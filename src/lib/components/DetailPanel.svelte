@@ -233,6 +233,12 @@
             <button type="button" onclick={() => invoke("reveal_in_explorer", { path: item.resourcePath })}>
               <AppIcon name="file" size={15} /> 定位到文件
             </button>
+            <button type="button" onclick={() => {
+              const folder = item.resourcePath!.replace(/[^\\/]+$/, '');
+              invoke("open_external_url", { url: folder });
+            }}>
+              <AppIcon name="download" size={15} /> 打开文件夹
+            </button>
           {/if}
           {#if !editing}
             <button type="button" onclick={() => {
