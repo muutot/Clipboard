@@ -57,6 +57,7 @@
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
   let view = $state<'main' | 'settings'>('main');
+  let lastBackspaceAt = $state(0);
   let indexedItems = $state<ClipboardItem[] | null>(null);
   let indexedQuery = $state("");
   let searchPending = $state(false);
@@ -598,20 +599,19 @@
     }
 
     if (event.key === "Escape") {
-      if (selectedIds.size > 0) {
-        selectedIds = new Set();
-        return;
-      }
-      if (query) {
-        query = "";
-        return;
-      }
       if (view === 'settings') {
         view = 'main';
         return;
       }
       if ('__TAURI_INTERNALS__' in window) {
         getCurrentWindow().hide();
+      }
+      return;
+    }
+
+    if (event.key === "Backspace" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
+      if (selectedIds.size > 0) {
+        selectedIds = new Set();
       }
       return;
     }
@@ -713,7 +713,21 @@
           autocomplete="off"
           placeholder={_t("app.searchPlaceholder")}
           spellcheck="false"
-      />
+          onkeydown={(e) => {
+            if (e.key === 'Backspace') {
+              const now = Date.now();
+              if (now - lastBackspaceAt < 400 && query) {
+                e.preventDefault();
+                query = '';
+                lastBackspaceAt = 0;
+              } else {
+                lastBackspaceAt = now;
+              }
+            } else {
+              lastBackspaceAt = 0;
+            }
+          }}
+        />
       {#if query}
         <button
           class="clear-button"
