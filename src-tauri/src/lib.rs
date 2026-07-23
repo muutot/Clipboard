@@ -1,3 +1,4 @@
+pub mod config;
 pub mod domain;
 pub mod ocr;
 pub mod platform;
