@@ -169,8 +169,8 @@
               <div class="setting-heading">
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                 <div>
-                  <strong>统一配置文件</strong>
-                  <p>所有用户设置都写入这一个 JSON 文件，切换数据目录时它不会迁移。</p>
+                  <strong>常规配置文件</strong>
+                  <p>除快捷键外的常规设置写入此 JSON；快捷键单独保存在 keyboard.json。</p>
                 </div>
               </div>
               <code class="path-value" title={status.configPath}>{status.configPath}</code>
