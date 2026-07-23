@@ -64,7 +64,7 @@ pub struct OcrConfig {
 impl Default for OcrConfig {
     fn default() -> Self {
         Self {
-            engine: "ppocr".to_string(),
+            engine: "windows-ocr".to_string(),
             tesseract_languages: "chi_sim+eng".to_string(),
             ppocr_model_path: None,
             extra: BTreeMap::new(),

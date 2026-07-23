@@ -47,7 +47,7 @@
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
-  let ocrEngine = $state("ppocr");
+  let ocrEngine = $state("windows-ocr");
 
   $effect(() => {
     if (open) {
@@ -465,8 +465,8 @@
             <div class="setting-heading">
               <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
               <div>
-                <strong>OCR 引擎</strong>
-                <p>PP-OCRv6 纯 Rust 实现，不依赖 Python。首次使用自动下载模型。</p>
+                    <strong>OCR 引擎</strong>
+                    <p>Windows OCR 系统自带无需安装。PP-OCRv6 需 Python + paddleocr，Tesseract 需手动安装。</p>
               </div>
             </div>
             <div class="setting-actions" style="flex-wrap: wrap;">

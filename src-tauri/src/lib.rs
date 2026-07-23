@@ -19,7 +19,7 @@ use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, T
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
-use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine, WindowsOcrEngine};
+use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, TesseractOcrEngine, WindowsOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
@@ -1162,26 +1162,14 @@ pub fn run() {
             performance_tracker.record_startup(startup_metrics.clone());
 
             let ocr_engine_name = config.ocr_engine().to_string();
-            // Try to auto-install PP-OCR models if configured
-            if ocr_engine_name == "ppocr" && !PpOcrEngine::is_available() {
-                eprintln!("[ocr] PP-OCRv6 configured, downloading models...");
-                if let Err(e) = PpOcrEngine::install(&paths) {
-                    eprintln!("[ocr] PP-OCR install failed: {}", e);
-                }
-            }
-
-            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && PpOcrEngine::is_available() {
-                Arc::new(PpOcrEngine::new())
-            } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
+            // Use Windows OCR (built-in, no install needed) or Tesseract
+            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
-            } else if ocr_engine_name == "windows-ocr" && WindowsOcrEngine::is_available() {
+            } else if WindowsOcrEngine::is_available() {
+                eprintln!("[ocr] using Windows built-in OCR");
                 Arc::new(WindowsOcrEngine::new())
             } else if TesseractOcrEngine::is_available() {
-                eprintln!("[ocr] {} not found, falling back to Tesseract", ocr_engine_name);
                 Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
-            } else if WindowsOcrEngine::is_available() {
-                eprintln!("[ocr] falling back to Windows OCR");
-                Arc::new(WindowsOcrEngine::new())
             } else {
                 eprintln!("[ocr] no OCR engine available");
                 Arc::new(NoopOcrEngine)
