@@ -230,6 +230,15 @@ fn get_clipboard_item_ocr(
 }
 
 #[tauri::command]
+fn list_source_applications(
+    database: tauri::State<'_, Database>,
+) -> Result<Vec<String>, String> {
+    database
+        .list_source_applications()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_keyboard_config(
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
 ) -> Result<KeyboardConfig, String> {
@@ -1420,6 +1429,7 @@ pub fn run() {
             set_clipboard_item_favorite,
             delete_clipboard_item,
             get_clipboard_item_ocr,
+            list_source_applications,
             get_keyboard_config,
             configure_keyboard_shortcuts,
             search_clipboard_items,
