@@ -290,6 +290,7 @@
         previewPath: record.previewPath,
         resourcePath: record.resourcePath,
         textContent: record.textContent,
+        iconPath: record.iconPath,
       };
       const existingIdx = items.findIndex(i => i.id === newItem.id);
       if (existingIdx >= 0) {

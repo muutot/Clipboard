@@ -14,13 +14,17 @@
     if (!isTauriRuntime()) return undefined;
     try {
       const normalized = filePath.replace(/\\/g, "/");
-      const url = convertFileSrc(normalized);
-      console.log("[image] convertFileSrc:", normalized, "->", url);
-      return url;
+      return convertFileSrc(normalized);
     } catch(e) {
-      console.error("[image] convertFileSrc error:", e);
       return undefined;
     }
+  }
+
+  function appIconUrl(sourceApp: string): string | undefined {
+    if (!sourceApp || !isTauriRuntime()) return undefined;
+    const key = sourceApp.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/^_+|_+$/g, '');
+    if (!key) return undefined;
+    return convertFileSrc(`icons/${key}.png`);
   }
 
   interface Props {
@@ -248,16 +252,16 @@
     </div>
 
     <div class="meta-row">
-      <span
-        class:source-red={item.sourceTone === "red"}
-        class:source-blue={item.sourceTone === "blue"}
-        class:source-violet={item.sourceTone === "violet"}
-        class="source-mark"
-      >
-        {#if item.sourceTone === "neutral"}
-          <AppIcon name={item.kind === "file" ? "file" : "clipboard"} size={12} />
+      <span class="source-mark">
+        {#if item.iconPath}
+          <img class="source-icon" src={assetUrl(item.iconPath)} alt={item.sourceApp} />
         {:else}
-          <span class="source-dot"></span>
+          <span
+            class="source-dot"
+            class:source-red={item.sourceTone === "red"}
+            class:source-blue={item.sourceTone === "blue"}
+            class:source-violet={item.sourceTone === "violet"}
+          ></span>
         {/if}
       </span>
       <span class="source-name">{item.sourceApp}</span>
@@ -537,9 +541,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     color: #d7c47b;
+  }
+
+  .source-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    border-radius: 2px;
   }
 
   .source-dot {

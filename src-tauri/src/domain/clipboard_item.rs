@@ -23,6 +23,7 @@ pub struct ClipboardItem {
     pub preview_path: Option<String>,
     pub content_hash: String,
     pub source_app: Option<String>,
+    pub icon_path: Option<String>,
     pub size_bytes: u64,
     pub created_at_ms: i64,
     pub last_used_at_ms: Option<i64>,

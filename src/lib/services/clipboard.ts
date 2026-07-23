@@ -116,6 +116,7 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     previewPath: record.previewPath,
     resourcePath: record.resourcePath,
     textContent: record.textContent,
+    iconPath: record.iconPath,
   };
 }
 

@@ -631,6 +631,7 @@ fn start_clipboard_monitoring(
                         preview_path: None,
                         content_hash,
                         source_app: None,
+                        icon_path: None,
                         size_bytes,
                         created_at_ms: now_ms,
                         last_used_at_ms: None,
@@ -987,7 +988,15 @@ pub fn run() {
                                 }
 
                                 let source_app_name = platform::windows_clipboard::get_foreground_app();
-                                let source_app = if source_app_name.is_empty() { None } else { Some(source_app_name) };
+                                let source_app = if source_app_name.is_empty() { None } else { Some(source_app_name.clone()) };
+
+                                // Extract and cache app icon
+                                let icon_dir = storage_path.join("icons");
+                                let icon_path = if !source_app_name.is_empty() {
+                                    platform::windows_clipboard::extract_app_icon(&icon_dir, &source_app_name)
+                                } else {
+                                    None
+                                };
 
                                 let text = platform::windows_clipboard::read_clipboard_text();
                                 let image_data = platform::windows_clipboard::read_clipboard_image();
@@ -1018,7 +1027,8 @@ pub fn run() {
                                         preview_path: Some(img_path.to_string_lossy().to_string()),
                                         content_hash: img_hash,
                                             source_app: source_app.clone(),
-                                        size_bytes: img.len() as u64,
+                                            icon_path: icon_path.clone(),
+                                            size_bytes: img.len() as u64,
                                         created_at_ms: now_ms,
                                         last_used_at_ms: None,
                                         is_favorite: false,
@@ -1065,7 +1075,8 @@ pub fn run() {
                                             preview_path: None,
                                             content_hash: file_hash,
                                         source_app: source_app.clone(),
-                                            size_bytes: file_size,
+                                        icon_path: icon_path.clone(),
+                                        size_bytes: file_size,
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
@@ -1135,6 +1146,7 @@ pub fn run() {
                                     preview_path: None,
                                     content_hash: content_hash.clone(),
                                     source_app: source_app.clone(),
+                                    icon_path: icon_path.clone(),
                                     size_bytes,
                                     created_at_ms: now_ms,
                                     last_used_at_ms: None,

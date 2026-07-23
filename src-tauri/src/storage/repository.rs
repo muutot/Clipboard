@@ -412,6 +412,7 @@ impl TryFrom<StoredClipboardItem> for ClipboardItem {
             created_at_ms: item.created_at_ms,
             last_used_at_ms: item.last_used_at_ms,
             is_favorite: item.is_favorite,
+            icon_path: None,
         })
     }
 }
@@ -456,6 +457,7 @@ mod tests {
             created_at_ms,
             last_used_at_ms: None,
             is_favorite: false,
+            icon_path: None,
         }
     }
 

@@ -517,8 +517,180 @@ pub fn get_foreground_app() -> String {
     String::new()
 }
 
+#[cfg(target_os = "windows")]
+pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str) -> Option<String> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::PathBuf;
+
+    extern "system" {
+        fn SHGetFileInfoW(
+            path: *const u16,
+            attributes: u32,
+            info: *mut SHFILEINFOW,
+            info_size: u32,
+            flags: u32,
+        ) -> usize;
+        fn DestroyIcon(icon: isize) -> i32;
+    }
+
+    #[repr(C)]
+    struct SHFILEINFOW {
+        hIcon: isize,
+        iIcon: i32,
+        dwAttributes: u32,
+        szDisplayName: [u16; 260],
+        szTypeName: [u16; 80],
+    }
+
+    const SHGFI_ICON: u32 = 0x100;
+    const SHGFI_SMALLICON: u32 = 0x1;
+    const SHGFI_USEFILEATTRIBUTES: u32 = 0x10;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+
+    let app_key = app_name.to_lowercase().chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>()
+        .trim_matches('_')
+        .to_string();
+
+    if app_key.is_empty() {
+        return None;
+    }
+
+    let icon_path = icon_dir.join(format!("{}.png", app_key));
+    if icon_path.exists() {
+        return Some(icon_path.to_string_lossy().to_string());
+    }
+
+    std::fs::create_dir_all(icon_dir).ok();
+
+    let wide_name: Vec<u16> = OsString::from(app_name)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut info = SHFILEINFOW {
+        hIcon: 0,
+        iIcon: 0,
+        dwAttributes: 0,
+        szDisplayName: [0u16; 260],
+        szTypeName: [0u16; 80],
+    };
+
+    unsafe {
+        let result = SHGetFileInfoW(
+            wide_name.as_ptr(),
+            FILE_ATTRIBUTE_NORMAL,
+            &mut info,
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES,
+        );
+
+        if result != 0 && info.hIcon != 0 {
+            let hicon = info.hIcon;
+            let saved = save_hicon_to_png(hicon, &icon_path);
+            DestroyIcon(hicon);
+            if saved {
+                return Some(icon_path.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
+    extern "system" {
+        fn GetIconInfo(hicon: isize, info: *mut ICONINFO) -> i32;
+        fn DeleteObject(obj: isize) -> i32;
+        fn GetDC(hwnd: isize) -> isize;
+        fn ReleaseDC(hwnd: isize, dc: isize) -> i32;
+        fn CreateCompatibleDC(dc: isize) -> isize;
+        fn DeleteDC(dc: isize) -> i32;
+        fn SelectObject(dc: isize, obj: isize) -> isize;
+        fn GetObjectW(obj: isize, size: i32, buf: *mut u8) -> i32;
+        fn GetDIBits(dc: isize, bitmap: isize, start: u32, lines: u32, bits: *mut u8, info: *mut BITMAPINFOHEADER, usage: u32) -> i32;
+    }
+
+    #[repr(C)]
+    struct ICONINFO { fIcon: i32, xHotspot: u32, yHotspot: u32, hbmMask: isize, hbmColor: isize }
+
+    #[repr(C)]
+    struct BITMAPINFOHEADER { biSize: u32, biWidth: i32, biHeight: i32, biPlanes: u16, biBitCount: u16, biCompression: u32, biSizeImage: u32, biXPelsPerMeter: i32, biYPelsPerMeter: i32, biClrUsed: u32, biClrImportant: u32 }
+
+    #[repr(C)]
+    struct BITMAP { bmType: i32, bmWidth: i32, bmHeight: i32, bmWidthBytes: i32, bmPlanes: u16, bmBitsPixel: u16, bmBits: isize }
+
+    const DIB_RGB_COLORS: u32 = 0;
+    const BI_RGB: u32 = 0;
+
+    unsafe {
+        let mut icon_info = ICONINFO { fIcon: 0, xHotspot: 0, yHotspot: 0, hbmMask: 0, hbmColor: 0 };
+        if GetIconInfo(hicon, &mut icon_info) == 0 {
+            return false;
+        }
+
+        let mut bmp = BITMAP { bmType: 0, bmWidth: 0, bmHeight: 0, bmWidthBytes: 0, bmPlanes: 0, bmBitsPixel: 0, bmBits: 0 };
+        let hbm = if icon_info.hbmColor != 0 { icon_info.hbmColor } else { icon_info.hbmMask };
+        if GetObjectW(hbm, std::mem::size_of::<BITMAP>() as i32, &mut bmp as *mut _ as *mut u8) == 0 {
+            DeleteObject(icon_info.hbmMask);
+            if icon_info.hbmColor != 0 { DeleteObject(icon_info.hbmColor); }
+            return false;
+        }
+
+        let width = bmp.bmWidth.abs() as u32;
+        let height = bmp.bmHeight.abs() as u32;
+        let row_size = ((width * 32 + 31) / 32) * 4;
+        let image_size = row_size * height;
+
+        let mut bi = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: bmp.bmWidth,
+            biHeight: bmp.bmHeight,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB,
+            biSizeImage: image_size,
+            biXPelsPerMeter: 0, biYPelsPerMeter: 0,
+            biClrUsed: 0, biClrImportant: 0,
+        };
+
+        let dc = GetDC(0);
+        let mem_dc = CreateCompatibleDC(dc);
+        let old_bmp = SelectObject(mem_dc, hbm);
+        let mut pixels = vec![0u8; image_size as usize];
+        GetDIBits(mem_dc, hbm, 0, height, pixels.as_mut_ptr(), &mut bi, DIB_RGB_COLORS);
+        SelectObject(mem_dc, old_bmp);
+        DeleteDC(mem_dc);
+        ReleaseDC(0, dc);
+
+        let mut rgba = vec![0u8; pixels.len()];
+        for (i, chunk) in pixels.chunks_exact(4).enumerate() {
+            let base = i * 4;
+            rgba[base] = chunk[2];
+            rgba[base + 1] = chunk[1];
+            rgba[base + 2] = chunk[0];
+            rgba[base + 3] = chunk[3];
+        }
+
+        let result = image::RgbaImage::from_raw(width, height, rgba)
+            .and_then(|img| {
+                let mut buf = std::io::Cursor::new(Vec::new());
+                img.write_to(&mut buf, image::ImageFormat::Png).ok()?;
+                std::fs::write(path, buf.into_inner()).ok()
+            })
+            .is_some();
+
+        DeleteObject(icon_info.hbmMask);
+        if icon_info.hbmColor != 0 { DeleteObject(icon_info.hbmColor); }
+        result
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
-fn dib_to_png(_dib: &[u8]) -> Option<Vec<u8>> {
+pub fn extract_app_icon(_icon_dir: &std::path::Path, _app_name: &str) -> Option<String> {
     None
 }
 

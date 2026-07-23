@@ -26,6 +26,7 @@ export interface ClipboardItem {
   previewPath?: string | null;
   resourcePath?: string | null;
   textContent?: string | null;
+  iconPath?: string | null;
 }
 
 export type ThemeMode = "dark";
@@ -65,6 +66,7 @@ export interface PersistedClipboardItem {
   previewPath: string | null;
   contentHash: string;
   sourceApp: string | null;
+  iconPath: string | null;
   sizeBytes: number;
   createdAtMs: number;
   lastUsedAtMs: number | null;
