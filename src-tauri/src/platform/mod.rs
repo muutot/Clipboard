@@ -489,6 +489,7 @@ impl SingleInstanceGuard {
     pub fn acquire(project_dir: &Path) -> Result<Self, String> {
         let lock_path = project_dir.join("instance.lock");
 
+        // Try to create a fresh lock file
         match fs::OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -500,13 +501,28 @@ impl SingleInstanceGuard {
                 Ok(Self { lock_path })
             }
             Err(_) => {
-                let pid = fs::read_to_string(&lock_path)
-                    .unwrap_or_default()
-                    .trim()
-                    .to_owned();
+                // Lock file already exists — check if the previous process is still alive
+                let content = fs::read_to_string(&lock_path).unwrap_or_default();
+                let pid_str = content.trim();
+
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    if !is_process_running(pid) {
+                        // Stale lock — remove and retry
+                        let _ = fs::remove_file(&lock_path);
+                        let mut file = fs::OpenOptions::new()
+                            .create_new(true)
+                            .write(true)
+                            .open(&lock_path)
+                            .map_err(|e| format!("failed to create lock file after cleanup: {e}"))?;
+                        writeln!(file, "{}", std::process::id())
+                            .map_err(|e| format!("failed to write lock file: {e}"))?;
+                        return Ok(Self { lock_path });
+                    }
+                }
+
                 Err(format!(
                     "another instance is already running (PID: {})",
-                    pid
+                    pid_str
                 ))
             }
         }
@@ -516,6 +532,40 @@ impl SingleInstanceGuard {
 impl Drop for SingleInstanceGuard {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.lock_path);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_process_running(pid: u32) -> bool {
+    extern "system" {
+        fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> isize;
+        fn CloseHandle(handle: isize) -> i32;
+        fn GetExitCodeProcess(process: isize, exit_code: *mut u32) -> i32;
+    }
+
+    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    const STILL_ACTIVE: u32 = 259;
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid);
+        if handle == 0 {
+            return false;
+        }
+        let mut exit_code = 0u32;
+        GetExitCodeProcess(handle, &mut exit_code);
+        CloseHandle(handle);
+        exit_code == STILL_ACTIVE
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_process_running(pid: u32) -> bool {
+    // On Unix, sending signal 0 checks if process exists
+    unsafe {
+        extern "C" {
+            fn kill(pid: i32, sig: i32) -> i32;
+        }
+        kill(pid as i32, 0) == 0
     }
 }
 

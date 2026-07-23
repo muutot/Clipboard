@@ -797,9 +797,14 @@ pub fn run() {
             let shortcut_manager = GlobalShortcutManager::new();
 
             if config.single_instance() {
-                let _guard = SingleInstanceGuard::acquire(&project_directory)
-                    .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-                app.manage(_guard);
+                match SingleInstanceGuard::acquire(&project_directory) {
+                    Ok(guard) => {
+                        app.manage(guard);
+                    }
+                    Err(e) => {
+                        eprintln!("[startup] {}", e);
+                    }
+                }
             }
 
             // Graceful shutdown handler
