@@ -1,0 +1,310 @@
+use rusqlite::{params, OptionalExtension, Row};
+
+use crate::domain::{ClipboardItem, ClipboardKind};
+
+use super::{Database, StorageError};
+
+const ITEM_COLUMNS: &str = "
+    id,
+    kind,
+    title,
+    text_content,
+    resource_path,
+    preview_path,
+    content_hash,
+    source_app,
+    size_bytes,
+    created_at_ms,
+    last_used_at_ms,
+    is_favorite
+";
+
+pub trait ClipboardRepository {
+    fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError>;
+    fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
+    fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
+    fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
+    fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
+    fn item_count(&self) -> Result<u64, StorageError>;
+}
+
+impl ClipboardRepository for Database {
+    fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
+        let size_bytes =
+            i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+                field: "size_bytes",
+            })?;
+
+        self.with_connection(|connection| {
+            Ok(connection.query_row(
+                "INSERT INTO clipboard_items (
+                    id,
+                    kind,
+                    title,
+                    text_content,
+                    resource_path,
+                    preview_path,
+                    content_hash,
+                    source_app,
+                    size_bytes,
+                    created_at_ms,
+                    last_used_at_ms,
+                    is_favorite
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+                 )
+                 ON CONFLICT DO UPDATE SET
+                    title = excluded.title,
+                    text_content = excluded.text_content,
+                    resource_path = excluded.resource_path,
+                    preview_path = excluded.preview_path,
+                    source_app = excluded.source_app,
+                    size_bytes = excluded.size_bytes,
+                    created_at_ms = excluded.created_at_ms,
+                    last_used_at_ms = COALESCE(
+                        excluded.last_used_at_ms,
+                        clipboard_items.last_used_at_ms
+                    ),
+                    is_favorite = MAX(
+                        clipboard_items.is_favorite,
+                        excluded.is_favorite
+                    )
+                 RETURNING id",
+                params![
+                    item.id,
+                    kind_to_storage(item.kind),
+                    item.title,
+                    item.text_content,
+                    item.resource_path,
+                    item.preview_path,
+                    item.content_hash,
+                    item.source_app,
+                    size_bytes,
+                    item.created_at_ms,
+                    item.last_used_at_ms,
+                    item.is_favorite,
+                ],
+                |row| row.get(0),
+            )?)
+        })
+    }
+
+    fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError> {
+        self.with_connection(|connection| {
+            let sql = format!("SELECT {ITEM_COLUMNS} FROM clipboard_items WHERE id = ?1");
+            let stored_item = connection
+                .query_row(&sql, [id], StoredClipboardItem::from_row)
+                .optional()?;
+
+            stored_item.map(TryInto::try_into).transpose()
+        })
+    }
+
+    fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError> {
+        self.with_connection(|connection| {
+            let sql = format!(
+                "SELECT {ITEM_COLUMNS}
+                 FROM clipboard_items
+                 ORDER BY created_at_ms DESC
+                 LIMIT ?1 OFFSET ?2"
+            );
+            let mut statement = connection.prepare_cached(&sql)?;
+            let stored_items = statement
+                .query_map(
+                    params![i64::from(limit.clamp(1, 500)), i64::from(offset)],
+                    StoredClipboardItem::from_row,
+                )?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            stored_items.into_iter().map(TryInto::try_into).collect()
+        })
+    }
+
+    fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1",
+                params![id, is_favorite],
+            )? > 0)
+        })
+    }
+
+    fn delete_item(&self, id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute("DELETE FROM clipboard_items WHERE id = ?1", [id])? > 0)
+        })
+    }
+
+    fn item_count(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 =
+                connection
+                    .query_row("SELECT COUNT(*) FROM clipboard_items", [], |row| row.get(0))?;
+
+            u64::try_from(count).map_err(|_| StorageError::InvalidStoredValue {
+                field: "clipboard_items.count",
+                value: count,
+            })
+        })
+    }
+}
+
+struct StoredClipboardItem {
+    id: String,
+    kind: String,
+    title: String,
+    text_content: Option<String>,
+    resource_path: Option<String>,
+    preview_path: Option<String>,
+    content_hash: String,
+    source_app: Option<String>,
+    size_bytes: i64,
+    created_at_ms: i64,
+    last_used_at_ms: Option<i64>,
+    is_favorite: bool,
+}
+
+impl StoredClipboardItem {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            kind: row.get(1)?,
+            title: row.get(2)?,
+            text_content: row.get(3)?,
+            resource_path: row.get(4)?,
+            preview_path: row.get(5)?,
+            content_hash: row.get(6)?,
+            source_app: row.get(7)?,
+            size_bytes: row.get(8)?,
+            created_at_ms: row.get(9)?,
+            last_used_at_ms: row.get(10)?,
+            is_favorite: row.get(11)?,
+        })
+    }
+}
+
+impl TryFrom<StoredClipboardItem> for ClipboardItem {
+    type Error = StorageError;
+
+    fn try_from(item: StoredClipboardItem) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: item.id,
+            kind: kind_from_storage(&item.kind)?,
+            title: item.title,
+            text_content: item.text_content,
+            resource_path: item.resource_path,
+            preview_path: item.preview_path,
+            content_hash: item.content_hash,
+            source_app: item.source_app,
+            size_bytes: u64::try_from(item.size_bytes).map_err(|_| {
+                StorageError::InvalidStoredValue {
+                    field: "size_bytes",
+                    value: item.size_bytes,
+                }
+            })?,
+            created_at_ms: item.created_at_ms,
+            last_used_at_ms: item.last_used_at_ms,
+            is_favorite: item.is_favorite,
+        })
+    }
+}
+
+fn kind_to_storage(kind: ClipboardKind) -> &'static str {
+    match kind {
+        ClipboardKind::Text => "text",
+        ClipboardKind::Link => "link",
+        ClipboardKind::Image => "image",
+        ClipboardKind::File => "file",
+    }
+}
+
+fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageError> {
+    match kind {
+        "text" => Ok(ClipboardKind::Text),
+        "link" => Ok(ClipboardKind::Link),
+        "image" => Ok(ClipboardKind::Image),
+        "file" => Ok(ClipboardKind::File),
+        _ => Err(StorageError::InvalidClipboardKind(kind.to_owned())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::{ClipboardItem, ClipboardKind};
+
+    use super::{ClipboardRepository, Database};
+
+    fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind: ClipboardKind::Text,
+            title: format!("record-{id}"),
+            text_content: Some(format!("content-{id}")),
+            resource_path: None,
+            preview_path: None,
+            content_hash: content_hash.to_owned(),
+            source_app: Some("test-suite".to_owned()),
+            size_bytes: 12,
+            created_at_ms,
+            last_used_at_ms: None,
+            is_favorite: false,
+        }
+    }
+
+    #[test]
+    fn saves_and_lists_items_by_recency() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("older", "hash-1", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("newer", "hash-2", 200))
+            .unwrap();
+
+        let items = database.list_recent(20, 0).unwrap();
+
+        assert_eq!(database.item_count().unwrap(), 2);
+        assert_eq!(items[0].id, "newer");
+        assert_eq!(items[1].id, "older");
+    }
+
+    #[test]
+    fn repeated_content_reuses_the_existing_record() {
+        let database = Database::open_in_memory().unwrap();
+        let mut first = text_item("original", "same-hash", 100);
+        first.is_favorite = true;
+        database.save_item(&first).unwrap();
+
+        let repeated = text_item("replacement", "same-hash", 500);
+        let stored_id = database.save_item(&repeated).unwrap();
+        let stored = database.get_item(&stored_id).unwrap().unwrap();
+
+        assert_eq!(stored_id, "original");
+        assert_eq!(stored.created_at_ms, 500);
+        assert!(stored.is_favorite);
+        assert_eq!(database.item_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn favorite_and_delete_changes_are_recorded_for_search() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&text_item("item", "hash", 100)).unwrap();
+
+        assert!(database.set_favorite("item", true).unwrap());
+        assert!(database.get_item("item").unwrap().unwrap().is_favorite);
+        assert!(database.delete_item("item").unwrap());
+
+        database
+            .with_connection(|connection| {
+                let last_operation: String = connection.query_row(
+                    "SELECT operation FROM search_outbox ORDER BY sequence DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )?;
+
+                assert_eq!(last_operation, "delete");
+                Ok(())
+            })
+            .unwrap();
+    }
+}

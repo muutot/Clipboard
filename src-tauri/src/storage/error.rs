@@ -7,6 +7,7 @@ pub enum StorageError {
     ConnectionPoisoned,
     InvalidClipboardKind(String),
     InvalidStoredValue { field: &'static str, value: i64 },
+    ValueOutOfRange { field: &'static str },
 }
 
 impl fmt::Display for StorageError {
@@ -20,6 +21,9 @@ impl fmt::Display for StorageError {
             }
             Self::InvalidStoredValue { field, value } => {
                 write!(formatter, "invalid stored value for {field}: {value}")
+            }
+            Self::ValueOutOfRange { field } => {
+                write!(formatter, "value is out of range for {field}")
             }
         }
     }
