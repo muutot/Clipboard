@@ -1,6 +1,7 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
+  import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import {
     configureStorageDirectory,
     getStorageStatus,
@@ -23,7 +24,7 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let activeSection = $state<"storage" | "keyboard">("storage");
+  let activeSection = $state<"capture" | "storage" | "keyboard">("storage");
 
   $effect(() => {
     if (open) {
@@ -128,6 +129,10 @@
         </div>
 
         <nav aria-label="设置分类">
+          <button class:active={activeSection === "capture"} type="button" onclick={() => (activeSection = "capture")}>
+            <AppIcon name="filter" size={16} />
+            <span>采集</span>
+          </button>
           <button class:active={activeSection === "storage"} type="button" onclick={() => (activeSection = "storage")}>
             <AppIcon name="file" size={16} />
             <span>存储</span>
@@ -149,7 +154,9 @@
       </aside>
 
       <div class="settings-content">
-        {#if activeSection === "keyboard"}
+        {#if activeSection === "capture"}
+          <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
+        {:else if activeSection === "keyboard"}
           <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
         {:else}
         <header>
@@ -287,7 +294,7 @@
   .settings-dialog {
     display: grid;
     grid-template-columns: 168px minmax(0, 1fr);
-    width: min(680px, 100%);
+    width: min(900px, 100%);
     height: min(570px, 100%);
     overflow: hidden;
     border: 1px solid #323232;

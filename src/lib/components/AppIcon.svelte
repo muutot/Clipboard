@@ -14,7 +14,8 @@
     | "download"
     | "search"
     | "clipboard"
-    | "keyboard";
+    | "keyboard"
+    | "filter";
 
   interface Props {
     name: IconName;
@@ -93,5 +94,7 @@
     <path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01" />
     <path d="M6 13h.01M9 13h.01M12 13h.01M15 13h.01M18 13h.01" />
     <path d="M8 16h8" />
+  {:else if name === "filter"}
+    <path d="M4 5h16l-6 7v6l-4 2v-8z" />
   {/if}
 </svg>
