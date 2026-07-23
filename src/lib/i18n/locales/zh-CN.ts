@@ -33,6 +33,7 @@ const zhCN: LocaleDefinition = {
   card: {
     copy: "复制",
     export: "导出",
+    saveAs: "另存为",
     favorite: "收藏",
     unfavorite: "取消收藏",
     delete: "删除",

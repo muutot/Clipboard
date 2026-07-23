@@ -33,6 +33,7 @@ const en: LocaleDefinition = {
   card: {
     copy: "Copy",
     export: "Export",
+    saveAs: "Save As",
     favorite: "Favorite",
     unfavorite: "Unfavorite",
     delete: "Delete",

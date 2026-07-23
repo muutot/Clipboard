@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-hide"]
+  "permissions": ["core:default", "core:window:allow-hide", "core:window:allow-close", "core:window:allow-set-focus", "core:webview:allow-create-webview-window"]
 }

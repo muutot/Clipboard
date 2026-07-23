@@ -301,7 +301,24 @@
       onclick={(event) => { event.stopPropagation(); oncopy(item.id); }}
     ><AppIcon name="copy" size={16} /></button>
     {#if item.kind === "image" || item.kind === "file"}
-      <button type="button" title={_t("card.export")} aria-label={_t("card.export")}
+      <button type="button" title={_t("card.saveAs")} aria-label={_t("card.saveAs")}
+        onclick={async (event) => {
+          event.stopPropagation();
+          if (item.resourcePath && isTauriRuntime()) {
+            try {
+              const url = convertFileSrc(item.resourcePath.replace(/\\/g, '/'));
+              const response = await fetch(url);
+              const blob = await response.blob();
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = item.fileName || item.title.split('/').pop() || 'file';
+              a.click();
+              URL.revokeObjectURL(a.href);
+            } catch {
+              invoke('open_external_url', { url: item.resourcePath }).catch(() => {});
+            }
+          }
+        }}
         ><AppIcon name="download" size={16} /></button
       >
     {/if}

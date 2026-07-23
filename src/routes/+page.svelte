@@ -5,7 +5,6 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
-  import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
   import Toast from "$lib/components/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
@@ -59,6 +58,7 @@
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
   let view = $state<'main' | 'settings'>('main');
+
   let lastBackspaceAt = $state(0);
   let indexedItems = $state<ClipboardItem[] | null>(null);
   let indexedQuery = $state("");
@@ -323,6 +323,28 @@
   });
 
   // --- Handlers ---
+
+  async function openSettings() {
+    if ('__TAURI_INTERNALS__' in window) {
+      const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+      const existing = await WebviewWindow.getByLabel("settings");
+      if (existing) {
+        existing.setFocus();
+        return;
+      }
+      new WebviewWindow("settings", {
+        url: "/settings",
+        title: "Settings",
+        width: 760,
+        height: 640,
+        minWidth: 560,
+        minHeight: 480,
+        center: true,
+        resizable: true,
+        decorations: false,
+      });
+    }
+  }
 
   function setFilter(filter: ClipboardFilter) {
     activeFilter = filter;
@@ -633,10 +655,6 @@
     }
 
     if (event.key === "Escape") {
-      if (view === 'settings') {
-        view = 'main';
-        return;
-      }
       if ('__TAURI_INTERNALS__' in window) {
         getCurrentWindow().hide();
       }
@@ -737,7 +755,6 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell" class:compact={$generalSettings.compactMode}>
-  {#if view === 'main'}
     <header class="search-header">
       <div class="search-box">
         <AppIcon name="search" size={20} strokeWidth={1.65} />
@@ -876,7 +893,7 @@
         ><AppIcon name="help" size={17} /></button>
       <button type="button" tabindex="-1" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}
         ><AppIcon name="pin" size={17} /></button>
-      <button type="button" tabindex="-1" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={() => (view = 'settings')}
+      <button type="button" tabindex="-1" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={openSettings}
         ><AppIcon name="settings" size={17} /></button>
     </div>
   </div>
@@ -989,29 +1006,18 @@
     <span>{statusMessage}</span>
     <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
   </footer>
-  {:else}
-    <div class="settings-page">
-      <button type="button" class="settings-back-btn" onclick={() => (view = 'main')} aria-label="Back">
-        <AppIcon name="chevron-left" size={18} strokeWidth={2} />
-        <span>Back</span>
-      </button>
-      <StorageSettingsDialog open={true} onclose={() => (view = 'main')} />
-    </div>
-  {/if}
 </main>
 
 <Toast />
-{#if view === 'main'}
-  <DetailPanel
-    item={detailItem}
-    onclose={closeDetail}
-    oncopy={copyItem}
-    onedit={startEdit}
-    onsaveedit={saveEdit}
-    onplainpaste={plainPaste}
-    onformatpaste={formatPaste}
-  />
-{/if}
+<DetailPanel
+  item={detailItem}
+  onclose={closeDetail}
+  oncopy={copyItem}
+  onedit={startEdit}
+  onsaveedit={saveEdit}
+  onplainpaste={plainPaste}
+  onformatpaste={formatPaste}
+/>
 
 <style>
   .app-shell {
