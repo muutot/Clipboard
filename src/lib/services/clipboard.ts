@@ -47,6 +47,46 @@ export async function persistDelete(id: string): Promise<boolean | null> {
   return invoke<boolean>("delete_clipboard_item", { id });
 }
 
+export async function persistBatchFavorite(
+  ids: string[],
+  isFavorite: boolean,
+): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("batch_set_favorite", { ids, isFavorite });
+}
+
+export async function persistBatchDelete(ids: string[]): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("batch_delete_clipboard_items", { ids });
+}
+
+export async function listSourceApplications(): Promise<string[] | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<string[]>("list_source_applications");
+}
+
+export interface ContentActions {
+  hasEmail: boolean;
+  hasUrl: boolean;
+  hasPhone: boolean;
+  hasColor: boolean;
+  emails: string[];
+  urls: string[];
+  phones: string[];
+  colors: string[];
+}
+
+export async function detectContentActions(
+  contentId: string,
+): Promise<ContentActions | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<ContentActions>("detect_content_actions", { contentId });
+}
+
 function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;

@@ -15,7 +15,27 @@
     | "search"
     | "clipboard"
     | "keyboard"
-    | "filter";
+    | "filter"
+    | "mail"
+    | "phone"
+    | "globe"
+    | "palette"
+    | "check"
+    | "calendar"
+    | "regex"
+    | "x"
+    | "chevron-down"
+    | "chevron-left"
+    | "eye"
+    | "edit"
+    | "code"
+    | "bar-chart"
+    | "sliders"
+    | "type"
+    | "copy-plus"
+    | "info"
+    | "clock"
+    | "mime";
 
   interface Props {
     name: IconName;
@@ -98,5 +118,77 @@
     <path d="M8 16h8" />
   {:else if name === "filter"}
     <path d="M4 5h16l-6 7v6l-4 2v-8z" />
+  {:else if name === "mail"}
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 4-10 8L2 4" />
+  {:else if name === "phone"}
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+  {:else if name === "globe"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M2 12h20M12 3a15.3 15.3 0 0 1 0 18" />
+    <path d="M12 3a15.3 15.3 0 0 0 0 18" />
+  {:else if name === "palette"}
+    <path d="M12 2a10 10 0 1 0 0 20v-2a8 8 0 1 1 8-8" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M8.5 8.5h.01M15.5 8.5h.01M9.5 14.5h.01" />
+  {:else if name === "check"}
+    <path d="M5 12l5 5L20 7" />
+  {:else if name === "calendar"}
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" />
+  {:else if name === "regex"}
+    <path d="M16 16.5 12 13l4-3.5" />
+    <path d="M8 14.5 12 12 8 9.5" />
+    <path d="M4 6l5 2-5 2" />
+    <path d="M20 6l-5 2 5 2" />
+  {:else if name === "x"}
+    <path d="M18 6 6 18M6 6l12 12" />
+  {:else if name === "chevron-down"}
+    <path d="m6 9 6 6 6-6" />
+  {:else if name === "chevron-left"}
+    <path d="m15 18-6-6 6-6" />
+  {:else if name === "eye"}
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  {:else if name === "edit"}
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  {:else if name === "code"}
+    <path d="m16 18 6-6-6-6" />
+    <path d="m8 6-6 6 6 6" />
+  {:else if name === "bar-chart"}
+    <path d="M18 20V10" />
+    <path d="M12 20V4" />
+    <path d="M6 20v-6" />
+  {:else if name === "sliders"}
+    <path d="M4 21v-7" />
+    <path d="M4 10V3" />
+    <path d="M12 21v-9" />
+    <path d="M12 8V3" />
+    <path d="M20 21v-5" />
+    <path d="M20 12V3" />
+    <path d="M1 14h6" />
+    <path d="M9 8h6" />
+    <path d="M17 16h6" />
+  {:else if name === "type"}
+    <path d="M5 4h14" />
+    <path d="M9 20h6" />
+    <path d="M12 4v16" />
+    <path d="M5 8h4M15 8h4" />
+  {:else if name === "copy-plus"}
+    <rect x="8" y="8" width="12" height="12" rx="2" />
+    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    <path d="M12 14h4M14 12v4" />
+  {:else if name === "info"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+  {:else if name === "clock"}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 6v6l4 2" />
+  {:else if name === "mime"}
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M9 13l2 2 4-4" />
   {/if}
 </svg>

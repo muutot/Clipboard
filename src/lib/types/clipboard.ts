@@ -19,6 +19,40 @@ export interface ClipboardItem {
     width: number;
     height: number;
   };
+  mimeType?: string;
+  ocrText?: string;
+  ocrStatus?: "pending" | "completed" | "none";
+  contentHash?: string;
+  resourcePath?: string | null;
+  textContent?: string | null;
+}
+
+export type ThemeMode = "dark";
+
+export type FontSize = "small" | "normal" | "large";
+
+export type Language = "zh-CN" | "en";
+
+export interface GeneralSettings {
+  language: Language;
+  fontSize: FontSize;
+  windowTransparency: number;
+  compactMode: boolean;
+  alwaysOnTop: boolean;
+  useSystemTitleBar: boolean;
+  theme: ThemeMode;
+}
+
+export interface CaptureSettings {
+  retentionPeriodDays: number;
+  maxItemCount: number;
+  recycleBinDays: number;
+  maxFileCopySize: number;
+}
+
+export interface AppSettings {
+  general: GeneralSettings;
+  capture: CaptureSettings;
 }
 
 export interface PersistedClipboardItem {

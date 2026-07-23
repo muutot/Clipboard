@@ -38,6 +38,10 @@ export interface LocaleDefinition {
     delete: string;
     selectItem: string;
     itemActions: string;
+    viewDetail: string;
+    edit: string;
+    pastePlain: string;
+    pasteFormat: string;
   };
   time: {
     justNow: string;
@@ -138,6 +142,117 @@ export interface LocaleDefinition {
   };
   actions: {
     close: string;
+    sendEmail: string;
+    openUrl: string;
+    callPhone: string;
+    copyColor: string;
+  };
+  dateFilter: {
+    all: string;
+    today: string;
+    yesterday: string;
+    week: string;
+    month: string;
+    custom: string;
+  };
+  sourceApp: {
+    all: string;
+    placeholder: string;
+  };
+  search: {
+    regex: string;
+    regexError: string;
+  };
+  bulk: {
+    copyN: string;
+    favoriteN: string;
+    deleteN: string;
+    deselectAll: string;
+  };
+  toast: {
+    copySuccess: string;
+    favoriteSuccess: string;
+    unfavoriteSuccess: string;
+    deleteSuccess: string;
+    copyFailed: string;
+    bulkCopySuccess: string;
+    bulkFavoriteSuccess: string;
+    bulkDeleteSuccess: string;
+    editSaved: string;
+    plainPasteSuccess: string;
+  };
+  detail: {
+    title: string;
+    preview: string;
+    details: string;
+    ocr: string;
+    sourceApp: string;
+    contentType: string;
+    copyTime: string;
+    size: string;
+    mimeInfo: string;
+    ocrStatus: string;
+    ocrText: string;
+    noOcr: string;
+    pending: string;
+    completed: string;
+    specialMarkers: string;
+    fileInfo: string;
+    back: string;
+  };
+  edit: {
+    edit: string;
+    save: string;
+    cancel: string;
+    placeholder: string;
+  };
+  paste: {
+    plainText: string;
+    withFormat: string;
+  };
+  general: {
+    title: string;
+    language: string;
+    fontSize: string;
+    fontSizeSmall: string;
+    fontSizeNormal: string;
+    fontSizeLarge: string;
+    windowTransparency: string;
+    compactMode: string;
+    alwaysOnTop: string;
+    useSystemTitleBar: string;
+    theme: string;
+    themeDark: string;
+  };
+  statistics: {
+    title: string;
+    totalRecords: string;
+    byType: string;
+    dbSize: string;
+    indexSize: string;
+    ocrTasks: string;
+    ocrPending: string;
+    ocrCompleted: string;
+    text: string;
+    link: string;
+    image: string;
+    file: string;
+  };
+  captureSettings: {
+    retentionPeriod: string;
+    retentionPeriodDesc: string;
+    maxItemCount: string;
+    maxItemCountDesc: string;
+    recycleBinDays: string;
+    recycleBinDaysDesc: string;
+    maxFileCopySize: string;
+    maxFileCopySizeDesc: string;
+    days: string;
+    bytes: string;
+  };
+  export: {
+    dragText: string;
+    dragFile: string;
   };
 }
 
