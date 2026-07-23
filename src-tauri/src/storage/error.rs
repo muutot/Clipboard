@@ -6,6 +6,7 @@ pub enum StorageError {
     Json(serde_json::Error),
     Sqlite(rusqlite::Error),
     ConnectionPoisoned,
+    FavoriteMustBeRemoved(String),
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
     InvalidStoredValue { field: &'static str, value: i64 },
@@ -19,6 +20,12 @@ impl fmt::Display for StorageError {
             Self::Json(error) => write!(formatter, "JSON storage error: {error}"),
             Self::Sqlite(error) => write!(formatter, "SQLite error: {error}"),
             Self::ConnectionPoisoned => formatter.write_str("database connection lock is poisoned"),
+            Self::FavoriteMustBeRemoved(id) => {
+                write!(
+                    formatter,
+                    "favorite item must be unfavorited before deletion: {id}"
+                )
+            }
             Self::InvalidClipboardKind(kind) => {
                 write!(formatter, "unknown clipboard item kind: {kind}")
             }

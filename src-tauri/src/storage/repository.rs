@@ -131,6 +131,18 @@ impl ClipboardRepository for Database {
 
     fn delete_item(&self, id: &str) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
+            let is_favorite = connection
+                .query_row(
+                    "SELECT is_favorite FROM clipboard_items WHERE id = ?1",
+                    [id],
+                    |row| row.get::<_, bool>(0),
+                )
+                .optional()?;
+
+            if is_favorite == Some(true) {
+                return Err(StorageError::FavoriteMustBeRemoved(id.to_owned()));
+            }
+
             Ok(connection.execute("DELETE FROM clipboard_items WHERE id = ?1", [id])? > 0)
         })
     }
@@ -233,6 +245,7 @@ mod tests {
     use crate::domain::{ClipboardItem, ClipboardKind};
 
     use super::{ClipboardRepository, Database};
+    use crate::storage::StorageError;
 
     fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
         ClipboardItem {
@@ -286,13 +299,43 @@ mod tests {
     }
 
     #[test]
-    fn favorite_and_delete_changes_are_recorded_for_search() {
+    fn favorite_must_be_removed_before_direct_deletion() {
         let database = Database::open_in_memory().unwrap();
         database.save_item(&text_item("item", "hash", 100)).unwrap();
-
         assert!(database.set_favorite("item", true).unwrap());
-        assert!(database.get_item("item").unwrap().unwrap().is_favorite);
+
+        assert!(matches!(
+            database.delete_item("item"),
+            Err(StorageError::FavoriteMustBeRemoved(id)) if id == "item"
+        ));
+        assert!(database.set_favorite("item", false).unwrap());
         assert!(database.delete_item("item").unwrap());
+        assert_eq!(database.item_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn favorite_survives_unfavorited_history_cleanup() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("favorite", "favorite-hash", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("regular", "regular-hash", 200))
+            .unwrap();
+        database.set_favorite("favorite", true).unwrap();
+
+        database
+            .with_connection(|connection| {
+                connection.execute("DELETE FROM clipboard_items WHERE is_favorite = 0", [])?;
+                Ok(())
+            })
+            .unwrap();
+
+        let stored = database.get_item("favorite").unwrap().unwrap();
+        assert!(stored.is_favorite);
+        assert_eq!(stored.title, "record-favorite");
+        assert!(database.get_item("regular").unwrap().is_none());
+        assert_eq!(database.item_count().unwrap(), 1);
 
         database
             .with_connection(|connection| {
