@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
@@ -414,9 +414,23 @@
       });
   }
 
-  function copyItem(id: string) {
+  async function copyItem(id: string) {
     const item = items.find((i) => i.id === id);
     if (!item) return;
+
+    if ((item.kind === "image" || item.kind === "file") && item.resourcePath) {
+      try {
+        const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
+        const response = await fetch(src);
+        const blob = await response.blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        showToast(_t("toast.copySuccess"), "success");
+      } catch {
+        showToast(_t("toast.copyFailed"), "error");
+      }
+      return;
+    }
+
     void navigator.clipboard.writeText(item.title).then(() => {
       showToast(_t("toast.copySuccess"), "success");
     }).catch(() => {

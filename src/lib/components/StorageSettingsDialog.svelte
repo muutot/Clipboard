@@ -3,6 +3,7 @@
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import {
     configureStorageDirectory,
     getStorageStatus,
@@ -45,6 +46,7 @@
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
+  let ocrEngine = $state("ppocr");
 
   $effect(() => {
     if (open) {
@@ -156,6 +158,18 @@
       feedback = error instanceof Error ? error.message : String(error);
     } finally {
       rebuilding = false;
+    }
+  }
+
+  async function saveOcrEngine(engine: string) {
+    try {
+      await invoke("set_ocr_config", { engine });
+      ocrEngine = engine;
+      feedback = `OCR 引擎已切换为 ${engine === 'ppocr' ? 'PP-OCRv6' : 'Tesseract'}，重启应用生效`;
+      feedbackSuccess = true;
+    } catch (error) {
+      console.error("Unable to save OCR config", error);
+      feedback = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -378,6 +392,24 @@
                     <span class="stat-value">0 / 0</span>
                     <span class="stat-label">{_t("statistics.ocrTasks")}</span>
                   </div>
+                </div>
+              </section>
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+                  <div>
+                    <strong>OCR 引擎</strong>
+                    <p>选择文字识别引擎，切换后重启生效</p>
+                  </div>
+                </div>
+                <div class="setting-actions" style="flex-wrap: wrap;">
+                  <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
+                    PP-OCRv6 Small (CPU)
+                  </button>
+                  <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
+                    Tesseract
+                  </button>
                 </div>
               </section>
 

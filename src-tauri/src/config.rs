@@ -21,6 +21,7 @@ pub struct AppConfig {
     pub permissions: PermissionConfig,
     pub window: WindowConfig,
     pub export: ExportConfig,
+    pub ocr: OcrConfig,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -45,6 +46,27 @@ impl Default for StorageConfig {
             file_storage_path: None,
             max_file_copy_size_bytes: 100 * 1024 * 1024,
             max_screenshot_size_bytes: 50 * 1024 * 1024,
+            extra: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct OcrConfig {
+    pub engine: String,
+    pub tesseract_languages: String,
+    pub ppocr_model_path: Option<String>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
+impl Default for OcrConfig {
+    fn default() -> Self {
+        Self {
+            engine: "ppocr".to_string(),
+            tesseract_languages: "chi_sim+eng".to_string(),
+            ppocr_model_path: None,
             extra: BTreeMap::new(),
         }
     }
@@ -309,6 +331,19 @@ impl ConfigStore {
     ) -> Result<(), StorageError> {
         self.config.export.schedule_auto_export = value;
         self.save()
+    }
+
+    pub fn ocr_engine(&self) -> &str {
+        &self.config.ocr.engine
+    }
+
+    pub fn set_ocr_engine(&mut self, value: String) -> Result<(), StorageError> {
+        self.config.ocr.engine = value;
+        self.save()
+    }
+
+    pub fn tesseract_languages(&self) -> &str {
+        &self.config.ocr.tesseract_languages
     }
 
     pub fn image_storage_path(&self) -> Option<&Path> {

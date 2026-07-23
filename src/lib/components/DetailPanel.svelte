@@ -35,18 +35,23 @@
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
 
   $effect(() => {
-    if (item?.kind === "image" && !item.ocrText && item.ocrStatus !== "completed" && isTauriRuntime()) {
+    if (item?.kind !== "image" || !isTauriRuntime()) return;
+    
+    const poll = () => {
+      if (item.ocrStatus === "completed") return;
       invoke<{ fullText: string; status: string }>("get_clipboard_item_ocr", { id: item.id })
         .then(result => {
           if (result) {
-            item.ocrText = result.fullText;
             item.ocrStatus = result.status === "completed" ? "completed" : "pending";
+            if (result.fullText) item.ocrText = result.fullText;
           }
         })
-        .catch(() => {
-          item.ocrStatus = "none";
-        });
-    }
+        .catch(() => { item.ocrStatus = "none"; });
+    };
+    
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
   });
 
   const emails = $derived(

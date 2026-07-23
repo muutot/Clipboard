@@ -19,7 +19,7 @@ use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, T
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
-use ocr::{OcrWorker, TesseractOcrEngine};
+use ocr::{OcrEngine, OcrWorker, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
@@ -275,15 +275,18 @@ fn get_clipboard_formats(window: tauri::Window) -> Result<ClipboardFormatInfo, S
 #[tauri::command]
 fn get_ocr_status(
     database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<OcrStatusInfo, String> {
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
-    let tesseract_available = TesseractOcrEngine::is_available();
+    let cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+    let engine = cfg.ocr_engine().to_string();
 
     Ok(OcrStatusInfo {
         pending_tasks: pending,
         completed_tasks: completed,
-        tesseract_available,
+        tesseract_available: TesseractOcrEngine::is_available(),
+        engine,
     })
 }
 
@@ -293,6 +296,33 @@ struct OcrStatusInfo {
     pending_tasks: u64,
     completed_tasks: u64,
     tesseract_available: bool,
+    engine: String,
+}
+
+#[tauri::command]
+fn get_ocr_config(config: tauri::State<'_, Mutex<ConfigStore>>) -> Result<OcrConfigResponse, String> {
+    let config = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+    Ok(OcrConfigResponse {
+        engine: config.ocr_engine().to_string(),
+        tesseract_languages: config.tesseract_languages().to_string(),
+    })
+}
+
+#[tauri::command]
+fn set_ocr_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    engine: String,
+) -> Result<(), String> {
+    config.lock().map_err(|_| "config lock poisoned".to_owned())?
+        .set_ocr_engine(engine)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OcrConfigResponse {
+    engine: String,
+    tesseract_languages: String,
 }
 
 #[tauri::command]
@@ -923,7 +953,19 @@ pub fn run() {
             let performance_tracker = PerformanceTracker::new();
             performance_tracker.record_startup(startup_metrics.clone());
 
-            let ocr_engine = Arc::new(TesseractOcrEngine::new());
+            let ocr_engine_name = config.ocr_engine().to_string();
+            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "tesseract" {
+                Arc::new(TesseractOcrEngine::with_languages(
+                    config.tesseract_languages().to_string(),
+                ))
+            } else {
+                // PP-OCR (default) — falls back to tesseract if available, otherwise skip
+                if TesseractOcrEngine::is_available() {
+                    Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
+                } else {
+                    Arc::new(TesseractOcrEngine::with_languages("chi_sim+eng"))
+                }
+            };
             let ocr_database = Database::open(&paths.database)?;
             let ocr_worker = OcrWorker::start(ocr_engine, Arc::new(ocr_database));
 
@@ -1279,6 +1321,8 @@ pub fn run() {
             run_cli_command,
             get_clipboard_formats,
             get_ocr_status,
+            get_ocr_config,
+            set_ocr_config,
             detect_content_actions,
             soft_delete_clipboard_item,
             restore_clipboard_item,
