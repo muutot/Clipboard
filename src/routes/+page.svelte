@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
+  import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
     loadClipboardHistory,
@@ -27,6 +28,7 @@
   let currentTime = $state(Date.now());
   let runtimeLabel = $state("浏览器预览");
   let statusMessage = $state("使用 ↑ ↓ 选择，Enter 快速粘贴");
+  let settingsOpen = $state(false);
 
   const filteredItems = $derived.by(() => {
     const keywords = query
@@ -230,7 +232,7 @@
       <button type="button" aria-label="清理记录" title="清理记录"><AppIcon name="trash" size={17} /></button>
       <button type="button" aria-label="帮助" title="帮助"><AppIcon name="help" size={17} /></button>
       <button type="button" aria-label="固定窗口" title="固定窗口"><AppIcon name="pin" size={17} /></button>
-      <button type="button" aria-label="设置" title="设置"><AppIcon name="settings" size={17} /></button>
+      <button type="button" aria-label="设置" title="设置" onclick={() => (settingsOpen = true)}><AppIcon name="settings" size={17} /></button>
     </div>
   </div>
 
@@ -271,6 +273,8 @@
     <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> 唤起</span>
   </footer>
 </main>
+
+<StorageSettingsDialog open={settingsOpen} onclose={() => (settingsOpen = false)} />
 
 <style>
   .app-shell {
