@@ -622,6 +622,35 @@
       return;
     }
 
+    // Shortcuts for the focused item
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+      const item = filteredItems.find(i => i.id === selectedId);
+      if (!item) return;
+
+      if (event.key === "c") {
+        event.preventDefault();
+        copyItem(selectedId);
+        return;
+      }
+      if (event.key === "d") {
+        event.preventDefault();
+        if (!item.favorite) deleteItem(selectedId);
+        return;
+      }
+      if (event.key === "f") {
+        event.preventDefault();
+        toggleFavorite(selectedId);
+        return;
+      }
+      if (event.key === "e") {
+        event.preventDefault();
+        if (item.kind === "text" || item.kind === "link") {
+          openDetail(selectedId);
+        }
+        return;
+      }
+    }
+
     if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) {
       const index = Number(event.key) - 1;
       const item = filteredItems[index];
