@@ -1,5 +1,6 @@
 mod domain;
 mod platform;
+mod search;
 
 use platform::RuntimeInfo;
 
