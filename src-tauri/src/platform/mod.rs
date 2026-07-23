@@ -32,6 +32,8 @@ pub mod linux_wayland;
 #[path = "linux_wayland.rs"]
 pub mod linux_wayland;
 
+pub mod windows_clipboard;
+
 // ---------------------------------------------------------------------------
 //  Runtime platform identifier
 // ---------------------------------------------------------------------------
@@ -350,10 +352,13 @@ fn current_capabilities() -> PlatformCapabilities {
 }
 
 // ---------------------------------------------------------------------------
-//  ClipboardMonitor (unchanged, kept for backward compatibility with lib.rs)
+//  ClipboardMonitor
 // ---------------------------------------------------------------------------
 
+use windows_clipboard::WindowsClipboardMonitor;
+
 pub struct ClipboardMonitor {
+    monitor: WindowsClipboardMonitor,
     pub running: bool,
     pub last_check_at: i64,
     pub ignored_applications: Vec<String>,
@@ -362,6 +367,7 @@ pub struct ClipboardMonitor {
 impl ClipboardMonitor {
     pub fn new() -> Self {
         Self {
+            monitor: WindowsClipboardMonitor::new(),
             running: false,
             last_check_at: 0,
             ignored_applications: Vec::new(),
@@ -369,17 +375,23 @@ impl ClipboardMonitor {
     }
 
     pub fn start(&mut self) -> Result<(), String> {
-        println!("Clipboard monitoring started");
+        let _receiver = self.monitor.start()?;
         self.running = true;
+        self.last_check_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
         Ok(())
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
+        self.monitor.stop();
         self.running = false;
         Ok(())
     }
 
     pub fn set_ignored_apps(&mut self, apps: Vec<String>) {
+        self.monitor.set_ignored_apps(apps.clone());
         self.ignored_applications = apps;
     }
 }
