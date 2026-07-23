@@ -78,15 +78,17 @@
         ontoggleFavorite(item.id);
       }}
     ><AppIcon name="star" size={16} filled={item.favorite} /></button>
-    <button
-      type="button"
-      title="删除"
-      aria-label="删除"
-      onclick={(event) => {
-        event.stopPropagation();
-        ondelete(item.id);
-      }}
-    ><AppIcon name="trash" size={16} /></button>
+    {#if !item.favorite}
+      <button
+        type="button"
+        title="删除"
+        aria-label="删除"
+        onclick={(event) => {
+          event.stopPropagation();
+          ondelete(item.id);
+        }}
+      ><AppIcon name="trash" size={16} /></button>
+    {/if}
   </div>
 
   <span class="shortcut">⌘{index + 1}</span>
