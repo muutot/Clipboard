@@ -452,6 +452,9 @@
                   <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
                     Tesseract
                   </button>
+                  <button class:primary={ocrEngine === 'windows-ocr'} type="button" onclick={() => saveOcrEngine('windows-ocr')}>
+                    Windows OCR
+                  </button>
                 </div>
               </section>
 

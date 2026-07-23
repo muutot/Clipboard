@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
@@ -13,6 +14,21 @@
 
   let { onclose }: Props = $props();
 
+  const STORAGE_KEY = "generalSettings";
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+  }
+
+  function saveSettings(partial: Record<string, unknown>) {
+    const current = loadSettings();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...current, ...partial }));
+  }
+
   let language = $state<Locale>($locale);
   let fontSize = $state<FontSize>("normal");
   let windowTransparency = $state(95);
@@ -23,9 +39,21 @@
   let feedback = $state("");
   let feedbackSuccess = $state(false);
 
+  onMount(() => {
+    const s = loadSettings();
+    if (s.language) { language = s.language; locale.set(s.language); }
+    if (s.fontSize) { fontSize = s.fontSize; changeFontSize(s.fontSize); }
+    if (s.windowTransparency != null) windowTransparency = s.windowTransparency;
+    if (s.compactMode != null) compactMode = s.compactMode;
+    if (s.alwaysOnTop != null) alwaysOnTop = s.alwaysOnTop;
+    if (s.useSystemTitleBar != null) useSystemTitleBar = s.useSystemTitleBar;
+    if (s.theme) theme = s.theme;
+  });
+
   function changeLanguage(lang: Locale) {
     language = lang;
     locale.set(lang);
+    saveSettings({ language: lang });
     feedback = _t(lang === "zh-CN" ? "已切换至中文" : "Switched to English");
     feedbackSuccess = true;
     setTimeout(() => (feedback = ""), 2000);
@@ -33,6 +61,7 @@
 
   function changeFontSize(size: FontSize) {
     fontSize = size;
+    saveSettings({ fontSize: size });
     const root = document.documentElement;
     const sizes: Record<FontSize, string> = { small: "13px", normal: "14px", large: "16px" };
     root.style.fontSize = sizes[size];
@@ -40,6 +69,7 @@
 
   function handleTransparency(event: Event) {
     windowTransparency = Number((event.target as HTMLInputElement).value);
+    saveSettings({ windowTransparency });
   }
 
   const fontSizeOptions = $derived([
@@ -136,7 +166,7 @@
       type="button"
       class="toggle-switch"
       class:active={compactMode}
-      onclick={() => (compactMode = !compactMode)}
+      onclick={() => { compactMode = !compactMode; saveSettings({ compactMode }); }}
       aria-checked={compactMode}
       aria-label={_t("general.compactMode")}
       role="switch"
@@ -157,7 +187,7 @@
       type="button"
       class="toggle-switch"
       class:active={alwaysOnTop}
-      onclick={() => (alwaysOnTop = !alwaysOnTop)}
+      onclick={() => { alwaysOnTop = !alwaysOnTop; saveSettings({ alwaysOnTop }); }}
       aria-checked={alwaysOnTop}
       aria-label={_t("general.alwaysOnTop")}
       role="switch"
@@ -178,7 +208,7 @@
       type="button"
       class="toggle-switch"
       class:active={useSystemTitleBar}
-      onclick={() => (useSystemTitleBar = !useSystemTitleBar)}
+      onclick={() => { useSystemTitleBar = !useSystemTitleBar; saveSettings({ useSystemTitleBar }); }}
       aria-checked={useSystemTitleBar}
       aria-label={_t("general.useSystemTitleBar")}
       role="switch"

@@ -1063,27 +1063,29 @@ pub fn run() {
             performance_tracker.record_startup(startup_metrics.clone());
 
             let ocr_engine_name = config.ocr_engine().to_string();
-            let ocr_engine: Arc<dyn OcrEngine> = if WindowsOcrEngine::is_available() {
-                Arc::new(WindowsOcrEngine::new())
-            } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
-                Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
-            } else if ocr_engine_name == "ppocr" && PpOcrEngine::is_available() {
-                Arc::new(PpOcrEngine::new())
-            } else if TesseractOcrEngine::is_available() {
-                eprintln!("[ocr] {} not found, falling back to Tesseract", ocr_engine_name);
-                Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
-            } else {
-                // Try to auto-install PP-OCR models
-                eprintln!("[ocr] no engine available, downloading PP-OCRv6 models...");
+            // Try to auto-install PP-OCR models if configured
+            if ocr_engine_name == "ppocr" && !PpOcrEngine::is_available() {
+                eprintln!("[ocr] PP-OCRv6 configured, downloading models...");
                 if let Err(e) = PpOcrEngine::install(&paths) {
                     eprintln!("[ocr] PP-OCR install failed: {}", e);
                 }
-                if PpOcrEngine::is_available() {
-                    Arc::new(PpOcrEngine::new())
-                } else {
-                    eprintln!("[ocr] no OCR engine available");
-                    Arc::new(NoopOcrEngine)
-                }
+            }
+
+            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && PpOcrEngine::is_available() {
+                Arc::new(PpOcrEngine::new())
+            } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
+                Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
+            } else if ocr_engine_name == "windows-ocr" && WindowsOcrEngine::is_available() {
+                Arc::new(WindowsOcrEngine::new())
+            } else if TesseractOcrEngine::is_available() {
+                eprintln!("[ocr] {} not found, falling back to Tesseract", ocr_engine_name);
+                Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
+            } else if WindowsOcrEngine::is_available() {
+                eprintln!("[ocr] falling back to Windows OCR");
+                Arc::new(WindowsOcrEngine::new())
+            } else {
+                eprintln!("[ocr] no OCR engine available");
+                Arc::new(NoopOcrEngine)
             };
             let ocr_database = Database::open(&paths.database)?;
             let ocr_worker = OcrWorker::start(ocr_engine, Arc::new(ocr_database));
