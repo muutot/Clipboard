@@ -1232,7 +1232,7 @@ pub fn run() {
                                     let item = ClipboardItem {
                                         id: format!("img_{}", img_hash),
                                         kind: ClipboardKind::Image,
-                                        title: format!("图片 ({})", img_path.file_name().unwrap_or_default().to_string_lossy()),
+                                        title: img_path.file_stem().unwrap_or_default().to_string_lossy().to_string(),
                                         text_content: None,
                                         resource_path: Some(img_path.to_string_lossy().to_string()),
                                         preview_path: Some(img_path.to_string_lossy().to_string()),

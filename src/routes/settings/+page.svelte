@@ -1,12 +1,9 @@
 <script lang="ts">
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
 
   function handleClose() {
-    if ('__TAURI_INTERNALS__' in window) {
-      import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-        getCurrentWindow().close();
-      });
-    }
+    getCurrentWindow().close();
   }
 </script>
 
