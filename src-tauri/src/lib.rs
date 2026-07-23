@@ -1,7 +1,7 @@
-mod domain;
-mod ocr;
-mod platform;
-mod search;
+pub mod domain;
+pub mod ocr;
+pub mod platform;
+pub mod search;
 
 use platform::RuntimeInfo;
 
