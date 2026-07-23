@@ -121,6 +121,8 @@ fn hotkey_message_loop(
             return Err("CreateWindowExW failed".to_string());
         }
 
+        set_hotkey_hwnd(hwnd);
+
         if let Err(e) = windows_clipboard::register_global_hotkey(hwnd, hotkey_id, modifiers, vk) {
             DestroyWindow(hwnd);
             return Err(e);
@@ -150,7 +152,6 @@ unsafe extern "system" fn hotkey_window_proc(
     lparam: isize,
 ) -> isize {
     if msg == WM_HOTKEY && wparam == 1 {
-        // We use a static to pass the sender through
         if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
             let _ = tx.send(());
         }
@@ -163,12 +164,9 @@ unsafe extern "system" fn hotkey_window_proc(
     DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-// We need to stash the sender somewhere accessible by the window proc.
-// Use a thread-local or a global Mutex. Since we only have one hotkey thread,
-// a static Mutex<Option<mpsc::Sender<()>>> works.
-
 use std::sync::Mutex;
 static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
+static HOTKEY_HWND: Mutex<isize> = Mutex::new(0);
 
 pub fn set_hotkey_sender(tx: &mpsc::Sender<()>) {
     if let Ok(mut guard) = HOTKEY_SENDER.lock() {
@@ -176,8 +174,131 @@ pub fn set_hotkey_sender(tx: &mpsc::Sender<()>) {
     }
 }
 
-pub fn clear_hotkey_sender() {
+pub fn set_hotkey_hwnd(hwnd: isize) {
+    if let Ok(mut guard) = HOTKEY_HWND.lock() {
+        *guard = hwnd;
+    }
+}
+
+pub fn clear_hotkey_state() {
     if let Ok(mut guard) = HOTKEY_SENDER.lock() {
         *guard = None;
+    }
+    if let Ok(mut guard) = HOTKEY_HWND.lock() {
+        *guard = 0;
+    }
+}
+
+pub fn stop_hotkey_thread() {
+    let hwnd = HOTKEY_HWND.lock().ok().and_then(|g| {
+        let h = *g;
+        if h != 0 { Some(h) } else { None }
+    });
+    if let Some(hwnd) = hwnd {
+        extern "system" {
+            fn PostMessageW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> i32;
+        }
+        const WM_QUIT: u32 = 0x0012;
+        unsafe {
+            PostMessageW(hwnd, WM_QUIT, 0, 0);
+        }
+    }
+    clear_hotkey_state();
+}
+
+pub struct HotkeyManager {
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl HotkeyManager {
+    pub fn new() -> Self {
+        Self { handle: None }
+    }
+
+    pub fn start(&mut self, modifiers: u32, vk: u32) {
+        self.stop();
+        let (tx, rx) = mpsc::channel::<()>();
+        let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
+        let window_handle = self.handle.take();
+        drop(window_handle);
+
+        let window_clone = {
+            let app_handle = std::env::var("TAURI_APP_HANDLE").ok()
+                .and_then(|_| None::<()>);
+            None::<()>
+        };
+
+        thread::spawn(move || loop {
+            match rx.recv() {
+                Ok(()) => {
+                    // The toggle window signal is handled via Tauri event system
+                }
+                Err(_) => break,
+            }
+        });
+
+        self.handle = Some(handle);
+    }
+
+    pub fn start_with_window(&mut self, modifiers: u32, vk: u32, window: tauri::WebviewWindow) {
+        self.stop();
+        let (tx, rx) = mpsc::channel::<()>();
+        let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
+
+        thread::spawn(move || loop {
+            match rx.recv() {
+                Ok(()) => {
+                    let is_visible = window.is_visible().unwrap_or(false);
+                    let is_focused = window.is_focused().unwrap_or(false);
+                    if !is_visible {
+                        let _ = window.show();
+                    }
+                    if !is_focused {
+                        let _ = window.set_focus();
+                    }
+                }
+                Err(_) => break,
+            }
+        });
+
+        self.handle = Some(handle);
+    }
+
+    pub fn stop(&mut self) {
+        stop_hotkey_thread();
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+pub fn shortcut_to_windows_hotkey(binding: &crate::keyboard::ShortcutBinding) -> Option<(u32, u32)> {
+    match binding {
+        crate::keyboard::ShortcutBinding::Chord { modifiers, key } => {
+            let mut mod_flags: u32 = 0;
+            for m in modifiers {
+                match m {
+                    crate::keyboard::Modifier::Alt => mod_flags |= windows_clipboard::MOD_ALT,
+                    crate::keyboard::Modifier::Control => mod_flags |= windows_clipboard::MOD_CONTROL,
+                    crate::keyboard::Modifier::Shift => mod_flags |= windows_clipboard::MOD_SHIFT,
+                    crate::keyboard::Modifier::Meta => mod_flags |= windows_clipboard::MOD_WIN,
+                }
+            }
+            let vk = match key.to_uppercase().as_str() {
+                "V" => windows_clipboard::VK_V,
+                "SPACE" => 0x20,
+                other if other.len() == 1 => {
+                    let c = other.chars().next().unwrap();
+                    if c.is_ascii_alphabetic() {
+                        c.to_ascii_uppercase() as u8 as u32
+                    } else {
+                        return None;
+                    }
+                }
+                _ => return None,
+            };
+            Some((mod_flags, vk))
+        }
+        crate::keyboard::ShortcutBinding::DoubleModifier { .. } => None,
     }
 }

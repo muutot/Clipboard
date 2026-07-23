@@ -122,14 +122,14 @@
       });
   });
 
-  function handleAction(event: MouseEvent, action: string, value: string) {
+  async function handleAction(event: MouseEvent, action: string, value: string) {
     event.stopPropagation();
-    if (action === "email") {
-      window.open(`mailto:${value}`, "_blank");
-    } else if (action === "url") {
-      window.open(value, "_blank");
-    } else if (action === "phone") {
-      window.open(`tel:${value}`, "_blank");
+    if (action === "url" || action === "email" || action === "phone") {
+      try {
+        await invoke("open_external_url", { url: action === "email" ? `mailto:${value}` : action === "phone" ? `tel:${value}` : value });
+      } catch {
+        window.open(action === "email" ? `mailto:${value}` : action === "phone" ? `tel:${value}` : value, "_blank");
+      }
     } else if (action === "color") {
       void navigator.clipboard.writeText(value).catch(() => {});
     }
@@ -292,31 +292,6 @@
     </div>
   {/if}
 
-  {#if !editing && contentActions && (contentActions.hasEmail || contentActions.hasUrl || contentActions.hasPhone || contentActions.hasColor)}
-    <div class="quick-actions" aria-label="Quick actions">
-      {#if contentActions.hasUrl}
-        <button type="button" title={_t("actions.openUrl")}
-          onclick={(e) => handleAction(e, "url", contentActions!.urls[0])} class="qa-btn"
-        ><AppIcon name="globe" size={13} /><span>{_t("actions.openUrl")}</span></button>
-      {/if}
-      {#if contentActions.hasEmail}
-        <button type="button" title={_t("actions.sendEmail")}
-          onclick={(e) => handleAction(e, "email", contentActions!.emails[0])} class="qa-btn"
-        ><AppIcon name="mail" size={13} /><span>{_t("actions.sendEmail")}</span></button>
-      {/if}
-      {#if contentActions.hasPhone}
-        <button type="button" title={_t("actions.callPhone")}
-          onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])} class="qa-btn"
-        ><AppIcon name="phone" size={13} /><span>{_t("actions.callPhone")}</span></button>
-      {/if}
-      {#if contentActions.hasColor}
-        <button type="button" title={_t("actions.copyColor")}
-          onclick={(e) => handleAction(e, "color", contentActions!.colors[0])} class="qa-btn"
-        ><AppIcon name="palette" size={13} /><span>{_t("actions.copyColor")}</span></button>
-      {/if}
-    </div>
-  {/if}
-
   {#if !editing}
     <div class="actions" aria-label={_t("card.itemActions")}>
     <button type="button" title={_t("card.viewDetail")} aria-label={_t("card.viewDetail")}
@@ -361,8 +336,24 @@
         onclick={(event) => {
           event.stopPropagation();
           ondelete(item.id);
-        }}><AppIcon name="trash" size={16} /></button
+        }}        ><AppIcon name="trash" size={16} /></button
       >
+    {/if}
+    {#if contentActions?.hasUrl}
+      <button type="button" title={_t("actions.openUrl")} onclick={(e) => handleAction(e, "url", contentActions!.urls[0])}
+      ><AppIcon name="globe" size={16} /></button>
+    {/if}
+    {#if contentActions?.hasEmail}
+      <button type="button" title={_t("actions.sendEmail")} onclick={(e) => handleAction(e, "email", contentActions!.emails[0])}
+      ><AppIcon name="mail" size={16} /></button>
+    {/if}
+    {#if contentActions?.hasPhone}
+      <button type="button" title={_t("actions.callPhone")} onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])}
+      ><AppIcon name="phone" size={16} /></button>
+    {/if}
+    {#if contentActions?.hasColor}
+      <button type="button" title={_t("actions.copyColor")} onclick={(e) => handleAction(e, "color", contentActions!.colors[0])}
+      ><AppIcon name="palette" size={16} /></button>
     {/if}
   </div>
   {/if}
@@ -579,37 +570,6 @@
     text-overflow: ellipsis;
   }
 
-  .quick-actions {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    gap: 4px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-  }
-
-  .qa-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    border: 1px solid #3a3a3a;
-    border-radius: 14px;
-    color: #b2b2b2;
-    background: #1e1e1e;
-    font-size: 11.5px;
-    cursor: pointer;
-    transition:
-      background 100ms ease,
-      border-color 100ms ease;
-  }
-
-  .qa-btn:hover {
-    border-color: #5a5a5a;
-    background: #2c2c2c;
-    color: #e8e8e8;
-  }
-
   .actions {
     position: absolute;
     z-index: 2;
@@ -730,9 +690,6 @@
       padding-right: 28px;
     }
     .actions {
-      display: none;
-    }
-    .quick-actions {
       display: none;
     }
   }

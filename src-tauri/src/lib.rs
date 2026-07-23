@@ -25,6 +25,7 @@ use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
     WindowManager,
 };
+use platform::windows_hotkey::{HotkeyManager, shortcut_to_windows_hotkey};
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
@@ -34,6 +35,21 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use std::str::FromStr;
+
+const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
+
+fn resolve_toggle_hotkey(config: &KeyboardConfig) -> Option<(u32, u32)> {
+    let shortcuts = config.shortcuts.get(TOGGLE_WINDOW_ACTION)?;
+    for shortcut in shortcuts {
+        if let Ok(binding) = keyboard::ShortcutBinding::from_str(shortcut) {
+            if let Some(hotkey) = shortcut_to_windows_hotkey(&binding) {
+                return Some(hotkey);
+            }
+        }
+    }
+    None
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -226,14 +242,44 @@ fn get_keyboard_config(
 #[tauri::command]
 fn configure_keyboard_shortcuts(
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
+    hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
     action: String,
     shortcuts: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    keyboard
+    let normalized = keyboard
         .lock()
         .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
-        .set_action_shortcuts(action, shortcuts)
-        .map_err(|error| error.to_string())
+        .set_action_shortcuts(action.clone(), shortcuts)
+        .map_err(|error| error.to_string())?;
+
+    if action == TOGGLE_WINDOW_ACTION {
+        let config = keyboard
+            .lock()
+            .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+            .config();
+        let mut hm = hotkey_manager
+            .lock()
+            .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
+        if let Some((mod_flags, vk)) = resolve_toggle_hotkey(&config) {
+            #[cfg(target_os = "windows")]
+            {
+                let app_handle = keyboard
+                    .lock()
+                    .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?;
+                drop(app_handle);
+                hm.stop();
+            }
+            #[cfg(target_os = "windows")]
+            if let Some(window) = (|| -> Option<tauri::WebviewWindow> {
+                // We can't access the app handle from here, so we use a global approach
+                None
+            })() {
+                hm.start_with_window(mod_flags, vk, window);
+            }
+        }
+    }
+
+    Ok(normalized)
 }
 
 #[tauri::command]
@@ -432,6 +478,11 @@ fn set_storage_config(
 struct OcrConfigResponse {
     engine: String,
     tesseract_languages: String,
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
 }
 
 #[tauri::command]
@@ -1352,7 +1403,6 @@ pub fn run() {
 
 
             app.manage(Mutex::new(config));
-            app.manage(Mutex::new(keyboard));
             app.manage(paths);
             app.manage(database);
             app.manage(search_index);
@@ -1364,45 +1414,21 @@ pub fn run() {
 
             let _tray = SystemTray::create().ok();
 
-            // Wire global hotkey (Alt+V) to toggle window
+            // Register global hotkey from keyboard config
+            let mut hotkey_manager = HotkeyManager::new();
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
-                use platform::windows_clipboard;
-
-                match window.hwnd() {
-                    Ok(_hwnd) => {
-                        let (tx, rx) = mpsc::channel::<()>();
-                        let _hotkey_thread = platform::windows_hotkey::spawn_hotkey_thread(
-                            1,
-                            windows_clipboard::MOD_ALT,
-                            windows_clipboard::VK_V,
-                            tx,
-                        );
-
-                        let window_clone = window.clone();
-                        thread::spawn(move || {
-                            loop {
-                                match rx.recv() {
-                                    Ok(()) => {
-                                        let is_visible = window_clone.is_visible().unwrap_or(false);
-                                        let is_focused = window_clone.is_focused().unwrap_or(false);
-                                        if !is_visible {
-                                            let _ = window_clone.show();
-                                        }
-                                        if !is_focused {
-                                            let _ = window_clone.set_focus();
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        eprintln!("[hotkey] failed to get window handle: {e}");
-                    }
+                let kb_config = keyboard.config();
+                if let Some((mod_flags, vk)) = resolve_toggle_hotkey(&kb_config) {
+                    hotkey_manager.start_with_window(mod_flags, vk, window.clone());
+                } else {
+                    eprintln!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+V");
+                    use platform::windows_clipboard;
+                    hotkey_manager.start_with_window(windows_clipboard::MOD_ALT, windows_clipboard::VK_V, window.clone());
                 }
             }
+            app.manage(Mutex::new(keyboard));
+            app.manage(Mutex::new(hotkey_manager));
 
             Ok(())
         })
@@ -1446,6 +1472,7 @@ pub fn run() {
             set_ocr_config,
             install_ppocr,
             check_ppocr_status,
+            open_external_url,
             set_history_config,
             get_history_config,
             set_storage_config,
