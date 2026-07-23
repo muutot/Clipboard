@@ -269,6 +269,86 @@
       {#if item.detailLabel}<span>{item.detailLabel}</span>{/if}
       <span>{formatRelativeTime(item.createdAt, now)}</span>
       {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
+      <div class="actions" aria-label={_t("card.itemActions")}>
+        <button type="button" title={_t("card.viewDetail")} aria-label={_t("card.viewDetail")}
+          onclick={(event) => { event.stopPropagation(); ondetail(item.id); }}
+        ><AppIcon name="eye" size={16} /></button>
+        <button type="button" title={_t("card.copy")} aria-label={_t("card.copy")}
+          onclick={(event) => { event.stopPropagation(); oncopy(item.id); }}
+        ><AppIcon name="copy" size={16} /></button>
+        {#if item.kind === "image" || item.kind === "file"}
+          <button type="button" title={_t("card.saveAs")} aria-label={_t("card.saveAs")}
+            onclick={async (event) => {
+              event.stopPropagation();
+              if (item.resourcePath && isTauriRuntime()) {
+                try {
+                  const { save } = await import('@tauri-apps/plugin-dialog');
+                  const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || 'file';
+                  const ext = defaultName.includes('.') ? defaultName.split('.').pop() : '';
+                  const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
+                  const filePath = await save({ defaultPath: defaultName, filters });
+                  if (filePath) {
+                    await invoke('copy_file_to', { src: item.resourcePath, dst: filePath });
+                  }
+                } catch {
+                  invoke('open_external_url', { url: item.resourcePath }).catch(() => {});
+                }
+              }
+            }}
+          ><AppIcon name="download" size={16} /></button>
+        {/if}
+        {#if item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file"}
+          <button type="button"
+            title={item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("card.edit")}
+            aria-label={item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("card.edit")}
+            onclick={startEdit}
+          ><AppIcon name="edit" size={16} /></button>
+        {/if}
+        {#if item.kind === "text"}
+          <button type="button" title={_t("card.pastePlain")} aria-label={_t("card.pastePlain")}
+            onclick={(event) => { event.stopPropagation(); onplainpaste(item.id); }}
+          ><AppIcon name="type" size={16} /></button>
+        {/if}
+        <button type="button" title={_t("card.pasteFormat")} aria-label={_t("card.pasteFormat")}
+          onclick={(event) => { event.stopPropagation(); onformatpaste(item.id); }}
+        ><AppIcon name="copy-plus" size={16} /></button>
+        <button
+          type="button"
+          class:active={item.favorite}
+          title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+          aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+          onclick={(event) => {
+            event.stopPropagation();
+            ontoggleFavorite(item.id);
+          }}><AppIcon name="star" size={16} filled={item.favorite} /></button>
+        {#if !item.favorite}
+          <button
+            type="button"
+            title={_t("card.delete")}
+            aria-label={_t("card.delete")}
+            onclick={(event) => {
+              event.stopPropagation();
+              ondelete(item.id);
+            }}><AppIcon name="trash" size={16} /></button>
+        {/if}
+        {#if contentActions?.hasUrl}
+          <button type="button" title={_t("actions.openUrl")} onclick={(e) => handleAction(e, "url", contentActions!.urls[0])}
+          ><AppIcon name="globe" size={16} /></button>
+        {/if}
+        {#if contentActions?.hasEmail}
+          <button type="button" title={_t("actions.sendEmail")} onclick={(e) => handleAction(e, "email", contentActions!.emails[0])}
+          ><AppIcon name="mail" size={16} /></button>
+        {/if}
+        {#if contentActions?.hasPhone}
+          <button type="button" title={_t("actions.callPhone")} onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])}
+          ><AppIcon name="phone" size={16} /></button>
+        {/if}
+        {#if contentActions?.hasColor}
+          <button type="button" title={_t("actions.copyColor")} onclick={(e) => handleAction(e, "color", contentActions!.colors[0])}
+          ><AppIcon name="palette" size={16} /></button>
+        {/if}
+      </div>
+      <span class="shortcut">⌘{index + 1}</span>
     </div>
   {:else}
     <div class="edit-area">
@@ -292,92 +372,6 @@
     </div>
   {/if}
 
-  {#if !editing}
-    <div class="actions" aria-label={_t("card.itemActions")}>
-    <button type="button" title={_t("card.viewDetail")} aria-label={_t("card.viewDetail")}
-      onclick={(event) => { event.stopPropagation(); ondetail(item.id); }}
-    ><AppIcon name="eye" size={16} /></button>
-    <button type="button" title={_t("card.copy")} aria-label={_t("card.copy")}
-      onclick={(event) => { event.stopPropagation(); oncopy(item.id); }}
-    ><AppIcon name="copy" size={16} /></button>
-    {#if item.kind === "image" || item.kind === "file"}
-      <button type="button" title={_t("card.saveAs")} aria-label={_t("card.saveAs")}
-        onclick={async (event) => {
-          event.stopPropagation();
-          if (item.resourcePath && isTauriRuntime()) {
-            try {
-              const { save } = await import('@tauri-apps/plugin-dialog');
-              const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || 'file';
-              const ext = defaultName.includes('.') ? defaultName.split('.').pop() : '';
-              const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
-              const filePath = await save({ defaultPath: defaultName, filters });
-              if (filePath) {
-                await invoke('copy_file_to', { src: item.resourcePath, dst: filePath });
-              }
-            } catch {
-              invoke('open_external_url', { url: item.resourcePath }).catch(() => {});
-            }
-          }
-        }}
-        ><AppIcon name="download" size={16} /></button
-      >
-    {/if}
-    {#if item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file"}
-      <button type="button"
-        title={item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("card.edit")}
-        aria-label={item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("card.edit")}
-        onclick={startEdit}
-      ><AppIcon name="edit" size={16} /></button>
-    {/if}
-    {#if item.kind === "text"}
-      <button type="button" title={_t("card.pastePlain")} aria-label={_t("card.pastePlain")}
-        onclick={(event) => { event.stopPropagation(); onplainpaste(item.id); }}
-      ><AppIcon name="type" size={16} /></button>
-    {/if}
-    <button type="button" title={_t("card.pasteFormat")} aria-label={_t("card.pasteFormat")}
-      onclick={(event) => { event.stopPropagation(); onformatpaste(item.id); }}
-    ><AppIcon name="copy-plus" size={16} /></button>
-    <button
-      type="button"
-      class:active={item.favorite}
-      title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-      aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-      onclick={(event) => {
-        event.stopPropagation();
-        ontoggleFavorite(item.id);
-      }}><AppIcon name="star" size={16} filled={item.favorite} /></button
-    >
-    {#if !item.favorite}
-      <button
-        type="button"
-        title={_t("card.delete")}
-        aria-label={_t("card.delete")}
-        onclick={(event) => {
-          event.stopPropagation();
-          ondelete(item.id);
-        }}        ><AppIcon name="trash" size={16} /></button
-      >
-    {/if}
-    {#if contentActions?.hasUrl}
-      <button type="button" title={_t("actions.openUrl")} onclick={(e) => handleAction(e, "url", contentActions!.urls[0])}
-      ><AppIcon name="globe" size={16} /></button>
-    {/if}
-    {#if contentActions?.hasEmail}
-      <button type="button" title={_t("actions.sendEmail")} onclick={(e) => handleAction(e, "email", contentActions!.emails[0])}
-      ><AppIcon name="mail" size={16} /></button>
-    {/if}
-    {#if contentActions?.hasPhone}
-      <button type="button" title={_t("actions.callPhone")} onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])}
-      ><AppIcon name="phone" size={16} /></button>
-    {/if}
-    {#if contentActions?.hasColor}
-      <button type="button" title={_t("actions.copyColor")} onclick={(e) => handleAction(e, "color", contentActions!.colors[0])}
-      ><AppIcon name="palette" size={16} /></button>
-    {/if}
-  </div>
-  {/if}
-
-  <span class="shortcut">⌘{index + 1}</span>
 </article>
 
 <style>
@@ -539,10 +533,11 @@
     z-index: 1;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
     gap: 8px;
     min-width: 0;
     margin-top: 10px;
-    padding-right: 82px;
     color: #8c8c8c;
     font-size: 11.5px;
     white-space: nowrap;
@@ -590,25 +585,18 @@
   }
 
   .actions {
-    position: absolute;
-    z-index: 2;
-    right: 34px;
-    bottom: 14px;
     display: flex;
     gap: 2px;
+    margin-left: auto;
     opacity: 0;
-    transform: translateY(2px);
+    pointer-events: auto;
     transition:
-      opacity 120ms ease,
-      transform 120ms ease;
+      opacity 120ms ease;
   }
 
   .clip-card:hover .actions,
-  .clip-card.selected .actions,
-  .clip-card:focus-within .actions,
-  .actions:focus-within {
+  .clip-card.selected .actions {
     opacity: 1;
-    transform: translateY(0);
   }
 
   .actions button {
@@ -632,13 +620,12 @@
   }
 
   .shortcut {
-    position: absolute;
-    z-index: 1;
-    right: 11px;
-    bottom: 15px;
+    margin-left: auto;
+    padding-left: 8px;
     color: #747474;
     font-size: 11.5px;
     pointer-events: none;
+    flex-shrink: 0;
   }
 
   .edit-area {
@@ -704,9 +691,6 @@
   @media (max-width: 620px) {
     .content {
       padding-right: 40px;
-    }
-    .meta-row {
-      padding-right: 28px;
     }
     .actions {
       display: none;

@@ -26,9 +26,10 @@
   interface Props {
     open: boolean;
     onclose: () => void;
+    standalone?: boolean;
   }
 
-  let { open, onclose }: Props = $props();
+  let { open, onclose, standalone = false }: Props = $props();
   let status = $state<StorageStatus | null>(null);
   let pending = $state<StorageDirectoryUpdate | null>(null);
   let dataDirectory = $state("");
@@ -227,396 +228,417 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-  <div class="settings-backdrop">
+  {@render backdropWrap()}
+{/if}
+
+{#snippet backdropWrap()}
+  {#if standalone}
     <div
-      class="settings-dialog"
+      class="settings-dialog settings-dialog--standalone"
       role="dialog"
-      aria-modal="true"
       aria-labelledby="settings-title"
       tabindex="-1"
     >
-      <aside class="settings-sidebar">
-        <div class="settings-brand">
-          <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
-          <div>
-            <strong>Clipboard</strong>
-            <small>0.1.0</small>
-          </div>
+      {@render dialogContent()}
+    </div>
+  {:else}
+    <div class="settings-backdrop">
+      <div
+        class="settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        tabindex="-1"
+      >
+        {@render dialogContent()}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet dialogContent()}
+  <aside class="settings-sidebar">
+    <div class="settings-brand">
+      <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
+      <div>
+        <strong>Clipboard</strong>
+        <small>0.1.0</small>
+      </div>
+    </div>
+
+    <nav aria-label="设置分类">
+      <button
+        class:active={activeSection === "general"}
+        type="button"
+        onclick={() => (activeSection = "general")}
+      >
+        <AppIcon name="sliders" size={16} />
+        <span>{_t("storage.generalTab")}</span>
+      </button>
+      <button
+        class:active={activeSection === "capture"}
+        type="button"
+        onclick={() => (activeSection = "capture")}
+      >
+        <AppIcon name="filter" size={16} />
+        <span>采集</span>
+      </button>
+      <button
+        class:active={activeSection === "storage"}
+        type="button"
+        onclick={() => (activeSection = "storage")}
+      >
+        <AppIcon name="file" size={16} />
+        <span>{_t("storage.storageTab")}</span>
+      </button>
+      <button
+        class:active={activeSection === "keyboard"}
+        type="button"
+        onclick={() => (activeSection = "keyboard")}
+      >
+        <AppIcon name="keyboard" size={16} />
+        <span>{_t("storage.keyboardTab")}</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <span>配置固定位置</span>
+      <code>{activeSection === "keyboard" ? "conf/keyboard.json" : "conf/conf.json"}</code>
+    </div>
+  </aside>
+
+  <div class="settings-content">
+    {#if activeSection === "general"}
+      <GeneralSettingsPanel {onclose} />
+    {:else if activeSection === "capture"}
+      <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
+    {:else if activeSection === "keyboard"}
+      <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
+    {:else}
+      <header>
+        <div>
+          <span class="eyebrow">{_t("storage.settings")}</span>
+          <h2 id="settings-title">{_t("storage.dataStorage")}</h2>
+          <p>{_t("storage.configPath")}</p>
         </div>
+        {#if !standalone}
+          <button
+            class="close-button"
+            type="button"
+            aria-label={_t("actions.close")}
+            onclick={onclose}>×</button
+          >
+        {/if}
+      </header>
 
-        <nav aria-label="设置分类">
-          <button
-            class:active={activeSection === "general"}
-            type="button"
-            onclick={() => (activeSection = "general")}
-          >
-            <AppIcon name="sliders" size={16} />
-            <span>{_t("storage.generalTab")}</span>
-          </button>
-          <button
-            class:active={activeSection === "capture"}
-            type="button"
-            onclick={() => (activeSection = "capture")}
-          >
-            <AppIcon name="filter" size={16} />
-            <span>采集</span>
-          </button>
-          <button
-            class:active={activeSection === "storage"}
-            type="button"
-            onclick={() => (activeSection = "storage")}
-          >
-            <AppIcon name="file" size={16} />
-            <span>{_t("storage.storageTab")}</span>
-          </button>
-          <button
-            class:active={activeSection === "keyboard"}
-            type="button"
-            onclick={() => (activeSection = "keyboard")}
-          >
-            <AppIcon name="keyboard" size={16} />
-            <span>{_t("storage.keyboardTab")}</span>
-          </button>
-        </nav>
-
-        <div class="sidebar-foot">
-          <span>配置固定位置</span>
-          <code>{activeSection === "keyboard" ? "conf/keyboard.json" : "conf/conf.json"}</code>
-        </div>
-      </aside>
-
-      <div class="settings-content">
-        {#if activeSection === "general"}
-          <GeneralSettingsPanel {onclose} />
-        {:else if activeSection === "capture"}
-          <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
-        {:else if activeSection === "keyboard"}
-          <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
-        {:else}
-          <header>
-            <div>
-              <span class="eyebrow">{_t("storage.settings")}</span>
-              <h2 id="settings-title">{_t("storage.dataStorage")}</h2>
-              <p>{_t("storage.configPath")}</p>
+      {#if loading}
+        <div class="settings-state">{_t("storage.readingConfig")}</div>
+      {:else if status}
+        <div class="settings-scroll">
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+              <div>
+                <strong>{_t("storage.configSectionTitle")}</strong>
+                <p>{_t("storage.configSectionDesc")}</p>
+              </div>
             </div>
-            <button
-              class="close-button"
-              type="button"
-              aria-label={_t("actions.close")}
-              onclick={onclose}>×</button
-            >
-          </header>
+            <code class="path-value" title={status.configPath}>{status.configPath}</code>
+          </section>
 
-          {#if loading}
-            <div class="settings-state">{_t("storage.readingConfig")}</div>
-          {:else if status}
-            <div class="settings-scroll">
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-                  <div>
-                    <strong>{_t("storage.configSectionTitle")}</strong>
-                    <p>{_t("storage.configSectionDesc")}</p>
-                  </div>
+          <section class="setting-card">
+            <div class="setting-heading split-heading">
+              <div class="heading-copy">
+                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.dataDirectoryTitle")}</strong>
+                  <p>{_t("storage.dataDirectoryDesc")}</p>
                 </div>
-                <code class="path-value" title={status.configPath}>{status.configPath}</code>
-              </section>
+              </div>
+              <span class:custom={status.usesCustomDataDirectory} class="directory-badge">
+                {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
+              </span>
+            </div>
 
-              <section class="setting-card">
-                <div class="setting-heading split-heading">
-                  <div class="heading-copy">
-                    <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-                    <div>
-                      <strong>{_t("storage.dataDirectoryTitle")}</strong>
-                      <p>{_t("storage.dataDirectoryDesc")}</p>
-                    </div>
-                  </div>
-                  <span class:custom={status.usesCustomDataDirectory} class="directory-badge">
-                    {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
-                  </span>
-                </div>
+            <label for="data-directory">{_t("storage.directoryPath")}</label>
+            <input
+              id="data-directory"
+              bind:value={dataDirectory}
+              autocomplete="off"
+              spellcheck="false"
+              placeholder={_t("storage.placeholderPath")}
+            />
 
-                <label for="data-directory">{_t("storage.directoryPath")}</label>
-                <input
-                  id="data-directory"
-                  bind:value={dataDirectory}
-                  autocomplete="off"
-                  spellcheck="false"
-                  placeholder={_t("storage.placeholderPath")}
-                />
+            <div class="setting-actions">
+              <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
+                >{_t("storage.restoreDefault")}</button
+              >
+              <button
+                class="primary"
+                type="button"
+                disabled={saving}
+                onclick={saveCustomDirectory}
+              >
+                {saving ? _t("storage.saving") : _t("storage.saveDirectory")}
+              </button>
+            </div>
 
-                <div class="setting-actions">
-                  <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
-                    >{_t("storage.restoreDefault")}</button
-                  >
-                  <button
-                    class="primary"
-                    type="button"
-                    disabled={saving}
-                    onclick={saveCustomDirectory}
-                  >
-                    {saving ? _t("storage.saving") : _t("storage.saveDirectory")}
-                  </button>
-                </div>
+            {#if pending}
+              <div class="pending-path">
+                <span>下次启动</span>
+                <code title={pending.storagePath}>{pending.storagePath}</code>
+              </div>
+            {/if}
+          </section>
 
-                {#if pending}
-                  <div class="pending-path">
-                    <span>下次启动</span>
-                    <code title={pending.storagePath}>{pending.storagePath}</code>
-                  </div>
-                {/if}
-              </section>
-
-              <section class="setting-card directory-tree-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-                  <div>
-                    <strong>{_t("storage.directoryTreeTitle")}</strong>
-                    <p>{_t("storage.directoryTreeDesc")}</p>
-                  </div>
-                </div>
-                <pre>storage/
+          <section class="setting-card directory-tree-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+              <div>
+                <strong>{_t("storage.directoryTreeTitle")}</strong>
+                <p>{_t("storage.directoryTreeDesc")}</p>
+              </div>
+            </div>
+            <pre>storage/
 ├─ image/
 │  └─ previews/
 ├─ files/
 └─ database/
    ├─ clipboard.sqlite3
    └─ search-index/</pre>
-              </section>
+          </section>
 
-              <section class="setting-card">
-                <div class="setting-heading split-heading">
-                  <div class="heading-copy">
-                    <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-                    <div>
-                      <strong>{_t("storage.searchIndexTitle")}</strong>
-                      <p>{_t("storage.searchIndexDesc")}</p>
-                    </div>
-                  </div>
-                  <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
-                    {status.searchIndexRebuildRequired
-                      ? _t("storage.rebuildRequired")
-                      : _t("storage.ready", { version: status.searchIndexVersion })}
-                  </span>
+          <section class="setting-card">
+            <div class="setting-heading split-heading">
+              <div class="heading-copy">
+                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.searchIndexTitle")}</strong>
+                  <p>{_t("storage.searchIndexDesc")}</p>
                 </div>
-                <code class="path-value" title={status.searchIndexPath}
-                  >{status.searchIndexPath}</code
-                >
-                <div class="setting-actions">
-                  <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
-                    {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
-                  </button>
-                </div>
-              </section>
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
-                  <div>
-                    <strong>{_t("statistics.title")}</strong>
-                    <p>剪贴板数据统计概览</p>
-                  </div>
-                </div>
-                <div class="stats-grid">
-                  <div class="stat-item">
-                    <span class="stat-value">{status.itemCount}</span>
-                    <span class="stat-label">{_t("statistics.totalRecords")}</span>
-                  </div>
-                  <div class="stat-item">
-                    <span class="stat-value">-</span>
-                    <span class="stat-label">{_t("statistics.dbSize")}</span>
-                  </div>
-                  <div class="stat-item">
-                    <span class="stat-value">v{status.searchIndexVersion}</span>
-                    <span class="stat-label">{_t("statistics.indexSize")}</span>
-                  </div>
-                  <div class="stat-item">
-                    <span class="stat-value">0 / 0</span>
-                    <span class="stat-label">{_t("statistics.ocrTasks")}</span>
-                  </div>
-                </div>
-              </section>
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-                  <div>
-                    <strong>OCR 引擎</strong>
-                    <p>PP-OCRv6 纯 Rust 实现，不依赖 Python。首次使用自动下载模型。</p>
-                  </div>
-                </div>
-                <div class="setting-actions" style="flex-wrap: wrap;">
-                  <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
-                    PP-OCRv6 (ONNX)
-                  </button>
-                  <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
-                    Tesseract
-                  </button>
-                  <button class:primary={ocrEngine === 'windows-ocr'} type="button" onclick={() => saveOcrEngine('windows-ocr')}>
-                    Windows OCR
-                  </button>
-                </div>
-              </section>
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
-                  <div>
-                    <strong>{_t("captureSettings.retentionPeriod")}</strong>
-                    <p>{_t("captureSettings.retentionPeriodDesc")}</p>
-                  </div>
-                </div>
-                <div class="number-input-row">
-                  <input
-                    type="number"
-                    bind:value={retentionPeriodDays}
-                    min="1"
-                    max="365"
-                    onchange={saveHistoryConfig}
-                  />
-                  <span class="number-suffix">{_t("captureSettings.days")}</span>
-                </div>
-              </section>
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-                  <div>
-                    <strong>{_t("captureSettings.maxItemCount")}</strong>
-                    <p>{_t("captureSettings.maxItemCountDesc")}</p>
-                  </div>
-                </div>
-                <div class="number-input-row">
-                  <input
-                    type="number"
-                    bind:value={maxItemCount}
-                    min="100"
-                    step="100"
-                    onchange={saveHistoryConfig}
-                  />
-                  <span class="number-suffix">条</span>
-                </div>
-              </section>
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-                  <div>
-                    <strong>{_t("captureSettings.recycleBinDays")}</strong>
-                    <p>{_t("captureSettings.recycleBinDaysDesc")}</p>
-                  </div>
-                </div>
-                <div class="number-input-row">
-                  <input
-                    type="number"
-                    bind:value={recycleBinDays}
-                    min="0"
-                    max="365"
-                    onchange={saveHistoryConfig}
-                  />
-                  <span class="number-suffix">{_t("captureSettings.days")}</span>
-                </div>
-              </section>
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-                  <div>
-                    <strong>{_t("captureSettings.maxFileCopySize")}</strong>
-                    <p>{_t("captureSettings.maxFileCopySizeDesc")}</p>
-                  </div>
-                </div>
-                <div class="number-input-row">
-                  <input
-                    type="number"
-                    bind:value={maxFileCopySize}
-                    min="1024"
-                    step="1048576"
-                    onchange={saveMaxFileCopySize}
-                  />
-                  <span class="number-suffix">{_t("captureSettings.bytes")}</span>
-                </div>
-              </section>
-
-              <div class="storage-summary">
-                <span>{_t("storage.databaseVersion", { version: status.schemaVersion })}</span>
-                <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
-                <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
-                <span title={status.databasePath}>{_t("storage.sqliteConnected")}</span>
               </div>
-
-              {#if perfMetrics}
-                <section class="setting-card">
-                  <div class="setting-heading">
-                    <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-                    <div>
-                      <strong>Performance</strong>
-                      <p>Startup {perfMetrics.startup.totalStartupMs}ms &bull; DB {perfMetrics.startup.dbOpenMs}ms &bull; Search init {perfMetrics.startup.searchInitMs}ms</p>
-                    </div>
-                  </div>
-                  {#if perfMetrics.searchLatency.searchesRecorded > 0}
-                    <div class="perf-grid">
-                      <div class="perf-item">
-                        <strong>{perfMetrics.searchLatency.searchesRecorded}</strong>
-                        <span>searches</span>
-                      </div>
-                      <div class="perf-item">
-                        <strong>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</strong>
-                        <span>avg latency</span>
-                      </div>
-                      <div class="perf-item">
-                        <strong>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</strong>
-                        <span>p95</span>
-                      </div>
-                      <div class="perf-item">
-                        <strong>{perfMetrics.searchLatency.p99Ms ?? '-'}ms</strong>
-                        <span>p99</span>
-                      </div>
-                    </div>
-                  {/if}
-                  <div class="perf-mem">
-                    <span>Uptime {perfMetrics.memory.uptimeSeconds}s &bull; Peak memory {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
-                  </div>
-                </section>
-              {/if}
-
-              <section class="setting-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-                  <div>
-                    <strong>Database Maintenance</strong>
-                    <p>Check and repair database integrity</p>
-                  </div>
-                </div>
-                <div class="setting-actions">
-                  <button type="button" disabled={repairLoading} onclick={doRepair}>
-                    {repairLoading ? 'Checking...' : 'Repair Database'}
-                  </button>
-                </div>
-                {#if repairResult}
-                  <div class="repair-result">
-                    <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
-                      {repairResult.integrityOk ? 'Integrity OK' : 'Integrity Issue'}
-                    </span>
-                    <code>{repairResult.integrityMessage}</code>
-                  </div>
-                {/if}
-              </section>
-
-              <p class="auto-save-note">修改即时生效，无需手动保存</p>
+              <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
+                {status.searchIndexRebuildRequired
+                  ? _t("storage.rebuildRequired")
+                  : _t("storage.ready", { version: status.searchIndexVersion })}
+              </span>
             </div>
-          {:else}
-            <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
+            <code class="path-value" title={status.searchIndexPath}
+              >{status.searchIndexPath}</code
+            >
+            <div class="setting-actions">
+              <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
+                {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
+              </button>
+            </div>
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
+              <div>
+                <strong>{_t("statistics.title")}</strong>
+                <p>剪贴板数据统计概览</p>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <span class="stat-value">{status.itemCount}</span>
+                <span class="stat-label">{_t("statistics.totalRecords")}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">-</span>
+                <span class="stat-label">{_t("statistics.dbSize")}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">v{status.searchIndexVersion}</span>
+                <span class="stat-label">{_t("statistics.indexSize")}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">0 / 0</span>
+                <span class="stat-label">{_t("statistics.ocrTasks")}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+              <div>
+                <strong>OCR 引擎</strong>
+                <p>PP-OCRv6 纯 Rust 实现，不依赖 Python。首次使用自动下载模型。</p>
+              </div>
+            </div>
+            <div class="setting-actions" style="flex-wrap: wrap;">
+              <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
+                PP-OCRv6 (ONNX)
+              </button>
+              <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
+                Tesseract
+              </button>
+              <button class:primary={ocrEngine === 'windows-ocr'} type="button" onclick={() => saveOcrEngine('windows-ocr')}>
+                Windows OCR
+              </button>
+            </div>
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
+              <div>
+                <strong>{_t("captureSettings.retentionPeriod")}</strong>
+                <p>{_t("captureSettings.retentionPeriodDesc")}</p>
+              </div>
+            </div>
+            <div class="number-input-row">
+              <input
+                type="number"
+                bind:value={retentionPeriodDays}
+                min="1"
+                max="365"
+                onchange={saveHistoryConfig}
+              />
+              <span class="number-suffix">{_t("captureSettings.days")}</span>
+            </div>
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <div>
+                <strong>{_t("captureSettings.maxItemCount")}</strong>
+                <p>{_t("captureSettings.maxItemCountDesc")}</p>
+              </div>
+            </div>
+            <div class="number-input-row">
+              <input
+                type="number"
+                bind:value={maxItemCount}
+                min="100"
+                step="100"
+                onchange={saveHistoryConfig}
+              />
+              <span class="number-suffix">条</span>
+            </div>
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+              <div>
+                <strong>{_t("captureSettings.recycleBinDays")}</strong>
+                <p>{_t("captureSettings.recycleBinDaysDesc")}</p>
+              </div>
+            </div>
+            <div class="number-input-row">
+              <input
+                type="number"
+                bind:value={recycleBinDays}
+                min="0"
+                max="365"
+                onchange={saveHistoryConfig}
+              />
+              <span class="number-suffix">{_t("captureSettings.days")}</span>
+            </div>
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+              <div>
+                <strong>{_t("captureSettings.maxFileCopySize")}</strong>
+                <p>{_t("captureSettings.maxFileCopySizeDesc")}</p>
+              </div>
+            </div>
+            <div class="number-input-row">
+              <input
+                type="number"
+                bind:value={maxFileCopySize}
+                min="1024"
+                step="1048576"
+                onchange={saveMaxFileCopySize}
+              />
+              <span class="number-suffix">{_t("captureSettings.bytes")}</span>
+            </div>
+          </section>
+
+          <div class="storage-summary">
+            <span>{_t("storage.databaseVersion", { version: status.schemaVersion })}</span>
+            <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
+            <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
+            <span title={status.databasePath}>{_t("storage.sqliteConnected")}</span>
+          </div>
+
+          {#if perfMetrics}
+            <section class="setting-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+                <div>
+                  <strong>Performance</strong>
+                  <p>Startup {perfMetrics.startup.totalStartupMs}ms &bull; DB {perfMetrics.startup.dbOpenMs}ms &bull; Search init {perfMetrics.startup.searchInitMs}ms</p>
+                </div>
+              </div>
+              {#if perfMetrics.searchLatency.searchesRecorded > 0}
+                <div class="perf-grid">
+                  <div class="perf-item">
+                    <strong>{perfMetrics.searchLatency.searchesRecorded}</strong>
+                    <span>searches</span>
+                  </div>
+                  <div class="perf-item">
+                    <strong>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</strong>
+                    <span>avg latency</span>
+                  </div>
+                  <div class="perf-item">
+                    <strong>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</strong>
+                    <span>p95</span>
+                  </div>
+                  <div class="perf-item">
+                    <strong>{perfMetrics.searchLatency.p99Ms ?? '-'}ms</strong>
+                    <span>p99</span>
+                  </div>
+                </div>
+              {/if}
+              <div class="perf-mem">
+                <span>Uptime {perfMetrics.memory.uptimeSeconds}s &bull; Peak memory {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
+              </div>
+            </section>
           {/if}
 
-          {#if feedback && status}
-            <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
-          {/if}
-        {/if}
-      </div>
-    </div>
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+              <div>
+                <strong>Database Maintenance</strong>
+                <p>Check and repair database integrity</p>
+              </div>
+            </div>
+            <div class="setting-actions">
+              <button type="button" disabled={repairLoading} onclick={doRepair}>
+                {repairLoading ? 'Checking...' : 'Repair Database'}
+              </button>
+            </div>
+            {#if repairResult}
+              <div class="repair-result">
+                <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
+                  {repairResult.integrityOk ? 'Integrity OK' : 'Integrity Issue'}
+                </span>
+                <code>{repairResult.integrityMessage}</code>
+              </div>
+            {/if}
+          </section>
+
+          <p class="auto-save-note">修改即时生效，无需手动保存</p>
+        </div>
+      {:else}
+        <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
+      {/if}
+
+      {#if feedback && status}
+        <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+      {/if}
+    {/if}
   </div>
-{/if}
+{/snippet}
 
 <style>
   .settings-backdrop {
@@ -640,6 +662,14 @@
     border-radius: 13px;
     background: #191919;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+  }
+
+  .settings-dialog--standalone {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
   }
 
   .settings-sidebar {

@@ -8,7 +8,7 @@
 </script>
 
 <div class="settings-shell">
-  <StorageSettingsDialog open={true} onclose={handleClose} />
+  <StorageSettingsDialog open={true} onclose={handleClose} standalone={true} />
 </div>
 
 <style>
