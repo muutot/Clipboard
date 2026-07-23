@@ -29,7 +29,7 @@ use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
 use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
@@ -928,7 +928,7 @@ pub fn run() {
 
             let mut privacy_manager = PrivacyManager::new();
             privacy_manager.sync_with_config(&config);
-            let clipboard_monitor = ClipboardMonitor::new();
+            let mut clipboard_monitor = ClipboardMonitor::new();
             let shortcut_manager = GlobalShortcutManager::new();
 
             if config.single_instance() {
@@ -953,6 +953,124 @@ pub fn run() {
                 std::process::exit(0);
             })
             .ok();
+
+            // Auto-start clipboard monitoring in background
+            let app_handle = app.handle().clone();
+            let db_path = paths.database.clone();
+            let privacy_paused = Arc::new(Mutex::new(false));
+
+            if clipboard_monitor.start().is_ok() {
+                if let Some(receiver) = clipboard_monitor.take_receiver() {
+                    thread::spawn(move || {
+                    let database = match Database::open(&db_path) {
+                        Ok(db) => db,
+                        Err(e) => {
+                            eprintln!("[clipboard-worker] failed to open database: {e}");
+                            return;
+                        }
+                    };
+
+                    let mut self_trigger_guard = content::hash::SelfTriggerGuard::new();
+                    let mut consecutive_errors = 0u32;
+
+                    loop {
+                        match receiver.recv_timeout(Duration::from_millis(500)) {
+                            Ok(_change) => {
+                                let is_paused = privacy_paused
+                                    .lock()
+                                    .map(|g| *g)
+                                    .unwrap_or(false);
+
+                                if is_paused {
+                                    continue;
+                                }
+
+                                let text = match platform::windows_clipboard::read_clipboard_text() {
+                                    Some(t) => t,
+                                    None => continue,
+                                };
+
+                                if text.is_empty() || text.len() > 500_000 {
+                                    continue;
+                                }
+
+                                let markers = content::detect_markers(&text);
+                                let kind = if markers.is_link || markers.has_url {
+                                    ClipboardKind::Link
+                                } else {
+                                    ClipboardKind::Text
+                                };
+
+                                let content_hash = content::hash::compute_content_hash(
+                                    if kind == ClipboardKind::Link { "link" } else { "text" },
+                                    &text,
+                                    None,
+                                );
+
+                                if self_trigger_guard.is_self_triggered(&content_hash) {
+                                    continue;
+                                }
+
+                                let title = text
+                                    .chars()
+                                    .take(200)
+                                    .collect::<String>()
+                                    .lines()
+                                    .next()
+                                    .unwrap_or("")
+                                    .to_string();
+                                let size_bytes = text.len() as u64;
+                                let now_ms = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as i64;
+
+                                let item = ClipboardItem {
+                                    id: format!("{}_{}", content_hash, now_ms),
+                                    kind,
+                                    title: title.clone(),
+                                    text_content: Some(text.clone()),
+                                    resource_path: None,
+                                    preview_path: None,
+                                    content_hash: content_hash.clone(),
+                                    source_app: None,
+                                    size_bytes,
+                                    created_at_ms: now_ms,
+                                    last_used_at_ms: None,
+                                    is_favorite: false,
+                                };
+
+                                match database.save_item(&item) {
+                                    Ok(_saved_id) => {
+                                        consecutive_errors = 0;
+                                        let _ = app_handle.emit("clipboard-item-added", &item);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("[clipboard-worker] failed to save item: {e}");
+                                        consecutive_errors += 1;
+                                        if consecutive_errors >= 10 {
+                                            eprintln!("[clipboard-worker] too many errors, pausing");
+                                            thread::sleep(Duration::from_secs(5));
+                                            consecutive_errors = 0;
+                                        }
+                                    }
+                                }
+                            }
+                            Err(mpsc::RecvTimeoutError::Timeout) => {}
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                eprintln!("[clipboard-worker] monitor disconnected, stopping");
+                                break;
+                            }
+                        }
+                    }
+                });
+            } else {
+                eprintln!("[startup] clipboard monitor has no receiver");
+            }
+        } else {
+            eprintln!("[startup] failed to start clipboard monitor");
+        }
+
 
             app.manage(Mutex::new(config));
             app.manage(Mutex::new(keyboard));

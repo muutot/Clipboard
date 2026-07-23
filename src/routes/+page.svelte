@@ -23,6 +23,8 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { createVirtualList, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
+  import { listen } from "@tauri-apps/api/event";
+  import type { PersistedClipboardItem } from "$lib/types/clipboard";
 
   const _t = (path: string, params?: Record<string, string | number>) => resolvePath($messages, path, params);
 
@@ -266,11 +268,33 @@
       if (apps) sourceApps = apps;
     });
 
-    void invoke("start_clipboard_monitoring").catch((error) => {
-      console.error("Failed to start clipboard monitoring:", error);
+    const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
+      const record = event.payload;
+      const sourceApp = record.sourceApp?.trim() || "Clipboard";
+      const newItem: ClipboardItem = {
+        id: record.id,
+        kind: record.kind,
+        title: record.title,
+        preview: record.textContent && record.textContent !== record.title ? record.textContent : "",
+        sourceApp,
+        sourceTone: sourceApp.includes("codex") ? "violet"
+          : sourceApp.includes("Chrome") || sourceApp.includes("Edge") ? "blue"
+          : sourceApp === "Clipboard" ? "neutral" : "red",
+        sizeLabel: record.kind === "text" || record.kind === "link"
+          ? `${record.textContent?.length || record.title.length} chars`
+          : `${record.sizeBytes} B`,
+        createdAt: record.createdAtMs,
+        favorite: false,
+        fileName: record.kind === "file" ? record.resourcePath?.split(/[\\/]/).pop() || record.title : undefined,
+      };
+      items = [newItem, ...items];
+      selectedId = newItem.id;
     });
 
-    return () => window.clearInterval(clock);
+    return () => {
+      window.clearInterval(clock);
+      unlisten.then(fn => fn());
+    };
   });
 
   // --- Handlers ---
