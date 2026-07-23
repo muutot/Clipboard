@@ -93,19 +93,33 @@ fn extract_emails(text: &str) -> Vec<String> {
 }
 
 fn extract_phone_numbers(text: &str) -> Vec<String> {
-    let re = try_match(
-        r"(?:\+?\d{1,3}[\s\-.]?)?\d{2,4}[\s\-.]?\d{2,4}[\s\-.]?\d{2,6}",
-        text,
-    );
-    re.map_or(Vec::new(), |re| {
-        re.find_iter(text)
-            .filter(|m| {
-                let s = m.as_str();
-                s.chars().filter(|c| c.is_ascii_digit()).count() >= 7
-            })
-            .map(|m| m.as_str().to_string())
-            .collect()
-    })
+    let mut results = Vec::new();
+
+    // Chinese mobile: 1[3-9]xxxxxxxxx (11 digits)
+    if let Some(re) = try_match(r"\b1[3-9]\d{9}\b", text) {
+        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
+    }
+
+    // Chinese landline: 0xx-xxxxxxxx or 0xxx-xxxxxxx
+    if let Some(re) = try_match(r"\b0\d{2}[\-]?\d{7,8}\b|\b0\d{3}[\-]?\d{7,8}\b", text) {
+        results.extend(
+            re.find_iter(text).map(|m| m.as_str().to_string())
+        );
+    }
+
+    // International format: +xx xxx xxx xxx or +x (xxx) xxx-xxxx
+    if let Some(re) = try_match(r"\+\d{1,3}[\s\-]?(?:\d{1,4}[\s\-]?){2,4}\d{2,4}", text) {
+        results.extend(
+            re.find_iter(text)
+                .filter(|m| {
+                    let digit_count = m.as_str().chars().filter(|c| c.is_ascii_digit()).count();
+                    digit_count >= 8 && digit_count <= 15
+                })
+                .map(|m| m.as_str().to_string()),
+        );
+    }
+
+    results
 }
 
 fn extract_colors(text: &str) -> Vec<String> {
@@ -255,7 +269,7 @@ mod tests {
 
     #[test]
     fn detects_phone() {
-        let markers = detect_markers("call 138-1234-5678 or +86 10 1234 5678");
+        let markers = detect_markers("call 13812345678 or +86 10 12345678");
         assert!(markers.has_phone);
         assert!(!markers.phone_numbers.is_empty());
     }
@@ -314,5 +328,19 @@ mod tests {
         assert!(!markers.has_ip_address);
         assert!(!markers.is_link);
         assert!(!markers.has_date);
+    }
+
+    #[test]
+    fn dates_are_not_phones() {
+        let markers = detect_markers("2024-01-15");
+        assert!(!markers.has_phone);
+        assert!(markers.has_date);
+    }
+
+    #[test]
+    fn ip_addresses_are_not_phones() {
+        let markers = detect_markers("192.168.1.1");
+        assert!(!markers.has_phone);
+        assert!(markers.has_ip_address);
     }
 }

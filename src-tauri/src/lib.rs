@@ -19,7 +19,7 @@ use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, T
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
-use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, TesseractOcrEngine};
+use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
@@ -286,7 +286,8 @@ fn get_ocr_status(
         pending_tasks: pending,
         completed_tasks: completed,
         tesseract_available: TesseractOcrEngine::is_available(),
-        has_engine: TesseractOcrEngine::is_available(),
+        ppocr_available: PpOcrEngine::is_available(),
+        has_engine: TesseractOcrEngine::is_available() || PpOcrEngine::is_available(),
         engine,
     })
 }
@@ -297,6 +298,7 @@ struct OcrStatusInfo {
     pending_tasks: u64,
     completed_tasks: u64,
     tesseract_available: bool,
+    ppocr_available: bool,
     has_engine: bool,
     engine: String,
 }
@@ -956,15 +958,23 @@ pub fn run() {
             performance_tracker.record_startup(startup_metrics.clone());
 
             let ocr_engine_name = config.ocr_engine().to_string();
-            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
-                Arc::new(TesseractOcrEngine::with_languages(
-                    config.tesseract_languages().to_string(),
-                ))
-            } else if TesseractOcrEngine::is_available() {
-                Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
-            } else {
-                eprintln!("[ocr] no OCR engine available (tesseract not found in PATH)");
-                Arc::new(ocr::NoopOcrEngine)
+            let ocr_engine: Arc<dyn OcrEngine> = match ocr_engine_name.as_str() {
+                "tesseract" if TesseractOcrEngine::is_available() => {
+                    Arc::new(TesseractOcrEngine::with_languages(
+                        config.tesseract_languages().to_string(),
+                    ))
+                }
+                "ppocr" if PpOcrEngine::is_available() => {
+                    Arc::new(PpOcrEngine::new())
+                }
+                _ if TesseractOcrEngine::is_available() => {
+                    eprintln!("[ocr] {} not found, falling back to Tesseract", ocr_engine_name);
+                    Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
+                }
+                _ => {
+                    eprintln!("[ocr] no OCR engine available");
+                    Arc::new(NoopOcrEngine)
+                }
             };
             let ocr_database = Database::open(&paths.database)?;
             let ocr_worker = OcrWorker::start(ocr_engine, Arc::new(ocr_database));
