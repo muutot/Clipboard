@@ -13,12 +13,21 @@ export interface StorageStatus {
   filesPath: string;
   imagePath: string;
   searchIndexPath: string;
+  searchIndexVersion: number;
+  searchIndexRebuildRequired: boolean;
 }
 
 export interface StorageDirectoryUpdate {
   dataDirectoryPath: string;
   storagePath: string;
   restartRequired: boolean;
+}
+
+export interface SearchSyncSummary {
+  processedEvents: number;
+  upsertedDocuments: number;
+  deletedDocuments: number;
+  lastSequence: number | null;
 }
 
 export async function getStorageStatus(): Promise<StorageStatus | null> {
@@ -39,4 +48,12 @@ export async function configureStorageDirectory(
   return invoke<StorageDirectoryUpdate>("configure_storage_directory", {
     dataDirectory,
   });
+}
+
+export async function rebuildSearchIndex(): Promise<SearchSyncSummary> {
+  if (!isTauriRuntime()) {
+    throw new Error("Search index rebuilding is only available in the desktop app");
+  }
+
+  return invoke<SearchSyncSummary>("rebuild_search_index");
 }

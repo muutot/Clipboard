@@ -3,6 +3,7 @@
   import {
     configureStorageDirectory,
     getStorageStatus,
+    rebuildSearchIndex,
     type StorageDirectoryUpdate,
     type StorageStatus,
   } from "$lib/services/storage";
@@ -18,7 +19,9 @@
   let dataDirectory = $state("");
   let loading = $state(false);
   let saving = $state(false);
+  let rebuilding = $state(false);
   let feedback = $state("");
+  let feedbackSuccess = $state(false);
 
   $effect(() => {
     if (open) {
@@ -30,6 +33,7 @@
     loading = true;
     pending = null;
     feedback = "";
+    feedbackSuccess = false;
 
     try {
       status = await getStorageStatus();
@@ -63,6 +67,7 @@
   async function saveDirectory(directory: string | null) {
     saving = true;
     feedback = "";
+    feedbackSuccess = false;
 
     try {
       pending = await configureStorageDirectory(directory);
@@ -70,11 +75,30 @@
       feedback = pending.restartRequired
         ? "已写入 conf/conf.json，重启应用后使用新目录"
         : "当前已经使用这个数据目录";
+      feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to configure storage directory", error);
       feedback = error instanceof Error ? error.message : String(error);
     } finally {
       saving = false;
+    }
+  }
+
+  async function rebuildIndex() {
+    rebuilding = true;
+    feedback = "";
+    feedbackSuccess = false;
+
+    try {
+      const summary = await rebuildSearchIndex();
+      status = await getStorageStatus();
+      feedback = `索引重建完成：处理 ${summary.processedEvents} 个事件，写入 ${summary.upsertedDocuments} 条记录`;
+      feedbackSuccess = true;
+    } catch (error) {
+      console.error("Unable to rebuild search index", error);
+      feedback = error instanceof Error ? error.message : String(error);
+    } finally {
+      rebuilding = false;
     }
   }
 
@@ -198,8 +222,30 @@
    └─ search-index/</pre>
             </section>
 
+            <section class="setting-card">
+              <div class="setting-heading split-heading">
+                <div class="heading-copy">
+                  <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                  <div>
+                    <strong>全文搜索索引</strong>
+                    <p>中文 N-gram 索引是 SQLite 数据的派生结果，可随时安全重建。</p>
+                  </div>
+                </div>
+                <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
+                  {status.searchIndexRebuildRequired ? "待重建" : `v${status.searchIndexVersion} 就绪`}
+                </span>
+              </div>
+              <code class="path-value" title={status.searchIndexPath}>{status.searchIndexPath}</code>
+              <div class="setting-actions">
+                <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
+                  {rebuilding ? "重建中…" : "一键重建索引"}
+                </button>
+              </div>
+            </section>
+
             <div class="storage-summary">
               <span>数据库版本 {status.schemaVersion}</span>
+              <span>搜索索引 v{status.searchIndexVersion}</span>
               <span>{status.itemCount} 条记录</span>
               <span title={status.databasePath}>SQLite 已连接</span>
             </div>
@@ -209,7 +255,7 @@
         {/if}
 
         {#if feedback && status}
-          <div class:success={pending !== null} class="settings-feedback">{feedback}</div>
+          <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
         {/if}
       </div>
     </div>
