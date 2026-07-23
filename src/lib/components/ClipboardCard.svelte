@@ -153,7 +153,7 @@
 
   function startEdit(event: MouseEvent) {
     event.stopPropagation();
-    editContent = item.title;
+    editContent = item.textContent || item.title;
     editing = true;
     onedit(item.id);
   }
@@ -249,7 +249,7 @@
     <div class="edit-area">
       <textarea
         bind:value={editContent}
-        rows={4}
+        rows={Math.min(12, Math.max(3, editContent.split("\n").length))}
         placeholder={_t("edit.placeholder")}
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e) => {

@@ -957,6 +957,7 @@ pub fn run() {
             // Auto-start clipboard monitoring in background
             let app_handle = app.handle().clone();
             let db_path = paths.database.clone();
+            let storage_path = paths.storage.clone();
             let privacy_paused = Arc::new(Mutex::new(false));
 
             if clipboard_monitor.start().is_ok() {
@@ -985,7 +986,101 @@ pub fn run() {
                                     continue;
                                 }
 
-                                let text = match platform::windows_clipboard::read_clipboard_text() {
+                                let text = platform::windows_clipboard::read_clipboard_text();
+                                let image_data = platform::windows_clipboard::read_clipboard_image();
+                                let file_paths = platform::windows_clipboard::read_clipboard_file_paths();
+
+                                if image_data.is_some() {
+                                    let img = image_data.unwrap();
+                                    let img_hash = content::hash::compute_content_hash("image", "", None);
+                                    let now_ms = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as i64;
+
+                                    let image_dir = storage_path.join("image");
+                                    std::fs::create_dir_all(&image_dir).ok();
+                                    let img_path = image_dir.join(format!("{}.png", img_hash));
+                                    std::fs::write(&img_path, &img).ok();
+
+                                    let item = ClipboardItem {
+                                        id: format!("img_{}", img_hash),
+                                        kind: ClipboardKind::Image,
+                                        title: format!("图片 ({})", img_path.file_name().unwrap_or_default().to_string_lossy()),
+                                        text_content: None,
+                                        resource_path: Some(img_path.to_string_lossy().to_string()),
+                                        preview_path: Some(img_path.to_string_lossy().to_string()),
+                                        content_hash: img_hash,
+                                        source_app: None,
+                                        size_bytes: img.len() as u64,
+                                        created_at_ms: now_ms,
+                                        last_used_at_ms: None,
+                                        is_favorite: false,
+                                    };
+
+                                    match database.save_item(&item) {
+                                        Ok(saved_id) => {
+                                            consecutive_errors = 0;
+                                            let mut emit_item = item.clone();
+                                            emit_item.id = saved_id;
+                                            let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                            continue;
+                                        }
+                                        Err(e) => {
+                                            eprintln!("[clipboard-worker] failed to save image: {e}");
+                                        }
+                                    }
+                                    continue;
+                                }
+
+                                if !file_paths.is_empty() {
+                                    for file_path in &file_paths {
+                                        let file_hash = content::hash::compute_content_hash("file", file_path, None);
+                                        let now_ms = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_millis() as i64;
+
+                                        let file_size = std::fs::metadata(file_path)
+                                            .map(|m| m.len())
+                                            .unwrap_or(0);
+
+                                        let file_name = std::path::Path::new(file_path)
+                                            .file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default();
+
+                                        let item = ClipboardItem {
+                                            id: format!("file_{}", file_hash),
+                                            kind: ClipboardKind::File,
+                                            title: file_name.clone(),
+                                            text_content: None,
+                                            resource_path: Some(file_path.clone()),
+                                            preview_path: None,
+                                            content_hash: file_hash,
+                                            source_app: None,
+                                            size_bytes: file_size,
+                                            created_at_ms: now_ms,
+                                            last_used_at_ms: None,
+                                            is_favorite: false,
+                                        };
+
+                                        match database.save_item(&item) {
+                                            Ok(saved_id) => {
+                                                consecutive_errors = 0;
+                                                let mut emit_item = item.clone();
+                                                emit_item.id = saved_id;
+                                                let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                            }
+                                            Err(e) => {
+                                                eprintln!("[clipboard-worker] failed to save file: {e}");
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                }
+
+                                let text = match text {
                                     Some(t) => t,
                                     None => continue,
                                 };

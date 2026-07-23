@@ -3,6 +3,10 @@ use std::thread;
 use std::time::Duration;
 
 pub const CF_UNICODETEXT: u32 = 13;
+pub const CF_DIB: u32 = 8;
+pub const CF_DIBV5: u32 = 17;
+pub const CF_HDROP: u32 = 15;
+pub const CF_BITMAP: u32 = 2;
 
 pub const MOD_ALT: u32 = 0x0001;
 pub const MOD_CONTROL: u32 = 0x0002;
@@ -253,6 +257,206 @@ pub fn read_clipboard_text() -> Option<String> {
 #[cfg(not(target_os = "windows"))]
 pub fn read_clipboard_text() -> Option<String> {
     None
+}
+
+#[cfg(target_os = "windows")]
+pub fn read_clipboard_image() -> Option<Vec<u8>> {
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> isize;
+        fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalUnlock(handle: isize) -> i32;
+        fn GlobalSize(handle: isize) -> usize;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+    }
+
+    unsafe {
+        let has_dib = IsClipboardFormatAvailable(CF_DIB) != 0;
+        let has_dibv5 = IsClipboardFormatAvailable(CF_DIBV5) != 0;
+        let has_bitmap = IsClipboardFormatAvailable(CF_BITMAP) != 0;
+
+        if !has_dib && !has_dibv5 && !has_bitmap {
+            return None;
+        }
+
+        let format = if has_dibv5 { CF_DIBV5 } else if has_dib { CF_DIB } else { CF_BITMAP };
+
+        if OpenClipboard(0) == 0 {
+            return None;
+        }
+
+        let handle = GetClipboardData(format);
+        if handle == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let size = GlobalSize(handle);
+        if size == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let ptr = GlobalLock(handle);
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+
+        let data = std::slice::from_raw_parts(ptr, size).to_vec();
+        GlobalUnlock(handle);
+        CloseClipboard();
+
+        dib_to_png(&data)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn dib_to_png(dib: &[u8]) -> Option<Vec<u8>> {
+    if dib.len() < 40 {
+        return None;
+    }
+
+    let header_size = u32::from_le_bytes([dib[0], dib[1], dib[2], dib[3]]);
+    if header_size < 40 {
+        return None;
+    }
+
+    let width = i32::from_le_bytes([dib[4], dib[5], dib[6], dib[7]]);
+    let height_abs = i32::from_le_bytes([dib[8], dib[9], dib[10], dib[11]]).unsigned_abs();
+    let bit_count = u16::from_le_bytes([dib[14], dib[15]]);
+
+    let pixel_data = &dib[header_size as usize..];
+
+    let img = match bit_count {
+        32 => {
+            let rgba = bgra_to_rgba(pixel_data, width as u32, height_abs);
+            image::RgbaImage::from_raw(width as u32, height_abs, rgba)?
+        }
+        24 => {
+            let rgb = bgr_to_rgb(pixel_data, width as u32, height_abs);
+            let mut buf = Vec::with_capacity(rgb.len());
+            for chunk in rgb.chunks_exact(3) {
+                buf.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+            }
+            image::RgbaImage::from_raw(width as u32, height_abs, buf)?
+        }
+        _ => return None,
+    };
+
+    let mut png_bytes = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png_bytes, image::ImageFormat::Png).ok()?;
+    Some(png_bytes.into_inner())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn read_clipboard_image() -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity(data.len());
+    let row_size = (width * 4) as usize;
+    for y in (0..height).rev() {
+        let start = (y as usize) * row_size;
+        let row = &data[start..start + row_size];
+        for chunk in row.chunks_exact(4) {
+            out.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "windows")]
+fn bgr_to_rgb(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity(data.len());
+    let row_padded = ((width * 3 + 3) / 4) * 4;
+    for y in (0..height).rev() {
+        let start = (y as usize) * row_padded as usize;
+        let row = &data[start..start + (width * 3) as usize];
+        for chunk in row.chunks_exact(3) {
+            out.push(chunk[2]);
+            out.push(chunk[1]);
+            out.push(chunk[0]);
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "windows")]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> isize;
+        fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalUnlock(handle: isize) -> i32;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+        fn DragQueryFileW(hdrop: isize, index: u32, buffer: *mut u16, max_count: u32) -> u32;
+    }
+
+    unsafe {
+        if IsClipboardFormatAvailable(CF_HDROP) == 0 {
+            return vec![];
+        }
+
+        if OpenClipboard(0) == 0 {
+            return vec![];
+        }
+
+        let handle = GetClipboardData(CF_HDROP);
+        if handle == 0 {
+            CloseClipboard();
+            return vec![];
+        }
+
+        let ptr = GlobalLock(handle) as isize;
+        if ptr == 0 {
+            CloseClipboard();
+            return vec![];
+        }
+
+        let file_count = DragQueryFileW(ptr, 0xFFFFFFFF, std::ptr::null_mut(), 0);
+        let mut paths = Vec::new();
+
+        for i in 0..file_count {
+            let mut buffer = [0u16; 520];
+            let len = DragQueryFileW(ptr, i, buffer.as_mut_ptr(), 520);
+            if len > 0 {
+                let wide: Vec<u16> = buffer[..len as usize].to_vec();
+                paths.push(OsString::from_wide(&wide).to_string_lossy().to_string());
+            }
+        }
+
+        GlobalUnlock(ptr);
+        CloseClipboard();
+        paths
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+#[cfg(not(target_os = "windows"))]
+fn dib_to_png(_dib: &[u8]) -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn bgra_to_rgba(_data: &[u8], _width: u32, _height: u32) -> Vec<u8> {
+    vec![]
+}
+
+#[cfg(not(target_os = "windows"))]
+fn bgr_to_rgb(_data: &[u8], _width: u32, _height: u32) -> Vec<u8> {
+    vec![]
 }
 
 #[cfg(target_os = "windows")]
