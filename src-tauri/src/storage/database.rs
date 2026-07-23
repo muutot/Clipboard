@@ -81,7 +81,7 @@ mod tests {
     fn initializes_schema_and_enables_foreign_keys() {
         let database = Database::open_in_memory().unwrap();
 
-        assert_eq!(database.schema_version().unwrap(), 2);
+        assert_eq!(database.schema_version().unwrap(), 1);
 
         database
             .with_connection(|connection| {
@@ -93,7 +93,6 @@ mod tests {
                      WHERE type = 'table'
                        AND name IN (
                          'clipboard_items',
-                         'favorite_items',
                          'ocr_results',
                          'search_outbox',
                          'schema_migrations'
@@ -103,7 +102,7 @@ mod tests {
                 )?;
 
                 assert_eq!(foreign_keys, 1);
-                assert_eq!(table_count, 5);
+                assert_eq!(table_count, 4);
                 Ok(())
             })
             .unwrap();
