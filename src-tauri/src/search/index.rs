@@ -1,4 +1,10 @@
-use std::{fs, path::Path, sync::Mutex};
+use std::{
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+};
 
 use tantivy::{
     collector::TopDocs,
@@ -10,7 +16,10 @@ use tantivy::{
 
 use crate::storage::SearchDocument;
 
-use super::{build_schema, register_tokenizers, SearchError, SearchFields, SearchQuery};
+use super::{
+    build_schema, manifest::SearchIndexLayout, register_tokenizers, SearchError, SearchFields,
+    SearchQuery,
+};
 
 const INDEX_WRITER_MEMORY_BYTES: usize = 15_000_000;
 
@@ -33,22 +42,54 @@ pub struct SearchIndex {
     fields: SearchFields,
     writer: Mutex<IndexWriter<TantivyDocument>>,
     reader: IndexReader,
+    layout: Option<SearchIndexLayout>,
+    rebuild_required: AtomicBool,
 }
 
 impl SearchIndex {
     pub fn open(path: &Path) -> Result<Self, SearchError> {
-        fs::create_dir_all(path)?;
+        let layout = SearchIndexLayout::prepare(path.to_path_buf())?;
         let (schema, fields) = build_schema();
-        let directory = MmapDirectory::open(path).map_err(tantivy::TantivyError::from)?;
+        let directory =
+            MmapDirectory::open(&layout.index_directory).map_err(tantivy::TantivyError::from)?;
         let index = Index::open_or_create(directory, schema)?;
 
-        Self::from_index(index, fields)
+        Self::from_index(index, fields, Some(layout))
     }
 
     #[cfg(test)]
     pub(crate) fn in_memory() -> Result<Self, SearchError> {
         let (schema, fields) = build_schema();
-        Self::from_index(Index::create_in_ram(schema), fields)
+        Self::from_index(Index::create_in_ram(schema), fields, None)
+    }
+
+    pub fn requires_full_rebuild(&self) -> bool {
+        self.rebuild_required.load(Ordering::Acquire)
+    }
+
+    pub fn begin_full_rebuild(&self) -> Result<(), SearchError> {
+        if let Some(layout) = &self.layout {
+            layout.mark_building()?;
+        }
+
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|_| SearchError::WriterPoisoned)?;
+        writer.delete_all_documents()?;
+        writer.commit()?;
+        drop(writer);
+        self.reader.reload()?;
+        self.rebuild_required.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    pub fn mark_rebuild_complete(&self) -> Result<(), SearchError> {
+        if let Some(layout) = &self.layout {
+            layout.mark_ready()?;
+        }
+        self.rebuild_required.store(false, Ordering::Release);
+        Ok(())
     }
 
     pub fn apply_changes(&self, changes: &[SearchIndexChange]) -> Result<(), SearchError> {
@@ -132,7 +173,14 @@ impl SearchIndex {
             .collect()
     }
 
-    fn from_index(index: Index, fields: SearchFields) -> Result<Self, SearchError> {
+    fn from_index(
+        index: Index,
+        fields: SearchFields,
+        layout: Option<SearchIndexLayout>,
+    ) -> Result<Self, SearchError> {
+        let rebuild_required = layout
+            .as_ref()
+            .is_some_and(|layout| layout.rebuild_required);
         register_tokenizers(&index)?;
         let reader = index
             .reader_builder()
@@ -145,6 +193,8 @@ impl SearchIndex {
             fields,
             writer: Mutex::new(writer),
             reader,
+            layout,
+            rebuild_required: AtomicBool::new(rebuild_required),
         })
     }
 
@@ -235,5 +285,20 @@ mod tests {
             .unwrap();
 
         assert!(index.search("删除", 20).unwrap().is_empty());
+    }
+
+    #[test]
+    fn full_rebuild_clears_existing_documents() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[SearchIndexChange::Upsert(document("item", "旧索引"))])
+            .unwrap();
+
+        index.begin_full_rebuild().unwrap();
+
+        assert!(index.requires_full_rebuild());
+        assert!(index.search("索引", 20).unwrap().is_empty());
+        index.mark_rebuild_complete().unwrap();
+        assert!(!index.requires_full_rebuild());
     }
 }
