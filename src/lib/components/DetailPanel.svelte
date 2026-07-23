@@ -140,18 +140,20 @@
       <div class="header-info">
         <span class="header-kind">{getKindLabel(item.kind)}</span>
         {#if editing}
-          <input
-            class="header-title-input"
-            bind:value={editContent}
-            onkeydown={(e) => {
-              if (e.key === 'Enter') { saveEdit(); }
-              if (e.key === 'Escape') { editing = false; }
-            }}
-            onblur={() => saveEdit()}
-          />
-          <button class="header-save-btn" type="button" onclick={saveEdit}>
-            <AppIcon name="check" size={14} strokeWidth={2.5} />
-          </button>
+          <div class="header-edit-row">
+            <input
+              class="header-title-input"
+              bind:value={editContent}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') { saveEdit(); }
+                if (e.key === 'Escape') { editing = false; }
+              }}
+              onblur={() => saveEdit()}
+            />
+            <button class="header-save-btn" type="button" onclick={saveEdit}>
+              <AppIcon name="check" size={14} strokeWidth={2.5} />
+            </button>
+          </div>
         {:else}
           <span class="header-title">{item.title.split("\n")[0]}</span>
         {/if}
@@ -443,6 +445,14 @@
     font-weight: 540;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  .header-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
   }
 
   .header-title-input {

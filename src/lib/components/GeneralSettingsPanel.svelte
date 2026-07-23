@@ -36,8 +36,22 @@
   }
 
   function handleTransparency(event: Event) {
-    generalSettings.updateSetting("windowTransparency", Number((event.target as HTMLInputElement).value));
+    const val = Number((event.target as HTMLInputElement).value);
+    generalSettings.updateSetting("windowTransparency", val);
+    updateSliderTrack(event.target as HTMLInputElement);
   }
+
+  function updateSliderTrack(el: HTMLInputElement) {
+    const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
+    el.style.setProperty("--slider-pct", pct + "%");
+  }
+
+  $effect(() => {
+    const el = document.querySelector<HTMLInputElement>(".transparency-slider");
+    if (el) {
+      updateSliderTrack(el);
+    }
+  });
 
   const fontSizeOptions = $derived([
     { value: "small" as const, label: _t("general.fontSizeSmall") },
@@ -343,20 +357,61 @@
     margin-top: 12px;
     -webkit-appearance: none;
     appearance: none;
-    height: 6px;
-    border-radius: 3px;
+    height: 4px;
+    border-radius: 2px;
     background: #2a2a2a;
     outline: none;
+    cursor: pointer;
+  }
+
+  .transparency-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
   }
 
   .transparency-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
     border-radius: 50%;
-    border: 2px solid #555;
-    background: #ccc;
+    border: 2px solid #4aa8ff;
+    background: #1a1a1a;
     cursor: pointer;
+    transition: box-shadow 100ms ease, transform 100ms ease;
+  }
+
+  .transparency-slider::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    transform: scale(1.15);
+  }
+
+  .transparency-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a2a;
+  }
+
+  .transparency-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #4aa8ff;
+  }
+
+  .transparency-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #4aa8ff;
+    background: #1a1a1a;
+    cursor: pointer;
+    transition: box-shadow 100ms ease, transform 100ms ease;
+  }
+
+  .transparency-slider::-moz-range-thumb:hover {
+    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    transform: scale(1.15);
   }
 
   .toggle-switch {
