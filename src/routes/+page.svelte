@@ -579,6 +579,11 @@
         query = "";
         return;
       }
+      if (view === 'settings') {
+        view = 'main';
+        return;
+      }
+      import('@tauri-apps/api/window').then(m => m.getCurrentWindow().hide());
       return;
     }
 

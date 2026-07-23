@@ -444,6 +444,79 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     vec![]
 }
 
+#[cfg(target_os = "windows")]
+pub fn get_foreground_app() -> String {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    extern "system" {
+        fn GetForegroundWindow() -> isize;
+        fn GetWindowThreadProcessId(hwnd: isize, process_id: *mut u32) -> u32;
+        fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> isize;
+        fn CloseHandle(handle: isize) -> i32;
+        fn QueryFullProcessImageNameW(
+            process: isize,
+            flags: u32,
+            buffer: *mut u16,
+            size: *mut u32,
+        ) -> i32;
+        fn GetWindowTextW(hwnd: isize, buffer: *mut u16, max_count: i32) -> i32;
+    }
+
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd == 0 {
+            return String::new();
+        }
+
+        let mut title_buf = [0u16; 256];
+        let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), 256);
+        let title = if title_len > 0 {
+            let wide: Vec<u16> = title_buf[..title_len as usize].to_vec();
+            OsString::from_wide(&wide).to_string_lossy().to_string()
+        } else {
+            String::new()
+        };
+
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
+            return if title.is_empty() { String::new() } else { title };
+        }
+
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process == 0 {
+            return if title.is_empty() { String::new() } else { title };
+        }
+
+        let mut path_buf = [0u16; 520];
+        let mut size = 520u32;
+        let result = QueryFullProcessImageNameW(process, 0, path_buf.as_mut_ptr(), &mut size);
+        CloseHandle(process);
+
+        if result != 0 {
+            let wide: Vec<u16> = path_buf[..size as usize].to_vec();
+            let full_path = OsString::from_wide(&wide).to_string_lossy().to_string();
+            let name = std::path::Path::new(&full_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+
+        title
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_foreground_app() -> String {
+    String::new()
+}
+
 #[cfg(not(target_os = "windows"))]
 fn dib_to_png(_dib: &[u8]) -> Option<Vec<u8>> {
     None

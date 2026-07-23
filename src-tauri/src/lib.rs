@@ -986,6 +986,9 @@ pub fn run() {
                                     continue;
                                 }
 
+                                let source_app_name = platform::windows_clipboard::get_foreground_app();
+                                let source_app = if source_app_name.is_empty() { None } else { Some(source_app_name) };
+
                                 let text = platform::windows_clipboard::read_clipboard_text();
                                 let image_data = platform::windows_clipboard::read_clipboard_image();
                                 let file_paths = platform::windows_clipboard::read_clipboard_file_paths();
@@ -1011,7 +1014,7 @@ pub fn run() {
                                         resource_path: Some(img_path.to_string_lossy().to_string()),
                                         preview_path: Some(img_path.to_string_lossy().to_string()),
                                         content_hash: img_hash,
-                                        source_app: None,
+                                            source_app: source_app.clone(),
                                         size_bytes: img.len() as u64,
                                         created_at_ms: now_ms,
                                         last_used_at_ms: None,
@@ -1058,7 +1061,7 @@ pub fn run() {
                                             resource_path: Some(file_path.clone()),
                                             preview_path: None,
                                             content_hash: file_hash,
-                                            source_app: None,
+                                        source_app: source_app.clone(),
                                             size_bytes: file_size,
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
@@ -1128,7 +1131,7 @@ pub fn run() {
                                     resource_path: None,
                                     preview_path: None,
                                     content_hash: content_hash.clone(),
-                                    source_app: None,
+                                    source_app: source_app.clone(),
                                     size_bytes,
                                     created_at_ms: now_ms,
                                     last_used_at_ms: None,
@@ -1202,11 +1205,8 @@ pub fn run() {
                             loop {
                                 match rx.recv() {
                                     Ok(()) => {
-                                        let _ = window_clone.set_focus();
                                         let is_visible = window_clone.is_visible().unwrap_or(false);
-                                        if is_visible {
-                                            let _ = window_clone.hide();
-                                        } else {
+                                        if !is_visible {
                                             let _ = window_clone.show();
                                             let _ = window_clone.set_focus();
                                         }
