@@ -476,6 +476,11 @@ struct OcrConfigResponse {
 }
 
 #[tauri::command]
+fn copy_file_to(src: String, dst: String) -> Result<(), String> {
+    std::fs::copy(&src, &dst).map(|_| ()).map_err(|e| format!("copy failed: {e}"))
+}
+
+#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
 }
@@ -1055,6 +1060,7 @@ fn validate_search_index(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let startup_timer = &mut StartupTimer::start();
             let project_directory = app.path().app_data_dir()?;
@@ -1461,6 +1467,7 @@ pub fn run() {
             install_ppocr,
             check_ppocr_status,
             open_external_url,
+            copy_file_to,
             set_history_config,
             get_history_config,
             set_storage_config,

@@ -57,8 +57,6 @@
   let currentTime = $state(Date.now());
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
-  let view = $state<'main' | 'settings'>('main');
-
   let lastBackspaceAt = $state(0);
   let indexedItems = $state<ClipboardItem[] | null>(null);
   let indexedQuery = $state("");
@@ -1533,34 +1531,6 @@
 
   .shortcut-hints b {
     font-weight: 400;
-  }
-
-  .settings-page {
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
-
-  .settings-back-btn {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    z-index: 51;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    color: #b2b2b2;
-    background: #1e1e1e;
-    cursor: pointer;
-    font-size: 12px;
-  }
-
-  .settings-back-btn:hover {
-    color: #e8e8e8;
-    background: #2c2c2c;
   }
 
   @media (max-width: 660px) {

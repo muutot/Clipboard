@@ -306,14 +306,14 @@
           event.stopPropagation();
           if (item.resourcePath && isTauriRuntime()) {
             try {
-              const url = convertFileSrc(item.resourcePath.replace(/\\/g, '/'));
-              const response = await fetch(url);
-              const blob = await response.blob();
-              const a = document.createElement('a');
-              a.href = URL.createObjectURL(blob);
-              a.download = item.fileName || item.title.split('/').pop() || 'file';
-              a.click();
-              URL.revokeObjectURL(a.href);
+              const { save } = await import('@tauri-apps/plugin-dialog');
+              const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || 'file';
+              const ext = defaultName.includes('.') ? defaultName.split('.').pop() : '';
+              const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
+              const filePath = await save({ defaultPath: defaultName, filters });
+              if (filePath) {
+                await invoke('copy_file_to', { src: item.resourcePath, dst: filePath });
+              }
             } catch {
               invoke('open_external_url', { url: item.resourcePath }).catch(() => {});
             }

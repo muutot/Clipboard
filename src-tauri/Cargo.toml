@@ -31,3 +31,4 @@ urlencoding = "2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
 ctrlc = "3"
 open = "5"
+tauri-plugin-dialog = "2"
