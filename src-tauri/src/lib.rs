@@ -513,7 +513,27 @@ fn rename_item(
 
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
-    open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
+        open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
+}
+
+#[tauri::command]
+fn reveal_in_explorer(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("file not found".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("explorer: {e}"))?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        open::that(p.parent().unwrap_or(p)).map_err(|e| format!("open: {e}"))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1498,6 +1518,7 @@ pub fn run() {
             install_ppocr,
             check_ppocr_status,
             open_external_url,
+            reveal_in_explorer,
             copy_file_to,
             rename_item,
             set_history_config,

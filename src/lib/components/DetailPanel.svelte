@@ -230,8 +230,8 @@
             <AppIcon name="copy" size={15} /> {_t("card.copy")}
           </button>
           {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
-            <button type="button" onclick={() => invoke("open_external_url", { url: item.resourcePath!.replace(/[^\\/]+$/, '') })}>
-              <AppIcon name="file" size={15} /> 打开文件夹
+            <button type="button" onclick={() => invoke("reveal_in_explorer", { path: item.resourcePath })}>
+              <AppIcon name="file" size={15} /> 定位到文件
             </button>
           {/if}
           {#if !editing}
