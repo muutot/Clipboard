@@ -7,8 +7,13 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "format:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test:rust": "cargo test -j 1 --manifest-path src-tauri/Cargo.toml",
+    "lint:rust": "cargo clippy -j 1 --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "verify": "npm run format:check && npm run check && npm run build && npm run test:rust && npm run lint:rust",
     "tauri": "tauri"
   },
   "license": "MIT",
@@ -19,10 +24,12 @@
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.9.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tauri-apps/cli": "^2",
+    "prettier": "^3.9.6",
+    "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3",
-    "@tauri-apps/cli": "^2"
+    "vite": "^6.0.3"
   }
 }
