@@ -37,12 +37,8 @@
 
   const filteredItems = $derived.by(() => {
     const normalizedQuery = query.trim();
-    const keywords = normalizedQuery
-      .toLocaleLowerCase()
-      .split(/\s+/)
-      .filter(Boolean);
-    const usesIndexedResults =
-      indexedItems !== null && indexedQuery === normalizedQuery;
+    const keywords = normalizedQuery.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const usesIndexedResults = indexedItems !== null && indexedQuery === normalizedQuery;
     const candidates = usesIndexedResults ? (indexedItems ?? []) : items;
 
     return candidates.filter((item) => {
@@ -63,9 +59,7 @@
   });
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
-  const resultSummary = $derived(
-    searchPending ? "搜索中…" : `${filteredItems.length} 条记录`,
-  );
+  const resultSummary = $derived(searchPending ? "搜索中…" : `${filteredItems.length} 条记录`);
 
   $effect(() => {
     const requestedQuery = query.trim();
@@ -148,9 +142,7 @@
     if (!original) return;
 
     const nextFavorite = !original.favorite;
-    items = items.map((item) =>
-      item.id === id ? { ...item, favorite: nextFavorite } : item,
-    );
+    items = items.map((item) => (item.id === id ? { ...item, favorite: nextFavorite } : item));
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
         item.id === id ? { ...item, favorite: nextFavorite } : item,
@@ -193,11 +185,7 @@
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
         if (historyIndex >= 0) {
-          items = [
-            ...items.slice(0, historyIndex),
-            deleted,
-            ...items.slice(historyIndex),
-          ];
+          items = [...items.slice(0, historyIndex), deleted, ...items.slice(historyIndex)];
         }
         if (indexedItems && searchIndex >= 0) {
           indexedItems = [
@@ -274,7 +262,12 @@
         spellcheck="false"
       />
       {#if query}
-        <button class="clear-button" type="button" aria-label="清除搜索" onclick={() => (query = "")}>×</button>
+        <button
+          class="clear-button"
+          type="button"
+          aria-label="清除搜索"
+          onclick={() => (query = "")}>×</button
+        >
       {/if}
     </div>
 
@@ -294,17 +287,28 @@
           aria-pressed={activeFilter === filter.id}
           onclick={() => setFilter(filter.id)}
         >
-          <AppIcon name={filter.icon} size={16} filled={filter.id === "favorite" && activeFilter === filter.id} />
+          <AppIcon
+            name={filter.icon}
+            size={16}
+            filled={filter.id === "favorite" && activeFilter === filter.id}
+          />
           <span>{filter.label}</span>
         </button>
       {/each}
     </nav>
 
     <div class="toolbar-actions">
-      <button type="button" aria-label="清理记录" title="清理记录"><AppIcon name="trash" size={17} /></button>
-      <button type="button" aria-label="帮助" title="帮助"><AppIcon name="help" size={17} /></button>
-      <button type="button" aria-label="固定窗口" title="固定窗口"><AppIcon name="pin" size={17} /></button>
-      <button type="button" aria-label="设置" title="设置" onclick={() => (settingsOpen = true)}><AppIcon name="settings" size={17} /></button>
+      <button type="button" aria-label="清理记录" title="清理记录"
+        ><AppIcon name="trash" size={17} /></button
+      >
+      <button type="button" aria-label="帮助" title="帮助"><AppIcon name="help" size={17} /></button
+      >
+      <button type="button" aria-label="固定窗口" title="固定窗口"
+        ><AppIcon name="pin" size={17} /></button
+      >
+      <button type="button" aria-label="设置" title="设置" onclick={() => (settingsOpen = true)}
+        ><AppIcon name="settings" size={17} /></button
+      >
     </div>
   </div>
 
@@ -335,7 +339,11 @@
       <div class="empty-state">
         <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
         <strong>{items.length === 0 ? "暂无剪贴板记录" : "没有找到相关记录"}</strong>
-        <p>{items.length === 0 ? "复制文本、图片或文件后会出现在这里。" : "尝试更换关键字或内容类型。"}</p>
+        <p>
+          {items.length === 0
+            ? "复制文本、图片或文件后会出现在这里。"
+            : "尝试更换关键字或内容类型。"}
+        </p>
       </div>
     {/if}
   </section>
@@ -426,9 +434,17 @@
     background: #ffffff;
   }
 
-  .brand-mark span:nth-child(1) { height: 9px; opacity: 0.75; }
-  .brand-mark span:nth-child(2) { height: 15px; }
-  .brand-mark span:nth-child(3) { height: 12px; opacity: 0.88; }
+  .brand-mark span:nth-child(1) {
+    height: 9px;
+    opacity: 0.75;
+  }
+  .brand-mark span:nth-child(2) {
+    height: 15px;
+  }
+  .brand-mark span:nth-child(3) {
+    height: 12px;
+    opacity: 0.88;
+  }
 
   .toolbar {
     display: flex;
@@ -452,7 +468,9 @@
     scrollbar-width: none;
   }
 
-  .filters::-webkit-scrollbar { display: none; }
+  .filters::-webkit-scrollbar {
+    display: none;
+  }
 
   .filters button,
   .toolbar-actions button {
@@ -484,11 +502,21 @@
     color: #4aa8ff;
   }
 
-  .filters button:nth-child(2) :global(svg) { color: #e2c05d; }
-  .filters button:nth-child(3) :global(svg) { color: #a8b7c9; }
-  .filters button:nth-child(4) :global(svg) { color: #6bbfc5; }
-  .filters button:nth-child(5) :global(svg) { color: #8fc7de; }
-  .filters button:nth-child(6) :global(svg) { color: #f5c842; }
+  .filters button:nth-child(2) :global(svg) {
+    color: #e2c05d;
+  }
+  .filters button:nth-child(3) :global(svg) {
+    color: #a8b7c9;
+  }
+  .filters button:nth-child(4) :global(svg) {
+    color: #6bbfc5;
+  }
+  .filters button:nth-child(5) :global(svg) {
+    color: #8fc7de;
+  }
+  .filters button:nth-child(6) :global(svg) {
+    color: #f5c842;
+  }
 
   .toolbar-actions {
     flex: 0 0 auto;
@@ -564,8 +592,12 @@
     scrollbar-width: thin;
   }
 
-  .history-list::-webkit-scrollbar { width: 7px; }
-  .history-list::-webkit-scrollbar-track { background: transparent; }
+  .history-list::-webkit-scrollbar {
+    width: 7px;
+  }
+  .history-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
   .history-list::-webkit-scrollbar-thumb {
     border-radius: 10px;
     background: #858585;
@@ -633,11 +665,19 @@
     font: inherit;
   }
 
-  .shortcut-hints b { font-weight: 400; }
+  .shortcut-hints b {
+    font-weight: 400;
+  }
 
   @media (max-width: 660px) {
-    .toolbar-actions { display: none; }
-    .status-bar > span:first-child { display: none; }
-    .status-bar { justify-content: flex-end; }
+    .toolbar-actions {
+      display: none;
+    }
+    .status-bar > span:first-child {
+      display: none;
+    }
+    .status-bar {
+      justify-content: flex-end;
+    }
   }
 </style>

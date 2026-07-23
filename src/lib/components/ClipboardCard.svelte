@@ -14,7 +14,6 @@
   }
 
   let { item, index, now, selected, onselect, ontoggleFavorite, ondelete }: Props = $props();
-
 </script>
 
 <article class:selected class="clip-card">
@@ -49,7 +48,12 @@
   </div>
 
   <div class="meta-row">
-    <span class:source-red={item.sourceTone === "red"} class:source-blue={item.sourceTone === "blue"} class:source-violet={item.sourceTone === "violet"} class="source-mark">
+    <span
+      class:source-red={item.sourceTone === "red"}
+      class:source-blue={item.sourceTone === "blue"}
+      class:source-violet={item.sourceTone === "violet"}
+      class="source-mark"
+    >
       {#if item.sourceTone === "neutral"}
         <AppIcon name={item.kind === "file" ? "file" : "clipboard"} size={12} />
       {:else}
@@ -66,7 +70,9 @@
   <div class="actions" aria-label="项目操作">
     <button type="button" title="复制" aria-label="复制"><AppIcon name="copy" size={16} /></button>
     {#if item.kind === "image" || item.kind === "file"}
-      <button type="button" title="导出" aria-label="导出"><AppIcon name="download" size={16} /></button>
+      <button type="button" title="导出" aria-label="导出"
+        ><AppIcon name="download" size={16} /></button
+      >
     {/if}
     <button
       type="button"
@@ -76,8 +82,8 @@
       onclick={(event) => {
         event.stopPropagation();
         ontoggleFavorite(item.id);
-      }}
-    ><AppIcon name="star" size={16} filled={item.favorite} /></button>
+      }}><AppIcon name="star" size={16} filled={item.favorite} /></button
+    >
     {#if !item.favorite}
       <button
         type="button"
@@ -86,8 +92,8 @@
         onclick={(event) => {
           event.stopPropagation();
           ondelete(item.id);
-        }}
-      ><AppIcon name="trash" size={16} /></button>
+        }}><AppIcon name="trash" size={16} /></button
+      >
     {/if}
   </div>
 
@@ -103,7 +109,9 @@
     color: #ececec;
     background: transparent;
     cursor: default;
-    transition: background 120ms ease, border-color 120ms ease;
+    transition:
+      background 120ms ease,
+      border-color 120ms ease;
   }
 
   .card-select {
@@ -181,7 +189,8 @@
     border-right: 1px solid #292b31;
     background:
       linear-gradient(#292b31 0 0) 12px 13px / 60px 5px no-repeat,
-      repeating-linear-gradient(to bottom, transparent 0 12px, #24262b 12px 14px) 12px 28px / 78% 42px no-repeat,
+      repeating-linear-gradient(to bottom, transparent 0 12px, #24262b 12px 14px) 12px 28px / 78%
+        42px no-repeat,
       #1e2024;
   }
 
@@ -200,9 +209,15 @@
     background: #33363e;
   }
 
-  .fake-editor span:nth-child(2) { width: 84%; }
-  .fake-editor span:nth-child(3) { width: 48%; }
-  .fake-editor span:nth-child(4) { width: 70%; }
+  .fake-editor span:nth-child(2) {
+    width: 84%;
+  }
+  .fake-editor span:nth-child(3) {
+    width: 48%;
+  }
+  .fake-editor span:nth-child(4) {
+    width: 70%;
+  }
 
   .fake-editor i {
     position: absolute;
@@ -246,11 +261,22 @@
     transform: rotate(-12deg);
   }
 
-  .source-red { color: #ff4655; }
-  .source-blue { color: #66bde1; }
-  .source-violet { color: #746dff; }
-  .source-name { color: #aaaaaa; }
-  .file-count { overflow: hidden; text-overflow: ellipsis; }
+  .source-red {
+    color: #ff4655;
+  }
+  .source-blue {
+    color: #66bde1;
+  }
+  .source-violet {
+    color: #746dff;
+  }
+  .source-name {
+    color: #aaaaaa;
+  }
+  .file-count {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   .actions {
     position: absolute;
@@ -261,7 +287,9 @@
     gap: 2px;
     opacity: 0;
     transform: translateY(2px);
-    transition: opacity 120ms ease, transform 120ms ease;
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
   }
 
   .clip-card:hover .actions,
@@ -302,8 +330,14 @@
   }
 
   @media (max-width: 620px) {
-    .content { padding-right: 40px; }
-    .meta-row { padding-right: 28px; }
-    .actions { display: none; }
+    .content {
+      padding-right: 40px;
+    }
+    .meta-row {
+      padding-right: 28px;
+    }
+    .actions {
+      display: none;
+    }
   }
 </style>

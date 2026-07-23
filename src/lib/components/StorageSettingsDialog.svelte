@@ -118,7 +118,13 @@
 
 {#if open}
   <div class="settings-backdrop">
-    <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+    <div
+      class="settings-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+      tabindex="-1"
+    >
       <aside class="settings-sidebar">
         <div class="settings-brand">
           <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
@@ -129,15 +135,27 @@
         </div>
 
         <nav aria-label="设置分类">
-          <button class:active={activeSection === "capture"} type="button" onclick={() => (activeSection = "capture")}>
+          <button
+            class:active={activeSection === "capture"}
+            type="button"
+            onclick={() => (activeSection = "capture")}
+          >
             <AppIcon name="filter" size={16} />
             <span>采集</span>
           </button>
-          <button class:active={activeSection === "storage"} type="button" onclick={() => (activeSection = "storage")}>
+          <button
+            class:active={activeSection === "storage"}
+            type="button"
+            onclick={() => (activeSection = "storage")}
+          >
             <AppIcon name="file" size={16} />
             <span>存储</span>
           </button>
-          <button class:active={activeSection === "keyboard"} type="button" onclick={() => (activeSection = "keyboard")}>
+          <button
+            class:active={activeSection === "keyboard"}
+            type="button"
+            onclick={() => (activeSection = "keyboard")}
+          >
             <AppIcon name="keyboard" size={16} />
             <span>快捷键</span>
           </button>
@@ -159,120 +177,133 @@
         {:else if activeSection === "keyboard"}
           <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
         {:else}
-        <header>
-          <div>
-            <span class="eyebrow">设置 / 存储</span>
-            <h2 id="settings-title">数据存储</h2>
-            <p>配置文件固定在项目目录；图片、文件和数据库可切换到其他数据目录。</p>
-          </div>
-          <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button>
-        </header>
+          <header>
+            <div>
+              <span class="eyebrow">设置 / 存储</span>
+              <h2 id="settings-title">数据存储</h2>
+              <p>配置文件固定在项目目录；图片、文件和数据库可切换到其他数据目录。</p>
+            </div>
+            <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}
+              >×</button
+            >
+          </header>
 
-        {#if loading}
-          <div class="settings-state">正在读取本地配置…</div>
-        {:else if status}
-          <div class="settings-scroll">
-            <section class="setting-card">
-              <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-                <div>
-                  <strong>常规配置文件</strong>
-                  <p>除快捷键外的常规设置写入此 JSON；快捷键单独保存在 keyboard.json。</p>
-                </div>
-              </div>
-              <code class="path-value" title={status.configPath}>{status.configPath}</code>
-            </section>
-
-            <section class="setting-card">
-              <div class="setting-heading split-heading">
-                <div class="heading-copy">
-                  <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+          {#if loading}
+            <div class="settings-state">正在读取本地配置…</div>
+          {:else if status}
+            <div class="settings-scroll">
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                   <div>
-                    <strong>数据目录</strong>
-                    <p>所选目录下始终创建统一的 storage 子目录结构。</p>
+                    <strong>常规配置文件</strong>
+                    <p>除快捷键外的常规设置写入此 JSON；快捷键单独保存在 keyboard.json。</p>
                   </div>
                 </div>
-                <span class:custom={status.usesCustomDataDirectory} class="directory-badge">
-                  {status.usesCustomDataDirectory ? "自定义" : "默认"}
-                </span>
-              </div>
+                <code class="path-value" title={status.configPath}>{status.configPath}</code>
+              </section>
 
-              <label for="data-directory">目录绝对路径</label>
-              <input
-                id="data-directory"
-                bind:value={dataDirectory}
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="例如 D:\ClipboardData"
-              />
-
-              <div class="setting-actions">
-                <button type="button" disabled={saving} onclick={restoreDefaultDirectory}>恢复默认</button>
-                <button class="primary" type="button" disabled={saving} onclick={saveCustomDirectory}>
-                  {saving ? "保存中…" : "保存目录"}
-                </button>
-              </div>
-
-              {#if pending}
-                <div class="pending-path">
-                  <span>下次启动</span>
-                  <code title={pending.storagePath}>{pending.storagePath}</code>
+              <section class="setting-card">
+                <div class="setting-heading split-heading">
+                  <div class="heading-copy">
+                    <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                    <div>
+                      <strong>数据目录</strong>
+                      <p>所选目录下始终创建统一的 storage 子目录结构。</p>
+                    </div>
+                  </div>
+                  <span class:custom={status.usesCustomDataDirectory} class="directory-badge">
+                    {status.usesCustomDataDirectory ? "自定义" : "默认"}
+                  </span>
                 </div>
-              {/if}
-            </section>
 
-            <section class="setting-card directory-tree-card">
-              <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-                <div>
-                  <strong>目录结构</strong>
-                  <p>数据库索引作为数据库的派生数据放在同一目录内。</p>
+                <label for="data-directory">目录绝对路径</label>
+                <input
+                  id="data-directory"
+                  bind:value={dataDirectory}
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="例如 D:\ClipboardData"
+                />
+
+                <div class="setting-actions">
+                  <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
+                    >恢复默认</button
+                  >
+                  <button
+                    class="primary"
+                    type="button"
+                    disabled={saving}
+                    onclick={saveCustomDirectory}
+                  >
+                    {saving ? "保存中…" : "保存目录"}
+                  </button>
                 </div>
-              </div>
-              <pre>storage/
+
+                {#if pending}
+                  <div class="pending-path">
+                    <span>下次启动</span>
+                    <code title={pending.storagePath}>{pending.storagePath}</code>
+                  </div>
+                {/if}
+              </section>
+
+              <section class="setting-card directory-tree-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+                  <div>
+                    <strong>目录结构</strong>
+                    <p>数据库索引作为数据库的派生数据放在同一目录内。</p>
+                  </div>
+                </div>
+                <pre>storage/
 ├─ image/
 │  └─ previews/
 ├─ files/
 └─ database/
    ├─ clipboard.sqlite3
    └─ search-index/</pre>
-            </section>
+              </section>
 
-            <section class="setting-card">
-              <div class="setting-heading split-heading">
-                <div class="heading-copy">
-                  <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-                  <div>
-                    <strong>全文搜索索引</strong>
-                    <p>中文 N-gram 索引是 SQLite 数据的派生结果，可随时安全重建。</p>
+              <section class="setting-card">
+                <div class="setting-heading split-heading">
+                  <div class="heading-copy">
+                    <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                    <div>
+                      <strong>全文搜索索引</strong>
+                      <p>中文 N-gram 索引是 SQLite 数据的派生结果，可随时安全重建。</p>
+                    </div>
                   </div>
+                  <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
+                    {status.searchIndexRebuildRequired
+                      ? "待重建"
+                      : `v${status.searchIndexVersion} 就绪`}
+                  </span>
                 </div>
-                <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
-                  {status.searchIndexRebuildRequired ? "待重建" : `v${status.searchIndexVersion} 就绪`}
-                </span>
-              </div>
-              <code class="path-value" title={status.searchIndexPath}>{status.searchIndexPath}</code>
-              <div class="setting-actions">
-                <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
-                  {rebuilding ? "重建中…" : "一键重建索引"}
-                </button>
-              </div>
-            </section>
+                <code class="path-value" title={status.searchIndexPath}
+                  >{status.searchIndexPath}</code
+                >
+                <div class="setting-actions">
+                  <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
+                    {rebuilding ? "重建中…" : "一键重建索引"}
+                  </button>
+                </div>
+              </section>
 
-            <div class="storage-summary">
-              <span>数据库版本 {status.schemaVersion}</span>
-              <span>搜索索引 v{status.searchIndexVersion}</span>
-              <span>{status.itemCount} 条记录</span>
-              <span title={status.databasePath}>SQLite 已连接</span>
+              <div class="storage-summary">
+                <span>数据库版本 {status.schemaVersion}</span>
+                <span>搜索索引 v{status.searchIndexVersion}</span>
+                <span>{status.itemCount} 条记录</span>
+                <span title={status.databasePath}>SQLite 已连接</span>
+              </div>
             </div>
-          </div>
-        {:else}
-          <div class="settings-state">{feedback || "桌面端存储服务不可用"}</div>
-        {/if}
+          {:else}
+            <div class="settings-state">{feedback || "桌面端存储服务不可用"}</div>
+          {/if}
 
-        {#if feedback && status}
-          <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
-        {/if}
+          {#if feedback && status}
+            <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+          {/if}
         {/if}
       </div>
     </div>
@@ -346,8 +377,14 @@
     display: block;
   }
 
-  .settings-brand strong { font-size: 12px; }
-  .settings-brand small { margin-top: 2px; color: #6f6f6f; font-size: 10px; }
+  .settings-brand strong {
+    font-size: 12px;
+  }
+  .settings-brand small {
+    margin-top: 2px;
+    color: #6f6f6f;
+    font-size: 10px;
+  }
 
   nav {
     display: grid;
@@ -374,7 +411,9 @@
     background: #292929;
   }
 
-  nav button:disabled { opacity: 0.45; }
+  nav button:disabled {
+    opacity: 0.45;
+  }
 
   .sidebar-foot {
     display: grid;
@@ -431,7 +470,10 @@
     line-height: 1.5;
   }
 
-  header p { max-width: 430px; font-size: 10.5px; }
+  header p {
+    max-width: 430px;
+    font-size: 10.5px;
+  }
 
   .close-button {
     width: 28px;
@@ -459,9 +501,16 @@
     background: #1e1e1e;
   }
 
-  .setting-heading { gap: 10px; }
-  .split-heading { justify-content: space-between; }
-  .heading-copy { gap: 10px; min-width: 0; }
+  .setting-heading {
+    gap: 10px;
+  }
+  .split-heading {
+    justify-content: space-between;
+  }
+  .heading-copy {
+    gap: 10px;
+    min-width: 0;
+  }
 
   .setting-icon {
     width: 29px;
@@ -476,7 +525,10 @@
     font-weight: 560;
   }
 
-  .setting-heading p { margin-top: 2px; font-size: 9.8px; }
+  .setting-heading p {
+    margin-top: 2px;
+    font-size: 9.8px;
+  }
 
   .path-value,
   .pending-path code {
@@ -528,10 +580,16 @@
     outline: none;
     color: #d7d7d7;
     background: #171717;
-    font: 10.5px "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font:
+      10.5px "Cascadia Code",
+      "SFMono-Regular",
+      Consolas,
+      monospace;
   }
 
-  input:focus { border-color: #555; }
+  input:focus {
+    border-color: #555;
+  }
 
   .setting-actions {
     display: flex;
@@ -556,7 +614,10 @@
     background: #e3e3e3;
   }
 
-  .setting-actions button:disabled { cursor: wait; opacity: 0.55; }
+  .setting-actions button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
 
   .pending-path {
     display: grid;
@@ -570,7 +631,9 @@
     font-size: 9.5px;
   }
 
-  .pending-path code { font-size: 9.5px; }
+  .pending-path code {
+    font-size: 9.5px;
+  }
 
   .directory-tree-card pre {
     margin: 11px 0 0;
@@ -579,7 +642,11 @@
     border-radius: 7px;
     color: #999;
     background: #181818;
-    font: 9.5px/1.55 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font:
+      9.5px/1.55 "Cascadia Code",
+      "SFMono-Regular",
+      Consolas,
+      monospace;
   }
 
   .storage-summary {
@@ -618,10 +685,16 @@
     background: rgba(27, 45, 33, 0.96);
   }
 
-  button { cursor: pointer; }
+  button {
+    cursor: pointer;
+  }
 
   @media (max-width: 560px) {
-    .settings-dialog { grid-template-columns: 1fr; }
-    .settings-sidebar { display: none; }
+    .settings-dialog {
+      grid-template-columns: 1fr;
+    }
+    .settings-sidebar {
+      display: none;
+    }
   }
 </style>

@@ -1,9 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
-import type {
-  ClipboardItem,
-  PersistedClipboardItem,
-} from "$lib/types/clipboard";
+import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard";
 
 export async function loadClipboardHistory(
   limit = 100,
@@ -33,10 +30,7 @@ export async function searchClipboardHistory(
   return records.map(toClipboardItem);
 }
 
-export async function persistFavorite(
-  id: string,
-  isFavorite: boolean,
-): Promise<boolean | null> {
+export async function persistFavorite(id: string, isFavorite: boolean): Promise<boolean | null> {
   if (!isTauriRuntime()) return null;
 
   return invoke<boolean>("set_clipboard_item_favorite", { id, isFavorite });
@@ -62,9 +56,7 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
     fileName:
-      record.kind === "file"
-        ? fileNameFromPath(record.resourcePath) || record.title
-        : undefined,
+      record.kind === "file" ? fileNameFromPath(record.resourcePath) || record.title : undefined,
   };
 }
 

@@ -12,9 +12,7 @@ export async function getApplicationFilterSettings(): Promise<ApplicationFilterS
   return invoke<ApplicationFilterSettings>("get_application_filter_settings");
 }
 
-export async function configureIgnoredApplications(
-  applications: string[],
-): Promise<string[]> {
+export async function configureIgnoredApplications(applications: string[]): Promise<string[]> {
   if (!isTauriRuntime()) {
     throw new Error("Application filters are only available in the desktop app");
   }
