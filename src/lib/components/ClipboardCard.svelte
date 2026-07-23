@@ -10,9 +10,10 @@
     selected: boolean;
     onselect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
+    ondelete: (id: string) => void;
   }
 
-  let { item, index, now, selected, onselect, ontoggleFavorite }: Props = $props();
+  let { item, index, now, selected, onselect, ontoggleFavorite, ondelete }: Props = $props();
 
 </script>
 
@@ -77,7 +78,15 @@
         ontoggleFavorite(item.id);
       }}
     ><AppIcon name="star" size={16} filled={item.favorite} /></button>
-    <button type="button" title="删除" aria-label="删除"><AppIcon name="trash" size={16} /></button>
+    <button
+      type="button"
+      title="删除"
+      aria-label="删除"
+      onclick={(event) => {
+        event.stopPropagation();
+        ondelete(item.id);
+      }}
+    ><AppIcon name="trash" size={16} /></button>
   </div>
 
   <span class="shortcut">⌘{index + 1}</span>

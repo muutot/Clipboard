@@ -3,6 +3,11 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
+  import {
+    loadClipboardHistory,
+    persistDelete,
+    persistFavorite,
+  } from "$lib/services/clipboard";
   import { getRuntimeInfo } from "$lib/services/runtime";
   import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
 
@@ -24,19 +29,24 @@
   let statusMessage = $state("使用 ↑ ↓ 选择，Enter 快速粘贴");
 
   const filteredItems = $derived.by(() => {
-    const keyword = query.trim().toLocaleLowerCase();
+    const keywords = query
+      .trim()
+      .toLocaleLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
 
     return items.filter((item) => {
       const matchesFilter =
         activeFilter === "all" ||
         (activeFilter === "favorite" ? item.favorite : item.kind === activeFilter);
 
-      if (!matchesFilter || !keyword) return matchesFilter;
+      if (!matchesFilter || keywords.length === 0) return matchesFilter;
 
-      return [item.title, item.preview, item.sourceApp]
+      const searchableText = [item.title, item.preview, item.sourceApp]
         .join(" ")
-        .toLocaleLowerCase()
-        .includes(keyword);
+        .toLocaleLowerCase();
+
+      return keywords.every((keyword) => searchableText.includes(keyword));
     });
   });
 
@@ -60,6 +70,21 @@
       }
     });
 
+    void loadClipboardHistory()
+      .then((storedItems) => {
+        if (storedItems === null) return;
+
+        items = storedItems;
+        selectedId = storedItems[0]?.id ?? "";
+        statusMessage = storedItems.length
+          ? `已从本地数据库载入 ${storedItems.length} 条记录`
+          : "剪贴板历史为空，复制内容后会出现在这里";
+      })
+      .catch((error) => {
+        console.error("Unable to load clipboard history", error);
+        statusMessage = "读取本地剪贴板历史失败";
+      });
+
     return () => window.clearInterval(clock);
   });
 
@@ -72,9 +97,43 @@
   }
 
   function toggleFavorite(id: string) {
+    const original = items.find((item) => item.id === id);
+    if (!original) return;
+
+    const nextFavorite = !original.favorite;
     items = items.map((item) =>
-      item.id === id ? { ...item, favorite: !item.favorite } : item,
+      item.id === id ? { ...item, favorite: nextFavorite } : item,
     );
+
+    void persistFavorite(id, nextFavorite)
+      .then((updated) => {
+        if (updated === false) throw new Error("record not found");
+      })
+      .catch((error) => {
+        console.error("Unable to update favorite", error);
+        items = items.map((item) =>
+          item.id === id ? { ...item, favorite: original.favorite } : item,
+        );
+        statusMessage = "收藏状态保存失败";
+      });
+  }
+
+  function deleteItem(id: string) {
+    const index = items.findIndex((item) => item.id === id);
+    if (index === -1) return;
+
+    const deleted = items[index];
+    items = items.filter((item) => item.id !== id);
+
+    void persistDelete(id)
+      .then((removed) => {
+        if (removed === false) throw new Error("record not found");
+      })
+      .catch((error) => {
+        console.error("Unable to delete clipboard item", error);
+        items = [...items.slice(0, index), deleted, ...items.slice(index)];
+        statusMessage = "删除记录失败";
+      });
   }
 
   function activateSelected() {
@@ -194,6 +253,7 @@
             selected={item.id === selectedId}
             onselect={selectItem}
             ontoggleFavorite={toggleFavorite}
+            ondelete={deleteItem}
           />
         {/each}
       </div>

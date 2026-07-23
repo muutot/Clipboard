@@ -21,6 +21,21 @@ export interface ClipboardItem {
   };
 }
 
+export interface PersistedClipboardItem {
+  id: string;
+  kind: ClipboardKind;
+  title: string;
+  textContent: string | null;
+  resourcePath: string | null;
+  previewPath: string | null;
+  contentHash: string;
+  sourceApp: string | null;
+  sizeBytes: number;
+  createdAtMs: number;
+  lastUsedAtMs: number | null;
+  isFavorite: boolean;
+}
+
 export interface RuntimeInfo {
   appVersion: string;
   operatingSystem: string;

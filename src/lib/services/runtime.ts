@@ -1,8 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { RuntimeInfo } from "$lib/types/clipboard";
 
+export function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 export async function getRuntimeInfo(): Promise<RuntimeInfo | null> {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+  if (!isTauriRuntime()) {
     return null;
   }
 
