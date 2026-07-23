@@ -10,6 +10,7 @@ use std::{path::PathBuf, sync::Mutex};
 
 use config::ConfigStore;
 use domain::{ClipboardItem, OcrResult};
+use keyboard::{KeyboardConfig, KeyboardManager};
 use platform::RuntimeInfo;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
@@ -23,6 +24,7 @@ struct StorageStatus {
     item_count: u64,
     project_path: String,
     config_path: String,
+    keyboard_config_path: String,
     data_directory_path: String,
     uses_custom_data_directory: bool,
     storage_path: String,
@@ -52,11 +54,18 @@ fn get_storage_status(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
     search_index: tauri::State<'_, SearchIndex>,
 ) -> Result<StorageStatus, String> {
     let config_path = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .path()
+        .display()
+        .to_string();
+    let keyboard_config_path = keyboard
+        .lock()
+        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
         .path()
         .display()
         .to_string();
@@ -68,6 +77,7 @@ fn get_storage_status(
         item_count: database.item_count().map_err(|error| error.to_string())?,
         project_path: paths.project.display().to_string(),
         config_path,
+        keyboard_config_path,
         data_directory_path: paths.data_directory.display().to_string(),
         uses_custom_data_directory: paths.uses_custom_data_directory(),
         storage_path: paths.storage.display().to_string(),
@@ -147,6 +157,29 @@ fn get_clipboard_item_ocr(
 }
 
 #[tauri::command]
+fn get_keyboard_config(
+    keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
+) -> Result<KeyboardConfig, String> {
+    Ok(keyboard
+        .lock()
+        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+        .config())
+}
+
+#[tauri::command]
+fn configure_keyboard_shortcuts(
+    keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
+    action: String,
+    shortcuts: Vec<String>,
+) -> Result<Vec<String>, String> {
+    keyboard
+        .lock()
+        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+        .set_action_shortcuts(action, shortcuts)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
@@ -182,6 +215,7 @@ pub fn run() {
         .setup(|app| {
             let project_directory = app.path().app_data_dir()?;
             let config = ConfigStore::load(&project_directory)?;
+            let keyboard = KeyboardManager::load(&project_directory)?;
             let paths = StoragePaths::initialize_with_data_directory(
                 project_directory,
                 config.storage_directory().map(PathBuf::from),
@@ -192,6 +226,7 @@ pub fn run() {
             SearchSynchronizer::default().initialize(&database, &search_index)?;
 
             app.manage(Mutex::new(config));
+            app.manage(Mutex::new(keyboard));
             app.manage(paths);
             app.manage(database);
             app.manage(search_index);
@@ -205,6 +240,8 @@ pub fn run() {
             set_clipboard_item_favorite,
             delete_clipboard_item,
             get_clipboard_item_ocr,
+            get_keyboard_config,
+            configure_keyboard_shortcuts,
             search_clipboard_items,
             rebuild_search_index
         ])
