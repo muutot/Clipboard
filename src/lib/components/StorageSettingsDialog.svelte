@@ -2,12 +2,18 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
+  import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import {
     configureStorageDirectory,
     getStorageStatus,
     rebuildSearchIndex,
+    getPerformanceMetrics,
+    repairDatabase,
+    validateSearchIndex,
     type StorageDirectoryUpdate,
     type StorageStatus,
+    type PerformanceMetrics,
+    type RepairResult,
   } from "$lib/services/storage";
   import { messages, resolvePath } from "$lib/i18n";
 
@@ -30,7 +36,15 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let activeSection = $state<"capture" | "storage" | "keyboard">("storage");
+  let activeSection = $state<"capture" | "storage" | "keyboard" | "general">("storage");
+
+  let retentionPeriodDays = $state(90);
+  let maxItemCount = $state(10000);
+  let recycleBinDays = $state(30);
+  let maxFileCopySize = $state(50 * 1024 * 1024);
+  let perfMetrics = $state<PerformanceMetrics | null>(null);
+  let repairResult = $state<RepairResult | null>(null);
+  let repairLoading = $state(false);
 
   $effect(() => {
     if (open) {
@@ -56,6 +70,37 @@
       feedback = _t("storage.writeFailed");
     } finally {
       loading = false;
+    }
+
+    void loadPerformanceMetrics();
+  }
+
+  async function loadPerformanceMetrics() {
+    try {
+      perfMetrics = await getPerformanceMetrics();
+    } catch {
+      perfMetrics = null;
+    }
+  }
+
+  async function doRepair() {
+    repairLoading = true;
+    repairResult = null;
+    feedback = "";
+    try {
+      repairResult = await repairDatabase();
+      if (repairResult) {
+        feedbackSuccess = repairResult.integrityOk;
+        feedback = repairResult.integrityOk
+          ? `Database integrity OK (${repairResult.pageCount} pages, ${repairResult.freelistCount} free)`
+          : `Database repair needed: ${repairResult.integrityMessage}`;
+      }
+    } catch (error) {
+      console.error("Database repair failed", error);
+      feedback = "Database repair failed: " + (error instanceof Error ? error.message : String(error));
+      feedbackSuccess = false;
+    } finally {
+      repairLoading = false;
     }
   }
 
@@ -145,6 +190,14 @@
 
         <nav aria-label="设置分类">
           <button
+            class:active={activeSection === "general"}
+            type="button"
+            onclick={() => (activeSection = "general")}
+          >
+            <AppIcon name="sliders" size={16} />
+            <span>{_t("storage.generalTab")}</span>
+          </button>
+          <button
             class:active={activeSection === "capture"}
             type="button"
             onclick={() => (activeSection = "capture")}
@@ -168,10 +221,6 @@
             <AppIcon name="keyboard" size={16} />
             <span>{_t("storage.keyboardTab")}</span>
           </button>
-          <button type="button" disabled>
-            <AppIcon name="settings" size={16} />
-            <span>{_t("storage.generalTab")}</span>
-          </button>
         </nav>
 
         <div class="sidebar-foot">
@@ -181,7 +230,9 @@
       </aside>
 
       <div class="settings-content">
-        {#if activeSection === "capture"}
+        {#if activeSection === "general"}
+          <GeneralSettingsPanel {onclose} />
+        {:else if activeSection === "capture"}
           <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
         {:else if activeSection === "keyboard"}
           <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
@@ -270,7 +321,7 @@
                 </div>
                 <pre>storage/
 ├─ image/
-�? └─ previews/
+│  └─ previews/
 ├─ files/
 └─ database/
    ├─ clipboard.sqlite3
@@ -302,12 +353,174 @@
                 </div>
               </section>
 
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
+                  <div>
+                    <strong>{_t("statistics.title")}</strong>
+                    <p>剪贴板数据统计概览</p>
+                  </div>
+                </div>
+                <div class="stats-grid">
+                  <div class="stat-item">
+                    <span class="stat-value">{status.itemCount}</span>
+                    <span class="stat-label">{_t("statistics.totalRecords")}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">-</span>
+                    <span class="stat-label">{_t("statistics.dbSize")}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">v{status.searchIndexVersion}</span>
+                    <span class="stat-label">{_t("statistics.indexSize")}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">0 / 0</span>
+                    <span class="stat-label">{_t("statistics.ocrTasks")}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
+                  <div>
+                    <strong>{_t("captureSettings.retentionPeriod")}</strong>
+                    <p>{_t("captureSettings.retentionPeriodDesc")}</p>
+                  </div>
+                </div>
+                <div class="number-input-row">
+                  <input
+                    type="number"
+                    bind:value={retentionPeriodDays}
+                    min="1"
+                    max="365"
+                  />
+                  <span class="number-suffix">{_t("captureSettings.days")}</span>
+                </div>
+              </section>
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                  <div>
+                    <strong>{_t("captureSettings.maxItemCount")}</strong>
+                    <p>{_t("captureSettings.maxItemCountDesc")}</p>
+                  </div>
+                </div>
+                <div class="number-input-row">
+                  <input
+                    type="number"
+                    bind:value={maxItemCount}
+                    min="100"
+                    step="100"
+                  />
+                  <span class="number-suffix">条</span>
+                </div>
+              </section>
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+                  <div>
+                    <strong>{_t("captureSettings.recycleBinDays")}</strong>
+                    <p>{_t("captureSettings.recycleBinDaysDesc")}</p>
+                  </div>
+                </div>
+                <div class="number-input-row">
+                  <input
+                    type="number"
+                    bind:value={recycleBinDays}
+                    min="0"
+                    max="365"
+                  />
+                  <span class="number-suffix">{_t("captureSettings.days")}</span>
+                </div>
+              </section>
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+                  <div>
+                    <strong>{_t("captureSettings.maxFileCopySize")}</strong>
+                    <p>{_t("captureSettings.maxFileCopySizeDesc")}</p>
+                  </div>
+                </div>
+                <div class="number-input-row">
+                  <input
+                    type="number"
+                    bind:value={maxFileCopySize}
+                    min="1024"
+                    step="1048576"
+                  />
+                  <span class="number-suffix">{_t("captureSettings.bytes")}</span>
+                </div>
+              </section>
+
               <div class="storage-summary">
                 <span>{_t("storage.databaseVersion", { version: status.schemaVersion })}</span>
                 <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
                 <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
                 <span title={status.databasePath}>{_t("storage.sqliteConnected")}</span>
               </div>
+
+              {#if perfMetrics}
+                <section class="setting-card">
+                  <div class="setting-heading">
+                    <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+                    <div>
+                      <strong>Performance</strong>
+                      <p>Startup {perfMetrics.startup.totalStartupMs}ms &bull; DB {perfMetrics.startup.dbOpenMs}ms &bull; Search init {perfMetrics.startup.searchInitMs}ms</p>
+                    </div>
+                  </div>
+                  {#if perfMetrics.searchLatency.searchesRecorded > 0}
+                    <div class="perf-grid">
+                      <div class="perf-item">
+                        <strong>{perfMetrics.searchLatency.searchesRecorded}</strong>
+                        <span>searches</span>
+                      </div>
+                      <div class="perf-item">
+                        <strong>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</strong>
+                        <span>avg latency</span>
+                      </div>
+                      <div class="perf-item">
+                        <strong>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</strong>
+                        <span>p95</span>
+                      </div>
+                      <div class="perf-item">
+                        <strong>{perfMetrics.searchLatency.p99Ms ?? '-'}ms</strong>
+                        <span>p99</span>
+                      </div>
+                    </div>
+                  {/if}
+                  <div class="perf-mem">
+                    <span>Uptime {perfMetrics.memory.uptimeSeconds}s &bull; Peak memory {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
+                  </div>
+                </section>
+              {/if}
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+                  <div>
+                    <strong>Database Maintenance</strong>
+                    <p>Check and repair database integrity</p>
+                  </div>
+                </div>
+                <div class="setting-actions">
+                  <button type="button" disabled={repairLoading} onclick={doRepair}>
+                    {repairLoading ? 'Checking...' : 'Repair Database'}
+                  </button>
+                </div>
+                {#if repairResult}
+                  <div class="repair-result">
+                    <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
+                      {repairResult.integrityOk ? 'Integrity OK' : 'Integrity Issue'}
+                    </span>
+                    <code>{repairResult.integrityMessage}</code>
+                  </div>
+                {/if}
+              </section>
             </div>
           {:else}
             <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
@@ -416,6 +629,13 @@
     font: inherit;
     font-size: 11.5px;
     text-align: left;
+    cursor: pointer;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  nav button:hover {
+    color: #aaa;
+    background: #1f1f1f;
   }
 
   nav button.active {
@@ -425,6 +645,7 @@
 
   nav button:disabled {
     opacity: 0.45;
+    cursor: default;
   }
 
   .sidebar-foot {
@@ -496,6 +717,7 @@
     background: #222;
     font-size: 18px;
     line-height: 1;
+    cursor: pointer;
   }
 
   .settings-scroll {
@@ -618,6 +840,7 @@
     background: #252525;
     font: inherit;
     font-size: 10px;
+    cursor: pointer;
   }
 
   .setting-actions button.primary {
@@ -659,6 +882,51 @@
       "SFMono-Regular",
       Consolas,
       monospace;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .stat-item {
+    padding: 10px;
+    border: 1px solid #2e2e2e;
+    border-radius: 7px;
+    background: #141414;
+    text-align: center;
+  }
+
+  .stat-value {
+    display: block;
+    color: #e4e4e4;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    color: #777;
+    font-size: 9.5px;
+  }
+
+  .number-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .number-input-row input {
+    width: 120px;
+  }
+
+  .number-suffix {
+    color: #888;
+    font-size: 10.5px;
+    flex-shrink: 0;
   }
 
   .storage-summary {
@@ -708,5 +976,62 @@
     .settings-sidebar {
       display: none;
     }
+  }
+
+  .perf-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .perf-item {
+    text-align: center;
+    padding: 6px 4px;
+    border: 1px solid #2f2f2f;
+    border-radius: 6px;
+    background: #181818;
+  }
+
+  .perf-item strong {
+    display: block;
+    color: #dedede;
+    font-size: 13px;
+    font-weight: 560;
+  }
+
+  .perf-item span {
+    color: #6f6f6f;
+    font-size: 9px;
+  }
+
+  .perf-mem {
+    margin-top: 8px;
+    color: #6f6f6f;
+    font-size: 9.5px;
+  }
+
+  .repair-result {
+    margin-top: 10px;
+    padding: 8px 9px;
+    border: 1px solid #2f2f2f;
+    border-radius: 6px;
+    background: #181818;
+    font-size: 9.5px;
+  }
+
+  .repair-result span.ok {
+    color: #9dc6aa;
+  }
+
+  .repair-result span.fail {
+    color: #d59c9c;
+  }
+
+  .repair-result code {
+    display: block;
+    margin-top: 4px;
+    color: #a7a7a7;
+    font-size: 9px;
   }
 </style>

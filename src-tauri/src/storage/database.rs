@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use super::{migrations, StorageError};
 
 pub struct Database {
-    connection: Mutex<Connection>,
+    pub(super) connection: Mutex<Connection>,
 }
 
 impl Database {
@@ -22,8 +22,7 @@ impl Database {
         Self::from_connection(Connection::open(path)?)
     }
 
-    #[cfg(test)]
-    pub(crate) fn open_in_memory() -> Result<Self, StorageError> {
+    pub fn open_in_memory() -> Result<Self, StorageError> {
         Self::from_connection(Connection::open_in_memory()?)
     }
 

@@ -24,11 +24,63 @@ export interface StorageDirectoryUpdate {
   restartRequired: boolean;
 }
 
+export interface PerformanceMetrics {
+  startup: {
+    totalStartupMs: number;
+    dbOpenMs: number;
+    searchInitMs: number;
+    migrationsMs: number;
+  };
+  searchLatency: {
+    searchesRecorded: number;
+    averageMs: number | null;
+    p95Ms: number | null;
+    p99Ms: number | null;
+  };
+  memory: {
+    currentBytes: number;
+    peakBytes: number;
+    snapshotCount: number;
+    uptimeSeconds: number;
+  };
+}
+
+export interface RepairResult {
+  integrityOk: boolean;
+  integrityMessage: string;
+  pageCount: number;
+  freelistCount: number;
+}
+
 export interface SearchSyncSummary {
   processedEvents: number;
   upsertedDocuments: number;
   deletedDocuments: number;
   lastSequence: number | null;
+}
+
+export async function getPerformanceMetrics(): Promise<PerformanceMetrics | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  return invoke<PerformanceMetrics>("get_performance_metrics");
+}
+
+export async function repairDatabase(): Promise<RepairResult | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  return invoke<RepairResult>("repair_database");
+}
+
+export async function validateSearchIndex(): Promise<boolean | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  return invoke<boolean>("validate_search_index");
 }
 
 export async function getStorageStatus(): Promise<StorageStatus | null> {

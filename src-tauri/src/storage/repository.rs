@@ -578,4 +578,118 @@ mod tests {
             })
             .unwrap();
     }
+
+    // ── Task 4: Pagination edge cases ──
+
+    #[test]
+    fn pagination_empty_database_returns_empty() {
+        let database = Database::open_in_memory().unwrap();
+        let items = database.list_recent(100, 0).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn pagination_single_page_returns_all_items() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("a", "hash-a", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("b", "hash-b", 200))
+            .unwrap();
+        database
+            .save_item(&text_item("c", "hash-c", 300))
+            .unwrap();
+
+        let items = database.list_recent(50, 0).unwrap();
+        assert_eq!(items.len(), 3);
+    }
+
+    #[test]
+    fn pagination_beyond_bounds_returns_empty() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("a", "hash-a", 100))
+            .unwrap();
+
+        let items = database.list_recent(100, 1000).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn pagination_returns_partial_page_at_end() {
+        let database = Database::open_in_memory().unwrap();
+        for i in 0..5 {
+            database
+                .save_item(&text_item(&format!("item-{i}"), &format!("hash-{i}"), i * 100))
+                .unwrap();
+        }
+
+        let items = database.list_recent(3, 3).unwrap();
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn pagination_limit_is_clamped() {
+        let database = Database::open_in_memory().unwrap();
+        for i in 0..600 {
+            database
+                .save_item(&text_item(&format!("item-{i}"), &format!("hash-{i}"), i as i64 * 100))
+                .unwrap();
+        }
+
+        let items = database.list_recent(10000, 0).unwrap();
+        assert!(items.len() <= 500);
+    }
+
+    // ── Task 4: Item count with soft-deleted items ──
+
+    #[test]
+    fn item_count_excludes_soft_deleted_items() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("active", "hash-1", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("deleted", "hash-2", 200))
+            .unwrap();
+
+        assert_eq!(database.item_count().unwrap(), 2);
+
+        database.soft_delete("deleted").unwrap();
+        assert_eq!(database.item_count().unwrap(), 1);
+        assert!(database.get_item("active").unwrap().is_some());
+    }
+
+    #[test]
+    fn item_count_includes_restored_items() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("restored", "hash-1", 100))
+            .unwrap();
+
+        database.soft_delete("restored").unwrap();
+        assert_eq!(database.item_count().unwrap(), 0);
+
+        database.restore_deleted("restored").unwrap();
+        assert_eq!(database.item_count().unwrap(), 1);
+    }
+
+    // ── Task 4: Concurrent read/write with multiple connections ──
+
+    #[test]
+    fn concurrent_read_does_not_block_writes() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("a", "hash-a", 100))
+            .unwrap();
+
+        let read_result = database.get_item("a");
+        database
+            .save_item(&text_item("b", "hash-b", 200))
+            .unwrap();
+
+        assert!(read_result.is_ok());
+        assert_eq!(database.item_count().unwrap(), 2);
+    }
 }

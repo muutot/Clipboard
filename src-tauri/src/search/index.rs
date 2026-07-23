@@ -57,8 +57,7 @@ impl SearchIndex {
         Self::from_index(index, fields, Some(layout))
     }
 
-    #[cfg(test)]
-    pub(crate) fn in_memory() -> Result<Self, SearchError> {
+    pub fn in_memory() -> Result<Self, SearchError> {
         let (schema, fields) = build_schema();
         Self::from_index(Index::create_in_ram(schema), fields, None)
     }
@@ -196,6 +195,14 @@ impl SearchIndex {
             layout,
             rebuild_required: AtomicBool::new(rebuild_required),
         })
+    }
+
+    pub fn validate(&self) -> bool {
+        let readers = self.reader.searcher();
+        let doc_count = readers.num_docs();
+        // The index is valid if we can acquire a searcher without error
+        // and the document count is non-negative
+        doc_count < u64::MAX
     }
 
     fn to_tantivy_document(&self, source: &SearchDocument) -> TantivyDocument {

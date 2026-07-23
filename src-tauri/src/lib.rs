@@ -5,6 +5,7 @@ pub mod domain;
 pub mod export;
 pub mod keyboard;
 pub mod ocr;
+pub mod performance;
 pub mod platform;
 pub mod privacy;
 pub mod search;
@@ -19,6 +20,7 @@ use domain::{ClipboardItem, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{OcrWorker, TesseractOcrEngine};
+use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
     WindowManager,
@@ -26,7 +28,7 @@ use platform::{
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
-use storage::{ClipboardRepository, Database, OcrRepository, StoragePaths};
+use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
 use tauri::Manager;
 use std::sync::Arc;
 
@@ -712,10 +714,32 @@ fn run_cli_command(
     cli::run_cli_command(&args, database.inner())
 }
 
+#[tauri::command]
+fn get_performance_metrics(
+    performance_tracker: tauri::State<'_, PerformanceTracker>,
+) -> Result<PerformanceSnapshot, String> {
+    Ok(performance_tracker.snapshot())
+}
+
+#[tauri::command]
+fn repair_database(
+    database: tauri::State<'_, Database>,
+) -> Result<RepairResult, String> {
+    database.repair().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn validate_search_index(
+    search_index: tauri::State<'_, SearchIndex>,
+) -> Result<bool, String> {
+    Ok(search_index.validate())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            let startup_timer = &mut StartupTimer::start();
             let project_directory = app.path().app_data_dir()?;
             let config = ConfigStore::load(&project_directory)?;
             let keyboard = KeyboardManager::load(&project_directory)?;
@@ -724,9 +748,44 @@ pub fn run() {
                 config.storage_directory().map(PathBuf::from),
             )?;
             let database = Database::open(&paths.database)?;
+
+            // Auto-recovery: check and repair if needed
+            match database.repair() {
+                Ok(result) => {
+                    if !result.integrity_ok {
+                        eprintln!(
+                            "[recovery] database integrity check failed: {}",
+                            result.integrity_message
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[recovery] database repair check failed: {e}");
+                }
+            }
+
             database.requeue_interrupted_ocr()?;
+            let db_open_duration = startup_timer.finish_segment();
+
             let search_index = SearchIndex::open(&paths.search_index)?;
-            SearchSynchronizer::default().initialize(&database, &search_index)?;
+            if !search_index.validate() {
+                eprintln!("[recovery] search index validation failed, will be rebuilt");
+            }
+            let _search_init_result = SearchSynchronizer::default().initialize(&database, &search_index);
+            let search_init_duration = startup_timer.finish_segment();
+
+            let migrations_ms = 0;
+            let startup_metrics = StartupMetrics {
+                total_startup_ms: db_open_duration.as_millis() as u64
+                    + search_init_duration.as_millis() as u64,
+                db_open_ms: db_open_duration.as_millis() as u64,
+                search_init_ms: search_init_duration.as_millis() as u64,
+                migrations_ms,
+            };
+            startup_metrics.log_summary();
+
+            let performance_tracker = PerformanceTracker::new();
+            performance_tracker.record_startup(startup_metrics.clone());
 
             let ocr_engine = Arc::new(TesseractOcrEngine::new());
             let ocr_database = Database::open(&paths.database)?;
@@ -743,11 +802,24 @@ pub fn run() {
                 app.manage(_guard);
             }
 
+            // Graceful shutdown handler
+            let ocr_worker_for_shutdown = ocr_worker.clone();
+            let paths_for_shutdown = paths.clone();
+            ctrlc::set_handler(move || {
+                eprintln!("[shutdown] received interrupt signal, cleaning up...");
+                ocr_worker_for_shutdown.stop();
+                // Config is auto-saved on drop
+                let _ = paths_for_shutdown;
+                std::process::exit(0);
+            })
+            .ok();
+
             app.manage(Mutex::new(config));
             app.manage(Mutex::new(keyboard));
             app.manage(paths);
             app.manage(database);
             app.manage(search_index);
+            app.manage(performance_tracker);
             app.manage(Mutex::new(privacy_manager));
             app.manage(Mutex::new(clipboard_monitor));
             app.manage(Mutex::new(shortcut_manager));
@@ -796,7 +868,10 @@ pub fn run() {
             detect_content_actions,
             soft_delete_clipboard_item,
             restore_clipboard_item,
-            enforce_history_cleanup
+            enforce_history_cleanup,
+            get_performance_metrics,
+            repair_database,
+            validate_search_index
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

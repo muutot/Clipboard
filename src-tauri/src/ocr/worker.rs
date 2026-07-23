@@ -8,6 +8,7 @@ use crate::storage::{Database, OcrRepository};
 
 use super::OcrEngine;
 
+#[derive(Clone)]
 pub struct OcrWorker {
     running: Arc<AtomicBool>,
 }
