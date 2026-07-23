@@ -315,4 +315,21 @@ mod tests {
         assert_eq!(index.search("TAURI", 20).unwrap().len(), 1);
         assert_eq!(index.search("clipboard", 20).unwrap().len(), 1);
     }
+
+    #[test]
+    fn results_are_returned_in_descending_relevance_order() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document("dense", "脸脸脸脸脏脏脏脏")),
+                SearchIndexChange::Upsert(document("sparse", "脸皮特别特别特别厚但是有点脏")),
+            ])
+            .unwrap();
+
+        let hits = index.search("脸 脏", 20).unwrap();
+
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].item_id, "dense");
+        assert!(hits[0].score > hits[1].score);
+    }
 }

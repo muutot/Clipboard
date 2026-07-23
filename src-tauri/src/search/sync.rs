@@ -131,9 +131,9 @@ impl Default for SearchSynchronizer {
 #[cfg(test)]
 mod tests {
     use crate::{
-        domain::{ClipboardItem, ClipboardKind},
+        domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus},
         search::{SearchError, SearchIndex, SearchIndexChange, SearchIndexSink},
-        storage::{ClipboardRepository, Database, SearchRepository},
+        storage::{ClipboardRepository, Database, OcrRepository, SearchRepository},
     };
 
     use super::SearchSynchronizer;
@@ -149,6 +149,23 @@ mod tests {
             content_hash: format!("hash-{id}"),
             source_app: Some("test-suite".to_owned()),
             size_bytes: 32,
+            created_at_ms: 100,
+            last_used_at_ms: None,
+            is_favorite: false,
+        }
+    }
+
+    fn image_item(id: &str) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind: ClipboardKind::Image,
+            title: "screenshot.png".to_owned(),
+            text_content: None,
+            resource_path: Some("image/screenshot.png".to_owned()),
+            preview_path: None,
+            content_hash: format!("hash-{id}"),
+            source_app: Some("test-suite".to_owned()),
+            size_bytes: 1_024,
             created_at_ms: 100,
             last_used_at_ms: None,
             is_favorite: false,
@@ -233,5 +250,36 @@ mod tests {
         assert_eq!(index.search("重建", 20).unwrap().len(), 1);
         assert!(!index.requires_full_rebuild());
         assert!(database.read_search_outbox(100).unwrap().is_empty());
+    }
+
+    #[test]
+    fn completed_ocr_text_returns_the_corresponding_image() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&image_item("image")).unwrap();
+        database
+            .save_ocr_result(&OcrResult {
+                item_id: "image".to_owned(),
+                status: OcrStatus::Completed,
+                engine: "test".to_owned(),
+                model_version: "1".to_owned(),
+                language: Some("zh-CN".to_owned()),
+                full_text: "截图里面的脸有点脏".to_owned(),
+                blocks: vec![],
+                image_hash: "hash-image".to_owned(),
+                created_at_ms: 100,
+                completed_at_ms: Some(200),
+                error_message: None,
+            })
+            .unwrap();
+        let index = SearchIndex::in_memory().unwrap();
+
+        SearchSynchronizer::default()
+            .sync_until_idle(&database, &index)
+            .unwrap();
+        let hits = index.search("截图 脏", 20).unwrap();
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].item_id, "image");
+        assert_eq!(hits[0].kind, "image");
     }
 }
