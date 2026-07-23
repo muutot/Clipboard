@@ -1,5 +1,6 @@
 pub mod config;
 pub mod domain;
+pub mod keyboard;
 pub mod ocr;
 pub mod platform;
 pub mod search;
