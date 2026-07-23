@@ -10,6 +10,7 @@ use std::{path::PathBuf, sync::Mutex};
 use config::ConfigStore;
 use domain::{ClipboardItem, OcrResult};
 use platform::RuntimeInfo;
+use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
 use storage::{ClipboardRepository, Database, OcrRepository, StoragePaths};
 use tauri::Manager;
@@ -28,6 +29,8 @@ struct StorageStatus {
     files_path: String,
     image_path: String,
     search_index_path: String,
+    search_index_version: u32,
+    search_index_rebuild_required: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -48,6 +51,7 @@ fn get_storage_status(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    search_index: tauri::State<'_, SearchIndex>,
 ) -> Result<StorageStatus, String> {
     let config_path = config
         .lock()
@@ -70,6 +74,8 @@ fn get_storage_status(
         files_path: paths.files.display().to_string(),
         image_path: paths.images.display().to_string(),
         search_index_path: paths.search_index.display().to_string(),
+        search_index_version: SEARCH_INDEX_VERSION,
+        search_index_rebuild_required: search_index.requires_full_rebuild(),
     })
 }
 
@@ -139,6 +145,36 @@ fn get_clipboard_item_ocr(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn search_clipboard_items(
+    database: tauri::State<'_, Database>,
+    search_index: tauri::State<'_, SearchIndex>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<ClipboardItem>, String> {
+    SearchSynchronizer::default()
+        .sync_until_idle(database.inner(), search_index.inner())
+        .map_err(|error| error.to_string())?;
+    let hits = search_index
+        .search(&query, limit.unwrap_or(100))
+        .map_err(|error| error.to_string())?;
+    let item_ids = hits.into_iter().map(|hit| hit.item_id).collect::<Vec<_>>();
+
+    database
+        .get_items_by_ids(&item_ids)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn rebuild_search_index(
+    database: tauri::State<'_, Database>,
+    search_index: tauri::State<'_, SearchIndex>,
+) -> Result<SearchSyncSummary, String> {
+    SearchSynchronizer::default()
+        .rebuild(database.inner(), search_index.inner())
+        .map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -151,10 +187,13 @@ pub fn run() {
             )?;
             let database = Database::open(&paths.database)?;
             database.requeue_interrupted_ocr()?;
+            let search_index = SearchIndex::open(&paths.search_index)?;
+            SearchSynchronizer::default().initialize(&database, &search_index)?;
 
             app.manage(Mutex::new(config));
             app.manage(paths);
             app.manage(database);
+            app.manage(search_index);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -164,7 +203,9 @@ pub fn run() {
             list_clipboard_items,
             set_clipboard_item_favorite,
             delete_clipboard_item,
-            get_clipboard_item_ocr
+            get_clipboard_item_ocr,
+            search_clipboard_items,
+            rebuild_search_index
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

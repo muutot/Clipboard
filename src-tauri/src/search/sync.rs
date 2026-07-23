@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use serde::Serialize;
+
 use crate::storage::SearchRepository;
 
 use super::{SearchError, SearchIndex, SearchIndexChange};
@@ -14,7 +16,8 @@ impl SearchIndexSink for SearchIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchSyncSummary {
     pub processed_events: u64,
     pub upserted_documents: u64,
