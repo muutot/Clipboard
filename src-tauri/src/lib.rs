@@ -44,6 +44,13 @@ struct StorageDirectoryUpdate {
     restart_required: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplicationFilterSettings {
+    discovered_applications: Vec<String>,
+    ignored_applications: Vec<String>,
+}
+
 #[tauri::command]
 fn get_runtime_info() -> RuntimeInfo {
     platform::runtime_info()
@@ -117,6 +124,38 @@ fn configure_storage_directory(
         data_directory_path: target_paths.data_directory.display().to_string(),
         storage_path: target_paths.storage.display().to_string(),
     })
+}
+
+#[tauri::command]
+fn get_application_filter_settings(
+    database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<ApplicationFilterSettings, String> {
+    let discovered_applications = database
+        .list_source_applications()
+        .map_err(|error| error.to_string())?;
+    let ignored_applications = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .ignored_applications()
+        .to_vec();
+
+    Ok(ApplicationFilterSettings {
+        discovered_applications,
+        ignored_applications,
+    })
+}
+
+#[tauri::command]
+fn configure_ignored_applications(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    applications: Vec<String>,
+) -> Result<Vec<String>, String> {
+    config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .set_ignored_applications(applications)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -236,6 +275,8 @@ pub fn run() {
             get_runtime_info,
             get_storage_status,
             configure_storage_directory,
+            get_application_filter_settings,
+            configure_ignored_applications,
             list_clipboard_items,
             set_clipboard_item_favorite,
             delete_clipboard_item,
