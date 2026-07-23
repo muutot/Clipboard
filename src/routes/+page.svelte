@@ -27,8 +27,11 @@
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
+  import { iconsDir } from "$lib/services/paths";
+  import { getStorageStatus } from "$lib/services/storage";
 
-  const _t = (path: string, params?: Record<string, string | number>) => resolvePath($messages, path, params);
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
 
   const filters = $derived([
     { id: "all" as ClipboardFilter, label: _t("filter.all"), icon: "grid" as IconName },
@@ -88,8 +91,16 @@
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1_000;
 
-    const startOfDay = (ts: number) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
-    const endOfDay = (ts: number) => { const d = new Date(ts); d.setHours(23, 59, 59, 999); return d.getTime(); };
+    const startOfDay = (ts: number) => {
+      const d = new Date(ts);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    };
+    const endOfDay = (ts: number) => {
+      const d = new Date(ts);
+      d.setHours(23, 59, 59, 999);
+      return d.getTime();
+    };
     const startOfWeek = (ts: number) => {
       const d = new Date(ts);
       const day = d.getDay();
@@ -100,16 +111,20 @@
     };
 
     switch (filter) {
-      case "today": return { from: startOfDay(now), to: endOfDay(now) };
-      case "yesterday": return { from: startOfDay(now - dayMs), to: endOfDay(now - dayMs) };
-      case "week": return { from: startOfWeek(now), to: endOfDay(now) };
+      case "today":
+        return { from: startOfDay(now), to: endOfDay(now) };
+      case "yesterday":
+        return { from: startOfDay(now - dayMs), to: endOfDay(now - dayMs) };
+      case "week":
+        return { from: startOfWeek(now), to: endOfDay(now) };
       case "month": {
         const d = new Date(now);
         d.setDate(1);
         d.setHours(0, 0, 0, 0);
         return { from: d.getTime(), to: endOfDay(now) };
       }
-      default: return null;
+      default:
+        return null;
     }
   }
 
@@ -132,7 +147,10 @@
 
       if (!matchesFilter) return false;
 
-      if (sourceAppFilter && !item.sourceApp.toLowerCase().includes(sourceAppFilter.toLowerCase())) {
+      if (
+        sourceAppFilter &&
+        !item.sourceApp.toLowerCase().includes(sourceAppFilter.toLowerCase())
+      ) {
         return false;
       }
 
@@ -166,7 +184,11 @@
   });
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
-  const resultSummary = $derived(searchPending ? _t("status.searching") : _t("status.recordCount", { count: filteredItems.length }));
+  const resultSummary = $derived(
+    searchPending
+      ? _t("status.searching")
+      : _t("status.recordCount", { count: filteredItems.length }),
+  );
 
   // --- Virtual scrolling ---
 
@@ -245,6 +267,12 @@
       currentTime = Date.now();
     }, 30_000);
 
+    void getStorageStatus().then((status) => {
+      if (status) {
+        iconsDir.set(status.iconsDir);
+      }
+    });
+
     void getRuntimeInfo().then((runtime) => {
       if (runtime) {
         runtimeLabel = `${runtime.operatingSystem} / ${runtime.architecture} \u00b7 ${_t("app.coreConnected")}`;
@@ -277,23 +305,32 @@
         id: record.id,
         kind: record.kind,
         title: record.title,
-        preview: record.textContent && record.textContent !== record.title ? record.textContent : "",
+        preview:
+          record.textContent && record.textContent !== record.title ? record.textContent : "",
         sourceApp,
-        sourceTone: sourceApp.includes("codex") ? "violet"
-          : sourceApp.includes("Chrome") || sourceApp.includes("Edge") ? "blue"
-          : sourceApp === "Clipboard" ? "neutral" : "red",
-        sizeLabel: record.kind === "text" || record.kind === "link"
-          ? formatTextLength(record.textContent?.length || record.title.length)
-          : `${record.sizeBytes} B`,
+        sourceTone: sourceApp.includes("codex")
+          ? "violet"
+          : sourceApp.includes("Chrome") || sourceApp.includes("Edge")
+            ? "blue"
+            : sourceApp === "Clipboard"
+              ? "neutral"
+              : "red",
+        sizeLabel:
+          record.kind === "text" || record.kind === "link"
+            ? formatTextLength(record.textContent?.length || record.title.length)
+            : `${record.sizeBytes} B`,
         createdAt: record.createdAtMs,
         favorite: record.isFavorite,
-        fileName: record.kind === "file" ? record.resourcePath?.split(/[\\/]/).pop() || record.title : undefined,
+        fileName:
+          record.kind === "file"
+            ? record.resourcePath?.split(/[\\/]/).pop() || record.title
+            : undefined,
         previewPath: record.previewPath,
         resourcePath: record.resourcePath,
         textContent: record.textContent,
         iconPath: record.iconPath,
       };
-      const existingIdx = items.findIndex(i => i.id === newItem.id);
+      const existingIdx = items.findIndex((i) => i.id === newItem.id);
       if (existingIdx >= 0) {
         items[existingIdx] = newItem;
         items = items;
@@ -306,16 +343,20 @@
     function applySettings(s: typeof $generalSettings) {
       const sizes: Record<string, string> = { small: "13px", normal: "14px", large: "16px" };
       document.documentElement.style.fontSize = sizes[s.fontSize] || "14px";
-      if ('__TAURI_INTERNALS__' in window) {
-        getCurrentWindow().setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
+      if ("__TAURI_INTERNALS__" in window) {
+        getCurrentWindow()
+          .setAlwaysOnTop(s.alwaysOnTop)
+          .catch(() => {});
       }
+      const shell = document.querySelector('.app-shell');
+      if (shell) { shell.classList.toggle('compact', s.compactMode); }
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
 
     return () => {
       window.clearInterval(clock);
-      unlisten.then(fn => fn());
+      unlisten.then((fn) => fn());
       unsubSettings();
     };
   });
@@ -323,7 +364,7 @@
   // --- Handlers ---
 
   async function openSettings() {
-    if ('__TAURI_INTERNALS__' in window) {
+    if ("__TAURI_INTERNALS__" in window) {
       const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
       const existing = await WebviewWindow.getByLabel("settings");
       if (existing) {
@@ -396,7 +437,10 @@
     void persistFavorite(id, nextFavorite)
       .then((updated) => {
         if (updated === false) throw new Error("record not found");
-        showToast(nextFavorite ? _t("toast.favoriteSuccess") : _t("toast.unfavoriteSuccess"), "success");
+        showToast(
+          nextFavorite ? _t("toast.favoriteSuccess") : _t("toast.unfavoriteSuccess"),
+          "success",
+        );
       })
       .catch((error) => {
         console.error("Unable to update favorite", error);
@@ -456,7 +500,7 @@
         const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
         const response = await fetch(src);
         const blob = await response.blob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
         showToast(_t("toast.copySuccess"), "success");
       } catch {
         showToast(_t("toast.copyFailed"), "error");
@@ -464,11 +508,14 @@
       return;
     }
 
-    void navigator.clipboard.writeText(item.textContent || item.title).then(() => {
-      showToast(_t("toast.copySuccess"), "success");
-    }).catch(() => {
-      showToast(_t("toast.copyFailed"), "error");
-    });
+    void navigator.clipboard
+      .writeText(item.textContent || item.title)
+      .then(() => {
+        showToast(_t("toast.copySuccess"), "success");
+      })
+      .catch(() => {
+        showToast(_t("toast.copyFailed"), "error");
+      });
   }
 
   function openDetail(id: string) {
@@ -485,17 +532,26 @@
   }
 
   async function saveEdit(id: string, content: string) {
-    const item = items.find(i => i.id === id);
+    const item = items.find((i) => i.id === id);
     const isText = item?.kind === "text" || item?.kind === "link";
     const isMedia = item?.kind === "image" || item?.kind === "file";
     const newTitle = isText ? content.slice(0, 200) : content;
     const newTextContent = isText ? content : (item?.textContent ?? null);
-    const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? '');
+    const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? "");
 
     if (isMedia && content) {
       try {
         const updated = await invoke<ClipboardItem>("rename_item", { id, newName: content });
-        items = items.map((item) => item.id === id ? { ...item, title: updated.title, resourcePath: updated.resourcePath, previewPath: updated.previewPath } : item);
+        items = items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                title: updated.title,
+                resourcePath: updated.resourcePath,
+                previewPath: updated.previewPath,
+              }
+            : item,
+        );
         showToast(_t("toast.editSaved"), "success");
         return;
       } catch (e) {
@@ -505,11 +561,15 @@
     }
 
     items = items.map((item) =>
-      item.id === id ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview } : item,
+      item.id === id
+        ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview }
+        : item,
     );
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview } : item,
+        item.id === id
+          ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview }
+          : item,
       );
     }
     showToast(_t("toast.editSaved"), "success");
@@ -522,21 +582,27 @@
   function plainPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    void navigator.clipboard.writeText(item.textContent || item.title).then(() => {
-      showToast(_t("toast.plainPasteSuccess"), "success");
-    }).catch(() => {
-      showToast(_t("toast.copyFailed"), "error");
-    });
+    void navigator.clipboard
+      .writeText(item.textContent || item.title)
+      .then(() => {
+        showToast(_t("toast.plainPasteSuccess"), "success");
+      })
+      .catch(() => {
+        showToast(_t("toast.copyFailed"), "error");
+      });
   }
 
   function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    void navigator.clipboard.writeText(item.textContent || item.title).then(() => {
-      showToast(_t("toast.copySuccess"), "success");
-    }).catch(() => {
-      showToast(_t("toast.copyFailed"), "error");
-    });
+    void navigator.clipboard
+      .writeText(item.textContent || item.title)
+      .then(() => {
+        showToast(_t("toast.copySuccess"), "success");
+      })
+      .catch(() => {
+        showToast(_t("toast.copyFailed"), "error");
+      });
   }
 
   // --- Bulk operations ---
@@ -544,24 +610,27 @@
   function bulkCopy() {
     const selectedItems = items.filter((i) => selectedIds.has(i.id));
     const text = selectedItems.map((i) => i.title).join("\n");
-    void navigator.clipboard.writeText(text).then(() => {
-      showToast(_t("toast.bulkCopySuccess", { count: selectedIds.size }), "success");
-    }).catch(() => {
-      showToast(_t("toast.copyFailed"), "error");
-    });
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        showToast(_t("toast.bulkCopySuccess", { count: selectedIds.size }), "success");
+      })
+      .catch(() => {
+        showToast(_t("toast.copyFailed"), "error");
+      });
   }
 
   function bulkFavorite() {
     const ids = [...selectedIds];
-    items = items.map((item) =>
-      selectedIds.has(item.id) ? { ...item, favorite: true } : item,
-    );
-    void persistBatchFavorite(ids, true).then(() => {
-      showToast(_t("toast.bulkFavoriteSuccess", { count: ids.length }), "success");
-      selectedIds = new Set();
-    }).catch((error) => {
-      console.error("Bulk favorite failed", error);
-    });
+    items = items.map((item) => (selectedIds.has(item.id) ? { ...item, favorite: true } : item));
+    void persistBatchFavorite(ids, true)
+      .then(() => {
+        showToast(_t("toast.bulkFavoriteSuccess", { count: ids.length }), "success");
+        selectedIds = new Set();
+      })
+      .catch((error) => {
+        console.error("Bulk favorite failed", error);
+      });
   }
 
   function bulkDelete() {
@@ -570,12 +639,14 @@
     items = items.filter((i) => !selectedIds.has(i.id));
     selectedIds = new Set();
 
-    void persistBatchDelete(ids).then(() => {
-      showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
-    }).catch((error) => {
-      console.error("Bulk delete failed", error);
-      items = [...items, ...removed];
-    });
+    void persistBatchDelete(ids)
+      .then(() => {
+        showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
+      })
+      .catch((error) => {
+        console.error("Bulk delete failed", error);
+        items = [...items, ...removed];
+      });
   }
 
   function activateSelected() {
@@ -593,7 +664,7 @@
     selectedId = filteredItems[next].id;
     const el = document.querySelector(`[data-id="${selectedId}"]`);
     if (el instanceof HTMLElement) {
-      el.scrollIntoView({ block: 'nearest' });
+      el.scrollIntoView({ block: "nearest" });
       el.focus();
     }
   }
@@ -627,52 +698,63 @@
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === "ArrowDown") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
       moveSelection(1);
       return;
     }
 
     if (event.key === "ArrowUp") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
       moveSelection(-1);
       return;
     }
 
     if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
-      const idx = filters.findIndex(f => f.id === activeFilter);
+      const idx = filters.findIndex((f) => f.id === activeFilter);
       const next = (idx + 1) % filters.length;
       setFilter(filters[next].id);
       return;
     }
 
     if (event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
-      const idx = filters.findIndex(f => f.id === activeFilter);
+      const idx = filters.findIndex((f) => f.id === activeFilter);
       const prev = (idx - 1 + filters.length) % filters.length;
       setFilter(filters[prev].id);
       return;
     }
 
     if (event.key === "Enter") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
       activateSelected();
       return;
     }
 
     if (event.key === "Escape") {
-      if ('__TAURI_INTERNALS__' in window) {
-        getCurrentWindow().hide();
+      if ("__TAURI_INTERNALS__" in window) {
+        getCurrentWindow()
+          .hide()
+          .catch(() => {});
       }
       return;
     }
 
-    if (event.key === "Backspace" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
+    if (
+      event.key === "Backspace" &&
+      !(event.target instanceof HTMLInputElement) &&
+      !(event.target instanceof HTMLTextAreaElement)
+    ) {
       if (selectedIds.size > 0) {
         selectedIds = new Set();
       }
@@ -680,7 +762,8 @@
     }
 
     if ((event.metaKey || event.ctrlKey) && event.key === "a") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
       selectedIds = new Set(filteredItems.map((i) => i.id));
       return;
@@ -692,7 +775,7 @@
         // Let the input handle its own Ctrl+key combinations (Ctrl+A, Ctrl+C, etc.)
         return;
       }
-      const item = filteredItems.find(i => i.id === selectedId);
+      const item = filteredItems.find((i) => i.id === selectedId);
       if (!item) return;
 
       if (event.key === "c") {
@@ -720,7 +803,8 @@
     }
 
     if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       const index = Number(event.key) - 1;
       const item = filteredItems[index];
       if (item) {
@@ -765,38 +849,39 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<main class="app-shell" class:compact={$generalSettings.compactMode}>
-    <header class="search-header">
-      <div class="search-box">
-        <AppIcon name="search" size={20} strokeWidth={1.65} />
-        <input
-          bind:value={query}
-          aria-label={_t("app.searchPlaceholder")}
-          autocomplete="off"
-          placeholder={_t("app.searchPlaceholder")}
-          spellcheck="false"
-          onkeydown={(e) => {
-            if (e.key === 'Backspace') {
-              const now = Date.now();
-              if (now - lastBackspaceAt < 400 && query) {
-                e.preventDefault();
-                query = '';
-                lastBackspaceAt = 0;
-              } else {
-                lastBackspaceAt = now;
-              }
-            } else {
+<main class="app-shell">
+  <header class="search-header">
+    <div class="search-box">
+      <AppIcon name="search" size={20} strokeWidth={1.65} />
+      <input
+        bind:value={query}
+        aria-label={_t("app.searchPlaceholder")}
+        autocomplete="off"
+        placeholder={_t("app.searchPlaceholder")}
+        spellcheck="false"
+        onkeydown={(e) => {
+          if (e.key === "Backspace") {
+            const now = Date.now();
+            if (now - lastBackspaceAt < 400 && query) {
+              e.preventDefault();
+              query = "";
               lastBackspaceAt = 0;
+            } else {
+              lastBackspaceAt = now;
             }
-          }}
-        />
+          } else {
+            lastBackspaceAt = 0;
+          }
+        }}
+      />
       {#if query}
         <button
           class="clear-button"
           tabindex="-1"
           type="button"
           aria-label={_t("app.clearSearch")}
-          onclick={() => (query = "")}>×</button>
+          onclick={() => (query = "")}>×</button
+        >
       {/if}
     </div>
     <button
@@ -808,8 +893,16 @@
       aria-label={_t("search.regex")}
       aria-pressed={regexMode}
       onclick={() => (regexMode = !regexMode)}
-    ><AppIcon name="regex" size={15} strokeWidth={2} /></button>
-    <img class="brand-icon" src="/app-icon.png" alt="Clipboard" title="Clipboard" width="28" height="28" />
+      ><AppIcon name="regex" size={15} strokeWidth={2} /></button
+    >
+    <img
+      class="brand-icon"
+      src="/app-icon.png"
+      alt="Clipboard"
+      title="Clipboard"
+      width="28"
+      height="28"
+    />
   </header>
 
   <div class="toolbar">
@@ -835,23 +928,40 @@
     <div class="filter-dropdowns">
       <!-- Date filter -->
       <div class="dropdown-wrapper">
-        <button type="button" tabindex="-1" class="filter-dropdown-btn" onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
-          aria-label={_t("dateFilter.all")} title={_t("dateFilter.all")}
+        <button
+          type="button"
+          tabindex="-1"
+          class="filter-dropdown-btn"
+          onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
+          aria-label={_t("dateFilter.all")}
+          title={_t("dateFilter.all")}
         >
           <AppIcon name="calendar" size={15} />
-          <span class="dropdown-label">{dateFilter === "all" ? _t("dateFilter.all") : dateFilterOptions.find(o => o.id === dateFilter)?.label ?? _t("dateFilter.all")}</span>
+          <span class="dropdown-label"
+            >{dateFilter === "all"
+              ? _t("dateFilter.all")
+              : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
+                _t("dateFilter.all"))}</span
+          >
           <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
         </button>
         {#if dateDropdownOpen}
           <div class="dropdown-popover" role="menu">
-            <div class="dropdown-backdrop" onclick={() => (dateDropdownOpen = false)} aria-hidden="true"></div>
+            <div
+              class="dropdown-backdrop"
+              onclick={() => (dateDropdownOpen = false)}
+              aria-hidden="true"
+            ></div>
             {#each dateFilterOptions as option}
               <button
                 type="button"
                 role="menuitem"
                 class:selected={dateFilter === option.id}
-                onclick={() => { dateFilter = option.id; dateDropdownOpen = false; }}
-              >{option.label}</button>
+                onclick={() => {
+                  dateFilter = option.id;
+                  dateDropdownOpen = false;
+                }}>{option.label}</button
+              >
             {/each}
           </div>
         {/if}
@@ -859,8 +969,13 @@
 
       <!-- Source app filter -->
       <div class="dropdown-wrapper">
-        <button type="button" tabindex="-1" class="filter-dropdown-btn" onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
-          aria-label={_t("sourceApp.all")} title={_t("sourceApp.all")}
+        <button
+          type="button"
+          tabindex="-1"
+          class="filter-dropdown-btn"
+          onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
+          aria-label={_t("sourceApp.all")}
+          title={_t("sourceApp.all")}
         >
           <AppIcon name="filter" size={15} />
           <span class="dropdown-label">{sourceAppFilter || _t("sourceApp.all")}</span>
@@ -868,7 +983,11 @@
         </button>
         {#if sourceAppDropdownOpen}
           <div class="dropdown-popover" role="menu">
-            <div class="dropdown-backdrop" onclick={() => (sourceAppDropdownOpen = false)} aria-hidden="true"></div>
+            <div
+              class="dropdown-backdrop"
+              onclick={() => (sourceAppDropdownOpen = false)}
+              aria-hidden="true"
+            ></div>
             <div class="dropdown-search">
               <AppIcon name="search" size={13} />
               <input
@@ -883,15 +1002,21 @@
                 type="button"
                 role="menuitem"
                 class:selected={sourceAppFilter === ""}
-                onclick={() => { sourceAppFilter = ""; sourceAppDropdownOpen = false; }}
-              >{_t("sourceApp.all")}</button>
+                onclick={() => {
+                  sourceAppFilter = "";
+                  sourceAppDropdownOpen = false;
+                }}>{_t("sourceApp.all")}</button
+              >
               {#each filteredSourceApps as app}
                 <button
                   type="button"
                   role="menuitem"
                   class:selected={sourceAppFilter === app}
-                  onclick={() => { sourceAppFilter = app; sourceAppDropdownOpen = false; }}
-                >{app}</button>
+                  onclick={() => {
+                    sourceAppFilter = app;
+                    sourceAppDropdownOpen = false;
+                  }}>{app}</button
+                >
               {/each}
             </div>
           </div>
@@ -901,11 +1026,21 @@
 
     <div class="toolbar-actions">
       <button type="button" tabindex="-1" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
-        ><AppIcon name="help" size={17} /></button>
-      <button type="button" tabindex="-1" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}
-        ><AppIcon name="pin" size={17} /></button>
-      <button type="button" tabindex="-1" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={openSettings}
-        ><AppIcon name="settings" size={17} /></button>
+        ><AppIcon name="help" size={17} /></button
+      >
+      <button
+        type="button"
+        tabindex="-1"
+        aria-label={_t("toolbar.pinWindow")}
+        title={_t("toolbar.pinWindow")}><AppIcon name="pin" size={17} /></button
+      >
+      <button
+        type="button"
+        tabindex="-1"
+        aria-label={_t("toolbar.settings")}
+        title={_t("toolbar.settings")}
+        onclick={openSettings}><AppIcon name="settings" size={17} /></button
+      >
     </div>
   </div>
 
@@ -920,7 +1055,9 @@
         <span class="result-count">{resultSummary}</span>
       </div>
       {#if selectedIds.size > 0}
-        <span class="multi-count">{selectedIds.size} {_t("status.recordCount", { count: 0 }).replace("0 ", "")}</span>
+        <span class="multi-count"
+          >{selectedIds.size} {_t("status.recordCount", { count: 0 }).replace("0 ", "")}</span
+        >
       {/if}
       <span class="runtime-status"><i></i>{runtimeLabel}</span>
     </div>
@@ -934,12 +1071,15 @@
       >
         <div
           class="virtual-container"
-          style="height: {useVirtualScroll ? virtualList.totalHeight + 'px' : 'auto'}; position: {useVirtualScroll ? 'relative' : 'static'};"
+          style="height: {useVirtualScroll
+            ? virtualList.totalHeight + 'px'
+            : 'auto'}; position: {useVirtualScroll ? 'relative' : 'static'};"
         >
           {#each visiblePageItems as item, visibleIdx (item.id)}
             {#if useVirtualScroll}
               <div
-                style="position: absolute; top: {virtualList.offsetY + visibleIdx * VIRTUAL_SCROLL_CONFIG.itemHeight}px; left: 0; right: 0;"
+                style="position: absolute; top: {virtualList.offsetY +
+                  visibleIdx * VIRTUAL_SCROLL_CONFIG.itemHeight}px; left: 0; right: 0;"
               >
                 <ClipboardCard
                   {item}
@@ -990,9 +1130,7 @@
         <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
         <strong>{items.length === 0 ? _t("app.noRecords") : _t("app.noMatchRecords")}</strong>
         <p>
-          {items.length === 0
-            ? _t("app.noRecordsHint")
-            : _t("app.noMatchRecordsHint")}
+          {items.length === 0 ? _t("app.noRecordsHint") : _t("app.noMatchRecordsHint")}
         </p>
       </div>
     {/if}
@@ -1000,15 +1138,25 @@
 
   {#if selectedIds.size > 0}
     <div class="bulk-bar">
-      <button type="button" class="bulk-deselect" onclick={() => (selectedIds = new Set())}
-        title={_t("bulk.deselectAll")}>
+      <button
+        type="button"
+        class="bulk-deselect"
+        onclick={() => (selectedIds = new Set())}
+        title={_t("bulk.deselectAll")}
+      >
         <AppIcon name="x" size={14} strokeWidth={2.5} />
         <span>{selectedIds.size}</span>
       </button>
       <div class="bulk-actions">
-        <button type="button" onclick={bulkCopy}>&#47;&#47; {_t("bulk.copyN", { count: selectedIds.size })}</button>
-        <button type="button" onclick={bulkFavorite}>&#42; {_t("bulk.favoriteN", { count: selectedIds.size })}</button>
-        <button type="button" class="danger" onclick={bulkDelete}>&#47;&#47; {_t("bulk.deleteN", { count: selectedIds.size })}</button>
+        <button type="button" onclick={bulkCopy}
+          >&#47;&#47; {_t("bulk.copyN", { count: selectedIds.size })}</button
+        >
+        <button type="button" onclick={bulkFavorite}
+          >&#42; {_t("bulk.favoriteN", { count: selectedIds.size })}</button
+        >
+        <button type="button" class="danger" onclick={bulkDelete}
+          >&#47;&#47; {_t("bulk.deleteN", { count: selectedIds.size })}</button
+        >
       </div>
     </div>
   {/if}
@@ -1044,19 +1192,52 @@
   }
 
   .app-shell.compact .search-header {
-    padding: 10px 16px 5px;
+    padding: 6px 16px 2px;
+    gap: 6px;
+  }
+
+  .app-shell.compact .search-box input {
+    font-size: 12px;
   }
 
   .app-shell.compact .toolbar {
-    padding: 4px 16px;
+    padding: 2px 16px 4px;
+  }
+
+  .app-shell.compact .toolbar-actions button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .app-shell.compact .filters button {
+    padding: 3px 9px;
+    font-size: 10px;
   }
 
   .app-shell.compact .history-list {
-    padding: 0 7px 10px;
+    padding: 0 4px 6px;
   }
 
   .app-shell.compact :global(.clip-card) {
-    padding: 8px 14px 7px;
+    padding: 6px 10px 5px;
+    border-radius: 7px;
+  }
+
+  .app-shell.compact :global(.clip-card .meta-row) {
+    gap: 5px;
+  }
+
+  .app-shell.compact :global(.clip-card .meta-row span) {
+    font-size: 9.5px;
+  }
+
+  .app-shell.compact :global(.clip-card .content) {
+    font-size: 12px;
+  }
+
+  .app-shell.compact :global(.clip-card .preview-text) {
+    font-size: 11.5px;
+    line-height: 1.4;
   }
 
   .search-header {
@@ -1116,7 +1297,10 @@
     color: #5a5a5a;
     background: transparent;
     cursor: pointer;
-    transition: color 100ms ease, border-color 100ms ease, background 100ms ease;
+    transition:
+      color 100ms ease,
+      border-color 100ms ease,
+      background 100ms ease;
   }
 
   .regex-toggle:hover {
@@ -1231,7 +1415,10 @@
     cursor: pointer;
     font-size: 11.5px;
     white-space: nowrap;
-    transition: color 100ms ease, border-color 100ms ease, background 100ms ease;
+    transition:
+      color 100ms ease,
+      border-color 100ms ease,
+      background 100ms ease;
   }
 
   .filter-dropdown-btn:hover {
@@ -1487,7 +1674,9 @@
     cursor: pointer;
     font-size: 11.5px;
     font-weight: 500;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .bulk-actions button:hover {

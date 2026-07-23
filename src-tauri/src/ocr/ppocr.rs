@@ -1,59 +1,154 @@
-use std::process::Command;
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use oar_ocr::oarocr::OAROCRBuilder;
 
 use super::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
 use crate::domain::OcrTextBlock;
 
-pub struct PpOcrEngine;
+pub struct PpOcrEngine {
+    ocr: Mutex<Option<oar_ocr::oarocr::OAROCR>>,
+    models_dir: PathBuf,
+}
+
+// SAFETY: OAROCR wraps ort::Session which uses RefCell internally (not Sync).
+// PpOcrEngine wraps it in a Mutex ensuring exclusive access. The OCR worker
+// calls recognize from a single thread at a time.
+unsafe impl Send for PpOcrEngine {}
+unsafe impl Sync for PpOcrEngine {}
 
 impl PpOcrEngine {
-    pub fn new() -> Self { Self }
-
-    pub fn is_available() -> bool {
-        Command::new("python")
-            .args(["-c", "from paddleocr import PaddleOCR; print('ok')"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "ok")
-            .unwrap_or(false)
+    pub fn new(models_dir: PathBuf) -> Self {
+        Self {
+            ocr: Mutex::new(None),
+            models_dir,
+        }
     }
 
-    pub fn install() -> Result<(), String> {
-        if !Command::new("python").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
-            return Err("Python not found. Install Python 3.8+ from https://python.org".to_string());
+    pub fn is_available(&self) -> bool {
+        super::models::all_models_present(&self.models_dir)
+    }
+
+    pub fn models_dir(&self) -> &PathBuf {
+        &self.models_dir
+    }
+
+    fn build_ocr(&self) -> Result<oar_ocr::oarocr::OAROCR, OcrEngineError> {
+        let paths = super::models::model_paths(&self.models_dir);
+
+        if !paths.det.exists() {
+            return Err(OcrEngineError::new(format!(
+                "Detection model not found: {}",
+                paths.det.display()
+            )));
         }
-        eprintln!("[ppocr] installing paddleocr...");
-        let out = Command::new("pip").args(["install", "paddlepaddle", "paddleocr"]).output()
-            .map_err(|e| format!("pip failed: {e}"))?;
-        if !out.status.success() {
-            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        if !paths.rec.exists() {
+            return Err(OcrEngineError::new(format!(
+                "Recognition model not found: {}",
+                paths.rec.display()
+            )));
         }
-        if !Self::is_available() {
-            return Err("Install OK but import failed. Check Python env.".to_string());
+        if !paths.dict.exists() {
+            return Err(OcrEngineError::new(format!(
+                "Dictionary not found: {}",
+                paths.dict.display()
+            )));
         }
-        Ok(())
+
+        OAROCRBuilder::new(
+            paths.det.to_string_lossy().as_ref(),
+            paths.rec.to_string_lossy().as_ref(),
+            paths.dict.to_string_lossy().as_ref(),
+        )
+        .build()
+        .map_err(|e| OcrEngineError::new(format!("Failed to build OCR engine: {e}")))
     }
 }
 
-impl Default for PpOcrEngine { fn default() -> Self { Self } }
+impl Default for PpOcrEngine {
+    fn default() -> Self {
+        Self::new(PathBuf::new())
+    }
+}
 
 impl OcrEngine for PpOcrEngine {
-    fn name(&self) -> &'static str { "ppocr" }
-    fn model_version(&self) -> &str { "v6" }
+    fn name(&self) -> &'static str {
+        "ppocr"
+    }
+
+    fn model_version(&self) -> &str {
+        "v5"
+    }
 
     fn recognize(&self, input: &OcrInput) -> Result<OcrOutput, OcrEngineError> {
-        let image_path = input.image_path.display().to_string().replace('\\', "\\\\");
-        let script = format!(
-            "from paddleocr import PaddleOCR; ocr = PaddleOCR(lang='ch', use_gpu=False); r = ocr.ocr('{}', cls=False); [print(l[1][0]) for l in r[0]] if r and r[0] else None",
-            image_path
-        );
-        let out = Command::new("python").args(["-c", &script]).output()
-            .map_err(|e| OcrEngineError::new(format!("Python: {e}")))?;
-        if !out.status.success() {
-            return Err(OcrEngineError::new(String::from_utf8_lossy(&out.stderr).trim().to_string()));
+        if !input.image_path.exists() {
+            return Err(OcrEngineError::new(format!(
+                "Image file not found: {}",
+                input.image_path.display()
+            )));
         }
-        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if text.is_empty() { return Err(OcrEngineError::new("OCR returned empty text")); }
-        let blocks: Vec<OcrTextBlock> = text.lines().filter(|l| !l.trim().is_empty()).enumerate()
-            .map(|(i, l)| OcrTextBlock { text: l.trim().to_string(), confidence: 0.0, left: 0, top: i as u32 * 24, width: (l.len() as u32).saturating_mul(10).max(100), height: 24 }).collect();
-        Ok(OcrOutput { language: Some("ch".to_string()), full_text: text, blocks })
+
+        let mut guard = self.ocr.lock().map_err(|_| {
+            OcrEngineError::new("OCR engine lock is poisoned")
+        })?;
+
+        if guard.is_none() {
+            let ocr = self.build_ocr()?;
+            *guard = Some(ocr);
+        }
+
+        let ocr = guard.as_ref().unwrap();
+
+        let result = ocr
+            .predict(input.image_path.to_string_lossy().as_ref())
+            .map_err(|e| OcrEngineError::new(format!("OCR recognition failed: {e}")))?;
+
+        if result.text_regions.is_empty() {
+            return Err(OcrEngineError::new("OCR returned no text"));
+        }
+
+        let mut full_text = String::new();
+        let mut blocks = Vec::new();
+
+        for text_region in &result.text_regions {
+            let text = text_region.text();
+            let confidence = text_region.confidence().unwrap_or(0.0);
+
+            if text.is_empty() {
+                continue;
+            }
+
+            if !full_text.is_empty() {
+                full_text.push('\n');
+            }
+            full_text.push_str(text);
+
+            let bbox = text_region.bounding_box();
+            let left = bbox.iter().map(|p| p[0]).fold(f32::MAX, f32::min).max(0.0) as u32;
+            let top = bbox.iter().map(|p| p[1]).fold(f32::MAX, f32::min).max(0.0) as u32;
+            let right = bbox.iter().map(|p| p[0]).fold(f32::MIN, f32::max);
+            let bottom = bbox.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+            let width = (right - left as f32).round().max(1.0) as u32;
+            let height = (bottom - top as f32).round().max(1.0) as u32;
+
+            blocks.push(OcrTextBlock {
+                text: text.to_string(),
+                confidence,
+                left,
+                top,
+                width,
+                height,
+            });
+        }
+
+        if full_text.is_empty() {
+            return Err(OcrEngineError::new("OCR returned empty text"));
+        }
+
+        Ok(OcrOutput {
+            language: Some("ch".to_string()),
+            full_text,
+            blocks,
+        })
     }
 }

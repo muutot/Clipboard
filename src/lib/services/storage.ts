@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
 
 export interface StorageStatus {
-  schemaVersion: number;
   itemCount: number;
   projectPath: string;
   configPath: string;
@@ -10,6 +9,7 @@ export interface StorageStatus {
   dataDirectoryPath: string;
   usesCustomDataDirectory: boolean;
   storagePath: string;
+  iconsDir: string;
   databasePath: string;
   filesPath: string;
   imagePath: string;

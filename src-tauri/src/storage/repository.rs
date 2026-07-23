@@ -18,7 +18,8 @@ const ITEM_COLUMNS: &str = "
     size_bytes,
     created_at_ms,
     last_used_at_ms,
-    is_favorite
+    is_favorite,
+    icon_path
 ";
 
 pub trait ClipboardRepository {
@@ -60,9 +61,10 @@ impl ClipboardRepository for Database {
                     size_bytes,
                     created_at_ms,
                     last_used_at_ms,
-                    is_favorite
+                    is_favorite,
+                    icon_path
                  ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
                  )
                  ON CONFLICT DO UPDATE SET
                     title = excluded.title,
@@ -79,6 +81,10 @@ impl ClipboardRepository for Database {
                     is_favorite = MAX(
                         clipboard_items.is_favorite,
                         excluded.is_favorite
+                    ),
+                    icon_path = COALESCE(
+                        excluded.icon_path,
+                        clipboard_items.icon_path
                     )
                  RETURNING id",
                 params![
@@ -94,6 +100,7 @@ impl ClipboardRepository for Database {
                     item.created_at_ms,
                     item.last_used_at_ms,
                     item.is_favorite,
+                    item.icon_path,
                 ],
                 |row| row.get(0),
             )?)
@@ -369,6 +376,7 @@ struct StoredClipboardItem {
     created_at_ms: i64,
     last_used_at_ms: Option<i64>,
     is_favorite: bool,
+    icon_path: Option<String>,
 }
 
 impl StoredClipboardItem {
@@ -386,6 +394,7 @@ impl StoredClipboardItem {
             created_at_ms: row.get(9)?,
             last_used_at_ms: row.get(10)?,
             is_favorite: row.get(11)?,
+            icon_path: row.get(12)?,
         })
     }
 }
@@ -412,7 +421,7 @@ impl TryFrom<StoredClipboardItem> for ClipboardItem {
             created_at_ms: item.created_at_ms,
             last_used_at_ms: item.last_used_at_ms,
             is_favorite: item.is_favorite,
-            icon_path: None,
+            icon_path: item.icon_path,
         })
     }
 }

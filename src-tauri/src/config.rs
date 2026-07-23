@@ -56,6 +56,7 @@ impl Default for StorageConfig {
 pub struct OcrConfig {
     pub engine: String,
     pub tesseract_languages: String,
+    pub models_dir: Option<PathBuf>,
     pub ppocr_model_path: Option<String>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
@@ -66,6 +67,7 @@ impl Default for OcrConfig {
         Self {
             engine: "ppocr".to_string(),
             tesseract_languages: "chi_sim+eng".to_string(),
+            models_dir: None,
             ppocr_model_path: None,
             extra: BTreeMap::new(),
         }
@@ -344,6 +346,15 @@ impl ConfigStore {
 
     pub fn tesseract_languages(&self) -> &str {
         &self.config.ocr.tesseract_languages
+    }
+
+    pub fn models_dir(&self) -> Option<&Path> {
+        self.config.ocr.models_dir.as_deref()
+    }
+
+    pub fn set_models_dir(&mut self, value: Option<PathBuf>) -> Result<(), StorageError> {
+        self.config.ocr.models_dir = value;
+        self.save()
     }
 
     pub fn image_storage_path(&self) -> Option<&Path> {

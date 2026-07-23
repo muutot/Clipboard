@@ -560,7 +560,6 @@
           </section>
 
           <div class="storage-summary">
-            <span>{_t("storage.databaseVersion", { version: status.schemaVersion })}</span>
             <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
             <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
             <span title={status.databasePath}>{_t("storage.sqliteConnected")}</span>

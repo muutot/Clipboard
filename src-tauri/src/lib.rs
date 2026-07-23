@@ -54,7 +54,6 @@ fn resolve_toggle_hotkey(config: &KeyboardConfig) -> Option<(u32, u32)> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StorageStatus {
-    schema_version: i64,
     item_count: u64,
     project_path: String,
     config_path: String,
@@ -62,6 +61,7 @@ struct StorageStatus {
     data_directory_path: String,
     uses_custom_data_directory: bool,
     storage_path: String,
+    icons_dir: String,
     database_path: String,
     files_path: String,
     image_path: String,
@@ -112,9 +112,6 @@ fn get_storage_status(
         .to_string();
 
     Ok(StorageStatus {
-        schema_version: database
-            .schema_version()
-            .map_err(|error| error.to_string())?,
         item_count: database.item_count().map_err(|error| error.to_string())?,
         project_path: paths.project.display().to_string(),
         config_path,
@@ -122,6 +119,7 @@ fn get_storage_status(
         data_directory_path: paths.data_directory.display().to_string(),
         uses_custom_data_directory: paths.uses_custom_data_directory(),
         storage_path: paths.storage.display().to_string(),
+        icons_dir: paths.storage.join("icons").display().to_string(),
         database_path: paths.database.display().to_string(),
         files_path: paths.files.display().to_string(),
         image_path: paths.images.display().to_string(),
@@ -317,18 +315,21 @@ fn get_clipboard_formats(window: tauri::Window) -> Result<ClipboardFormatInfo, S
 fn get_ocr_status(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    paths: tauri::State<'_, StoragePaths>,
 ) -> Result<OcrStatusInfo, String> {
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
     let cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
     let engine = cfg.ocr_engine().to_string();
+    let models_dir = ocr::models::models_dir(&paths.storage);
 
     Ok(OcrStatusInfo {
         pending_tasks: pending,
         completed_tasks: completed,
         tesseract_available: TesseractOcrEngine::is_available(),
-        ppocr_available: PpOcrEngine::is_available(),
-        has_engine: TesseractOcrEngine::is_available() || PpOcrEngine::is_available(),
+        ppocr_available: ocr::models::all_models_present(&models_dir),
+        has_engine: TesseractOcrEngine::is_available()
+            || ocr::models::all_models_present(&models_dir),
         engine,
     })
 }
@@ -364,15 +365,21 @@ fn set_ocr_config(
 }
 
 #[tauri::command]
-fn install_ppocr() -> Result<String, String> {
-    PpOcrEngine::install().map_err(|e| e.to_string())?;
-    Ok("PP-OCRv6 installed successfully".to_string())
+fn install_ppocr(
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<String, String> {
+    let models_dir = ocr::models::models_dir(&paths.storage);
+    ocr::models::download_models(&models_dir, None)?;
+    Ok("PP-OCR models downloaded successfully".to_string())
 }
 
 #[tauri::command]
-fn check_ppocr_status() -> Result<PpOcrStatus, String> {
+fn check_ppocr_status(
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<PpOcrStatus, String> {
+    let models_dir = ocr::models::models_dir(&paths.storage);
     Ok(PpOcrStatus {
-        available: PpOcrEngine::is_available(),
+        available: ocr::models::all_models_present(&models_dir),
         tesseract_available: TesseractOcrEngine::is_available(),
     })
 }
@@ -1156,16 +1163,17 @@ pub fn run() {
             performance_tracker.record_startup(startup_metrics.clone());
 
             let ocr_engine_name = config.ocr_engine().to_string();
-            // Try auto-install PP-OCR models if configured
-            if ocr_engine_name == "ppocr" && !PpOcrEngine::is_available() {
+            let models_dir = ocr::models::models_dir(&paths.storage);
+            // Try auto-download PP-OCR models if configured
+            if ocr_engine_name == "ppocr" && !ocr::models::all_models_present(&models_dir) {
                 eprintln!("[ocr] PP-OCR configured, downloading models...");
-                if let Err(e) = PpOcrEngine::install() {
-                    eprintln!("[ocr] PP-OCR install failed: {}", e);
+                if let Err(e) = ocr::models::download_models(&models_dir, None) {
+                    eprintln!("[ocr] PP-OCR model download failed: {}", e);
                 }
             }
 
-            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && PpOcrEngine::is_available() {
-                Arc::new(PpOcrEngine::new())
+            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && ocr::models::all_models_present(&models_dir) {
+                Arc::new(PpOcrEngine::new(models_dir))
             } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
             } else if TesseractOcrEngine::is_available() {

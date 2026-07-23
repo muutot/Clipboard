@@ -565,7 +565,7 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
 
     let icon_path = icon_dir.join(format!("{}.png", app_key));
     if icon_path.exists() {
-        return Some(icon_path.to_string_lossy().to_string());
+        return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
     }
 
     std::fs::create_dir_all(icon_dir).ok();
@@ -602,7 +602,7 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
             let saved = save_hicon_to_png(hicon, &icon_path);
             DestroyIcon(hicon);
             if saved {
-                return Some(icon_path.to_string_lossy().to_string());
+                return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
             }
         }
     }

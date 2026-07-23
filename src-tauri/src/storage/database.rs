@@ -26,22 +26,12 @@ impl Database {
         Self::from_connection(Connection::open_in_memory()?)
     }
 
-    fn from_connection(mut connection: Connection) -> Result<Self, StorageError> {
+    fn from_connection(connection: Connection) -> Result<Self, StorageError> {
         configure_connection(&connection)?;
-        migrations::run(&mut connection)?;
+        migrations::create_schema(&connection)?;
 
         Ok(Self {
             connection: Mutex::new(connection),
-        })
-    }
-
-    pub fn schema_version(&self) -> Result<i64, StorageError> {
-        self.with_connection(|connection| {
-            Ok(connection.query_row(
-                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
-                [],
-                |row| row.get(0),
-            )?)
         })
     }
 
@@ -80,8 +70,6 @@ mod tests {
     fn initializes_schema_and_enables_foreign_keys() {
         let database = Database::open_in_memory().unwrap();
 
-        assert_eq!(database.schema_version().unwrap(), 2);
-
         database
             .with_connection(|connection| {
                 let foreign_keys: i64 =
@@ -93,15 +81,14 @@ mod tests {
                        AND name IN (
                          'clipboard_items',
                          'ocr_results',
-                         'search_outbox',
-                         'schema_migrations'
+                         'search_outbox'
                        )",
                     [],
                     |row| row.get(0),
                 )?;
 
                 assert_eq!(foreign_keys, 1);
-                assert_eq!(table_count, 4);
+                assert_eq!(table_count, 3);
                 Ok(())
             })
             .unwrap();
