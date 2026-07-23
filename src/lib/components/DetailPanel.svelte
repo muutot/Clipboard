@@ -5,7 +5,7 @@
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
-  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -33,6 +33,21 @@
   let { item, onclose, oncopy, onedit, onplainpaste, onformatpaste }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
+
+  $effect(() => {
+    if (item?.kind === "image" && !item.ocrText && item.ocrStatus !== "completed" && isTauriRuntime()) {
+      invoke<{ fullText: string; status: string }>("get_clipboard_item_ocr", { id: item.id })
+        .then(result => {
+          if (result) {
+            item.ocrText = result.fullText;
+            item.ocrStatus = result.status === "completed" ? "completed" : "pending";
+          }
+        })
+        .catch(() => {
+          item.ocrStatus = "none";
+        });
+    }
+  });
 
   const emails = $derived(
     item ? [...new Set(([item.title, item.preview].filter(Boolean).join(" ").match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? []))] : [],

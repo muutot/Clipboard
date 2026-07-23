@@ -1037,6 +1037,7 @@ pub fn run() {
                                     match database.save_item(&item) {
                                         Ok(saved_id) => {
                                             consecutive_errors = 0;
+                                            let _ = database.enqueue_ocr(&saved_id);
                                             let mut emit_item = item.clone();
                                             emit_item.id = saved_id;
                                             let _ = app_handle.emit("clipboard-item-added", &emit_item);
