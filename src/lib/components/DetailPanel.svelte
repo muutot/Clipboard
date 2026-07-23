@@ -26,13 +26,16 @@
     onclose: () => void;
     oncopy: (id: string) => void;
     onedit: (id: string) => void;
+    onsaveedit: (id: string, content: string) => void;
     onplainpaste: (id: string) => void;
     onformatpaste: (id: string) => void;
   }
 
-  let { item, onclose, oncopy, onedit, onplainpaste, onformatpaste }: Props = $props();
+  let { item, onclose, oncopy, onedit, onsaveedit, onplainpaste, onformatpaste }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
+  let editing = $state(false);
+  let editContent = $state("");
 
   $effect(() => {
     if (item?.kind !== "image" || !isTauriRuntime()) return;
@@ -173,7 +176,20 @@
           {:else if isMarkdown}
             <MarkdownPreview content={item.title} />
           {:else}
-            <pre class="content-full">{item.title}</pre>
+            {#if editing}
+              <textarea class="edit-area" bind:value={editContent} rows={8}></textarea>
+              <div class="edit-actions">
+                <button type="button" class="primary" onclick={() => {
+                  if (item) onsaveedit(item.id, editContent);
+                  item!.title = editContent.split('\n')[0];
+                  item!.textContent = editContent;
+                  editing = false;
+                }}>{_t("edit.save")}</button>
+                <button type="button" onclick={() => (editing = false)}>{_t("edit.cancel")}</button>
+              </div>
+            {:else}
+              <pre class="content-full">{item.title}</pre>
+            {/if}
           {/if}
         </div>
 
@@ -181,8 +197,11 @@
           <button type="button" onclick={() => oncopy(item.id)}>
             <AppIcon name="copy" size={15} /> {_t("card.copy")}
           </button>
-          {#if item.kind === "text" || item.kind === "link"}
-            <button type="button" onclick={() => onedit(item.id)}>
+          {#if (item.kind === "text" || item.kind === "link") && !editing}
+            <button type="button" onclick={() => {
+              editContent = item.textContent || item.title;
+              editing = true;
+            }}>
               <AppIcon name="edit" size={15} /> {_t("edit.edit")}
             </button>
           {/if}

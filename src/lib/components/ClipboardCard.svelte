@@ -292,7 +292,7 @@
     </div>
   {/if}
 
-  {#if contentActions && (contentActions.hasEmail || contentActions.hasUrl || contentActions.hasPhone || contentActions.hasColor)}
+  {#if !editing && contentActions && (contentActions.hasEmail || contentActions.hasUrl || contentActions.hasPhone || contentActions.hasColor)}
     <div class="quick-actions" aria-label="Quick actions">
       {#if contentActions.hasUrl}
         <button type="button" title={_t("actions.openUrl")}
@@ -317,7 +317,8 @@
     </div>
   {/if}
 
-  <div class="actions" aria-label={_t("card.itemActions")}>
+  {#if !editing}
+    <div class="actions" aria-label={_t("card.itemActions")}>
     <button type="button" title={_t("card.viewDetail")} aria-label={_t("card.viewDetail")}
       onclick={(event) => { event.stopPropagation(); ondetail(item.id); }}
     ><AppIcon name="eye" size={16} /></button>
@@ -364,6 +365,7 @@
       >
     {/if}
   </div>
+  {/if}
 
   <span class="shortcut">⌘{index + 1}</span>
 </article>

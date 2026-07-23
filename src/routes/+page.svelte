@@ -16,6 +16,7 @@
     persistBatchDelete,
     searchClipboardHistory,
     listSourceApplications,
+    formatTextLength,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -283,7 +284,7 @@
           : sourceApp.includes("Chrome") || sourceApp.includes("Edge") ? "blue"
           : sourceApp === "Clipboard" ? "neutral" : "red",
         sizeLabel: record.kind === "text" || record.kind === "link"
-          ? `${record.textContent?.length || record.title.length} chars`
+          ? formatTextLength(record.textContent?.length || record.title.length)
           : `${record.sizeBytes} B`,
         createdAt: record.createdAtMs,
         favorite: record.isFavorite,
@@ -991,6 +992,7 @@
     onclose={closeDetail}
     oncopy={copyItem}
     onedit={startEdit}
+    onsaveedit={saveEdit}
     onplainpaste={plainPaste}
     onformatpaste={formatPaste}
   />

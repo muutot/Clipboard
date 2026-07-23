@@ -90,25 +90,20 @@ export async function detectContentActions(
 function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;
-  const unknownSource = resolvePath(messages, "card.selectItem");
   const sourceApp = record.sourceApp?.trim()
     || resolvePath(messages, "app.name");
 
-  const kindLabels: Record<string, { file: string; image: string; chars: string }> = {
-    "zh-CN": { file: "个文件", image: "图片记录", chars: "个字符" },
-    en: { file: " file(s)", image: "Image record", chars: " chars" },
-  };
-
-  const labels = kindLabels[locale] ?? kindLabels.en;
+  const fileLabel = locale === "zh-CN" ? "个文件" : " file(s)";
+  const imageLabel = locale === "zh-CN" ? "图片记录" : "Image record";
 
   return {
     id: record.id,
     kind: record.kind,
     title: record.title,
-    preview: buildPreview(record, labels),
+    preview: buildPreview(record, fileLabel, imageLabel),
     sourceApp,
     sourceTone: sourceTone(sourceApp, locale),
-    sizeLabel: formatSize(record, labels),
+    sizeLabel: formatSizeSimple(record),
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
     fileName:
@@ -122,23 +117,26 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
 
 function buildPreview(
   record: PersistedClipboardItem,
-  labels: { file: string; image: string; chars: string },
+  fileLabel: string, imageLabel: string,
 ): string {
   if (record.textContent && record.textContent !== record.title) {
     return record.textContent;
   }
 
-  if (record.kind === "file") return `1 ${labels.file}`;
-  if (record.kind === "image") return labels.image;
+  if (record.kind === "file") return `1 ${fileLabel}`;
+  if (record.kind === "image") return imageLabel;
   return "";
 }
 
-function formatSize(
-  record: PersistedClipboardItem,
-  labels: { file: string; image: string; chars: string },
-): string {
+export function formatTextLength(length: number): string {
+  const locale = getLocale();
+  if (locale === "zh-CN") return `${length} 个字符`;
+  return `${length} chars`;
+}
+
+function formatSizeSimple(record: PersistedClipboardItem): string {
   if (record.kind === "text" || record.kind === "link") {
-    return `${[...(record.textContent || record.title)].length} ${labels.chars}`;
+    return formatTextLength((record.textContent || record.title).length);
   }
 
   const units = ["B", "KB", "MB", "GB"];
