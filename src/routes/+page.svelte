@@ -260,8 +260,8 @@
     {:else}
       <div class="empty-state">
         <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
-        <strong>没有找到相关记录</strong>
-        <p>尝试更换关键字或内容类型。</p>
+        <strong>{items.length === 0 ? "暂无剪贴板记录" : "没有找到相关记录"}</strong>
+        <p>{items.length === 0 ? "复制文本、图片或文件后会出现在这里。" : "尝试更换关键字或内容类型。"}</p>
       </div>
     {/if}
   </section>
