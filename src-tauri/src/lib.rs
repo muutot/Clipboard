@@ -1,4 +1,5 @@
 mod domain;
+mod ocr;
 mod platform;
 mod search;
 
