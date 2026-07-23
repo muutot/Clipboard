@@ -1,6 +1,9 @@
-use rusqlite::{params, OptionalExtension, Row};
+use std::path::PathBuf;
+
+use rusqlite::{params, OptionalExtension, Row, TransactionBehavior};
 
 use crate::domain::{OcrResult, OcrStatus, OcrTextBlock};
+use crate::ocr::OcrInput;
 
 use super::{Database, StorageError};
 
@@ -19,6 +22,10 @@ const OCR_COLUMNS: &str = "
 ";
 
 pub trait OcrRepository {
+    fn enqueue_ocr(&self, item_id: &str) -> Result<bool, StorageError>;
+    fn claim_next_ocr(&self) -> Result<Option<OcrInput>, StorageError>;
+    fn retry_ocr(&self, item_id: &str) -> Result<bool, StorageError>;
+    fn requeue_interrupted_ocr(&self) -> Result<u64, StorageError>;
     fn save_ocr_result(&self, result: &OcrResult) -> Result<(), StorageError>;
     fn get_ocr_result(&self, item_id: &str) -> Result<Option<OcrResult>, StorageError>;
     fn find_completed_ocr_by_hash(
@@ -28,6 +35,100 @@ pub trait OcrRepository {
 }
 
 impl OcrRepository for Database {
+    fn enqueue_ocr(&self, item_id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "INSERT INTO ocr_results (
+                    item_id,
+                    status,
+                    image_hash,
+                    created_at_ms
+                 )
+                 SELECT id, 'pending', content_hash, created_at_ms
+                 FROM clipboard_items
+                 WHERE id = ?1
+                   AND kind = 'image'
+                   AND resource_path IS NOT NULL
+                 ON CONFLICT(item_id) DO NOTHING",
+                [item_id],
+            )? > 0)
+        })
+    }
+
+    fn claim_next_ocr(&self) -> Result<Option<OcrInput>, StorageError> {
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let pending = transaction
+                .query_row(
+                    "SELECT ocr_results.item_id, clipboard_items.resource_path, ocr_results.image_hash
+                     FROM ocr_results
+                     INNER JOIN clipboard_items
+                        ON clipboard_items.id = ocr_results.item_id
+                     WHERE ocr_results.status = 'pending'
+                       AND clipboard_items.resource_path IS NOT NULL
+                     ORDER BY ocr_results.created_at_ms ASC
+                     LIMIT 1",
+                    [],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    },
+                )
+                .optional()?;
+
+            let Some((item_id, image_path, image_hash)) = pending else {
+                transaction.commit()?;
+                return Ok(None);
+            };
+
+            let claimed = transaction.execute(
+                "UPDATE ocr_results
+                 SET status = 'processing', error_message = NULL
+                 WHERE item_id = ?1 AND status = 'pending'",
+                [&item_id],
+            )?;
+            transaction.commit()?;
+
+            if claimed == 0 {
+                return Ok(None);
+            }
+
+            Ok(Some(OcrInput {
+                item_id,
+                image_path: PathBuf::from(image_path),
+                image_hash,
+            }))
+        })
+    }
+
+    fn retry_ocr(&self, item_id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "UPDATE ocr_results
+                 SET status = 'pending', error_message = NULL, completed_at_ms = NULL
+                 WHERE item_id = ?1 AND status = 'failed'",
+                [item_id],
+            )? > 0)
+        })
+    }
+
+    fn requeue_interrupted_ocr(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count = connection.execute(
+                "UPDATE ocr_results
+                 SET status = 'pending'
+                 WHERE status = 'processing'",
+                [],
+            )?;
+
+            Ok(count as u64)
+        })
+    }
+
     fn save_ocr_result(&self, result: &OcrResult) -> Result<(), StorageError> {
         let blocks_json = serde_json::to_string(&result.blocks)?;
 
@@ -270,5 +371,42 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn claims_queued_images_in_creation_order() {
+        let database = Database::open_in_memory().unwrap();
+        let mut later = image_item("later", "later-hash");
+        later.created_at_ms = 200;
+        let mut earlier = image_item("earlier", "earlier-hash");
+        earlier.created_at_ms = 100;
+        database.save_item(&later).unwrap();
+        database.save_item(&earlier).unwrap();
+        assert!(database.enqueue_ocr("later").unwrap());
+        assert!(database.enqueue_ocr("earlier").unwrap());
+
+        let claimed = database.claim_next_ocr().unwrap().unwrap();
+
+        assert_eq!(claimed.item_id, "earlier");
+        assert_eq!(
+            database.get_ocr_result("earlier").unwrap().unwrap().status,
+            OcrStatus::Processing
+        );
+    }
+
+    #[test]
+    fn requeues_jobs_interrupted_by_shutdown() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&image_item("image", "image-hash"))
+            .unwrap();
+        database.enqueue_ocr("image").unwrap();
+        database.claim_next_ocr().unwrap().unwrap();
+
+        assert_eq!(database.requeue_interrupted_ocr().unwrap(), 1);
+        assert_eq!(
+            database.get_ocr_result("image").unwrap().unwrap().status,
+            OcrStatus::Pending
+        );
     }
 }
