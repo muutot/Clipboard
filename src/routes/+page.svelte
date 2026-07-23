@@ -567,6 +567,24 @@
       return;
     }
 
+    if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      event.preventDefault();
+      const idx = filters.findIndex(f => f.id === activeFilter);
+      const next = (idx + 1) % filters.length;
+      setFilter(filters[next].id);
+      return;
+    }
+
+    if (event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey)) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      event.preventDefault();
+      const idx = filters.findIndex(f => f.id === activeFilter);
+      const prev = (idx - 1 + filters.length) % filters.length;
+      setFilter(filters[prev].id);
+      return;
+    }
+
     if (event.key === "Enter") {
       event.preventDefault();
       activateSelected();
