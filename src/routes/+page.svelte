@@ -453,13 +453,18 @@
   }
 
   function saveEdit(id: string, content: string) {
-    const fullTitle = content.slice(0, 200);
+    const item = items.find(i => i.id === id);
+    const isText = item?.kind === "text" || item?.kind === "link";
+    const newTitle = isText ? content.slice(0, 200) : content;
+    const newTextContent = isText ? content : (item?.textContent ?? null);
+    const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? '');
+
     items = items.map((item) =>
-      item.id === id ? { ...item, title: fullTitle, textContent: content, preview: content.length > 200 ? content.slice(200) : '' } : item,
+      item.id === id ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview } : item,
     );
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, title: fullTitle, textContent: content, preview: content.length > 200 ? content.slice(200) : '' } : item,
+        item.id === id ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview } : item,
       );
     }
     showToast(_t("toast.editSaved"), "success");

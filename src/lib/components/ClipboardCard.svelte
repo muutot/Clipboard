@@ -305,7 +305,7 @@
         ><AppIcon name="download" size={16} /></button
       >
     {/if}
-    {#if item.kind === "text" || item.kind === "link"}
+    {#if item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file"}
       <button type="button" title={_t("card.edit")} aria-label={_t("card.edit")}
         onclick={startEdit}
       ><AppIcon name="edit" size={16} /></button>

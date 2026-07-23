@@ -204,9 +204,9 @@
           <button type="button" onclick={() => oncopy(item.id)}>
             <AppIcon name="copy" size={15} /> {_t("card.copy")}
           </button>
-          {#if (item.kind === "text" || item.kind === "link") && !editing}
+          {#if !editing}
             <button type="button" onclick={() => {
-              editContent = item.textContent || item.title;
+              editContent = (item.kind === "text" || item.kind === "link") ? (item.textContent || item.title) : item.title;
               editing = true;
             }}>
               <AppIcon name="edit" size={15} /> {_t("edit.edit")}

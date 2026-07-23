@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { GeneralSettings, FontSize, ThemeMode } from "$lib/types/clipboard";
+  import type { FontSize, ThemeMode } from "$lib/types/clipboard";
+  import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -14,62 +14,29 @@
 
   let { onclose }: Props = $props();
 
-  const STORAGE_KEY = "generalSettings";
-
-  function loadSettings() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return {};
-  }
-
-  function saveSettings(partial: Record<string, unknown>) {
-    const current = loadSettings();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...current, ...partial }));
-  }
-
-  let language = $state<Locale>($locale);
-  let fontSize = $state<FontSize>("normal");
-  let windowTransparency = $state(95);
-  let compactMode = $state(false);
-  let alwaysOnTop = $state(false);
-  let useSystemTitleBar = $state(false);
-  let theme = $state<ThemeMode>("dark");
+  let s = $state($generalSettings);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
 
-  onMount(() => {
-    const s = loadSettings();
-    if (s.language) { language = s.language; locale.set(s.language); }
-    if (s.fontSize) { fontSize = s.fontSize; changeFontSize(s.fontSize); }
-    if (s.windowTransparency != null) windowTransparency = s.windowTransparency;
-    if (s.compactMode != null) compactMode = s.compactMode;
-    if (s.alwaysOnTop != null) alwaysOnTop = s.alwaysOnTop;
-    if (s.useSystemTitleBar != null) useSystemTitleBar = s.useSystemTitleBar;
-    if (s.theme) theme = s.theme;
-  });
+  generalSettings.subscribe((v) => { s = v; });
 
   function changeLanguage(lang: Locale) {
-    language = lang;
+    generalSettings.updateSetting("language", lang);
     locale.set(lang);
-    saveSettings({ language: lang });
     feedback = _t(lang === "zh-CN" ? "已切换至中文" : "Switched to English");
     feedbackSuccess = true;
     setTimeout(() => (feedback = ""), 2000);
   }
 
   function changeFontSize(size: FontSize) {
-    fontSize = size;
-    saveSettings({ fontSize: size });
+    generalSettings.updateSetting("fontSize", size);
     const root = document.documentElement;
     const sizes: Record<FontSize, string> = { small: "13px", normal: "14px", large: "16px" };
     root.style.fontSize = sizes[size];
   }
 
   function handleTransparency(event: Event) {
-    windowTransparency = Number((event.target as HTMLInputElement).value);
-    saveSettings({ windowTransparency });
+    generalSettings.updateSetting("windowTransparency", Number((event.target as HTMLInputElement).value));
   }
 
   const fontSizeOptions = $derived([
@@ -105,12 +72,12 @@
     <div class="lang-toggle">
       <button
         type="button"
-        class:active={language === "zh-CN"}
+        class:active={s.language === "zh-CN"}
         onclick={() => changeLanguage("zh-CN")}
       >中文</button>
       <button
         type="button"
-        class:active={language === "en"}
+        class:active={s.language === "en"}
         onclick={() => changeLanguage("en")}
       >English</button>
     </div>
@@ -128,7 +95,7 @@
       {#each fontSizeOptions as option}
         <button
           type="button"
-          class:active={fontSize === option.value}
+          class:active={s.fontSize === option.value}
           onclick={() => changeFontSize(option.value)}
         >{option.label}</button>
       {/each}
@@ -140,14 +107,14 @@
       <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
       <div>
         <strong>{_t("general.windowTransparency")}</strong>
-        <p>{windowTransparency}%</p>
+        <p>{s.windowTransparency}%</p>
       </div>
     </div>
     <input
       type="range"
       min="60"
       max="100"
-      value={windowTransparency}
+      value={s.windowTransparency}
       oninput={handleTransparency}
       class="transparency-slider"
     />
@@ -165,9 +132,9 @@
     <button
       type="button"
       class="toggle-switch"
-      class:active={compactMode}
-      onclick={() => { compactMode = !compactMode; saveSettings({ compactMode }); }}
-      aria-checked={compactMode}
+      class:active={s.compactMode}
+      onclick={() => generalSettings.updateSetting("compactMode", !s.compactMode)}
+      aria-checked={s.compactMode}
       aria-label={_t("general.compactMode")}
       role="switch"
     >
@@ -186,9 +153,9 @@
     <button
       type="button"
       class="toggle-switch"
-      class:active={alwaysOnTop}
-      onclick={() => { alwaysOnTop = !alwaysOnTop; saveSettings({ alwaysOnTop }); }}
-      aria-checked={alwaysOnTop}
+      class:active={s.alwaysOnTop}
+      onclick={() => generalSettings.updateSetting("alwaysOnTop", !s.alwaysOnTop)}
+      aria-checked={s.alwaysOnTop}
       aria-label={_t("general.alwaysOnTop")}
       role="switch"
     >
@@ -207,9 +174,9 @@
     <button
       type="button"
       class="toggle-switch"
-      class:active={useSystemTitleBar}
-      onclick={() => { useSystemTitleBar = !useSystemTitleBar; saveSettings({ useSystemTitleBar }); }}
-      aria-checked={useSystemTitleBar}
+      class:active={s.useSystemTitleBar}
+      onclick={() => generalSettings.updateSetting("useSystemTitleBar", !s.useSystemTitleBar)}
+      aria-checked={s.useSystemTitleBar}
       aria-label={_t("general.useSystemTitleBar")}
       role="switch"
     >
