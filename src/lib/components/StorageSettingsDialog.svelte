@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import {
     configureStorageDirectory,
     getStorageStatus,
@@ -22,6 +23,7 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let activeSection = $state<"storage" | "keyboard">("storage");
 
   $effect(() => {
     if (open) {
@@ -126,9 +128,13 @@
         </div>
 
         <nav aria-label="设置分类">
-          <button class="active" type="button">
+          <button class:active={activeSection === "storage"} type="button" onclick={() => (activeSection = "storage")}>
             <AppIcon name="file" size={16} />
             <span>存储</span>
+          </button>
+          <button class:active={activeSection === "keyboard"} type="button" onclick={() => (activeSection = "keyboard")}>
+            <AppIcon name="keyboard" size={16} />
+            <span>快捷键</span>
           </button>
           <button type="button" disabled>
             <AppIcon name="settings" size={16} />
@@ -138,11 +144,14 @@
 
         <div class="sidebar-foot">
           <span>配置固定位置</span>
-          <code>conf/conf.json</code>
+          <code>{activeSection === "keyboard" ? "conf/keyboard.json" : "conf/conf.json"}</code>
         </div>
       </aside>
 
       <div class="settings-content">
+        {#if activeSection === "keyboard"}
+          <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
+        {:else}
         <header>
           <div>
             <span class="eyebrow">设置 / 存储</span>
@@ -256,6 +265,7 @@
 
         {#if feedback && status}
           <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+        {/if}
         {/if}
       </div>
     </div>

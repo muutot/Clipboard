@@ -6,6 +6,7 @@ export interface StorageStatus {
   itemCount: number;
   projectPath: string;
   configPath: string;
+  keyboardConfigPath: string;
   dataDirectoryPath: string;
   usesCustomDataDirectory: boolean;
   storagePath: string;

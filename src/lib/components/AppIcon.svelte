@@ -13,7 +13,8 @@
     | "copy"
     | "download"
     | "search"
-    | "clipboard";
+    | "clipboard"
+    | "keyboard";
 
   interface Props {
     name: IconName;
@@ -87,5 +88,10 @@
     <rect x="5" y="4" width="14" height="17" rx="2" />
     <path d="M9 4.5V3h6v1.5" />
     <path d="M9 9h6M9 13h6M9 17h4" />
+  {:else if name === "keyboard"}
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01" />
+    <path d="M6 13h.01M9 13h.01M12 13h.01M15 13h.01M18 13h.01" />
+    <path d="M8 16h8" />
   {/if}
 </svg>
