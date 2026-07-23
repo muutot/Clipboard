@@ -81,7 +81,7 @@ mod tests {
     fn initializes_schema_and_enables_foreign_keys() {
         let database = Database::open_in_memory().unwrap();
 
-        assert_eq!(database.schema_version().unwrap(), 1);
+        assert_eq!(database.schema_version().unwrap(), 2);
 
         database
             .with_connection(|connection| {

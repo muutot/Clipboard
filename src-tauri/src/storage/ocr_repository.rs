@@ -32,6 +32,8 @@ pub trait OcrRepository {
         &self,
         image_hash: &str,
     ) -> Result<Option<OcrResult>, StorageError>;
+    fn count_pending_ocr(&self) -> Result<u64, StorageError>;
+    fn count_completed_ocr(&self) -> Result<u64, StorageError>;
 }
 
 impl OcrRepository for Database {
@@ -204,6 +206,28 @@ impl OcrRepository for Database {
                 .optional()?;
 
             stored_result.map(TryInto::try_into).transpose()
+        })
+    }
+
+    fn count_pending_ocr(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM ocr_results WHERE status IN ('pending', 'processing')",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count as u64)
+        })
+    }
+
+    fn count_completed_ocr(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM ocr_results WHERE status = 'completed'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count as u64)
         })
     }
 }

@@ -9,9 +9,10 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    sql: r#"
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        sql: r#"
         CREATE TABLE clipboard_items (
             id TEXT PRIMARY KEY NOT NULL,
             kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
@@ -101,7 +102,26 @@ const MIGRATIONS: &[Migration] = &[Migration {
             VALUES (NEW.item_id, 'upsert', NEW.created_at_ms);
         END;
     "#,
-}];
+    },
+    Migration {
+        version: 2,
+        sql: r#"
+        ALTER TABLE clipboard_items ADD COLUMN deleted_at_ms INTEGER;
+        ALTER TABLE clipboard_items ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1));
+
+        CREATE INDEX clipboard_items_deleted_created_at_idx
+            ON clipboard_items (deleted, created_at_ms DESC);
+
+        DROP TRIGGER IF EXISTS clipboard_items_search_update;
+        CREATE TRIGGER clipboard_items_search_update
+        AFTER UPDATE ON clipboard_items
+        BEGIN
+            INSERT INTO search_outbox (item_id, operation, created_at_ms)
+            VALUES (NEW.id, CASE WHEN NEW.deleted = 1 THEN 'delete' ELSE 'upsert' END, NEW.created_at_ms);
+        END;
+    "#,
+    },
+];
 
 pub(super) fn run(connection: &mut Connection) -> Result<(), StorageError> {
     connection.execute_batch(

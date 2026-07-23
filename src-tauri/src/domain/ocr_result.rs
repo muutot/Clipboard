@@ -36,6 +36,37 @@ pub struct OcrResult {
     pub error_message: Option<String>,
 }
 
+impl OcrResult {
+    pub fn completed(
+        item_id: &str,
+        engine: &str,
+        model_version: &str,
+        language: Option<&str>,
+        full_text: &str,
+        blocks: &[OcrTextBlock],
+        image_hash: &str,
+    ) -> Self {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        Self {
+            item_id: item_id.to_owned(),
+            status: OcrStatus::Completed,
+            engine: engine.to_owned(),
+            model_version: model_version.to_owned(),
+            language: language.map(|s| s.to_owned()),
+            full_text: full_text.to_owned(),
+            blocks: blocks.to_vec(),
+            image_hash: image_hash.to_owned(),
+            created_at_ms: now_ms,
+            completed_at_ms: Some(now_ms),
+            error_message: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::OcrStatus;

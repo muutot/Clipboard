@@ -30,6 +30,12 @@ pub trait ClipboardRepository {
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
     fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
     fn item_count(&self) -> Result<u64, StorageError>;
+    fn delete_older_than(&self, days: u32) -> Result<u64, StorageError>;
+    fn enforce_capacity_limit(&self, max_items: u64) -> Result<u64, StorageError>;
+    fn cleanup_orphan_search_index(&self) -> Result<u64, StorageError>;
+    fn soft_delete(&self, id: &str) -> Result<bool, StorageError>;
+    fn restore_deleted(&self, id: &str) -> Result<bool, StorageError>;
+    fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError>;
 }
 
 impl ClipboardRepository for Database {
@@ -141,6 +147,7 @@ impl ClipboardRepository for Database {
             let sql = format!(
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
+                 WHERE deleted = 0
                  ORDER BY created_at_ms DESC
                  LIMIT ?1 OFFSET ?2"
             );
@@ -163,6 +170,7 @@ impl ClipboardRepository for Database {
                  FROM clipboard_items
                  WHERE source_app IS NOT NULL
                    AND TRIM(source_app) <> ''
+                   AND deleted = 0
                  GROUP BY LOWER(TRIM(source_app))
                  ORDER BY LOWER(TRIM(source_app)) ASC",
             )?;
@@ -206,7 +214,7 @@ impl ClipboardRepository for Database {
         self.with_connection(|connection| {
             let count: i64 =
                 connection
-                    .query_row("SELECT COUNT(*) FROM clipboard_items", [], |row| row.get(0))?;
+                    .query_row("SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0", [], |row| row.get(0))?;
 
             u64::try_from(count).map_err(|_| StorageError::InvalidStoredValue {
                 field: "clipboard_items.count",
@@ -214,6 +222,125 @@ impl ClipboardRepository for Database {
             })
         })
     }
+
+    fn delete_older_than(&self, days: u32) -> Result<u64, StorageError> {
+        if days == 0 {
+            return Ok(0);
+        }
+        self.with_connection(|connection| {
+            let cutoff_ms = current_time_ms() - i64::from(days) * 86_400_000;
+            let deleted = connection.execute(
+                "DELETE FROM clipboard_items
+                 WHERE is_favorite = 0
+                   AND deleted = 0
+                   AND created_at_ms < ?1",
+                [cutoff_ms],
+            )?;
+            Ok(deleted as u64)
+        })
+    }
+
+    fn enforce_capacity_limit(&self, max_items: u64) -> Result<u64, StorageError> {
+        if max_items == 0 {
+            return Ok(0);
+        }
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0",
+                [],
+                |row| row.get(0),
+            )?;
+            if count <= max_items as i64 {
+                return Ok(0);
+            }
+            let excess = count - max_items as i64;
+            let deleted = connection.execute(
+                "DELETE FROM clipboard_items WHERE id IN (
+                    SELECT id FROM clipboard_items
+                    WHERE is_favorite = 0 AND deleted = 0
+                    ORDER BY created_at_ms ASC
+                    LIMIT ?1
+                )",
+                [excess],
+            )?;
+            Ok(deleted as u64)
+        })
+    }
+
+    fn cleanup_orphan_search_index(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let removed = connection.execute(
+                "DELETE FROM search_outbox
+                 WHERE item_id NOT IN (SELECT id FROM clipboard_items)",
+                [],
+            )?;
+            Ok(removed as u64)
+        })
+    }
+
+    fn soft_delete(&self, id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            let is_favorite = connection
+                .query_row(
+                    "SELECT is_favorite FROM clipboard_items WHERE id = ?1 AND deleted = 0",
+                    [id],
+                    |row| row.get::<_, bool>(0),
+                )
+                .optional()?;
+
+            if is_favorite == Some(true) {
+                return Err(StorageError::FavoriteMustBeRemoved(id.to_owned()));
+            }
+
+            let now = current_time_ms();
+            Ok(connection.execute(
+                "UPDATE clipboard_items SET deleted = 1, deleted_at_ms = ?2 WHERE id = ?1 AND deleted = 0",
+                params![id, now],
+            )? > 0)
+        })
+    }
+
+    fn restore_deleted(&self, id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            let affected = connection.execute(
+                "UPDATE clipboard_items SET deleted = 0, deleted_at_ms = NULL WHERE id = ?1 AND deleted = 1",
+                [id],
+            )?;
+            if affected > 0 {
+                connection.execute(
+                    "INSERT INTO search_outbox (item_id, operation, created_at_ms)
+                     VALUES (?1, 'upsert', ?2)",
+                    params![id, current_time_ms()],
+                )?;
+            }
+            Ok(affected > 0)
+        })
+    }
+
+    fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError> {
+        if days == 0 {
+            return Ok(0);
+        }
+        self.with_connection(|connection| {
+            let cutoff_ms = current_time_ms() - i64::from(days) * 86_400_000;
+            let deleted = connection.execute(
+                "DELETE FROM clipboard_items
+                 WHERE deleted = 1
+                   AND deleted_at_ms IS NOT NULL
+                   AND deleted_at_ms < ?1",
+                [cutoff_ms],
+            )?;
+            Ok(deleted as u64)
+        })
+    }
+}
+
+fn current_time_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
 }
 
 struct StoredClipboardItem {

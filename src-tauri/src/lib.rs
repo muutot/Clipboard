@@ -1,23 +1,34 @@
+pub mod cli;
 pub mod config;
 pub mod content;
 pub mod domain;
+pub mod export;
 pub mod keyboard;
 pub mod ocr;
 pub mod platform;
+pub mod privacy;
 pub mod search;
 pub mod storage;
 
 use std::{path::PathBuf, sync::Mutex};
 
+use cli::{CliArgs, CliCommand};
 use config::ConfigStore;
-use content::{ContentMarkers, TextTransform, TransformOperation};
+use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation};
 use domain::{ClipboardItem, OcrResult};
+use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
-use platform::RuntimeInfo;
+use ocr::{OcrWorker, TesseractOcrEngine};
+use platform::{
+    ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
+    WindowManager,
+};
+use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
 use storage::{ClipboardRepository, Database, OcrRepository, StoragePaths};
 use tauri::Manager;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -251,8 +262,89 @@ fn rebuild_search_index(
 }
 
 #[tauri::command]
+fn get_clipboard_formats(window: tauri::Window) -> Result<ClipboardFormatInfo, String> {
+    let _ = window;
+    Ok(ClipboardFormatInfo::empty())
+}
+
+#[tauri::command]
+fn get_ocr_status(
+    database: tauri::State<'_, Database>,
+) -> Result<OcrStatusInfo, String> {
+    let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
+    let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
+    let tesseract_available = TesseractOcrEngine::is_available();
+
+    Ok(OcrStatusInfo {
+        pending_tasks: pending,
+        completed_tasks: completed,
+        tesseract_available,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OcrStatusInfo {
+    pending_tasks: u64,
+    completed_tasks: u64,
+    tesseract_available: bool,
+}
+
+#[tauri::command]
 fn detect_content_markers(text: String) -> ContentMarkers {
     content::detect_markers(&text)
+}
+
+#[tauri::command]
+fn detect_content_actions(text: String) -> Vec<QuickAction> {
+    let markers = content::detect_markers(&text);
+    content::detect_actions(&markers)
+}
+
+#[tauri::command]
+fn soft_delete_clipboard_item(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<bool, String> {
+    database
+        .soft_delete(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn restore_clipboard_item(database: tauri::State<'_, Database>, id: String) -> Result<bool, String> {
+    database
+        .restore_deleted(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn enforce_history_cleanup(
+    database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<u64, String> {
+    let (retention_days, max_items, recycle_bin_days) = {
+        let guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        (guard.retention_days(), guard.max_items(), guard.recycle_bin_days())
+    };
+
+    let mut total_deleted = 0u64;
+    total_deleted += database
+        .delete_older_than(retention_days)
+        .map_err(|error| error.to_string())?;
+    total_deleted += database
+        .enforce_capacity_limit(max_items as u64)
+        .map_err(|error| error.to_string())?;
+    total_deleted += database
+        .permanently_delete_expired(recycle_bin_days)
+        .map_err(|error| error.to_string())?;
+    total_deleted += database
+        .cleanup_orphan_search_index()
+        .map_err(|error| error.to_string())?;
+
+    Ok(total_deleted)
 }
 
 #[tauri::command]
@@ -282,6 +374,344 @@ fn transform_text(input: String, operation: String) -> Result<TextTransform, Str
     })
 }
 
+#[tauri::command]
+fn toggle_privacy_pause(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+) -> Result<bool, String> {
+    let mut privacy = privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+    privacy.toggle_pause();
+
+    let paused = privacy.is_paused();
+    config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .set_privacy_paused(paused)
+        .map_err(|e| e.to_string())?;
+
+    Ok(paused)
+}
+
+#[tauri::command]
+fn check_sensitive_content(
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+    text: String,
+) -> Result<bool, String> {
+    Ok(privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?
+        .is_sensitive_content(&text))
+}
+
+#[tauri::command]
+fn check_password_manager(
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+    app_name: String,
+) -> Result<bool, String> {
+    Ok(privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?
+        .is_password_manager(&app_name))
+}
+
+#[tauri::command]
+fn get_privacy_status(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+) -> Result<PrivacyStatus, String> {
+    let privacy = privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+
+    Ok(PrivacyStatus {
+        paused: privacy.is_paused(),
+        password_manager_apps: privacy.password_manager_apps.clone(),
+        master_password_hash_set: config.privacy_master_password_hash().is_some(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PrivacyStatus {
+    paused: bool,
+    password_manager_apps: Vec<String>,
+    master_password_hash_set: bool,
+}
+
+#[tauri::command]
+fn export_clipboard_items(
+    database: tauri::State<'_, Database>,
+    format: String,
+    include_favorites: Option<bool>,
+    date_from_ms: Option<i64>,
+    date_to_ms: Option<i64>,
+    content_types: Option<Vec<String>>,
+) -> Result<String, String> {
+    let export_format = match format.as_str() {
+        "json" => ExportFormat::Json,
+        "csv" => ExportFormat::Csv,
+        "plainText" => ExportFormat::PlainText,
+        other => return Err(format!("unknown export format: {other}")),
+    };
+
+    let options = ExportOptions {
+        format: export_format,
+        include_favorites: include_favorites.unwrap_or(true),
+        date_from_ms,
+        date_to_ms,
+        content_types: content_types.unwrap_or_else(|| {
+            vec![
+                "text".to_owned(),
+                "link".to_owned(),
+                "image".to_owned(),
+                "file".to_owned(),
+            ]
+        }),
+    };
+
+    let items = database
+        .list_recent(10_000, 0)
+        .map_err(|e| e.to_string())?;
+
+    export_items(&items, &options)
+}
+
+#[tauri::command]
+fn import_clipboard_items(
+    database: tauri::State<'_, Database>,
+    json: String,
+) -> Result<ImportSummary, String> {
+    import_from_json(&json, database.inner())
+}
+
+#[tauri::command]
+fn get_export_formats() -> Result<Vec<ExportFormatInfo>, String> {
+    Ok(vec![
+        ExportFormatInfo {
+            id: "json".to_owned(),
+            label: "JSON".to_owned(),
+            extension: ".json".to_owned(),
+        },
+        ExportFormatInfo {
+            id: "csv".to_owned(),
+            label: "CSV".to_owned(),
+            extension: ".csv".to_owned(),
+        },
+        ExportFormatInfo {
+            id: "plainText".to_owned(),
+            label: "Plain Text".to_owned(),
+            extension: ".txt".to_owned(),
+        },
+    ])
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportFormatInfo {
+    id: String,
+    label: String,
+    extension: String,
+}
+
+#[tauri::command]
+fn start_clipboard_monitoring(
+    monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+) -> Result<bool, String> {
+    monitor
+        .lock()
+        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?
+        .start()?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn stop_clipboard_monitoring(
+    monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+) -> Result<bool, String> {
+    monitor
+        .lock()
+        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?
+        .stop()?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn get_clipboard_monitor_status(
+    monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+) -> Result<ClipboardMonitorStatus, String> {
+    let monitor = monitor
+        .lock()
+        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
+    Ok(ClipboardMonitorStatus {
+        running: monitor.running,
+        ignored_applications: monitor.ignored_applications.clone(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClipboardMonitorStatus {
+    running: bool,
+    ignored_applications: Vec<String>,
+}
+
+#[tauri::command]
+fn set_clipboard_ignored_apps(
+    monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+    apps: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let mut monitor = monitor
+        .lock()
+        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
+    monitor.set_ignored_apps(apps);
+    Ok(monitor.ignored_applications.clone())
+}
+
+#[tauri::command]
+fn save_window_position(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    let mut guard = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    WindowManager::save_position(
+        &mut *guard,
+        x,
+        y,
+        width,
+        height,
+    )
+}
+
+#[tauri::command]
+fn restore_window_position(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<Option<WindowPosition>, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    Ok(WindowManager::restore_position(&config).map(|(x, y, w, h)| WindowPosition { x, y, width: w, height: h }))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowPosition {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[tauri::command]
+fn get_window_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<WindowConfigInfo, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    Ok(WindowConfigInfo {
+        launch_at_startup: config.launch_at_startup(),
+        close_to_tray: config.close_to_tray(),
+        single_instance: config.single_instance(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowConfigInfo {
+    launch_at_startup: bool,
+    close_to_tray: bool,
+    single_instance: bool,
+}
+
+#[tauri::command]
+fn set_window_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    launch_at_startup: Option<bool>,
+    close_to_tray: Option<bool>,
+    single_instance: Option<bool>,
+) -> Result<(), String> {
+    let mut config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    if let Some(v) = launch_at_startup {
+        config.set_launch_at_startup(v).map_err(|e| e.to_string())?;
+    }
+    if let Some(v) = close_to_tray {
+        config.set_close_to_tray(v).map_err(|e| e.to_string())?;
+    }
+    if let Some(v) = single_instance {
+        config.set_single_instance(v).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_export_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<ExportConfigInfo, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    Ok(ExportConfigInfo {
+        schedule_auto_export: config.schedule_auto_export().map(|s| s.to_owned()),
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportConfigInfo {
+    schedule_auto_export: Option<String>,
+}
+
+#[tauri::command]
+fn set_export_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    schedule_auto_export: Option<String>,
+) -> Result<(), String> {
+    config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .set_schedule_auto_export(schedule_auto_export)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn run_cli_command(
+    database: tauri::State<'_, Database>,
+    command: String,
+    query: Option<String>,
+    limit: Option<usize>,
+) -> Result<String, String> {
+    let command = match command.as_str() {
+        "list" => CliCommand::List,
+        "search" => CliCommand::Search,
+        "copy" => CliCommand::Copy,
+        "paste" => CliCommand::Paste,
+        "delete" => CliCommand::Delete,
+        "export" => CliCommand::Export,
+        "stats" => CliCommand::Stats,
+        other => return Err(format!("unknown command: {other}")),
+    };
+
+    let args = CliArgs {
+        command,
+        query,
+        limit,
+    };
+
+    cli::run_cli_command(&args, database.inner())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -290,7 +720,7 @@ pub fn run() {
             let config = ConfigStore::load(&project_directory)?;
             let keyboard = KeyboardManager::load(&project_directory)?;
             let paths = StoragePaths::initialize_with_data_directory(
-                project_directory,
+                project_directory.clone(),
                 config.storage_directory().map(PathBuf::from),
             )?;
             let database = Database::open(&paths.database)?;
@@ -298,11 +728,33 @@ pub fn run() {
             let search_index = SearchIndex::open(&paths.search_index)?;
             SearchSynchronizer::default().initialize(&database, &search_index)?;
 
+            let ocr_engine = Arc::new(TesseractOcrEngine::new());
+            let ocr_database = Database::open(&paths.database)?;
+            let ocr_worker = OcrWorker::start(ocr_engine, Arc::new(ocr_database));
+
+            let mut privacy_manager = PrivacyManager::new();
+            privacy_manager.sync_with_config(&config);
+            let clipboard_monitor = ClipboardMonitor::new();
+            let shortcut_manager = GlobalShortcutManager::new();
+
+            if config.single_instance() {
+                let _guard = SingleInstanceGuard::acquire(&project_directory)
+                    .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+                app.manage(_guard);
+            }
+
             app.manage(Mutex::new(config));
             app.manage(Mutex::new(keyboard));
             app.manage(paths);
             app.manage(database);
             app.manage(search_index);
+            app.manage(Mutex::new(privacy_manager));
+            app.manage(Mutex::new(clipboard_monitor));
+            app.manage(Mutex::new(shortcut_manager));
+            app.manage(ocr_worker);
+
+            let _tray = SystemTray::create().ok();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -320,7 +772,31 @@ pub fn run() {
             search_clipboard_items,
             rebuild_search_index,
             detect_content_markers,
-            transform_text
+            transform_text,
+            toggle_privacy_pause,
+            check_sensitive_content,
+            check_password_manager,
+            get_privacy_status,
+            export_clipboard_items,
+            import_clipboard_items,
+            get_export_formats,
+            start_clipboard_monitoring,
+            stop_clipboard_monitoring,
+            get_clipboard_monitor_status,
+            set_clipboard_ignored_apps,
+            save_window_position,
+            restore_window_position,
+            get_window_config,
+            set_window_config,
+            get_export_config,
+            set_export_config,
+            run_cli_command,
+            get_clipboard_formats,
+            get_ocr_status,
+            detect_content_actions,
+            soft_delete_clipboard_item,
+            restore_clipboard_item,
+            enforce_history_cleanup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
