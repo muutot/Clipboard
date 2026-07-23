@@ -10,6 +10,7 @@ pub enum StorageError {
     DataDirectoryMustBeAbsolute(PathBuf),
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
+    InvalidSearchOperation(String),
     InvalidStoredValue { field: &'static str, value: i64 },
     ValueOutOfRange { field: &'static str },
 }
@@ -39,6 +40,9 @@ impl fmt::Display for StorageError {
             }
             Self::InvalidOcrStatus(status) => {
                 write!(formatter, "unknown OCR status: {status}")
+            }
+            Self::InvalidSearchOperation(operation) => {
+                write!(formatter, "unknown search outbox operation: {operation}")
             }
             Self::InvalidStoredValue { field, value } => {
                 write!(formatter, "invalid stored value for {field}: {value}")
