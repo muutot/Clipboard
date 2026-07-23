@@ -14,8 +14,11 @@
     if (!isTauriRuntime()) return undefined;
     try {
       const normalized = filePath.replace(/\\/g, "/");
-      return convertFileSrc(normalized);
-    } catch {
+      const url = convertFileSrc(normalized);
+      console.log("[image] convertFileSrc:", normalized, "->", url);
+      return url;
+    } catch(e) {
+      console.error("[image] convertFileSrc error:", e);
       return undefined;
     }
   }

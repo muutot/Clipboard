@@ -1004,7 +1004,10 @@ pub fn run() {
                                     let image_dir = storage_path.join("image");
                                     std::fs::create_dir_all(&image_dir).ok();
                                     let img_path = image_dir.join(format!("{}.png", img_hash));
-                                    std::fs::write(&img_path, &img).ok();
+                                    match std::fs::write(&img_path, &img) {
+                                        Ok(_) => eprintln!("[clipboard-worker] saved image: {}", img_path.display()),
+                                        Err(e) => eprintln!("[clipboard-worker] failed to write image {}: {}", img_path.display(), e),
+                                    }
 
                                     let item = ClipboardItem {
                                         id: format!("img_{}", img_hash),
@@ -1206,8 +1209,11 @@ pub fn run() {
                                 match rx.recv() {
                                     Ok(()) => {
                                         let is_visible = window_clone.is_visible().unwrap_or(false);
+                                        let is_focused = window_clone.is_focused().unwrap_or(false);
                                         if !is_visible {
                                             let _ = window_clone.show();
+                                        }
+                                        if !is_focused {
                                             let _ = window_clone.set_focus();
                                         }
                                     }
