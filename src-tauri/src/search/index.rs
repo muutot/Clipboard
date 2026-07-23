@@ -1,0 +1,236 @@
+use std::{fs, path::Path, sync::Mutex};
+
+use tantivy::{
+    collector::TopDocs,
+    directory::MmapDirectory,
+    query::{BooleanQuery, Query, TermQuery},
+    schema::{IndexRecordOption, TantivyDocument, Value},
+    Index, IndexReader, IndexWriter, ReloadPolicy, Term,
+};
+
+use crate::storage::SearchDocument;
+
+use super::{build_schema, register_tokenizers, SearchError, SearchFields, SearchQuery};
+
+const INDEX_WRITER_MEMORY_BYTES: usize = 15_000_000;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchHit {
+    pub item_id: String,
+    pub kind: String,
+    pub score: f32,
+    pub created_at_ms: i64,
+    pub is_favorite: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SearchIndexChange {
+    Upsert(SearchDocument),
+    Delete(String),
+}
+
+pub struct SearchIndex {
+    fields: SearchFields,
+    writer: Mutex<IndexWriter<TantivyDocument>>,
+    reader: IndexReader,
+}
+
+impl SearchIndex {
+    pub fn open(path: &Path) -> Result<Self, SearchError> {
+        fs::create_dir_all(path)?;
+        let (schema, fields) = build_schema();
+        let directory = MmapDirectory::open(path).map_err(tantivy::TantivyError::from)?;
+        let index = Index::open_or_create(directory, schema)?;
+
+        Self::from_index(index, fields)
+    }
+
+    pub fn apply_changes(&self, changes: &[SearchIndexChange]) -> Result<(), SearchError> {
+        if changes.is_empty() {
+            return Ok(());
+        }
+
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|_| SearchError::WriterPoisoned)?;
+        let result = (|| {
+            for change in changes {
+                let item_id = match change {
+                    SearchIndexChange::Upsert(document) => &document.item_id,
+                    SearchIndexChange::Delete(item_id) => item_id,
+                };
+                writer.delete_term(Term::from_field_text(self.fields.item_id, item_id));
+
+                if let SearchIndexChange::Upsert(document) = change {
+                    writer.add_document(self.to_tantivy_document(document))?;
+                }
+            }
+
+            writer.commit()?;
+            Ok::<(), tantivy::TantivyError>(())
+        })();
+
+        if let Err(error) = result {
+            let _ = writer.rollback();
+            return Err(error.into());
+        }
+
+        drop(writer);
+        self.reader.reload()?;
+        Ok(())
+    }
+
+    pub fn search(&self, input: &str, limit: usize) -> Result<Vec<SearchHit>, SearchError> {
+        let query = SearchQuery::parse(input);
+        let ngrams = query.required_ngrams();
+        if ngrams.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let required_queries = ngrams
+            .into_iter()
+            .map(|ngram| {
+                Box::new(TermQuery::new(
+                    Term::from_field_text(self.fields.content, &ngram),
+                    IndexRecordOption::WithFreqs,
+                )) as Box<dyn Query>
+            })
+            .collect();
+        let query = BooleanQuery::intersection(required_queries);
+        let searcher = self.reader.searcher();
+        let top_documents = searcher.search(
+            &query,
+            &TopDocs::with_limit(limit.min(500)).order_by_score(),
+        )?;
+
+        top_documents
+            .into_iter()
+            .map(|(score, address)| {
+                let document = searcher.doc::<TantivyDocument>(address)?;
+                Ok(SearchHit {
+                    item_id: stored_text(&document, self.fields.item_id, "item_id")?.to_owned(),
+                    kind: stored_text(&document, self.fields.kind, "kind")?.to_owned(),
+                    score,
+                    created_at_ms: document
+                        .get_first(self.fields.created_at_ms)
+                        .and_then(|value| value.as_i64())
+                        .ok_or(SearchError::MissingStoredField("created_at_ms"))?,
+                    is_favorite: document
+                        .get_first(self.fields.is_favorite)
+                        .and_then(|value| value.as_u64())
+                        .ok_or(SearchError::MissingStoredField("is_favorite"))?
+                        != 0,
+                })
+            })
+            .collect()
+    }
+
+    fn from_index(index: Index, fields: SearchFields) -> Result<Self, SearchError> {
+        register_tokenizers(&index)?;
+        let reader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()?;
+        let writer =
+            index.writer_with_num_threads::<TantivyDocument>(1, INDEX_WRITER_MEMORY_BYTES)?;
+
+        Ok(Self {
+            fields,
+            writer: Mutex::new(writer),
+            reader,
+        })
+    }
+
+    fn to_tantivy_document(&self, source: &SearchDocument) -> TantivyDocument {
+        let mut document = TantivyDocument::new();
+        document.add_text(self.fields.item_id, &source.item_id);
+        document.add_text(self.fields.kind, &source.kind);
+        document.add_text(self.fields.content, &source.content);
+        document.add_i64(self.fields.created_at_ms, source.created_at_ms);
+        document.add_u64(self.fields.is_favorite, u64::from(source.is_favorite));
+        document
+    }
+}
+
+fn stored_text<'document>(
+    document: &'document TantivyDocument,
+    field: tantivy::schema::Field,
+    field_name: &'static str,
+) -> Result<&'document str, SearchError> {
+    document
+        .get_first(field)
+        .and_then(|value| value.as_str())
+        .ok_or(SearchError::MissingStoredField(field_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use tantivy::Index;
+
+    use super::{SearchIndex, SearchIndexChange};
+    use crate::{search::build_schema, storage::SearchDocument};
+
+    fn document(item_id: &str, content: &str) -> SearchDocument {
+        SearchDocument {
+            item_id: item_id.to_owned(),
+            kind: "text".to_owned(),
+            content: content.to_owned(),
+            created_at_ms: 100,
+            is_favorite: false,
+        }
+    }
+
+    fn in_memory_index() -> SearchIndex {
+        let (schema, fields) = build_schema();
+        SearchIndex::from_index(Index::create_in_ram(schema), fields).unwrap()
+    }
+
+    #[test]
+    fn matches_required_terms_regardless_of_query_order() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document("clean", "脸皮挺好")),
+                SearchIndexChange::Upsert(document("dirty", "脸皮挺脏")),
+            ])
+            .unwrap();
+
+        let forward = index.search("脸 脏", 20).unwrap();
+        let reversed = index.search("脏 脸", 20).unwrap();
+
+        assert_eq!(forward.len(), 1);
+        assert_eq!(forward[0].item_id, "dirty");
+        assert_eq!(reversed, forward);
+    }
+
+    #[test]
+    fn repeated_upserts_replace_the_previous_document() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[SearchIndexChange::Upsert(document("item", "旧内容"))])
+            .unwrap();
+        index
+            .apply_changes(&[SearchIndexChange::Upsert(document("item", "新内容"))])
+            .unwrap();
+
+        assert!(index.search("旧", 20).unwrap().is_empty());
+        assert_eq!(index.search("新", 20).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn deletes_are_idempotent() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[SearchIndexChange::Upsert(document("item", "待删除"))])
+            .unwrap();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Delete("item".to_owned()),
+                SearchIndexChange::Delete("item".to_owned()),
+            ])
+            .unwrap();
+
+        assert!(index.search("删除", 20).unwrap().is_empty());
+    }
+}
