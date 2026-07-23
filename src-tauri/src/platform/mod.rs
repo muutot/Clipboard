@@ -33,6 +33,7 @@ pub mod linux_wayland;
 pub mod linux_wayland;
 
 pub mod windows_clipboard;
+pub mod windows_hotkey;
 
 // ---------------------------------------------------------------------------
 //  Runtime platform identifier
@@ -355,13 +356,14 @@ fn current_capabilities() -> PlatformCapabilities {
 //  ClipboardMonitor
 // ---------------------------------------------------------------------------
 
-use windows_clipboard::WindowsClipboardMonitor;
+use windows_clipboard::{WindowsClipboardMonitor, ClipboardChange};
 
 pub struct ClipboardMonitor {
     monitor: WindowsClipboardMonitor,
     pub running: bool,
     pub last_check_at: i64,
     pub ignored_applications: Vec<String>,
+    receiver: Option<std::sync::mpsc::Receiver<ClipboardChange>>,
 }
 
 impl ClipboardMonitor {
@@ -371,11 +373,13 @@ impl ClipboardMonitor {
             running: false,
             last_check_at: 0,
             ignored_applications: Vec::new(),
+            receiver: None,
         }
     }
 
     pub fn start(&mut self) -> Result<(), String> {
-        let _receiver = self.monitor.start()?;
+        let receiver = self.monitor.start()?;
+        self.receiver = Some(receiver);
         self.running = true;
         self.last_check_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -387,7 +391,12 @@ impl ClipboardMonitor {
     pub fn stop(&mut self) -> Result<(), String> {
         self.monitor.stop();
         self.running = false;
+        self.receiver = None;
         Ok(())
+    }
+
+    pub fn take_receiver(&mut self) -> Option<std::sync::mpsc::Receiver<ClipboardChange>> {
+        self.receiver.take()
     }
 
     pub fn set_ignored_apps(&mut self, apps: Vec<String>) {
@@ -402,13 +411,78 @@ impl ClipboardMonitor {
 
 pub struct GlobalShortcutManager {
     pub shortcuts: HashMap<String, Vec<ShortcutBinding>>,
+    registered_ids: Vec<i32>,
 }
 
 impl GlobalShortcutManager {
     pub fn new() -> Self {
         Self {
             shortcuts: HashMap::new(),
+            registered_ids: Vec::new(),
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn register_platform_hotkeys(&mut self, hwnd: isize) -> Result<(), String> {
+        use crate::platform::windows_clipboard;
+
+        self.unregister_platform_hotkeys(hwnd)?;
+
+        let mut next_id: i32 = 1;
+        for shortcuts in self.shortcuts.values() {
+            for binding in shortcuts {
+                if let crate::keyboard::ShortcutBinding::Chord { modifiers, key } = binding {
+                    let mut mod_flags: u32 = 0;
+                    for m in modifiers {
+                        match m {
+                            crate::keyboard::Modifier::Alt => mod_flags |= windows_clipboard::MOD_ALT,
+                            crate::keyboard::Modifier::Control => mod_flags |= windows_clipboard::MOD_CONTROL,
+                            crate::keyboard::Modifier::Shift => mod_flags |= windows_clipboard::MOD_SHIFT,
+                            crate::keyboard::Modifier::Meta => mod_flags |= windows_clipboard::MOD_WIN,
+                        }
+                    }
+                    let vk = match key.to_uppercase().as_str() {
+                        "V" => windows_clipboard::VK_V,
+                        "SPACE" => 0x20,
+                        other if other.len() == 1 => {
+                            let c = other.chars().next().unwrap();
+                            if c.is_ascii_alphabetic() {
+                                c as u8 as u32
+                            } else {
+                                continue;
+                            }
+                        }
+                        _ => continue,
+                    };
+                    windows_clipboard::register_global_hotkey(hwnd, next_id, mod_flags, vk)?;
+                    self.registered_ids.push(next_id);
+                    next_id += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn register_platform_hotkeys(&mut self, _hwnd: isize) -> Result<(), String> {
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn unregister_platform_hotkeys(&mut self, hwnd: isize) -> Result<(), String> {
+        use crate::platform::windows_clipboard;
+
+        for id in &self.registered_ids {
+            let _ = windows_clipboard::unregister_global_hotkey(hwnd, *id);
+        }
+        self.registered_ids.clear();
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn unregister_platform_hotkeys(&mut self, _hwnd: isize) -> Result<(), String> {
+        self.registered_ids.clear();
+        Ok(())
     }
 
     pub fn register(

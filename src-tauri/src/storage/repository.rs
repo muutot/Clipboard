@@ -36,6 +36,7 @@ pub trait ClipboardRepository {
     fn soft_delete(&self, id: &str) -> Result<bool, StorageError>;
     fn restore_deleted(&self, id: &str) -> Result<bool, StorageError>;
     fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError>;
+    fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
 }
 
 impl ClipboardRepository for Database {
@@ -329,6 +330,18 @@ impl ClipboardRepository for Database {
                    AND deleted_at_ms IS NOT NULL
                    AND deleted_at_ms < ?1",
                 [cutoff_ms],
+            )?;
+            Ok(deleted as u64)
+        })
+    }
+
+    fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let deleted = connection.execute(
+                "UPDATE clipboard_items
+                 SET deleted = 1, deleted_at_ms = ?1
+                 WHERE is_favorite = 0 AND deleted = 0",
+                [current_time_ms()],
             )?;
             Ok(deleted as u64)
         })

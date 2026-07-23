@@ -16,7 +16,7 @@ use std::{path::PathBuf, sync::Mutex};
 use cli::{CliArgs, CliCommand};
 use config::ConfigStore;
 use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation};
-use domain::{ClipboardItem, OcrResult};
+use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{OcrWorker, TesseractOcrEngine};
@@ -31,6 +31,9 @@ use serde::Serialize;
 use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
 use tauri::Manager;
 use std::sync::Arc;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -314,6 +317,15 @@ fn soft_delete_clipboard_item(
 }
 
 #[tauri::command]
+fn clear_all_non_favorite_items(
+    database: tauri::State<'_, Database>,
+) -> Result<u64, String> {
+    database
+        .clear_all_non_favorite_items()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn restore_clipboard_item(database: tauri::State<'_, Database>, id: String) -> Result<bool, String> {
     database
         .restore_deleted(&id)
@@ -523,11 +535,134 @@ struct ExportFormatInfo {
 #[tauri::command]
 fn start_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+    paths: tauri::State<'_, StoragePaths>,
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
 ) -> Result<bool, String> {
-    monitor
+    let mut guard = monitor
         .lock()
-        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?
-        .start()?;
+        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
+    guard.start()?;
+
+    let receiver = guard
+        .take_receiver()
+        .ok_or("clipboard monitor started but no receiver available".to_owned())?;
+
+    drop(guard);
+
+    let db_path = paths.database.clone();
+    let privacy_arc = {
+        let p = privacy
+            .lock()
+            .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+        Arc::new(Mutex::new(p.paused))
+    };
+
+    thread::spawn(move || {
+        let database = match Database::open(&db_path) {
+            Ok(db) => Arc::new(db),
+            Err(e) => {
+                eprintln!("[clipboard-worker] failed to open database: {e}");
+                return;
+            }
+        };
+
+        let mut self_trigger_guard = content::hash::SelfTriggerGuard::new();
+        let mut consecutive_errors = 0u32;
+
+        loop {
+            match receiver.recv_timeout(Duration::from_millis(500)) {
+                Ok(_change) => {
+                    let is_paused = privacy_arc
+                        .lock()
+                        .map(|g| *g)
+                        .unwrap_or(false);
+
+                    if is_paused {
+                        continue;
+                    }
+
+                    let text = match platform::windows_clipboard::read_clipboard_text() {
+                        Some(t) => t,
+                        None => continue,
+                    };
+
+                    if text.is_empty() || text.len() > 500_000 {
+                        continue;
+                    }
+
+                    let markers = content::detect_markers(&text);
+                    let kind = if markers.is_link || markers.has_url {
+                        ClipboardKind::Link
+                    } else {
+                        ClipboardKind::Text
+                    };
+
+                    let content_hash = content::hash::compute_content_hash(
+                        if kind == ClipboardKind::Link { "link" } else { "text" },
+                        &text,
+                        None,
+                    );
+
+                    if self_trigger_guard.is_self_triggered(&content_hash) {
+                        self_trigger_guard.mark_as_self_triggered(&content_hash);
+                        continue;
+                    }
+
+                    let title = text
+                        .chars()
+                        .take(200)
+                        .collect::<String>()
+                        .lines()
+                        .next()
+                        .unwrap_or("")
+                        .to_string();
+                    let size_bytes = text.len() as u64;
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as i64;
+
+                    let item = ClipboardItem {
+                        id: content_hash.clone(),
+                        kind,
+                        title,
+                        text_content: Some(text),
+                        resource_path: None,
+                        preview_path: None,
+                        content_hash,
+                        source_app: None,
+                        size_bytes,
+                        created_at_ms: now_ms,
+                        last_used_at_ms: None,
+                        is_favorite: false,
+                    };
+
+                    match database.save_item(&item) {
+                        Ok(_) => {
+                            consecutive_errors = 0;
+                        }
+                        Err(e) => {
+                            eprintln!("[clipboard-worker] failed to save item: {e}");
+                            consecutive_errors += 1;
+                            if consecutive_errors >= 10 {
+                                eprintln!(
+                                    "[clipboard-worker] too many consecutive errors, pausing"
+                                );
+                                thread::sleep(Duration::from_secs(5));
+                                consecutive_errors = 0;
+                            }
+                        }
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    eprintln!("[clipboard-worker] monitor channel disconnected, stopping");
+                    break;
+                }
+            }
+        }
+    });
+
     Ok(true)
 }
 
@@ -832,6 +967,46 @@ pub fn run() {
 
             let _tray = SystemTray::create().ok();
 
+            // Wire global hotkey (Alt+V) to toggle window
+            #[cfg(target_os = "windows")]
+            if let Some(window) = app.get_webview_window("main") {
+                use platform::windows_clipboard;
+
+                match window.hwnd() {
+                    Ok(_hwnd) => {
+                        let (tx, rx) = mpsc::channel::<()>();
+                        let _hotkey_thread = platform::windows_hotkey::spawn_hotkey_thread(
+                            1,
+                            windows_clipboard::MOD_ALT,
+                            windows_clipboard::VK_V,
+                            tx,
+                        );
+
+                        let window_clone = window.clone();
+                        thread::spawn(move || {
+                            loop {
+                                match rx.recv() {
+                                    Ok(()) => {
+                                        let _ = window_clone.set_focus();
+                                        let is_visible = window_clone.is_visible().unwrap_or(false);
+                                        if is_visible {
+                                            let _ = window_clone.hide();
+                                        } else {
+                                            let _ = window_clone.show();
+                                            let _ = window_clone.set_focus();
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("[hotkey] failed to get window handle: {e}");
+                    }
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -874,6 +1049,7 @@ pub fn run() {
             soft_delete_clipboard_item,
             restore_clipboard_item,
             enforce_history_cleanup,
+            clear_all_non_favorite_items,
             get_performance_metrics,
             repair_database,
             validate_search_index

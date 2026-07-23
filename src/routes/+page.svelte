@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -486,6 +487,33 @@
     selectedId = filteredItems[next].id;
   }
 
+  function clearHistory() {
+    const nonFavorites = items.filter((item) => !item.favorite);
+    if (nonFavorites.length === 0) {
+      showToast(_t("toast.noRecordsToClear"), "info");
+      return;
+    }
+
+    const removedIds = new Set(nonFavorites.map((i) => i.id));
+    items = items.filter((item) => item.favorite);
+    if (indexedItems) {
+      indexedItems = indexedItems.filter((item) => item.favorite);
+    }
+    selectedIds = new Set([...selectedIds].filter((x) => !removedIds.has(x)));
+
+    void invoke<number>("clear_all_non_favorite_items")
+      .then((count) => {
+        showToast(_t("toast.clearHistorySuccess", { count }), "success");
+        statusMessage = items.length
+          ? _t("status.recordCount", { count: items.length })
+          : _t("app.historyEmpty");
+      })
+      .catch((error) => {
+        console.error("Unable to clear history", error);
+        showToast(_t("app.deleteFailed"), "error");
+      });
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -691,6 +719,7 @@
 
     <div class="toolbar-actions">
       <button type="button" aria-label={_t("toolbar.clearHistory")} title={_t("toolbar.clearHistory")}
+        onclick={clearHistory}
         ><AppIcon name="trash" size={17} /></button>
       <button type="button" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
         ><AppIcon name="help" size={17} /></button>

@@ -128,12 +128,25 @@
 
     if (item.kind === "text" || item.kind === "link") {
       event.dataTransfer.setData("text/plain", item.title);
+      if (item.textContent) {
+        event.dataTransfer.setData("text/html", item.textContent);
+      }
       event.dataTransfer.effectAllowed = "copy";
     } else if (item.kind === "file" && item.resourcePath) {
+      const fileUri = item.resourcePath.startsWith("file://")
+        ? item.resourcePath
+        : `file://${item.resourcePath.replace(/\\/g, "/")}`;
+      event.dataTransfer.setData("text/uri-list", fileUri);
       event.dataTransfer.setData("text/plain", item.resourcePath);
       event.dataTransfer.effectAllowed = "copy";
     } else if (item.kind === "image") {
       event.dataTransfer.setData("text/plain", item.title);
+      if (item.resourcePath) {
+        const fileUri = item.resourcePath.startsWith("file://")
+          ? item.resourcePath
+          : `file://${item.resourcePath.replace(/\\/g, "/")}`;
+        event.dataTransfer.setData("text/uri-list", fileUri);
+      }
       event.dataTransfer.effectAllowed = "copy";
     }
   }

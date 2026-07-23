@@ -2,6 +2,15 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+pub const CF_UNICODETEXT: u32 = 13;
+
+pub const MOD_ALT: u32 = 0x0001;
+pub const MOD_CONTROL: u32 = 0x0002;
+pub const MOD_SHIFT: u32 = 0x0004;
+pub const MOD_WIN: u32 = 0x0008;
+
+pub const VK_V: u32 = 0x56;
+
 pub struct WindowsClipboardMonitor {
     running: bool,
     ignored_apps: Vec<String>,
@@ -195,6 +204,93 @@ fn format_id_to_name(format_id: u32) -> String {
 #[cfg(not(target_os = "windows"))]
 fn format_id_to_name(_format_id: u32) -> String {
     String::new()
+}
+
+#[cfg(target_os = "windows")]
+pub fn read_clipboard_text() -> Option<String> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> isize;
+        fn GlobalLock(handle: isize) -> *const u16;
+        fn GlobalUnlock(handle: isize) -> i32;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+    }
+
+    unsafe {
+        if IsClipboardFormatAvailable(CF_UNICODETEXT) == 0 {
+            return None;
+        }
+
+        if OpenClipboard(0) == 0 {
+            return None;
+        }
+
+        let handle = GetClipboardData(CF_UNICODETEXT);
+        if handle == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let ptr = GlobalLock(handle);
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+
+        let len = (0..).take_while(|&i| *ptr.add(i) != 0).count();
+        let wide: Vec<u16> = std::slice::from_raw_parts(ptr, len).to_vec();
+        GlobalUnlock(handle);
+        CloseClipboard();
+
+        Some(OsString::from_wide(&wide).to_string_lossy().to_string())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn read_clipboard_text() -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+pub fn register_global_hotkey(hwnd: isize, id: i32, modifiers: u32, vk: u32) -> Result<(), String> {
+    extern "system" {
+        fn RegisterHotKey(hwnd: isize, id: i32, modifiers: u32, vk: u32) -> i32;
+    }
+
+    let result = unsafe { RegisterHotKey(hwnd, id, modifiers, vk) };
+    if result == 0 {
+        Err(format!("RegisterHotKey failed for id={}", id))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn register_global_hotkey(_hwnd: isize, _id: i32, _modifiers: u32, _vk: u32) -> Result<(), String> {
+    Err("global hotkey registration is not supported on this platform".to_string())
+}
+
+#[cfg(target_os = "windows")]
+pub fn unregister_global_hotkey(hwnd: isize, id: i32) -> Result<(), String> {
+    extern "system" {
+        fn UnregisterHotKey(hwnd: isize, id: i32) -> i32;
+    }
+
+    let result = unsafe { UnregisterHotKey(hwnd, id) };
+    if result == 0 {
+        Err(format!("UnregisterHotKey failed for id={}", id))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn unregister_global_hotkey(_hwnd: isize, _id: i32) -> Result<(), String> {
+    Err("global hotkey unregistration is not supported on this platform".to_string())
 }
 
 #[cfg(test)]
