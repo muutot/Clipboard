@@ -93,6 +93,30 @@ impl SearchSynchronizer {
             }
         }
     }
+
+    pub fn initialize(
+        &self,
+        repository: &impl SearchRepository,
+        index: &SearchIndex,
+    ) -> Result<SearchSyncSummary, SearchError> {
+        if index.requires_full_rebuild() {
+            self.rebuild(repository, index)
+        } else {
+            self.sync_until_idle(repository, index)
+        }
+    }
+
+    pub fn rebuild(
+        &self,
+        repository: &impl SearchRepository,
+        index: &SearchIndex,
+    ) -> Result<SearchSyncSummary, SearchError> {
+        index.begin_full_rebuild()?;
+        repository.enqueue_full_search_rebuild()?;
+        let summary = self.sync_until_idle(repository, index)?;
+        index.mark_rebuild_complete()?;
+        Ok(summary)
+    }
 }
 
 impl Default for SearchSynchronizer {
@@ -186,5 +210,25 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(database.read_search_outbox(100).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rebuild_recovers_records_even_without_pending_events() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&item("item", "重建可见")).unwrap();
+        let pending = database.read_search_outbox(100).unwrap();
+        database
+            .acknowledge_search_outbox(pending.last().unwrap().sequence)
+            .unwrap();
+        let index = SearchIndex::in_memory().unwrap();
+
+        let summary = SearchSynchronizer::default()
+            .rebuild(&database, &index)
+            .unwrap();
+
+        assert_eq!(summary.upserted_documents, 1);
+        assert_eq!(index.search("重建", 20).unwrap().len(), 1);
+        assert!(!index.requires_full_rebuild());
+        assert!(database.read_search_outbox(100).unwrap().is_empty());
     }
 }
