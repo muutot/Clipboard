@@ -324,6 +324,31 @@ fn set_ocr_config(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn install_ppocr(
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<String, String> {
+    PpOcrEngine::install(&paths).map_err(|e| e.to_string())?;
+    Ok("PP-OCRv6 installed successfully".to_string())
+}
+
+#[tauri::command]
+fn check_ppocr_status() -> Result<PpOcrStatus, String> {
+    Ok(PpOcrStatus {
+        available: PpOcrEngine::is_available(),
+        windows_ocr_available: WindowsOcrEngine::is_available(),
+        tesseract_available: TesseractOcrEngine::is_available(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PpOcrStatus {
+    available: bool,
+    windows_ocr_available: bool,
+    tesseract_available: bool,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HistoryConfigInfo {
@@ -1408,6 +1433,8 @@ pub fn run() {
             get_ocr_status,
             get_ocr_config,
             set_ocr_config,
+            install_ppocr,
+            check_ppocr_status,
             set_history_config,
             get_history_config,
             set_storage_config,

@@ -608,6 +608,7 @@
     }
 
     if (event.key === "Enter") {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       event.preventDefault();
       activateSelected();
       return;

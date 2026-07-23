@@ -17,17 +17,65 @@ impl PpOcrEngine {
     }
 
     pub fn is_available() -> bool {
-        // Check for paddleocr CLI
-        Command::new("paddleocr")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-            || Command::new("python")
-                .args(["-c", "import paddleocr; print('ok')"])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
+        // Check if PP-OCRv6 models exist in the storage directory
+        // Models are downloaded on first use via the install command
+        #[cfg(target_os = "windows")]
+        {
+            let local = std::env::var("APPDATA")
+                .ok()
+                .map(|d| std::path::PathBuf::from(d).join("com.clipboard.desktop/models/ppocr/det"))
+                .filter(|p| p.exists());
+            if local.is_some() { return true; }
+        }
+        false
+    }
+
+    pub fn install(paths: &crate::storage::StoragePaths) -> Result<(), String> {
+        let model_dir = paths.storage.join("ppocr-models");
+        std::fs::create_dir_all(&model_dir.join("det")).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&model_dir.join("rec")).map_err(|e| e.to_string())?;
+
+        let files = [
+            ("det/inference.pdmodel", "https://paddleocr.bj.bcebos.com/PP-OCRv6/chinese/ch_PP-OCRv6_det_infer.tar"),
+            ("rec/inference.pdmodel", "https://paddleocr.bj.bcebos.com/PP-OCRv6/chinese/ch_PP-OCRv6_rec_infer.tar"),
+        ];
+
+        for (path, url) in &files {
+            let dest = model_dir.join(path);
+            if dest.exists() { continue; }
+
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+
+            eprintln!("[ppocr] downloading model from {}", url);
+            let tarball = model_dir.join(format!("{}.tar", path.replace('/', "_")));
+            
+            let status = Command::new("powershell")
+                .args([
+                    "-NoProfile", "-Command",
+                    &format!("[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '{}' -OutFile '{}'", url, tarball.display()),
+                ])
+                .status()
+                .map_err(|e| format!("download failed: {e}"))?;
+
+            if !status.success() {
+                return Err(format!("failed to download model {}", path));
+            }
+
+            let status = Command::new("tar")
+                .args(["-xf", &tarball.to_string_lossy(), "-C", &model_dir.to_string_lossy()])
+                .status()
+                .map_err(|e| format!("extract failed: {e}"))?;
+
+            if !status.success() {
+                eprintln!("[ppocr] tar extract failed for {}, model may need manual setup", path);
+            }
+
+            let _ = std::fs::remove_file(&tarball);
+        }
+
+        Ok(())
     }
 }
 
