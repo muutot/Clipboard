@@ -442,12 +442,12 @@
                   <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
                   <div>
                     <strong>OCR 引擎</strong>
-                    <p>选择文字识别引擎，切换后重启生效</p>
+                    <p>PP-OCRv6 纯 Rust 实现，不依赖 Python。首次使用自动下载模型。</p>
                   </div>
                 </div>
                 <div class="setting-actions" style="flex-wrap: wrap;">
                   <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
-                    PP-OCRv6 Small (CPU)
+                    PP-OCRv6 (ONNX)
                   </button>
                   <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
                     Tesseract
