@@ -435,12 +435,14 @@
   }
 
   function saveEdit(id: string, content: string) {
+    const firstLine = content.split('\n')[0].slice(0, 200);
+    const rest = content.length > firstLine.length ? content.slice(firstLine.length).trim() : '';
     items = items.map((item) =>
-      item.id === id ? { ...item, title: content } : item,
+      item.id === id ? { ...item, title: firstLine, textContent: content, preview: rest || item.preview } : item,
     );
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, title: content } : item,
+        item.id === id ? { ...item, title: firstLine, textContent: content, preview: rest || item.preview } : item,
       );
     }
     showToast(_t("toast.editSaved"), "success");
