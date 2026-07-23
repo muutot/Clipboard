@@ -11,8 +11,20 @@ pub enum StorageError {
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
     InvalidSearchOperation(String),
-    InvalidStoredValue { field: &'static str, value: i64 },
-    ValueOutOfRange { field: &'static str },
+    InvalidKeyboardAction(String),
+    InvalidShortcut(String),
+    ShortcutConflict {
+        shortcut: String,
+        first_action: String,
+        second_action: String,
+    },
+    InvalidStoredValue {
+        field: &'static str,
+        value: i64,
+    },
+    ValueOutOfRange {
+        field: &'static str,
+    },
 }
 
 impl fmt::Display for StorageError {
@@ -44,6 +56,18 @@ impl fmt::Display for StorageError {
             Self::InvalidSearchOperation(operation) => {
                 write!(formatter, "unknown search outbox operation: {operation}")
             }
+            Self::InvalidKeyboardAction(action) => {
+                write!(formatter, "invalid keyboard action name: {action}")
+            }
+            Self::InvalidShortcut(message) => formatter.write_str(message),
+            Self::ShortcutConflict {
+                shortcut,
+                first_action,
+                second_action,
+            } => write!(
+                formatter,
+                "shortcut {shortcut} is assigned to both {first_action} and {second_action}"
+            ),
             Self::InvalidStoredValue { field, value } => {
                 write!(formatter, "invalid stored value for {field}: {value}")
             }
