@@ -16,6 +16,9 @@ const CONFIG_FILE_NAME: &str = "conf.json";
 #[serde(default, rename_all = "camelCase")]
 pub struct AppConfig {
     pub storage: StorageConfig,
+    pub history: HistoryConfig,
+    pub privacy: PrivacyConfig,
+    pub permissions: PermissionConfig,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -26,6 +29,67 @@ pub struct StorageConfig {
     pub data_directory: Option<PathBuf>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct HistoryConfig {
+    pub max_items: u32,
+    pub retention_days: u32,
+    pub favorites_exempt: bool,
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        Self {
+            max_items: 10_000,
+            retention_days: 30,
+            favorites_exempt: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PrivacyConfig {
+    pub local_only: bool,
+    pub telemetry_enabled: bool,
+    pub capture_sensitive_sources: bool,
+    pub ignored_applications: Vec<String>,
+}
+
+impl Default for PrivacyConfig {
+    fn default() -> Self {
+        Self {
+            local_only: true,
+            telemetry_enabled: false,
+            capture_sensitive_sources: false,
+            ignored_applications: vec![
+                "1Password".to_owned(),
+                "Bitwarden".to_owned(),
+                "KeePass".to_owned(),
+                "KeePassXC".to_owned(),
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PermissionConfig {
+    pub request_accessibility_on_demand: bool,
+    pub allow_network_access: bool,
+    pub start_at_login: bool,
+}
+
+impl Default for PermissionConfig {
+    fn default() -> Self {
+        Self {
+            request_accessibility_on_demand: true,
+            allow_network_access: false,
+            start_at_login: false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -92,6 +156,12 @@ mod tests {
 
         assert_eq!(store.path(), project.join("conf/conf.json"));
         assert_eq!(saved["storage"]["dataDirectory"], Value::Null);
+        assert_eq!(saved["history"]["maxItems"], 10_000);
+        assert_eq!(saved["history"]["retentionDays"], 30);
+        assert_eq!(saved["history"]["favoritesExempt"], true);
+        assert_eq!(saved["privacy"]["localOnly"], true);
+        assert_eq!(saved["privacy"]["telemetryEnabled"], false);
+        assert_eq!(saved["permissions"]["allowNetworkAccess"], false);
         fs::remove_dir_all(project).unwrap();
     }
 
