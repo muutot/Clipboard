@@ -1090,7 +1090,7 @@ pub fn run() {
                                 }
 
                                 let markers = content::detect_markers(&text);
-                                let kind = if markers.is_link || markers.has_url {
+                                let kind = if markers.is_link {
                                     ClipboardKind::Link
                                 } else {
                                     ClipboardKind::Text
