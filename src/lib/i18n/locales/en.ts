@@ -40,8 +40,8 @@ const en: LocaleDefinition = {
     itemActions: "Item actions",
     viewDetail: "View Details",
     edit: "Edit",
-    pastePlain: "Paste as plain text",
-    pasteFormat: "Paste with formatting",
+    pastePlain: "Copy as plain text",
+    pasteFormat: "Copy with formatting",
   },
   time: {
     justNow: "just now",

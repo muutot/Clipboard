@@ -40,8 +40,8 @@ const zhCN: LocaleDefinition = {
     itemActions: "项目操作",
     viewDetail: "查看详情",
     edit: "编辑",
-    pastePlain: "粘贴为纯文本",
-    pasteFormat: "保留格式粘贴",
+    pastePlain: "复制为纯文本",
+    pasteFormat: "保留格式复制",
   },
   time: {
     justNow: "刚刚",

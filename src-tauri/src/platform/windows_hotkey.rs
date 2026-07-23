@@ -208,40 +208,17 @@ pub fn stop_hotkey_thread() {
 
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
+    window: Option<tauri::WebviewWindow>,
 }
 
 impl HotkeyManager {
     pub fn new() -> Self {
-        Self { handle: None }
-    }
-
-    pub fn start(&mut self, modifiers: u32, vk: u32) {
-        self.stop();
-        let (tx, rx) = mpsc::channel::<()>();
-        let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
-        let window_handle = self.handle.take();
-        drop(window_handle);
-
-        let window_clone = {
-            let app_handle = std::env::var("TAURI_APP_HANDLE").ok()
-                .and_then(|_| None::<()>);
-            None::<()>
-        };
-
-        thread::spawn(move || loop {
-            match rx.recv() {
-                Ok(()) => {
-                    // The toggle window signal is handled via Tauri event system
-                }
-                Err(_) => break,
-            }
-        });
-
-        self.handle = Some(handle);
+        Self { handle: None, window: None }
     }
 
     pub fn start_with_window(&mut self, modifiers: u32, vk: u32, window: tauri::WebviewWindow) {
         self.stop();
+        self.window = Some(window.clone());
         let (tx, rx) = mpsc::channel::<()>();
         let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
 
@@ -262,6 +239,12 @@ impl HotkeyManager {
         });
 
         self.handle = Some(handle);
+    }
+
+    pub fn restart(&mut self, modifiers: u32, vk: u32) {
+        if let Some(window) = self.window.clone() {
+            self.start_with_window(modifiers, vk, window);
+        }
     }
 
     pub fn stop(&mut self) {

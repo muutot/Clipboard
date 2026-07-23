@@ -432,7 +432,7 @@
       return;
     }
 
-    void navigator.clipboard.writeText(item.title).then(() => {
+    void navigator.clipboard.writeText(item.textContent || item.title).then(() => {
       showToast(_t("toast.copySuccess"), "success");
     }).catch(() => {
       showToast(_t("toast.copyFailed"), "error");
@@ -473,7 +473,7 @@
   function plainPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    void navigator.clipboard.writeText(item.title).then(() => {
+    void navigator.clipboard.writeText(item.textContent || item.title).then(() => {
       showToast(_t("toast.plainPasteSuccess"), "success");
     }).catch(() => {
       showToast(_t("toast.copyFailed"), "error");
@@ -483,7 +483,7 @@
   function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    void navigator.clipboard.writeText(item.title).then(() => {
+    void navigator.clipboard.writeText(item.textContent || item.title).then(() => {
       showToast(_t("toast.copySuccess"), "success");
     }).catch(() => {
       showToast(_t("toast.copyFailed"), "error");
@@ -860,9 +860,6 @@
     </div>
 
     <div class="toolbar-actions">
-      <button type="button" tabindex="-1" aria-label={_t("toolbar.clearHistory")} title={_t("toolbar.clearHistory")}
-        onclick={clearHistory}
-        ><AppIcon name="trash" size={17} /></button>
       <button type="button" tabindex="-1" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
         ><AppIcon name="help" size={17} /></button>
       <button type="button" tabindex="-1" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}

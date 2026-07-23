@@ -257,25 +257,11 @@ fn configure_keyboard_shortcuts(
             .lock()
             .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
             .config();
-        let mut hm = hotkey_manager
-            .lock()
-            .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
         if let Some((mod_flags, vk)) = resolve_toggle_hotkey(&config) {
-            #[cfg(target_os = "windows")]
-            {
-                let app_handle = keyboard
-                    .lock()
-                    .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?;
-                drop(app_handle);
-                hm.stop();
-            }
-            #[cfg(target_os = "windows")]
-            if let Some(window) = (|| -> Option<tauri::WebviewWindow> {
-                // We can't access the app handle from here, so we use a global approach
-                None
-            })() {
-                hm.start_with_window(mod_flags, vk, window);
-            }
+            let mut hm = hotkey_manager
+                .lock()
+                .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
+            hm.restart(mod_flags, vk);
         }
     }
 
@@ -801,11 +787,7 @@ fn start_clipboard_monitoring(
                     let title = text
                         .chars()
                         .take(200)
-                        .collect::<String>()
-                        .lines()
-                        .next()
-                        .unwrap_or("")
-                        .to_string();
+                        .collect::<String>();
                     let size_bytes = text.len() as u64;
                     let now_ms = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
@@ -1341,11 +1323,7 @@ pub fn run() {
                                 let title = text
                                     .chars()
                                     .take(200)
-                                    .collect::<String>()
-                                    .lines()
-                                    .next()
-                                    .unwrap_or("")
-                                    .to_string();
+                                    .collect::<String>();
                                 let size_bytes = text.len() as u64;
                                 let now_ms = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
