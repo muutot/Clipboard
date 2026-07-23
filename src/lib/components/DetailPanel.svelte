@@ -766,4 +766,50 @@
       width: 100vw;
     }
   }
+
+  .edit-area {
+    position: relative;
+    z-index: 4;
+    padding: 4px;
+  }
+
+  .edit-area textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #4aa8ff;
+    border-radius: 7px;
+    color: #e4e4e4;
+    background: #141414;
+    font: 12px/1.55 "Cascadia Code", Consolas, monospace;
+    resize: vertical;
+    outline: none;
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    justify-content: flex-end;
+  }
+
+  .edit-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #a3a3a3;
+    background: #252525;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .edit-actions button.primary {
+    border-color: #e3e3e3;
+    color: #1c1c1c;
+    background: #e3e3e3;
+  }
 </style>
