@@ -4,7 +4,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -201,13 +201,18 @@
   {#if !editing}
     <div class="content">
       {#if item.kind === "image"}
-        <div class="image-preview" aria-label={item.preview}>
-          <div class="fake-sidebar"></div>
-          <div class="fake-editor">
-            <span></span><span></span><span></span><span></span>
-            <i></i>
+        {#if item.previewPath || item.resourcePath}
+          <div class="image-preview">
+            <img
+              src={convertFileSrc(item.previewPath || item.resourcePath!)}
+              alt={item.preview}
+            />
           </div>
-        </div>
+        {:else}
+          <div class="image-preview image-placeholder">
+            <AppIcon name="image" size={28} strokeWidth={1.5} />
+          </div>
+        {/if}
       {:else if item.kind === "file"}
         <div class="file-title">
           <span class="file-icon"><AppIcon name="file" size={15} /></span>
@@ -440,7 +445,7 @@
     margin-top: 4px;
     overflow: hidden;
     color: #8e8e8e;
-    font-size: 12px;
+    font-size: 11.5px;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -461,9 +466,7 @@
   }
 
   .image-preview {
-    display: flex;
     width: min(100%, 380px);
-    height: 82px;
     overflow: hidden;
     border: 1px solid #303237;
     border-radius: 6px;
@@ -471,49 +474,20 @@
     box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
   }
 
-  .fake-sidebar {
-    width: 30%;
-    border-right: 1px solid #292b31;
-    background:
-      linear-gradient(#292b31 0 0) 12px 13px / 60px 5px no-repeat,
-      repeating-linear-gradient(to bottom, transparent 0 12px, #24262b 12px 14px) 12px 28px / 78%
-        42px no-repeat,
-      #1e2024;
-  }
-
-  .fake-editor {
-    position: relative;
-    flex: 1;
-    padding: 13px 16px;
-  }
-
-  .fake-editor span {
+  .image-preview img {
     display: block;
-    width: 64%;
-    height: 4px;
-    margin-bottom: 8px;
-    border-radius: 3px;
-    background: #33363e;
+    max-height: 120px;
+    width: 100%;
+    object-fit: contain;
+    border-radius: 6px;
   }
 
-  .fake-editor span:nth-child(2) {
-    width: 84%;
-  }
-  .fake-editor span:nth-child(3) {
-    width: 48%;
-  }
-  .fake-editor span:nth-child(4) {
-    width: 70%;
-  }
-
-  .fake-editor i {
-    position: absolute;
-    right: 16px;
-    bottom: 13px;
-    left: 16px;
-    height: 3px;
-    border-radius: 3px;
-    background: linear-gradient(90deg, #705cff 0 72%, #2b2d33 72%);
+  .image-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 82px;
+    color: #555;
   }
 
   .meta-row {
@@ -547,7 +521,6 @@
     background: currentColor;
     transform: rotate(-12deg);
   }
-
   .source-red {
     color: #ff4655;
   }
@@ -583,7 +556,7 @@
     border-radius: 14px;
     color: #b2b2b2;
     background: #1e1e1e;
-    font-size: 11px;
+    font-size: 11.5px;
     cursor: pointer;
     transition:
       background 100ms ease,
@@ -643,7 +616,7 @@
     right: 11px;
     bottom: 15px;
     color: #747474;
-    font-size: 10px;
+    font-size: 11.5px;
     pointer-events: none;
   }
 
@@ -682,7 +655,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 5px;
     font: inherit;
-    font-size: 11px;
+    font-size: 11.5px;
     cursor: pointer;
     transition: background 100ms ease, border-color 100ms ease;
   }

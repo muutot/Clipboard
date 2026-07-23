@@ -23,6 +23,7 @@ export interface ClipboardItem {
   ocrText?: string;
   ocrStatus?: "pending" | "completed" | "none";
   contentHash?: string;
+  previewPath?: string | null;
   resourcePath?: string | null;
   textContent?: string | null;
 }

@@ -286,6 +286,9 @@
         createdAt: record.createdAtMs,
         favorite: false,
         fileName: record.kind === "file" ? record.resourcePath?.split(/[\\/]/).pop() || record.title : undefined,
+        previewPath: record.previewPath,
+        resourcePath: record.resourcePath,
+        textContent: record.textContent,
       };
       items = [newItem, ...items];
       selectedId = newItem.id;
@@ -625,18 +628,6 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <header class="title-bar" data-tauri-drag-region>
-    <span class="title-bar-text">Clipboard</span>
-    <div class="title-bar-actions">
-      <button type="button" class="title-bar-btn" onclick={() => (view = 'settings')} aria-label="Settings">⚙</button>
-      <button type="button" class="title-bar-btn title-bar-close" onclick={() => {
-        if ('__TAURI_INTERNALS__' in window) {
-          import('@tauri-apps/api/window').then(m => m.getCurrentWindow().close());
-        }
-      }} aria-label="Close">✕</button>
-    </div>
-  </header>
-
   {#if view === 'main'}
     <header class="search-header">
       <div class="search-box">
@@ -903,53 +894,9 @@
 {/if}
 
 <style>
-  .title-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 32px;
-    padding: 0 8px;
-    background: #0f0f0f;
-    border-bottom: 1px solid #222;
-    user-select: none;
-    -webkit-user-select: none;
-    flex-shrink: 0;
-  }
-  .title-bar-text {
-    color: #777;
-    font-size: 11px;
-    font-weight: 500;
-    margin-left: 6px;
-  }
-  .title-bar-actions {
-    display: flex;
-    gap: 4px;
-  }
-  .title-bar-btn {
-    width: 28px;
-    height: 22px;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: #888;
-    cursor: pointer;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .title-bar-btn:hover {
-    background: #2a2a2a;
-    color: #ddd;
-  }
-  .title-bar-close:hover {
-    background: #c42b1c;
-    color: #fff;
-  }
-
   .app-shell {
     display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     width: 100%;
     height: 100vh;
     min-height: 480px;
@@ -1154,7 +1101,7 @@
     color: #8b8b8b;
     background: transparent;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 11.5px;
     white-space: nowrap;
     transition: color 100ms ease, border-color 100ms ease, background 100ms ease;
   }
@@ -1260,7 +1207,7 @@
   .regex-error {
     padding: 4px 16px;
     color: #e85d5d;
-    font-size: 11px;
+    font-size: 11.5px;
     background: rgba(232, 93, 93, 0.06);
     border-bottom: 1px solid rgba(232, 93, 93, 0.12);
   }
@@ -1279,7 +1226,7 @@
     gap: 16px;
     padding: 11px 17px 7px;
     color: #777777;
-    font-size: 10.5px;
+    font-size: 11.5px;
   }
 
   .section-heading > div {
@@ -1300,7 +1247,7 @@
   .multi-count {
     color: #4aa8ff;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 11.5px;
   }
 
   .runtime-status {
@@ -1389,7 +1336,7 @@
     color: #8b8b8b;
     background: transparent;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 11.5px;
     transition: color 100ms ease;
   }
 
@@ -1410,7 +1357,7 @@
     color: #b2b2b2;
     background: #222;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 500;
     transition: background 100ms ease, color 100ms ease;
   }
@@ -1441,7 +1388,7 @@
     border-top: 1px solid #292929;
     color: #6f6f6f;
     background: #181818;
-    font-size: 10.5px;
+    font-size: 11.5px;
   }
 
   .status-bar > span:first-child {

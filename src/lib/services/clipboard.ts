@@ -113,6 +113,9 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     favorite: record.isFavorite,
     fileName:
       record.kind === "file" ? fileNameFromPath(record.resourcePath) || record.title : undefined,
+    previewPath: record.previewPath,
+    resourcePath: record.resourcePath,
+    textContent: record.textContent,
   };
 }
 
