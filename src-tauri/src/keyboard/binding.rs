@@ -139,7 +139,7 @@ impl fmt::Display for ShortcutParseError {
 
 impl Error for ShortcutParseError {}
 
-fn normalize_key(key: &str) -> String {
+pub(super) fn normalize_key(key: &str) -> String {
     if key.chars().count() == 1 {
         key.to_uppercase()
     } else {

@@ -37,6 +37,15 @@ impl Default for KeyboardConfig {
     }
 }
 
+impl KeyboardConfig {
+    pub fn from_shortcuts(shortcuts: BTreeMap<String, Vec<String>>) -> Self {
+        Self {
+            shortcuts,
+            extra: BTreeMap::new(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct KeyboardConfigStore {
     path: PathBuf,
