@@ -188,8 +188,11 @@
 <article
   class:selected
   class="clip-card"
+  tabindex="-1"
+  data-id={item.id}
   draggable="true"
   ondragstart={handleDragStart}
+  onfocus={() => onselect(item.id)}
 >
   <button
     class="card-select"
@@ -433,9 +436,16 @@
   }
 
   .clip-card:hover,
-  .clip-card.selected {
+  .clip-card.selected,
+  .clip-card:focus-within {
     border-color: rgba(255, 255, 255, 0.035);
     background: #242424;
+  }
+
+  .clip-card:focus-visible {
+    outline: 2px solid rgba(255, 91, 91, 0.85);
+    outline-offset: -2px;
+    border-radius: 10px;
   }
 
   .content {
@@ -603,6 +613,7 @@
 
   .clip-card:hover .actions,
   .clip-card.selected .actions,
+  .clip-card:focus-within .actions,
   .actions:focus-within {
     opacity: 1;
     transform: translateY(0);

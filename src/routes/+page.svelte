@@ -525,6 +525,11 @@
     const current = Math.max(0, selectedIndex);
     const next = Math.min(filteredItems.length - 1, Math.max(0, current + offset));
     selectedId = filteredItems[next].id;
+    const el = document.querySelector(`[data-id="${selectedId}"]`);
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ block: 'nearest' });
+      el.focus();
+    }
   }
 
   function clearHistory() {
