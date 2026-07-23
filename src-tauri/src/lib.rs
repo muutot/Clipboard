@@ -1039,13 +1039,13 @@ pub fn run() {
                                     continue;
                                 }
 
-                                let source_app_name = platform::windows_clipboard::get_foreground_app();
-                                let source_app = if source_app_name.is_empty() { None } else { Some(source_app_name.clone()) };
+                                let app_info = platform::windows_clipboard::get_foreground_app();
+                                let source_app = if app_info.name.is_empty() { None } else { Some(app_info.name.clone()) };
 
                                 // Extract and cache app icon
                                 let icon_dir = storage_path.join("icons");
-                                let icon_path = if !source_app_name.is_empty() {
-                                    platform::windows_clipboard::extract_app_icon(&icon_dir, &source_app_name)
+                                let icon_path = if !app_info.name.is_empty() {
+                                    platform::windows_clipboard::extract_app_icon(&icon_dir, &app_info.name, &app_info.exe_path)
                                 } else {
                                     None
                                 };

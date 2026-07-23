@@ -445,7 +445,13 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn get_foreground_app() -> String {
+pub struct ForegroundApp {
+    pub name: String,
+    pub exe_path: String,
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_foreground_app() -> ForegroundApp {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
@@ -468,7 +474,7 @@ pub fn get_foreground_app() -> String {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd == 0 {
-            return String::new();
+            return ForegroundApp { name: String::new(), exe_path: String::new() };
         }
 
         let mut title_buf = [0u16; 256];
@@ -483,12 +489,12 @@ pub fn get_foreground_app() -> String {
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, &mut pid);
         if pid == 0 {
-            return if title.is_empty() { String::new() } else { title };
+            return ForegroundApp { name: title.clone(), exe_path: String::new() };
         }
 
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process == 0 {
-            return if title.is_empty() { String::new() } else { title };
+            return ForegroundApp { name: title.clone(), exe_path: String::new() };
         }
 
         let mut path_buf = [0u16; 520];
@@ -503,22 +509,26 @@ pub fn get_foreground_app() -> String {
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
-            if !name.is_empty() {
-                return name;
-            }
+            return ForegroundApp { name, exe_path: full_path };
         }
 
-        title
+        ForegroundApp { name: title, exe_path: String::new() }
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn get_foreground_app() -> String {
-    String::new()
+pub fn get_foreground_app() -> ForegroundApp {
+    ForegroundApp { name: String::new(), exe_path: String::new() }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub struct ForegroundApp {
+    pub name: String,
+    pub exe_path: String,
 }
 
 #[cfg(target_os = "windows")]
-pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str) -> Option<String> {
+pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &str) -> Option<String> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStrExt;
     use std::path::PathBuf;
@@ -565,7 +575,8 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str) -> Option<St
 
     std::fs::create_dir_all(icon_dir).ok();
 
-    let wide_name: Vec<u16> = OsString::from(app_name)
+    let path_for_icon = if exe_path.is_empty() { app_name.to_string() } else { exe_path.to_string() };
+    let wide_name: Vec<u16> = OsString::from(&path_for_icon)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
@@ -690,7 +701,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn extract_app_icon(_icon_dir: &std::path::Path, _app_name: &str) -> Option<String> {
+pub fn extract_app_icon(_icon_dir: &std::path::Path, _app_name: &str, _exe_path: &str) -> Option<String> {
     None
 }
 
