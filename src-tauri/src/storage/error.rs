@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, path::PathBuf};
 
 #[derive(Debug)]
 pub enum StorageError {
@@ -7,6 +7,7 @@ pub enum StorageError {
     Sqlite(rusqlite::Error),
     ConnectionPoisoned,
     FavoriteMustBeRemoved(String),
+    DataDirectoryMustBeAbsolute(PathBuf),
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
     InvalidStoredValue { field: &'static str, value: i64 },
@@ -24,6 +25,13 @@ impl fmt::Display for StorageError {
                 write!(
                     formatter,
                     "favorite item must be unfavorited before deletion: {id}"
+                )
+            }
+            Self::DataDirectoryMustBeAbsolute(path) => {
+                write!(
+                    formatter,
+                    "data directory must be an absolute path: {}",
+                    path.display()
                 )
             }
             Self::InvalidClipboardKind(kind) => {
