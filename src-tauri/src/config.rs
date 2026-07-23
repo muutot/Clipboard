@@ -133,6 +133,31 @@ impl ConfigStore {
         self.save()
     }
 
+    pub fn ignored_applications(&self) -> &[String] {
+        &self.config.privacy.ignored_applications
+    }
+
+    pub fn set_ignored_applications(
+        &mut self,
+        applications: Vec<String>,
+    ) -> Result<Vec<String>, StorageError> {
+        let mut normalized = BTreeMap::new();
+        for application in applications {
+            let application = application.trim();
+            if application.is_empty() {
+                continue;
+            }
+            normalized
+                .entry(application.to_lowercase())
+                .or_insert_with(|| application.to_owned());
+        }
+
+        let applications = normalized.into_values().collect::<Vec<_>>();
+        self.config.privacy.ignored_applications = applications.clone();
+        self.save()?;
+        Ok(applications)
+    }
+
     fn save(&self) -> Result<(), StorageError> {
         fs::write(&self.path, serde_json::to_vec_pretty(&self.config)?)?;
         Ok(())
@@ -195,6 +220,30 @@ mod tests {
         assert_eq!(store.storage_directory(), Some(custom_data.as_path()));
         assert_eq!(saved["storage"]["copySizeLimitMb"], 128);
         assert_eq!(saved["window"]["useSystemTitlebar"], false);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn normalizes_and_persists_ignored_applications() {
+        let project = temporary_test_directory("ignored-apps");
+        let mut store = ConfigStore::load(&project).unwrap();
+
+        let saved = store
+            .set_ignored_applications(vec![
+                " KeePass ".to_owned(),
+                "keepass".to_owned(),
+                "Bitwarden".to_owned(),
+                "".to_owned(),
+            ])
+            .unwrap();
+        let persisted: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+
+        assert_eq!(saved, vec!["Bitwarden", "KeePass"]);
+        assert_eq!(store.ignored_applications(), saved);
+        assert_eq!(
+            persisted["privacy"]["ignoredApplications"],
+            json!(["Bitwarden", "KeePass"])
+        );
         fs::remove_dir_all(project).unwrap();
     }
 
