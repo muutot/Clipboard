@@ -453,14 +453,13 @@
   }
 
   function saveEdit(id: string, content: string) {
-    const firstLine = content.split('\n')[0].slice(0, 200);
-    const rest = content.length > firstLine.length ? content.slice(firstLine.length).trim() : '';
+    const fullTitle = content.slice(0, 200);
     items = items.map((item) =>
-      item.id === id ? { ...item, title: firstLine, textContent: content, preview: rest || item.preview } : item,
+      item.id === id ? { ...item, title: fullTitle, textContent: content, preview: content.length > 200 ? content.slice(200) : '' } : item,
     );
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, title: firstLine, textContent: content, preview: rest || item.preview } : item,
+        item.id === id ? { ...item, title: fullTitle, textContent: content, preview: content.length > 200 ? content.slice(200) : '' } : item,
       );
     }
     showToast(_t("toast.editSaved"), "success");

@@ -184,7 +184,7 @@
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={() => {
                   if (item) onsaveedit(item.id, editContent);
-                  item!.title = editContent.split('\n')[0];
+                  item!.title = editContent.slice(0, 200);
                   item!.textContent = editContent;
                   editing = false;
                 }}>
@@ -195,7 +195,7 @@
                 </button>
               </div>
             {:else}
-              <pre class="content-full">{item.title}</pre>
+              <pre class="content-full">{item.textContent || item.title}</pre>
             {/if}
           {/if}
         </div>
