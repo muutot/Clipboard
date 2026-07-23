@@ -237,7 +237,7 @@
               editContent = item.title.split("\n")[0];
               editing = true;
             }}>
-              <AppIcon name="edit" size={15} /> {_t("edit.edit")}
+              <AppIcon name="edit" size={15} /> {item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("edit.edit")}
             </button>
           {/if}
           <button type="button" onclick={() => onplainpaste(item.id)}>

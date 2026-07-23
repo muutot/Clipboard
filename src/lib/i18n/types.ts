@@ -202,6 +202,7 @@ export interface LocaleDefinition {
   };
   edit: {
     edit: string;
+    editFileName: string;
     save: string;
     cancel: string;
     placeholder: string;

@@ -209,6 +209,7 @@ const en: LocaleDefinition = {
   },
   edit: {
     edit: "Edit",
+    editFileName: "Edit Filename",
     save: "Save",
     cancel: "Cancel",
     placeholder: "Enter text content...",

@@ -27,6 +27,7 @@
   import { parseDateQuery } from "$lib/utils/date-query";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
+  import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) => resolvePath($messages, path, params);
 
@@ -304,9 +305,20 @@
       }
     });
 
+    function applySettings(s: typeof $generalSettings) {
+      const sizes: Record<string, string> = { small: "13px", normal: "14px", large: "16px" };
+      document.documentElement.style.fontSize = sizes[s.fontSize] || "14px";
+      if ('__TAURI_INTERNALS__' in window) {
+        getCurrentWindow().setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
+      }
+    }
+    applySettings($generalSettings);
+    const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
+
     return () => {
       window.clearInterval(clock);
       unlisten.then(fn => fn());
+      unsubSettings();
     };
   });
 
@@ -724,7 +736,7 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<main class="app-shell">
+<main class="app-shell" class:compact={$generalSettings.compactMode}>
   {#if view === 'main'}
     <header class="search-header">
       <div class="search-box">
@@ -1014,6 +1026,22 @@
     background: rgba(27, 27, 27, 0.985);
   }
 
+  .app-shell.compact .search-header {
+    padding: 10px 16px 5px;
+  }
+
+  .app-shell.compact .toolbar {
+    padding: 4px 16px;
+  }
+
+  .app-shell.compact .history-list {
+    padding: 0 7px 10px;
+  }
+
+  .app-shell.compact :global(.clip-card) {
+    padding: 8px 14px 7px;
+  }
+
   .search-header {
     display: flex;
     align-items: center;
@@ -1085,36 +1113,11 @@
     background: rgba(181, 122, 236, 0.08);
   }
 
-  .brand-mark {
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 2px;
+  .brand-icon {
     width: 28px;
     height: 28px;
-    padding: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.26);
     border-radius: 8px;
-    background: linear-gradient(145deg, #ff4b4b, #c61f29);
-    box-shadow: 0 4px 14px rgba(220, 35, 45, 0.18);
-  }
-
-  .brand-mark span {
-    width: 3px;
-    border-radius: 3px;
-    background: #ffffff;
-  }
-
-  .brand-mark span:nth-child(1) {
-    height: 9px;
-    opacity: 0.75;
-  }
-  .brand-mark span:nth-child(2) {
-    height: 15px;
-  }
-  .brand-mark span:nth-child(3) {
-    height: 12px;
-    opacity: 0.88;
+    object-fit: contain;
   }
 
   .toolbar {

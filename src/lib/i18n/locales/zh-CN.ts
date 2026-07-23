@@ -202,6 +202,7 @@ const zhCN: LocaleDefinition = {
   },
   edit: {
     edit: "编辑",
+    editFileName: "编辑文件名",
     save: "保存",
     cancel: "取消",
     placeholder: "输入文本内容...",
