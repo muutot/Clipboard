@@ -6,6 +6,12 @@
     getKeyboardConfig,
     type KeyboardConfig,
   } from "$lib/services/keyboard";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (
+    path: string,
+    params?: Record<string, string | number>,
+  ) => resolvePath($messages, path, params);
 
   interface Props {
     configPath?: string;
@@ -20,10 +26,10 @@
   let feedback = $state("");
   let feedbackSuccess = $state(false);
 
-  const actionLabels: Record<string, string> = {
-    toggleWindow: "唤起或隐藏主窗口",
-    quickPaste: "快速粘贴当前条目",
-  };
+  const actionLabels: Record<string, string> = $derived({
+    toggleWindow: _t("keyboard.toggleWindow"),
+    quickPaste: _t("keyboard.quickPaste"),
+  });
 
   onMount(() => {
     void loadConfig();
@@ -37,7 +43,7 @@
     try {
       config = await getKeyboardConfig();
       if (!config) {
-        feedback = "浏览器预览无法读取桌面端快捷键配置";
+        feedback = _t("keyboard.browserUnavailable");
         return;
       }
       drafts = Object.fromEntries(
@@ -67,7 +73,7 @@
       const normalized = await configureKeyboardShortcuts(action, shortcuts);
       drafts[action] = normalized.join(", ");
       if (config) config.shortcuts[action] = normalized;
-      feedback = `已保存 ${normalized.length} 组快捷键，运行时立即生效`;
+      feedback = _t("keyboard.saved", { count: normalized.length });
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save keyboard shortcuts", error);
@@ -84,23 +90,28 @@
 
 <header>
   <div>
-    <span class="eyebrow">设置 / 快捷键</span>
-    <h2>键盘与唤起</h2>
-    <p>每个操作可绑定多个组合；双击修饰键写作 Shift+Shift、Ctrl+Ctrl。</p>
+    <span class="eyebrow">{_t("keyboard.settings")}</span>
+    <h2>{_t("keyboard.title")}</h2>
+    <p>每个操作可绑定多个组合；双击修饰键写�?Shift+Shift、Ctrl+Ctrl�?/p>
   </div>
-  <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button>
+  <button
+    class="close-button"
+    type="button"
+    aria-label={_t("actions.close")}
+    onclick={onclose}>×</button
+  >
 </header>
 
 {#if loading}
-  <div class="settings-state">正在读取快捷键配置…</div>
+  <div class="settings-state">{_t("keyboard.readingConfig")}</div>
 {:else if config}
   <div class="settings-scroll">
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
         <div>
-          <strong>独立快捷键配置</strong>
-          <p>常规设置与快捷键分文件保存，切换数据目录时都不会迁移。</p>
+          <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
+          <p>{_t("keyboard.shortcutConfigDesc")}</p>
         </div>
       </div>
       <code class="path-value" title={configPath}>{configPath}</code>
@@ -111,18 +122,20 @@
         <div class="setting-heading split-heading">
           <div>
             <strong>{actionLabel(action)}</strong>
-            <p><code>{action}</code> · 多组绑定使用逗号分隔</p>
+            <p><code>{action}</code> · {_t("keyboard.actionCode")}</p>
           </div>
-          <span class="binding-count">{config.shortcuts[action].length} 组</span>
+          <span class="binding-count"
+            >{_t("keyboard.bindingsCount", { count: config.shortcuts[action].length })}</span
+          >
         </div>
-        <label for={`shortcut-${action}`}>快捷键组合</label>
+        <label for={`shortcut-${action}`}>{_t("keyboard.shortcutInput")}</label>
         <input
           id={`shortcut-${action}`}
           value={drafts[action] ?? ""}
           oninput={(event) => (drafts[action] = event.currentTarget.value)}
           autocomplete="off"
           spellcheck="false"
-          placeholder="例如 Alt+V, Shift+Shift"
+          placeholder={_t("keyboard.inputPlaceholder")}
         />
         <div class="setting-actions">
           <button
@@ -131,21 +144,21 @@
             disabled={savingAction !== ""}
             onclick={() => saveAction(action)}
           >
-            {savingAction === action ? "保存中…" : "保存绑定"}
+            {savingAction === action ? _t("keyboard.saving") : _t("keyboard.saveBinding")}
           </button>
         </div>
       </section>
     {/each}
 
     <section class="shortcut-help">
-      <strong>格式提示</strong>
-      <span>普通组合：Ctrl+Shift+V</span>
-      <span>双击修饰键：Shift+Shift</span>
-      <span>同一组合不能分配给两个操作</span>
+      <strong>{_t("keyboard.formatHint")}</strong>
+      <span>{_t("keyboard.chordFormat")}</span>
+      <span>{_t("keyboard.doubleFormat")}</span>
+      <span>{_t("keyboard.noDuplicate")}</span>
     </section>
   </div>
 {:else}
-  <div class="settings-state">{feedback || "桌面端快捷键服务不可用"}</div>
+  <div class="settings-state">{feedback || _t("keyboard.keyboardUnavailable")}</div>
 {/if}
 
 {#if feedback && config}

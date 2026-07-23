@@ -1,7 +1,11 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
+  import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
+
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
 
   interface Props {
     item: ClipboardItem;
@@ -20,7 +24,7 @@
   <button
     class="card-select"
     type="button"
-    aria-label={`选择剪贴板记录：${item.title}`}
+    aria-label={_t("card.selectItem", { title: item.title })}
     aria-pressed={selected}
     onclick={() => onselect(item.id)}
   ></button>
@@ -64,21 +68,21 @@
     <span>{item.sizeLabel}</span>
     {#if item.detailLabel}<span>{item.detailLabel}</span>{/if}
     <span>{formatRelativeTime(item.createdAt, now)}</span>
-    {#if item.kind === "file"}<span class="file-count">▣ {item.preview}</span>{/if}
+    {#if item.kind === "file"}<span class="file-count">�?{item.preview}</span>{/if}
   </div>
 
-  <div class="actions" aria-label="项目操作">
-    <button type="button" title="复制" aria-label="复制"><AppIcon name="copy" size={16} /></button>
+  <div class="actions" aria-label={_t("card.itemActions")}>
+    <button type="button" title={_t("card.copy")} aria-label={_t("card.copy")}><AppIcon name="copy" size={16} /></button>
     {#if item.kind === "image" || item.kind === "file"}
-      <button type="button" title="导出" aria-label="导出"
+      <button type="button" title={_t("card.export")} aria-label={_t("card.export")}
         ><AppIcon name="download" size={16} /></button
       >
     {/if}
     <button
       type="button"
       class:active={item.favorite}
-      title={item.favorite ? "取消收藏" : "收藏"}
-      aria-label={item.favorite ? "取消收藏" : "收藏"}
+      title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+      aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
       onclick={(event) => {
         event.stopPropagation();
         ontoggleFavorite(item.id);
@@ -87,8 +91,8 @@
     {#if !item.favorite}
       <button
         type="button"
-        title="删除"
-        aria-label="删除"
+        title={_t("card.delete")}
+        aria-label={_t("card.delete")}
         onclick={(event) => {
           event.stopPropagation();
           ondelete(item.id);

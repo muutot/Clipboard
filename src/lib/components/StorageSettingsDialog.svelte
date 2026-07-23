@@ -9,6 +9,12 @@
     type StorageDirectoryUpdate,
     type StorageStatus,
   } from "$lib/services/storage";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (
+    path: string,
+    params?: Record<string, string | number>,
+  ) => resolvePath($messages, path, params);
 
   interface Props {
     open: boolean;
@@ -42,12 +48,12 @@
       status = await getStorageStatus();
       dataDirectory = status?.dataDirectoryPath ?? "";
       if (!status) {
-        feedback = "浏览器预览无法读取桌面端存储配置";
+        feedback = _t("storage.systemMessage");
       }
     } catch (error) {
       console.error("Unable to load storage settings", error);
       status = null;
-      feedback = "读取存储配置失败";
+      feedback = _t("storage.writeFailed");
     } finally {
       loading = false;
     }
@@ -56,7 +62,7 @@
   async function saveCustomDirectory() {
     const requested = dataDirectory.trim();
     if (!requested) {
-      feedback = "请输入绝对路径，或使用“恢复默认”";
+      feedback = _t("storage.enterAbsolutePath");
       return;
     }
 
@@ -76,8 +82,8 @@
       pending = await configureStorageDirectory(directory);
       dataDirectory = pending.dataDirectoryPath;
       feedback = pending.restartRequired
-        ? "已写入 conf/conf.json，重启应用后使用新目录"
-        : "当前已经使用这个数据目录";
+        ? _t("storage.savedAndRestart")
+        : _t("storage.alreadyUsingDir");
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to configure storage directory", error);
@@ -95,7 +101,10 @@
     try {
       const summary = await rebuildSearchIndex();
       status = await getStorageStatus();
-      feedback = `索引重建完成：处理 ${summary.processedEvents} 个事件，写入 ${summary.upsertedDocuments} 条记录`;
+      feedback = _t("storage.rebuildComplete", {
+        events: summary.processedEvents,
+        docs: summary.upsertedDocuments,
+      });
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to rebuild search index", error);
@@ -149,7 +158,7 @@
             onclick={() => (activeSection = "storage")}
           >
             <AppIcon name="file" size={16} />
-            <span>存储</span>
+            <span>{_t("storage.storageTab")}</span>
           </button>
           <button
             class:active={activeSection === "keyboard"}
@@ -157,11 +166,11 @@
             onclick={() => (activeSection = "keyboard")}
           >
             <AppIcon name="keyboard" size={16} />
-            <span>快捷键</span>
+            <span>{_t("storage.keyboardTab")}</span>
           </button>
           <button type="button" disabled>
             <AppIcon name="settings" size={16} />
-            <span>常规</span>
+            <span>{_t("storage.generalTab")}</span>
           </button>
         </nav>
 
@@ -179,25 +188,28 @@
         {:else}
           <header>
             <div>
-              <span class="eyebrow">设置 / 存储</span>
-              <h2 id="settings-title">数据存储</h2>
-              <p>配置文件固定在项目目录；图片、文件和数据库可切换到其他数据目录。</p>
+              <span class="eyebrow">{_t("storage.settings")}</span>
+              <h2 id="settings-title">{_t("storage.dataStorage")}</h2>
+              <p>{_t("storage.configPath")}</p>
             </div>
-            <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}
-              >×</button
+            <button
+              class="close-button"
+              type="button"
+              aria-label={_t("actions.close")}
+              onclick={onclose}>×</button
             >
           </header>
 
           {#if loading}
-            <div class="settings-state">正在读取本地配置…</div>
+            <div class="settings-state">{_t("storage.readingConfig")}</div>
           {:else if status}
             <div class="settings-scroll">
               <section class="setting-card">
                 <div class="setting-heading">
                   <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                   <div>
-                    <strong>常规配置文件</strong>
-                    <p>除快捷键外的常规设置写入此 JSON；快捷键单独保存在 keyboard.json。</p>
+                    <strong>{_t("storage.configSectionTitle")}</strong>
+                    <p>{_t("storage.configSectionDesc")}</p>
                   </div>
                 </div>
                 <code class="path-value" title={status.configPath}>{status.configPath}</code>
@@ -208,27 +220,27 @@
                   <div class="heading-copy">
                     <span class="setting-icon"><AppIcon name="file" size={17} /></span>
                     <div>
-                      <strong>数据目录</strong>
-                      <p>所选目录下始终创建统一的 storage 子目录结构。</p>
+                      <strong>{_t("storage.dataDirectoryTitle")}</strong>
+                      <p>{_t("storage.dataDirectoryDesc")}</p>
                     </div>
                   </div>
                   <span class:custom={status.usesCustomDataDirectory} class="directory-badge">
-                    {status.usesCustomDataDirectory ? "自定义" : "默认"}
+                    {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
                   </span>
                 </div>
 
-                <label for="data-directory">目录绝对路径</label>
+                <label for="data-directory">{_t("storage.directoryPath")}</label>
                 <input
                   id="data-directory"
                   bind:value={dataDirectory}
                   autocomplete="off"
                   spellcheck="false"
-                  placeholder="例如 D:\ClipboardData"
+                  placeholder={_t("storage.placeholderPath")}
                 />
 
                 <div class="setting-actions">
                   <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
-                    >恢复默认</button
+                    >{_t("storage.restoreDefault")}</button
                   >
                   <button
                     class="primary"
@@ -236,7 +248,7 @@
                     disabled={saving}
                     onclick={saveCustomDirectory}
                   >
-                    {saving ? "保存中…" : "保存目录"}
+                    {saving ? _t("storage.saving") : _t("storage.saveDirectory")}
                   </button>
                 </div>
 
@@ -252,13 +264,13 @@
                 <div class="setting-heading">
                   <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
                   <div>
-                    <strong>目录结构</strong>
-                    <p>数据库索引作为数据库的派生数据放在同一目录内。</p>
+                    <strong>{_t("storage.directoryTreeTitle")}</strong>
+                    <p>{_t("storage.directoryTreeDesc")}</p>
                   </div>
                 </div>
                 <pre>storage/
 ├─ image/
-│  └─ previews/
+�? └─ previews/
 ├─ files/
 └─ database/
    ├─ clipboard.sqlite3
@@ -270,14 +282,14 @@
                   <div class="heading-copy">
                     <span class="setting-icon"><AppIcon name="search" size={17} /></span>
                     <div>
-                      <strong>全文搜索索引</strong>
-                      <p>中文 N-gram 索引是 SQLite 数据的派生结果，可随时安全重建。</p>
+                      <strong>{_t("storage.searchIndexTitle")}</strong>
+                      <p>{_t("storage.searchIndexDesc")}</p>
                     </div>
                   </div>
                   <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
                     {status.searchIndexRebuildRequired
-                      ? "待重建"
-                      : `v${status.searchIndexVersion} 就绪`}
+                      ? _t("storage.rebuildRequired")
+                      : _t("storage.ready", { version: status.searchIndexVersion })}
                   </span>
                 </div>
                 <code class="path-value" title={status.searchIndexPath}
@@ -285,20 +297,20 @@
                 >
                 <div class="setting-actions">
                   <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
-                    {rebuilding ? "重建中…" : "一键重建索引"}
+                    {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
                   </button>
                 </div>
               </section>
 
               <div class="storage-summary">
-                <span>数据库版本 {status.schemaVersion}</span>
-                <span>搜索索引 v{status.searchIndexVersion}</span>
-                <span>{status.itemCount} 条记录</span>
-                <span title={status.databasePath}>SQLite 已连接</span>
+                <span>{_t("storage.databaseVersion", { version: status.schemaVersion })}</span>
+                <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
+                <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
+                <span title={status.databasePath}>{_t("storage.sqliteConnected")}</span>
               </div>
             </div>
           {:else}
-            <div class="settings-state">{feedback || "桌面端存储服务不可用"}</div>
+            <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
           {/if}
 
           {#if feedback && status}

@@ -12,23 +12,27 @@
   } from "$lib/services/clipboard";
   import { getRuntimeInfo } from "$lib/services/runtime";
   import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
+  import type { IconName } from "$lib/components/AppIcon.svelte";
+  import { messages, resolvePath } from "$lib/i18n";
 
-  const filters = [
-    { id: "all", label: "全部", icon: "grid" },
-    { id: "text", label: "文本", icon: "text" },
-    { id: "link", label: "链接", icon: "link" },
-    { id: "image", label: "图片", icon: "image" },
-    { id: "file", label: "文件", icon: "file" },
-    { id: "favorite", label: "收藏", icon: "star" },
-  ] as const;
+  const _t = (path: string, params?: Record<string, string | number>) => resolvePath($messages, path, params);
+
+  const filters = $derived([
+    { id: "all" as ClipboardFilter, label: _t("filter.all"), icon: "grid" as IconName },
+    { id: "text" as ClipboardFilter, label: _t("filter.text"), icon: "text" as IconName },
+    { id: "link" as ClipboardFilter, label: _t("filter.link"), icon: "link" as IconName },
+    { id: "image" as ClipboardFilter, label: _t("filter.image"), icon: "image" as IconName },
+    { id: "file" as ClipboardFilter, label: _t("filter.file"), icon: "file" as IconName },
+    { id: "favorite" as ClipboardFilter, label: _t("filter.favorite"), icon: "star" as IconName },
+  ]);
 
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
   let selectedId = $state(demoClipboardItems[0]?.id ?? "");
   let currentTime = $state(Date.now());
-  let runtimeLabel = $state("浏览器预览");
-  let statusMessage = $state("使用 ↑ ↓ 选择，Enter 快速粘贴");
+  let runtimeLabel = $state(_t("app.browserPreview"));
+  let statusMessage = $state(_t("app.activateHint"));
   let settingsOpen = $state(false);
   let indexedItems = $state<ClipboardItem[] | null>(null);
   let indexedQuery = $state("");
@@ -59,7 +63,7 @@
   });
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
-  const resultSummary = $derived(searchPending ? "搜索中…" : `${filteredItems.length} 条记录`);
+  const resultSummary = $derived(searchPending ? _t("status.searching") : _t("status.recordCount", { count: filteredItems.length }));
 
   $effect(() => {
     const requestedQuery = query.trim();
@@ -79,12 +83,12 @@
           if (requestId !== searchRequestId || results === null) return;
           indexedItems = results;
           indexedQuery = requestedQuery;
-          statusMessage = `索引搜索命中 ${results.length} 条记录`;
+          statusMessage = _t("app.searchHitSummary", { count: results.length });
         })
         .catch((error) => {
           if (requestId !== searchRequestId) return;
           console.error("Unable to search clipboard history", error);
-          statusMessage = "索引搜索失败，已保留本地筛选结果";
+          statusMessage = _t("app.searchFailed");
         })
         .finally(() => {
           if (requestId === searchRequestId) searchPending = false;
@@ -107,7 +111,7 @@
 
     void getRuntimeInfo().then((runtime) => {
       if (runtime) {
-        runtimeLabel = `${runtime.operatingSystem} / ${runtime.architecture} · 核心已连接`;
+        runtimeLabel = `${runtime.operatingSystem} / ${runtime.architecture} · ${_t("app.coreConnected")}`;
       }
     });
 
@@ -118,12 +122,12 @@
         items = storedItems;
         selectedId = storedItems[0]?.id ?? "";
         statusMessage = storedItems.length
-          ? `已从本地数据库载入 ${storedItems.length} 条记录`
-          : "剪贴板历史为空，复制内容后会出现在这里";
+          ? _t("status.recordCount", { count: storedItems.length })
+          : _t("app.historyEmpty");
       })
       .catch((error) => {
         console.error("Unable to load clipboard history", error);
-        statusMessage = "读取本地剪贴板历史失败";
+        statusMessage = _t("app.databaseLoadFailed");
       });
 
     return () => window.clearInterval(clock);
@@ -163,7 +167,7 @@
             item.id === id ? { ...item, favorite: original.favorite } : item,
           );
         }
-        statusMessage = "收藏状态保存失败";
+        statusMessage = _t("app.favoriteFailed");
       });
   }
 
@@ -194,7 +198,7 @@
             ...indexedItems.slice(searchIndex),
           ];
         }
-        statusMessage = "删除记录失败";
+        statusMessage = _t("app.deleteFailed");
       });
   }
 
@@ -202,7 +206,7 @@
     const item = filteredItems.find((candidate) => candidate.id === selectedId);
     if (!item) return;
 
-    statusMessage = `已选择“${item.title.split("\n")[0]}” · 平台粘贴服务待接入`;
+    statusMessage = _t("app.activateItem", { title: item.title.split("\n")[0] });
   }
 
   function moveSelection(offset: number) {
@@ -256,16 +260,16 @@
       <AppIcon name="search" size={20} strokeWidth={1.65} />
       <input
         bind:value={query}
-        aria-label="搜索剪贴板历史"
+        aria-label={_t("app.searchPlaceholder")}
         autocomplete="off"
-        placeholder="输入关键字，唤醒沉睡记忆"
+        placeholder={_t("app.searchPlaceholder")}
         spellcheck="false"
       />
       {#if query}
         <button
           class="clear-button"
           type="button"
-          aria-label="清除搜索"
+          aria-label={_t("app.clearSearch")}
           onclick={() => (query = "")}>×</button
         >
       {/if}
@@ -279,7 +283,7 @@
   </header>
 
   <div class="toolbar">
-    <nav class="filters" aria-label="剪贴板类型筛选">
+    <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
           type="button"
@@ -298,31 +302,32 @@
     </nav>
 
     <div class="toolbar-actions">
-      <button type="button" aria-label="清理记录" title="清理记录"
+      <button type="button" aria-label={_t("toolbar.clearHistory")} title={_t("toolbar.clearHistory")}
         ><AppIcon name="trash" size={17} /></button
       >
-      <button type="button" aria-label="帮助" title="帮助"><AppIcon name="help" size={17} /></button
+      <button type="button" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
+        ><AppIcon name="help" size={17} /></button
       >
-      <button type="button" aria-label="固定窗口" title="固定窗口"
+      <button type="button" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}
         ><AppIcon name="pin" size={17} /></button
       >
-      <button type="button" aria-label="设置" title="设置" onclick={() => (settingsOpen = true)}
+      <button type="button" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={() => (settingsOpen = true)}
         ><AppIcon name="settings" size={17} /></button
       >
     </div>
   </div>
 
-  <section class="history-panel" aria-label="剪贴板历史">
+  <section class="history-panel" aria-label={_t("app.recentRecords")}>
     <div class="section-heading">
       <div>
-        <span class="eyebrow">最近记录</span>
+        <span class="eyebrow">{_t("app.recentRecords")}</span>
         <span class="result-count">{resultSummary}</span>
       </div>
       <span class="runtime-status"><i></i>{runtimeLabel}</span>
     </div>
 
     {#if filteredItems.length > 0}
-      <div class="history-list" aria-label="剪贴板项目">
+      <div class="history-list" aria-label="clipboard items">
         {#each filteredItems as item, index (item.id)}
           <ClipboardCard
             {item}
@@ -338,11 +343,11 @@
     {:else}
       <div class="empty-state">
         <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
-        <strong>{items.length === 0 ? "暂无剪贴板记录" : "没有找到相关记录"}</strong>
+        <strong>{items.length === 0 ? _t("app.noRecords") : _t("app.noMatchRecords")}</strong>
         <p>
           {items.length === 0
-            ? "复制文本、图片或文件后会出现在这里。"
-            : "尝试更换关键字或内容类型。"}
+            ? _t("app.noRecordsHint")
+            : _t("app.noMatchRecordsHint")}
         </p>
       </div>
     {/if}
@@ -350,7 +355,7 @@
 
   <footer class="status-bar">
     <span>{statusMessage}</span>
-    <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> 唤起</span>
+    <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
   </footer>
 </main>
 

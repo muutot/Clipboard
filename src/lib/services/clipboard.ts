@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard";
+import { getLocale, resolvePath } from "$lib/i18n";
+import zhCN from "$lib/i18n/locales/zh-CN";
+import en from "$lib/i18n/locales/en";
+
+const locales = { "zh-CN": zhCN, en };
 
 export async function loadClipboardHistory(
   limit = 100,
@@ -43,16 +48,27 @@ export async function persistDelete(id: string): Promise<boolean | null> {
 }
 
 function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
-  const sourceApp = record.sourceApp?.trim() || "未知来源";
+  const locale = getLocale();
+  const messages = locales[locale] ?? locales.en;
+  const unknownSource = resolvePath(messages, "card.selectItem");
+  const sourceApp = record.sourceApp?.trim()
+    || resolvePath(messages, "app.name");
+
+  const kindLabels: Record<string, { file: string; image: string; chars: string }> = {
+    "zh-CN": { file: "个文件", image: "图片记录", chars: "个字符" },
+    en: { file: " file(s)", image: "Image record", chars: " chars" },
+  };
+
+  const labels = kindLabels[locale] ?? kindLabels.en;
 
   return {
     id: record.id,
     kind: record.kind,
     title: record.title,
-    preview: buildPreview(record),
+    preview: buildPreview(record, labels),
     sourceApp,
-    sourceTone: sourceTone(sourceApp),
-    sizeLabel: formatSize(record),
+    sourceTone: sourceTone(sourceApp, locale),
+    sizeLabel: formatSize(record, labels),
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
     fileName:
@@ -60,19 +76,25 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   };
 }
 
-function buildPreview(record: PersistedClipboardItem): string {
+function buildPreview(
+  record: PersistedClipboardItem,
+  labels: { file: string; image: string; chars: string },
+): string {
   if (record.textContent && record.textContent !== record.title) {
     return record.textContent;
   }
 
-  if (record.kind === "file") return "1 个文件";
-  if (record.kind === "image") return "图片记录";
+  if (record.kind === "file") return `1 ${labels.file}`;
+  if (record.kind === "image") return labels.image;
   return "";
 }
 
-function formatSize(record: PersistedClipboardItem): string {
+function formatSize(
+  record: PersistedClipboardItem,
+  labels: { file: string; image: string; chars: string },
+): string {
   if (record.kind === "text" || record.kind === "link") {
-    return `${[...(record.textContent || record.title)].length} 个字符`;
+    return `${[...(record.textContent || record.title)].length} ${labels.chars}`;
   }
 
   const units = ["B", "KB", "MB", "GB"];
@@ -92,10 +114,11 @@ function fileNameFromPath(path: string | null): string | undefined {
   return path?.split(/[\\/]/).filter(Boolean).pop();
 }
 
-function sourceTone(sourceApp: string): ClipboardItem["sourceTone"] {
+function sourceTone(sourceApp: string, locale: string): ClipboardItem["sourceTone"] {
   const normalized = sourceApp.toLocaleLowerCase();
+  const unknownLabel = locale === "zh-CN" ? "未知来源" : "unknown";
 
-  if (normalized === "未知来源") return "neutral";
+  if (normalized === unknownLabel) return "neutral";
   if (normalized.includes("codex")) return "violet";
   if (normalized.includes("browser") || normalized.includes("chrome")) return "blue";
   return "red";

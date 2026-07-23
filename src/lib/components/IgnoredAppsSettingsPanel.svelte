@@ -6,6 +6,12 @@
     getApplicationFilterSettings,
     type ApplicationFilterSettings,
   } from "$lib/services/capture";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (
+    path: string,
+    params?: Record<string, string | number>,
+  ) => resolvePath($messages, path, params);
 
   interface Props {
     configPath?: string;
@@ -47,7 +53,7 @@
 
     try {
       settings = await getApplicationFilterSettings();
-      if (!settings) feedback = "浏览器预览无法读取桌面端应用列表";
+      if (!settings) feedback = _t("capture.browserUnavailable");
     } catch (error) {
       console.error("Unable to load application filters", error);
       feedback = error instanceof Error ? error.message : String(error);
@@ -91,7 +97,7 @@
     try {
       const ignoredApplications = await configureIgnoredApplications(applications);
       settings = { ...settings, ignoredApplications };
-      feedback = `已保存 ${ignoredApplications.length} 个忽略应用`;
+      feedback = _t("capture.saved", { count: ignoredApplications.length });
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save ignored applications", error);
@@ -116,31 +122,36 @@
 
 <header>
   <div>
-    <span class="eyebrow">设置 / 采集 / 应用过滤</span>
-    <h2>忽略的应用</h2>
-    <p>来自忽略应用的剪贴板内容不会进入历史、文件存储、OCR 队列或搜索索引。</p>
+    <span class="eyebrow">{_t("capture.settings")}</span>
+    <h2>{_t("capture.title")}</h2>
+    <p>{_t("capture.description")}</p>
   </div>
-  <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button>
+  <button
+    class="close-button"
+    type="button"
+    aria-label={_t("actions.close")}
+    onclick={onclose}>×</button
+  >
 </header>
 
 {#if loading}
-  <div class="settings-state">正在读取来源应用…</div>
+  <div class="settings-state">{_t("capture.readingApps")}</div>
 {:else if settings}
   <div class="settings-scroll">
     <section class="filter-board">
       <div class="application-column">
         <div class="column-heading">
-          <strong>可忽略的应用 <span>{availableApplications.length} 项</span></strong>
+          <strong>{_t("capture.availableApps")} <span>{availableApplications.length}</span></strong>
           <button
             type="button"
-            title="刷新来源应用"
-            aria-label="刷新来源应用"
-            onclick={loadSettings}>↻</button
+            title={_t("capture.refreshApps")}
+            aria-label={_t("capture.refreshApps")}
+            onclick={loadSettings}>�?/button
           >
         </div>
         <label class="search-field">
           <AppIcon name="search" size={15} />
-          <input bind:value={availableSearch} placeholder="搜索应用" />
+          <input bind:value={availableSearch} placeholder={_t("capture.searchApps")} />
         </label>
         <div class="application-list">
           {#each visibleAvailable as application}
@@ -154,7 +165,7 @@
               <strong>{application}</strong>
             </label>
           {:else}
-            <p class="empty-list">尚未发现可配置的来源应用</p>
+            <p class="empty-list">{_t("capture.noAppsFound")}</p>
           {/each}
         </div>
       </div>
@@ -162,32 +173,32 @@
       <div class="transfer-column">
         <button
           type="button"
-          aria-label="忽略选中的应用"
-          title="忽略选中的应用"
+          aria-label={_t("capture.ignoreSelected")}
+          title={_t("capture.ignoreSelected")}
           disabled={saving || selectedAvailable.length === 0}
-          onclick={ignoreSelected}>›</button
+          onclick={ignoreSelected}>�?/button
         >
       </div>
 
       <div class="application-column">
         <div class="column-heading">
-          <strong>已忽略的应用 <span>{settings.ignoredApplications.length} 项</span></strong>
-          <span class="plus-mark">＋</span>
+          <strong>{_t("capture.ignoredApps")} <span>{settings.ignoredApplications.length}</span></strong>
+          <span class="plus-mark">�?/span>
         </div>
         <label class="search-field">
           <AppIcon name="search" size={15} />
-          <input bind:value={ignoredSearch} placeholder="搜索应用" />
+          <input bind:value={ignoredSearch} placeholder={_t("capture.searchIgnored")} />
         </label>
         <div class="manual-add">
           <input
             bind:value={manualApplication}
-            placeholder="手动添加应用名称"
+            placeholder={_t("capture.addManual")}
             onkeydown={(event) => event.key === "Enter" && addManualApplication()}
           />
           <button
             type="button"
             disabled={saving || !manualApplication.trim()}
-            onclick={addManualApplication}>添加</button
+            onclick={addManualApplication}>{_t("capture.add")}</button
           >
         </div>
         <div class="application-list">
@@ -197,14 +208,14 @@
               <strong>{application}</strong>
               <button
                 type="button"
-                aria-label={`不再忽略 ${application}`}
-                title="移出忽略列表"
+                aria-label={_t("capture.removeIgnored", { app: application })}
+                title={_t("capture.moveOut")}
                 disabled={saving}
                 onclick={() => removeIgnored(application)}>×</button
               >
             </div>
           {:else}
-            <p class="empty-list">当前没有匹配的忽略应用</p>
+            <p class="empty-list">{_t("capture.noIgnoredMatch")}</p>
           {/each}
         </div>
       </div>
@@ -213,11 +224,11 @@
     <div class="settings-note">
       <span>配置文件</span>
       <code title={configPath}>{configPath}</code>
-      <span>· 应用来源识别接入后会自动补充左侧列表</span>
+      <span>· {_t("capture.configNote")}</span>
     </div>
   </div>
 {:else}
-  <div class="settings-state">{feedback || "桌面端应用过滤服务不可用"}</div>
+  <div class="settings-state">{feedback || _t("capture.captureUnavailable")}</div>
 {/if}
 
 {#if feedback && settings}
