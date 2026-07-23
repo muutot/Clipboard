@@ -5,12 +5,271 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigStore;
 use crate::keyboard::ShortcutBinding;
 
+// ---------------------------------------------------------------------------
+//  Platform-specific adapter modules
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "macos")]
+pub mod macos;
+#[cfg(not(target_os = "macos"))]
+#[path = "macos.rs"]
+pub mod macos;
+
+#[cfg(target_os = "linux")]
+pub mod linux_x11;
+#[cfg(not(target_os = "linux"))]
+#[path = "linux_x11.rs"]
+pub mod linux_x11;
+
+#[cfg(target_os = "linux")]
+pub mod linux_wayland;
+#[cfg(not(target_os = "linux"))]
+#[path = "linux_wayland.rs"]
+pub mod linux_wayland;
+
+// ---------------------------------------------------------------------------
+//  Runtime platform identifier
+// ---------------------------------------------------------------------------
+
+/// Identifies the platform the application is running on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Platform {
+    Windows,
+    MacOS,
+    LinuxX11,
+    LinuxWayland,
+    Unknown,
+}
+
+impl Platform {
+    /// Detects the current platform at runtime.
+    ///
+    /// On Linux this also checks `XDG_SESSION_TYPE` to distinguish between
+    /// X11 and Wayland sessions.
+    pub fn detect() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            return Platform::Windows;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            return Platform::MacOS;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let session = std::env::var("XDG_SESSION_TYPE")
+                .unwrap_or_default()
+                .to_lowercase();
+            if session == "wayland" {
+                return Platform::LinuxWayland;
+            }
+            return Platform::LinuxX11;
+        }
+        #[allow(unreachable_code)]
+        Platform::Unknown
+    }
+
+    /// Returns whether this platform uses the X11 windowing system.
+    pub fn is_x11(&self) -> bool {
+        matches!(self, Platform::LinuxX11)
+    }
+
+    /// Returns whether this platform uses the Wayland protocol.
+    pub fn is_wayland(&self) -> bool {
+        matches!(self, Platform::LinuxWayland)
+    }
+
+    /// Returns whether this is a macOS system.
+    pub fn is_macos(&self) -> bool {
+        matches!(self, Platform::MacOS)
+    }
+
+    /// Returns whether this is a Windows system.
+    pub fn is_windows(&self) -> bool {
+        matches!(self, Platform::Windows)
+    }
+}
+
+impl std::fmt::Display for Platform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Platform::Windows => f.write_str("Windows"),
+            Platform::MacOS => f.write_str("macOS"),
+            Platform::LinuxX11 => f.write_str("Linux (X11)"),
+            Platform::LinuxWayland => f.write_str("Linux (Wayland)"),
+            Platform::Unknown => f.write_str("Unknown"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  PlatformInfo (replaces RuntimeInfo with richer data)
+// ---------------------------------------------------------------------------
+
+/// Detailed information about the current platform environment.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformInfo {
+    pub platform: Platform,
+    pub app_version: &'static str,
+    pub operating_system: &'static str,
+    pub architecture: &'static str,
+    pub capabilities: PlatformCapabilities,
+    /// The compositor / desktop environment name (Linux only).
+    pub desktop_environment: Option<String>,
+    /// Whether the platform provides clipboard monitoring.
+    pub clipboard_monitoring_supported: bool,
+    /// Whether the platform supports global hotkey registration.
+    pub global_shortcut_supported: bool,
+    /// Whether the system tray is functional.
+    pub system_tray_supported: bool,
+    /// For Wayland: compositor-specific capability details.
+    #[cfg(target_os = "linux")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wayland_capabilities: Option<linux_wayland::WaylandCapabilities>,
+    /// Human-readable notes about platform-specific quirks.
+    pub platform_notes: Vec<String>,
+}
+
+/// Returns a comprehensive picture of the current platform's capabilities.
+pub fn get_platform_info() -> PlatformInfo {
+    let platform = Platform::detect();
+    let caps = current_capabilities();
+
+    let desktop_environment = std::env::var("XDG_CURRENT_DESKTOP").ok();
+
+    #[allow(unused_mut)]
+    let mut notes = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        if !macos::MacOSAccessibilityHelper::is_trusted() {
+            notes.push(
+                "Accessibility permission is not granted. Some features require it. \
+                 Open System Settings → Privacy & Security → Accessibility.".into(),
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if platform.is_wayland() {
+            let wayland_caps = linux_wayland::WaylandCapabilities::detect();
+            if wayland_caps.requires_config {
+                notes.extend(wayland_caps.notes.clone());
+            }
+        } else {
+            notes.push(
+                "X11 session detected. Clipboard monitoring should work on most \
+                 desktop environments.".into(),
+            );
+        }
+    }
+
+    PlatformInfo {
+        platform,
+        app_version: env!("CARGO_PKG_VERSION"),
+        operating_system: std::env::consts::OS,
+        architecture: std::env::consts::ARCH,
+        capabilities: caps,
+        desktop_environment,
+        clipboard_monitoring_supported: caps.clipboard_monitoring,
+        global_shortcut_supported: caps.global_shortcut,
+        system_tray_supported: caps.system_tray,
+
+        #[cfg(target_os = "linux")]
+        wayland_capabilities: if platform.is_wayland() {
+            Some(linux_wayland::WaylandCapabilities::detect())
+        } else {
+            None
+        },
+
+        platform_notes: notes,
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  PlatformAdapter trait
+// ---------------------------------------------------------------------------
+
+/// The `PlatformAdapter` trait abstracts clipboard monitoring, global
+/// keyboard shortcut registration, and system tray management across
+/// Windows, macOS, and Linux (X11 + Wayland).
+///
+/// # Implementing a new platform
+///
+/// 1. Create a new module under `src/platform/` (e.g. `windows_impl.rs`).
+/// 2. Implement `PlatformAdapter` for a platform-specific struct.
+/// 3. Register the adapter in `PlatformAdapter::detect()`.
+///
+/// # Example
+///
+/// ```ignore
+/// use crate::platform::{PlatformAdapter, Platform, PlatformCapabilities};
+///
+/// let adapter = PlatformAdapter::detect();
+/// println!("Running on: {:?}", adapter.platform());
+/// println!("Capabilities: {:?}", adapter.capabilities());
+/// ```
+pub trait PlatformAdapter: Send + Sync {
+    /// Returns which platform this adapter is for.
+    fn platform(&self) -> Platform;
+
+    /// Returns the capabilities available on this platform.
+    fn capabilities(&self) -> PlatformCapabilities;
+
+    /// Retrieves the current clipboard text content, if available.
+    fn get_clipboard_text(&self) -> Option<String>;
+
+    /// Returns the available clipboard format identifiers (MIME/UTI).
+    fn get_clipboard_types(&self) -> Vec<String>;
+
+    /// Registers global keyboard shortcuts for the given action.
+    ///
+    /// # Arguments
+    ///
+    /// * `action_id` - An opaque identifier passed to the callback when the
+    ///   shortcut fires.
+    /// * `shortcuts` - The key bindings to register.
+    fn register_global_shortcuts(
+        &mut self,
+        action_id: &str,
+        shortcuts: &[ShortcutBinding],
+    ) -> Result<(), String>;
+
+    /// Removes all previously registered global shortcuts.
+    fn unregister_all_shortcuts(&mut self) -> Result<(), String>;
+
+    /// Sets the ignored application list for clipboard monitoring.
+    fn set_ignored_applications(&mut self, apps: Vec<String>);
+
+    /// Returns the current list of ignored applications.
+    fn ignored_applications(&self) -> Vec<String>;
+
+    /// Returns whether clipboard monitoring is active.
+    fn is_monitoring(&self) -> bool;
+
+    /// Starts clipboard content monitoring.
+    fn start_monitoring(&mut self) -> Result<(), String>;
+
+    /// Stops clipboard content monitoring.
+    fn stop_monitoring(&mut self) -> Result<(), String>;
+
+    /// Returns platform-specific information as a human-readable string.
+    fn platform_info(&self) -> String;
+}
+
+// ---------------------------------------------------------------------------
+//  PlatformCapabilities (unchanged, kept for backward compatibility)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformCapabilities {
     pub clipboard_monitoring: bool,
@@ -19,6 +278,10 @@ pub struct PlatformCapabilities {
     pub system_tray: bool,
     pub requires_accessibility_permission: bool,
 }
+
+// ---------------------------------------------------------------------------
+//  RuntimeInfo (kept for backward compatibility)
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +349,10 @@ fn current_capabilities() -> PlatformCapabilities {
     }
 }
 
+// ---------------------------------------------------------------------------
+//  ClipboardMonitor (unchanged, kept for backward compatibility with lib.rs)
+// ---------------------------------------------------------------------------
+
 pub struct ClipboardMonitor {
     pub running: bool,
     pub last_check_at: i64,
@@ -117,6 +384,10 @@ impl ClipboardMonitor {
     }
 }
 
+// ---------------------------------------------------------------------------
+//  GlobalShortcutManager (unchanged)
+// ---------------------------------------------------------------------------
+
 pub struct GlobalShortcutManager {
     pub shortcuts: HashMap<String, Vec<ShortcutBinding>>,
 }
@@ -146,6 +417,10 @@ impl GlobalShortcutManager {
     }
 }
 
+// ---------------------------------------------------------------------------
+//  TrayMenuItem + SystemTray (unchanged)
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Clone)]
 pub enum TrayMenuItem {
     Item { label: String, action: String },
@@ -166,6 +441,10 @@ impl SystemTray {
     }
 }
 
+// ---------------------------------------------------------------------------
+//  WindowManager (unchanged)
+// ---------------------------------------------------------------------------
+
 pub struct WindowManager;
 
 impl WindowManager {
@@ -185,6 +464,10 @@ impl WindowManager {
         config.window_position()
     }
 }
+
+// ---------------------------------------------------------------------------
+//  SingleInstanceGuard (unchanged)
+// ---------------------------------------------------------------------------
 
 pub struct SingleInstanceGuard {
     lock_path: PathBuf,
@@ -224,11 +507,52 @@ impl Drop for SingleInstanceGuard {
     }
 }
 
+// ---------------------------------------------------------------------------
+//  Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use std::{fs, time::SystemTime};
 
     use super::*;
+
+    // ---- Platform detection tests ----
+
+    #[test]
+    fn platform_detect_returns_variant() {
+        let p = Platform::detect();
+        assert!(matches!(p, Platform::Windows | Platform::MacOS | Platform::LinuxX11 | Platform::LinuxWayland | Platform::Unknown));
+    }
+
+    #[test]
+    fn platform_display_is_human_readable() {
+        let p = Platform::detect();
+        let s = p.to_string();
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn platform_info_returns_valid_data() {
+        let info = get_platform_info();
+        assert_eq!(info.operating_system, std::env::consts::OS);
+        assert_eq!(info.architecture, std::env::consts::ARCH);
+        assert!(!info.app_version.is_empty());
+        assert_eq!(
+            info.clipboard_monitoring_supported,
+            info.capabilities.clipboard_monitoring
+        );
+        assert_eq!(
+            info.global_shortcut_supported,
+            info.capabilities.global_shortcut
+        );
+        assert_eq!(
+            info.system_tray_supported,
+            info.capabilities.system_tray
+        );
+    }
+
+    // ---- Existing tests (unchanged) ----
 
     #[test]
     fn clipboard_monitor_starts_and_stops() {
@@ -305,4 +629,3 @@ mod tests {
 
     use std::str::FromStr;
 }
-
