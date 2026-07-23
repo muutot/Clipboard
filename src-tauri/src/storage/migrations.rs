@@ -9,9 +9,10 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    sql: r#"
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        sql: r#"
         CREATE TABLE clipboard_items (
             id TEXT PRIMARY KEY NOT NULL,
             kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
@@ -101,7 +102,112 @@ const MIGRATIONS: &[Migration] = &[Migration {
             VALUES (NEW.item_id, 'upsert', NEW.created_at_ms);
         END;
     "#,
-}];
+    },
+    Migration {
+        version: 2,
+        sql: r#"
+        CREATE TABLE favorite_items (
+            id TEXT PRIMARY KEY NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
+            title TEXT NOT NULL,
+            text_content TEXT,
+            resource_path TEXT,
+            preview_path TEXT,
+            content_hash TEXT NOT NULL,
+            source_app TEXT,
+            size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+            created_at_ms INTEGER NOT NULL,
+            last_used_at_ms INTEGER,
+            favorited_at_ms INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            UNIQUE (kind, content_hash)
+        );
+
+        CREATE INDEX favorite_items_favorited_at_idx
+            ON favorite_items (favorited_at_ms DESC);
+
+        INSERT INTO favorite_items (
+            id,
+            kind,
+            title,
+            text_content,
+            resource_path,
+            preview_path,
+            content_hash,
+            source_app,
+            size_bytes,
+            created_at_ms,
+            last_used_at_ms,
+            favorited_at_ms,
+            metadata_json
+        )
+        SELECT
+            id,
+            kind,
+            title,
+            text_content,
+            resource_path,
+            preview_path,
+            content_hash,
+            source_app,
+            size_bytes,
+            created_at_ms,
+            last_used_at_ms,
+            created_at_ms,
+            metadata_json
+        FROM clipboard_items
+        WHERE is_favorite = 1;
+
+        UPDATE clipboard_items SET is_favorite = 0;
+
+        DROP TRIGGER clipboard_items_search_delete;
+
+        CREATE TRIGGER clipboard_items_search_delete
+        AFTER DELETE ON clipboard_items
+        BEGIN
+            INSERT INTO search_outbox (item_id, operation, created_at_ms)
+            VALUES (
+                OLD.id,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM favorite_items WHERE id = OLD.id)
+                    THEN 'upsert'
+                    ELSE 'delete'
+                END,
+                OLD.created_at_ms
+            );
+        END;
+
+        CREATE TRIGGER favorite_items_search_insert
+        AFTER INSERT ON favorite_items
+        BEGIN
+            INSERT INTO search_outbox (item_id, operation, created_at_ms)
+            VALUES (NEW.id, 'upsert', NEW.favorited_at_ms);
+        END;
+
+        CREATE TRIGGER favorite_items_search_update
+        AFTER UPDATE ON favorite_items
+        BEGIN
+            INSERT INTO search_outbox (item_id, operation, created_at_ms)
+            VALUES (NEW.id, 'upsert', NEW.favorited_at_ms);
+        END;
+
+        CREATE TRIGGER favorite_items_search_delete
+        AFTER DELETE ON favorite_items
+        BEGIN
+            INSERT INTO search_outbox (item_id, operation, created_at_ms)
+            VALUES (
+                OLD.id,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM clipboard_items WHERE id = OLD.id)
+                    THEN 'upsert'
+                    ELSE 'delete'
+                END,
+                OLD.favorited_at_ms
+            );
+        END;
+    "#,
+    },
+];
 
 pub(super) fn run(connection: &mut Connection) -> Result<(), StorageError> {
     connection.execute_batch(
