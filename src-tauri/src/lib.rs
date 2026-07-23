@@ -2,6 +2,7 @@ pub mod domain;
 pub mod ocr;
 pub mod platform;
 pub mod search;
+pub mod storage;
 
 use platform::RuntimeInfo;
 
