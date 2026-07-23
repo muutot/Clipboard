@@ -1,4 +1,6 @@
-use rusqlite::{params, OptionalExtension, Row};
+use std::collections::HashMap;
+
+use rusqlite::{params, params_from_iter, OptionalExtension, Row};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 
@@ -22,6 +24,7 @@ const ITEM_COLUMNS: &str = "
 pub trait ClipboardRepository {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError>;
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
+    fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
     fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
@@ -97,6 +100,38 @@ impl ClipboardRepository for Database {
                 .optional()?;
 
             stored_item.map(TryInto::try_into).transpose()
+        })
+    }
+
+    fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.with_connection(|connection| {
+            let ids = &ids[..ids.len().min(500)];
+            let placeholders = (1..=ids.len())
+                .map(|position| format!("?{position}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let sql = format!(
+                "SELECT {ITEM_COLUMNS}
+                 FROM clipboard_items
+                 WHERE id IN ({placeholders})"
+            );
+            let mut statement = connection.prepare(&sql)?;
+            let stored_items = statement
+                .query_map(params_from_iter(ids.iter()), StoredClipboardItem::from_row)?
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut items_by_id = stored_items
+                .into_iter()
+                .map(|item| {
+                    let item = ClipboardItem::try_from(item)?;
+                    Ok((item.id.clone(), item))
+                })
+                .collect::<Result<HashMap<_, _>, StorageError>>()?;
+
+            Ok(ids.iter().filter_map(|id| items_by_id.remove(id)).collect())
         })
     }
 
@@ -279,6 +314,33 @@ mod tests {
         assert_eq!(database.item_count().unwrap(), 2);
         assert_eq!(items[0].id, "newer");
         assert_eq!(items[1].id, "older");
+    }
+
+    #[test]
+    fn batch_lookup_preserves_requested_relevance_order() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("first", "hash-1", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("second", "hash-2", 200))
+            .unwrap();
+
+        let items = database
+            .get_items_by_ids(&[
+                "second".to_owned(),
+                "missing".to_owned(),
+                "first".to_owned(),
+            ])
+            .unwrap();
+
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["second", "first"]
+        );
     }
 
     #[test]
