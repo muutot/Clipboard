@@ -593,7 +593,7 @@
     position: absolute;
     z-index: 2;
     right: 34px;
-    bottom: 9px;
+    bottom: 14px;
     display: flex;
     gap: 2px;
     opacity: 0;
