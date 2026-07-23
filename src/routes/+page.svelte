@@ -8,6 +8,7 @@
     loadClipboardHistory,
     persistDelete,
     persistFavorite,
+    searchClipboardHistory,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo } from "$lib/services/runtime";
   import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
@@ -29,20 +30,29 @@
   let runtimeLabel = $state("浏览器预览");
   let statusMessage = $state("使用 ↑ ↓ 选择，Enter 快速粘贴");
   let settingsOpen = $state(false);
+  let indexedItems = $state<ClipboardItem[] | null>(null);
+  let indexedQuery = $state("");
+  let searchPending = $state(false);
+  let searchRequestId = 0;
 
   const filteredItems = $derived.by(() => {
-    const keywords = query
-      .trim()
+    const normalizedQuery = query.trim();
+    const keywords = normalizedQuery
       .toLocaleLowerCase()
       .split(/\s+/)
       .filter(Boolean);
+    const usesIndexedResults =
+      indexedItems !== null && indexedQuery === normalizedQuery;
+    const candidates = usesIndexedResults ? (indexedItems ?? []) : items;
 
-    return items.filter((item) => {
+    return candidates.filter((item) => {
       const matchesFilter =
         activeFilter === "all" ||
         (activeFilter === "favorite" ? item.favorite : item.kind === activeFilter);
 
-      if (!matchesFilter || keywords.length === 0) return matchesFilter;
+      if (!matchesFilter || keywords.length === 0 || usesIndexedResults) {
+        return matchesFilter;
+      }
 
       const searchableText = [item.title, item.preview, item.sourceApp]
         .join(" ")
@@ -53,7 +63,42 @@
   });
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
-  const resultSummary = $derived(`${filteredItems.length} 条记录`);
+  const resultSummary = $derived(
+    searchPending ? "搜索中…" : `${filteredItems.length} 条记录`,
+  );
+
+  $effect(() => {
+    const requestedQuery = query.trim();
+    const requestId = ++searchRequestId;
+    indexedItems = null;
+    indexedQuery = "";
+
+    if (!requestedQuery) {
+      searchPending = false;
+      return;
+    }
+
+    searchPending = true;
+    const timer = window.setTimeout(() => {
+      void searchClipboardHistory(requestedQuery, 500)
+        .then((results) => {
+          if (requestId !== searchRequestId || results === null) return;
+          indexedItems = results;
+          indexedQuery = requestedQuery;
+          statusMessage = `索引搜索命中 ${results.length} 条记录`;
+        })
+        .catch((error) => {
+          if (requestId !== searchRequestId) return;
+          console.error("Unable to search clipboard history", error);
+          statusMessage = "索引搜索失败，已保留本地筛选结果";
+        })
+        .finally(() => {
+          if (requestId === searchRequestId) searchPending = false;
+        });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  });
 
   $effect(() => {
     if (filteredItems.length > 0 && selectedIndex === -1) {
@@ -99,13 +144,18 @@
   }
 
   function toggleFavorite(id: string) {
-    const original = items.find((item) => item.id === id);
+    const original = filteredItems.find((item) => item.id === id);
     if (!original) return;
 
     const nextFavorite = !original.favorite;
     items = items.map((item) =>
       item.id === id ? { ...item, favorite: nextFavorite } : item,
     );
+    if (indexedItems) {
+      indexedItems = indexedItems.map((item) =>
+        item.id === id ? { ...item, favorite: nextFavorite } : item,
+      );
+    }
 
     void persistFavorite(id, nextFavorite)
       .then((updated) => {
@@ -116,16 +166,25 @@
         items = items.map((item) =>
           item.id === id ? { ...item, favorite: original.favorite } : item,
         );
+        if (indexedItems) {
+          indexedItems = indexedItems.map((item) =>
+            item.id === id ? { ...item, favorite: original.favorite } : item,
+          );
+        }
         statusMessage = "收藏状态保存失败";
       });
   }
 
   function deleteItem(id: string) {
-    const index = items.findIndex((item) => item.id === id);
-    if (index === -1) return;
+    const deleted = filteredItems.find((item) => item.id === id);
+    if (!deleted) return;
 
-    const deleted = items[index];
+    const historyIndex = items.findIndex((item) => item.id === id);
+    const searchIndex = indexedItems?.findIndex((item) => item.id === id) ?? -1;
     items = items.filter((item) => item.id !== id);
+    if (indexedItems) {
+      indexedItems = indexedItems.filter((item) => item.id !== id);
+    }
 
     void persistDelete(id)
       .then((removed) => {
@@ -133,7 +192,20 @@
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        items = [...items.slice(0, index), deleted, ...items.slice(index)];
+        if (historyIndex >= 0) {
+          items = [
+            ...items.slice(0, historyIndex),
+            deleted,
+            ...items.slice(historyIndex),
+          ];
+        }
+        if (indexedItems && searchIndex >= 0) {
+          indexedItems = [
+            ...indexedItems.slice(0, searchIndex),
+            deleted,
+            ...indexedItems.slice(searchIndex),
+          ];
+        }
         statusMessage = "删除记录失败";
       });
   }

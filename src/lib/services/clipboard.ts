@@ -19,6 +19,20 @@ export async function loadClipboardHistory(
   return records.map(toClipboardItem);
 }
 
+export async function searchClipboardHistory(
+  query: string,
+  limit = 100,
+): Promise<ClipboardItem[] | null> {
+  if (!isTauriRuntime()) return null;
+
+  const records = await invoke<PersistedClipboardItem[]>("search_clipboard_items", {
+    query,
+    limit,
+  });
+
+  return records.map(toClipboardItem);
+}
+
 export async function persistFavorite(
   id: string,
   isFavorite: boolean,
