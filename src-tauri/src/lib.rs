@@ -324,6 +324,84 @@ fn set_ocr_config(
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct HistoryConfigInfo {
+    max_items: u32,
+    retention_days: u32,
+    recycle_bin_days: u32,
+}
+
+#[tauri::command]
+fn get_history_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<HistoryConfigInfo, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    Ok(HistoryConfigInfo {
+        max_items: config.max_items(),
+        retention_days: config.retention_days(),
+        recycle_bin_days: config.recycle_bin_days(),
+    })
+}
+
+#[tauri::command]
+fn set_history_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    max_items: Option<u32>,
+    retention_days: Option<u32>,
+    recycle_bin_days: Option<u32>,
+) -> Result<(), String> {
+    let mut config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    if let Some(v) = max_items {
+        config.set_max_items(v).map_err(|e| e.to_string())?;
+    }
+    if let Some(v) = retention_days {
+        config.set_retention_days(v).map_err(|e| e.to_string())?;
+    }
+    if let Some(v) = recycle_bin_days {
+        config.set_recycle_bin_days(v).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageConfigInfo {
+    max_file_copy_size_bytes: u64,
+    max_screenshot_size_bytes: u64,
+}
+
+#[tauri::command]
+fn get_storage_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<StorageConfigInfo, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    Ok(StorageConfigInfo {
+        max_file_copy_size_bytes: config.max_file_copy_size_bytes(),
+        max_screenshot_size_bytes: config.max_screenshot_size_bytes(),
+    })
+}
+
+#[tauri::command]
+fn set_storage_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    max_file_copy_size_bytes: Option<u64>,
+) -> Result<(), String> {
+    let mut config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    if let Some(v) = max_file_copy_size_bytes {
+        config.set_max_file_copy_size_bytes(v).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct OcrConfigResponse {
     engine: String,
     tesseract_languages: String,
@@ -1333,6 +1411,10 @@ pub fn run() {
             get_ocr_status,
             get_ocr_config,
             set_ocr_config,
+            set_history_config,
+            get_history_config,
+            set_storage_config,
+            get_storage_config,
             detect_content_actions,
             soft_delete_clipboard_item,
             restore_clipboard_item,

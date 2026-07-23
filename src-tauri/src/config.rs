@@ -374,6 +374,26 @@ impl ConfigStore {
         self.config.history.recycle_bin_days
     }
 
+    pub fn set_retention_days(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.history.retention_days = value;
+        self.save()
+    }
+
+    pub fn set_max_items(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.history.max_items = value;
+        self.save()
+    }
+
+    pub fn set_recycle_bin_days(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.history.recycle_bin_days = value;
+        self.save()
+    }
+
+    pub fn set_max_file_copy_size_bytes(&mut self, value: u64) -> Result<(), StorageError> {
+        self.config.storage.max_file_copy_size_bytes = value;
+        self.save()
+    }
+
     fn save(&self) -> Result<(), StorageError> {
         fs::write(&self.path, serde_json::to_vec_pretty(&self.config)?)?;
         Ok(())

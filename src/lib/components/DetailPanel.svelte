@@ -112,8 +112,9 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape") {
+    if (item && event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       onclose();
     }
   }
@@ -177,15 +178,21 @@
             <MarkdownPreview content={item.title} />
           {:else}
             {#if editing}
-              <textarea class="edit-area" bind:value={editContent} rows={8}></textarea>
+              <div class="edit-area">
+                <textarea bind:value={editContent} rows={8}></textarea>
+              </div>
               <div class="edit-actions">
-                <button type="button" class="primary" onclick={() => {
+                <button type="button" class="edit-save" onclick={() => {
                   if (item) onsaveedit(item.id, editContent);
                   item!.title = editContent.split('\n')[0];
                   item!.textContent = editContent;
                   editing = false;
-                }}>{_t("edit.save")}</button>
-                <button type="button" onclick={() => (editing = false)}>{_t("edit.cancel")}</button>
+                }}>
+                  <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                </button>
+                <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
+                  <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
+                </button>
               </div>
             {:else}
               <pre class="content-full">{item.title}</pre>
@@ -805,11 +812,17 @@
     font: inherit;
     font-size: 11.5px;
     cursor: pointer;
+    transition: background 100ms ease, border-color 100ms ease;
   }
 
-  .edit-actions button.primary {
+  .edit-actions button.edit-save {
     border-color: #e3e3e3;
     color: #1c1c1c;
     background: #e3e3e3;
+  }
+
+  .edit-actions button.edit-cancel:hover {
+    color: #ccc;
+    background: #2e2e2e;
   }
 </style>

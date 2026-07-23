@@ -75,6 +75,28 @@
     }
 
     void loadPerformanceMetrics();
+    void loadHistoryConfig();
+  }
+
+  async function loadHistoryConfig() {
+    try {
+      const result = await invoke<{ maxItems: number; retentionDays: number; recycleBinDays: number }>("get_history_config");
+      if (result) {
+        maxItemCount = result.maxItems;
+        retentionPeriodDays = result.retentionDays;
+        recycleBinDays = result.recycleBinDays;
+      }
+    } catch (error) {
+      console.error("Unable to load history config", error);
+    }
+    try {
+      const result = await invoke<{ maxFileCopySizeBytes: number }>("get_storage_config");
+      if (result) {
+        maxFileCopySize = result.maxFileCopySizeBytes;
+      }
+    } catch (error) {
+      console.error("Unable to load storage config", error);
+    }
   }
 
   async function loadPerformanceMetrics() {
@@ -170,6 +192,26 @@
     } catch (error) {
       console.error("Unable to save OCR config", error);
       feedback = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  async function saveHistoryConfig() {
+    try {
+      await invoke("set_history_config", {
+        maxItems: maxItemCount,
+        retentionDays: retentionPeriodDays,
+        recycleBinDays: recycleBinDays,
+      });
+    } catch (error) {
+      console.error("Unable to save history config", error);
+    }
+  }
+
+  async function saveMaxFileCopySize() {
+    try {
+      await invoke("set_storage_config", { maxFileCopySizeBytes: maxFileCopySize });
+    } catch (error) {
+      console.error("Unable to save storage config", error);
     }
   }
 
@@ -427,6 +469,7 @@
                     bind:value={retentionPeriodDays}
                     min="1"
                     max="365"
+                    onchange={saveHistoryConfig}
                   />
                   <span class="number-suffix">{_t("captureSettings.days")}</span>
                 </div>
@@ -446,6 +489,7 @@
                     bind:value={maxItemCount}
                     min="100"
                     step="100"
+                    onchange={saveHistoryConfig}
                   />
                   <span class="number-suffix">条</span>
                 </div>
@@ -465,6 +509,7 @@
                     bind:value={recycleBinDays}
                     min="0"
                     max="365"
+                    onchange={saveHistoryConfig}
                   />
                   <span class="number-suffix">{_t("captureSettings.days")}</span>
                 </div>
@@ -484,6 +529,7 @@
                     bind:value={maxFileCopySize}
                     min="1024"
                     step="1048576"
+                    onchange={saveMaxFileCopySize}
                   />
                   <span class="number-suffix">{_t("captureSettings.bytes")}</span>
                 </div>
@@ -553,6 +599,8 @@
                   </div>
                 {/if}
               </section>
+
+              <p class="auto-save-note">修改即时生效，无需手动保存</p>
             </div>
           {:else}
             <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
@@ -1065,5 +1113,13 @@
     margin-top: 4px;
     color: #a7a7a7;
     font-size: 9px;
+  }
+
+  .auto-save-note {
+    margin: 0;
+    padding: 8px 0 0;
+    color: #666;
+    font-size: 10px;
+    text-align: center;
   }
 </style>

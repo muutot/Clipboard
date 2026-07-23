@@ -121,6 +121,7 @@
       oninput={handleTransparency}
       class="transparency-slider"
     />
+    <p class="placeholder-note">窗口透明度功能开发中</p>
   </section>
 
   <section class="setting-card toggle-card">
@@ -149,7 +150,7 @@
       <span class="setting-icon"><AppIcon name="pin" size={17} /></span>
       <div>
         <strong>{_t("general.alwaysOnTop")}</strong>
-        <p>窗口始终悬浮在其他应用上方</p>
+        <p>窗口始终悬浮在其他应用上方 · 开发中</p>
       </div>
     </div>
     <button
@@ -199,6 +200,8 @@
       <span>{_t("general.themeDark")}</span>
     </div>
   </section>
+
+  <p class="auto-save-note">修改即时生效，无需手动保存</p>
 </div>
 
 {#if feedback}
@@ -431,5 +434,20 @@
     border-color: #35513f;
     color: #9dc6aa;
     background: rgba(27, 45, 33, 0.96);
+  }
+
+  .auto-save-note {
+    margin: 0;
+    padding: 8px 0 0;
+    color: #666;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .placeholder-note {
+    margin: 6px 0 0;
+    color: #5a5a5a;
+    font-size: 9.5px;
+    font-style: italic;
   }
 </style>

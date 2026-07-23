@@ -529,9 +529,6 @@ pub struct ForegroundApp {
 
 #[cfg(target_os = "windows")]
 pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &str) -> Option<String> {
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStrExt;
-    use std::path::PathBuf;
 
     extern "system" {
         fn SHGetFileInfoW(
@@ -555,8 +552,6 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
 
     const SHGFI_ICON: u32 = 0x100;
     const SHGFI_SMALLICON: u32 = 0x1;
-    const SHGFI_USEFILEATTRIBUTES: u32 = 0x10;
-    const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
 
     let app_key = app_name.to_lowercase().chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
@@ -575,9 +570,13 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
 
     std::fs::create_dir_all(icon_dir).ok();
 
-    let path_for_icon = if exe_path.is_empty() { app_name.to_string() } else { exe_path.to_string() };
-    let wide_name: Vec<u16> = OsString::from(&path_for_icon)
-        .encode_wide()
+    let path_for_icon = if exe_path.is_empty() {
+        format!("{}.exe", app_name)
+    } else {
+        exe_path.to_string()
+    };
+    let wide_name: Vec<u16> = path_for_icon
+        .encode_utf16()
         .chain(std::iter::once(0))
         .collect();
 
@@ -592,10 +591,10 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
     unsafe {
         let result = SHGetFileInfoW(
             wide_name.as_ptr(),
-            FILE_ATTRIBUTE_NORMAL,
+            0,
             &mut info,
             std::mem::size_of::<SHFILEINFOW>() as u32,
-            SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES,
+            SHGFI_ICON | SHGFI_SMALLICON,
         );
 
         if result != 0 && info.hIcon != 0 {

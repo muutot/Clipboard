@@ -92,7 +92,7 @@
   <div>
     <span class="eyebrow">{_t("keyboard.settings")}</span>
     <h2>{_t("keyboard.title")}</h2>
-    <p>每个操作可绑定多个组合；双击修饰键写�?Shift+Shift、Ctrl+Ctrl�?/p>
+    <p>每个操作可绑定多个组合；双击修饰键写�?Shift+Shift、Ctrl+Ctrl�?/p>
   </div>
   <button
     class="close-button"
@@ -156,6 +156,22 @@
       <span>{_t("keyboard.doubleFormat")}</span>
       <span>{_t("keyboard.noDuplicate")}</span>
     </section>
+
+    <section class="shortcut-reference">
+      <strong>当前快捷键参考</strong>
+      <div class="ref-grid">
+        <div class="ref-row"><kbd>↑</kbd><kbd>↓</kbd><span>选择条目</span></div>
+        <div class="ref-row"><kbd>←</kbd><kbd>→</kbd><kbd>Tab</kbd><span>切换分类</span></div>
+        <div class="ref-row"><kbd>Enter</kbd><span>激活</span></div>
+        <div class="ref-row"><kbd>ESC</kbd><span>隐藏窗口</span></div>
+        <div class="ref-row"><kbd>Ctrl</kbd>+<kbd>C</kbd><kbd>D</kbd><kbd>F</kbd><kbd>E</kbd><span>复制 / 删除 / 收藏 / 编辑</span></div>
+        <div class="ref-row"><kbd>Ctrl</kbd>+<kbd>数字</kbd><span>快速复制第 N 条</span></div>
+        <div class="ref-row"><kbd>Alt</kbd>+<kbd>V</kbd><span>唤起窗口</span></div>
+        <div class="ref-row"><kbd>Backspace</kbd>×2<span>清空搜索</span></div>
+      </div>
+    </section>
+
+    <p class="auto-save-note">修改即时生效，无需手动保存</p>
   </div>
 {:else}
   <div class="settings-state">{feedback || _t("keyboard.keyboardUnavailable")}</div>
@@ -361,5 +377,60 @@
     border-color: #35513f;
     color: #9dc6aa;
     background: rgba(27, 45, 33, 0.96);
+  }
+
+  .auto-save-note {
+    margin: 0;
+    padding: 8px 0 0;
+    color: #666;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .shortcut-reference {
+    padding: 13px;
+    border: 1px solid #303030;
+    border-radius: 9px;
+    background: #1e1e1e;
+  }
+
+  .shortcut-reference strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #dedede;
+    font-size: 11.5px;
+    font-weight: 560;
+  }
+
+  .ref-grid {
+    display: grid;
+    gap: 6px;
+  }
+
+  .ref-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .ref-row kbd {
+    display: inline-block;
+    padding: 2px 7px;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    color: #c3c3c3;
+    background: #252525;
+    font:
+      10px "Cascadia Code",
+      Consolas,
+      monospace;
+    line-height: 1.5;
+  }
+
+  .ref-row span {
+    color: #888;
+    font-size: 10.5px;
+    margin-left: 6px;
   }
 </style>
