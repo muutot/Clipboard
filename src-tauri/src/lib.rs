@@ -1,4 +1,5 @@
 pub mod config;
+pub mod content;
 pub mod domain;
 pub mod keyboard;
 pub mod ocr;
@@ -9,6 +10,7 @@ pub mod storage;
 use std::{path::PathBuf, sync::Mutex};
 
 use config::ConfigStore;
+use content::ContentMarkers;
 use domain::{ClipboardItem, OcrResult};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use platform::RuntimeInfo;
@@ -248,6 +250,11 @@ fn rebuild_search_index(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn detect_content_markers(text: String) -> ContentMarkers {
+    content::detect_markers(&text)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -284,7 +291,8 @@ pub fn run() {
             get_keyboard_config,
             configure_keyboard_shortcuts,
             search_clipboard_items,
-            rebuild_search_index
+            rebuild_search_index,
+            detect_content_markers
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
