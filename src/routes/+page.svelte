@@ -769,11 +769,7 @@
       aria-pressed={regexMode}
       onclick={() => (regexMode = !regexMode)}
     ><AppIcon name="regex" size={15} strokeWidth={2} /></button>
-    <div class="brand-mark" title="Clipboard">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
+    <img class="brand-icon" src="/app-icon.png" alt="Clipboard" title="Clipboard" width="28" height="28" />
   </header>
 
   <div class="toolbar">

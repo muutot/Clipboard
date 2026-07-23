@@ -113,10 +113,18 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (item && event.key === "Escape") {
+      if (editing) { editing = false; return; }
       event.preventDefault();
       event.stopPropagation();
       onclose();
     }
+  }
+
+  function saveEdit() {
+    if (!item || !editContent.trim()) { editing = false; return; }
+    onsaveedit(item.id, editContent.trim());
+    item.title = editContent.trim();
+    editing = false;
   }
 </script>
 
@@ -131,7 +139,22 @@
       </button>
       <div class="header-info">
         <span class="header-kind">{getKindLabel(item.kind)}</span>
-        <span class="header-title">{item.title.split("\n")[0]}</span>
+        {#if editing}
+          <input
+            class="header-title-input"
+            bind:value={editContent}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') { saveEdit(); }
+              if (e.key === 'Escape') { editing = false; }
+            }}
+            onblur={() => saveEdit()}
+          />
+          <button class="header-save-btn" type="button" onclick={saveEdit}>
+            <AppIcon name="check" size={14} strokeWidth={2.5} />
+          </button>
+        {:else}
+          <span class="header-title">{item.title.split("\n")[0]}</span>
+        {/if}
       </div>
     </div>
 
@@ -204,9 +227,14 @@
           <button type="button" onclick={() => oncopy(item.id)}>
             <AppIcon name="copy" size={15} /> {_t("card.copy")}
           </button>
+          {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
+            <button type="button" onclick={() => invoke("open_external_url", { url: item.resourcePath!.replace(/[^\\/]+$/, '') })}>
+              <AppIcon name="file" size={15} /> 打开文件夹
+            </button>
+          {/if}
           {#if !editing}
             <button type="button" onclick={() => {
-              editContent = (item.kind === "text" || item.kind === "link") ? (item.textContent || item.title) : item.title;
+              editContent = item.title.split("\n")[0];
               editing = true;
             }}>
               <AppIcon name="edit" size={15} /> {_t("edit.edit")}
@@ -415,6 +443,37 @@
     font-weight: 540;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  .header-title-input {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 8px;
+    border: 1px solid #4aa8ff;
+    border-radius: 5px;
+    color: #e4e4e4;
+    background: #141414;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .header-save-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #a3a3a3;
+    background: #252525;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .header-save-btn:hover {
+    color: #51b96b;
+    border-color: #51b96b;
   }
 
   .detail-tabs {
