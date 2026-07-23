@@ -1,7 +1,7 @@
 use tantivy::schema::{
     Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, FAST, INDEXED, STORED, STRING,
 };
-use tantivy::tokenizer::NgramTokenizer;
+use tantivy::tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer};
 use tantivy::Index;
 
 pub const NGRAM_TOKENIZER_NAME: &str = "cjk_ngram_1_3";
@@ -41,9 +41,10 @@ pub fn build_schema() -> (Schema, SearchFields) {
 }
 
 pub fn register_tokenizers(index: &Index) -> tantivy::Result<()> {
-    index
-        .tokenizers()
-        .register(NGRAM_TOKENIZER_NAME, NgramTokenizer::all_ngrams(1, 3)?);
+    let analyzer = TextAnalyzer::builder(NgramTokenizer::all_ngrams(1, 3)?)
+        .filter(LowerCaser)
+        .build();
+    index.tokenizers().register(NGRAM_TOKENIZER_NAME, analyzer);
     Ok(())
 }
 
@@ -81,5 +82,21 @@ mod tests {
         assert!(tokens.contains(&"脸皮挺".to_owned()));
         assert!(tokens.contains(&"皮挺脏".to_owned()));
         assert!(!tokens.contains(&"脸皮挺脏".to_owned()));
+    }
+
+    #[test]
+    fn registered_analyzer_normalizes_latin_letter_case() {
+        let (schema, fields) = build_schema();
+        let index = Index::create_in_ram(schema);
+        register_tokenizers(&index).unwrap();
+        let mut analyzer = index.tokenizer_for_field(fields.content).unwrap();
+        let mut stream = analyzer.token_stream("AbC");
+        let mut tokens = Vec::new();
+        while stream.advance() {
+            tokens.push(stream.token().text.clone());
+        }
+
+        assert!(tokens.contains(&"abc".to_owned()));
+        assert!(!tokens.contains(&"AbC".to_owned()));
     }
 }

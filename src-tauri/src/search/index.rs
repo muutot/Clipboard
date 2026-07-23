@@ -301,4 +301,18 @@ mod tests {
         index.mark_rebuild_complete().unwrap();
         assert!(!index.requires_full_rebuild());
     }
+
+    #[test]
+    fn latin_search_is_case_insensitive() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[SearchIndexChange::Upsert(document(
+                "item",
+                "Tauri Clipboard",
+            ))])
+            .unwrap();
+
+        assert_eq!(index.search("TAURI", 20).unwrap().len(), 1);
+        assert_eq!(index.search("clipboard", 20).unwrap().len(), 1);
+    }
 }
