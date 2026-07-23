@@ -15,9 +15,11 @@ use tauri::Manager;
 struct StorageStatus {
     schema_version: i64,
     item_count: u64,
+    project_path: String,
+    storage_path: String,
     database_path: String,
     files_path: String,
-    screenshots_path: String,
+    image_path: String,
     search_index_path: String,
 }
 
@@ -36,9 +38,11 @@ fn get_storage_status(
             .schema_version()
             .map_err(|error| error.to_string())?,
         item_count: database.item_count().map_err(|error| error.to_string())?,
+        project_path: paths.project.display().to_string(),
+        storage_path: paths.storage.display().to_string(),
         database_path: paths.database.display().to_string(),
         files_path: paths.files.display().to_string(),
-        screenshots_path: paths.screenshots.display().to_string(),
+        image_path: paths.images.display().to_string(),
         search_index_path: paths.search_index.display().to_string(),
     })
 }
