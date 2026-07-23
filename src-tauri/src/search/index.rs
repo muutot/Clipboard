@@ -45,6 +45,12 @@ impl SearchIndex {
         Self::from_index(index, fields)
     }
 
+    #[cfg(test)]
+    pub(crate) fn in_memory() -> Result<Self, SearchError> {
+        let (schema, fields) = build_schema();
+        Self::from_index(Index::create_in_ram(schema), fields)
+    }
+
     pub fn apply_changes(&self, changes: &[SearchIndexChange]) -> Result<(), SearchError> {
         if changes.is_empty() {
             return Ok(());
@@ -166,10 +172,8 @@ fn stored_text<'document>(
 
 #[cfg(test)]
 mod tests {
-    use tantivy::Index;
-
     use super::{SearchIndex, SearchIndexChange};
-    use crate::{search::build_schema, storage::SearchDocument};
+    use crate::storage::SearchDocument;
 
     fn document(item_id: &str, content: &str) -> SearchDocument {
         SearchDocument {
@@ -182,8 +186,7 @@ mod tests {
     }
 
     fn in_memory_index() -> SearchIndex {
-        let (schema, fields) = build_schema();
-        SearchIndex::from_index(Index::create_in_ram(schema), fields).unwrap()
+        SearchIndex::in_memory().unwrap()
     }
 
     #[test]
