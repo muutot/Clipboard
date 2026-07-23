@@ -484,12 +484,25 @@
     // handled within ClipboardCard
   }
 
-  function saveEdit(id: string, content: string) {
+  async function saveEdit(id: string, content: string) {
     const item = items.find(i => i.id === id);
     const isText = item?.kind === "text" || item?.kind === "link";
+    const isMedia = item?.kind === "image" || item?.kind === "file";
     const newTitle = isText ? content.slice(0, 200) : content;
     const newTextContent = isText ? content : (item?.textContent ?? null);
     const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? '');
+
+    if (isMedia && content) {
+      try {
+        const updated = await invoke<ClipboardItem>("rename_item", { id, newName: content });
+        items = items.map((item) => item.id === id ? { ...item, title: updated.title, resourcePath: updated.resourcePath, previewPath: updated.previewPath } : item);
+        showToast(_t("toast.editSaved"), "success");
+        return;
+      } catch (e) {
+        showToast(String(e), "error");
+        return;
+      }
+    }
 
     items = items.map((item) =>
       item.id === id ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview } : item,

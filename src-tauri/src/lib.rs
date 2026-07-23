@@ -481,6 +481,37 @@ fn copy_file_to(src: String, dst: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn rename_item(
+    database: tauri::State<'_, Database>,
+    id: String,
+    new_name: String,
+) -> Result<ClipboardItem, String> {
+    let items = database.get_items_by_ids(&[id.clone()]).map_err(|e| e.to_string())?;
+    let item = items.into_iter().next().ok_or_else(|| "item not found".to_string())?;
+    if new_name.trim().is_empty() { return Err("name cannot be empty".to_string()); }
+    let mut updated = item.clone();
+    if item.kind == ClipboardKind::Image || item.kind == ClipboardKind::File {
+        if let Some(ref old_path) = item.resource_path {
+            let old = std::path::Path::new(old_path);
+            if old.exists() {
+                let ext = old.extension().unwrap_or_default().to_string_lossy();
+                let parent = old.parent().unwrap_or(std::path::Path::new("."));
+                let new_path = parent.join(format!("{}.{}", new_name.trim(), ext));
+                if new_path != old {
+                    if new_path.exists() { return Err(format!("file already exists: {}", new_path.display())); }
+                    std::fs::rename(old, &new_path).map_err(|e| format!("rename failed: {e}"))?;
+                }
+                updated.resource_path = Some(new_path.to_string_lossy().to_string());
+                updated.preview_path = Some(new_path.to_string_lossy().to_string());
+            }
+        }
+    }
+    updated.title = new_name.trim().to_string();
+    database.save_item(&updated).map_err(|e| e.to_string())?;
+    Ok(updated)
+}
+
+#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
 }
@@ -1468,6 +1499,7 @@ pub fn run() {
             check_ppocr_status,
             open_external_url,
             copy_file_to,
+            rename_item,
             set_history_config,
             get_history_config,
             set_storage_config,
