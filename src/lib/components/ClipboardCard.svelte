@@ -9,6 +9,17 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
+  function assetUrl(filePath: string | null | undefined): string | undefined {
+    if (!filePath) return undefined;
+    if (!isTauriRuntime()) return undefined;
+    try {
+      const normalized = filePath.replace(/\\/g, "/");
+      return convertFileSrc(normalized);
+    } catch {
+      return undefined;
+    }
+  }
+
   interface Props {
     item: ClipboardItem;
     index: number;
@@ -203,10 +214,14 @@
       {#if item.kind === "image"}
         {#if item.previewPath || item.resourcePath}
           <div class="image-preview">
-            <img
-              src={convertFileSrc(item.previewPath || item.resourcePath!)}
-              alt={item.preview}
-            />
+            {#if assetUrl(item.previewPath || item.resourcePath)}
+              <img
+                src={assetUrl(item.previewPath || item.resourcePath)}
+                alt={item.preview || ''}
+              />
+            {:else}
+              <AppIcon name="image" size={28} strokeWidth={1.5} />
+            {/if}
           </div>
         {:else}
           <div class="image-preview image-placeholder">

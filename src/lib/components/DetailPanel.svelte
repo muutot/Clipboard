@@ -5,9 +5,21 @@
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
+  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { isTauriRuntime } from "$lib/services/runtime";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
+
+  function assetUrl(filePath: string | null | undefined): string | undefined {
+    if (!filePath) return undefined;
+    if (!isTauriRuntime()) return undefined;
+    try {
+      return convertFileSrc(filePath.replace(/\\/g, "/"));
+    } catch {
+      return undefined;
+    }
+  }
 
   interface Props {
     item: ClipboardItem | null;
@@ -116,12 +128,19 @@
         <div class="preview-section">
           {#if item.kind === "image"}
             <div class="image-full-preview">
-              <div class="image-placeholder">
-                <AppIcon name="image" size={48} strokeWidth={1.5} />
-                {#if item.imageMeta}
-                  <span class="image-meta">{item.imageMeta.width} × {item.imageMeta.height}</span>
-                {/if}
-              </div>
+              {#if assetUrl(item.previewPath || item.resourcePath)}
+                <img
+                  src={assetUrl(item.previewPath || item.resourcePath)}
+                  alt={item.preview || item.title}
+                />
+              {:else}
+                <div class="image-placeholder">
+                  <AppIcon name="image" size={48} strokeWidth={1.5} />
+                  {#if item.imageMeta}
+                    <span class="image-meta">{item.imageMeta.width} × {item.imageMeta.height}</span>
+                  {/if}
+                </div>
+              {/if}
             </div>
           {:else if item.kind === "file"}
             <div class="file-full-preview">
@@ -420,11 +439,18 @@
     justify-content: center;
     gap: 12px;
     min-height: 180px;
-    padding: 32px;
+    padding: 16px;
     border: 1px solid #2e2e2e;
     border-radius: 8px;
     color: #888;
     background: #141414;
+  }
+
+  .image-full-preview img {
+    max-width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    border-radius: 4px;
   }
 
   .image-placeholder {
