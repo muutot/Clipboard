@@ -28,6 +28,7 @@ pub trait SearchRepository {
     fn read_search_outbox(&self, limit: u32) -> Result<Vec<SearchOutboxEvent>, StorageError>;
     fn get_search_document(&self, item_id: &str) -> Result<Option<SearchDocument>, StorageError>;
     fn acknowledge_search_outbox(&self, through_sequence: i64) -> Result<u64, StorageError>;
+    fn enqueue_full_search_rebuild(&self) -> Result<u64, StorageError>;
 }
 
 impl SearchRepository for Database {
@@ -97,6 +98,23 @@ impl SearchRepository for Database {
             )?;
 
             Ok(deleted as u64)
+        })
+    }
+
+    fn enqueue_full_search_rebuild(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            transaction.execute("DELETE FROM search_outbox", [])?;
+            let queued = transaction.execute(
+                "INSERT INTO search_outbox (item_id, operation, created_at_ms)
+                 SELECT id, 'upsert', created_at_ms
+                 FROM clipboard_items
+                 ORDER BY id",
+                [],
+            )?;
+            transaction.commit()?;
+
+            Ok(queued as u64)
         })
     }
 }
@@ -240,5 +258,24 @@ mod tests {
                 .operation,
             SearchOperation::Delete
         );
+    }
+
+    #[test]
+    fn full_rebuild_replaces_pending_events_with_current_items() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&item("keep", ClipboardKind::Text, "keep-hash"))
+            .unwrap();
+        database
+            .save_item(&item("delete", ClipboardKind::Text, "delete-hash"))
+            .unwrap();
+        database.delete_item("delete").unwrap();
+
+        assert_eq!(database.enqueue_full_search_rebuild().unwrap(), 1);
+        let events = database.read_search_outbox(100).unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].item_id, "keep");
+        assert_eq!(events[0].operation, SearchOperation::Upsert);
     }
 }
