@@ -26,6 +26,7 @@ pub trait ClipboardRepository {
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
+    fn list_source_applications(&self) -> Result<Vec<String>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
     fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
     fn item_count(&self) -> Result<u64, StorageError>;
@@ -152,6 +153,25 @@ impl ClipboardRepository for Database {
                 .collect::<Result<Vec<_>, _>>()?;
 
             stored_items.into_iter().map(TryInto::try_into).collect()
+        })
+    }
+
+    fn list_source_applications(&self) -> Result<Vec<String>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare_cached(
+                "SELECT MIN(TRIM(source_app))
+                 FROM clipboard_items
+                 WHERE source_app IS NOT NULL
+                   AND TRIM(source_app) <> ''
+                 GROUP BY LOWER(TRIM(source_app))
+                 ORDER BY LOWER(TRIM(source_app)) ASC",
+            )?;
+
+            let applications = statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(applications)
         })
     }
 
@@ -340,6 +360,25 @@ mod tests {
                 .map(|item| item.id.as_str())
                 .collect::<Vec<_>>(),
             vec!["second", "first"]
+        );
+    }
+
+    #[test]
+    fn lists_distinct_source_applications_for_filter_configuration() {
+        let database = Database::open_in_memory().unwrap();
+        let mut chatgpt = text_item("chatgpt", "hash-1", 100);
+        chatgpt.source_app = Some("ChatGPT".to_owned());
+        let mut browser = text_item("browser", "hash-2", 200);
+        browser.source_app = Some("Browser".to_owned());
+        let mut duplicate = text_item("duplicate", "hash-3", 300);
+        duplicate.source_app = Some("chatgpt".to_owned());
+        database.save_item(&chatgpt).unwrap();
+        database.save_item(&browser).unwrap();
+        database.save_item(&duplicate).unwrap();
+
+        assert_eq!(
+            database.list_source_applications().unwrap(),
+            vec!["Browser", "ChatGPT"]
         );
     }
 
