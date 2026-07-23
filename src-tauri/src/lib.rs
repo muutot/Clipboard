@@ -1041,9 +1041,11 @@ pub fn run() {
                                 };
 
                                 match database.save_item(&item) {
-                                    Ok(_saved_id) => {
+                                    Ok(saved_id) => {
                                         consecutive_errors = 0;
-                                        let _ = app_handle.emit("clipboard-item-added", &item);
+                                        let mut emit_item = item.clone();
+                                        emit_item.id = saved_id;
+                                        let _ = app_handle.emit("clipboard-item-added", &emit_item);
                                     }
                                     Err(e) => {
                                         eprintln!("[clipboard-worker] failed to save item: {e}");

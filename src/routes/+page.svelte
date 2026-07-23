@@ -284,14 +284,20 @@
           ? `${record.textContent?.length || record.title.length} chars`
           : `${record.sizeBytes} B`,
         createdAt: record.createdAtMs,
-        favorite: false,
+        favorite: record.isFavorite,
         fileName: record.kind === "file" ? record.resourcePath?.split(/[\\/]/).pop() || record.title : undefined,
         previewPath: record.previewPath,
         resourcePath: record.resourcePath,
         textContent: record.textContent,
       };
-      items = [newItem, ...items];
-      selectedId = newItem.id;
+      const existingIdx = items.findIndex(i => i.id === newItem.id);
+      if (existingIdx >= 0) {
+        items[existingIdx] = newItem;
+        items = items;
+      } else {
+        items = [newItem, ...items];
+        selectedId = newItem.id;
+      }
     });
 
     return () => {
