@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 /// A normalized, order-independent search query.
 ///
 /// Every term is required to match. The terms are sorted and deduplicated so
@@ -24,6 +26,27 @@ impl SearchQuery {
 
     pub fn terms(&self) -> &[String] {
         &self.terms
+    }
+
+    /// Returns the longest n-grams available in the 1-3 character index for
+    /// every required term. Keeping short terms intact preserves adjacency:
+    /// `脸 脏` becomes two clauses while `脸脏` remains one two-character clause.
+    pub fn required_ngrams(&self) -> Vec<String> {
+        let mut ngrams = BTreeSet::new();
+
+        for term in &self.terms {
+            let characters = term.chars().collect::<Vec<_>>();
+            if characters.len() <= 3 {
+                ngrams.insert(term.clone());
+                continue;
+            }
+
+            for window in characters.windows(3) {
+                ngrams.insert(window.iter().collect());
+            }
+        }
+
+        ngrams.into_iter().collect()
     }
 
     /// Baseline matcher used to verify query semantics before the Tantivy
@@ -61,5 +84,31 @@ mod tests {
         assert_eq!(query.terms().len(), 2);
         assert!(query.terms().contains(&"脸".to_string()));
         assert!(query.terms().contains(&"脏".to_string()));
+    }
+
+    #[test]
+    fn spaced_terms_remain_independent_required_ngrams() {
+        let ngrams = SearchQuery::parse("脸 脏").required_ngrams();
+
+        assert_eq!(ngrams.len(), 2);
+        assert!(ngrams.contains(&"脸".to_owned()));
+        assert!(ngrams.contains(&"脏".to_owned()));
+    }
+
+    #[test]
+    fn adjacent_short_terms_are_not_split_apart() {
+        assert_eq!(
+            SearchQuery::parse("脸脏").required_ngrams(),
+            vec!["脸脏".to_owned()]
+        );
+    }
+
+    #[test]
+    fn long_terms_use_overlapping_trigrams() {
+        let ngrams = SearchQuery::parse("脸皮挺脏").required_ngrams();
+
+        assert_eq!(ngrams.len(), 2);
+        assert!(ngrams.contains(&"脸皮挺".to_owned()));
+        assert!(ngrams.contains(&"皮挺脏".to_owned()));
     }
 }
