@@ -24,3 +24,7 @@ serde_json = "1"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 tantivy = "0.26.1"
 regex-lite = "0.1"
+base64 = "0.22"
+sha2 = "0.10"
+md-5 = "0.10"
+urlencoding = "2"

@@ -10,7 +10,7 @@ pub mod storage;
 use std::{path::PathBuf, sync::Mutex};
 
 use config::ConfigStore;
-use content::ContentMarkers;
+use content::{ContentMarkers, TextTransform, TransformOperation};
 use domain::{ClipboardItem, OcrResult};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use platform::RuntimeInfo;
@@ -255,6 +255,33 @@ fn detect_content_markers(text: String) -> ContentMarkers {
     content::detect_markers(&text)
 }
 
+#[tauri::command]
+fn transform_text(input: String, operation: String) -> Result<TextTransform, String> {
+    let op = match operation.as_str() {
+        "stripWhitespace" => TransformOperation::StripWhitespace,
+        "stripNewlines" => TransformOperation::StripNewlines,
+        "toUpperCase" => TransformOperation::ToUpperCase,
+        "toLowerCase" => TransformOperation::ToLowerCase,
+        "jsonFormat" => TransformOperation::JsonFormat,
+        "base64Encode" => TransformOperation::Base64Encode,
+        "base64Decode" => TransformOperation::Base64Decode,
+        "urlEncode" => TransformOperation::UrlEncode,
+        "urlDecode" => TransformOperation::UrlDecode,
+        "md5" => TransformOperation::Md5,
+        "sha256" => TransformOperation::Sha256,
+        "sha512" => TransformOperation::Sha512,
+        _ => return Err(format!("unknown transform operation: {}", operation)),
+    };
+
+    let result = op.apply(&input);
+
+    Ok(TextTransform {
+        input,
+        operation: op,
+        result,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -292,7 +319,8 @@ pub fn run() {
             configure_keyboard_shortcuts,
             search_clipboard_items,
             rebuild_search_index,
-            detect_content_markers
+            detect_content_markers,
+            transform_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
