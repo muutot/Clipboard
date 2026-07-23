@@ -353,7 +353,7 @@
     {/if}
   </section>
 
-  <footer class="status-bar">
+  <footer class="status-bar" role="status" aria-live="polite">
     <span>{statusMessage}</span>
     <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
   </footer>
