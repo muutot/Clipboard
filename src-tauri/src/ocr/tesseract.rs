@@ -71,7 +71,15 @@ impl OcrEngine for TesseractOcrEngine {
             .arg("-l")
             .arg(&self.languages)
             .arg("--psm")
-            .arg("3")
+            .arg("6")
+            .arg("--oem")
+            .arg("1")
+            .arg("-c")
+            .arg("tessedit_write_images=false")
+            .arg("-c")
+            .arg("load_system_dawg=false")
+            .arg("-c")
+            .arg("load_freq_dawg=false")
             .output()
             .map_err(|error| {
                 OcrEngineError::new(format!(

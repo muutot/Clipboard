@@ -41,7 +41,7 @@ impl OcrWorker {
         database: Arc<Database>,
         running: Arc<AtomicBool>,
     ) {
-        let poll_interval = Duration::from_secs(2);
+        let poll_interval = Duration::from_millis(500);
         let mut consecutive_errors = 0u32;
         let max_consecutive_errors = 5;
 
@@ -49,6 +49,21 @@ impl OcrWorker {
             let has_task = match database.claim_next_ocr() {
                 Ok(Some(input)) => {
                     consecutive_errors = 0;
+
+                    // Check if OCR result already exists for this image hash
+                    if let Ok(Some(existing)) = database.find_completed_ocr_by_hash(&input.image_hash) {
+                        let result = OcrResult::completed(
+                            &input.item_id,
+                            &existing.engine,
+                            &existing.model_version,
+                            existing.language.as_deref(),
+                            &existing.full_text,
+                            &existing.blocks,
+                            &input.image_hash,
+                        );
+                        let _ = database.save_ocr_result(&result);
+                        continue;
+                    }
 
                     let engine_name = engine.name().to_string();
                     let model_version = engine.model_version().to_string();

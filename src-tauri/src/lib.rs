@@ -1004,7 +1004,7 @@ pub fn run() {
 
                                 if image_data.is_some() {
                                     let img = image_data.unwrap();
-                                    let img_hash = content::hash::compute_content_hash("image", "", None);
+                                    let img_hash = content::hash::compute_media_hash("image", &img);
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()

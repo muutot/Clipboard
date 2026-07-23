@@ -17,6 +17,13 @@ pub fn compute_content_hash(kind: &str, text: &str, resource_path: Option<&str>)
     format!("{:x}", hasher.finalize())
 }
 
+pub fn compute_media_hash(kind: &str, data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(kind.as_bytes());
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DedupResult {
     pub is_duplicate: bool,
