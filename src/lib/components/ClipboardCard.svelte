@@ -595,7 +595,9 @@
   }
 
   .clip-card:hover .actions,
-  .clip-card.selected .actions {
+  .clip-card.selected .actions,
+  .clip-card:hover .shortcut,
+  .clip-card.selected .shortcut {
     opacity: 1;
   }
 
@@ -620,12 +622,13 @@
   }
 
   .shortcut {
-    margin-left: auto;
-    padding-left: 8px;
+    margin-left: 8px;
     color: #747474;
     font-size: 11.5px;
     pointer-events: none;
     flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 120ms ease;
   }
 
   .edit-area {
