@@ -617,6 +617,7 @@
     }
 
     if ((event.metaKey || event.ctrlKey) && event.key === "a") {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       event.preventDefault();
       selectedIds = new Set(filteredItems.map((i) => i.id));
       return;
@@ -624,6 +625,10 @@
 
     // Shortcuts for the focused item
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        // Let the input handle its own Ctrl+key combinations (Ctrl+A, Ctrl+C, etc.)
+        return;
+      }
       const item = filteredItems.find(i => i.id === selectedId);
       if (!item) return;
 
@@ -652,6 +657,7 @@
     }
 
     if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       const index = Number(event.key) - 1;
       const item = filteredItems[index];
       if (item) {
