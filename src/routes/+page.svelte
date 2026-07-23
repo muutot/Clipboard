@@ -53,7 +53,7 @@
   let currentTime = $state(Date.now());
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
-  let settingsOpen = $state(false);
+  let view = $state<'main' | 'settings'>('main');
   let indexedItems = $state<ClipboardItem[] | null>(null);
   let indexedQuery = $state("");
   let searchPending = $state(false);
@@ -264,6 +264,10 @@
 
     void listSourceApplications().then((apps) => {
       if (apps) sourceApps = apps;
+    });
+
+    void invoke("start_clipboard_monitoring").catch((error) => {
+      console.error("Failed to start clipboard monitoring:", error);
     });
 
     return () => window.clearInterval(clock);
@@ -597,15 +601,28 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <header class="search-header">
-    <div class="search-box">
-      <AppIcon name="search" size={20} strokeWidth={1.65} />
-      <input
-        bind:value={query}
-        aria-label={_t("app.searchPlaceholder")}
-        autocomplete="off"
-        placeholder={_t("app.searchPlaceholder")}
-        spellcheck="false"
+  <header class="title-bar" data-tauri-drag-region>
+    <span class="title-bar-text">Clipboard</span>
+    <div class="title-bar-actions">
+      <button type="button" class="title-bar-btn" onclick={() => (view = 'settings')} aria-label="Settings">⚙</button>
+      <button type="button" class="title-bar-btn title-bar-close" onclick={() => {
+        if ('__TAURI_INTERNALS__' in window) {
+          import('@tauri-apps/api/window').then(m => m.getCurrentWindow().close());
+        }
+      }} aria-label="Close">✕</button>
+    </div>
+  </header>
+
+  {#if view === 'main'}
+    <header class="search-header">
+      <div class="search-box">
+        <AppIcon name="search" size={20} strokeWidth={1.65} />
+        <input
+          bind:value={query}
+          aria-label={_t("app.searchPlaceholder")}
+          autocomplete="off"
+          placeholder={_t("app.searchPlaceholder")}
+          spellcheck="false"
       />
       {#if query}
         <button
@@ -725,7 +742,7 @@
         ><AppIcon name="help" size={17} /></button>
       <button type="button" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}
         ><AppIcon name="pin" size={17} /></button>
-      <button type="button" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={() => (settingsOpen = true)}
+      <button type="button" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={() => (view = 'settings')}
         ><AppIcon name="settings" size={17} /></button>
     </div>
   </div>
@@ -838,20 +855,74 @@
     <span>{statusMessage}</span>
     <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
   </footer>
+  {:else}
+    <div class="settings-page">
+      <button type="button" class="settings-back-btn" onclick={() => (view = 'main')} aria-label="Back">
+        <AppIcon name="chevron-left" size={18} strokeWidth={2} />
+        <span>Back</span>
+      </button>
+      <StorageSettingsDialog open={true} onclose={() => (view = 'main')} />
+    </div>
+  {/if}
 </main>
 
 <Toast />
-<StorageSettingsDialog open={settingsOpen} onclose={() => (settingsOpen = false)} />
-<DetailPanel
-  item={detailItem}
-  onclose={closeDetail}
-  oncopy={copyItem}
-  onedit={startEdit}
-  onplainpaste={plainPaste}
-  onformatpaste={formatPaste}
-/>
+{#if view === 'main'}
+  <DetailPanel
+    item={detailItem}
+    onclose={closeDetail}
+    oncopy={copyItem}
+    onedit={startEdit}
+    onplainpaste={plainPaste}
+    onformatpaste={formatPaste}
+  />
+{/if}
 
 <style>
+  .title-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 32px;
+    padding: 0 8px;
+    background: #0f0f0f;
+    border-bottom: 1px solid #222;
+    user-select: none;
+    -webkit-user-select: none;
+    flex-shrink: 0;
+  }
+  .title-bar-text {
+    color: #777;
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: 6px;
+  }
+  .title-bar-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .title-bar-btn {
+    width: 28px;
+    height: 22px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .title-bar-btn:hover {
+    background: #2a2a2a;
+    color: #ddd;
+  }
+  .title-bar-close:hover {
+    background: #c42b1c;
+    color: #fff;
+  }
+
   .app-shell {
     display: grid;
     grid-template-rows: auto auto auto minmax(0, 1fr) auto;
@@ -1374,6 +1445,34 @@
 
   .shortcut-hints b {
     font-weight: 400;
+  }
+
+  .settings-page {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .settings-back-btn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 51;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #b2b2b2;
+    background: #1e1e1e;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .settings-back-btn:hover {
+    color: #e8e8e8;
+    background: #2c2c2c;
   }
 
   @media (max-width: 660px) {
