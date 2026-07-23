@@ -746,6 +746,7 @@
       {#if query}
         <button
           class="clear-button"
+          tabindex="-1"
           type="button"
           aria-label={_t("app.clearSearch")}
           onclick={() => (query = "")}>×</button>
@@ -753,6 +754,7 @@
     </div>
     <button
       type="button"
+      tabindex="-1"
       class="regex-toggle"
       class:regex-active={regexMode}
       title={_t("search.regex")}
@@ -772,6 +774,7 @@
       {#each filters as filter}
         <button
           type="button"
+          tabindex="-1"
           class:active={activeFilter === filter.id}
           aria-pressed={activeFilter === filter.id}
           onclick={() => setFilter(filter.id)}
@@ -789,7 +792,7 @@
     <div class="filter-dropdowns">
       <!-- Date filter -->
       <div class="dropdown-wrapper">
-        <button type="button" class="filter-dropdown-btn" onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
+        <button type="button" tabindex="-1" class="filter-dropdown-btn" onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
           aria-label={_t("dateFilter.all")} title={_t("dateFilter.all")}
         >
           <AppIcon name="calendar" size={15} />
@@ -813,7 +816,7 @@
 
       <!-- Source app filter -->
       <div class="dropdown-wrapper">
-        <button type="button" class="filter-dropdown-btn" onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
+        <button type="button" tabindex="-1" class="filter-dropdown-btn" onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
           aria-label={_t("sourceApp.all")} title={_t("sourceApp.all")}
         >
           <AppIcon name="filter" size={15} />
@@ -854,14 +857,14 @@
     </div>
 
     <div class="toolbar-actions">
-      <button type="button" aria-label={_t("toolbar.clearHistory")} title={_t("toolbar.clearHistory")}
+      <button type="button" tabindex="-1" aria-label={_t("toolbar.clearHistory")} title={_t("toolbar.clearHistory")}
         onclick={clearHistory}
         ><AppIcon name="trash" size={17} /></button>
-      <button type="button" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
+      <button type="button" tabindex="-1" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
         ><AppIcon name="help" size={17} /></button>
-      <button type="button" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}
+      <button type="button" tabindex="-1" aria-label={_t("toolbar.pinWindow")} title={_t("toolbar.pinWindow")}
         ><AppIcon name="pin" size={17} /></button>
-      <button type="button" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={() => (view = 'settings')}
+      <button type="button" tabindex="-1" aria-label={_t("toolbar.settings")} title={_t("toolbar.settings")} onclick={() => (view = 'settings')}
         ><AppIcon name="settings" size={17} /></button>
     </div>
   </div>
