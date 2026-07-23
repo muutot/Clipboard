@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -585,7 +586,9 @@
         view = 'main';
         return;
       }
-      import('@tauri-apps/api/window').then(m => m.getCurrentWindow().hide());
+      if ('__TAURI_INTERNALS__' in window) {
+        getCurrentWindow().hide();
+      }
       return;
     }
 
