@@ -47,7 +47,7 @@
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
-  let ocrEngine = $state("windows-ocr");
+  let ocrEngine = $state("ppocr");
 
   $effect(() => {
     if (open) {
@@ -466,20 +466,17 @@
               <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
               <div>
                     <strong>OCR 引擎</strong>
-                    <p>Windows OCR 系统自带无需安装。PP-OCRv6 需 Python + paddleocr，Tesseract 需手动安装。</p>
+                    <p>PP-OCRv6 需安装 Python + paddleocr，Tesseract 需手动安装。</p>
               </div>
             </div>
             <div class="setting-actions" style="flex-wrap: wrap;">
               <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
                 PP-OCRv6 (ONNX)
               </button>
-              <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
-                Tesseract
-              </button>
-              <button class:primary={ocrEngine === 'windows-ocr'} type="button" onclick={() => saveOcrEngine('windows-ocr')}>
-                Windows OCR
-              </button>
-            </div>
+                  <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
+                    Tesseract
+                  </button>
+                </div>
           </section>
 
           <section class="setting-card">

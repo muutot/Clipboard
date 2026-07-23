@@ -2,12 +2,10 @@ mod engine;
 mod noop;
 mod ppocr;
 mod tesseract;
-mod windows_ocr;
 mod worker;
 
 pub use engine::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
 pub use noop::NoopOcrEngine;
 pub use ppocr::PpOcrEngine;
 pub use tesseract::TesseractOcrEngine;
-pub use windows_ocr::WindowsOcrEngine;
 pub use worker::OcrWorker;

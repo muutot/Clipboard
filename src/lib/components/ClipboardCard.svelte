@@ -475,7 +475,7 @@
     overflow: hidden;
     font-size: 13px;
     line-height: 1.55;
-    white-space: pre-line;
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
 

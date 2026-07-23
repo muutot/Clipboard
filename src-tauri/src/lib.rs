@@ -19,7 +19,7 @@ use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, T
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
-use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, TesseractOcrEngine, WindowsOcrEngine};
+use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
@@ -328,8 +328,7 @@ fn get_ocr_status(
         completed_tasks: completed,
         tesseract_available: TesseractOcrEngine::is_available(),
         ppocr_available: PpOcrEngine::is_available(),
-        windows_ocr_available: WindowsOcrEngine::is_available(),
-        has_engine: WindowsOcrEngine::is_available() || TesseractOcrEngine::is_available() || PpOcrEngine::is_available(),
+        has_engine: TesseractOcrEngine::is_available() || PpOcrEngine::is_available(),
         engine,
     })
 }
@@ -341,7 +340,6 @@ struct OcrStatusInfo {
     completed_tasks: u64,
     tesseract_available: bool,
     ppocr_available: bool,
-    windows_ocr_available: bool,
     has_engine: bool,
     engine: String,
 }
@@ -366,10 +364,8 @@ fn set_ocr_config(
 }
 
 #[tauri::command]
-fn install_ppocr(
-    paths: tauri::State<'_, StoragePaths>,
-) -> Result<String, String> {
-    PpOcrEngine::install(&paths).map_err(|e| e.to_string())?;
+fn install_ppocr() -> Result<String, String> {
+    PpOcrEngine::install().map_err(|e| e.to_string())?;
     Ok("PP-OCRv6 installed successfully".to_string())
 }
 
@@ -377,7 +373,6 @@ fn install_ppocr(
 fn check_ppocr_status() -> Result<PpOcrStatus, String> {
     Ok(PpOcrStatus {
         available: PpOcrEngine::is_available(),
-        windows_ocr_available: WindowsOcrEngine::is_available(),
         tesseract_available: TesseractOcrEngine::is_available(),
     })
 }
@@ -386,7 +381,6 @@ fn check_ppocr_status() -> Result<PpOcrStatus, String> {
 #[serde(rename_all = "camelCase")]
 struct PpOcrStatus {
     available: bool,
-    windows_ocr_available: bool,
     tesseract_available: bool,
 }
 
@@ -1162,13 +1156,20 @@ pub fn run() {
             performance_tracker.record_startup(startup_metrics.clone());
 
             let ocr_engine_name = config.ocr_engine().to_string();
-            // Use Windows OCR (built-in, no install needed) or Tesseract
-            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
+            // Try auto-install PP-OCR models if configured
+            if ocr_engine_name == "ppocr" && !PpOcrEngine::is_available() {
+                eprintln!("[ocr] PP-OCR configured, downloading models...");
+                if let Err(e) = PpOcrEngine::install() {
+                    eprintln!("[ocr] PP-OCR install failed: {}", e);
+                }
+            }
+
+            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && PpOcrEngine::is_available() {
+                Arc::new(PpOcrEngine::new())
+            } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
-            } else if WindowsOcrEngine::is_available() {
-                eprintln!("[ocr] using Windows built-in OCR");
-                Arc::new(WindowsOcrEngine::new())
             } else if TesseractOcrEngine::is_available() {
+                eprintln!("[ocr] falling back to Tesseract");
                 Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
             } else {
                 eprintln!("[ocr] no OCR engine available");
