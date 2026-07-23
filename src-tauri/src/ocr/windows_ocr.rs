@@ -13,13 +13,7 @@ impl WindowsOcrEngine {
     
     pub fn is_available() -> bool {
         #[cfg(target_os = "windows")]
-        {
-            Command::new("powershell")
-                .args(["-NoProfile", "-Command", "try { Add-Type -AssemblyName System.Runtime.WindowsRuntime; $null = [Windows.Media.Ocr.OcrEngine]; $true } catch { $false }"])
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "True")
-                .unwrap_or(false)
-        }
+        { true } // Windows 10+ always has OCR built-in
         #[cfg(not(target_os = "windows"))]
         { false }
     }

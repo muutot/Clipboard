@@ -1073,8 +1073,17 @@ pub fn run() {
                 eprintln!("[ocr] {} not found, falling back to Tesseract", ocr_engine_name);
                 Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
             } else {
-                eprintln!("[ocr] no OCR engine available");
-                Arc::new(NoopOcrEngine)
+                // Try to auto-install PP-OCR models
+                eprintln!("[ocr] no engine available, downloading PP-OCRv6 models...");
+                if let Err(e) = PpOcrEngine::install(&paths) {
+                    eprintln!("[ocr] PP-OCR install failed: {}", e);
+                }
+                if PpOcrEngine::is_available() {
+                    Arc::new(PpOcrEngine::new())
+                } else {
+                    eprintln!("[ocr] no OCR engine available");
+                    Arc::new(NoopOcrEngine)
+                }
             };
             let ocr_database = Database::open(&paths.database)?;
             let ocr_worker = OcrWorker::start(ocr_engine, Arc::new(ocr_database));

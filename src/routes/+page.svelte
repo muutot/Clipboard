@@ -578,12 +578,14 @@
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === "ArrowDown") {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       event.preventDefault();
       moveSelection(1);
       return;
     }
 
     if (event.key === "ArrowUp") {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       event.preventDefault();
       moveSelection(-1);
       return;
