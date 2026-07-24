@@ -262,7 +262,7 @@ pub fn read_clipboard_text() -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn read_clipboard_image() -> Option<Vec<u8>> {
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
@@ -315,7 +315,7 @@ pub fn read_clipboard_image() -> Option<Vec<u8>> {
 }
 
 #[cfg(target_os = "windows")]
-fn dib_to_png(dib: &[u8]) -> Option<Vec<u8>> {
+fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     if dib.len() < 40 {
         return None;
     }
@@ -349,11 +349,11 @@ fn dib_to_png(dib: &[u8]) -> Option<Vec<u8>> {
 
     let mut png_bytes = std::io::Cursor::new(Vec::new());
     img.write_to(&mut png_bytes, image::ImageFormat::Png).ok()?;
-    Some(png_bytes.into_inner())
+    Some((png_bytes.into_inner(), width as u32, height_abs))
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn read_clipboard_image() -> Option<Vec<u8>> {
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     None
 }
 

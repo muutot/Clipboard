@@ -1404,7 +1404,7 @@ pub fn run() {
                                 let file_paths = platform::windows_clipboard::read_clipboard_file_paths();
 
                                 if image_data.is_some() {
-                                    let img = image_data.unwrap();
+                                    let (img, img_width, img_height) = image_data.unwrap();
                                     let img_hash = content::hash::compute_media_hash("image", &img);
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
@@ -1418,6 +1418,11 @@ pub fn run() {
                                         Ok(_) => eprintln!("[clipboard-worker] saved image: {}", img_path.display()),
                                         Err(e) => eprintln!("[clipboard-worker] failed to write image {}: {}", img_path.display(), e),
                                     }
+
+                                    let metadata = serde_json::json!({
+                                        "width": img_width,
+                                        "height": img_height,
+                                    });
 
                                     let item = ClipboardItem {
                                         id: format!("img_{}", img_hash),
@@ -1433,7 +1438,7 @@ pub fn run() {
                                         created_at_ms: now_ms,
                                         last_used_at_ms: None,
                                         is_favorite: false,
-                                        metadata_json: None,
+                                        metadata_json: Some(metadata.to_string()),
                                     };
 
                                     match database.save_item(&item) {
@@ -1513,7 +1518,27 @@ pub fn run() {
                                             .map(|n| n.to_string_lossy().to_string())
                                             .unwrap_or_default();
 
+                                        let file_sizes: Vec<(String, u64)> = file_paths
+                                            .iter()
+                                            .map(|p| {
+                                                let name = std::path::Path::new(p)
+                                                    .file_name()
+                                                    .map(|n| n.to_string_lossy().to_string())
+                                                    .unwrap_or_default();
+                                                let size = std::fs::metadata(p)
+                                                    .map(|m| m.len())
+                                                    .unwrap_or(0);
+                                                (name, size)
+                                            })
+                                            .collect();
+
                                         let paths_json = serde_json::to_string(&file_paths).unwrap_or_default();
+
+                                        let metadata = serde_json::json!({
+                                            "files": file_sizes.iter().map(|(name, size)| {
+                                                serde_json::json!({ "name": name, "size": size })
+                                            }).collect::<Vec<_>>(),
+                                        });
 
                                         let item = ClipboardItem {
                                             id: format!("files_{}", group_hash),
@@ -1529,7 +1554,7 @@ pub fn run() {
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
-                                            metadata_json: None,
+                                            metadata_json: Some(metadata.to_string()),
                                         };
 
                                         match database.save_item(&item) {
