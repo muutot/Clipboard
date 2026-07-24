@@ -10,10 +10,21 @@ export interface VirtualListResult {
 }
 
 const TEXT_HEIGHT = 88;
+const TALL_TEXT_HEIGHT = 88;
 const IMAGE_HEIGHT = 150;
 
-export function itemHeight(kind: string): number {
-  return kind === "image" ? IMAGE_HEIGHT : TEXT_HEIGHT;
+export function itemHeight(
+  kind: string,
+  hasPreview?: boolean,
+  compact?: boolean,
+  compactText?: number,
+  compactTallText?: number,
+  compactImage?: number,
+  cardGap?: number,
+): number {
+  if (kind === "image") return compact ? (compactImage ?? 130) : IMAGE_HEIGHT;
+  if (compact) return (hasPreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
+  return hasPreview ? TALL_TEXT_HEIGHT : TEXT_HEIGHT;
 }
 
 export function createVirtualList(
