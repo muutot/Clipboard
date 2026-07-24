@@ -31,15 +31,18 @@
     oncopy: (id: string) => void;
     onedit: (id: string) => void;
     onsaveedit: (id: string, content: string) => void;
+    onrenametitle: (id: string, title: string) => void;
     onplainpaste: (id: string) => void;
     oncopyfilename: (id: string) => void;
   }
 
-  let { item, onclose, oncopy, onedit, onsaveedit, onplainpaste, oncopyfilename }: Props = $props();
+  let { item, onclose, oncopy, onedit, onsaveedit, onrenametitle, onplainpaste, oncopyfilename }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
+  let editingTitle = $state(false);
   let editContent = $state("");
+  let editTitleContent = $state("");
   let imageFullscreen = $state(false);
   let zoom = $state(1);
   let panX = $state(0);
@@ -180,7 +183,7 @@
 
   $effect(() => {
     if (item?.kind !== "image" || !isTauriRuntime()) return;
-    
+
     const poll = () => {
       if (item.ocrStatus === "completed") return;
       invoke<{ fullText: string; status: string }>("get_clipboard_item_ocr", { id: item.id })
@@ -192,7 +195,7 @@
         })
         .catch(() => { item.ocrStatus = "none"; });
     };
-    
+
     poll();
     const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
@@ -273,6 +276,12 @@
     onsaveedit(item.id, editContent.trim());
     editing = false;
   }
+
+  function saveTitleEdit() {
+    if (!item || !editTitleContent.trim()) { editingTitle = false; return; }
+    onrenametitle(item.id, editTitleContent.trim());
+    editingTitle = false;
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -286,23 +295,23 @@
       </button>
       <div class="header-info">
         <span class="header-kind">{getKindLabel(item.kind)}</span>
-        {#if editing}
+        {#if editingTitle}
           <div class="header-edit-row">
             <input
               class="header-title-input"
-              bind:value={editContent}
+              bind:value={editTitleContent}
               onkeydown={(e) => {
-                if (e.key === 'Enter') { saveEdit(); }
-                if (e.key === 'Escape') { editing = false; }
+                if (e.key === 'Enter') { saveTitleEdit(); }
+                if (e.key === 'Escape') { editingTitle = false; }
               }}
-              onblur={() => saveEdit()}
+              onblur={() => saveTitleEdit()}
             />
-            <button class="header-save-btn" type="button" onclick={saveEdit}>
+            <button class="header-save-btn" type="button" onclick={saveTitleEdit}>
               <AppIcon name="check" size={14} strokeWidth={2.5} />
             </button>
           </div>
         {:else}
-          <span class="header-title">
+          <span class="header-title" ondblclick={() => { editTitleContent = item.title; editingTitle = true; }}>
             {#if item.kind === "file" && item.fileMeta && item.fileMeta.length > 1}
               <AppIcon name="file" size={15} /> {item.fileMeta.length} {_t("detail.files")}
             {:else}
@@ -374,13 +383,41 @@
               {/if}
             </div>
           {:else if isCode && !isMarkdown}
-            <CodePreview content={detailContent} />
+            {#if editing}
+              <div class="edit-area">
+                <textarea bind:value={editContent} rows={Math.min(20, Math.max(5, editContent.split("\n").length))} placeholder={_t("edit.placeholder")}></textarea>
+              </div>
+              <div class="edit-actions">
+                <button type="button" class="edit-save" onclick={saveEdit}>
+                  <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                </button>
+                <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
+                  <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
+                </button>
+              </div>
+            {:else}
+              <CodePreview content={detailContent} />
+            {/if}
           {:else if isMarkdown}
-            <MarkdownPreview content={detailContent} />
+            {#if editing}
+              <div class="edit-area">
+                <textarea bind:value={editContent} rows={Math.min(20, Math.max(5, editContent.split("\n").length))} placeholder={_t("edit.placeholder")}></textarea>
+              </div>
+              <div class="edit-actions">
+                <button type="button" class="edit-save" onclick={saveEdit}>
+                  <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                </button>
+                <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
+                  <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
+                </button>
+              </div>
+            {:else}
+              <MarkdownPreview content={detailContent} />
+            {/if}
           {:else}
             {#if editing}
               <div class="edit-area">
-                <textarea bind:value={editContent} rows={8}></textarea>
+                <textarea bind:value={editContent} rows={Math.min(20, Math.max(5, editContent.split("\n").length))} placeholder={_t("edit.placeholder")}></textarea>
               </div>
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={saveEdit}>
@@ -429,11 +466,11 @@
           {/if}
           {#if item.kind === "image" || item.kind === "file"}
             <button type="button" onclick={() => oncopyfilename(item.id)}>
-              <AppIcon name="file" size={15} /> {_t("paste.copyFileName")}
+              <AppIcon name="file" size={15} /> {_t("copy.copyFileName")}
             </button>
           {:else}
             <button type="button" onclick={() => onplainpaste(item.id)}>
-              <AppIcon name="type" size={15} /> {_t("paste.plainText")}
+              <AppIcon name="type" size={15} /> {_t("copy.plainText")}
             </button>
           {/if}
         </div>

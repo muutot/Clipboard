@@ -650,8 +650,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   async function saveEdit(id: string, content: string) {
     editingId = null;
     const item = items.find((i) => i.id === id);
-    const isText = item?.kind === "text" || item?.kind === "link";
     const isMedia = item?.kind === "image" || item?.kind === "file";
+    const isText = item?.kind === "text" || item?.kind === "link";
     const newTitle = isText ? content.slice(0, 200) : content;
     const newTextContent = isText ? content : (item?.textContent ?? null);
     const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? "");
@@ -669,6 +669,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
               }
             : item,
         );
+        if (detailItem?.id === id) {
+          detailItem = { ...detailItem, title: updated.title, resourcePath: updated.resourcePath, previewPath: updated.previewPath };
+        }
         showToast(_t("toast.editSaved"), "success");
         return;
       } catch (e) {
@@ -679,13 +682,16 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
     items = items.map((item) =>
       item.id === id
-        ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview }
+        ? { ...item, textContent: newTextContent, preview: newPreview, ...(item.customTitle ? {} : { title: newTitle }) }
         : item,
     );
+    if (detailItem?.id === id) {
+      detailItem = { ...detailItem, textContent: newTextContent, preview: newPreview, ...(detailItem.customTitle ? {} : { title: newTitle }) };
+    }
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
         item.id === id
-          ? { ...item, title: newTitle, textContent: newTextContent, preview: newPreview }
+          ? { ...item, textContent: newTextContent, preview: newPreview, ...(item.customTitle ? {} : { title: newTitle }) }
           : item,
       );
     }
@@ -694,6 +700,14 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   function cancelEdit(_id: string) {
     editingId = null;
+  }
+
+  function renameTitle(id: string, title: string) {
+    items = items.map((item) => item.id === id ? { ...item, title, customTitle: true } : item);
+    if (detailItem?.id === id) detailItem = { ...detailItem, title, customTitle: true };
+    if (indexedItems) {
+      indexedItems = indexedItems.map((item) => item.id === id ? { ...item, title, customTitle: true } : item);
+    }
   }
 
   function plainPaste(_id: string) {
@@ -1152,9 +1166,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     </div>
 
     <div class="toolbar-actions">
-      <button type="button" tabindex="-1" aria-label={_t("toolbar.help")} title={_t("toolbar.help")}
-        ><AppIcon name="help" size={17} /></button
-      >
       <button
         type="button"
         tabindex="-1"
@@ -1315,6 +1326,7 @@ showCheckbox={false}
   oncopy={copyItem}
   onedit={startEdit}
   onsaveedit={saveEdit}
+  onrenametitle={renameTitle}
   onplainpaste={plainPaste}
   oncopyfilename={copyFilename}
 />
