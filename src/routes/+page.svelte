@@ -388,8 +388,7 @@
       const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
       const existing = await WebviewWindow.getByLabel("settings");
       if (existing) {
-        await existing.show();
-        await existing.setFocus();
+        existing.setFocus();
         return;
       }
       new WebviewWindow("settings", {
