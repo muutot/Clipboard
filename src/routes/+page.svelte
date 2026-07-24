@@ -1275,6 +1275,29 @@
     padding: 0 4px 6px;
   }
 
+  :global(.app-shell.compact .clip-card) {
+    padding: 6px 10px 5px;
+    border-radius: 7px;
+  }
+
+  :global(.app-shell.compact .clip-card .meta-row) {
+    gap: 5px;
+    margin-top: 0;
+  }
+
+  :global(.app-shell.compact .clip-card .meta-row span) {
+    font-size: 9.5px;
+  }
+
+  :global(.app-shell.compact .clip-card .content) {
+    font-size: 12px;
+  }
+
+  :global(.app-shell.compact .clip-card .text-preview) {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
   .search-header {
     display: flex;
     align-items: center;
