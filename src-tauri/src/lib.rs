@@ -795,6 +795,21 @@ fn rename_item(
 }
 
 #[tauri::command]
+fn update_clipboard_text(
+    database: tauri::State<'_, Database>,
+    id: String,
+    new_title: String,
+    new_text_content: String,
+) -> Result<bool, String> {
+    let items = database.get_items_by_ids(&[id.clone()]).map_err(|e| e.to_string())?;
+    let mut item = items.into_iter().next().ok_or_else(|| "item not found".to_string())?;
+    item.title = new_title;
+    item.text_content = Some(new_text_content);
+    database.save_item(&item).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
         open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
 }
@@ -1981,6 +1996,7 @@ pub fn run() {
             reveal_in_explorer,
             copy_file_to,
             rename_item,
+            update_clipboard_text,
             set_history_config,
             get_history_config,
             set_storage_config,
