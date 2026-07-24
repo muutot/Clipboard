@@ -1,6 +1,23 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
+  import { generalSettings } from "$lib/services/settings";
+
+  let s = $state($generalSettings);
+  $effect(() => {
+    const unsub = generalSettings.subscribe((v) => { s = v; });
+    return unsub;
+  });
+
+  $effect(() => {
+    const r = document.documentElement.style;
+    r.fontSize = `${s.fontSizes.base}px`;
+    r.setProperty("--font-size-base", `${s.fontSizes.base}px`);
+    r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
+    r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
+    r.setProperty("--font-size-cardTitle", `${s.fontSizes.cardTitle}px`);
+    r.setProperty("--font-size-cardPreview", `${s.fontSizes.cardPreview}px`);
+  });
 
   function handleClose() {
     getCurrentWindow().close();
