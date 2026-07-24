@@ -544,31 +544,31 @@
           </div>
           <div style="display:grid; gap:12px;">
             <div>
-              <label style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+              <label for="det-score" style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
                 <span>分数阈值 (score)</span>
                 <span style="color:#d7d7d7;">{detScoreThreshold.toFixed(2)}</span>
               </label>
-              <input type="range" min="0.05" max="0.95" step="0.05" bind:value={detScoreThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
+              <input id="det-score" type="range" min="0.05" max="0.95" step="0.05" bind:value={detScoreThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
               <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
             <div>
-              <label style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+              <label for="det-box" style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
                 <span>框阈值 (box)</span>
                 <span style="color:#d7d7d7;">{detBoxThreshold.toFixed(2)}</span>
               </label>
-              <input type="range" min="0.1" max="0.95" step="0.05" bind:value={detBoxThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
+              <input id="det-box" type="range" min="0.1" max="0.95" step="0.05" bind:value={detBoxThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
               <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
             <div>
-              <label style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+              <label for="det-unclip" style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
                 <span>扩展比例 (unclip)</span>
                 <span style="color:#d7d7d7;">{detUnclipRatio.toFixed(1)}</span>
               </label>
-              <input type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
+              <input id="det-unclip" type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
               <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
                 <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
               </div>
@@ -1094,7 +1094,6 @@
     font-size: 11px;
   }
 
-  .path-value,
   .pending-path code {
     display: block;
     overflow: hidden;

@@ -92,7 +92,7 @@
   <div>
     <span class="eyebrow">{_t("keyboard.settings")}</span>
     <h2>{_t("keyboard.title")}</h2>
-    <p>每个操作可绑定多个组合；双击修饰键写�?Shift+Shift、Ctrl+Ctrl�?/p>
+    <p>每个操作可绑定多个组合；双击修饰键写法: Shift+Shift、Ctrl+Ctrl</p>
   </div>
   <button
     class="close-button"

@@ -113,6 +113,7 @@
   onmouseup={onMouseUp}
   onmouseleave={onMouseUp}
   ondblclick={onDblClick}
+  onkeydown={(e) => { if (e.key === "Escape") hideWindow(); }}
 >
   <button type="button" class="close-btn" onclick={hideWindow} aria-label="Close">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
