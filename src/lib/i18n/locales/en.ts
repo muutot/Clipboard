@@ -29,6 +29,7 @@ const en: LocaleDefinition = {
     image: "Image",
     file: "File",
     favorite: "Favorites",
+    deleted: "Trash",
   },
   card: {
     copy: "Copy",
@@ -247,6 +248,8 @@ const en: LocaleDefinition = {
     alwaysOnTopDescription: "Window stays on top of other applications",
     pinCopiedToTop: "Pin Copied to Top",
     pinCopiedToTopDescription: "Move a copied item to the top of the list",
+    useRecycleBin: "Recycle Bin",
+    useRecycleBinDescription: "Move deleted items to recycle bin instead of permanent deletion",
     useSystemTitleBar: "Use System Title Bar",
     useSystemTitleBarDescription: "Use the operating system's native title bar",
     desktopFullscreen: "Desktop Fullscreen Preview",

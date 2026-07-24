@@ -29,6 +29,7 @@ export interface LocaleDefinition {
     image: string;
     file: string;
     favorite: string;
+    deleted: string;
   };
   card: {
     copy: string;
@@ -242,6 +243,8 @@ export interface LocaleDefinition {
     alwaysOnTopDescription: string;
     pinCopiedToTop: string;
     pinCopiedToTopDescription: string;
+    useRecycleBin: string;
+    useRecycleBinDescription: string;
     useSystemTitleBar: string;
     useSystemTitleBarDescription: string;
     desktopFullscreen: string;

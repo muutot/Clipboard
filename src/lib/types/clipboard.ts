@@ -1,7 +1,7 @@
 export const clipboardKinds = ["text", "link", "image", "file"] as const;
 
 export type ClipboardKind = (typeof clipboardKinds)[number];
-export type ClipboardFilter = "all" | ClipboardKind | "favorite";
+export type ClipboardFilter = "all" | ClipboardKind | "favorite" | "deleted";
 
 export interface ClipboardItem {
   id: string;
@@ -15,6 +15,7 @@ export interface ClipboardItem {
   detailLabel?: string;
   createdAt: number;
   favorite: boolean;
+  deleted?: boolean;
   fileName?: string;
   imageMeta?: {
     width: number;
@@ -65,6 +66,7 @@ export interface GeneralSettings {
   compactSearchFontSize: number;
   compactCardBorderRadius: number;
   pinCopiedToTop: boolean;
+  useRecycleBin: boolean;
   rememberWindowPosition: boolean;
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;

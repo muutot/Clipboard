@@ -28,6 +28,7 @@ function createSettingsStore() {
     compactSearchFontSize: 14,
     compactCardBorderRadius: 10,
     pinCopiedToTop: true,
+    useRecycleBin: true,
     rememberWindowPosition: false,
     alwaysOnTop: false,
     useSystemTitleBar: false,
