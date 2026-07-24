@@ -18,7 +18,10 @@
   let feedback = $state("");
   let feedbackSuccess = $state(false);
 
-  generalSettings.subscribe((v) => { s = v; });
+  $effect(() => {
+    const unsub = generalSettings.subscribe((v) => { s = v; });
+    return unsub;
+  });
 
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);

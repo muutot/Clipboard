@@ -13,7 +13,10 @@
   let { onclose }: Props = $props();
 
   let s = $state($generalSettings);
-  generalSettings.subscribe((v) => { s = v; });
+  $effect(() => {
+    const unsub = generalSettings.subscribe((v) => { s = v; });
+    return unsub;
+  });
 
   function updateSliderTrack(el: HTMLInputElement) {
     const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
