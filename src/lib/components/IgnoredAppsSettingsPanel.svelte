@@ -263,26 +263,26 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding: 20px 24px 15px;
+    padding: 20px 22px 15px;
     border-bottom: 1px solid #292929;
   }
   .eyebrow {
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 18px;
+    font-size: var(--settings-page-title-size, 18px);
     font-weight: 590;
   }
   header p {
     max-width: 570px;
     margin: 0;
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 1.5;
   }
   .close-button {
@@ -303,7 +303,7 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    padding: 16px 20px 48px;
+    padding: 14px 18px 48px;
     overflow: auto;
     scrollbar-color: #9a9a9a transparent;
     scrollbar-width: thin;
@@ -349,7 +349,7 @@
     justify-content: space-between;
     min-height: 25px;
     color: #ddd;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-heading-size, 13px);
   }
   .column-heading strong span {
     margin-left: 4px;
@@ -389,7 +389,7 @@
     outline: 0;
     color: #d7d7d7;
     background: transparent;
-    font: 10.5px inherit;
+    font: var(--settings-control-size, 11px) inherit;
   }
   .manual-add {
     display: flex;
@@ -427,7 +427,7 @@
     border-radius: 7px;
     color: #d8d8d8;
     background: transparent;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-control-size, 11px);
     cursor: pointer;
   }
   .application-row + .application-row {

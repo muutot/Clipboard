@@ -188,14 +188,14 @@
 
   .eyebrow {
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 18px;
+    font-size: var(--settings-page-title-size, 18px);
     font-weight: 590;
   }
   header p,
@@ -206,7 +206,7 @@
   }
   header p {
     max-width: 430px;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
 
   .close-button {
@@ -244,9 +244,9 @@
   }
 
   .setting-card {
-    padding: 13px;
+    padding: 10px 13px;
     border: 1px solid #303030;
-    border-radius: 9px;
+    border-radius: var(--settings-card-radius, 9px);
     background: #1e1e1e;
   }
   .setting-heading {
@@ -272,12 +272,12 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
   .setting-heading p {
     margin-top: 2px;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
   .setting-heading code {
     color: #888;
@@ -322,12 +322,19 @@
   }
   .setting-actions button {
     padding: 7px 10px;
-    border: 1px solid #e3e3e3;
+    border: 1px solid #3a3a3a;
     border-radius: 6px;
-    color: #1c1c1c;
-    background: #e3e3e3;
+    color: #c8c8c8;
+    background: #252525;
     font: inherit;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .setting-actions button:hover:not(:disabled) {
+    color: #f0f0f0;
+    background: #303030;
   }
   button {
     cursor: pointer;
@@ -370,9 +377,9 @@
   }
 
   .shortcut-reference {
-    padding: 13px;
+    padding: 10px 13px;
     border: 1px solid #303030;
-    border-radius: 9px;
+    border-radius: var(--settings-card-radius, 9px);
     background: #1e1e1e;
   }
 
@@ -380,7 +387,7 @@
     display: block;
     margin-bottom: 10px;
     color: #dedede;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
 

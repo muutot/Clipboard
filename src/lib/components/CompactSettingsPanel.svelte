@@ -217,7 +217,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -225,7 +225,7 @@
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 18px;
+    font-size: var(--settings-page-title-size, 18px);
     font-weight: 590;
   }
 
@@ -233,7 +233,7 @@
     max-width: 430px;
     margin: 0;
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 1.5;
   }
 
@@ -273,9 +273,9 @@
   }
 
   .setting-card {
-    padding: 13px;
+    padding: 10px 13px;
     border: 1px solid #303030;
-    border-radius: 9px;
+    border-radius: var(--settings-card-radius, 9px);
     background: #1e1e1e;
   }
 
@@ -310,14 +310,14 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin: 2px 0 0;
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
 
   .heading-inline {

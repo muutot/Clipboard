@@ -933,6 +933,13 @@
   }
 
   .settings-dialog {
+    --settings-page-title-size: calc(var(--font-size-base, 14px) + 4px);
+    --settings-heading-size: var(--font-size-cardTitle, 13px);
+    --settings-description-size: var(--font-size-secondary, 11px);
+    --settings-note-size: var(--font-size-tiny, 10px);
+    --settings-control-size: var(--font-size-secondary, 11px);
+    --settings-card-radius: 9px;
+    --settings-control-radius: 6px;
     display: grid;
     grid-template-columns: 168px minmax(0, 1fr);
     width: min(728px, 100%);
@@ -1019,7 +1026,7 @@
     color: #999;
     background: #1a1a1a;
     font: inherit;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size);
     text-align: left;
     cursor: pointer;
     transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
@@ -1078,7 +1085,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-note-size);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -1086,7 +1093,7 @@
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 19px;
+    font-size: var(--settings-page-title-size);
     font-weight: 590;
   }
 
@@ -1099,7 +1106,7 @@
 
   header p {
     max-width: 430px;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .close-button {
@@ -1140,7 +1147,7 @@
   .setting-card {
     padding: 10px 13px;
     border: 1px solid #303030;
-    border-radius: 9px;
+    border-radius: var(--settings-card-radius);
     background: #1e1e1e;
   }
 
@@ -1157,13 +1164,13 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: var(--font-size-base, 14px);
+    font-size: var(--settings-heading-size);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin-top: 2px;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .pending-path code {
@@ -1205,7 +1212,7 @@
     box-sizing: border-box;
     padding: 8px 10px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     outline: none;
     color: #d7d7d7;
     background: #1a1a1a;
@@ -1227,11 +1234,11 @@
     box-sizing: border-box;
     padding: 8px 30px 8px 12px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     outline: none;
     color: #d7d7d7;
     background: #1a1a1a;
-    font-size: var(--font-size-base, 14px);
+    font-size: var(--settings-control-size);
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
@@ -1364,7 +1371,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .settings-feedback.success {
@@ -1463,22 +1470,22 @@
     height: 34px;
     box-sizing: border-box;
     padding: 5px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: var(--settings-control-radius);
+    color: #a3a3a3;
+    background: #252525;
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 100ms ease, color 100ms ease;
+  }
 
   .setting-card-row select,
   .setting-card-row .model-select {
     height: 34px;
     box-sizing: border-box;
-  }
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-    color: #a3a3a3;
-    background: #252525;
-    font: inherit;
-    font-size: var(--font-size-secondary, 11px);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: background 100ms ease, color 100ms ease;
   }
 
   .setting-card-row button:hover {
