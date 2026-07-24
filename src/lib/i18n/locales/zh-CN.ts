@@ -249,6 +249,8 @@ const zhCN: LocaleDefinition = {
     themeDark: "暗黑",
     rememberWindowPosition: "记住窗口位置",
     rememberWindowPositionDescription: "重新打开时恢复上一次窗口位置",
+    on: "开",
+    off: "关",
     autoSaveNote: "修改即时生效，无需手动保存",
   },
   compact: {

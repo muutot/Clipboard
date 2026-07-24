@@ -256,6 +256,8 @@ const en: LocaleDefinition = {
     themeDark: "Dark",
     rememberWindowPosition: "Remember Window Position",
     rememberWindowPositionDescription: "Restore the last window position on reopen",
+    on: "On",
+    off: "Off",
     autoSaveNote: "Changes take effect immediately, no manual save needed",
   },
   compact: {
