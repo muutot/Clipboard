@@ -6,7 +6,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
   import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { generalSettings } from "$lib/services/settings";
@@ -48,6 +48,7 @@
   let dragStartY = 0;
   let panStartX = 0;
   let panStartY = 0;
+  let savedPos = $state<{ x: number; y: number; w: number; h: number } | null>(null);
 
   async function openImageFullscreen() {
     imageFullscreen = true;
@@ -55,7 +56,17 @@
     panX = 0;
     panY = 0;
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try { await getCurrentWindow().setFullscreen(true); } catch {}
+      try {
+        const win = getCurrentWindow();
+        const pos = await win.outerPosition();
+        const size = await win.outerSize();
+        savedPos = { x: pos.x, y: pos.y, w: size.width, h: size.height };
+        const monitor = await win.currentMonitor();
+        if (monitor?.size) {
+          await win.setPosition(new LogicalPosition(0, 0));
+          await win.setSize(new LogicalSize(monitor.size.width, monitor.size.height));
+        }
+      } catch {}
     }
   }
 
@@ -65,7 +76,14 @@
     panX = 0;
     panY = 0;
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try { await getCurrentWindow().setFullscreen(false); } catch {}
+      try {
+        const win = getCurrentWindow();
+        if (savedPos) {
+          await win.setPosition(new LogicalPosition(savedPos.x, savedPos.y));
+          await win.setSize(new LogicalSize(savedPos.w, savedPos.h));
+          savedPos = null;
+        }
+      } catch {}
     }
   }
 
