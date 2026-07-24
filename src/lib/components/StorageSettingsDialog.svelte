@@ -1201,8 +1201,16 @@
   }
 
   select:focus,
-  .model-select:focus {
-    border-color: #5a8fd4;
+  .model-select:focus,
+  .unit-select:focus {
+    border-color: #555;
+  }
+
+  select option,
+  .model-select option,
+  .unit-select option {
+    background: #1e1e1e;
+    color: #d7d7d7;
   }
 
   .setting-actions {
@@ -1633,10 +1641,6 @@
 
   .unit-select:hover {
     border-color: #555;
-  }
-
-  .unit-select:focus {
-    border-color: #5a8fd4;
   }
 
   .restart-btn {
