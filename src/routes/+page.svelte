@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -939,8 +940,8 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <div class="drag-bar" data-tauri-drag-region></div>
-  <header class="search-header" data-tauri-drag-region>
+  <div class="drag-bar" onmousedown={() => getCurrentWebviewWindow().startDragging()}></div>
+  <header class="search-header" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
     <div class="search-box">
       <input
         bind:value={query}
@@ -995,7 +996,7 @@
     />
   </header>
 
-  <div class="toolbar" data-tauri-drag-region>
+  <div class="toolbar" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button

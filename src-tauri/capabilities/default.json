@@ -14,6 +14,7 @@
     "core:window:allow-outer-position",
     "core:window:allow-outer-size",
     "core:window:allow-current-monitor",
+    "core:window:allow-start-dragging",
     "core:webview:allow-create-webview-window",
     "dialog:default",
     "dialog:allow-save"
