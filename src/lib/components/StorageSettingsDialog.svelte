@@ -98,6 +98,7 @@
   let ocrCompleted = $state(0);
   let ocrAvailable = $state(false);
   let installedVariant = $state<string | null>(null);
+  let activeVariant = $state<string>("tiny");
   let ocrInstalling = $state(false);
   let ocrProgressLabel = $state("");
   let ocrProgressPct = $state(-1);
@@ -190,6 +191,22 @@
       unlisten();
       ocrInstalling = false;
       ocrProgressPct = -1;
+    }
+  }
+
+  async function applyModel() {
+    if (activeVariant === modelVariant) {
+      feedback = "模型已应用";
+      feedbackSuccess = true;
+      return;
+    }
+    try {
+      await saveOcrEngine('ppocr');
+      activeVariant = modelVariant;
+      feedback = "切换成功";
+      feedbackSuccess = true;
+    } catch (e) {
+      feedback = String(e);
     }
   }
 
@@ -517,7 +534,7 @@
               <option value="large">large (高精度, ~30MB)</option>
             </select>
             {#if installedVariant === modelVariant}
-              <button type="button" onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #4a4a35; border-radius:6px; background:rgba(45,45,27,0.6); color:#c6c69d; cursor:pointer; font-size:13px; white-space:nowrap;">应用</button>
+              <button type="button" onclick={applyModel} style="padding:9px 14px; border:1px solid #4a4a35; border-radius:6px; background:rgba(45,45,27,0.6); color:#c6c69d; cursor:pointer; font-size:13px; white-space:nowrap;">应用</button>
             {:else}
               <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #3a3a3a; border-radius:6px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px; white-space:nowrap;">
                 {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
