@@ -48,27 +48,14 @@
   let dragStartY = 0;
   let panStartX = 0;
   let panStartY = 0;
-  let savedPos = $state<{ x: number; y: number; w: number; h: number } | null>(null);
 
   async function openImageFullscreen() {
     imageFullscreen = true;
     zoom = 1;
     panX = 0;
     panY = 0;
-    const url = assetUrl(item?.previewPath || item?.resourcePath);
-    console.log("[fullscreen] open", { mode: get(generalSettings).imageFullscreenMode, url, kind: item?.kind, previewPath: item?.previewPath, resourcePath: item?.resourcePath });
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try {
-        const win = getCurrentWindow();
-        const pos = await win.outerPosition();
-        const size = await win.outerSize();
-        savedPos = { x: pos.x, y: pos.y, w: size.width, h: size.height };
-        const monitor = await win.currentMonitor();
-        if (monitor?.size) {
-          await win.setPosition(new LogicalPosition(0, 0));
-          await win.setSize(new LogicalSize(monitor.size.width, monitor.size.height));
-        }
-      } catch {}
+      try { await getCurrentWindow().setFullscreen(true); } catch {}
     }
   }
 
@@ -78,14 +65,7 @@
     panX = 0;
     panY = 0;
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try {
-        const win = getCurrentWindow();
-        if (savedPos) {
-          await win.setPosition(new LogicalPosition(savedPos.x, savedPos.y));
-          await win.setSize(new LogicalSize(savedPos.w, savedPos.h));
-          savedPos = null;
-        }
-      } catch {}
+      try { await getCurrentWindow().setFullscreen(false); } catch {}
     }
   }
 

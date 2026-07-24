@@ -4,9 +4,16 @@ export interface VirtualScrollConfig {
 }
 
 export interface VirtualListResult {
-  visibleItems: { index: number }[];
+  visibleItems: { index: number; top: number }[];
   totalHeight: number;
   offsetY: number;
+}
+
+const TEXT_HEIGHT = 88;
+const IMAGE_HEIGHT = 150;
+
+export function itemHeight(kind: string): number {
+  return kind === "image" ? IMAGE_HEIGHT : TEXT_HEIGHT;
 }
 
 export function createVirtualList(
@@ -14,24 +21,46 @@ export function createVirtualList(
   containerHeight: number,
   scrollTop: number,
   config: VirtualScrollConfig,
+  heights?: number[],
 ): VirtualListResult {
-  const { itemHeight, overscan } = config;
-
   if (totalItems === 0 || containerHeight <= 0) {
     return { visibleItems: [], totalHeight: 0, offsetY: 0 };
   }
 
-  const totalHeight = totalItems * itemHeight;
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const visibleCount = Math.ceil(containerHeight / itemHeight) + overscan * 2;
-  const endIndex = Math.min(totalItems, startIndex + visibleCount);
+  // Build cumulative position array from heights
+  const positions: number[] = [0];
+  for (let i = 0; i < totalItems; i++) {
+    const h = heights?.[i] ?? config.itemHeight;
+    positions.push(positions[i] + h);
+  }
+  const totalHeight = positions[totalItems];
 
-  const visibleItems: { index: number }[] = [];
+  // Binary search for the first visible item
+  let startIndex = 0;
+  let endIndex = totalItems;
+  while (startIndex < endIndex) {
+    const mid = Math.floor((startIndex + endIndex) / 2);
+    if (positions[mid] <= scrollTop) {
+      startIndex = mid + 1;
+    } else {
+      endIndex = mid;
+    }
+  }
+  startIndex = Math.max(0, startIndex - 1 - config.overscan);
+
+  // Find end index based on visible height
+  const visibleBottom = scrollTop + containerHeight;
+  while (endIndex < totalItems && positions[endIndex] < visibleBottom) {
+    endIndex++;
+  }
+  endIndex = Math.min(totalItems, endIndex + config.overscan);
+
+  const visibleItems: { index: number; top: number }[] = [];
   for (let i = startIndex; i < endIndex; i++) {
-    visibleItems.push({ index: i });
+    visibleItems.push({ index: i, top: positions[i] });
   }
 
-  const offsetY = startIndex * itemHeight;
+  const offsetY = positions[startIndex];
 
   return { visibleItems, totalHeight, offsetY };
 }

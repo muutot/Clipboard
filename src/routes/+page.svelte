@@ -24,7 +24,7 @@
   import type { IconName } from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { assets } from "$app/paths";
-  import { createVirtualList, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
+  import { createVirtualList, itemHeight, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
@@ -195,7 +195,13 @@
   // --- Virtual scrolling ---
 
   const virtualList = $derived(
-    createVirtualList(filteredItems.length, containerHeight, scrollTop, VIRTUAL_SCROLL_CONFIG),
+    createVirtualList(
+      filteredItems.length,
+      containerHeight,
+      scrollTop,
+      VIRTUAL_SCROLL_CONFIG,
+      filteredItems.map(i => itemHeight(i.kind)),
+    ),
   );
 
   const useVirtualScroll = $derived(filteredItems.length > VIRTUAL_SCROLL_THRESHOLD);
@@ -1086,8 +1092,7 @@
           {#each visiblePageItems as item, visibleIdx (item.id)}
             {#if useVirtualScroll}
               <div
-                style="position: absolute; top: {virtualList.offsetY +
-                  visibleIdx * VIRTUAL_SCROLL_CONFIG.itemHeight}px; left: 0; right: 0;"
+                style="position: absolute; top: {virtualList.visibleItems[visibleIdx].top}px; left: 0; right: 0;"
               >
                 <ClipboardCard
                   {item}
