@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4AA8FF"/>
+      <stop offset="100%" stop-color="#2D7DD2"/>
+    </linearGradient>
+    <linearGradient id="clip" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E8E8E8"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  
+  <!-- Background rounded rectangle -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bg)"/>
+  
+  <!-- Clipboard body -->
+  <g filter="url(#shadow)">
+    <rect x="120" y="100" width="272" height="340" rx="24" fill="url(#clip)"/>
+    
+    <!-- Clipboard clip at top -->
+    <rect x="184" y="72" width="144" height="56" rx="16" fill="#E0E0E0"/>
+    <rect x="208" y="64" width="96" height="40" rx="12" fill="#4AA8FF"/>
+    
+    <!-- Text lines -->
+    <rect x="160" y="176" width="192" height="16" rx="8" fill="#D0D0D0"/>
+    <rect x="160" y="216" width="160" height="16" rx="8" fill="#D0D0D0"/>
+    <rect x="160" y="256" width="176" height="16" rx="8" fill="#D0D0D0"/>
+    <rect x="160" y="296" width="120" height="16" rx="8" fill="#D0D0D0"/>
+    
+    <!-- Checkmark circle -->
+    <circle cx="328" cy="376" r="40" fill="#4AA8FF"/>
+    <path d="M308 376 L322 390 L352 360" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>
