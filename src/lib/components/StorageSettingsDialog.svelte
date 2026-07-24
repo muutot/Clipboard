@@ -68,6 +68,15 @@
     maxFileCopyDisplay = toDisplaySize(maxFileCopySize, unit);
   }
 
+  function relativePath(absolute: string): string {
+    if (!status?.projectPath) return absolute;
+    const base = status.projectPath.replace(/\\/g, "/");
+    const target = absolute.replace(/\\/g, "/");
+    if (target.startsWith(base + "/")) return target.slice(base.length + 1);
+    if (target.startsWith(base)) return target.slice(base.length);
+    return absolute;
+  }
+
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
@@ -582,7 +591,7 @@
                 <p>{_t("storage.configSectionDesc")}</p>
               </div>
             </div>
-            <code class="path-value" title={status.configPath}>{status.configPath}</code>
+            <code class="path-value" title={status.configPath}>{relativePath(status.configPath)}</code>
           </section>
 
           <section class="setting-card">
@@ -663,7 +672,7 @@
               </span>
             </div>
             <code class="path-value" title={status.searchIndexPath}
-              >{status.searchIndexPath}</code
+              >{relativePath(status.searchIndexPath)}</code
             >
             <div class="setting-actions">
               <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
@@ -760,7 +769,7 @@
           <div class="storage-summary">
             <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
             <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
-            <span title={status.databasePath}>{_t("storage.sqliteConnected")}</span>
+            <span title={relativePath(status.databasePath)}>{_t("storage.sqliteConnected")}</span>
           </div>
 
           {#if perfMetrics}
