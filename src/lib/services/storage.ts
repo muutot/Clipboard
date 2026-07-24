@@ -11,9 +11,11 @@ export interface StorageStatus {
   storagePath: string;
   iconsDir: string;
   databasePath: string;
+  databaseSizeBytes: number;
   filesPath: string;
   imagePath: string;
   searchIndexPath: string;
+  searchIndexSizeBytes: number;
   searchIndexVersion: number;
   searchIndexRebuildRequired: boolean;
 }

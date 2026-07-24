@@ -64,9 +64,11 @@ struct StorageStatus {
     storage_path: String,
     icons_dir: String,
     database_path: String,
+    database_size_bytes: u64,
     files_path: String,
     image_path: String,
     search_index_path: String,
+    search_index_size_bytes: u64,
     search_index_version: u32,
     search_index_rebuild_required: bool,
 }
@@ -122,9 +124,11 @@ fn get_storage_status(
         storage_path: paths.storage.display().to_string(),
         icons_dir: paths.storage.join("icons").display().to_string(),
         database_path: paths.database.display().to_string(),
+        database_size_bytes: file_or_dir_size(&paths.database),
         files_path: paths.files.display().to_string(),
         image_path: paths.images.display().to_string(),
         search_index_path: paths.search_index.display().to_string(),
+        search_index_size_bytes: dir_size(&paths.database_directory),
         search_index_version: SEARCH_INDEX_VERSION,
         search_index_rebuild_required: search_index.requires_full_rebuild(),
     })
@@ -214,6 +218,32 @@ fn copy_dir_contents(from: &PathBuf, to: &PathBuf) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn file_or_dir_size(path: &PathBuf) -> u64 {
+    if path.is_file() {
+        let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        let wal = path.with_extension("sqlite3-wal");
+        let shm = path.with_extension("sqlite3-shm");
+        let wal_size = std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+        let shm_size = std::fs::metadata(&shm).map(|m| m.len()).unwrap_or(0);
+        return size + wal_size + shm_size;
+    }
+    dir_size(path)
+}
+
+fn dir_size(path: &PathBuf) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                total += dir_size(&entry.path());
+            } else {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    total
 }
 
 #[tauri::command]

@@ -81,6 +81,14 @@
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
+
+  function formatBytes(bytes: number): string {
+    if (bytes === 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
   let ocrEngine = $state("ppocr");
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
@@ -88,6 +96,8 @@
   let ocrInstalling = $state(false);
   let ocrProgressLabel = $state("");
   let ocrProgressPct = $state(-1);
+  let ocrProgressCurrent = $state(0);
+  let ocrProgressTotal = $state(0);
   let modelVariant = $state("tiny");
   let detScoreThreshold = $state(0.3);
   let detBoxThreshold = $state(0.6);
@@ -149,6 +159,8 @@
     ocrInstalling = true;
     ocrProgressPct = -1;
     ocrProgressLabel = "";
+    ocrProgressCurrent = 0;
+    ocrProgressTotal = 0;
     const unlisten = await listen<{
       filename: string;
       label: string;
@@ -158,6 +170,8 @@
     }>("ppocr-download-progress", (event) => {
       ocrProgressLabel = event.payload.label;
       ocrProgressPct = event.payload.percentage;
+      ocrProgressCurrent = event.payload.current;
+      ocrProgressTotal = event.payload.total;
     });
     try {
       const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
@@ -503,11 +517,12 @@
                 </select>
               </div>
               <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="align-self:flex-end; white-space:nowrap; padding:9px 14px; border:1px solid #343434; border-radius:7px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px;">
-                {ocrInstalling ? (ocrProgressPct >= 0 ? `${Math.round(ocrProgressPct)}%` : '下载中...') : '下载模型'}
+                {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载模型'}
               </button>
             </div>
             {#if ocrInstalling && ocrProgressPct >= 0}
-              <div style="margin-top:6px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
+              <div style="margin-top:2px; color:#888; font-size:10px;">{formatBytes(ocrProgressCurrent)} / {formatBytes(ocrProgressTotal)}</div>
+              <div style="margin-top:4px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
                 <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
               </div>
             {/if}
@@ -708,15 +723,15 @@
                 <span class="stat-label">{_t("statistics.totalRecords")}</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">-</span>
+                <span class="stat-value">{formatBytes(status.databaseSizeBytes)}</span>
                 <span class="stat-label">{_t("statistics.dbSize")}</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">v{status.searchIndexVersion}</span>
+                <span class="stat-value">{formatBytes(status.searchIndexSizeBytes)}</span>
                 <span class="stat-label">{_t("statistics.indexSize")}</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">0 / 0</span>
+                <span class="stat-value">{ocrCompleted} / {ocrPending + ocrCompleted}</span>
                 <span class="stat-label">{_t("statistics.ocrTasks")}</span>
               </div>
             </div>
