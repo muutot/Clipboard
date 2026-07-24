@@ -596,13 +596,24 @@
   function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
+    const text = item.textContent || item.title;
+    const html = "<div>" + text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>") + "</div>";
     void navigator.clipboard
-      .writeText(item.textContent || item.title)
+      .write([
+        new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        }),
+      ])
       .then(() => {
         showToast(_t("toast.copySuccess"), "success");
       })
       .catch(() => {
-        showToast(_t("toast.copyFailed"), "error");
+        void navigator.clipboard.writeText(text).then(() => {
+          showToast(_t("toast.copySuccess"), "success");
+        }).catch(() => {
+          showToast(_t("toast.copyFailed"), "error");
+        });
       });
   }
 
