@@ -55,6 +55,8 @@
     zoom = 1;
     panX = 0;
     panY = 0;
+    const url = assetUrl(item?.previewPath || item?.resourcePath);
+    console.log("[fullscreen] open", { mode: get(generalSettings).imageFullscreenMode, url, kind: item?.kind, previewPath: item?.previewPath, resourcePath: item?.resourcePath });
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
       try {
         const win = getCurrentWindow();
@@ -496,6 +498,8 @@
         alt={item.preview || item.title}
         draggable="false"
         style="transform: translate({panX}px, {panY}px) scale({zoom})"
+        onload={() => console.log("[fullscreen] image loaded")}
+        onerror={(e) => console.error("[fullscreen] image load error", e)}
       />
     </div>
   {/if}
