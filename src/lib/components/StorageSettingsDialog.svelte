@@ -97,7 +97,7 @@
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
   let ocrAvailable = $state(false);
-  let installedVariant = $state<string | null>(null);
+  let installedVariants = $state<Set<string>>(new Set());
   let activeVariant = $state<string>("tiny");
   let ocrInstalling = $state(false);
   let ocrProgressLabel = $state("");
@@ -183,7 +183,7 @@
       const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
       feedback = msg;
       feedbackSuccess = true;
-      installedVariant = modelVariant;
+      installedVariants = new Set([...installedVariants, modelVariant]);
       loadOcrStatus();
     } catch (e) {
       feedback = String(e);
@@ -514,11 +514,11 @@
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
           <span class="setting-label">模型</span>
           <select bind:value={modelVariant} class="model-select" style="flex:1; max-width:200px;">
-            <option value="tiny">tiny (~5MB)</option>
-            <option value="medium">medium (~15MB)</option>
-            <option value="large">large (~30MB)</option>
+            <option value="tiny">tiny (~5MB){installedVariants.has("tiny") ? " ✓" : ""}</option>
+            <option value="medium">medium (~15MB){installedVariants.has("medium") ? " ✓" : ""}</option>
+            <option value="large">large (~30MB){installedVariants.has("large") ? " ✓" : ""}</option>
           </select>
-          {#if installedVariant === modelVariant}
+          {#if installedVariants.has(modelVariant)}
             <button type="button" onclick={applyModel}>应用</button>
           {:else}
             <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
@@ -583,6 +583,9 @@
 
         <p class="auto-save-note">修改即时生效，无需手动保存</p>
       </div>
+      {#if feedback}
+        <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+      {/if}
     {:else}
       <header>
         <div>
