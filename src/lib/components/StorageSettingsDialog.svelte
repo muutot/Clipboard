@@ -781,12 +781,6 @@
             </select>
           </section>
 
-          <div class="storage-summary">
-            <span>{_t("storage.searchIndexVersion", { version: status.searchIndexVersion })}</span>
-            <span>{_t("storage.recordCount", { count: status.itemCount })}</span>
-            <span title={relativePath(status.databasePath)}>{_t("storage.sqliteConnected")}</span>
-          </div>
-
           {#if perfMetrics}
         <section class="setting-card">
               <div class="setting-heading">
@@ -1308,15 +1302,6 @@
     color: #888;
     font-size: 12px;
     flex-shrink: 0;
-  }
-
-  .storage-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    padding: 1px 3px;
-    color: #666;
-    font-size: 11px;
   }
 
   .settings-state {
