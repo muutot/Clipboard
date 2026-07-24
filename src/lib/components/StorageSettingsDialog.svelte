@@ -1609,16 +1609,19 @@
   .restart-btn {
     margin-left: auto;
     padding: 5px 12px;
-    border: 1px solid #4aa8ff;
+    border: 1px solid #4a4a4a;
     border-radius: 6px;
-    color: #4aa8ff;
-    background: rgba(74, 168, 255, 0.1);
+    color: #d8d8d8;
+    background: #2a2a2a;
     font-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     flex-shrink: 0;
+    transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
   }
 
   .restart-btn:hover {
-    background: rgba(74, 168, 255, 0.2);
+    color: #fff;
+    background: #383838;
+    border-color: #5a5a5a;
   }
 </style>

@@ -57,6 +57,8 @@
     onsaveedit: (id: string, content: string) => void;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
+    onduplicate: (id: string) => void;
+    onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
   }
 
@@ -84,12 +86,18 @@
     onsaveedit,
     oncanceledit,
     onplainpaste,
+    onduplicate,
+    onsaveasnew,
     onrestore,
   }: Props = $props();
 
   let editing = $state(false);
   let editContent = $state("");
   let editTitle = $state("");
+
+  const contentChanged = $derived(
+    editContent !== (item.textContent || item.title) || editTitle !== item.title,
+  );
   let contentActions = $state<{
     hasEmail: boolean;
     hasUrl: boolean;
@@ -223,6 +231,12 @@
     event.stopPropagation();
     editing = false;
     oncanceledit(item.id);
+  }
+
+  function saveAsNew(event: Event) {
+    event.stopPropagation();
+    onsaveasnew(item.id, editTitle, editContent);
+    editing = false;
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -482,6 +496,10 @@
         <button type="button" class="edit-save" onclick={saveEdit}>
           <AppIcon name="check" size={14} strokeWidth={2.5} />
           {_t("edit.save")}
+        </button>
+        <button type="button" class="edit-save-as-new" disabled={!contentChanged} onclick={saveAsNew}>
+          <AppIcon name="copy" size={14} strokeWidth={2.5} />
+          {_t("edit.saveAsNew")}
         </button>
         <button type="button" class="edit-cancel" onclick={cancelEdit}>
           <AppIcon name="x" size={14} strokeWidth={2.5} />
@@ -842,6 +860,7 @@
   }
 
   .edit-save,
+  .edit-save-as-new,
   .edit-cancel {
     display: inline-flex;
     align-items: center;
@@ -858,13 +877,32 @@
   }
 
   .edit-save {
-    border-color: #4aa8ff;
-    color: #4aa8ff;
-    background: rgba(74, 168, 255, 0.1);
+    color: #d8d8d8;
+    background: #2a2a2a;
+    border-color: #4a4a4a;
   }
 
   .edit-save:hover {
-    background: rgba(74, 168, 255, 0.2);
+    color: #fff;
+    background: #383838;
+    border-color: #5a5a5a;
+  }
+
+  .edit-save-as-new {
+    color: #999;
+    background: #252525;
+    border-color: #3a3a3a;
+  }
+
+  .edit-save-as-new:hover {
+    color: #bbb;
+    background: #303030;
+    border-color: #4a4a4a;
+  }
+
+  .edit-save-as-new:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .edit-cancel {

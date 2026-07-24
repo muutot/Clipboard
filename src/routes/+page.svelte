@@ -736,6 +736,27 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       });
   }
 
+  function duplicateItem(id: string) {
+    invoke("duplicate_clipboard_item", { id })
+      .then(() => {
+        showToast(_t("toast.duplicateSuccess"), "success");
+      })
+      .catch(() => {
+        showToast(_t("toast.saveFailed"), "error");
+      });
+  }
+
+  async function saveAsNew(id: string, title: string, content: string) {
+    editingId = null;
+    try {
+      const newId: string = await invoke("duplicate_clipboard_item", { id });
+      await invoke("update_clipboard_text", { id: newId, newTitle: title, newTextContent: content });
+      showToast(_t("toast.duplicateSuccess"), "success");
+    } catch {
+      showToast(_t("toast.saveFailed"), "error");
+    }
+  }
+
   function copyFilename(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
@@ -1250,8 +1271,10 @@ showCheckbox={false}
                   ondetail={openDetail}
                   onedit={startEdit}
                   onsaveedit={saveEdit}
+                  onsaveasnew={saveAsNew}
                   oncanceledit={cancelEdit}
                   onplainpaste={plainPaste}
+                  onduplicate={duplicateItem}
                   onrestore={restoreItem}
 
                 />
@@ -1279,9 +1302,11 @@ showCheckbox={false}
                 ondetail={openDetail}
                 onedit={startEdit}
                 onsaveedit={saveEdit}
+                onsaveasnew={saveAsNew}
                 oncanceledit={cancelEdit}
                 onplainpaste={plainPaste}
-                  onrestore={restoreItem}
+                onduplicate={duplicateItem}
+                onrestore={restoreItem}
               /> 
             {/if}
           {/each}
@@ -1338,6 +1363,8 @@ showCheckbox={false}
   onsaveedit={saveEdit}
   onrenametitle={renameTitle}
   onplainpaste={plainPaste}
+  onduplicate={duplicateItem}
+  onsaveasnew={saveAsNew}
   oncopyfilename={copyFilename}
 />
 

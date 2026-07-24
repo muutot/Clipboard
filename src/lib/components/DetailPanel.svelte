@@ -33,10 +33,12 @@
     onsaveedit: (id: string, content: string) => void;
     onrenametitle: (id: string, title: string) => void;
     onplainpaste: (id: string) => void;
+    onduplicate: (id: string) => void;
+    onsaveasnew: (id: string, title: string, content: string) => void;
     oncopyfilename: (id: string) => void;
   }
 
-  let { item, onclose, oncopy, onedit, onsaveedit, onrenametitle, onplainpaste, oncopyfilename }: Props = $props();
+  let { item, onclose, oncopy, onedit, onsaveedit, onrenametitle, onplainpaste, onduplicate, onsaveasnew, oncopyfilename }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
@@ -282,6 +284,12 @@
     onrenametitle(item.id, editTitleContent.trim());
     editingTitle = false;
   }
+
+  function saveAsNew() {
+    if (!item || !editContent.trim()) return;
+    onsaveasnew(item.id, item.title, editContent.trim());
+    editing = false;
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -391,6 +399,9 @@
                 <button type="button" class="edit-save" onclick={saveEdit}>
                   <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
                 </button>
+                <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
+                  <AppIcon name="copy" size={14} strokeWidth={2.5} /> {_t("edit.saveAsNew")}
+                </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
                   <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
                 </button>
@@ -407,6 +418,9 @@
                 <button type="button" class="edit-save" onclick={saveEdit}>
                   <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
                 </button>
+                <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
+                  <AppIcon name="copy" size={14} strokeWidth={2.5} /> {_t("edit.saveAsNew")}
+                </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
                   <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
                 </button>
@@ -422,6 +436,9 @@
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={saveEdit}>
                   <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                </button>
+                <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
+                  <AppIcon name="copy" size={14} strokeWidth={2.5} /> {_t("edit.saveAsNew")}
                 </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
                   <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
@@ -1230,9 +1247,32 @@
   }
 
   .edit-actions button.edit-save {
-    border-color: #e3e3e3;
-    color: #1c1c1c;
-    background: #e3e3e3;
+    color: #d8d8d8;
+    background: #2a2a2a;
+    border-color: #4a4a4a;
+  }
+
+  .edit-actions button.edit-save:hover {
+    color: #fff;
+    background: #383838;
+    border-color: #5a5a5a;
+  }
+
+  .edit-actions button.edit-save-as-new {
+    color: #999;
+    background: #252525;
+    border-color: #3a3a3a;
+  }
+
+  .edit-actions button.edit-save-as-new:hover {
+    color: #bbb;
+    background: #303030;
+    border-color: #4a4a4a;
+  }
+
+  .edit-actions button.edit-save-as-new:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .edit-actions button.edit-cancel:hover {
