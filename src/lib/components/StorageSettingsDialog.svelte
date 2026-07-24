@@ -70,11 +70,15 @@
   }
 
   function relativePath(absolute: string): string {
-    if (!status?.projectPath) return absolute;
-    const base = status.projectPath.replace(/\\/g, "/");
-    const target = absolute.replace(/\\/g, "/");
-    if (target.startsWith(base + "/")) return target.slice(base.length + 1);
-    if (target.startsWith(base)) return target.slice(base.length);
+    if (!status) return absolute;
+    const bases = [status.projectPath, status.dataDirectoryPath];
+    for (const basePath of bases) {
+      if (!basePath) continue;
+      const base = basePath.replace(/\\/g, "/");
+      const target = absolute.replace(/\\/g, "/");
+      if (target === base) return ".";
+      if (target.startsWith(base + "/")) return target.slice(base.length + 1);
+    }
     return absolute;
   }
 
