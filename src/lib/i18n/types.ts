@@ -240,6 +240,8 @@ export interface LocaleDefinition {
     compactModeDescription: string;
     alwaysOnTop: string;
     alwaysOnTopDescription: string;
+    pinCopiedToTop: string;
+    pinCopiedToTopDescription: string;
     useSystemTitleBar: string;
     useSystemTitleBarDescription: string;
     desktopFullscreen: string;

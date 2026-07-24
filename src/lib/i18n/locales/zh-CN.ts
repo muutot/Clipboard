@@ -238,6 +238,8 @@ const zhCN: LocaleDefinition = {
     compactModeDescription: "减少卡片间距，显示更多记录",
     alwaysOnTop: "窗口置顶",
     alwaysOnTopDescription: "窗口始终悬浮在其他应用上方",
+    pinCopiedToTop: "复制后置顶",
+    pinCopiedToTopDescription: "点击复制某个条目后将其移动到列表顶部",
     useSystemTitleBar: "使用系统标题栏",
     useSystemTitleBarDescription: "使用操作系统原生标题栏",
     desktopFullscreen: "桌面全屏预览",

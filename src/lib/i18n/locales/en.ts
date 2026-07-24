@@ -245,6 +245,8 @@ const en: LocaleDefinition = {
     compactModeDescription: "Reduce card spacing to show more records",
     alwaysOnTop: "Always on Top",
     alwaysOnTopDescription: "Window stays on top of other applications",
+    pinCopiedToTop: "Pin Copied to Top",
+    pinCopiedToTopDescription: "Move a copied item to the top of the list",
     useSystemTitleBar: "Use System Title Bar",
     useSystemTitleBarDescription: "Use the operating system's native title bar",
     desktopFullscreen: "Desktop Fullscreen Preview",

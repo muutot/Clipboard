@@ -152,6 +152,27 @@
 
   <section class="setting-card toggle-card">
     <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+      <div>
+        <strong>{_t("general.pinCopiedToTop")}</strong>
+        <p>{_t("general.pinCopiedToTopDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.pinCopiedToTop}
+      onclick={() => generalSettings.updateSetting("pinCopiedToTop", !s.pinCopiedToTop)}
+      aria-checked={s.pinCopiedToTop}
+      aria-label={_t("general.pinCopiedToTop")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
       <div>
         <strong>{_t("general.useSystemTitleBar")}</strong>
