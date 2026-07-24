@@ -265,7 +265,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: 9.5px;
+    font-size: var(--font-size-tiny, 9.5px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -273,7 +273,7 @@
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 18px;
+    font-size: var(--font-size-base, 18px);
     font-weight: 590;
   }
 
@@ -281,7 +281,7 @@
     max-width: 430px;
     margin: 0;
     color: #777;
-    font-size: 10.5px;
+    font-size: var(--font-size-secondary, 10.5px);
     line-height: 1.5;
   }
 
@@ -358,14 +358,14 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: 11.5px;
+    font-size: var(--font-size-base, 11.5px);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin: 2px 0 0;
     color: #777;
-    font-size: 9.8px;
+    font-size: var(--font-size-secondary, 9.8px);
   }
 
   .heading-inline {

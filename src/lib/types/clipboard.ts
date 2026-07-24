@@ -40,6 +40,7 @@ export type ThemeMode = "dark" | "light";
 export interface FontSizeSettings {
   base: number;
   secondary: number;
+  tiny: number;
 }
 
 export type Language = "zh-CN" | "en";

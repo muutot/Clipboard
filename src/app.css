@@ -17,6 +17,7 @@
   -moz-osx-font-smoothing: grayscale;
   --font-size-base: 14px;
   --font-size-secondary: 11px;
+  --font-size-tiny: 10px;
 }
 
 * {

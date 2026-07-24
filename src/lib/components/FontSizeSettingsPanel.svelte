@@ -42,6 +42,13 @@
     const el = document.querySelectorAll<HTMLInputElement>(".transparency-slider");
     el.forEach(updateSliderTrack);
   });
+
+  $effect(() => {
+    document.documentElement.style.fontSize = `${s.fontSizes.base}px`;
+    document.documentElement.style.setProperty("--font-size-base", `${s.fontSizes.base}px`);
+    document.documentElement.style.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
+    document.documentElement.style.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
+  });
 </script>
 
 <header>
@@ -82,6 +89,20 @@
     <input type="range" min="9" max="16" value={s.fontSizes.secondary} oninput={sliderHandler("secondary")} class="transparency-slider" />
   </section>
 
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="ruler" size={17} /></span>
+      <div class="heading-inline">
+        <div>
+          <strong>微小文字</strong>
+          <p>标签、标记、角标等最小号文字的字体大小</p>
+        </div>
+        <span class="value-label">{s.fontSizes.tiny}px</span>
+      </div>
+    </div>
+    <input type="range" min="8" max="13" value={s.fontSizes.tiny} oninput={sliderHandler("tiny")} class="transparency-slider" />
+  </section>
+
   <p class="auto-save-note">修改即时生效，无需手动保存</p>
 </div>
 
@@ -97,7 +118,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: 9.5px;
+    font-size: var(--font-size-tiny, 9.5px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -105,7 +126,7 @@
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 18px;
+    font-size: var(--font-size-base, 18px);
     font-weight: 590;
   }
 
@@ -113,7 +134,7 @@
     max-width: 430px;
     margin: 0;
     color: #777;
-    font-size: 10.5px;
+    font-size: var(--font-size-secondary, 10.5px);
     line-height: 1.5;
   }
 
@@ -182,19 +203,19 @@
   .heading-inline strong {
     display: block;
     color: #dedede;
-    font-size: 11.5px;
+    font-size: var(--font-size-base, 11.5px);
     font-weight: 560;
   }
 
   .heading-inline p {
     margin: 2px 0 0;
     color: #777;
-    font-size: 9.8px;
+    font-size: var(--font-size-secondary, 9.8px);
   }
 
   .value-label {
     color: #aaa;
-    font-size: 12px;
+    font-size: var(--font-size-secondary, 12px);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -250,7 +271,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: 10px;
+    font-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
 </style>

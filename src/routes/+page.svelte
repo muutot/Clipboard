@@ -364,8 +364,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     function applySettings(s: typeof $generalSettings) {
       const r = document.documentElement.style;
       if (s.fontSizes) {
+        r.fontSize = `${s.fontSizes.base}px`;
         r.setProperty("--font-size-base", `${s.fontSizes.base}px`);
         r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
+        r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
       }
       if ("__TAURI_INTERNALS__" in window) {
         getCurrentWindow()
@@ -386,11 +388,14 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
-    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number } }>(
+    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number } }>(
       "settings-font-changed",
       (event) => {
-        document.documentElement.style.setProperty("--font-size-base", `${event.payload.fontSizes.base}px`);
-        document.documentElement.style.setProperty("--font-size-secondary", `${event.payload.fontSizes.secondary}px`);
+        const { base, secondary, tiny } = event.payload.fontSizes;
+        document.documentElement.style.fontSize = `${base}px`;
+        document.documentElement.style.setProperty("--font-size-base", `${base}px`);
+        document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
+        document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
       },
     );
 

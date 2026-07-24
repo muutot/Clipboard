@@ -14,7 +14,7 @@ function loadFromStorage(): Partial<GeneralSettings> {
 function createSettingsStore() {
   const defaults: GeneralSettings = {
     language: "zh-CN",
-    fontSizes: { base: 14, secondary: 11 },
+    fontSizes: { base: 14, secondary: 11, tiny: 10 },
     windowTransparency: 95,
     compactMode: false,
     compactPaddingTop: 6,

@@ -692,7 +692,7 @@
   .header-title {
     overflow: hidden;
     color: #e4e4e4;
-    font-size: 13px;
+    font-size: var(--font-size-base, 13px);
     font-weight: 540;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -751,7 +751,7 @@
     color: #777;
     background: transparent;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-secondary, 12px);
     cursor: pointer;
     transition: color 100ms ease, background 100ms ease;
   }
