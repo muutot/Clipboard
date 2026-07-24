@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::oarocr::OAROCRBuilder;
 
 use super::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
@@ -9,6 +10,9 @@ use crate::domain::OcrTextBlock;
 pub struct PpOcrEngine {
     ocr: Mutex<Option<oar_ocr::oarocr::OAROCR>>,
     models_dir: PathBuf,
+    score_threshold: f32,
+    box_threshold: f32,
+    unclip_ratio: f32,
 }
 
 // SAFETY: OAROCR wraps ort::Session internally. The OCR worker calls recognize
@@ -17,10 +21,18 @@ unsafe impl Send for PpOcrEngine {}
 unsafe impl Sync for PpOcrEngine {}
 
 impl PpOcrEngine {
-    pub fn new(models_dir: PathBuf) -> Self {
+    pub fn new(
+        models_dir: PathBuf,
+        score_threshold: f32,
+        box_threshold: f32,
+        unclip_ratio: f32,
+    ) -> Self {
         Self {
             ocr: Mutex::new(None),
             models_dir,
+            score_threshold,
+            box_threshold,
+            unclip_ratio,
         }
     }
 
@@ -40,6 +52,12 @@ impl PpOcrEngine {
             "pp-ocrv6_small_rec.onnx",
             "ppocrv6_dict.txt",
         )
+        .text_detection_config(TextDetectionConfig {
+            score_threshold: self.score_threshold,
+            box_threshold: self.box_threshold,
+            unclip_ratio: self.unclip_ratio,
+            ..Default::default()
+        })
         .build()
         .map_err(|e| OcrEngineError::new(format!("Failed to build OCR engine: {e}")))
     }
@@ -47,7 +65,7 @@ impl PpOcrEngine {
 
 impl Default for PpOcrEngine {
     fn default() -> Self {
-        Self::new(PathBuf::new())
+        Self::new(PathBuf::new(), 0.3, 0.6, 1.5)
     }
 }
 

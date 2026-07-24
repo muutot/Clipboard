@@ -58,6 +58,9 @@ pub struct OcrConfig {
     pub tesseract_languages: String,
     pub models_dir: Option<PathBuf>,
     pub ppocr_model_path: Option<String>,
+    pub det_score_threshold: f32,
+    pub det_box_threshold: f32,
+    pub det_unclip_ratio: f32,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -69,6 +72,9 @@ impl Default for OcrConfig {
             tesseract_languages: "chi_sim+eng".to_string(),
             models_dir: None,
             ppocr_model_path: None,
+            det_score_threshold: 0.3,
+            det_box_threshold: 0.6,
+            det_unclip_ratio: 1.5,
             extra: BTreeMap::new(),
         }
     }
@@ -354,6 +360,30 @@ impl ConfigStore {
 
     pub fn set_models_dir(&mut self, value: Option<PathBuf>) -> Result<(), StorageError> {
         self.config.ocr.models_dir = value;
+        self.save()
+    }
+
+    pub fn det_score_threshold(&self) -> f32 {
+        self.config.ocr.det_score_threshold
+    }
+
+    pub fn det_box_threshold(&self) -> f32 {
+        self.config.ocr.det_box_threshold
+    }
+
+    pub fn det_unclip_ratio(&self) -> f32 {
+        self.config.ocr.det_unclip_ratio
+    }
+
+    pub fn set_det_thresholds(
+        &mut self,
+        score_threshold: f32,
+        box_threshold: f32,
+        unclip_ratio: f32,
+    ) -> Result<(), StorageError> {
+        self.config.ocr.det_score_threshold = score_threshold;
+        self.config.ocr.det_box_threshold = box_threshold;
+        self.config.ocr.det_unclip_ratio = unclip_ratio;
         self.save()
     }
 

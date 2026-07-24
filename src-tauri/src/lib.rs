@@ -352,6 +352,9 @@ fn get_ocr_config(config: tauri::State<'_, Mutex<ConfigStore>>) -> Result<OcrCon
     Ok(OcrConfigResponse {
         engine: config.ocr_engine().to_string(),
         tesseract_languages: config.tesseract_languages().to_string(),
+        det_score_threshold: config.det_score_threshold(),
+        det_box_threshold: config.det_box_threshold(),
+        det_unclip_ratio: config.det_unclip_ratio(),
     })
 }
 
@@ -359,10 +362,16 @@ fn get_ocr_config(config: tauri::State<'_, Mutex<ConfigStore>>) -> Result<OcrCon
 fn set_ocr_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     engine: String,
+    det_score_threshold: Option<f32>,
+    det_box_threshold: Option<f32>,
+    det_unclip_ratio: Option<f32>,
 ) -> Result<(), String> {
-    config.lock().map_err(|_| "config lock poisoned".to_owned())?
-        .set_ocr_engine(engine)
-        .map_err(|e| e.to_string())
+    let mut cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+    cfg.set_ocr_engine(engine).map_err(|e| e.to_string())?;
+    let score = det_score_threshold.unwrap_or_else(|| cfg.det_score_threshold());
+    let box_t = det_box_threshold.unwrap_or_else(|| cfg.det_box_threshold());
+    let unclip = det_unclip_ratio.unwrap_or_else(|| cfg.det_unclip_ratio());
+    cfg.set_det_thresholds(score, box_t, unclip).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -378,10 +387,13 @@ fn restart_ocr_engine(
     let cfg = config.lock().map_err(|_| "config lock".to_owned())?;
     let ocr_engine_name = cfg.ocr_engine().to_string();
     let langs = cfg.tesseract_languages().to_string();
+    let score_threshold = cfg.det_score_threshold();
+    let box_threshold = cfg.det_box_threshold();
+    let unclip_ratio = cfg.det_unclip_ratio();
     drop(cfg);
 
     let engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" {
-        let ppocr = PpOcrEngine::new(paths.storage.join("ppocr-models"));
+        let ppocr = PpOcrEngine::new(paths.storage.join("ppocr-models"), score_threshold, box_threshold, unclip_ratio);
         if ppocr.is_available() {
             Arc::new(ppocr)
         } else {
@@ -603,6 +615,9 @@ fn set_storage_config(
 struct OcrConfigResponse {
     engine: String,
     tesseract_languages: String,
+    det_score_threshold: f32,
+    det_box_threshold: f32,
+    det_unclip_ratio: f32,
 }
 
 #[tauri::command]
@@ -1295,9 +1310,12 @@ pub fn run() {
             let ocr_engine_name = config.ocr_engine().to_string();
             let models_dir = ocr::models::models_dir(&paths.storage);
             let ppocr_ready = ocr::models::all_models_present(&models_dir);
+            let score_threshold = config.det_score_threshold();
+            let box_threshold = config.det_box_threshold();
+            let unclip_ratio = config.det_unclip_ratio();
 
             let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && ppocr_ready {
-                Arc::new(PpOcrEngine::new(models_dir))
+                Arc::new(PpOcrEngine::new(models_dir, score_threshold, box_threshold, unclip_ratio))
             } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
             } else if TesseractOcrEngine::is_available() {

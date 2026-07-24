@@ -146,7 +146,7 @@
             type="button"
             title={_t("capture.refreshApps")}
             aria-label={_t("capture.refreshApps")}
-            onclick={loadSettings}>â†?/button
+            onclick={loadSettings}>&#x21bb;</button
           >
         </div>
         <label class="search-field">
@@ -176,14 +176,14 @@
           aria-label={_t("capture.ignoreSelected")}
           title={_t("capture.ignoreSelected")}
           disabled={saving || selectedAvailable.length === 0}
-          onclick={ignoreSelected}>â€?/button
+          onclick={ignoreSelected}>&#x2192;</button
         >
       </div>
 
       <div class="application-column">
         <div class="column-heading">
           <strong>{_t("capture.ignoredApps")} <span>{settings.ignoredApplications.length}</span></strong>
-          <span class="plus-mark">ï¼?/span>
+          <span class="plus-mark">+</span>
         </div>
         <label class="search-field">
           <AppIcon name="search" size={15} />
@@ -279,6 +279,21 @@
     min-height: 0;
     padding: 16px 20px 48px;
     overflow: auto;
+    scrollbar-color: #9a9a9a transparent;
+    scrollbar-width: thin;
+  }
+
+  .settings-scroll::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .settings-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .settings-scroll::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: #858585;
   }
   .filter-board {
     display: grid;

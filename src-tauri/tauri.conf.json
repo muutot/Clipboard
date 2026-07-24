@@ -16,7 +16,7 @@
         "title": "Clipboard",
         "width": 720,
         "height": 700,
-        "minWidth": 560,
+        "minWidth": 750,
         "minHeight": 500,
         "center": true,
         "resizable": true,

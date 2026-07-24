@@ -888,6 +888,7 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
+  <div class="resize-edge"></div>
   <header class="search-header" data-tauri-drag-region>
     <div class="search-box">
       <input
@@ -1217,7 +1218,7 @@
 <style>
   .app-shell {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: 4px auto auto minmax(0, 1fr) auto;
     width: 100%;
     height: 100vh;
     min-height: 480px;
@@ -1225,6 +1226,11 @@
     border: 1px solid #363636;
     color: #eeeeee;
     background: rgba(27, 27, 27, 0.985);
+  }
+
+  .resize-edge {
+    height: 4px;
+    background: transparent;
   }
 
   :global(.app-shell.compact .search-header) {

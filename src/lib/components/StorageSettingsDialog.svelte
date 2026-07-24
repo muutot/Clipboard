@@ -56,6 +56,9 @@
   let ocrProgressLabel = $state("");
   let ocrProgressPct = $state(-1);
   let modelVariant = $state("tiny");
+  let detScoreThreshold = $state(0.3);
+  let detBoxThreshold = $state(0.6);
+  let detUnclipRatio = $state(1.5);
 
   $effect(() => {
     if (open) {
@@ -97,6 +100,15 @@
       }
       const status = await invoke<{ available: boolean }>("check_ppocr_status");
       if (status) ocrAvailable = status.available;
+    } catch { /* ignore */ }
+    try {
+      const cfg = await invoke<{ engine: string; detScoreThreshold: number; detBoxThreshold: number; detUnclipRatio: number }>("get_ocr_config");
+      if (cfg) {
+        ocrEngine = cfg.engine;
+        detScoreThreshold = cfg.detScoreThreshold;
+        detBoxThreshold = cfg.detBoxThreshold;
+        detUnclipRatio = cfg.detUnclipRatio;
+      }
     } catch { /* ignore */ }
   }
 
@@ -242,6 +254,23 @@
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save OCR config", error);
+      feedback = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  async function saveDetConfig() {
+    try {
+      await invoke("set_ocr_config", {
+        engine: ocrEngine,
+        detScoreThreshold,
+        detBoxThreshold,
+        detUnclipRatio,
+      });
+      await invoke("restart_ocr_engine");
+      feedback = "检测参数已保存并生效";
+      feedbackSuccess = true;
+    } catch (error) {
+      console.error("Unable to save detection config", error);
       feedback = error instanceof Error ? error.message : String(error);
     }
   }
@@ -409,18 +438,18 @@
             </div>
           </div>
           {#if ocrAvailable}
-            <div style="padding:8px 0; color:#51b96b; font-size:12px;">✓ 模型已下载到 storage/ppocr-models/</div>
+            <div style="padding:8px 0; color:#51b96b; font-size:13px;">✓ 模型已下载到 storage/ppocr-models/</div>
           {:else}
             <div style="display:flex; gap:8px; align-items:stretch;">
               <div style="flex:1; min-width:0;">
-                <label for="model-variant" style="display:block; font-size:10px; color:#8a8a8a; margin-bottom:4px;">模型规格</label>
+                <label for="model-variant" style="display:block; font-size:11.5px; color:#8a8a8a; margin-bottom:4px;">模型规格</label>
                 <select bind:value={modelVariant} class="model-select">
                   <option value="tiny">tiny (快速, ~5MB)</option>
                   <option value="medium">medium (平衡, ~15MB)</option>
                   <option value="large">large (高精度, ~30MB)</option>
                 </select>
               </div>
-              <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="align-self:flex-end; white-space:nowrap; padding:9px 14px; border:1px solid #343434; border-radius:7px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:11.5px;">
+              <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="align-self:flex-end; white-space:nowrap; padding:9px 14px; border:1px solid #343434; border-radius:7px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px;">
                 {ocrInstalling ? (ocrProgressPct >= 0 ? `${Math.round(ocrProgressPct)}%` : '下载中...') : '下载模型'}
               </button>
             </div>
@@ -430,6 +459,48 @@
               </div>
             {/if}
           {/if}
+        </section>
+
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+            <div>
+              <strong>检测参数</strong>
+              <p>调整文本区域检测参数，影响空格与换行的识别</p>
+            </div>
+          </div>
+          <div style="display:grid; gap:12px;">
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+                <span>分数阈值 (score)</span>
+                <span style="color:#d7d7d7;">{detScoreThreshold.toFixed(2)}</span>
+              </label>
+              <input type="range" min="0.05" max="0.95" step="0.05" bind:value={detScoreThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
+              <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
+                <span>低 (更多区域)</span><span>高 (更少区域)</span>
+              </div>
+            </div>
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+                <span>框阈值 (box)</span>
+                <span style="color:#d7d7d7;">{detBoxThreshold.toFixed(2)}</span>
+              </label>
+              <input type="range" min="0.1" max="0.95" step="0.05" bind:value={detBoxThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
+              <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
+                <span>低 (更多区域)</span><span>高 (更少区域)</span>
+              </div>
+            </div>
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+                <span>扩展比例 (unclip)</span>
+                <span style="color:#d7d7d7;">{detUnclipRatio.toFixed(1)}</span>
+              </label>
+              <input type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
+              <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
+                <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="setting-card">
@@ -854,12 +925,12 @@
   }
 
   .settings-brand strong {
-    font-size: 12px;
+    font-size: 13.5px;
   }
   .settings-brand small {
     margin-top: 2px;
     color: #6f6f6f;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   nav {
@@ -878,7 +949,7 @@
     color: #777;
     background: transparent;
     font: inherit;
-    font-size: 11.5px;
+    font-size: 13px;
     text-align: left;
     cursor: pointer;
     transition: background 100ms ease, color 100ms ease;
@@ -905,7 +976,7 @@
     margin-top: auto;
     padding: 10px 6px 0;
     color: #606060;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .sidebar-foot code {
@@ -935,7 +1006,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: 9.5px;
+    font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -943,7 +1014,7 @@
   h2 {
     margin: 5px 0 4px;
     color: #efefef;
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 590;
   }
 
@@ -956,7 +1027,7 @@
 
   header p {
     max-width: 430px;
-    font-size: 10.5px;
+    font-size: 12px;
   }
 
   .close-button {
@@ -966,7 +1037,7 @@
     border-radius: 7px;
     color: #999;
     background: #222;
-    font-size: 18px;
+    font-size: 19px;
     line-height: 1;
     cursor: pointer;
   }
@@ -977,6 +1048,21 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
+    scrollbar-color: #9a9a9a transparent;
+    scrollbar-width: thin;
+  }
+
+  .settings-scroll::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .settings-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .settings-scroll::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: #858585;
   }
 
   .setting-card {
@@ -1006,13 +1092,13 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: 11.5px;
+    font-size: 13px;
     font-weight: 560;
   }
 
   .setting-heading p {
     margin-top: 2px;
-    font-size: 9.8px;
+    font-size: 11px;
   }
 
   .path-value,
@@ -1031,7 +1117,7 @@
     border: 1px solid #2f2f2f;
     border-radius: 6px;
     background: #181818;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .directory-badge {
@@ -1040,7 +1126,7 @@
     border: 1px solid #393939;
     border-radius: 999px;
     color: #888;
-    font-size: 9px;
+    font-size: 10.5px;
   }
 
   .directory-badge.custom {
@@ -1053,7 +1139,7 @@
     display: block;
     margin: 12px 0 6px;
     color: #8a8a8a;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   input {
@@ -1066,7 +1152,7 @@
     color: #d7d7d7;
     background: #171717;
     font:
-      10.5px "Cascadia Code",
+      12px "Cascadia Code",
       "SFMono-Regular",
       Consolas,
       monospace;
@@ -1086,7 +1172,7 @@
     outline: none;
     color: #d7d7d7;
     background: #171717;
-    font-size: 11.5px;
+    font-size: 13px;
     cursor: pointer;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
@@ -1114,7 +1200,7 @@
     color: #a3a3a3;
     background: #252525;
     font: inherit;
-    font-size: 10px;
+    font-size: 11.5px;
     cursor: pointer;
   }
 
@@ -1138,11 +1224,11 @@
     padding-top: 9px;
     border-top: 1px solid #2d2d2d;
     color: #6f6f6f;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .pending-path code {
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .directory-tree-card pre {
@@ -1177,14 +1263,14 @@
   .stat-value {
     display: block;
     color: #e4e4e4;
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
     margin-bottom: 4px;
   }
 
   .stat-label {
     color: #777;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .number-input-row {
@@ -1200,7 +1286,7 @@
 
   .number-suffix {
     color: #888;
-    font-size: 10.5px;
+    font-size: 12px;
     flex-shrink: 0;
   }
 
@@ -1210,7 +1296,7 @@
     gap: 8px 14px;
     padding: 1px 3px;
     color: #666;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .settings-state {
@@ -1218,7 +1304,7 @@
     flex: 1;
     place-items: center;
     color: #777;
-    font-size: 11px;
+    font-size: 12.5px;
   }
 
   .settings-feedback {
@@ -1231,7 +1317,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: 10px;
+    font-size: 11.5px;
   }
 
   .settings-feedback.success {
@@ -1271,19 +1357,19 @@
   .perf-item strong {
     display: block;
     color: #dedede;
-    font-size: 13px;
+    font-size: 14.5px;
     font-weight: 560;
   }
 
   .perf-item span {
     color: #6f6f6f;
-    font-size: 9px;
+    font-size: 10.5px;
   }
 
   .perf-mem {
     margin-top: 8px;
     color: #6f6f6f;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .repair-result {
@@ -1292,7 +1378,7 @@
     border: 1px solid #2f2f2f;
     border-radius: 6px;
     background: #181818;
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .repair-result span.ok {
@@ -1307,14 +1393,14 @@
     display: block;
     margin-top: 4px;
     color: #a7a7a7;
-    font-size: 9px;
+    font-size: 10.5px;
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: 10px;
+    font-size: 11.5px;
     text-align: center;
   }
 </style>
