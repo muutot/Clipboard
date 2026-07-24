@@ -585,10 +585,7 @@
     overflow: hidden;
     font-size: var(--font-size-base, 13px);
     line-height: 1.55;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: var(--text-lines, 1);
-    line-clamp: var(--text-lines, 1);
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
 

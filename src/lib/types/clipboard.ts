@@ -44,7 +44,6 @@ export interface FontSizeSettings {
 }
 
 export interface DisplaySettings {
-  textLines: number;
   showSecondaryText: boolean;
 }
 

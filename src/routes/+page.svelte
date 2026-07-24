@@ -370,7 +370,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
       }
       if (s.display) {
-        r.setProperty("--text-lines", `${s.display.textLines}`);
         r.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
       }
       if ("__TAURI_INTERNALS__" in window) {
@@ -392,7 +391,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
-    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number }; display: { textLines: number; showSecondaryText: boolean } }>(
+    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number }; display: { showSecondaryText: boolean } }>(
       "settings-font-changed",
       (event) => {
         const { base, secondary, tiny } = event.payload.fontSizes || {};
@@ -404,7 +403,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
           document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
         }
         if (display) {
-          document.documentElement.style.setProperty("--text-lines", `${display.textLines}`);
           document.documentElement.style.setProperty("--show-secondary", display.showSecondaryText ? "block" : "none");
         }
       },
