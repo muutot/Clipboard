@@ -788,22 +788,20 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === "ArrowDown") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
       event.preventDefault();
       moveSelection(1);
       return;
     }
 
     if (event.key === "ArrowUp") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
       event.preventDefault();
       moveSelection(-1);
       return;
     }
 
     if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const next = (idx + 1) % filters.length;
@@ -812,6 +810,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
 
     if (event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey)) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const prev = (idx - 1 + filters.length) % filters.length;

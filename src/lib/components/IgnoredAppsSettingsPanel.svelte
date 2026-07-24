@@ -264,6 +264,9 @@
     line-height: 1.5;
   }
   .close-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 28px;
     height: 28px;
     border: 1px solid #353535;
@@ -335,6 +338,9 @@
   }
   .column-heading button,
   .plus-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 0;
     color: #888;
     background: transparent;
@@ -407,6 +413,11 @@
     text-overflow: ellipsis;
   }
   .application-row > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
     margin-left: auto;
     border: 0;
     color: #666;

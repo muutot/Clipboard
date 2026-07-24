@@ -17,5 +17,7 @@ export async function configureIgnoredApplications(applications: string[]): Prom
     throw new Error("Application filters are only available in the desktop app");
   }
 
-  return invoke<string[]>("configure_ignored_applications", { applications });
+  const result = await invoke<string[]>("configure_ignored_applications", { applications });
+  invoke("set_clipboard_ignored_apps", { apps: applications }).catch(() => {});
+  return result;
 }

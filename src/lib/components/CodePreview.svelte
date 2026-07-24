@@ -133,7 +133,7 @@
     margin: 0;
     padding: 8px 0;
     overflow-x: auto;
-    font: 11px/1.65 "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+    font: 11px/1.35 "Cascadia Code", Consolas, "SFMono-Regular", monospace;
     color: #d4d4d4;
   }
 
