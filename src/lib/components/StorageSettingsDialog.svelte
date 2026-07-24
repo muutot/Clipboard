@@ -878,7 +878,7 @@
   .settings-dialog {
     display: grid;
     grid-template-columns: 168px minmax(0, 1fr);
-    width: min(900px, 100%);
+    width: min(728px, 100%);
     height: min(570px, 100%);
     overflow: hidden;
     border: 1px solid #323232;
