@@ -566,10 +566,8 @@
               <input type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
               <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
                 <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
-              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
         <section class="setting-card">
           <div class="setting-heading">
@@ -608,19 +606,13 @@
         <div class="settings-state">{_t("storage.readingConfig")}</div>
       {:else if status}
         <div class="settings-scroll">
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-              <div>
-                <strong>{_t("storage.configSectionTitle")}</strong>
-                <p>{relativePath(status!.configPath)}</p>
-              </div>
-            </div>
-            <div class="setting-actions">
-              <button type="button" onclick={() => invoke("open_external_url", { url: status!.configPath })}>
-                <AppIcon name="file" size={14} /> 打开配置文件
-              </button>
-            </div>
+          <section class="setting-card setting-card-row">
+            <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+            <span class="setting-label">常规配置文件</span>
+            <span class="config-path">{relativePath(status!.configPath)}</span>
+            <button type="button" class="open-btn" onclick={() => invoke("open_external_url", { url: status!.configPath })}>
+              <AppIcon name="file" size={14} /> 打开
+            </button>
           </section>
 
           <section class="setting-card">
@@ -636,28 +628,16 @@
                 <p>{_t("storage.dataDirectoryDesc")}</p>
               </div>
             </div>
-
-            <label for="data-directory">{_t("storage.directoryPath")}</label>
-            <input
-              id="data-directory"
-              bind:value={dataDirectory}
-              autocomplete="off"
-              spellcheck="false"
-              placeholder={_t("storage.placeholderPath")}
-            />
-
-            <div class="setting-actions">
-              <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
-                >{_t("storage.restoreDefault")}</button
-              >
-              <button
-                class="primary"
-                type="button"
-                disabled={saving}
-                onclick={saveCustomDirectory}
-              >
-                {saving ? _t("storage.saving") : _t("storage.saveDirectory")}
-              </button>
+            <div class="dir-input-row">
+              <input
+                id="data-directory"
+                bind:value={dataDirectory}
+                autocomplete="off"
+                spellcheck="false"
+                placeholder={_t("storage.placeholderPath")}
+              />
+              <button type="button" disabled={saving} onclick={restoreDefaultDirectory}>{_t("storage.restoreDefault")}</button>
+              <button type="button" disabled={saving} onclick={saveCustomDirectory}>{saving ? _t("storage.saving") : _t("storage.saveDirectory")}</button>
             </div>
 
             {#if pending}
@@ -1506,6 +1486,86 @@
     color: #888;
     font-size: 11px;
     flex-shrink: 0;
+  }
+
+  .config-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #777;
+    font-size: 10.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #999;
+    background: #222;
+    font: inherit;
+    font-size: 10.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .open-btn:hover {
+    color: #ccc;
+    background: #2e2e2e;
+  }
+
+  .dir-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .dir-input-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #d7d7d7;
+    background: #1a1a1a;
+    font: 12px "Cascadia Code", Consolas, monospace;
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+
+  .dir-input-row input:focus {
+    border-color: #555;
+  }
+
+  .dir-input-row button {
+    padding: 7px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #a3a3a3;
+    background: #252525;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .dir-input-row button:hover {
+    color: #ccc;
+    background: #2e2e2e;
+  }
+
+  .dir-input-row button:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   .unit-select {
