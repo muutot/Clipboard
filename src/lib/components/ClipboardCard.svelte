@@ -585,13 +585,17 @@
     overflow: hidden;
     font-size: var(--font-size-base, 13px);
     line-height: 1.55;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--text-lines, 1);
+    line-clamp: var(--text-lines, 1);
     text-overflow: ellipsis;
   }
 
   .secondary-preview {
     margin-top: 4px;
     overflow: hidden;
+    display: var(--show-secondary, block);
     color: #8e8e8e;
     font-size: var(--font-size-secondary, 11.5px);
     white-space: nowrap;

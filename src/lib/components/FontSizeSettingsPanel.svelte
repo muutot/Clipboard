@@ -26,8 +26,15 @@
 
   function applyFontSize(category: keyof typeof s.fontSizes, value: number) {
     generalSettings.updateSetting("fontSizes", { ...s.fontSizes, [category]: value });
+    document.documentElement.style.fontSize = `${s.fontSizes.base}px`;
     document.documentElement.style.setProperty(`--font-size-${category}`, `${value}px`);
-    emit("settings-font-changed", { fontSizes: { ...s.fontSizes, [category]: value } }).catch(() => {});
+    emit("settings-font-changed", { fontSizes: { ...s.fontSizes, [category]: value }, display: s.display }).catch(() => {});
+  }
+
+  function updateDisplay(partial: Partial<typeof s.display>) {
+    const d = { ...s.display, ...partial };
+    generalSettings.updateSetting("display", d);
+    emit("settings-font-changed", { fontSizes: s.fontSizes, display: d }).catch(() => {});
   }
 
   function sliderHandler(category: keyof typeof s.fontSizes) {
@@ -48,6 +55,8 @@
     document.documentElement.style.setProperty("--font-size-base", `${s.fontSizes.base}px`);
     document.documentElement.style.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
     document.documentElement.style.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
+    document.documentElement.style.setProperty("--text-lines", `${s.display.textLines}`);
+    document.documentElement.style.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
   });
 </script>
 
@@ -101,6 +110,36 @@
       </div>
     </div>
     <input type="range" min="8" max="13" value={s.fontSizes.tiny} oninput={sliderHandler("tiny")} class="transparency-slider" />
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+      <div>
+        <strong>多行文字</strong>
+        <p>列表条目显示多行文字，设置显示行数</p>
+      </div>
+    </div>
+    <label class="font-size-input">
+      <input type="number" min={1} max={5} value={s.display.textLines}
+        oninput={(e) => updateDisplay({ textLines: Number((e.target as HTMLInputElement).value) })} />
+      <span>行</span>
+    </label>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+      <div>
+        <strong>显示辅助文字</strong>
+        <p>列表条目下方的小字预览文本</p>
+      </div>
+    </div>
+    <button type="button" class="toggle-switch" class:active={s.display.showSecondaryText}
+      onclick={() => updateDisplay({ showSecondaryText: !s.display.showSecondaryText })}
+      role="switch" aria-checked={s.display.showSecondaryText} aria-label="显示辅助文字">
+      <span class="toggle-knob"></span>
+    </button>
   </section>
 
   <p class="auto-save-note">修改即时生效，无需手动保存</p>
@@ -274,4 +313,84 @@
     font-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
+
+  .toggle-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .toggle-switch {
+    width: 40px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    background: #1a1a1a;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: border-color 100ms ease, background 100ms ease;
+  }
+
+  .toggle-switch.active {
+    border-color: #4aa8ff;
+    background: rgba(74, 168, 255, 0.18);
+  }
+
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #666;
+    transition: transform 120ms ease, background 100ms ease;
+  }
+
+  .toggle-switch.active .toggle-knob {
+    transform: translateX(18px);
+    background: #4aa8ff;
+  }
+
+  .font-size-input {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .font-size-input input {
+    width: 42px;
+    padding: 4px 6px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #d8d8d8;
+    background: #1a1a1a;
+    font: inherit;
+    font-size: 11px;
+    text-align: center;
+    outline: none;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .font-size-input input::-webkit-inner-spin-button,
+  .font-size-input input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .font-size-input input:focus {
+    border-color: #5a5a5a;
+  }
+
+  .font-size-input span {
+    color: #888;
+    font-size: 10px;
+  }
+
+  button { cursor: pointer; }
 </style>

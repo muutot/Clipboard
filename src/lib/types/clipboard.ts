@@ -43,11 +43,17 @@ export interface FontSizeSettings {
   tiny: number;
 }
 
+export interface DisplaySettings {
+  textLines: number;
+  showSecondaryText: boolean;
+}
+
 export type Language = "zh-CN" | "en";
 
 export interface GeneralSettings {
   language: Language;
   fontSizes: FontSizeSettings;
+  display: DisplaySettings;
   windowTransparency: number;
   compactMode: boolean;
   compactPaddingTop: number;

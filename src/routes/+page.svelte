@@ -369,6 +369,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
         r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
       }
+      if (s.display) {
+        r.setProperty("--text-lines", `${s.display.textLines}`);
+        r.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
+      }
       if ("__TAURI_INTERNALS__" in window) {
         getCurrentWindow()
           .setAlwaysOnTop(s.alwaysOnTop)
@@ -388,14 +392,21 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
-    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number } }>(
+    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number }; display: { textLines: number; showSecondaryText: boolean } }>(
       "settings-font-changed",
       (event) => {
-        const { base, secondary, tiny } = event.payload.fontSizes;
-        document.documentElement.style.fontSize = `${base}px`;
-        document.documentElement.style.setProperty("--font-size-base", `${base}px`);
-        document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
-        document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
+        const { base, secondary, tiny } = event.payload.fontSizes || {};
+        const display = event.payload.display;
+        if (base !== undefined) {
+          document.documentElement.style.fontSize = `${base}px`;
+          document.documentElement.style.setProperty("--font-size-base", `${base}px`);
+          document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
+          document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
+        }
+        if (display) {
+          document.documentElement.style.setProperty("--text-lines", `${display.textLines}`);
+          document.documentElement.style.setProperty("--show-secondary", display.showSecondaryText ? "block" : "none");
+        }
       },
     );
 

@@ -15,6 +15,7 @@ function createSettingsStore() {
   const defaults: GeneralSettings = {
     language: "zh-CN",
     fontSizes: { base: 14, secondary: 11, tiny: 10 },
+    display: { textLines: 1, showSecondaryText: true },
     windowTransparency: 95,
     compactMode: false,
     compactPaddingTop: 6,
