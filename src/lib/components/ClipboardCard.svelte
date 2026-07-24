@@ -45,6 +45,7 @@
     compactPaddingBottom?: number;
     compactCardGap?: number;
     compactCardBorderRadius?: number;
+    compactCardHeight?: number;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
@@ -70,6 +71,7 @@
     compactPaddingBottom = 4,
     compactCardGap = 5,
     compactCardBorderRadius = 10,
+    compactCardHeight = 0,
     onselect,
     ontoggleSelect,
     ontoggleFavorite,
@@ -228,6 +230,7 @@
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
   style:--cg={compact ? `${compactCardGap}px` : undefined}
   style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
+  style:height={compact && compactCardHeight ? `${compactCardHeight}px` : undefined}
   tabindex="-1"
   data-id={item.id}
   draggable="true"
@@ -483,6 +486,8 @@
     padding: var(--cpt, 6px) 14px var(--cpb, 4px);
     border-radius: var(--cbr, 7px);
     margin-bottom: var(--cg, 5px);
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .clip-card.compact .meta-row {

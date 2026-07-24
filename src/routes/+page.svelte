@@ -1206,6 +1206,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                   compactPaddingBottom={compactPaddingBottom}
                   compactCardGap={compactCardGap}
                   compactCardBorderRadius={compactCardBorderRadius}
+                  compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : item.kind !== "file" && !!item.preview ? compactTallText : compactText) : 0}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1232,6 +1233,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                 compactPaddingBottom={compactPaddingBottom}
                 compactCardGap={compactCardGap}
                 compactCardBorderRadius={compactCardBorderRadius}
+                compactCardHeight={itemHeight(item.kind, item.kind !== "image" && item.kind !== "file" && !!item.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap)}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}
