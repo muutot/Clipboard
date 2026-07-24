@@ -1614,8 +1614,8 @@
   }
 
   .unit-select {
-    width: 56px;
-    padding: 7px 2px;
+    width: 64px;
+    padding: 8px 24px 8px 10px;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     color: #d7d7d7;
@@ -1623,14 +1623,20 @@
     font-size: 11px;
     cursor: pointer;
     flex-shrink: 0;
-    text-align: center;
-    text-align-last: center;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23999' d='M1 2l3 4 3-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
     outline: none;
-    transition: border-color 120ms ease;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .unit-select:hover {
+    border-color: #555;
   }
 
   .unit-select:focus {
-    border-color: #555;
+    border-color: #5a8fd4;
   }
 
   .restart-btn {
