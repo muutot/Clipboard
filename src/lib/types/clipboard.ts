@@ -16,6 +16,7 @@ export interface ClipboardItem {
   createdAt: number;
   favorite: boolean;
   deleted?: boolean;
+  customTitle?: boolean;
   fileName?: string;
   imageMeta?: {
     width: number;

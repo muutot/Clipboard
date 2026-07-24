@@ -89,6 +89,7 @@
 
   let editing = $state(false);
   let editContent = $state("");
+  let editTitle = $state("");
   let contentActions = $state<{
     hasEmail: boolean;
     hasUrl: boolean;
@@ -207,6 +208,7 @@
   function startEdit(event: MouseEvent) {
     event.stopPropagation();
     editContent = item.textContent || item.title;
+    editTitle = item.title;
     editing = true;
     onedit(item.id);
   }
@@ -298,7 +300,7 @@
       {:else}
         <div class="text-preview">{item.title}</div>
         {#if item.preview}
-          <div class="secondary-preview">{item.preview}</div>
+          <div class="secondary-preview" style:display={item.customTitle ? "block" : undefined}>{item.preview}</div>
         {/if}
       {/if}
     </div>
@@ -456,6 +458,9 @@
     </div>
   {:else}
     <div class="edit-area">
+      {#if item.customTitle}
+        <input class="edit-title-input" bind:value={editTitle} placeholder="标题" />
+      {/if}
       <textarea
         bind:value={editContent}
         rows={Math.min(12, Math.max(3, editContent.split("\n").length))}
@@ -776,6 +781,24 @@
     position: relative;
     z-index: 4;
     padding: 4px;
+  }
+
+  .edit-title-input {
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #d8d8d8;
+    background: #1a1a1a;
+    font: inherit;
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .edit-title-input:focus {
+    border-color: #5a5a5a;
   }
 
   .edit-area textarea {
