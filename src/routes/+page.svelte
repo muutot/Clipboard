@@ -940,7 +940,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <div class="drag-bar" onmousedown={() => getCurrentWebviewWindow().startDragging()}></div>
   <header class="search-header" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
     <div class="search-box">
       <input
@@ -1282,7 +1281,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 <style>
   .app-shell {
     display: grid;
-    grid-template-rows: 4px auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     width: 100%;
     height: 100vh;
     min-height: 480px;
@@ -1290,15 +1289,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     border: 1px solid #363636;
     color: #eeeeee;
     background: rgba(27, 27, 27, 0.985);
-  }
-
-  .drag-bar {
-    height: 12px;
-    width: 100%;
-    min-height: 12px;
-    background: rgba(255, 255, 255, 0.015);
-    cursor: default;
-    flex-shrink: 0;
   }
 
   :global(.app-shell.compact .search-header) {
