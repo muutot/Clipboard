@@ -34,7 +34,7 @@ export function itemHeight(
 ): number {
   if (customTitle && compact) return (compactCustomTitle ?? 80) + (cardGap ?? 5);
   const effectivePreview = hasPreview && showPreview !== false;
-  if (kind === "image") return compact ? (compactImage ?? 130) : IMAGE_HEIGHT;
+  if (kind === "image") return compact ? (compactImage ?? 130) + (cardGap ?? 5) : IMAGE_HEIGHT;
   if (compact) return (effectivePreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
   return effectivePreview ? TALL_TEXT_HEIGHT : TEXT_HEIGHT;
 }

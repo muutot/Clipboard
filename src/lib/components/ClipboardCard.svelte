@@ -522,8 +522,7 @@
     overflow: hidden;
     outline: none;
     transition:
-      background 120ms ease,
-      border-color 120ms ease;
+      background 120ms ease;
   }
 
   .clip-card.compact {
@@ -581,6 +580,7 @@
   }
 
   .clip-card:hover .card-checkbox,
+  .clip-card.selected .card-checkbox,
   .clip-card .card-checkbox:has(input:checked) {
     opacity: 1;
   }
