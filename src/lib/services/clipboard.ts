@@ -96,6 +96,20 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const fileLabel = locale === "zh-CN" ? "个文件" : " file(s)";
   const imageLabel = locale === "zh-CN" ? "图片记录" : "Image record";
 
+  let imageMeta: { width: number; height: number } | undefined;
+  let fileMeta: { name: string; size: number }[] | undefined;
+  if (record.metadataJson) {
+    try {
+      const meta = JSON.parse(record.metadataJson);
+      if (record.kind === "image" && typeof meta.width === "number" && typeof meta.height === "number") {
+        imageMeta = { width: meta.width, height: meta.height };
+      }
+      if (record.kind === "file" && Array.isArray(meta.files)) {
+        fileMeta = meta.files;
+      }
+    } catch { /* ignore */ }
+  }
+
   return {
     id: record.id,
     kind: record.kind,
@@ -104,10 +118,13 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     sourceApp,
     sourceTone: sourceTone(sourceApp, locale),
     sizeLabel: formatSizeSimple(record),
+    sizeBytes: record.sizeBytes,
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
     fileName:
       record.kind === "file" ? fileNameFromPath(record.resourcePath) || record.title : undefined,
+    imageMeta,
+    fileMeta,
     previewPath: record.previewPath,
     resourcePath: record.resourcePath,
     textContent: record.textContent,
@@ -121,7 +138,8 @@ function buildPreview(
   fileLabel: string, imageLabel: string,
 ): string {
   if (record.textContent && record.textContent !== record.title) {
-    return record.textContent;
+    const lines = record.textContent.split("\n");
+    return lines.length > 1 ? lines[1] : "";
   }
 
   if (record.kind === "file") {

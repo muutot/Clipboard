@@ -623,6 +623,20 @@
       });
   }
 
+  function copyFilename(_id: string) {
+    const item = items.find((i) => i.id === _id);
+    if (!item) return;
+    const name = item.fileName ?? item.title;
+    void navigator.clipboard
+      .writeText(name)
+      .then(() => {
+        showToast(_t("toast.copySuccess"), "success");
+      })
+      .catch(() => {
+        showToast(_t("toast.copyFailed"), "error");
+      });
+  }
+
   function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
@@ -1213,6 +1227,7 @@
   onsaveedit={saveEdit}
   onplainpaste={plainPaste}
   onformatpaste={formatPaste}
+  oncopyfilename={copyFilename}
 />
 
 <style>
@@ -1258,28 +1273,6 @@
 
   :global(.app-shell.compact .history-list) {
     padding: 0 4px 6px;
-  }
-
-  :global(.app-shell.compact .clip-card) {
-    padding: 6px 10px 5px;
-    border-radius: 7px;
-  }
-
-  :global(.app-shell.compact .clip-card .meta-row) {
-    gap: 5px;
-  }
-
-  :global(.app-shell.compact .clip-card .meta-row span) {
-    font-size: 9.5px;
-  }
-
-  :global(.app-shell.compact .clip-card .content) {
-    font-size: 12px;
-  }
-
-  :global(.app-shell.compact .clip-card .preview-text) {
-    font-size: 11.5px;
-    line-height: 1.4;
   }
 
   .search-header {

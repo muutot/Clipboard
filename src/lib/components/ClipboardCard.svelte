@@ -259,7 +259,11 @@
       {:else if item.kind === "file"}
         <div class="file-title">
           <span class="file-icon"><AppIcon name="file" size={15} /></span>
-          <span>{item.fileName ?? item.title}</span>
+          {#if item.fileMeta && item.fileMeta.length > 1}
+            <span>{item.fileMeta[0].name}{item.fileMeta.length > 2 ? `, ${item.fileMeta[1].name}` : ""} 等 {item.fileMeta.length} 个文件</span>
+          {:else}
+            <span>{item.fileName ?? item.title}</span>
+          {/if}
         </div>
       {:else}
         <div class="text-preview">{item.title}</div>
@@ -330,7 +334,7 @@
             }}><AppIcon name="download" size={16} /></button
           >
         {/if}
-        {#if item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file"}
+        {#if (item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
           <button
             type="button"
             title={item.kind === "image" || item.kind === "file"
