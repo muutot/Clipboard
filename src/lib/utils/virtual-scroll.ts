@@ -22,7 +22,10 @@ export function itemHeight(
   compactImage?: number,
   cardGap?: number,
   showPreview?: boolean,
+  customTitle?: boolean,
+  compactCustomTitle?: number,
 ): number {
+  if (customTitle && compact) return (compactCustomTitle ?? 80) + (cardGap ?? 5);
   const effectivePreview = hasPreview && showPreview !== false;
   if (kind === "image") return compact ? (compactImage ?? 130) : IMAGE_HEIGHT;
   if (compact) return (effectivePreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
