@@ -257,7 +257,7 @@
 {/snippet}
 
 {#snippet dialogContent()}
-  <aside class="settings-sidebar">
+  <aside class="settings-sidebar" data-tauri-drag-region>
     <div class="settings-brand">
       <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
       <div>

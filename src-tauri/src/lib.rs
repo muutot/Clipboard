@@ -369,8 +369,8 @@ fn install_ppocr(
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<String, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
-    ocr::models::download_models(&models_dir, None)?;
-    Ok("PP-OCR models downloaded successfully".to_string())
+    std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
+    Ok(format!("PP-OCR models directory ready: {}", models_dir.display()))
 }
 
 #[tauri::command]
@@ -1164,15 +1164,9 @@ pub fn run() {
 
             let ocr_engine_name = config.ocr_engine().to_string();
             let models_dir = ocr::models::models_dir(&paths.storage);
-            // Try auto-download PP-OCR models if configured
-            if ocr_engine_name == "ppocr" && !ocr::models::all_models_present(&models_dir) {
-                eprintln!("[ocr] PP-OCR configured, downloading models...");
-                if let Err(e) = ocr::models::download_models(&models_dir, None) {
-                    eprintln!("[ocr] PP-OCR model download failed: {}", e);
-                }
-            }
+            let ppocr_ready = ocr::models::all_models_present(&models_dir);
 
-            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && ocr::models::all_models_present(&models_dir) {
+            let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && ppocr_ready {
                 Arc::new(PpOcrEngine::new(models_dir))
             } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))

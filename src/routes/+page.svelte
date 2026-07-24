@@ -714,8 +714,10 @@
     }
 
     if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        event.preventDefault();
         return;
+      }
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const next = (idx + 1) % filters.length;
@@ -724,8 +726,10 @@
     }
 
     if (event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        event.preventDefault();
         return;
+      }
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const prev = (idx - 1 + filters.length) % filters.length;
@@ -852,7 +856,6 @@
 <main class="app-shell">
   <header class="search-header" data-tauri-drag-region>
     <div class="search-box">
-      <AppIcon name="search" size={20} strokeWidth={1.65} />
       <input
         bind:value={query}
         aria-label={_t("app.searchPlaceholder")}
