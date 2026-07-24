@@ -528,7 +528,7 @@
   }
 
   .clip-card.compact .text-preview {
-    font-size: var(--font-size-cardPreview, 11px);
+    font-size: var(--font-size-cardTitle, 13px);
     line-height: 1.4;
   }
 
