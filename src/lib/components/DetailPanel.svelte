@@ -216,8 +216,9 @@
     emails.length > 0 || urls.length > 0 || phones.length > 0 || colors.length > 0,
   );
 
-  const isCode = $derived(item ? detectCodeLanguage(item.title) !== null : false);
-  const isMarkdown = $derived(item ? /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m.test(item.title) : false);
+  const detailContent = $derived(item ? (item.textContent || item.title) : "");
+  const isCode = $derived(item ? detectCodeLanguage(detailContent) !== null : false);
+  const isMarkdown = $derived(item ? /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m.test(detailContent) : false);
 
   function detectCodeLanguage(text: string): string | null {
     const patterns: [RegExp, string][] = [
@@ -271,7 +272,6 @@
   function saveEdit() {
     if (!item || !editContent.trim()) { editing = false; return; }
     onsaveedit(item.id, editContent.trim());
-    item.title = editContent.trim();
     editing = false;
   }
 </script>
@@ -375,9 +375,9 @@
               {/if}
             </div>
           {:else if isCode && !isMarkdown}
-            <CodePreview content={item.title} />
+            <CodePreview content={detailContent} />
           {:else if isMarkdown}
-            <MarkdownPreview content={item.title} />
+            <MarkdownPreview content={detailContent} />
           {:else}
             {#if editing}
               <div class="edit-area">
@@ -414,7 +414,7 @@
           {/if}
           {#if !editing && (!item.fileMeta || item.fileMeta.length <= 1)}
             <button type="button" onclick={() => {
-              editContent = item.title.split("\n")[0];
+              editContent = item.textContent || item.title;
               editing = true;
             }}>
               <AppIcon name="edit" size={15} /> {item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("edit.edit")}
