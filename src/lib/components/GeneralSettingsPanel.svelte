@@ -599,13 +599,6 @@
     text-align: center;
   }
 
-  .placeholder-note {
-    margin: 6px 0 0;
-    color: #5a5a5a;
-    font-size: 9.5px;
-    font-style: italic;
-  }
-
   .slider-row {
     display: flex;
     align-items: center;
@@ -670,13 +663,5 @@
 
   .slider-row input[type="range"]::-moz-range-thumb:hover {
     transform: scale(1.15);
-  }
-
-  .slider-value {
-    min-width: 36px;
-    text-align: right;
-    color: #aaa;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
   }
 </style>

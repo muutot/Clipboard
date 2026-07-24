@@ -571,8 +571,10 @@
               <input type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
               <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
                 <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
+              </div>
             </div>
-          </section>
+          </div>
+        </section>
 
         <section class="setting-card">
           <div class="setting-heading">
@@ -585,8 +587,8 @@
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
             <div class="stat-item"><span class="stat-value">{ocrPending}</span><span class="stat-label">待处理</span></div>
             <div class="stat-item"><span class="stat-value">{ocrCompleted}</span><span class="stat-label">已完成</span></div>
-          </div>
-        </section>
+            </div>
+          </section>
 
         <p class="auto-save-note">修改即时生效，无需手动保存</p>
       </div>
@@ -888,8 +890,7 @@
   }
 
   .settings-brand,
-  .setting-heading,
-  .heading-copy {
+  .setting-heading {
     display: flex;
     align-items: center;
   }
@@ -1074,13 +1075,6 @@
   .setting-heading {
     gap: 10px;
   }
-  .split-heading {
-    justify-content: space-between;
-  }
-  .heading-copy {
-    gap: 10px;
-    min-width: 0;
-  }
 
   .setting-icon {
     width: 29px;
@@ -1108,30 +1102,6 @@
     font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-
-  .path-value {
-    margin-top: 11px;
-    padding: 8px 9px;
-    border: 1px solid #2f2f2f;
-    border-radius: 6px;
-    background: #181818;
-    font-size: 11px;
-  }
-
-  .directory-badge {
-    flex: 0 0 auto;
-    padding: 3px 7px;
-    border: 1px solid #393939;
-    border-radius: 999px;
-    color: #888;
-    font-size: 10.5px;
-  }
-
-  .directory-badge.custom {
-    border-color: rgba(112, 154, 255, 0.36);
-    color: #9eb9ff;
-    background: rgba(72, 111, 206, 0.12);
   }
 
   .inline-badge {
@@ -1219,35 +1189,6 @@
     font-size: 12px;
   }
 
-  .setting-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 7px;
-    margin-top: 9px;
-  }
-
-  .setting-actions button {
-    padding: 7px 10px;
-    border: 1px solid #383838;
-    border-radius: 6px;
-    color: #a3a3a3;
-    background: #252525;
-    font: inherit;
-    font-size: 11.5px;
-    cursor: pointer;
-  }
-
-  .setting-actions button.primary {
-    border-color: #e3e3e3;
-    color: #1c1c1c;
-    background: #e3e3e3;
-  }
-
-  .setting-actions button:disabled {
-    cursor: wait;
-    opacity: 0.55;
-  }
-
   .pending-path {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -1304,17 +1245,6 @@
   .stat-label {
     color: #777;
     font-size: 11px;
-  }
-
-  .number-input-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .number-input-row input {
-    width: 120px;
   }
 
   .number-suffix {
@@ -1390,12 +1320,6 @@
     font-size: 10.5px;
   }
 
-  .perf-mem {
-    margin-top: 8px;
-    color: #6f6f6f;
-    font-size: 11px;
-  }
-
   .repair-result {
     margin-top: 10px;
     padding: 8px 9px;
@@ -1459,6 +1383,7 @@
     text-align: right;
     outline: none;
     transition: border-color 120ms ease;
+    appearance: textfield;
     -moz-appearance: textfield;
   }
 

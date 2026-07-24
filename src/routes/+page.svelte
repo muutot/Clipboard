@@ -940,7 +940,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <header class="search-header" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
+  <header class="search-header" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
     <div class="search-box">
       <input
         bind:value={query}
@@ -995,7 +995,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     />
   </header>
 
-  <div class="toolbar" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
+  <div class="toolbar" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
