@@ -399,10 +399,35 @@ fn restart_ocr_engine(
 #[tauri::command]
 fn install_ppocr(
     paths: tauri::State<'_, StoragePaths>,
+    variant: String,
 ) -> Result<String, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
     std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
-    Ok(format!("PP-OCR models directory ready: {}", models_dir.display()))
+    if ocr::models::all_models_present(&models_dir) {
+        return Ok("PP-OCR models already installed".to_string());
+    }
+    let det_url = match variant.as_str() {
+        "tiny" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_tiny_det.onnx",
+        "medium" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_medium_det.onnx",
+        _ => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_small_det.onnx",
+    };
+    let rec_url = match variant.as_str() {
+        "tiny" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_tiny_rec.onnx",
+        "medium" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_medium_rec.onnx",
+        _ => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_small_rec.onnx",
+    };
+    let dict_url = "https://raw.githubusercontent.com/hiroi-sora/pp-ocrv6-onnx/main/ppocrv6_dict.txt";
+
+    for (url, filename) in [(det_url, "pp-ocrv6_small_det.onnx"), (rec_url, "pp-ocrv6_small_rec.onnx"), (dict_url, "ppocrv6_dict.txt")] {
+        let dest = models_dir.join(filename);
+        if dest.exists() { continue; }
+        let status = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &format!("[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '{}' -OutFile '{}'", url, dest.display())])
+            .status().map_err(|e| format!("download failed: {e}"))?;
+        if !status.success() { return Err(format!("download failed for {filename}")); }
+    }
+
+    Ok("PP-OCRv6 models downloaded successfully".to_string())
 }
 
 #[tauri::command]

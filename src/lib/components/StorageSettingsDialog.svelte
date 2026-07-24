@@ -52,6 +52,7 @@
   let ocrCompleted = $state(0);
   let ocrAvailable = $state(false);
   let ocrInstalling = $state(false);
+  let modelVariant = $state("tiny");
 
   $effect(() => {
     if (open) {
@@ -99,7 +100,7 @@
   async function installPpocr() {
     ocrInstalling = true;
     try {
-      const msg = await invoke<string>("install_ppocr");
+      const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
       feedback = msg;
       feedbackSuccess = true;
       loadOcrStatus();
@@ -380,6 +381,31 @@
               Tesseract
             </button>
           </div>
+        </section>
+
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+            <div>
+              <strong>模型下载</strong>
+              <p>{ocrAvailable ? 'PP-OCRv6 模型已就绪' : '下载 ONNX 模型到本地存储'}</p>
+            </div>
+          </div>
+          {#if ocrAvailable}
+            <div style="padding:8px 0; color:#51b96b; font-size:12px;">✓ 模型已下载到 storage/ppocr-models/</div>
+          {:else}
+            <label for="model-variant" style="margin:8px 0 4px; display:block; font-size:10px; color:#8a8a8a;">模型规格</label>
+            <select bind:value={modelVariant} class="model-select" style="width:100%; margin-bottom:8px;">
+              <option value="tiny">PP-OCRv6 tiny (快速, ~5MB)</option>
+              <option value="medium">PP-OCRv6 medium (平衡, ~15MB)</option>
+              <option value="large">PP-OCRv6 large (高精度, ~30MB)</option>
+            </select>
+            <div class="setting-actions">
+              <button class="primary" type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
+                {ocrInstalling ? '下载中...' : '下载模型'}
+              </button>
+            </div>
+          {/if}
         </section>
 
         <section class="setting-card">

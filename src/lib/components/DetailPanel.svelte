@@ -36,10 +36,74 @@
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
   let editContent = $state("");
-  $effect(() => {
+  let imageFullscreen = $state(false);
+  let zoom = $state(1);
+  let panX = $state(0);
+  let panY = $state(0);
+  let isDragging = $state(false);
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let panStartX = 0;
+  let panStartY = 0;
+
+  function openImageFullscreen() {
+    imageFullscreen = true;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function closeImageFullscreen() {
     imageFullscreen = false;
-    activeTab = "preview";
-    editing = false;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function onWheel(e: WheelEvent) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    zoom = Math.min(20, Math.max(0.1, zoom * delta));
+  }
+
+  function onMouseDown(e: MouseEvent) {
+    if (e.button !== 0) return;
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    panStartX = panX;
+    panStartY = panY;
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isDragging) return;
+    panX = panStartX + (e.clientX - dragStartX);
+    panY = panStartY + (e.clientY - dragStartY);
+  }
+
+  function onMouseUp() {
+    isDragging = false;
+  }
+
+  function onDblClick() {
+    if (zoom !== 1 || panX !== 0 || panY !== 0) {
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+    } else {
+      zoom = 2;
+    }
+  }
+
+  $effect(() => {
+    if (item) {
+      imageFullscreen = false;
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+      activeTab = "preview";
+      editing = false;
+    }
   });
 
   $effect(() => {
@@ -118,7 +182,7 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (item && event.key === "Escape") {
-      if (imageFullscreen) { imageFullscreen = false; return; }
+      if (imageFullscreen) { closeImageFullscreen(); return; }
       if (editing) { editing = false; return; }
       event.preventDefault();
       event.stopPropagation();
@@ -188,6 +252,9 @@
                   src={assetUrl(item.previewPath || item.resourcePath)}
                   alt={item.preview || item.title}
                 />
+                <button type="button" class="image-fullscreen-btn" onclick={openImageFullscreen} aria-label="全屏预览">
+                  <AppIcon name="maximize" size={16} strokeWidth={2} />
+                </button>
               {:else}
                 <div class="image-placeholder">
                   <AppIcon name="image" size={48} strokeWidth={1.5} />
