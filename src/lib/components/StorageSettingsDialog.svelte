@@ -97,6 +97,7 @@
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
   let ocrAvailable = $state(false);
+  let installedVariant = $state<string | null>(null);
   let ocrInstalling = $state(false);
   let ocrProgressLabel = $state("");
   let ocrProgressPct = $state(-1);
@@ -181,6 +182,7 @@
       const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
       feedback = msg;
       feedbackSuccess = true;
+      installedVariant = modelVariant;
       loadOcrStatus();
     } catch (e) {
       feedback = String(e);
@@ -514,7 +516,7 @@
               <option value="medium">medium (平衡, ~15MB)</option>
               <option value="large">large (高精度, ~30MB)</option>
             </select>
-            {#if ocrAvailable}
+            {#if installedVariant === modelVariant}
               <button type="button" onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #4a4a35; border-radius:6px; background:rgba(45,45,27,0.6); color:#c6c69d; cursor:pointer; font-size:13px; white-space:nowrap;">应用</button>
             {:else}
               <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #3a3a3a; border-radius:6px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px; white-space:nowrap;">
