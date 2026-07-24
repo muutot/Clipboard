@@ -362,8 +362,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     });
 
     function applySettings(s: typeof $generalSettings) {
-      const sizes: Record<string, string> = { small: "13px", normal: "14px", large: "16px" };
-      document.documentElement.style.fontSize = sizes[s.fontSize] || "14px";
+      document.documentElement.style.fontSize = `${s.fontSize}px`;
       if ("__TAURI_INTERNALS__" in window) {
         getCurrentWindow()
           .setAlwaysOnTop(s.alwaysOnTop)

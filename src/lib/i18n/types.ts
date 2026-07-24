@@ -249,6 +249,7 @@ export interface LocaleDefinition {
     theme: string;
     themeDescription: string;
     themeDark: string;
+    themeLight: string;
     rememberWindowPosition: string;
     rememberWindowPositionDescription: string;
     on: string;

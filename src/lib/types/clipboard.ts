@@ -35,9 +35,9 @@ export interface ClipboardItem {
   metadataJson?: string | null;
 }
 
-export type ThemeMode = "dark";
+export type ThemeMode = "dark" | "light";
 
-export type FontSize = "small" | "normal" | "large";
+export type FontSize = number;
 
 export type Language = "zh-CN" | "en";
 

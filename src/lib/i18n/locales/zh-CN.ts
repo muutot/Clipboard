@@ -247,6 +247,7 @@ const zhCN: LocaleDefinition = {
     theme: "主题",
     themeDescription: "仅支持暗黑主题",
     themeDark: "暗黑",
+    themeLight: "浅色",
     rememberWindowPosition: "记住窗口位置",
     rememberWindowPositionDescription: "重新打开时恢复上一次窗口位置",
     on: "开",

@@ -2,7 +2,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { FontSize, ThemeMode } from "$lib/types/clipboard";
+  import type { ThemeMode } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -31,11 +31,13 @@
     setTimeout(() => (feedback = ""), 2000);
   }
 
-  function changeFontSize(size: FontSize) {
-    generalSettings.updateSetting("fontSize", size);
-    const root = document.documentElement;
-    const sizes: Record<FontSize, string> = { small: "13px", normal: "14px", large: "16px" };
-    root.style.fontSize = sizes[size];
+  function changeFontSize(value: number) {
+    generalSettings.updateSetting("fontSize", value);
+    document.documentElement.style.fontSize = `${value}px`;
+  }
+
+  function changeTheme(value: ThemeMode) {
+    generalSettings.updateSetting("theme", value);
   }
 
   function handleTransparency(event: Event) {
@@ -61,11 +63,6 @@
     updateSliderTrack(viewerOpacityEl);
   });
 
-  const fontSizeOptions = $derived([
-    { value: "small" as const, label: _t("general.fontSizeSmall") },
-    { value: "normal" as const, label: _t("general.fontSizeNormal") },
-    { value: "large" as const, label: _t("general.fontSizeLarge") },
-  ]);
 </script>
 
 <header>
@@ -83,7 +80,7 @@
 </header>
 
 <div class="settings-scroll">
-  <section class="setting-card">
+  <section class="setting-card toggle-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="globe" size={17} /></span>
       <div>
@@ -92,20 +89,12 @@
       </div>
     </div>
     <div class="lang-toggle">
-      <button
-        type="button"
-        class:active={s.language === "zh-CN"}
-        onclick={() => changeLanguage("zh-CN")}
-      >中文</button>
-      <button
-        type="button"
-        class:active={s.language === "en"}
-        onclick={() => changeLanguage("en")}
-      >English</button>
+      <button type="button" class:active={s.language === "zh-CN"} onclick={() => changeLanguage("zh-CN")}>中文</button>
+      <button type="button" class:active={s.language === "en"} onclick={() => changeLanguage("en")}>English</button>
     </div>
   </section>
 
-  <section class="setting-card">
+  <section class="setting-card toggle-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="type" size={17} /></span>
       <div>
@@ -113,15 +102,16 @@
         <p>{_t("general.fontSizeDescription")}</p>
       </div>
     </div>
-    <div class="font-size-controls">
-      {#each fontSizeOptions as option}
-        <button
-          type="button"
-          class:active={s.fontSize === option.value}
-          onclick={() => changeFontSize(option.value)}
-        >{option.label}</button>
-      {/each}
-    </div>
+    <label class="font-size-input">
+      <input
+        type="number"
+        min={10}
+        max={28}
+        value={s.fontSize}
+        oninput={(e) => changeFontSize(Number((e.target as HTMLInputElement).value))}
+      />
+      <span>px</span>
+    </label>
   </section>
 
   <section class="setting-card">
@@ -270,7 +260,7 @@
     </button>
   </section>
 
-  <section class="setting-card">
+  <section class="setting-card toggle-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
       <div>
@@ -278,10 +268,10 @@
         <p>{_t("general.themeDescription")}</p>
       </div>
     </div>
-    <div class="theme-option">
-      <span class="theme-dot-dark"></span>
-      <span>{_t("general.themeDark")}</span>
-    </div>
+    <select class="theme-select" value={s.theme} onchange={(e) => changeTheme((e.target as HTMLSelectElement).value as ThemeMode)}>
+      <option value="dark">{_t("general.themeDark")}</option>
+      <option value="light">{_t("general.themeLight")}</option>
+    </select>
   </section>
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
@@ -422,15 +412,13 @@
     flex-shrink: 0;
   }
 
-  .lang-toggle,
-  .font-size-controls {
+  .lang-toggle {
     display: flex;
     gap: 6px;
-    margin-top: 12px;
+    flex-shrink: 0;
   }
 
-  .lang-toggle button,
-  .font-size-controls button {
+  .lang-toggle button {
     padding: 7px 16px;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
@@ -442,17 +430,52 @@
     transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
   }
 
-  .lang-toggle button:hover,
-  .font-size-controls button:hover {
+  .lang-toggle button:hover {
     color: #ccc;
     background: #292929;
   }
 
-  .lang-toggle button.active,
-  .font-size-controls button.active {
+  .lang-toggle button.active {
     border-color: #5a5a5a;
     color: #f0f0f0;
     background: #333;
+  }
+
+  .font-size-input {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .font-size-input input {
+    width: 52px;
+    padding: 4px 6px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #d8d8d8;
+    background: #1a1a1a;
+    font: inherit;
+    font-size: 11px;
+    text-align: center;
+    outline: none;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .font-size-input input::-webkit-inner-spin-button,
+  .font-size-input input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .font-size-input input:focus {
+    border-color: #5a5a5a;
+  }
+
+  .font-size-input span {
+    color: #888;
+    font-size: 10px;
   }
 
   .transparency-slider {
@@ -551,21 +574,24 @@
     background: #4aa8ff;
   }
 
-  .theme-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    color: #bbb;
+  .theme-select {
+    padding: 5px 8px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #d8d8d8;
+    background: #1a1a1a;
+    font: inherit;
     font-size: 11px;
+    cursor: pointer;
+    flex-shrink: 0;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
   }
 
-  .theme-dot-dark {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 1px solid #444;
-    background: #1a1a1a;
+  .theme-select:focus {
+    border-color: #5a5a5a;
   }
 
   button {

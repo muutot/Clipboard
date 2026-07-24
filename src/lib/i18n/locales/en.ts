@@ -254,6 +254,7 @@ const en: LocaleDefinition = {
     theme: "Theme",
     themeDescription: "Only dark theme is supported",
     themeDark: "Dark",
+    themeLight: "Light",
     rememberWindowPosition: "Remember Window Position",
     rememberWindowPositionDescription: "Restore the last window position on reopen",
     on: "On",
