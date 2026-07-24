@@ -765,32 +765,6 @@
 
           {#if perfMetrics}
         <section class="setting-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-            <div>
-              <strong>安装 PP-OCRv6</strong>
-              <p>{ocrAvailable ? '引擎已就绪' : '需 Python 3.8+，点击安装自动下载模型'}</p>
-            </div>
-          </div>
-          {#if ocrAvailable}
-            <div class="stat-grid" style="grid-template-columns:1fr">
-              <div class="stat-item"><span class="stat-value" style="color:#51b96b">✓ 已安装</span><span class="stat-label">PP-OCRv6 可正常使用</span></div>
-            </div>
-          {:else}
-            <div class="setting-actions" style="flex-wrap: wrap;">
-              <button class:primary={ocrInstalling} type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
-                {ocrInstalling ? (ocrProgressPct >= 0 ? `${Math.round(ocrProgressPct)}%` : '安装中…') : '安装 PP-OCRv6'}
-              </button>
-            </div>
-            {#if ocrInstalling && ocrProgressPct >= 0}
-              <div style="margin-top:6px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
-                <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
-              </div>
-            {/if}
-          {/if}
-        </section>
-
-        <section class="setting-card">
               <div class="setting-heading">
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                 <div>
