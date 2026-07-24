@@ -132,7 +132,7 @@
       oninput={handleTransparency}
       class="transparency-slider"
     />
-    <p class="placeholder-note">窗口透明度功能开发中</p>
+    <p class="placeholder-note">需重启应用后生效</p>
   </section>
 
   <section class="setting-card toggle-card">
@@ -161,7 +161,7 @@
       <span class="setting-icon"><AppIcon name="pin" size={17} /></span>
       <div>
         <strong>{_t("general.alwaysOnTop")}</strong>
-        <p>窗口始终悬浮在其他应用上方 · 开发中</p>
+        <p>窗口始终悬浮在其他应用上方</p>
       </div>
     </div>
     <button

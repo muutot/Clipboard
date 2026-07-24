@@ -16,6 +16,7 @@
     searchClipboardHistory,
     listSourceApplications,
     formatTextLength,
+    formatSizeSimple,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -318,7 +319,7 @@
         sizeLabel:
           record.kind === "text" || record.kind === "link"
             ? formatTextLength(record.textContent?.length || record.title.length)
-            : `${record.sizeBytes} B`,
+            : formatSizeSimple(record),
         createdAt: record.createdAtMs,
         favorite: record.isFavorite,
         fileName:
@@ -714,10 +715,6 @@
     }
 
     if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        event.preventDefault();
-        return;
-      }
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const next = (idx + 1) % filters.length;
@@ -726,10 +723,6 @@
     }
 
     if (event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        event.preventDefault();
-        return;
-      }
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const prev = (idx - 1 + filters.length) % filters.length;

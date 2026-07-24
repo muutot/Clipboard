@@ -134,7 +134,7 @@ export function formatTextLength(length: number): string {
   return `${length} chars`;
 }
 
-function formatSizeSimple(record: PersistedClipboardItem): string {
+export function formatSizeSimple(record: PersistedClipboardItem): string {
   if (record.kind === "text" || record.kind === "link") {
     return formatTextLength((record.textContent || record.title).length);
   }
