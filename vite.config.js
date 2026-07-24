@@ -29,4 +29,9 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    rollupOptions: {
+      external: ["@tauri-apps/plugin-dialog"],
+    },
+  },
 }));
