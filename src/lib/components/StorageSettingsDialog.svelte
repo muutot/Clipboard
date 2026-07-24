@@ -1466,6 +1466,30 @@
     margin: 0;
   }
 
+  .setting-card-row button {
+    padding: 5px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #a3a3a3;
+    background: #252525;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .setting-card-row button:hover {
+    color: #ccc;
+    background: #2e2e2e;
+  }
+
+  .setting-card-row button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
   .setting-card-row input:focus {
     border-color: #555;
   }
