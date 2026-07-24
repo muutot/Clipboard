@@ -1211,6 +1211,8 @@
   .unit-select option {
     background: #1e1e1e;
     color: #d7d7d7;
+    padding: 6px 10px;
+    font-size: 12px;
   }
 
   .setting-actions {
@@ -1631,6 +1633,8 @@
     font-size: 11px;
     cursor: pointer;
     flex-shrink: 0;
+    text-align: center;
+    text-align-last: center;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23999' d='M1 2l3 4 3-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
