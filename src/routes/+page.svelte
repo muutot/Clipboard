@@ -1292,9 +1292,12 @@
   }
 
   .drag-bar {
-    height: 10px;
+    height: 12px;
     width: 100%;
-    background: transparent;
+    min-height: 12px;
+    background: rgba(255, 255, 255, 0.015);
+    cursor: default;
+    flex-shrink: 0;
   }
 
   :global(.app-shell.compact .search-header) {
