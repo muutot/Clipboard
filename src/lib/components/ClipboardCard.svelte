@@ -454,6 +454,7 @@
     color: #ececec;
     background: transparent;
     cursor: default;
+    overflow: hidden;
     transition:
       background 120ms ease,
       border-color 120ms ease;
@@ -576,6 +577,7 @@
 
   .image-preview {
     width: min(100%, 380px);
+    max-height: 120px;
     overflow: hidden;
     border: 1px solid #303237;
     border-radius: 6px;
