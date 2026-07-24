@@ -1421,7 +1421,8 @@
   }
 
   .unit-select {
-    padding: 6px 4px;
+    width: 52px;
+    padding: 6px 2px;
     border: 1px solid #343434;
     border-radius: 7px;
     color: #d7d7d7;
