@@ -127,9 +127,9 @@
   <section class="setting-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
-      <div>
+      <div class="heading-inline">
         <strong>{_t("general.windowTransparency")}</strong>
-        <p>{s.windowTransparency}%</p>
+        <span class="value-label">{s.windowTransparency}%</span>
       </div>
     </div>
     <input
@@ -141,7 +141,6 @@
       class="transparency-slider"
       bind:this={transparencyEl}
     />
-    <p class="placeholder-note">{_t("general.windowTransparencyDescription")}</p>
   </section>
 
   <section class="setting-card toggle-card">
@@ -231,9 +230,9 @@
   <section class="setting-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-      <div>
+      <div class="heading-inline">
         <strong>{_t("general.viewerBackdropOpacity")}</strong>
-        <p>{_t("general.viewerBackdropOpacityDescription")}</p>
+        <span class="value-label">{s.viewerBackdropOpacity}%</span>
       </div>
     </div>
     <div class="slider-row">
@@ -247,7 +246,6 @@
         aria-label={_t("general.viewerBackdropOpacity")}
         bind:this={viewerOpacityEl}
       />
-      <span class="slider-value">{s.viewerBackdropOpacity}%</span>
     </div>
   </section>
 
@@ -406,6 +404,22 @@
     margin: 2px 0 0;
     color: #777;
     font-size: 9.8px;
+  }
+
+  .heading-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .value-label {
+    color: #aaa;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 
   .lang-toggle,
