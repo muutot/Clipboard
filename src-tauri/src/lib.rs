@@ -514,7 +514,7 @@ fn restart_ocr_engine(
     drop(cfg);
 
     let engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" {
-        let ppocr = PpOcrEngine::new(paths.storage.join("ppocr-models"), score_threshold, box_threshold, unclip_ratio);
+        let ppocr = PpOcrEngine::new(ocr::models::models_dir(&paths.storage), score_threshold, box_threshold, unclip_ratio);
         if ppocr.is_available() {
             Arc::new(ppocr)
         } else {
