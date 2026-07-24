@@ -3,6 +3,7 @@
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
+  import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import {
@@ -39,7 +40,7 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let activeSection = $state<"general" | "capture" | "storage" | "keyboard" | "ocr">("storage");
+  let activeSection = $state<"general" | "compact" | "capture" | "storage" | "keyboard" | "ocr">("storage");
 
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
@@ -355,6 +356,14 @@
         <span>{_t("storage.generalTab")}</span>
       </button>
       <button
+        class:active={activeSection === "compact"}
+        type="button"
+        onclick={() => (activeSection = "compact")}
+      >
+        <AppIcon name="grid" size={16} />
+        <span>{_t("storage.compactTab")}</span>
+      </button>
+      <button
         class:active={activeSection === "capture"}
         type="button"
         onclick={() => (activeSection = "capture")}
@@ -397,6 +406,8 @@
   <div class="settings-content">
     {#if activeSection === "general"}
       <GeneralSettingsPanel {onclose} />
+    {:else if activeSection === "compact"}
+      <CompactSettingsPanel {onclose} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
     {:else if activeSection === "keyboard"}

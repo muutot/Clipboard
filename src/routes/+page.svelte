@@ -194,13 +194,21 @@
 
   // --- Virtual scrolling ---
 
+  const compactMode = $derived($generalSettings.compactMode);
+  const compactText = $derived($generalSettings.compactTextHeight);
+  const compactTallText = $derived($generalSettings.compactTallTextHeight);
+  const compactImage = $derived($generalSettings.compactImageHeight);
+  const compactCardGap = $derived($generalSettings.compactCardGap);
+  const compactPaddingTop = $derived($generalSettings.compactPaddingTop);
+  const compactPaddingBottom = $derived($generalSettings.compactPaddingBottom);
+
   const virtualList = $derived(
     createVirtualList(
       filteredItems.length,
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(i => itemHeight(i.kind)),
+      filteredItems.map(i => itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap)),
     ),
   );
 
@@ -1139,6 +1147,10 @@
                   selected={item.id === selectedId}
                   checked={selectedIds.has(item.id)}
                   showCheckbox={selectedIds.size > 0}
+                  compact={compactMode}
+                  compactPaddingTop={compactPaddingTop}
+                  compactPaddingBottom={compactPaddingBottom}
+                  compactCardGap={compactCardGap}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1160,6 +1172,10 @@
                 selected={item.id === selectedId}
                 checked={selectedIds.has(item.id)}
                 showCheckbox={selectedIds.size > 0}
+                compact={compactMode}
+                compactPaddingTop={compactPaddingTop}
+                compactPaddingBottom={compactPaddingBottom}
+                compactCardGap={compactCardGap}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}
@@ -1273,29 +1289,6 @@
 
   :global(.app-shell.compact .history-list) {
     padding: 0 4px 6px;
-  }
-
-  :global(.app-shell.compact .clip-card) {
-    padding: 6px 10px 5px;
-    border-radius: 7px;
-  }
-
-  :global(.app-shell.compact .clip-card .meta-row) {
-    gap: 5px;
-    margin-top: 0;
-  }
-
-  :global(.app-shell.compact .clip-card .meta-row span) {
-    font-size: 9.5px;
-  }
-
-  :global(.app-shell.compact .clip-card .content) {
-    font-size: 12px;
-  }
-
-  :global(.app-shell.compact .clip-card .text-preview) {
-    font-size: 11.5px;
-    line-height: 1.4;
   }
 
   .search-header {

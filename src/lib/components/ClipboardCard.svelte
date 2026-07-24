@@ -40,6 +40,10 @@
     selected: boolean;
     checked: boolean;
     showCheckbox: boolean;
+    compact?: boolean;
+    compactPaddingTop?: number;
+    compactPaddingBottom?: number;
+    compactCardGap?: number;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
@@ -60,6 +64,10 @@
     selected,
     checked,
     showCheckbox,
+    compact = false,
+    compactPaddingTop = 6,
+    compactPaddingBottom = 4,
+    compactCardGap = 5,
     onselect,
     ontoggleSelect,
     ontoggleFavorite,
@@ -212,7 +220,11 @@
 
 <article
   class:selected
+  class:compact
   class="clip-card"
+  style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
+  style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
+  style:--cg={compact ? `${compactCardGap}px` : undefined}
   tabindex="-1"
   data-id={item.id}
   draggable="true"
@@ -462,6 +474,30 @@
     transition:
       background 120ms ease,
       border-color 120ms ease;
+  }
+
+  .clip-card.compact {
+    padding: var(--cpt, 6px) 14px var(--cpb, 4px);
+    border-radius: 7px;
+    margin-bottom: var(--cg, 5px);
+  }
+
+  .clip-card.compact .meta-row {
+    margin-top: 0;
+    gap: 5px;
+  }
+
+  .clip-card.compact .meta-row span {
+    font-size: 9.5px;
+  }
+
+  .clip-card.compact .content {
+    font-size: 12px;
+  }
+
+  .clip-card.compact .text-preview {
+    font-size: 11.5px;
+    line-height: 1.4;
   }
 
   .card-select {
