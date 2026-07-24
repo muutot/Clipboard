@@ -509,17 +509,18 @@
             </div>
           </div>
           <div style="display:flex; gap:8px; align-items:flex-end;">
-            <div style="flex:1; min-width:0;">
-              <label for="model-variant" style="display:block; font-size:11.5px; color:#8a8a8a; margin-bottom:4px;">模型规格</label>
-              <select bind:value={modelVariant} class="model-select">
-                <option value="tiny">tiny (快速, ~5MB)</option>
-                <option value="medium">medium (平衡, ~15MB)</option>
-                <option value="large">large (高精度, ~30MB)</option>
-              </select>
-            </div>
-            <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #3a3a3a; border-radius:6px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px; white-space:nowrap;">
-              {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
-            </button>
+            <select bind:value={modelVariant} class="model-select" style="flex:1;">
+              <option value="tiny">tiny (快速, ~5MB)</option>
+              <option value="medium">medium (平衡, ~15MB)</option>
+              <option value="large">large (高精度, ~30MB)</option>
+            </select>
+            {#if ocrAvailable}
+              <button type="button" onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #4a4a35; border-radius:6px; background:rgba(45,45,27,0.6); color:#c6c69d; cursor:pointer; font-size:13px; white-space:nowrap;">应用</button>
+            {:else}
+              <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #3a3a3a; border-radius:6px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px; white-space:nowrap;">
+                {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
+              </button>
+            {/if}
           </div>
           {#if ocrInstalling && ocrProgressPct >= 0}
             <div style="margin-top:2px; color:#888; font-size:10px;">{formatBytes(ocrProgressCurrent)} / {formatBytes(ocrProgressTotal)}</div>
