@@ -629,7 +629,7 @@
           <div>
             <span class="eyebrow">设置 / 统计</span>
             <h2>数据统计</h2>
-            <p>存储与性能概览</p>
+            <p>存储分布与性能</p>
           </div>
         </header>
 
@@ -638,34 +638,34 @@
             <div class="setting-heading">
               <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
               <div>
-                <strong>数据概览</strong>
-                <p>剪贴板存储分布</p>
+                <strong>存储分布</strong>
+                <p>各项数据占用空间</p>
               </div>
             </div>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-value">{status.itemCount}</span>
-                <span class="stat-label">{_t("statistics.totalRecords")}</span>
+            <div class="stats-rows">
+              <div class="stat-row">
+                <span>总记录数</span>
+                <span>{status.itemCount}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-value">{formatBytes(status.databaseSizeBytes)}</span>
-                <span class="stat-label">{_t("statistics.dbSize")}</span>
+              <div class="stat-row">
+                <span>文本 / 链接</span>
+                <span>{status.textCount + status.linkCount}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-value">{status.textCount + status.linkCount}</span>
-                <span class="stat-label">文本 / 链接</span>
+              <div class="stat-row">
+                <span>图片</span>
+                <span>{status.imageCount} 张 · {formatBytes(status.imageSizeBytes)}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-value">{formatBytes(status.searchIndexSizeBytes)}</span>
-                <span class="stat-label">{_t("statistics.indexSize")}</span>
+              <div class="stat-row">
+                <span>文件</span>
+                <span>{status.fileCount} 个 · {formatBytes(status.fileSizeBytes)}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-value">{status.imageCount} 张</span>
-                <span class="stat-label">{formatBytes(status.imageSizeBytes)}</span>
+              <div class="stat-row">
+                <span>数据库</span>
+                <span>{formatBytes(status.databaseSizeBytes)}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-value">{status.fileCount} 个</span>
-                <span class="stat-label">{formatBytes(status.fileSizeBytes)}</span>
+              <div class="stat-row">
+                <span>搜索索引</span>
+                <span>{formatBytes(status.searchIndexSizeBytes)}</span>
               </div>
             </div>
           </section>
@@ -677,48 +677,57 @@
               <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
               <div>
                 <strong>性能</strong>
-                <p>启动 {perfMetrics.startup.totalStartupMs}ms · DB {perfMetrics.startup.dbOpenMs}ms · 搜索 {perfMetrics.startup.searchInitMs}ms · 迁移 {perfMetrics.startup.migrationsMs}ms · 运行 {perfMetrics.memory.uptimeSeconds}s · 峰值 {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</p>
+                <p>应用启动与搜索耗时统计</p>
               </div>
             </div>
-            {#if perfMetrics.searchLatency.searchesRecorded > 0}
-              <div class="perf-grid">
-                <div class="perf-item">
-                  <strong>{perfMetrics.searchLatency.searchesRecorded}</strong>
-                  <span>搜索次数</span>
-                </div>
-                <div class="perf-item">
-                  <strong>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</strong>
-                  <span>平均搜索耗时</span>
-                </div>
-                <div class="perf-item">
-                  <strong>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</strong>
-                  <span>P95 搜索耗时</span>
-                </div>
-                <div class="perf-item">
-                  <strong>{perfMetrics.searchLatency.p99Ms ?? '-'}ms</strong>
-                  <span>P99 搜索耗时</span>
-                </div>
+            <div class="stats-rows">
+              <div class="stat-row">
+                <span>启动总耗时</span>
+                <span>{perfMetrics.startup.totalStartupMs}ms</span>
               </div>
-            {/if}
-            <div class="perf-grid" style="margin-top:10px;">
-              <div class="perf-item">
-                <strong>{Math.round(perfMetrics.memory.currentBytes / 1048576)} MB</strong>
-                <span>当前内存</span>
+              <div class="stat-row">
+                <span>数据库打开</span>
+                <span>{perfMetrics.startup.dbOpenMs}ms</span>
               </div>
-              <div class="perf-item">
-                <strong>{perfMetrics.memory.snapshotCount}</strong>
-                <span>采样次数</span>
+              <div class="stat-row">
+                <span>搜索初始化</span>
+                <span>{perfMetrics.startup.searchInitMs}ms</span>
               </div>
-              <div class="perf-item">
-                <strong>{perfMetrics.startup.migrationsMs}ms</strong>
+              <div class="stat-row">
                 <span>数据库迁移</span>
+                <span>{perfMetrics.startup.migrationsMs}ms</span>
               </div>
-              <div class="perf-item"></div>
+              <div class="stat-row">
+                <span>运行时长</span>
+                <span>{perfMetrics.memory.uptimeSeconds}s</span>
+              </div>
+              <div class="stat-row">
+                <span>内存峰值</span>
+                <span>{Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
+              </div>
+              {#if perfMetrics.searchLatency.searchesRecorded > 0}
+                <div class="stat-row">
+                  <span>搜索次数</span>
+                  <span>{perfMetrics.searchLatency.searchesRecorded}</span>
+                </div>
+                <div class="stat-row">
+                  <span>平均搜索耗时</span>
+                  <span>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</span>
+                </div>
+                <div class="stat-row">
+                  <span>P95 搜索耗时</span>
+                  <span>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</span>
+                </div>
+                <div class="stat-row">
+                  <span>P99 搜索耗时</span>
+                  <span>{perfMetrics.searchLatency.p99Ms ?? '-'}ms</span>
+                </div>
+              {/if}
             </div>
           </section>
         {/if}
 
-        <p class="auto-save-note">数据为实时采集，反映当前运行状态</p>
+        <p class="auto-save-note">启动性能为应用初始化耗时，搜索延迟需触发搜索后统计</p>
       </div>
     {:else}
       <header>
@@ -1283,11 +1292,31 @@
       monospace;
   }
 
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-    margin-top: 12px;
+  .stats-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border: 1px solid #2b2b2b;
+    border-radius: 6px;
+    background: #161616;
+    font-size: var(--font-size-secondary, 11px);
+  }
+
+  .stat-row span:first-child {
+    color: #999;
+  }
+
+  .stat-row span:last-child {
+    color: #d8d8d8;
+    font-weight: 560;
   }
 
   .stat-item {
@@ -1355,33 +1384,6 @@
     .settings-sidebar {
       display: none;
     }
-  }
-
-  .perf-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .perf-item {
-    text-align: center;
-    padding: 6px 4px;
-    border: 1px solid #2f2f2f;
-    border-radius: 6px;
-    background: #181818;
-  }
-
-  .perf-item strong {
-    display: block;
-    color: #dedede;
-    font-size: var(--font-size-base, 14px);
-    font-weight: 560;
-  }
-
-  .perf-item span {
-    color: #6f6f6f;
-    font-size: var(--font-size-tiny, 10px);
   }
 
   .repair-result {
