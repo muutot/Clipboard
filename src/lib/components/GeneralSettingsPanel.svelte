@@ -62,9 +62,9 @@
 
 <header>
   <div>
-    <span class="eyebrow">设置 / 常规</span>
+    <span class="eyebrow">{_t("general.eyebrow")}</span>
     <h2>{_t("general.title")}</h2>
-    <p>界面外观和语言偏好设置。</p>
+    <p>{_t("general.description")}</p>
   </div>
   <button
     class="close-button"
@@ -80,7 +80,7 @@
       <span class="setting-icon"><AppIcon name="globe" size={17} /></span>
       <div>
         <strong>{_t("general.language")}</strong>
-        <p>界面显示语言</p>
+        <p>{_t("general.languageDescription")}</p>
       </div>
     </div>
     <div class="lang-toggle">
@@ -102,7 +102,7 @@
       <span class="setting-icon"><AppIcon name="type" size={17} /></span>
       <div>
         <strong>{_t("general.fontSize")}</strong>
-        <p>调整界面元素的字体大小</p>
+        <p>{_t("general.fontSizeDescription")}</p>
       </div>
     </div>
     <div class="font-size-controls">
@@ -132,7 +132,7 @@
       oninput={handleTransparency}
       class="transparency-slider"
     />
-    <p class="placeholder-note">需重启应用后生效</p>
+    <p class="placeholder-note">{_t("general.windowTransparencyDescription")}</p>
   </section>
 
   <section class="setting-card toggle-card">
@@ -140,7 +140,7 @@
       <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
       <div>
         <strong>{_t("general.compactMode")}</strong>
-        <p>减少卡片间距，显示更多记录</p>
+        <p>{_t("general.compactModeDescription")}</p>
       </div>
     </div>
     <button
@@ -161,7 +161,7 @@
       <span class="setting-icon"><AppIcon name="pin" size={17} /></span>
       <div>
         <strong>{_t("general.alwaysOnTop")}</strong>
-        <p>窗口始终悬浮在其他应用上方</p>
+        <p>{_t("general.alwaysOnTopDescription")}</p>
       </div>
     </div>
     <button
@@ -182,7 +182,7 @@
       <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
       <div>
         <strong>{_t("general.useSystemTitleBar")}</strong>
-        <p>使用操作系统原生标题栏</p>
+        <p>{_t("general.useSystemTitleBarDescription")}</p>
       </div>
     </div>
     <button
@@ -202,8 +202,8 @@
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="maximize" size={17} /></span>
       <div>
-        <strong>桌面全屏预览</strong>
-        <p>开启时图片全屏覆盖桌面，关闭时仅在应用内全屏</p>
+        <strong>{_t("general.desktopFullscreen")}</strong>
+        <p>{_t("general.desktopFullscreenDescription")}</p>
       </div>
     </div>
     <button
@@ -212,7 +212,7 @@
       class:active={s.imageFullscreenMode === "desktop"}
       onclick={() => generalSettings.updateSetting("imageFullscreenMode", s.imageFullscreenMode === "desktop" ? "overlay" : "desktop")}
       aria-checked={s.imageFullscreenMode === "desktop"}
-      aria-label="桌面全屏预览"
+      aria-label={_t("general.desktopFullscreen")}
       role="switch"
     >
       <span class="toggle-knob"></span>
@@ -224,7 +224,7 @@
       <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
       <div>
         <strong>{_t("general.theme")}</strong>
-        <p>仅支持暗黑主题</p>
+        <p>{_t("general.themeDescription")}</p>
       </div>
     </div>
     <div class="theme-option">
@@ -233,7 +233,7 @@
     </div>
   </section>
 
-  <p class="auto-save-note">修改即时生效，无需手动保存</p>
+  <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>
 
 {#if feedback}

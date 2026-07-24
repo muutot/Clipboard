@@ -245,7 +245,7 @@
       </div>
     </div>
 
-    <nav class="detail-tabs" aria-label="详情选项卡">
+    <nav class="detail-tabs" aria-label={_t("detail.tabAriaLabel")}>
       <button class:active={activeTab === "preview"} type="button" onclick={() => (activeTab = "preview")}>
         {_t("detail.preview")}
       </button>
@@ -267,7 +267,7 @@
                   src={assetUrl(item.previewPath || item.resourcePath)}
                   alt={item.preview || item.title}
                 />
-                <button type="button" class="image-fullscreen-btn" onclick={openImageFullscreen} aria-label="全屏预览">
+                <button type="button" class="image-fullscreen-btn" onclick={openImageFullscreen} aria-label={_t("detail.fullscreenPreview")}>
                   <AppIcon name="maximize" size={16} strokeWidth={2} />
                 </button>
               {:else}
@@ -319,13 +319,13 @@
           </button>
           {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
             <button type="button" onclick={() => invoke("reveal_in_explorer", { path: item.resourcePath })}>
-              <AppIcon name="file" size={15} /> 定位到文件
+              <AppIcon name="file" size={15} /> {_t("detail.locateFile")}
             </button>
             <button type="button" onclick={() => {
               const folder = item.resourcePath!.replace(/[^\\/]+$/, '');
               invoke("open_external_url", { url: folder });
             }}>
-              <AppIcon name="download" size={15} /> 打开文件夹
+              <AppIcon name="download" size={15} /> {_t("detail.openFolder")}
             </button>
           {/if}
           {#if !editing}
@@ -472,7 +472,7 @@
       ondblclick={onDblClick}
       role="presentation"
     >
-      <button type="button" class="viewer-close-btn" onclick={closeImageFullscreen} aria-label="关闭">
+      <button type="button" class="viewer-close-btn" onclick={closeImageFullscreen} aria-label={_t("actions.close")}>
         <AppIcon name="x" size={20} strokeWidth={2.5} />
       </button>
       <div class="viewer-zoom-hint">{Math.round(zoom * 100)}%</div>

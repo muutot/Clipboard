@@ -200,6 +200,10 @@ export interface LocaleDefinition {
     specialMarkers: string;
     fileInfo: string;
     back: string;
+    tabAriaLabel: string;
+    fullscreenPreview: string;
+    locateFile: string;
+    openFolder: string;
   };
   edit: {
     edit: string;
@@ -214,17 +218,29 @@ export interface LocaleDefinition {
   };
   general: {
     title: string;
+    eyebrow: string;
+    description: string;
     language: string;
+    languageDescription: string;
     fontSize: string;
+    fontSizeDescription: string;
     fontSizeSmall: string;
     fontSizeNormal: string;
     fontSizeLarge: string;
     windowTransparency: string;
+    windowTransparencyDescription: string;
     compactMode: string;
+    compactModeDescription: string;
     alwaysOnTop: string;
+    alwaysOnTopDescription: string;
     useSystemTitleBar: string;
+    useSystemTitleBarDescription: string;
+    desktopFullscreen: string;
+    desktopFullscreenDescription: string;
     theme: string;
+    themeDescription: string;
     themeDark: string;
+    autoSaveNote: string;
   };
   statistics: {
     title: string;
