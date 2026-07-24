@@ -192,6 +192,7 @@ const zhCN: LocaleDefinition = {
     contentType: "内容类型",
     copyTime: "复制时间",
     size: "大小",
+    dimensions: "尺寸",
     mimeInfo: "MIME 信息",
     ocrStatus: "OCR 状态",
     ocrText: "识别文字",
@@ -217,6 +218,7 @@ const zhCN: LocaleDefinition = {
   paste: {
     plainText: "粘贴为纯文本",
     withFormat: "保留格式粘贴",
+    copyFileName: "复制文件名",
   },
   general: {
     title: "常规设置",

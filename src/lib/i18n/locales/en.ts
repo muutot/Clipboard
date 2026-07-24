@@ -199,6 +199,7 @@ const en: LocaleDefinition = {
     contentType: "Content Type",
     copyTime: "Copy Time",
     size: "Size",
+    dimensions: "Dimensions",
     mimeInfo: "MIME Info",
     ocrStatus: "OCR Status",
     ocrText: "Recognized Text",
@@ -224,6 +225,7 @@ const en: LocaleDefinition = {
   paste: {
     plainText: "Paste as plain text",
     withFormat: "Paste with formatting",
+    copyFileName: "Copy file name",
   },
   general: {
     title: "General Settings",

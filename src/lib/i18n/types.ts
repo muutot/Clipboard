@@ -192,6 +192,7 @@ export interface LocaleDefinition {
     contentType: string;
     copyTime: string;
     size: string;
+    dimensions: string;
     mimeInfo: string;
     ocrStatus: string;
     ocrText: string;
@@ -217,7 +218,10 @@ export interface LocaleDefinition {
   paste: {
     plainText: string;
     withFormat: string;
+    copyFileName: string;
   };
+
+
   general: {
     title: string;
     eyebrow: string;
