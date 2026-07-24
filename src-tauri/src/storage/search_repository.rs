@@ -171,6 +171,8 @@ mod tests {
             created_at_ms: 100,
             last_used_at_ms: None,
             is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
         }
     }
 

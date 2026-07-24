@@ -28,6 +28,7 @@ pub struct ClipboardItem {
     pub created_at_ms: i64,
     pub last_used_at_ms: Option<i64>,
     pub is_favorite: bool,
+    pub metadata_json: Option<String>,
 }
 
 #[cfg(test)]

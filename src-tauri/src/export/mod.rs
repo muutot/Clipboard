@@ -131,6 +131,8 @@ mod tests {
                 created_at_ms: 1000,
                 last_used_at_ms: None,
                 is_favorite: true,
+                icon_path: None,
+                metadata_json: None,
             },
             ClipboardItem {
                 id: "item-2".to_owned(),
@@ -145,6 +147,8 @@ mod tests {
                 created_at_ms: 2000,
                 last_used_at_ms: None,
                 is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
             },
         ]
     }

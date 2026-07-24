@@ -274,7 +274,7 @@
                   src={assetUrl(item.previewPath || item.resourcePath)}
                   alt={item.preview || item.title}
                 />
-                <button type="button" class="image-fullscreen-btn" onclick={openImageFullscreen} aria-label={_t("detail.fullscreenPreview")}>
+                <button type="button" class="image-fullscreen-btn" onclick={(e) => { e.stopPropagation(); openImageFullscreen(); }} aria-label={_t("detail.fullscreenPreview")}>
                   <AppIcon name="maximize" size={16} strokeWidth={2} />
                 </button>
               {:else}
@@ -288,8 +288,24 @@
             </div>
           {:else if item.kind === "file"}
             <div class="file-full-preview">
-              <AppIcon name="file" size={48} strokeWidth={1.5} />
-              <strong>{item.fileName ?? item.title}</strong>
+              {#if item.textContent && item.textContent.startsWith("[")}
+                {@const paths = (() => { try { return JSON.parse(item.textContent); } catch { return null; } })()}
+                {#if paths && paths.length > 1}
+                  <AppIcon name="file" size={36} strokeWidth={1.5} />
+                  <strong>{paths.length} {_t("detail.files")}</strong>
+                  <div class="file-list">
+                    {#each paths as filePath}
+                      <span class="file-list-item">{filePath.split(/[\\/]/).pop()}</span>
+                    {/each}
+                  </div>
+                {:else}
+                  <AppIcon name="file" size={48} strokeWidth={1.5} />
+                  <strong>{item.fileName ?? item.title}</strong>
+                {/if}
+              {:else}
+                <AppIcon name="file" size={48} strokeWidth={1.5} />
+                <strong>{item.fileName ?? item.title}</strong>
+              {/if}
               <span>{item.preview}</span>
             </div>
           {:else if isCode && !isMarkdown}
@@ -712,6 +728,23 @@
   .file-full-preview span {
     color: #777;
     font-size: 11px;
+  }
+
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    width: 100%;
+    padding: 0 8px;
+  }
+
+  .file-list-item {
+    font-size: 12px;
+    color: #aaa;
+    text-align: left;
+    word-break: break-all;
   }
 
   .detail-actions {

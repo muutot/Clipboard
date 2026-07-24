@@ -5,6 +5,13 @@
 import adapter from "@sveltejs/adapter-static";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
+// In production Tauri builds the webview loads from tauri://localhost/ but
+// bundled frontend assets are served via the asset protocol at
+// https://asset.localhost/.  TAURI_DEV_HOST is only set during `tauri dev`
+// (where Vite serves everything from localhost), so we switch the assets path
+// accordingly.
+const isDev = !!process.env.TAURI_DEV_HOST;
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   preprocess: vitePreprocess(),
@@ -12,6 +19,10 @@ const config = {
     adapter: adapter({
       fallback: "index.html",
     }),
+    paths: {
+      assets: isDev ? "" : "https://asset.localhost",
+      base: "",
+    },
   },
 };
 

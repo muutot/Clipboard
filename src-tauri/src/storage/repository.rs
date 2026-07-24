@@ -19,7 +19,8 @@ const ITEM_COLUMNS: &str = "
     created_at_ms,
     last_used_at_ms,
     is_favorite,
-    icon_path
+    icon_path,
+    metadata_json
 ";
 
 pub trait ClipboardRepository {
@@ -62,9 +63,10 @@ impl ClipboardRepository for Database {
                     created_at_ms,
                     last_used_at_ms,
                     is_favorite,
-                    icon_path
+                    icon_path,
+                    metadata_json
                  ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
                  )
                  ON CONFLICT DO UPDATE SET
                     title = excluded.title,
@@ -85,6 +87,10 @@ impl ClipboardRepository for Database {
                     icon_path = COALESCE(
                         excluded.icon_path,
                         clipboard_items.icon_path
+                    ),
+                    metadata_json = COALESCE(
+                        excluded.metadata_json,
+                        clipboard_items.metadata_json
                     )
                  RETURNING id",
                 params![
@@ -101,6 +107,7 @@ impl ClipboardRepository for Database {
                     item.last_used_at_ms,
                     item.is_favorite,
                     item.icon_path,
+                    item.metadata_json,
                 ],
                 |row| row.get(0),
             )?)
@@ -377,6 +384,7 @@ struct StoredClipboardItem {
     last_used_at_ms: Option<i64>,
     is_favorite: bool,
     icon_path: Option<String>,
+    metadata_json: Option<String>,
 }
 
 impl StoredClipboardItem {
@@ -395,6 +403,7 @@ impl StoredClipboardItem {
             last_used_at_ms: row.get(10)?,
             is_favorite: row.get(11)?,
             icon_path: row.get(12)?,
+            metadata_json: row.get(13)?,
         })
     }
 }
@@ -422,6 +431,7 @@ impl TryFrom<StoredClipboardItem> for ClipboardItem {
             last_used_at_ms: item.last_used_at_ms,
             is_favorite: item.is_favorite,
             icon_path: item.icon_path,
+            metadata_json: item.metadata_json,
         })
     }
 }
@@ -467,6 +477,7 @@ mod tests {
             last_used_at_ms: None,
             is_favorite: false,
             icon_path: None,
+            metadata_json: None,
         }
     }
 

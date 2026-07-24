@@ -112,6 +112,7 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     resourcePath: record.resourcePath,
     textContent: record.textContent,
     iconPath: record.iconPath,
+    metadataJson: record.metadataJson,
   };
 }
 
@@ -123,7 +124,15 @@ function buildPreview(
     return record.textContent;
   }
 
-  if (record.kind === "file") return `1 ${fileLabel}`;
+  if (record.kind === "file") {
+    if (record.textContent && record.textContent.startsWith("[")) {
+      try {
+        const paths = JSON.parse(record.textContent) as string[];
+        if (paths.length > 1) return `${paths.length} ${fileLabel}`;
+      } catch { /* ignore */ }
+    }
+    return `1 ${fileLabel}`;
+  }
   if (record.kind === "image") return imageLabel;
   return "";
 }

@@ -180,6 +180,8 @@ mod tests {
             created_at_ms: 1000,
             last_used_at_ms: None,
             is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
         };
         ClipboardRepository::save_item(&database, &item).unwrap();
 
@@ -208,6 +210,8 @@ mod tests {
             created_at_ms: 1000,
             last_used_at_ms: None,
             is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
         };
         ClipboardRepository::save_item(&database, &item).unwrap();
 

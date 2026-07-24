@@ -204,6 +204,7 @@ const zhCN: LocaleDefinition = {
     fullscreenPreview: "全屏预览",
     locateFile: "定位到文件",
     openFolder: "打开文件夹",
+    files: "个文件",
   },
   edit: {
     edit: "编辑",

@@ -1003,6 +1003,7 @@ fn start_clipboard_monitoring(
                         created_at_ms: now_ms,
                         last_used_at_ms: None,
                         is_favorite: false,
+                        metadata_json: None,
                     };
 
                     match database.save_item(&item) {
@@ -1414,6 +1415,7 @@ pub fn run() {
                                         created_at_ms: now_ms,
                                         last_used_at_ms: None,
                                         is_favorite: false,
+                                        metadata_json: None,
                                     };
 
                                     match database.save_item(&item) {
@@ -1433,17 +1435,17 @@ pub fn run() {
                                 }
 
                                 if !file_paths.is_empty() {
-                                    for file_path in &file_paths {
-                                        let file_hash = content::hash::compute_content_hash("file", file_path, None);
-                                        let now_ms = std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_millis() as i64;
+                                    let now_ms = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as i64;
 
+                                    if file_paths.len() == 1 {
+                                        let file_path = &file_paths[0];
+                                        let file_hash = content::hash::compute_content_hash("file", file_path, None);
                                         let file_size = std::fs::metadata(file_path)
                                             .map(|m| m.len())
                                             .unwrap_or(0);
-
                                         let file_name = std::path::Path::new(file_path)
                                             .file_name()
                                             .map(|n| n.to_string_lossy().to_string())
@@ -1452,17 +1454,18 @@ pub fn run() {
                                         let item = ClipboardItem {
                                             id: format!("file_{}", file_hash),
                                             kind: ClipboardKind::File,
-                                            title: file_name.clone(),
+                                            title: file_name,
                                             text_content: None,
                                             resource_path: Some(file_path.clone()),
                                             preview_path: None,
                                             content_hash: file_hash,
-                                        source_app: source_app.clone(),
-                                        icon_path: icon_path.clone(),
-                                        size_bytes: file_size,
+                                            source_app: source_app.clone(),
+                                            icon_path: icon_path.clone(),
+                                            size_bytes: file_size,
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
+                                            metadata_json: None,
                                         };
 
                                         match database.save_item(&item) {
@@ -1474,6 +1477,52 @@ pub fn run() {
                                             }
                                             Err(e) => {
                                                 eprintln!("[clipboard-worker] failed to save file: {e}");
+                                            }
+                                        }
+                                    } else {
+                                        let mut sorted_paths = file_paths.clone();
+                                        sorted_paths.sort();
+                                        let joined = sorted_paths.join("\n");
+                                        let group_hash = content::hash::compute_content_hash("files", &joined, None);
+
+                                        let total_size: u64 = file_paths
+                                            .iter()
+                                            .map(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0))
+                                            .sum();
+
+                                        let first_name = std::path::Path::new(&file_paths[0])
+                                            .file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default();
+
+                                        let paths_json = serde_json::to_string(&file_paths).unwrap_or_default();
+
+                                        let item = ClipboardItem {
+                                            id: format!("files_{}", group_hash),
+                                            kind: ClipboardKind::File,
+                                            title: first_name,
+                                            text_content: Some(paths_json),
+                                            resource_path: Some(file_paths[0].clone()),
+                                            preview_path: None,
+                                            content_hash: group_hash,
+                                            source_app: source_app.clone(),
+                                            icon_path: icon_path.clone(),
+                                            size_bytes: total_size,
+                                            created_at_ms: now_ms,
+                                            last_used_at_ms: None,
+                                            is_favorite: false,
+                                            metadata_json: None,
+                                        };
+
+                                        match database.save_item(&item) {
+                                            Ok(saved_id) => {
+                                                consecutive_errors = 0;
+                                                let mut emit_item = item.clone();
+                                                emit_item.id = saved_id;
+                                                let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                            }
+                                            Err(e) => {
+                                                eprintln!("[clipboard-worker] failed to save file batch: {e}");
                                             }
                                         }
                                     }
@@ -1530,6 +1579,7 @@ pub fn run() {
                                     created_at_ms: now_ms,
                                     last_used_at_ms: None,
                                     is_favorite: false,
+                                    metadata_json: None,
                                 };
 
                                 match database.save_item(&item) {

@@ -211,6 +211,7 @@ const en: LocaleDefinition = {
     fullscreenPreview: "Fullscreen preview",
     locateFile: "Locate File",
     openFolder: "Open Folder",
+    files: "files",
   },
   edit: {
     edit: "Edit",

@@ -204,6 +204,7 @@ export interface LocaleDefinition {
     fullscreenPreview: string;
     locateFile: string;
     openFolder: string;
+    files: string;
   };
   edit: {
     edit: string;

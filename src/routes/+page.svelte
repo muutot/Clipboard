@@ -337,6 +337,7 @@
         resourcePath: record.resourcePath,
         textContent: record.textContent,
         iconPath: record.iconPath,
+        metadataJson: record.metadataJson,
       };
       const existingIdx = items.findIndex((i) => i.id === newItem.id);
       if (existingIdx >= 0) {
@@ -503,7 +504,7 @@
     const item = items.find((i) => i.id === id);
     if (!item) return;
 
-    if ((item.kind === "image" || item.kind === "file") && item.resourcePath) {
+    if (item.kind === "image" && item.resourcePath) {
       try {
         const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
         const response = await fetch(src);
@@ -512,6 +513,28 @@
         showToast(_t("toast.copySuccess"), "success");
       } catch {
         showToast(_t("toast.copyFailed"), "error");
+      }
+      return;
+    }
+
+    if (item.kind === "file") {
+      if (item.textContent && item.textContent.startsWith("[")) {
+        try {
+          const paths = JSON.parse(item.textContent) as string[];
+          if (paths.length > 1) {
+            await navigator.clipboard.writeText(paths.join("\n"));
+            showToast(_t("toast.copySuccess"), "success");
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+      if (item.resourcePath) {
+        try {
+          await navigator.clipboard.writeText(item.resourcePath);
+          showToast(_t("toast.copySuccess"), "success");
+        } catch {
+          showToast(_t("toast.copyFailed"), "error");
+        }
       }
       return;
     }
