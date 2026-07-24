@@ -872,6 +872,28 @@ fn restore_clipboard_item(database: tauri::State<'_, Database>, id: String) -> R
 }
 
 #[tauri::command]
+fn duplicate_clipboard_item(
+    database: tauri::State<'_, Database>,
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<String, String> {
+    let items = database.get_items_by_ids(&[id.clone()]).map_err(|e| e.to_string())?;
+    let mut item = items.into_iter().next().ok_or_else(|| "item not found".to_string())?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    item.id = format!("{}-{}", item.content_hash, now_ms);
+    item.content_hash = format!("{}-{}", item.content_hash, now_ms);
+    item.created_at_ms = now_ms;
+    item.last_used_at_ms = None;
+    item.is_favorite = false;
+    database.save_item(&item).map_err(|e| e.to_string())?;
+    let _ = app.emit("clipboard-item-added", &item);
+    Ok(item.id.clone())
+}
+
+#[tauri::command]
 fn enforce_history_cleanup(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
@@ -2004,6 +2026,7 @@ pub fn run() {
             detect_content_actions,
             soft_delete_clipboard_item,
             restore_clipboard_item,
+            duplicate_clipboard_item,
             enforce_history_cleanup,
             clear_all_non_favorite_items,
             get_performance_metrics,
