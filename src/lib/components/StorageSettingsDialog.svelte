@@ -71,7 +71,7 @@
 
   function relativePath(absolute: string): string {
     if (!status) return absolute;
-    const bases = [status.projectPath, status.dataDirectoryPath];
+    const bases = [status.dataDirectoryPath, status.storagePath, status.projectPath];
     for (const basePath of bases) {
       if (!basePath) continue;
       const base = basePath.replace(/\\/g, "/");
@@ -707,14 +707,14 @@
               </div>
               <div class="stat-item">
                 <span class="stat-value">{status.textCount + status.linkCount}</span>
-                <span class="stat-label">文本</span>
+                <span class="stat-label">文本/链接</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{status.imageCount}</span>
+                <span class="stat-value">{status.imageCount} {_t("statistics.image")}</span>
                 <span class="stat-label">{formatBytes(status.imageSizeBytes)}</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{status.fileCount}</span>
+                <span class="stat-value">{status.fileCount} {_t("statistics.file")}</span>
                 <span class="stat-label">{formatBytes(status.fileSizeBytes)}</span>
               </div>
               <div class="stat-item">
@@ -822,28 +822,21 @@
             </section>
           {/if}
 
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-              <div>
-                <strong>Database Maintenance</strong>
-                <p>Check and repair database integrity</p>
-              </div>
-            </div>
-            <div class="setting-actions">
-              <button type="button" disabled={repairLoading} onclick={doRepair}>
-                {repairLoading ? 'Checking...' : 'Repair Database'}
-              </button>
-            </div>
-            {#if repairResult}
-              <div class="repair-result">
-                <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
-                  {repairResult.integrityOk ? 'Integrity OK' : 'Integrity Issue'}
-                </span>
-                <code>{repairResult.integrityMessage}</code>
-              </div>
-            {/if}
+          <section class="setting-card setting-card-row">
+            <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+            <span class="setting-label">数据库维护</span>
+            <button type="button" disabled={repairLoading} onclick={doRepair}>
+              {repairLoading ? '检查中...' : '修复数据库'}
+            </button>
           </section>
+          {#if repairResult}
+            <div class="repair-result">
+              <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
+                {repairResult.integrityOk ? '完整性正常' : '发现问题'}
+              </span>
+              <code>{repairResult.integrityMessage}</code>
+            </div>
+          {/if}
 
           <p class="auto-save-note">修改即时生效，无需手动保存</p>
         </div>
