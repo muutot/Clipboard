@@ -104,20 +104,8 @@
     {#if detectedLang}
       <div class="code-lang-label">{detectedLang}</div>
     {/if}
-    <pre class="code-content"><code>
-      {#each tokenizedLines as line, i}
-        <span class="code-line">
-          <span class="line-number">{String(i + 1).padStart(String(tokenizedLines.length).length, " ")}</span>
-          {#each line as token}
-            {#if token.classes}
-              <span class={token.classes}>{token.text}</span>
-            {:else}
-              {token.text}
-            {/if}
-          {/each}
-        </span>
-      {/each}
-    </code></pre>
+    <pre class="code-content"><code>{#each tokenizedLines as line, i}<span class="code-line"><span class="line-number">{String(i + 1).padStart(String(tokenizedLines.length).length, " ")}</span>{#each line as token}{#if token.classes}<span class={token.classes}>{token.text}</span>{:else}{token.text}{/if}{/each}</span>
+      {/each}</code></pre>
   </div>
 {/if}
 

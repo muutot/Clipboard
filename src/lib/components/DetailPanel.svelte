@@ -793,7 +793,7 @@
       Consolas,
       monospace;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: break-word;
     overflow-x: auto;
   }
 
@@ -1131,7 +1131,7 @@
     background: #141414;
     font: 12px/1.6 "Cascadia Code", Consolas, monospace;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: break-word;
   }
 
   .ocr-empty {
