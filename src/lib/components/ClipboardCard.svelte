@@ -532,7 +532,6 @@
 
   .content {
     position: relative;
-    z-index: 1;
     min-width: 0;
     padding-right: 76px;
     padding-left: 0;
@@ -602,8 +601,6 @@
   }
 
   .meta-row {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;

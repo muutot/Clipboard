@@ -23,6 +23,7 @@
   import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
   import type { IconName } from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
+  import { assets } from "$app/paths";
   import { createVirtualList, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { listen } from "@tauri-apps/api/event";
@@ -904,7 +905,7 @@
     >
     <img
       class="brand-icon"
-      src="/app-icon.png"
+      src="{assets}/app-icon.png"
       alt="Clipboard"
       title="Clipboard"
       width="28"
