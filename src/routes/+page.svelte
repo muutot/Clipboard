@@ -52,7 +52,7 @@
     { id: "month" as const, label: _t("dateFilter.month") },
   ]);
 
-  const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 88, overscan: 5 };
+  const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 150, overscan: 5 };
   const VIRTUAL_SCROLL_THRESHOLD = 50;
 
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
