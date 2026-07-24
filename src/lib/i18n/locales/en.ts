@@ -280,6 +280,8 @@ const en: LocaleDefinition = {
     shortTextHeightDescription: "Height for single-line or no-preview items",
     tallTextHeight: "Tall Text Height",
     tallTextHeightDescription: "Height for multi-line items with preview",
+    customTitleHeight: "Custom Title Height",
+    customTitleHeightDescription: "Height for items with custom title",
     imageHeight: "Image Height",
     imageHeightDescription: "Display height for image items",
     searchHeight: "Search Box Height",

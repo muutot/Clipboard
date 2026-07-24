@@ -43,6 +43,8 @@ export interface FontSizeSettings {
   base: number;
   secondary: number;
   tiny: number;
+  cardTitle: number;
+  cardPreview: number;
 }
 
 export interface DisplaySettings {
@@ -63,6 +65,7 @@ export interface GeneralSettings {
   compactTextHeight: number;
   compactTallTextHeight: number;
   compactImageHeight: number;
+  compactCustomTitleHeight: number;
   compactSearchHeight: number;
   compactSearchFontSize: number;
   compactCardBorderRadius: number;

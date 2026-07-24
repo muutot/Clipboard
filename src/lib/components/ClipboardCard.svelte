@@ -299,8 +299,10 @@
         </div>
       {:else}
         <div class="text-preview">{item.title}</div>
-        {#if item.preview}
-          <div class="secondary-preview" style:display={item.customTitle ? "block" : undefined}>{item.preview}</div>
+        {#if item.customTitle}
+          <div class="content-preview">{(item.textContent || item.preview || "").split("\n")[0].slice(0, 200)}</div>
+        {:else if item.preview}
+          <div class="secondary-preview">{item.preview}</div>
         {/if}
       {/if}
     </div>
@@ -526,7 +528,7 @@
   }
 
   .clip-card.compact .text-preview {
-    font-size: 11.5px;
+    font-size: var(--font-size-cardPreview, 11px);
     line-height: 1.4;
   }
 
@@ -610,7 +612,7 @@
 
   .text-preview {
     overflow: hidden;
-    font-size: var(--font-size-base, 13px);
+    font-size: var(--font-size-cardTitle, 13px);
     line-height: 1.55;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -621,7 +623,16 @@
     overflow: hidden;
     display: var(--show-secondary, block);
     color: #8e8e8e;
-    font-size: var(--font-size-secondary, 11.5px);
+    font-size: var(--font-size-cardPreview, 11px);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .content-preview {
+    margin-top: 4px;
+    overflow: hidden;
+    color: #8e8e8e;
+    font-size: var(--font-size-cardPreview, 11px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }

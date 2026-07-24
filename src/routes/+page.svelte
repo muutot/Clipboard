@@ -204,6 +204,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   const compactText = $derived($generalSettings.compactTextHeight);
   const compactTallText = $derived($generalSettings.compactTallTextHeight);
   const compactImage = $derived($generalSettings.compactImageHeight);
+  const compactCustomTitle = $derived($generalSettings.compactCustomTitleHeight);
   const compactCardGap = $derived($generalSettings.compactCardGap);
   const compactPaddingTop = $derived($generalSettings.compactPaddingTop);
   const compactPaddingBottom = $derived($generalSettings.compactPaddingBottom);
@@ -218,7 +219,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(i => itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText)),
+      filteredItems.map(i => itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText, !!i.customTitle, compactCustomTitle)),
     ),
   );
 
@@ -374,6 +375,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         r.setProperty("--font-size-base", `${s.fontSizes.base}px`);
         r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
         r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
+        r.setProperty("--font-size-cardTitle", `${s.fontSizes.cardTitle}px`);
+        r.setProperty("--font-size-cardPreview", `${s.fontSizes.cardPreview}px`);
       }
       if (s.display) {
         r.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
@@ -397,16 +400,18 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
-    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number }; display: { showSecondaryText: boolean } }>(
+    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number; cardTitle: number; cardPreview: number }; display: { showSecondaryText: boolean } }>(
       "settings-font-changed",
       (event) => {
-        const { base, secondary, tiny } = event.payload.fontSizes || {};
+        const { base, secondary, tiny, cardTitle, cardPreview } = event.payload.fontSizes || {};
         const display = event.payload.display;
         if (base !== undefined) {
           document.documentElement.style.fontSize = `${base}px`;
           document.documentElement.style.setProperty("--font-size-base", `${base}px`);
           document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
           document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
+          document.documentElement.style.setProperty("--font-size-cardTitle", `${cardTitle}px`);
+          document.documentElement.style.setProperty("--font-size-cardPreview", `${cardPreview}px`);
         }
         if (display) {
           document.documentElement.style.setProperty("--show-secondary", display.showSecondaryText ? "block" : "none");
@@ -680,6 +685,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       }
     }
 
+    if (isText) {
+      invoke("update_clipboard_text", { id, newTitle, newTextContent }).catch(() => {});
+    }
+
     items = items.map((item) =>
       item.id === id
         ? { ...item, textContent: newTextContent, preview: newPreview, ...(item.customTitle ? {} : { title: newTitle }) }
@@ -708,6 +717,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     if (indexedItems) {
       indexedItems = indexedItems.map((item) => item.id === id ? { ...item, title, customTitle: true } : item);
     }
+    invoke("rename_item", { id, newName: title }).catch(() => {});
   }
 
   function plainPaste(_id: string) {
@@ -1231,7 +1241,7 @@ showCheckbox={false}
                   compactPaddingBottom={compactPaddingBottom}
                   compactCardGap={compactCardGap}
                   compactCardBorderRadius={compactCardBorderRadius}
-                  compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText) : 0}
+                  compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.customTitle ? compactCustomTitle : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText)) : 0}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1260,7 +1270,7 @@ showCheckbox={false}
                 compactPaddingBottom={compactPaddingBottom}
                 compactCardGap={compactCardGap}
                 compactCardBorderRadius={compactCardBorderRadius}
-                compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText) : 0}
+                compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.customTitle ? compactCustomTitle : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText)) : 0}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}

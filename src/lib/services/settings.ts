@@ -14,7 +14,7 @@ function loadFromStorage(): Partial<GeneralSettings> {
 function createSettingsStore() {
   const defaults: GeneralSettings = {
     language: "zh-CN",
-    fontSizes: { base: 14, secondary: 11, tiny: 10 },
+    fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
     display: { showSecondaryText: true },
     windowTransparency: 95,
     compactMode: false,
@@ -24,6 +24,7 @@ function createSettingsStore() {
     compactTextHeight: 58,
     compactTallTextHeight: 70,
     compactImageHeight: 130,
+    compactCustomTitleHeight: 80,
     compactSearchHeight: 40,
     compactSearchFontSize: 14,
     compactCardBorderRadius: 10,

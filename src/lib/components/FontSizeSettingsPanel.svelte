@@ -55,6 +55,8 @@
     document.documentElement.style.setProperty("--font-size-base", `${s.fontSizes.base}px`);
     document.documentElement.style.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
     document.documentElement.style.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
+    document.documentElement.style.setProperty("--font-size-cardTitle", `${s.fontSizes.cardTitle}px`);
+    document.documentElement.style.setProperty("--font-size-cardPreview", `${s.fontSizes.cardPreview}px`);
     document.documentElement.style.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
   });
 </script>
@@ -109,6 +111,34 @@
       </div>
     </div>
     <input type="range" min="8" max="13" value={s.fontSizes.tiny} oninput={sliderHandler("tiny")} class="transparency-slider" />
+  </section>
+
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+      <div class="heading-inline">
+        <div>
+          <strong>条目标题</strong>
+          <p>列表卡片上的标题文字大小</p>
+        </div>
+        <span class="value-label">{s.fontSizes.cardTitle}px</span>
+      </div>
+    </div>
+    <input type="range" min="10" max="20" value={s.fontSizes.cardTitle} oninput={sliderHandler("cardTitle")} class="transparency-slider" />
+  </section>
+
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="info" size={17} /></span>
+      <div class="heading-inline">
+        <div>
+          <strong>条目辅助文字</strong>
+          <p>列表卡片上的辅助预览/自定义标题首行文字</p>
+        </div>
+        <span class="value-label">{s.fontSizes.cardPreview}px</span>
+      </div>
+    </div>
+    <input type="range" min="8" max="16" value={s.fontSizes.cardPreview} oninput={sliderHandler("cardPreview")} class="transparency-slider" />
   </section>
 
   <section class="setting-card toggle-card">

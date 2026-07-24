@@ -18,6 +18,8 @@
   --font-size-base: 14px;
   --font-size-secondary: 11px;
   --font-size-tiny: 10px;
+  --font-size-cardTitle: 13px;
+  --font-size-cardPreview: 11px;
 }
 
 * {
