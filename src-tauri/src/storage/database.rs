@@ -46,6 +46,15 @@ impl Database {
 
         action(&mut connection)
     }
+
+    pub fn vacuum_into(&self, target_path: impl AsRef<Path>) -> Result<(), StorageError> {
+        self.with_connection(|conn| {
+            conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+            let target = target_path.as_ref().to_string_lossy().replace('\\', "\\\\");
+            conn.execute_batch(&format!("VACUUM INTO '{}'", target.replace('\'', "''")))?;
+            Ok(())
+        })
+    }
 }
 
 fn configure_connection(connection: &Connection) -> Result<(), StorageError> {

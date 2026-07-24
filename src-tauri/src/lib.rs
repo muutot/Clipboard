@@ -134,6 +134,7 @@ fn get_storage_status(
 fn configure_storage_directory(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     active_paths: tauri::State<'_, StoragePaths>,
+    database: tauri::State<'_, Database>,
     data_directory: Option<String>,
 ) -> Result<StorageDirectoryUpdate, String> {
     let requested_directory = data_directory.map(PathBuf::from);
@@ -142,6 +143,11 @@ fn configure_storage_directory(
         requested_directory,
     )
     .map_err(|error| error.to_string())?;
+
+    if target_paths.data_directory != active_paths.data_directory {
+        migrate_storage_data(&active_paths, &target_paths, &database)?;
+    }
+
     let saved_directory = target_paths
         .uses_custom_data_directory()
         .then(|| target_paths.data_directory.clone());
@@ -157,6 +163,57 @@ fn configure_storage_directory(
         data_directory_path: target_paths.data_directory.display().to_string(),
         storage_path: target_paths.storage.display().to_string(),
     })
+}
+
+fn migrate_storage_data(
+    old: &StoragePaths,
+    new: &StoragePaths,
+    database: &Database,
+) -> Result<(), String> {
+    let dirs_to_migrate: &[(PathBuf, PathBuf, &str)] = &[
+        (old.images.clone(), new.images.clone(), "images"),
+        (old.files.clone(), new.files.clone(), "files"),
+        (old.search_index.clone(), new.search_index.clone(), "search-index"),
+    ];
+
+    for (old_dir, new_dir, label) in dirs_to_migrate {
+        if old_dir.exists() {
+            copy_dir_contents(old_dir, new_dir)
+                .map_err(|e| format!("failed to migrate {}: {}", label, e))?;
+        }
+    }
+
+    let icons_old = old.storage.join("icons");
+    let icons_new = new.storage.join("icons");
+    if icons_old.exists() {
+        copy_dir_contents(&icons_old, &icons_new)
+            .map_err(|e| format!("failed to migrate icons: {}", e))?;
+    }
+
+    if old.database.exists() {
+        database
+            .vacuum_into(&new.database)
+            .map_err(|e| format!("failed to migrate database: {}", e))?;
+    }
+
+    Ok(())
+}
+
+fn copy_dir_contents(from: &PathBuf, to: &PathBuf) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| format!("create dir: {}", e))?;
+    for entry in std::fs::read_dir(from).map_err(|e| format!("read dir: {}", e))? {
+        let entry = entry.map_err(|e| format!("dir entry: {}", e))?;
+        let dest = to.join(entry.file_name());
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            copy_dir_contents(&entry.path(), &dest)?;
+        } else {
+            // Skip locked files, continue with others
+            if let Err(e) = std::fs::copy(entry.path(), &dest) {
+                eprintln!("[migrate] skip locked file {}: {}", entry.path().display(), e);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

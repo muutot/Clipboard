@@ -46,6 +46,28 @@
   let maxItemCount = $state(10000);
   let recycleBinDays = $state(30);
   let maxFileCopySize = $state(50 * 1024 * 1024);
+  let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
+  let maxFileCopyDisplay = $state(50);
+
+  const unitMultipliers: Record<string, number> = { byte: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+
+  function toDisplaySize(bytes: number, unit: string): number {
+    return Math.round(bytes / (unitMultipliers[unit] || 1));
+  }
+
+  function fromDisplaySize(value: number, unit: string): number {
+    return Math.round(value * (unitMultipliers[unit] || 1));
+  }
+
+  function updateMaxFileSizeFromDisplay() {
+    maxFileCopySize = fromDisplaySize(maxFileCopyDisplay, maxFileCopySizeUnit);
+  }
+
+  function changeFileSizeUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    maxFileCopySizeUnit = unit;
+    maxFileCopyDisplay = toDisplaySize(maxFileCopySize, unit);
+  }
+
   let perfMetrics = $state<PerformanceMetrics | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
@@ -156,6 +178,7 @@
       const result = await invoke<{ maxFileCopySizeBytes: number }>("get_storage_config");
       if (result) {
         maxFileCopySize = result.maxFileCopySizeBytes;
+        maxFileCopyDisplay = toDisplaySize(result.maxFileCopySizeBytes, maxFileCopySizeUnit);
       }
     } catch (error) {
       console.error("Unable to load storage config", error);
@@ -721,12 +744,17 @@
             <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
             <input
               type="number"
-              bind:value={maxFileCopySize}
-              min="1024"
-              step="1048576"
+              bind:value={maxFileCopyDisplay}
+              min="1"
+              oninput={updateMaxFileSizeFromDisplay}
               onchange={saveMaxFileCopySize}
             />
-            <span class="number-suffix">{_t("captureSettings.bytes")}</span>
+            <select class="unit-select" bind:value={maxFileCopySizeUnit} onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}>
+              <option value="byte">B</option>
+              <option value="KB">KB</option>
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
           </section>
 
           <div class="storage-summary">
@@ -1389,6 +1417,17 @@
   .setting-card-row .number-suffix {
     color: #888;
     font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .unit-select {
+    padding: 6px 4px;
+    border: 1px solid #343434;
+    border-radius: 7px;
+    color: #d7d7d7;
+    background: #171717;
+    font-size: 11px;
+    cursor: pointer;
     flex-shrink: 0;
   }
 </style>
