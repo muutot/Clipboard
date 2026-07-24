@@ -28,7 +28,6 @@
   let feedbackSuccess = $state(false);
 
   const actionLabels: Record<string, string> = $derived({
-    toggleWindow: _t("keyboard.toggleWindow"),
     quickPaste: _t("keyboard.quickPaste"),
   });
 
@@ -120,7 +119,7 @@
       </button>
     </section>
 
-    {#each Object.entries(config.shortcuts) as [action]}
+    {#each Object.entries(config.shortcuts).filter(([a]) => a !== "toggleWindow") as [action]}
       <section class="setting-card">
         <div class="setting-heading split-heading">
           <div>
@@ -196,7 +195,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: 9.5px;
+-size: var(--font-size-tiny, 10px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -214,7 +213,7 @@
   }
   header p {
     max-width: 430px;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
   }
 
   .close-button {
@@ -280,12 +279,12 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: 11.5px;
+-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
   .setting-heading p {
     margin-top: 2px;
-    font-size: 9.8px;
+    font-size: var(--font-size-tiny, 10px);
   }
   .setting-heading code {
     color: #888;
@@ -297,13 +296,13 @@
     border: 1px solid #393939;
     border-radius: 999px;
     color: #999;
-    font-size: 9px;
+-size: var(--font-size-tiny, 10px);
   }
   label {
     display: block;
     margin: 12px 0 6px;
     color: #8a8a8a;
-    font-size: 9.5px;
+-size: var(--font-size-tiny, 10px);
   }
   input {
     width: 100%;
@@ -335,7 +334,7 @@
     color: #1c1c1c;
     background: #e3e3e3;
     font: inherit;
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
   }
   button {
     cursor: pointer;
@@ -351,7 +350,7 @@
     gap: 7px 12px;
     padding: 4px 3px;
     color: #686868;
-    font-size: 9.5px;
+-size: var(--font-size-tiny, 10px);
   }
   .shortcut-help strong {
     color: #898989;
@@ -361,7 +360,7 @@
     flex: 1;
     place-items: center;
     color: #777;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
   .settings-feedback {
     position: absolute;
@@ -373,7 +372,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
   }
   .settings-feedback.success {
     border-color: #35513f;
@@ -385,7 +384,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
 
@@ -400,7 +399,7 @@
     display: block;
     margin-bottom: 10px;
     color: #dedede;
-    font-size: 11.5px;
+-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
 
@@ -432,7 +431,7 @@
 
   .ref-row span {
     color: #888;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     margin-left: 6px;
   }
 
@@ -446,7 +445,7 @@
     color: #999;
     background: #222;
     font: inherit;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;

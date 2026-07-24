@@ -515,7 +515,7 @@
     {:else if activeSection === "font"}
       <FontSizeSettingsPanel {onclose} />
     {:else if activeSection === "capture"}
-      <IgnoredAppsSettingsPanel configPath={status?.configPath} iconsDir={status?.iconsDir} {onclose} />
+      <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} />
     {:else if activeSection === "keyboard"}
       <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
     {:else if activeSection === "ocr"}
@@ -564,32 +564,32 @@
           </div>
           <div style="display:grid; gap:12px;">
             <div>
-              <label for="det-score" style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+              <label for="det-score" style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;">
                 <span>分数阈值 (score)</span>
                 <span style="color:#d7d7d7;">{detScoreThreshold.toFixed(2)}</span>
               </label>
               <input id="det-score" type="range" min="0.05" max="0.95" step="0.05" bind:value={detScoreThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
-              <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
+              <div style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;">
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
             <div>
-              <label for="det-box" style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+              <label for="det-box" style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;">
                 <span>框阈值 (box)</span>
                 <span style="color:#d7d7d7;">{detBoxThreshold.toFixed(2)}</span>
               </label>
               <input id="det-box" type="range" min="0.1" max="0.95" step="0.05" bind:value={detBoxThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
-              <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
+              <div style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;">
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
             <div>
-              <label for="det-unclip" style="display:flex; justify-content:space-between; font-size:12px; color:#8a8a8a; margin-bottom:4px;">
+              <label for="det-unclip" style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;">
                 <span>扩展比例 (unclip)</span>
                 <span style="color:#d7d7d7;">{detUnclipRatio.toFixed(1)}</span>
               </label>
               <input id="det-unclip" type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
-              <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#555; margin-top:2px;">
+              <div style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;">
                 <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
               </div>
             </div>
@@ -948,12 +948,12 @@
   }
 
   .settings-brand strong {
-    font-size: 13.5px;
+-size: var(--font-size-base, 14px);
   }
   .settings-brand small {
     margin-top: 2px;
     color: #6f6f6f;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   nav {
@@ -972,7 +972,7 @@
     color: #999;
     background: #1a1a1a;
     font: inherit;
-    font-size: 12.5px;
+-size: var(--font-size-secondary, 11px);
     text-align: left;
     cursor: pointer;
     transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
@@ -1001,7 +1001,7 @@
     margin-top: auto;
     padding: 10px 6px 0;
     color: #606060;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .sidebar-foot code {
@@ -1031,7 +1031,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -1052,7 +1052,7 @@
 
   header p {
     max-width: 430px;
-    font-size: 12px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .close-button {
@@ -1110,13 +1110,13 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: 13px;
+-size: var(--font-size-base, 14px);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin-top: 2px;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .pending-path code {
@@ -1135,7 +1135,7 @@
     border: 1px solid #393939;
     border-radius: 999px;
     color: #888;
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
     font-weight: 500;
     vertical-align: middle;
   }
@@ -1150,7 +1150,7 @@
     display: block;
     margin: 12px 0 6px;
     color: #8a8a8a;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   input {
@@ -1184,7 +1184,7 @@
     outline: none;
     color: #d7d7d7;
     background: #1a1a1a;
-    font-size: 13px;
+-size: var(--font-size-base, 14px);
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
@@ -1212,7 +1212,7 @@
     background: #1e1e1e;
     color: #d7d7d7;
     padding: 6px 10px;
-    font-size: 12px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .pending-path {
@@ -1224,11 +1224,11 @@
     padding-top: 9px;
     border-top: 1px solid #2d2d2d;
     color: #6f6f6f;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .pending-path code {
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .directory-tree-card pre {
@@ -1270,12 +1270,12 @@
 
   .stat-label {
     color: #777;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .number-suffix {
     color: #888;
-    font-size: 12px;
+-size: var(--font-size-secondary, 11px);
     flex-shrink: 0;
   }
 
@@ -1284,7 +1284,7 @@
     flex: 1;
     place-items: center;
     color: #777;
-    font-size: 12.5px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .settings-feedback {
@@ -1297,7 +1297,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: 11.5px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .settings-feedback.success {
@@ -1337,13 +1337,13 @@
   .perf-item strong {
     display: block;
     color: #dedede;
-    font-size: 14.5px;
+-size: var(--font-size-base, 14px);
     font-weight: 560;
   }
 
   .perf-item span {
     color: #6f6f6f;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
   }
 
   .repair-result {
@@ -1352,7 +1352,7 @@
     border: 1px solid #2f2f2f;
     border-radius: 6px;
     background: #181818;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
 
   .repair-result span.ok {
@@ -1367,14 +1367,14 @@
     display: block;
     margin-top: 4px;
     color: #a7a7a7;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: 11.5px;
+-size: var(--font-size-secondary, 11px);
     text-align: center;
   }
 
@@ -1393,7 +1393,7 @@
     flex: 1;
     min-width: 0;
     color: #dedede;
-    font-size: 11.5px;
+-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
 
@@ -1434,7 +1434,7 @@
     color: #a3a3a3;
     background: #252525;
     font: inherit;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1457,7 +1457,7 @@
 
   .setting-card-row .number-suffix {
     color: #888;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     flex-shrink: 0;
   }
 
@@ -1466,7 +1466,7 @@
     min-width: 0;
     overflow: hidden;
     color: #777;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -1481,7 +1481,7 @@
     color: #999;
     background: #222;
     font: inherit;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1524,7 +1524,7 @@
     color: #a3a3a3;
     background: #252525;
     font: inherit;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1569,7 +1569,7 @@
     color: #a3a3a3;
     background: #252525;
     font: inherit;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1593,7 +1593,7 @@
     border-radius: 6px;
     color: #d7d7d7;
     background: #1a1a1a;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     flex-shrink: 0;
     text-align: center;
@@ -1613,7 +1613,7 @@
     border-radius: 6px;
     color: #4aa8ff;
     background: rgba(74, 168, 255, 0.1);
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     flex-shrink: 0;
   }

@@ -217,7 +217,7 @@
 
   .eyebrow {
     color: #777;
-    font-size: 9.5px;
+-size: var(--font-size-tiny, 10px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -233,7 +233,7 @@
     max-width: 430px;
     margin: 0;
     color: #777;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     line-height: 1.5;
   }
 
@@ -310,14 +310,14 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
-    font-size: 11.5px;
+-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin: 2px 0 0;
     color: #777;
-    font-size: 9.8px;
+    font-size: var(--font-size-tiny, 10px);
   }
 
   .heading-inline {
@@ -331,7 +331,7 @@
 
   .value-label {
     color: #aaa;
-    font-size: 12px;
+-size: var(--font-size-secondary, 11px);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -440,7 +440,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
 </style>
