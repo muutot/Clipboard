@@ -420,6 +420,14 @@
               <AppIcon name="edit" size={15} /> {_t("edit.edit")}
             </button>
           {/if}
+          {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
+            <button type="button" onclick={() => {
+              editContent = item.title.split("\n")[0];
+              editing = true;
+            }}>
+              <AppIcon name="edit" size={15} /> {_t("edit.editFileName")}
+            </button>
+          {/if}
           {#if item.kind === "image" || item.kind === "file"}
             <button type="button" onclick={() => oncopyfilename(item.id)}>
               <AppIcon name="file" size={15} /> {_t("paste.copyFileName")}
