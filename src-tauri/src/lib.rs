@@ -56,6 +56,12 @@ fn resolve_toggle_hotkey(config: &KeyboardConfig) -> Option<(u32, u32)> {
 #[serde(rename_all = "camelCase")]
 struct StorageStatus {
     item_count: u64,
+    image_count: u64,
+    image_size_bytes: u64,
+    file_count: u64,
+    file_size_bytes: u64,
+    text_count: u64,
+    link_count: u64,
     project_path: String,
     config_path: String,
     keyboard_config_path: String,
@@ -116,6 +122,12 @@ fn get_storage_status(
 
     Ok(StorageStatus {
         item_count: database.item_count().map_err(|error| error.to_string())?,
+        image_count: database.count_by_kind("image").unwrap_or(0),
+        image_size_bytes: database.size_by_kind("image").unwrap_or(0),
+        file_count: database.count_by_kind("file").unwrap_or(0),
+        file_size_bytes: database.size_by_kind("file").unwrap_or(0),
+        text_count: database.count_by_kind("text").unwrap_or(0),
+        link_count: database.count_by_kind("link").unwrap_or(0),
         project_path: paths.project.display().to_string(),
         config_path,
         keyboard_config_path,

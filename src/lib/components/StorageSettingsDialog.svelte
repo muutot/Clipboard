@@ -727,12 +727,20 @@
                 <span class="stat-label">{_t("statistics.dbSize")}</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{formatBytes(status.searchIndexSizeBytes)}</span>
-                <span class="stat-label">{_t("statistics.indexSize")}</span>
+                <span class="stat-value">{status.textCount + status.linkCount}</span>
+                <span class="stat-label">文本</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{ocrCompleted} / {ocrPending + ocrCompleted}</span>
-                <span class="stat-label">{_t("statistics.ocrTasks")}</span>
+                <span class="stat-value">{status.imageCount}</span>
+                <span class="stat-label">{formatBytes(status.imageSizeBytes)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{status.fileCount}</span>
+                <span class="stat-label">{formatBytes(status.fileSizeBytes)}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value">{formatBytes(status.searchIndexSizeBytes)}</span>
+                <span class="stat-label">{_t("statistics.indexSize")}</span>
               </div>
             </div>
           </section>

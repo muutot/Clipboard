@@ -39,6 +39,8 @@ pub trait ClipboardRepository {
     fn restore_deleted(&self, id: &str) -> Result<bool, StorageError>;
     fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError>;
     fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
+    fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
+    fn size_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
 }
 
 impl ClipboardRepository for Database {
@@ -358,6 +360,34 @@ impl ClipboardRepository for Database {
                 [current_time_ms()],
             )?;
             Ok(deleted as u64)
+        })
+    }
+
+    fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE kind = ?1 AND deleted = 0",
+                [kind],
+                |row| row.get(0),
+            )?;
+            u64::try_from(count).map_err(|_| StorageError::InvalidStoredValue {
+                field: "clipboard_items.count",
+                value: count,
+            })
+        })
+    }
+
+    fn size_by_kind(&self, kind: &str) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let total: i64 = connection.query_row(
+                "SELECT COALESCE(SUM(size_bytes), 0) FROM clipboard_items WHERE kind = ?1 AND deleted = 0",
+                [kind],
+                |row| row.get(0),
+            )?;
+            u64::try_from(total).map_err(|_| StorageError::InvalidStoredValue {
+                field: "clipboard_items.size",
+                value: total,
+            })
         })
     }
 }

@@ -3,6 +3,12 @@ import { isTauriRuntime } from "$lib/services/runtime";
 
 export interface StorageStatus {
   itemCount: number;
+  imageCount: number;
+  imageSizeBytes: number;
+  fileCount: number;
+  fileSizeBytes: number;
+  textCount: number;
+  linkCount: number;
   projectPath: string;
   configPath: string;
   keyboardConfigPath: string;
