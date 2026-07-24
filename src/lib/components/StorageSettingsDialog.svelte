@@ -40,6 +40,13 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+
+  $effect(() => {
+    if (feedback) {
+      const t = setTimeout(() => { feedback = ""; }, 2000);
+      return () => clearTimeout(t);
+    }
+  });
   let restartNeeded = $state(false);
   let activeSection = $state<"general" | "compact" | "capture" | "storage" | "keyboard" | "ocr">("storage");
 
