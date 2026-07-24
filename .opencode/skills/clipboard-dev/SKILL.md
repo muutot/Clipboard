@@ -295,6 +295,28 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - BEM-like naming (`.detail-panel`, `.viewer-close-btn`)
 - Glass morphism: `backdrop-filter: blur()`, semi-transparent backgrounds
 
+**Form control styling rules (must follow strictly):**
+
+- `<input type="number">` — hide native spin buttons:
+  ```css
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  ```
+- `<select>` — hide native dropdown arrow:
+  ```css
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+  }
+  ```
+
 ## Z-Index Layering (Fixed)
 
 | z-index | Element | Context |
