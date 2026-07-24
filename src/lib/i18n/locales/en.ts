@@ -272,6 +272,12 @@ const en: LocaleDefinition = {
     tallTextHeightDescription: "Height for multi-line items with preview",
     imageHeight: "Image Height",
     imageHeightDescription: "Display height for image items",
+    searchHeight: "Search Box Height",
+    searchHeightDescription: "Height of the search input box",
+    searchFontSize: "Search Font Size",
+    searchFontSizeDescription: "Font size of the search input box",
+    cardBorderRadius: "Card Border Radius",
+    cardBorderRadiusDescription: "Corner radius of cards",
   },
   statistics: {
     title: "Statistics",

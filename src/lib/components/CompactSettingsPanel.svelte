@@ -182,6 +182,60 @@
         class="compact-slider"
       />
     </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div>
+          <strong>{_t("compact.searchHeight")}</strong>
+          <p>{s.compactSearchHeight}px · {_t("compact.searchHeightDescription")}</p>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="28"
+        max="56"
+        value={s.compactSearchHeight}
+        oninput={sliderHandler("compactSearchHeight")}
+        class="compact-slider"
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="type" size={17} /></span>
+        <div>
+          <strong>{_t("compact.searchFontSize")}</strong>
+          <p>{s.compactSearchFontSize}px · {_t("compact.searchFontSizeDescription")}</p>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="10"
+        max="24"
+        value={s.compactSearchFontSize}
+        oninput={sliderHandler("compactSearchFontSize")}
+        class="compact-slider"
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+        <div>
+          <strong>{_t("compact.cardBorderRadius")}</strong>
+          <p>{s.compactCardBorderRadius}px · {_t("compact.cardBorderRadiusDescription")}</p>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="0"
+        max="20"
+        value={s.compactCardBorderRadius}
+        oninput={sliderHandler("compactCardBorderRadius")}
+        class="compact-slider"
+      />
+    </section>
   {/if}
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>

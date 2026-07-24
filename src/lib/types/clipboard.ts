@@ -52,6 +52,9 @@ export interface GeneralSettings {
   compactTextHeight: number;
   compactTallTextHeight: number;
   compactImageHeight: number;
+  compactSearchHeight: number;
+  compactSearchFontSize: number;
+  compactCardBorderRadius: number;
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;

@@ -201,6 +201,9 @@
   const compactCardGap = $derived($generalSettings.compactCardGap);
   const compactPaddingTop = $derived($generalSettings.compactPaddingTop);
   const compactPaddingBottom = $derived($generalSettings.compactPaddingBottom);
+  const compactSearchHeight = $derived($generalSettings.compactSearchHeight);
+  const compactSearchFontSize = $derived($generalSettings.compactSearchFontSize);
+  const compactCardBorderRadius = $derived($generalSettings.compactCardBorderRadius);
 
   const virtualList = $derived(
     createVirtualList(
@@ -923,6 +926,7 @@
         autocomplete="off"
         placeholder={_t("app.searchPlaceholder")}
         spellcheck="false"
+        style={compactMode ? `height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;` : undefined}
         onkeydown={(e) => {
           if (e.key === "Backspace") {
             const now = Date.now();
@@ -1155,6 +1159,7 @@
                   compactPaddingTop={compactPaddingTop}
                   compactPaddingBottom={compactPaddingBottom}
                   compactCardGap={compactCardGap}
+                  compactCardBorderRadius={compactCardBorderRadius}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1180,6 +1185,7 @@
                 compactPaddingTop={compactPaddingTop}
                 compactPaddingBottom={compactPaddingBottom}
                 compactCardGap={compactCardGap}
+                compactCardBorderRadius={compactCardBorderRadius}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}
@@ -1278,7 +1284,7 @@
   }
 
   :global(.app-shell.compact .toolbar) {
-    padding: 2px 16px 4px;
+    padding: 2px 8px 4px;
   }
 
   :global(.app-shell.compact .toolbar-actions button) {
@@ -1288,7 +1294,7 @@
 
   :global(.app-shell.compact .filters button) {
     padding: 3px 9px;
-    font-size: 10px;
+    font-size: 12px;
   }
 
   :global(.app-shell.compact .history-list) {

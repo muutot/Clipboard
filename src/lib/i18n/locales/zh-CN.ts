@@ -265,6 +265,12 @@ const zhCN: LocaleDefinition = {
     tallTextHeightDescription: "带预览的多行文本条目高度",
     imageHeight: "图片高度",
     imageHeightDescription: "图片类型条目的显示高度",
+    searchHeight: "搜索框高度",
+    searchHeightDescription: "搜索输入框的高度",
+    searchFontSize: "搜索框字体",
+    searchFontSizeDescription: "搜索输入框的字体大小",
+    cardBorderRadius: "卡片圆角",
+    cardBorderRadiusDescription: "卡片的圆角大小",
   },
   statistics: {
     title: "数据统计",

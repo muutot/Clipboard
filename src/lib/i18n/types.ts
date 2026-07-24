@@ -267,6 +267,12 @@ export interface LocaleDefinition {
     tallTextHeightDescription: string;
     imageHeight: string;
     imageHeightDescription: string;
+    searchHeight: string;
+    searchHeightDescription: string;
+    searchFontSize: string;
+    searchFontSizeDescription: string;
+    cardBorderRadius: string;
+    cardBorderRadiusDescription: string;
   };
   statistics: {
     title: string;
