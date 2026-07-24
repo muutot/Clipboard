@@ -832,8 +832,6 @@ impl Drop for MacOSTrayManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keyboard::ShortcutBinding;
-    use std::str::FromStr;
 
     #[test]
     fn clipboard_monitor_lifecycle() {

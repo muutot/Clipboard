@@ -1463,9 +1463,8 @@ fn set_export_config(
 }
 
 #[tauri::command]
-fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+fn restart_app(app: tauri::AppHandle) {
     app.restart();
-    Ok(())
 }
 
 #[tauri::command]

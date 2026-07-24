@@ -161,6 +161,7 @@ fn parse_text_into_blocks(text: &str) -> Vec<OcrTextBlock> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn engine_has_name_and_version() {

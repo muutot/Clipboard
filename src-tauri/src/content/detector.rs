@@ -95,8 +95,9 @@ fn extract_emails(text: &str) -> Vec<String> {
 fn extract_phone_numbers(text: &str) -> Vec<String> {
     let mut results = Vec::new();
 
-    // Chinese mobile: 1[3-9]xxxxxxxxx (11 digits)
-    if let Some(re) = try_match(r"\b1[3-9]\d{9}\b", text) {
+    // Chinese mobile: 1[3-9]xxxxxxxxx (11 digits), allowing common grouping
+    // separators such as `138-1234-5678` or `138 1234 5678`.
+    if let Some(re) = try_match(r"\b1[3-9]\d(?:[- ]?\d{4}){2}\b", text) {
         results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
     }
 

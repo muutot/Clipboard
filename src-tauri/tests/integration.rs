@@ -14,10 +14,12 @@ mod integration_tests {
             preview_path: None,
             content_hash: format!("hash-{id}"),
             source_app: Some("test-suite".to_owned()),
+            icon_path: None,
             size_bytes: content.len() as u64,
             created_at_ms,
             last_used_at_ms: None,
             is_favorite: false,
+            metadata_json: None,
         }
     }
 
@@ -31,10 +33,12 @@ mod integration_tests {
             preview_path: None,
             content_hash: image_hash.to_owned(),
             source_app: Some("test-suite".to_owned()),
+            icon_path: None,
             size_bytes: 1024,
             created_at_ms,
             last_used_at_ms: None,
             is_favorite: false,
+            metadata_json: None,
         }
     }
 
