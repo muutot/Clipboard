@@ -940,8 +940,8 @@
 
 <main class="app-shell">
   <div class="resize-edge"></div>
-  <header class="search-header" data-tauri-drag-region>
-    <div class="drag-spacer" data-tauri-drag-region></div>
+  <header class="search-header">
+    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
     <div class="search-box">
       <input
         bind:value={query}
@@ -975,7 +975,7 @@
         >
       {/if}
     </div>
-    <div class="drag-spacer" data-tauri-drag-region></div>
+    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
     <button
       type="button"
       tabindex="-1"
@@ -987,7 +987,7 @@
       onclick={() => (regexMode = !regexMode)}
       ><AppIcon name="regex" size={15} strokeWidth={2} /></button
     >
-    <div class="drag-spacer" data-tauri-drag-region></div>
+    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
     <img
       class="brand-icon"
       src="{assets}/app-icon.png"
@@ -996,10 +996,11 @@
       width="28"
       height="28"
     />
-    <div class="drag-spacer" data-tauri-drag-region></div>
+    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
   </header>
 
-  <div class="toolbar" data-tauri-drag-region>
+  <div class="toolbar">
+    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
@@ -1136,6 +1137,7 @@
         onclick={openSettings}><AppIcon name="settings" size={17} /></button
       >
     </div>
+    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
   </div>
 
   {#if regexError}
@@ -1334,11 +1336,13 @@
     padding: 15px 16px 8px;
   }
 
-  .drag-spacer {
-    flex: 1;
-    min-width: 6px;
+  .drag-handle {
+    width: 8px;
+    min-width: 8px;
     height: 100%;
     align-self: stretch;
+    cursor: default;
+    flex-shrink: 0;
   }
 
   .search-box {
