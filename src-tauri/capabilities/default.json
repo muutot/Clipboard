@@ -9,6 +9,11 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:window:allow-set-fullscreen",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-current-monitor",
     "core:webview:allow-create-webview-window",
     "dialog:default",
     "dialog:allow-save"
