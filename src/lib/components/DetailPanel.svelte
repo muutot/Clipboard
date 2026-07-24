@@ -137,6 +137,13 @@
   });
 
   $effect(() => {
+    if (imageFullscreen) {
+      const url = assetUrl(item?.previewPath || item?.resourcePath);
+      console.log("[fullscreen] active", { url, hasItem: !!item });
+    }
+  });
+
+  $effect(() => {
     if (item?.kind !== "image" || !isTauriRuntime()) return;
     
     const poll = () => {

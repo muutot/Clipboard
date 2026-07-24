@@ -590,8 +590,8 @@
 
   .image-preview img {
     display: block;
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     border-radius: 6px;
   }
