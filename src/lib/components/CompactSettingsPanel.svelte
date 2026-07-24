@@ -32,7 +32,7 @@
   }
 
   $effect(() => {
-    document.querySelectorAll<HTMLInputElement>(".compact-slider").forEach((el) => {
+    document.querySelectorAll<HTMLInputElement>(".transparency-slider").forEach((el) => {
       updateSliderTrack(el);
     });
   });
@@ -78,162 +78,171 @@
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.paddingTop")}</strong>
-          <p>{s.compactPaddingTop}px · {_t("compact.paddingTopDescription")}</p>
+          <span class="value-label">{s.compactPaddingTop}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.paddingTopDescription")}</p>
       <input
         type="range"
         min="0"
         max="20"
         value={s.compactPaddingTop}
         oninput={sliderHandler("compactPaddingTop")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.paddingBottom")}</strong>
-          <p>{s.compactPaddingBottom}px · {_t("compact.paddingBottomDescription")}</p>
+          <span class="value-label">{s.compactPaddingBottom}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.paddingBottomDescription")}</p>
       <input
         type="range"
         min="0"
         max="20"
         value={s.compactPaddingBottom}
         oninput={sliderHandler("compactPaddingBottom")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="ruler" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.cardGap")}</strong>
-          <p>{s.compactCardGap}px · {_t("compact.cardGapDescription")}</p>
+          <span class="value-label">{s.compactCardGap}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.cardGapDescription")}</p>
       <input
         type="range"
         min="0"
         max="20"
         value={s.compactCardGap}
         oninput={sliderHandler("compactCardGap")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.shortTextHeight")}</strong>
-          <p>{s.compactTextHeight}px · {_t("compact.shortTextHeightDescription")}</p>
+          <span class="value-label">{s.compactTextHeight}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.shortTextHeightDescription")}</p>
       <input
         type="range"
         min="40"
         max="90"
         value={s.compactTextHeight}
         oninput={sliderHandler("compactTextHeight")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.tallTextHeight")}</strong>
-          <p>{s.compactTallTextHeight}px · {_t("compact.tallTextHeightDescription")}</p>
+          <span class="value-label">{s.compactTallTextHeight}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.tallTextHeightDescription")}</p>
       <input
         type="range"
         min="50"
         max="100"
         value={s.compactTallTextHeight}
         oninput={sliderHandler("compactTallTextHeight")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.imageHeight")}</strong>
-          <p>{s.compactImageHeight}px · {_t("compact.imageHeightDescription")}</p>
+          <span class="value-label">{s.compactImageHeight}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.imageHeightDescription")}</p>
       <input
         type="range"
         min="80"
         max="200"
         value={s.compactImageHeight}
         oninput={sliderHandler("compactImageHeight")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.searchHeight")}</strong>
-          <p>{s.compactSearchHeight}px · {_t("compact.searchHeightDescription")}</p>
+          <span class="value-label">{s.compactSearchHeight}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.searchHeightDescription")}</p>
       <input
         type="range"
         min="28"
         max="56"
         value={s.compactSearchHeight}
         oninput={sliderHandler("compactSearchHeight")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="type" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.searchFontSize")}</strong>
-          <p>{s.compactSearchFontSize}px · {_t("compact.searchFontSizeDescription")}</p>
+          <span class="value-label">{s.compactSearchFontSize}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.searchFontSizeDescription")}</p>
       <input
         type="range"
         min="10"
         max="24"
         value={s.compactSearchFontSize}
         oninput={sliderHandler("compactSearchFontSize")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-        <div>
+        <div class="heading-inline">
           <strong>{_t("compact.cardBorderRadius")}</strong>
-          <p>{s.compactCardBorderRadius}px · {_t("compact.cardBorderRadiusDescription")}</p>
+          <span class="value-label">{s.compactCardBorderRadius}px</span>
         </div>
       </div>
+      <p class="setting-desc">{_t("compact.cardBorderRadiusDescription")}</p>
       <input
         type="range"
         min="0"
         max="20"
         value={s.compactCardBorderRadius}
         oninput={sliderHandler("compactCardBorderRadius")}
-        class="compact-slider"
+        class="transparency-slider"
       />
     </section>
   {/if}
@@ -350,13 +359,30 @@
     font-weight: 560;
   }
 
-  .setting-heading p {
+  .setting-heading p,
+  .setting-desc {
     margin: 2px 0 0;
     color: #777;
     font-size: 9.8px;
   }
 
-  .compact-slider {
+  .heading-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .value-label {
+    color: #aaa;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .transparency-slider {
     width: 100%;
     margin-top: 12px;
     -webkit-appearance: none;
@@ -368,13 +394,13 @@
     cursor: pointer;
   }
 
-  .compact-slider::-webkit-slider-runnable-track {
+  .transparency-slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
     background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
   }
 
-  .compact-slider::-webkit-slider-thumb {
+  .transparency-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 16px;
     height: 16px;
@@ -386,24 +412,24 @@
     transition: box-shadow 100ms ease, transform 100ms ease;
   }
 
-  .compact-slider::-webkit-slider-thumb:hover {
+  .transparency-slider::-webkit-slider-thumb:hover {
     box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
     transform: scale(1.15);
   }
 
-  .compact-slider::-moz-range-track {
+  .transparency-slider::-moz-range-track {
     height: 4px;
     border-radius: 2px;
     background: #2a2a2a;
   }
 
-  .compact-slider::-moz-range-progress {
+  .transparency-slider::-moz-range-progress {
     height: 4px;
     border-radius: 2px;
     background: #4aa8ff;
   }
 
-  .compact-slider::-moz-range-thumb {
+  .transparency-slider::-moz-range-thumb {
     width: 16px;
     height: 16px;
     border-radius: 50%;
@@ -413,7 +439,7 @@
     transition: box-shadow 100ms ease, transform 100ms ease;
   }
 
-  .compact-slider::-moz-range-thumb:hover {
+  .transparency-slider::-moz-range-thumb:hover {
     box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
     transform: scale(1.15);
   }

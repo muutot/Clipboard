@@ -225,18 +225,15 @@
         <span class="value-label">{s.viewerBackdropOpacity}%</span>
       </div>
     </div>
-    <div class="slider-row">
-      <input
-        type="range"
-        min="0"
-        max="100"
-        step="1"
-        value={s.viewerBackdropOpacity}
-        oninput={(e) => { generalSettings.updateSetting("viewerBackdropOpacity", Number((e.target as HTMLInputElement).value)); updateSliderTrack(viewerOpacityEl); }}
-        aria-label={_t("general.viewerBackdropOpacity")}
-        bind:this={viewerOpacityEl}
-      />
-    </div>
+    <input
+      type="range"
+      min="0"
+      max="100"
+      value={s.viewerBackdropOpacity}
+      oninput={(e) => { generalSettings.updateSetting("viewerBackdropOpacity", Number((e.target as HTMLInputElement).value)); updateSliderTrack(viewerOpacityEl); }}
+      class="transparency-slider"
+      bind:this={viewerOpacityEl}
+    />
   </section>
 
   <section class="setting-card toggle-card">
@@ -625,69 +622,4 @@
     text-align: center;
   }
 
-  .slider-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .slider-row input[type="range"] {
-    flex: 1;
-    height: 4px;
-    border: none;
-    border-radius: 2px;
-    background: #2a2a2a;
-    outline: none;
-    cursor: pointer;
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  .slider-row input[type="range"]::-webkit-slider-runnable-track {
-    height: 4px;
-    border-radius: 2px;
-    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
-  }
-
-  .slider-row input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #4aa8ff;
-    border: 2px solid #1a1a1a;
-    margin-top: -5px;
-    cursor: pointer;
-    transition: transform 100ms ease;
-  }
-
-  .slider-row input[type="range"]::-webkit-slider-thumb:hover {
-    transform: scale(1.15);
-  }
-
-  .slider-row input[type="range"]::-moz-range-track {
-    height: 4px;
-    border-radius: 2px;
-    background: #2a2a2a;
-  }
-
-  .slider-row input[type="range"]::-moz-range-progress {
-    height: 4px;
-    border-radius: 2px;
-    background: #4aa8ff;
-  }
-
-  .slider-row input[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #4aa8ff;
-    border: 2px solid #1a1a1a;
-    cursor: pointer;
-  }
-
-  .slider-row input[type="range"]::-moz-range-thumb:hover {
-    transform: scale(1.15);
-  }
 </style>

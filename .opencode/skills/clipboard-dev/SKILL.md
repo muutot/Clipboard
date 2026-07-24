@@ -300,6 +300,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - `<input type="number">` — hide native spin buttons:
   ```css
   input[type="number"] {
+    appearance: textfield;
     -moz-appearance: textfield;
   }
   input[type="number"]::-webkit-inner-spin-button,
@@ -316,6 +317,89 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
     -moz-appearance: none;
   }
   ```
+
+**Setting card patterns (use consistently):**
+
+- **Toggle card** — label on left, switch/button on right, same row:
+  ```svelte
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="..." size={17} /></span>
+      <div>
+        <strong>Label</strong>
+        <p>Description</p>
+      </div>
+    </div>
+    <!-- toggle switch, lang-toggle buttons, font-size-input, or theme-select here -->
+  </section>
+  ```
+  CSS: `.toggle-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; }`
+
+- **Slider card** — label+value on same row (`heading-inline`), slider below, NO wrapper div around `<input>`:
+  ```svelte
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="..." size={17} /></span>
+      <div class="heading-inline">
+        <strong>Label</strong>
+        <span class="value-label">{value}px</span>
+      </div>
+    </div>
+    <!-- optional: <p class="setting-desc">Description</p> -->
+    <input type="range" class="transparency-slider" oninput={handler} />
+  </section>
+  ```
+  CSS for heading-inline: `display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 0; gap: 8px;`
+  CSS for value-label: `color: #aaa; font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0;`
+  CSS for setting-desc: `margin: 2px 0 0; color: #777; font-size: 9.8px;`
+
+- **All range sliders** use class `transparency-slider` — no other slider classes. Do NOT wrap `<input type="range">` in any div.
+  ```css
+  .transparency-slider {
+    width: 100%; margin-top: 12px;
+    -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px; background: #2a2a2a;
+    outline: none; cursor: pointer;
+  }
+  .transparency-slider::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
+  }
+  .transparency-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px;
+    border-radius: 50%; border: 2px solid #4aa8ff; background: #1a1a1a;
+    cursor: pointer; transition: box-shadow 100ms ease, transform 100ms ease;
+  }
+  .transparency-slider::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4); transform: scale(1.15);
+  }
+  .transparency-slider::-moz-range-track { height: 4px; border-radius: 2px; background: #2a2a2a; }
+  .transparency-slider::-moz-range-progress { height: 4px; border-radius: 2px; background: #4aa8ff; }
+  .transparency-slider::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid #4aa8ff; background: #1a1a1a;
+    cursor: pointer; transition: box-shadow 100ms ease, transform 100ms ease;
+  }
+  .transparency-slider::-moz-range-thumb:hover {
+    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4); transform: scale(1.15);
+  }
+  ```
+
+- **Dark theme color tokens** (use consistently, avoid creating new shades):
+  | Token | Value | Usage |
+  |-------|-------|-------|
+  | bg card | `#1e1e1e` | `.setting-card` background |
+  | bg input | `#1a1a1a` | inputs, buttons, selects |
+  | bg hover | `#242424` | `.application-row:hover` |
+  | bg selected | `#252f3d` | `.application-row.selected` |
+  | border default | `#3a3a3a` | inputs, buttons |
+  | border focus | `#5a5a5a` | `.active`, `:focus` |
+  | border card | `#303030` | `.setting-card` |
+  | border subtle | `#292929` | section dividers |
+  | text primary | `#dedede` / `#d8d8d8` | headings, content |
+  | text muted | `#999` / `#777` / `#666` | descriptions, placeholders |
+  | accent | `#4aa8ff` | slider track, toggle, focus ring |
+  | selected outline | `#3d5a80` | `.selected` box-shadow |
 
 ## Z-Index Layering (Fixed)
 
