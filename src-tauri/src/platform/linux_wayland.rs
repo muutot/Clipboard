@@ -58,6 +58,8 @@
 //!         → Best-effort: try wlr-data-control, fall back to Portal clipboard
 //! ```
 
+#![allow(dead_code)]
+
 use std::{
     collections::HashSet,
     sync::{

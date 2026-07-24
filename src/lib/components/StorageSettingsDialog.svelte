@@ -4,6 +4,7 @@
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import {
     configureStorageDirectory,
     getStorageStatus,
@@ -52,6 +53,8 @@
   let ocrCompleted = $state(0);
   let ocrAvailable = $state(false);
   let ocrInstalling = $state(false);
+  let ocrProgressLabel = $state("");
+  let ocrProgressPct = $state(-1);
   let modelVariant = $state("tiny");
 
   $effect(() => {
@@ -99,6 +102,18 @@
 
   async function installPpocr() {
     ocrInstalling = true;
+    ocrProgressPct = -1;
+    ocrProgressLabel = "";
+    const unlisten = await listen<{
+      filename: string;
+      label: string;
+      current: number;
+      total: number;
+      percentage: number;
+    }>("ppocr-download-progress", (event) => {
+      ocrProgressLabel = event.payload.label;
+      ocrProgressPct = event.payload.percentage;
+    });
     try {
       const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
       feedback = msg;
@@ -107,7 +122,9 @@
     } catch (e) {
       feedback = String(e);
     } finally {
+      unlisten();
       ocrInstalling = false;
+      ocrProgressPct = -1;
     }
   }
 
@@ -404,9 +421,14 @@
                 </select>
               </div>
               <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="align-self:flex-end; white-space:nowrap; padding:9px 14px; border:1px solid #343434; border-radius:7px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:11.5px;">
-                {ocrInstalling ? '下载中...' : '下载模型'}
+                {ocrInstalling ? (ocrProgressPct >= 0 ? `${Math.round(ocrProgressPct)}%` : '下载中...') : '下载模型'}
               </button>
             </div>
+            {#if ocrInstalling && ocrProgressPct >= 0}
+              <div style="margin-top:6px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
+                <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
+              </div>
+            {/if}
           {/if}
         </section>
 
@@ -675,9 +697,14 @@
           {:else}
             <div class="setting-actions" style="flex-wrap: wrap;">
               <button class:primary={ocrInstalling} type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
-                {ocrInstalling ? '安装中…' : '安装 PP-OCRv6'}
+                {ocrInstalling ? (ocrProgressPct >= 0 ? `${Math.round(ocrProgressPct)}%` : '安装中…') : '安装 PP-OCRv6'}
               </button>
             </div>
+            {#if ocrInstalling && ocrProgressPct >= 0}
+              <div style="margin-top:6px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
+                <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
+              </div>
+            {/if}
           {/if}
         </section>
 

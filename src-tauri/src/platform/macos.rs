@@ -8,6 +8,8 @@
 //! documentation are compiled — the implementation bodies are gated behind
 //! `#[cfg(target_os = "macos")]`.
 
+#![allow(dead_code)]
+
 use std::{
     collections::HashSet,
     sync::{

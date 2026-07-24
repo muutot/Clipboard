@@ -72,7 +72,7 @@ pub fn detect_markers(text: &str) -> ContentMarkers {
     markers
 }
 
-fn try_match(regex_str: &str, text: &str) -> Option<regex_lite::Regex> {
+fn try_match(regex_str: &str, _text: &str) -> Option<regex_lite::Regex> {
     regex_lite::Regex::new(regex_str).ok()
 }
 

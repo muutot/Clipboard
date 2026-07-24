@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::process::Command;
 
 use crate::domain::OcrTextBlock;

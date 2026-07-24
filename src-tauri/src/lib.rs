@@ -31,6 +31,7 @@ use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VE
 use serde::Serialize;
 use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
 use tauri::{Emitter, Manager};
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
@@ -403,8 +404,19 @@ fn restart_ocr_engine(
     Ok(())
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PpOcrDownloadProgress {
+    filename: String,
+    label: String,
+    current: u64,
+    total: u64,
+    percentage: f64,
+}
+
 #[tauri::command]
-fn install_ppocr(
+async fn install_ppocr(
+    app: tauri::AppHandle,
     paths: tauri::State<'_, StoragePaths>,
     variant: String,
 ) -> Result<String, String> {
@@ -425,13 +437,66 @@ fn install_ppocr(
     };
     let dict_url = "https://raw.githubusercontent.com/hiroi-sora/pp-ocrv6-onnx/main/ppocrv6_dict.txt";
 
-    for (url, filename) in [(det_url, "pp-ocrv6_small_det.onnx"), (rec_url, "pp-ocrv6_small_rec.onnx"), (dict_url, "ppocrv6_dict.txt")] {
+    let files = [
+        (det_url, "pp-ocrv6_small_det.onnx", "检测模型"),
+        (rec_url, "pp-ocrv6_small_rec.onnx", "识别模型"),
+        (dict_url, "ppocrv6_dict.txt", "字典文件"),
+    ];
+
+    let client = reqwest::Client::builder()
+        .user_agent("clipboard-desktop")
+        .build()
+        .map_err(|e| format!("create client: {e}"))?;
+
+    for (url, filename, label) in &files {
         let dest = models_dir.join(filename);
-        if dest.exists() { continue; }
-        let status = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &format!("[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '{}' -OutFile '{}'", url, dest.display())])
-            .status().map_err(|e| format!("download failed: {e}"))?;
-        if !status.success() { return Err(format!("download failed for {filename}")); }
+        if dest.exists() {
+            continue;
+        }
+
+        let _ = app.emit(
+            "ppocr-download-progress",
+            PpOcrDownloadProgress {
+                filename: filename.to_string(),
+                label: label.to_string(),
+                current: 0,
+                total: 0,
+                percentage: 0.0,
+            },
+        );
+
+        let mut response = client
+            .get(*url)
+            .send()
+            .await
+            .map_err(|e| format!("download {filename}: {e}"))?;
+        let total = response.content_length().unwrap_or(0);
+        let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
+        let mut downloaded: u64 = 0;
+
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|e| format!("download {filename}: {e}"))?
+        {
+            file.write_all(&chunk).map_err(|e| e.to_string())?;
+            downloaded += chunk.len() as u64;
+            let percentage = if total > 0 {
+                (downloaded as f64 / total as f64) * 100.0
+            } else {
+                -1.0
+            };
+            let _ = app.emit(
+                "ppocr-download-progress",
+                PpOcrDownloadProgress {
+                    filename: filename.to_string(),
+                    label: label.to_string(),
+                    current: downloaded,
+                    total,
+                    percentage,
+                },
+            );
+        }
     }
 
     Ok("PP-OCRv6 models downloaded successfully".to_string())

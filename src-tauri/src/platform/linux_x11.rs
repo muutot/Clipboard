@@ -15,6 +15,8 @@
 //! events.  On non-Linux targets only the type definitions and documentation
 //! are compiled.
 
+#![allow(dead_code)]
+
 use std::{
     collections::{HashMap, HashSet},
     sync::{
