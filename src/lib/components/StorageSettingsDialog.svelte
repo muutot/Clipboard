@@ -1177,17 +1177,18 @@
   input {
     width: 100%;
     box-sizing: border-box;
-    padding: 9px 10px;
-    border: 1px solid #343434;
-    border-radius: 7px;
+    padding: 8px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
     outline: none;
     color: #d7d7d7;
-    background: #171717;
+    background: #1a1a1a;
     font:
       12px "Cascadia Code",
       "SFMono-Regular",
       Consolas,
       monospace;
+    transition: border-color 120ms ease;
   }
 
   input:focus {
@@ -1198,19 +1199,19 @@
   .model-select {
     width: 100%;
     box-sizing: border-box;
-    padding: 9px 10px;
-    border: 1px solid #343434;
-    border-radius: 7px;
+    padding: 8px 28px 8px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
     outline: none;
     color: #d7d7d7;
-    background: #171717;
+    background: #1a1a1a;
     font-size: 13px;
     cursor: pointer;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 10px center;
-    padding-right: 28px;
+    background-position: right 8px center;
+    transition: border-color 120ms ease;
   }
 
   select:focus,
@@ -1458,7 +1459,18 @@
   .setting-card-row input {
     width: 100px;
     flex-shrink: 0;
-    padding: 6px 8px;
+    padding: 7px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #d7d7d7;
+    background: #1a1a1a;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+
+  .setting-card-row input:focus {
+    border-color: #555;
   }
 
   .setting-card-row .number-suffix {
@@ -1468,15 +1480,23 @@
   }
 
   .unit-select {
-    width: 52px;
-    padding: 6px 2px;
-    border: 1px solid #343434;
-    border-radius: 7px;
+    width: 56px;
+    padding: 7px 2px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
     color: #d7d7d7;
-    background: #171717;
+    background: #1a1a1a;
     font-size: 11px;
     cursor: pointer;
     flex-shrink: 0;
+    text-align: center;
+    text-align-last: center;
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+
+  .unit-select:focus {
+    border-color: #555;
   }
 
   .restart-btn {
