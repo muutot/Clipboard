@@ -1198,51 +1198,51 @@
     background: rgba(27, 27, 27, 0.985);
   }
 
-  .app-shell.compact .search-header {
+  :global(.app-shell.compact .search-header) {
     padding: 6px 16px 2px;
     gap: 6px;
   }
 
-  .app-shell.compact .search-box input {
+  :global(.app-shell.compact .search-box input) {
     font-size: 12px;
   }
 
-  .app-shell.compact .toolbar {
+  :global(.app-shell.compact .toolbar) {
     padding: 2px 16px 4px;
   }
 
-  .app-shell.compact .toolbar-actions button {
+  :global(.app-shell.compact .toolbar-actions button) {
     width: 28px;
     height: 28px;
   }
 
-  .app-shell.compact .filters button {
+  :global(.app-shell.compact .filters button) {
     padding: 3px 9px;
     font-size: 10px;
   }
 
-  .app-shell.compact .history-list {
+  :global(.app-shell.compact .history-list) {
     padding: 0 4px 6px;
   }
 
-  .app-shell.compact :global(.clip-card) {
+  :global(.app-shell.compact .clip-card) {
     padding: 6px 10px 5px;
     border-radius: 7px;
   }
 
-  .app-shell.compact :global(.clip-card .meta-row) {
+  :global(.app-shell.compact .clip-card .meta-row) {
     gap: 5px;
   }
 
-  .app-shell.compact :global(.clip-card .meta-row span) {
+  :global(.app-shell.compact .clip-card .meta-row span) {
     font-size: 9.5px;
   }
 
-  .app-shell.compact :global(.clip-card .content) {
+  :global(.app-shell.compact .clip-card .content) {
     font-size: 12px;
   }
 
-  .app-shell.compact :global(.clip-card .preview-text) {
+  :global(.app-shell.compact .clip-card .preview-text) {
     font-size: 11.5px;
     line-height: 1.4;
   }
