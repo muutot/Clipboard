@@ -520,6 +520,7 @@
     background: transparent;
     cursor: default;
     overflow: hidden;
+    outline: none;
     transition:
       background 120ms ease,
       border-color 120ms ease;
@@ -615,8 +616,7 @@
 
   .clip-card:hover,
   .clip-card.selected,
-  .clip-card:focus-within,
-  .clip-card:focus-visible {
+  .clip-card:focus-within {
     border-color: rgba(255, 255, 255, 0.035);
     background: #242424;
   }

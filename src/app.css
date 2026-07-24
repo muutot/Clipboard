@@ -51,8 +51,7 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible,
-[tabindex]:focus-visible {
+input:focus-visible {
   outline: 2px solid rgba(255, 91, 91, 0.85);
   outline-offset: 2px;
 }
@@ -86,8 +85,7 @@ input:focus-visible,
 
 @media (forced-colors: active) {
   button:focus-visible,
-  input:focus-visible,
-  [tabindex]:focus-visible {
+  input:focus-visible {
     outline: 3px solid ButtonText;
     outline-offset: 2px;
   }
