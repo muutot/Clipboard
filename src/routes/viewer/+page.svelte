@@ -43,17 +43,20 @@
     document.addEventListener("keydown", onEscape, true);
 
     let unlisten: UnlistenFn | undefined;
+    let alive = true;
     import("@tauri-apps/api/event").then(({ listen }) => {
+      if (!alive) return;
       listen<{ src: string; opacity: number }>("viewer:open", (event) => {
         src = event.payload.src;
         opacity = event.payload.opacity;
         zoom = 1;
         panX = 0;
         panY = 0;
-      }).then((fn) => { unlisten = fn; });
+      }).then((fn) => { if (alive) unlisten = fn; });
     });
 
     return () => {
+      alive = false;
       document.removeEventListener("keydown", onEscape, true);
       if (unlisten) unlisten();
     };
