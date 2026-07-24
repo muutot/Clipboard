@@ -312,9 +312,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
         items = storedItems;
         selectedId = storedItems[0]?.id ?? "";
-        statusMessage = storedItems.length
-          ? _t("status.recordCount", { count: storedItems.length })
-          : _t("app.historyEmpty");
       })
       .catch((error) => {
         console.error("Unable to load clipboard history", error);
@@ -853,9 +850,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     void invoke<number>("clear_all_non_favorite_items")
       .then((count) => {
         showToast(_t("toast.clearHistorySuccess", { count }), "success");
-        statusMessage = items.length
-          ? _t("status.recordCount", { count: items.length })
-          : _t("app.historyEmpty");
       })
       .catch((error) => {
         console.error("Unable to clear history", error);
@@ -1219,16 +1213,11 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   <section class="history-panel" aria-label={_t("app.recentRecords")}>
     <div class="section-heading">
-      <div>
-        <span class="eyebrow">{_t("app.recentRecords")}</span>
-        <span class="result-count">{resultSummary}</span>
-      </div>
       {#if selectedIds.size > 0}
         <span class="multi-count"
           >{selectedIds.size} {_t("status.recordCount", { count: 0 }).replace("0 ", "")}</span
         >
       {/if}
-      <span class="runtime-status"><i></i>{runtimeLabel}</span>
     </div>
 
     {#if filteredItems.length > 0}
@@ -1307,7 +1296,7 @@ showCheckbox={false}
                 onplainpaste={plainPaste}
                 onduplicate={duplicateItem}
                 onrestore={restoreItem}
-              /> 
+              />
             {/if}
           {/each}
         </div>
@@ -1349,6 +1338,10 @@ showCheckbox={false}
   {/if}
 
   <footer class="status-bar" role="status" aria-live="polite">
+    <span class="status-left">
+      <span class="result-count">{resultSummary}</span>
+      <span class="runtime-status"><i></i>{runtimeLabel}</span>
+    </span>
     <span>{statusMessage}</span>
     <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
   </footer>
@@ -1707,7 +1700,7 @@ showCheckbox={false}
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 11px 17px 7px;
+    padding: 0 17px 7px;
     color: #777777;
     font-size: 11.5px;
   }
@@ -1876,7 +1869,14 @@ showCheckbox={false}
     font-size: 11.5px;
   }
 
-  .status-bar > span:first-child {
+  .status-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .status-bar > span {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
