@@ -32,5 +32,4 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 ctrlc = "3"
 open = "5"
 tauri-plugin-dialog = "2"
-oar-ocr = { version = "0.7", features = ["download-binaries"] }
-ureq = "3"
+oar-ocr = { version = "0.8", features = ["download-binaries", "auto-download"] }

@@ -133,7 +133,7 @@
 {#if item}
   <div class="detail-backdrop" onclick={onclose} aria-hidden="true"></div>
   <div class="detail-panel" role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
-    <div class="detail-header">
+    <div class="detail-header" data-tauri-drag-region>
       <button class="back-btn" type="button" onclick={onclose} aria-label={_t("detail.back")}>
         <AppIcon name="chevron-left" size={18} strokeWidth={2} />
       </button>

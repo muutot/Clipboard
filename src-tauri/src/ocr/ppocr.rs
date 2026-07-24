@@ -11,9 +11,8 @@ pub struct PpOcrEngine {
     models_dir: PathBuf,
 }
 
-// SAFETY: OAROCR wraps ort::Session which uses RefCell internally (not Sync).
-// PpOcrEngine wraps it in a Mutex ensuring exclusive access. The OCR worker
-// calls recognize from a single thread at a time.
+// SAFETY: OAROCR wraps ort::Session internally. The OCR worker calls recognize
+// from a single thread at a time, and we protect access with a Mutex.
 unsafe impl Send for PpOcrEngine {}
 unsafe impl Sync for PpOcrEngine {}
 
@@ -34,31 +33,12 @@ impl PpOcrEngine {
     }
 
     fn build_ocr(&self) -> Result<oar_ocr::oarocr::OAROCR, OcrEngineError> {
-        let paths = super::models::model_paths(&self.models_dir);
-
-        if !paths.det.exists() {
-            return Err(OcrEngineError::new(format!(
-                "Detection model not found: {}",
-                paths.det.display()
-            )));
-        }
-        if !paths.rec.exists() {
-            return Err(OcrEngineError::new(format!(
-                "Recognition model not found: {}",
-                paths.rec.display()
-            )));
-        }
-        if !paths.dict.exists() {
-            return Err(OcrEngineError::new(format!(
-                "Dictionary not found: {}",
-                paths.dict.display()
-            )));
-        }
+        super::models::set_oar_home(&self.models_dir);
 
         OAROCRBuilder::new(
-            paths.det.to_string_lossy().as_ref(),
-            paths.rec.to_string_lossy().as_ref(),
-            paths.dict.to_string_lossy().as_ref(),
+            "pp-ocrv6_small_det.onnx",
+            "pp-ocrv6_small_rec.onnx",
+            "ppocrv6_dict.txt",
         )
         .build()
         .map_err(|e| OcrEngineError::new(format!("Failed to build OCR engine: {e}")))
@@ -77,7 +57,7 @@ impl OcrEngine for PpOcrEngine {
     }
 
     fn model_version(&self) -> &str {
-        "v5"
+        super::models::MODEL_VERSION
     }
 
     fn recognize(&self, input: &OcrInput) -> Result<OcrOutput, OcrEngineError> {
@@ -99,35 +79,41 @@ impl OcrEngine for PpOcrEngine {
 
         let ocr = guard.as_ref().unwrap();
 
+        let image = oar_ocr::utils::load_image(&input.image_path)
+            .map_err(|e| OcrEngineError::new(format!("Failed to load image: {e}")))?;
+
         let result = ocr
-            .predict(input.image_path.to_string_lossy().as_ref())
+            .predict(vec![image])
             .map_err(|e| OcrEngineError::new(format!("OCR recognition failed: {e}")))?;
 
-        if result.text_regions.is_empty() {
+        let page = result.into_iter().next()
+            .ok_or_else(|| OcrEngineError::new("OCR returned no results"))?;
+
+        if page.text_regions.is_empty() {
             return Err(OcrEngineError::new("OCR returned no text"));
         }
 
         let mut full_text = String::new();
         let mut blocks = Vec::new();
 
-        for text_region in &result.text_regions {
-            let text = text_region.text();
-            let confidence = text_region.confidence().unwrap_or(0.0);
+        for region in &page.text_regions {
+            let text = match &region.text {
+                Some(t) if !t.is_empty() => t,
+                _ => continue,
+            };
 
-            if text.is_empty() {
-                continue;
-            }
+            let confidence = region.confidence.unwrap_or(0.0);
 
             if !full_text.is_empty() {
                 full_text.push('\n');
             }
             full_text.push_str(text);
 
-            let bbox = text_region.bounding_box();
-            let left = bbox.iter().map(|p| p[0]).fold(f32::MAX, f32::min).max(0.0) as u32;
-            let top = bbox.iter().map(|p| p[1]).fold(f32::MAX, f32::min).max(0.0) as u32;
-            let right = bbox.iter().map(|p| p[0]).fold(f32::MIN, f32::max);
-            let bottom = bbox.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+            let bbox = &region.bounding_box;
+            let left = bbox.points.iter().map(|p| p.x as f32).fold(f32::MAX, f32::min).max(0.0) as u32;
+            let top = bbox.points.iter().map(|p| p.y as f32).fold(f32::MAX, f32::min).max(0.0) as u32;
+            let right = bbox.points.iter().map(|p| p.x as f32).fold(f32::MIN, f32::max);
+            let bottom = bbox.points.iter().map(|p| p.y as f32).fold(f32::MIN, f32::max);
             let width = (right - left as f32).round().max(1.0) as u32;
             let height = (bottom - top as f32).round().max(1.0) as u32;
 

@@ -850,7 +850,7 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <header class="search-header">
+  <header class="search-header" data-tauri-drag-region>
     <div class="search-box">
       <AppIcon name="search" size={20} strokeWidth={1.65} />
       <input
