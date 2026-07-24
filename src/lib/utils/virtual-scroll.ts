@@ -13,6 +13,13 @@ const TEXT_HEIGHT = 88;
 const TALL_TEXT_HEIGHT = 88;
 const IMAGE_HEIGHT = 150;
 
+export function editHeight(lineCount: number, hasCustomTitle?: boolean): number {
+  const rows = Math.min(12, Math.max(3, lineCount));
+  let h = 25 + 8 + (rows * 20) + 36;
+  if (hasCustomTitle) h += 34;
+  return h;
+}
+
 export function itemHeight(
   kind: string,
   hasPreview?: boolean,

@@ -27,7 +27,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { IconName } from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { assets } from "$app/paths";
-  import { createVirtualList, itemHeight, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
+  import { createVirtualList, editHeight, itemHeight, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
@@ -219,7 +219,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(i => itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText, !!i.customTitle, compactCustomTitle)),
+      filteredItems.map(i => editingId === i.id ? editHeight((i.textContent || "").split("\n").length, !!i.customTitle) : itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText, !!i.customTitle, compactCustomTitle)),
     ),
   );
 

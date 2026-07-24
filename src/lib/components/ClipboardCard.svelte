@@ -235,9 +235,10 @@
   }
 </script>
 
-<article
+  <article
   class:selected
   class:compact
+  class:editing={editing}
   class="clip-card"
   style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
@@ -512,6 +513,11 @@
     margin-bottom: var(--cg, 5px);
     box-sizing: border-box;
     overflow: hidden;
+  }
+
+  .clip-card.editing {
+    overflow: visible;
+    z-index: 2;
   }
 
   .clip-card.compact .meta-row {
@@ -790,7 +796,7 @@
 
   .edit-area {
     position: relative;
-    z-index: 4;
+    z-index: 1;
     padding: 4px;
   }
 
