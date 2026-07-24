@@ -44,6 +44,7 @@ const en: LocaleDefinition = {
     edit: "Edit",
     pastePlain: "Copy as plain text",
     pasteFormat: "Copy with formatting",
+    duplicateItem: "Save as new entry",
   },
   time: {
     justNow: "just now",
@@ -190,6 +191,8 @@ const en: LocaleDefinition = {
     bulkDeleteSuccess: "Deleted {count} items",
     editSaved: "Edit saved",
     plainPasteSuccess: "Pasted as plain text",
+    duplicateSuccess: "Duplicated as new entry",
+    saveFailed: "Save failed",
   },
   detail: {
     title: "Content Details",
@@ -223,11 +226,13 @@ const en: LocaleDefinition = {
     save: "Save",
     cancel: "Cancel",
     placeholder: "Enter text content...",
+    saveAsNew: "Save as new",
   },
   copy: {
     plainText: "Paste as plain text",
     withFormat: "Paste with formatting",
     copyFileName: "Copy file name",
+    duplicateItem: "Save as new entry",
   },
   general: {
     title: "General Settings",

@@ -44,6 +44,7 @@ export interface LocaleDefinition {
     edit: string;
     pastePlain: string;
     pasteFormat: string;
+    duplicateItem: string;
   };
   time: {
     justNow: string;
@@ -183,6 +184,8 @@ export interface LocaleDefinition {
     bulkDeleteSuccess: string;
     editSaved: string;
     plainPasteSuccess: string;
+    duplicateSuccess: string;
+    saveFailed: string;
   };
   detail: {
     title: string;
@@ -216,11 +219,13 @@ export interface LocaleDefinition {
     save: string;
     cancel: string;
     placeholder: string;
+    saveAsNew: string;
   };
   copy: {
     plainText: string;
     withFormat: string;
     copyFileName: string;
+    duplicateItem: string;
   };
 
 

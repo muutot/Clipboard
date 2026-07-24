@@ -44,6 +44,7 @@ const zhCN: LocaleDefinition = {
     edit: "编辑",
     pastePlain: "复制为纯文本",
     pasteFormat: "保留格式复制",
+    duplicateItem: "另存为新条目",
   },
   time: {
     justNow: "刚刚",
@@ -183,6 +184,8 @@ const zhCN: LocaleDefinition = {
     bulkDeleteSuccess: "已删除 {count} 项",
     editSaved: "已保存编辑内容",
     plainPasteSuccess: "已复制为纯文本",
+    duplicateSuccess: "已另存为新条目",
+    saveFailed: "保存失败",
   },
   detail: {
     title: "内容详情",
@@ -216,11 +219,13 @@ const zhCN: LocaleDefinition = {
     save: "保存",
     cancel: "取消",
     placeholder: "输入文本内容...",
+    saveAsNew: "另存为新条目",
   },
   copy: {
     plainText: "复制纯文本",
     withFormat: "保留格式复制",
     copyFileName: "复制文件名",
+    duplicateItem: "另存为新条目",
   },
   general: {
     title: "常规设置",
