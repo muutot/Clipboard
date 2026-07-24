@@ -3,7 +3,7 @@
   import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
 
   function handleClose() {
-    getCurrentWindow().close();
+    getCurrentWindow().hide();
   }
 </script>
 
