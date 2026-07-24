@@ -38,7 +38,7 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let activeSection = $state<"capture" | "storage" | "keyboard" | "general">("storage");
+  let activeSection = $state<"general" | "capture" | "storage" | "keyboard" | "ocr">("storage");
 
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
@@ -48,6 +48,8 @@
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
   let ocrEngine = $state("ppocr");
+  let ocrPending = $state(0);
+  let ocrCompleted = $state(0);
 
   $effect(() => {
     if (open) {
@@ -77,6 +79,17 @@
 
     void loadPerformanceMetrics();
     void loadHistoryConfig();
+    void loadOcrStatus();
+  }
+
+  async function loadOcrStatus() {
+    try {
+      const result = await invoke<{ pendingTasks: number; completedTasks: number; engine: string }>("get_ocr_status");
+      if (result) {
+        ocrPending = result.pendingTasks;
+        ocrCompleted = result.completedTasks;
+      }
+    } catch { /* ignore */ }
   }
 
   async function loadHistoryConfig() {
@@ -299,6 +312,14 @@
         <AppIcon name="keyboard" size={16} />
         <span>{_t("storage.keyboardTab")}</span>
       </button>
+      <button
+        class:active={activeSection === "ocr"}
+        type="button"
+        onclick={() => (activeSection = "ocr")}
+      >
+        <AppIcon name="eye" size={16} />
+        <span>OCR</span>
+      </button>
     </nav>
 
     <div class="sidebar-foot">
@@ -314,6 +335,50 @@
       <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
     {:else if activeSection === "keyboard"}
       <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
+    {:else if activeSection === "ocr"}
+      <header>
+        <div>
+          <span class="eyebrow">设置 / OCR</span>
+          <h2>文字识别</h2>
+          <p>OCR 引擎选择与状态</p>
+        </div>
+        <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button>
+      </header>
+      <div class="settings-scroll">
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+            <div>
+              <strong>OCR 引擎</strong>
+              <p>PP-OCRv6 需安装 Python + paddleocr，Tesseract 需手动安装。</p>
+            </div>
+          </div>
+          <div class="setting-actions" style="flex-wrap: wrap;">
+            <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
+              PP-OCRv6
+            </button>
+            <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
+              Tesseract
+            </button>
+          </div>
+        </section>
+
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+            <div>
+              <strong>任务状态</strong>
+              <p>当前 OCR 队列与已识别统计</p>
+            </div>
+          </div>
+          <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="stat-item"><span class="stat-value">{ocrPending}</span><span class="stat-label">待处理</span></div>
+            <div class="stat-item"><span class="stat-value">{ocrCompleted}</span><span class="stat-label">已完成</span></div>
+          </div>
+        </section>
+
+        <p class="auto-save-note">修改即时生效，无需手动保存</p>
+      </div>
     {:else}
       <header>
         <div>
@@ -459,24 +524,6 @@
                 <span class="stat-label">{_t("statistics.ocrTasks")}</span>
               </div>
             </div>
-          </section>
-
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-              <div>
-                    <strong>OCR 引擎</strong>
-                    <p>PP-OCRv6 需安装 Python + paddleocr，Tesseract 需手动安装。</p>
-              </div>
-            </div>
-            <div class="setting-actions" style="flex-wrap: wrap;">
-              <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
-                PP-OCRv6 (ONNX)
-              </button>
-                  <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
-                    Tesseract
-                  </button>
-                </div>
           </section>
 
           <section class="setting-card">

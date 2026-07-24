@@ -36,6 +36,13 @@
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
   let editContent = $state("");
+  let imageFullscreen = $state(false);
+
+  $effect(() => {
+    imageFullscreen = false;
+    activeTab = "preview";
+    editing = false;
+  });
 
   $effect(() => {
     if (item?.kind !== "image" || !isTauriRuntime()) return;
@@ -113,6 +120,7 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (item && event.key === "Escape") {
+      if (imageFullscreen) { imageFullscreen = false; return; }
       if (editing) { editing = false; return; }
       event.preventDefault();
       event.stopPropagation();
@@ -131,9 +139,9 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if item}
-  <div class="detail-backdrop" onclick={onclose} aria-hidden="true"></div>
-  <div class="detail-panel" role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
-    <div class="detail-header" data-tauri-drag-region>
+  <div class="detail-backdrop" class:fullscreen-backdrop={imageFullscreen} onclick={imageFullscreen ? () => (imageFullscreen = false) : onclose} aria-hidden="true"></div>
+  <div class="detail-panel" class:fullscreen={imageFullscreen} role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
+    <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
       <button class="back-btn" type="button" onclick={onclose} aria-label={_t("detail.back")}>
         <AppIcon name="chevron-left" size={18} strokeWidth={2} />
       </button>
