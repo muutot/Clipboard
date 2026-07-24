@@ -24,12 +24,11 @@
   }
 
   interface Props {
-    configPath?: string;
     iconsDir?: string;
     onclose: () => void;
   }
 
-  let { configPath = "conf/conf.json", iconsDir = "", onclose }: Props = $props();
+  let { iconsDir = "", onclose }: Props = $props();
   let settings = $state<ApplicationFilterSettings | null>(null);
   let availableSearch = $state("");
   let ignoredSearch = $state("");
@@ -248,11 +247,7 @@
       </div>
     </section>
 
-    <div class="settings-note">
-      <span>配置文件</span>
-      <code title={configPath}>{configPath}</code>
-      <span>· {_t("capture.configNote")}</span>
-    </div>
+    <p class="auto-save-note">{_t("capture.configNote")}</p>
   </div>
 {:else}
   <div class="settings-state">{feedback || _t("capture.captureUnavailable")}</div>
@@ -273,7 +268,7 @@
   }
   .eyebrow {
     color: #777;
-    font-size: 9.5px;
+-size: var(--font-size-tiny, 10px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -287,7 +282,7 @@
     max-width: 570px;
     margin: 0;
     color: #777;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     line-height: 1.5;
   }
   .close-button {
@@ -304,8 +299,9 @@
     line-height: 1;
   }
   .settings-scroll {
-    display: grid;
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     min-height: 0;
     padding: 16px 20px 48px;
     overflow: auto;
@@ -328,20 +324,21 @@
   .filter-board {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     min-height: 365px;
+    flex: 1;
     border: 1px solid #303030;
     border-radius: 10px;
     background: #1b1b1b;
+    overflow: hidden;
   }
   .application-column {
-    display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     padding: 13px;
   }
-  .application-column:first-child {
-    grid-template-rows: auto auto minmax(0, 1fr);
-  }
+
   .application-column + .transfer-column,
   .transfer-column + .application-column {
     border-left: 1px solid #303030;
@@ -352,7 +349,7 @@
     justify-content: space-between;
     min-height: 25px;
     color: #ddd;
-    font-size: 11px;
+-size: var(--font-size-secondary, 11px);
   }
   .column-heading strong span {
     margin-left: 4px;
@@ -360,7 +357,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 999px;
     color: #898989;
-    font-size: 8.5px;
+-size: var(--font-size-tiny, 10px);
     font-weight: 500;
   }
   .column-heading button,
@@ -371,7 +368,7 @@
     border: 0;
     color: #888;
     background: transparent;
-    font-size: 16px;
+-size: var(--font-size-base, 14px);
   }
   .search-field {
     display: flex;
@@ -410,11 +407,14 @@
     color: #c8c8c8;
     background: #303030;
     font: inherit;
-    font-size: 9px;
+-size: var(--font-size-tiny, 10px);
   }
   .application-list {
+    flex: 1;
     min-height: 0;
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #555 transparent;
   }
   .application-row {
     display: flex;
@@ -427,7 +427,7 @@
     border-radius: 7px;
     color: #d8d8d8;
     background: transparent;
-    font-size: 10.5px;
+-size: var(--font-size-tiny, 10px);
     cursor: pointer;
   }
   .application-row + .application-row {
@@ -461,7 +461,7 @@
     border: 0;
     color: #666;
     background: transparent;
-    font-size: 16px;
+-size: var(--font-size-base, 14px);
   }
   .app-avatar {
     display: inline-grid;
@@ -473,7 +473,7 @@
     border-radius: 7px;
     color: #ddd;
     background: linear-gradient(145deg, #3d4656, #252a32);
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
     font-weight: 700;
   }
   .app-avatar.locked {
@@ -492,13 +492,19 @@
     place-items: center;
   }
   .transfer-column button {
-    width: 24px;
-    height: 28px;
-    border: 1px solid #3d3d3d;
-    border-radius: 6px;
-    color: #aaa;
-    background: #292929;
-    font-size: 18px;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    color: #999;
+    background: transparent;
+-size: var(--font-size-base, 14px);
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .transfer-column button:hover:not(:disabled) {
+    color: #fff;
+    background: #333;
   }
   button {
     cursor: pointer;
@@ -510,30 +516,22 @@
   .empty-list {
     margin: 16px 6px;
     color: #626262;
-    font-size: 9.5px;
+    font-size: var(--font-size-tiny, 10px);
     text-align: center;
-  }
-  .settings-note {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    min-width: 0;
-    padding: 2px 4px;
-    color: #666;
-    font-size: 9.5px;
-  }
-  .settings-note code {
-    overflow: hidden;
-    color: #888;
-    white-space: nowrap;
-    text-overflow: ellipsis;
   }
   .settings-state {
     display: grid;
     flex: 1;
     place-items: center;
     color: #777;
-    font-size: 11px;
+  }
+
+  .auto-save-note {
+    margin: 0;
+    padding: 8px 0 0;
+    color: #666;
+    font-size: var(--font-size-tiny, 10px);
+    text-align: right;
   }
   .settings-feedback {
     position: absolute;
@@ -545,7 +543,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: 10px;
+-size: var(--font-size-tiny, 10px);
   }
   .settings-feedback.success {
     border-color: #35513f;
