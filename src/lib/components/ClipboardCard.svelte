@@ -56,7 +56,6 @@
     onsaveedit: (id: string, content: string) => void;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
-    onformatpaste: (id: string) => void;
   }
 
   let {
@@ -82,7 +81,6 @@
     onsaveedit,
     oncanceledit,
     onplainpaste,
-    onformatpaste,
   }: Props = $props();
 
   let editing = $state(false);
@@ -320,6 +318,38 @@
       <span>{formatRelativeTime(item.createdAt, now)}</span>
       {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
       <div class="actions" aria-label={_t("card.itemActions")}>
+        {#if contentActions?.hasUrl}
+          <button
+            type="button"
+            title={_t("actions.openUrl")}
+            onclick={(e) => handleAction(e, "url", contentActions!.urls[0])}
+            ><AppIcon name="globe" size={16} /></button
+          >
+        {/if}
+        {#if contentActions?.hasEmail}
+          <button
+            type="button"
+            title={_t("actions.sendEmail")}
+            onclick={(e) => handleAction(e, "email", contentActions!.emails[0])}
+            ><AppIcon name="mail" size={16} /></button
+          >
+        {/if}
+        {#if contentActions?.hasPhone}
+          <button
+            type="button"
+            title={_t("actions.callPhone")}
+            onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])}
+            ><AppIcon name="phone" size={16} /></button
+          >
+        {/if}
+        {#if contentActions?.hasColor}
+          <button
+            type="button"
+            title={_t("actions.copyColor")}
+            onclick={(e) => handleAction(e, "color", contentActions!.colors[0])}
+            ><AppIcon name="palette" size={16} /></button
+          >
+        {/if}
         <button
           type="button"
           title={_t("card.viewDetail")}
@@ -387,15 +417,6 @@
         {/if}
         <button
           type="button"
-          title={_t("card.pasteFormat")}
-          aria-label={_t("card.pasteFormat")}
-          onclick={(event) => {
-            event.stopPropagation();
-            onformatpaste(item.id);
-          }}><AppIcon name="copy-plus" size={16} /></button
-        >
-        <button
-          type="button"
           class:active={item.favorite}
           title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
           aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
@@ -413,38 +434,6 @@
               event.stopPropagation();
               ondelete(item.id);
             }}><AppIcon name="trash" size={16} /></button
-          >
-        {/if}
-        {#if contentActions?.hasUrl}
-          <button
-            type="button"
-            title={_t("actions.openUrl")}
-            onclick={(e) => handleAction(e, "url", contentActions!.urls[0])}
-            ><AppIcon name="globe" size={16} /></button
-          >
-        {/if}
-        {#if contentActions?.hasEmail}
-          <button
-            type="button"
-            title={_t("actions.sendEmail")}
-            onclick={(e) => handleAction(e, "email", contentActions!.emails[0])}
-            ><AppIcon name="mail" size={16} /></button
-          >
-        {/if}
-        {#if contentActions?.hasPhone}
-          <button
-            type="button"
-            title={_t("actions.callPhone")}
-            onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])}
-            ><AppIcon name="phone" size={16} /></button
-          >
-        {/if}
-        {#if contentActions?.hasColor}
-          <button
-            type="button"
-            title={_t("actions.copyColor")}
-            onclick={(e) => handleAction(e, "color", contentActions!.colors[0])}
-            ><AppIcon name="palette" size={16} /></button
           >
         {/if}
       </div>

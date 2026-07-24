@@ -32,11 +32,10 @@
     onedit: (id: string) => void;
     onsaveedit: (id: string, content: string) => void;
     onplainpaste: (id: string) => void;
-    onformatpaste: (id: string) => void;
     oncopyfilename: (id: string) => void;
   }
 
-  let { item, onclose, oncopy, onedit, onsaveedit, onplainpaste, onformatpaste, oncopyfilename }: Props = $props();
+  let { item, onclose, oncopy, onedit, onsaveedit, onplainpaste, oncopyfilename }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
@@ -437,9 +436,6 @@
               <AppIcon name="type" size={15} /> {_t("paste.plainText")}
             </button>
           {/if}
-          <button type="button" onclick={() => onformatpaste(item.id)}>
-            <AppIcon name="copy-plus" size={15} /> {_t("paste.withFormat")}
-          </button>
         </div>
 
       {:else if activeTab === "details"}
@@ -795,6 +791,8 @@
     white-space: pre-wrap;
     overflow-wrap: break-word;
     overflow-x: auto;
+    max-height: 360px;
+    overflow-y: auto;
   }
 
   .image-full-preview,
@@ -1025,6 +1023,8 @@
   .marker-item a {
     color: #66bde1;
     text-decoration: none;
+    white-space: normal;
+    word-break: break-all;
   }
 
   .marker-item a:hover {

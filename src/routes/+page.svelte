@@ -715,32 +715,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       });
   }
 
-  function formatPaste(_id: string) {
-    const item = items.find((i) => i.id === _id);
-    if (!item) return;
-    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
-    const text = item.textContent || item.title;
-    invoke("mark_self_triggered", { text }).catch(() => {});
-    const html = "<div>" + text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>") + "</div>";
-    void navigator.clipboard
-      .write([
-        new ClipboardItem({
-          "text/plain": new Blob([text], { type: "text/plain" }),
-          "text/html": new Blob([html], { type: "text/html" }),
-        }),
-      ])
-      .then(() => {
-        showToast(_t("toast.copySuccess"), "success");
-      })
-      .catch(() => {
-        void navigator.clipboard.writeText(text).then(() => {
-          showToast(_t("toast.copySuccess"), "success");
-        }).catch(() => {
-          showToast(_t("toast.copyFailed"), "error");
-        });
-      });
-  }
-
   // --- Bulk operations ---
 
   function bulkCopy() {
@@ -1242,7 +1216,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                   onsaveedit={saveEdit}
                   oncanceledit={cancelEdit}
                   onplainpaste={plainPaste}
-                  onformatpaste={formatPaste}
+
                 />
               </div>
             {:else}
@@ -1269,8 +1243,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                 onsaveedit={saveEdit}
                 oncanceledit={cancelEdit}
                 onplainpaste={plainPaste}
-                onformatpaste={formatPaste}
-              />
+              /> 
             {/if}
           {/each}
         </div>
@@ -1325,7 +1298,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   onedit={startEdit}
   onsaveedit={saveEdit}
   onplainpaste={plainPaste}
-  onformatpaste={formatPaste}
   oncopyfilename={copyFilename}
 />
 
