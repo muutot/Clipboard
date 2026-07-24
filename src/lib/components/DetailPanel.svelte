@@ -48,7 +48,6 @@
   let dragStartY = 0;
   let panStartX = 0;
   let panStartY = 0;
-  let savedPos: { x: number; y: number; w: number; h: number } | null = null;
 
   async function openImageFullscreen() {
     imageFullscreen = true;
@@ -56,19 +55,7 @@
     panX = 0;
     panY = 0;
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try {
-        const win = getCurrentWindow();
-        const monitor = await win.currentMonitor();
-        if (monitor) {
-          const pos = await win.outerPosition();
-          const size = await win.outerSize();
-          savedPos = { x: pos.x, y: pos.y, w: size.width, h: size.height };
-          const { PhysicalPosition, PhysicalSize } = await import("@tauri-apps/api/dpi");
-          await win.setPosition(new PhysicalPosition(0, 0));
-          await win.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
-          await win.setFocus();
-        }
-      } catch (e) { console.warn("fullscreen failed", e); }
+      try { await getCurrentWindow().setFullscreen(true); } catch {}
     }
   }
 
@@ -77,14 +64,8 @@
     zoom = 1;
     panX = 0;
     panY = 0;
-    if (savedPos && isTauriRuntime()) {
-      try {
-        const win = getCurrentWindow();
-        const { PhysicalPosition, PhysicalSize } = await import("@tauri-apps/api/dpi");
-        await win.setPosition(new PhysicalPosition(savedPos.x, savedPos.y));
-        await win.setSize(new PhysicalSize(savedPos.w, savedPos.h));
-      } catch {}
-      savedPos = null;
+    if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
+      try { await getCurrentWindow().setFullscreen(false); } catch {}
     }
   }
 
