@@ -613,24 +613,28 @@
               <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
               <div>
                 <strong>{_t("storage.configSectionTitle")}</strong>
-                <p>{_t("storage.configSectionDesc")}</p>
+                <p>{relativePath(status!.configPath)}</p>
               </div>
             </div>
-            <code class="path-value" title={status.configPath}>{relativePath(status.configPath)}</code>
+            <div class="setting-actions">
+              <button type="button" onclick={() => invoke("open_external_url", { url: status!.configPath })}>
+                <AppIcon name="file" size={14} /> 打开配置文件
+              </button>
+            </div>
           </section>
 
           <section class="setting-card">
-            <div class="setting-heading split-heading">
-              <div class="heading-copy">
-                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-                <div>
-                  <strong>{_t("storage.dataDirectoryTitle")}</strong>
-                  <p>{_t("storage.dataDirectoryDesc")}</p>
-                </div>
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <div>
+                <strong>
+                  {_t("storage.dataDirectoryTitle")}
+                  <span class:custom={status.usesCustomDataDirectory} class="inline-badge">
+                    {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
+                  </span>
+                </strong>
+                <p>{_t("storage.dataDirectoryDesc")}</p>
               </div>
-              <span class:custom={status.usesCustomDataDirectory} class="directory-badge">
-                {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
-              </span>
             </div>
 
             <label for="data-directory">{_t("storage.directoryPath")}</label>
@@ -1167,6 +1171,24 @@
     background: rgba(72, 111, 206, 0.12);
   }
 
+  .inline-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border: 1px solid #393939;
+    border-radius: 999px;
+    color: #888;
+    font-size: 10px;
+    font-weight: 500;
+    vertical-align: middle;
+  }
+
+  .inline-badge.custom {
+    border-color: rgba(112, 154, 255, 0.36);
+    color: #9eb9ff;
+    background: rgba(72, 111, 206, 0.12);
+  }
+
   label {
     display: block;
     margin: 12px 0 6px;
@@ -1464,9 +1486,16 @@
     border-radius: 6px;
     color: #d7d7d7;
     background: #1a1a1a;
-    font-size: 12px;
+    font: 12px inherit;
     outline: none;
     transition: border-color 120ms ease;
+    -moz-appearance: textfield;
+  }
+
+  .setting-card-row input::-webkit-outer-spin-button,
+  .setting-card-row input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
   .setting-card-row input:focus {
