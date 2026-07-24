@@ -519,33 +519,20 @@
           </div>
         </section>
 
-        <section class="setting-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-            <div>
-              <strong>模型下载</strong>
-              <p>{ocrAvailable ? 'PP-OCRv6 模型已就绪' : '下载 ONNX 模型到本地存储'}</p>
-            </div>
-          </div>
-          <div style="display:flex; gap:8px; align-items:flex-end;">
-            <select bind:value={modelVariant} class="model-select" style="flex:1;">
-              <option value="tiny">tiny (快速, ~5MB)</option>
-              <option value="medium">medium (平衡, ~15MB)</option>
-              <option value="large">large (高精度, ~30MB)</option>
-            </select>
-            {#if installedVariant === modelVariant}
-              <button type="button" onclick={applyModel} style="padding:9px 14px; border:1px solid #4a4a35; border-radius:6px; background:rgba(45,45,27,0.6); color:#c6c69d; cursor:pointer; font-size:13px; white-space:nowrap;">应用</button>
-            {:else}
-              <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #3a3a3a; border-radius:6px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px; white-space:nowrap;">
-                {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
-              </button>
-            {/if}
-          </div>
-          {#if ocrInstalling && ocrProgressPct >= 0}
-            <div style="margin-top:2px; color:#888; font-size:10px;">{formatBytes(ocrProgressCurrent)} / {formatBytes(ocrProgressTotal)}</div>
-            <div style="margin-top:4px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
-              <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
-            </div>
+        <section class="setting-card setting-card-row">
+          <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+          <span class="setting-label">模型</span>
+          <select bind:value={modelVariant} class="model-select" style="flex:1; max-width:200px;">
+            <option value="tiny">tiny (~5MB)</option>
+            <option value="medium">medium (~15MB)</option>
+            <option value="large">large (~30MB)</option>
+          </select>
+          {#if installedVariant === modelVariant}
+            <button type="button" onclick={applyModel}>应用</button>
+          {:else}
+            <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
+              {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
+            </button>
           {/if}
         </section>
 
