@@ -552,6 +552,9 @@
             <div class="ocr-status ocr-completed">
               <span class="ocr-dot"></span>
               {_t("detail.completed")}
+              <button type="button" class="ocr-copy-btn" onclick={() => navigator.clipboard.writeText(item.ocrText ?? "")}>
+                {_t("detail.copyOcrText")}
+              </button>
             </div>
             <pre class="ocr-content">{item.ocrText}</pre>
           {:else if item.ocrStatus === "pending"}
@@ -1083,6 +1086,23 @@
   .ocr-completed .ocr-dot {
     background: #51b96b;
     box-shadow: 0 0 6px rgba(81, 185, 107, 0.4);
+  }
+
+  .ocr-copy-btn {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: #b0b0b0;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .ocr-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #e0e0e0;
   }
 
   .ocr-pending {

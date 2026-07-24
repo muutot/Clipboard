@@ -196,6 +196,7 @@ export interface LocaleDefinition {
     mimeInfo: string;
     ocrStatus: string;
     ocrText: string;
+    copyOcrText: string;
     noOcr: string;
     pending: string;
     completed: string;

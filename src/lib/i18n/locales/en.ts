@@ -203,6 +203,7 @@ const en: LocaleDefinition = {
     mimeInfo: "MIME Info",
     ocrStatus: "OCR Status",
     ocrText: "Recognized Text",
+    copyOcrText: "Copy OCR Text",
     noOcr: "No OCR results",
     pending: "Pending",
     completed: "Completed",

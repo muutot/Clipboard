@@ -150,7 +150,7 @@ const zhCN: LocaleDefinition = {
     copyColor: "复制颜色",
   },
   dateFilter: {
-    all: "所有时间",
+    all: "时间",
     today: "今天",
     yesterday: "昨天",
     week: "本周",
@@ -158,7 +158,7 @@ const zhCN: LocaleDefinition = {
     custom: "自定义",
   },
   sourceApp: {
-    all: "所有应用",
+    all: "应用",
     placeholder: "搜索来源应用…",
   },
   search: {
@@ -196,6 +196,7 @@ const zhCN: LocaleDefinition = {
     mimeInfo: "MIME 信息",
     ocrStatus: "OCR 状态",
     ocrText: "识别文字",
+    copyOcrText: "复制 OCR 文本",
     noOcr: "暂无 OCR 结果",
     pending: "处理中",
     completed: "已完成",
