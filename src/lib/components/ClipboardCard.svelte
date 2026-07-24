@@ -239,7 +239,7 @@
     type="button"
     aria-label={_t("card.selectItem", { title: item.title })}
     aria-pressed={selected}
-    onclick={(e) => onselect(item.id)}
+    onclick={(e) => onselect(item.id, e)}
     ondblclick={(e) => handleDoubleClick(e)}
   ></button>
 
@@ -562,15 +562,10 @@
 
   .clip-card:hover,
   .clip-card.selected,
-  .clip-card:focus-within {
+  .clip-card:focus-within,
+  .clip-card:focus-visible {
     border-color: rgba(255, 255, 255, 0.035);
     background: #242424;
-  }
-
-  .clip-card:focus-visible {
-    outline: 2px solid rgba(255, 91, 91, 0.85);
-    outline-offset: -2px;
-    border-radius: 10px;
   }
 
   .content {
