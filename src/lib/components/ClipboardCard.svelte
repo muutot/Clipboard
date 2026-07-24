@@ -576,8 +576,11 @@
 
   .image-preview {
     width: min(100%, 380px);
-    max-height: 120px;
+    height: 90px;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid #303237;
     border-radius: 6px;
     background: #17191d;
@@ -586,8 +589,8 @@
 
   .image-preview img {
     display: block;
-    max-height: 120px;
-    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
     border-radius: 6px;
   }
