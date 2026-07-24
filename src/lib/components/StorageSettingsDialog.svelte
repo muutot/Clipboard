@@ -1180,7 +1180,7 @@
   .model-select {
     width: 100%;
     box-sizing: border-box;
-    padding: 8px 28px 8px 10px;
+    padding: 8px 30px 8px 12px;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     outline: none;
@@ -1189,15 +1189,20 @@
     font-size: 13px;
     cursor: pointer;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23999' d='M2 3l3 4 3-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center;
-    transition: border-color 120ms ease;
+    background-position: right 10px center;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  select:hover,
+  .model-select:hover {
+    border-color: #555;
   }
 
   select:focus,
   .model-select:focus {
-    border-color: #555;
+    border-color: #5a8fd4;
   }
 
   .setting-actions {
