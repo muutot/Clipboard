@@ -90,8 +90,8 @@
       <span class="setting-icon"><AppIcon name="info" size={17} /></span>
       <div class="heading-inline">
         <div>
-          <strong>辅助文字</strong>
-          <p>时间戳、来源名称、文件大小等次要信息</p>
+          <strong>描述文字</strong>
+          <p>时间戳、来源名称、文件大小等描述性信息</p>
         </div>
         <span class="value-label">{s.fontSizes.secondary}px</span>
       </div>
@@ -104,7 +104,7 @@
       <span class="setting-icon"><AppIcon name="ruler" size={17} /></span>
       <div class="heading-inline">
         <div>
-          <strong>微小文字</strong>
+          <strong>备注文字</strong>
           <p>标签、标记、角标等最小号文字的字体大小</p>
         </div>
         <span class="value-label">{s.fontSizes.tiny}px</span>
