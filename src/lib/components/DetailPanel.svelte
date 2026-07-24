@@ -412,12 +412,12 @@
               <AppIcon name="download" size={15} /> {_t("detail.openFolder")}
             </button>
           {/if}
-          {#if !editing && (!item.fileMeta || item.fileMeta.length <= 1)}
+          {#if !editing && (item.kind === "text" || item.kind === "link")}
             <button type="button" onclick={() => {
               editContent = item.textContent || item.title;
               editing = true;
             }}>
-              <AppIcon name="edit" size={15} /> {item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("edit.edit")}
+              <AppIcon name="edit" size={15} /> {_t("edit.edit")}
             </button>
           {/if}
           {#if item.kind === "image" || item.kind === "file"}
