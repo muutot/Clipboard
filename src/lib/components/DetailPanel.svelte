@@ -50,10 +50,14 @@
   let panStartY = 0;
 
   async function openImageFullscreen() {
-    imageFullscreen = true;
-    zoom = 1;
-    panX = 0;
-    panY = 0;
+    if (!item?.previewPath && !item?.resourcePath) return;
+    // Defer state change to avoid click event reaching the new backdrop handler
+    setTimeout(() => {
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+      imageFullscreen = true;
+    }, 0);
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
       try { await getCurrentWindow().setFullscreen(true); } catch {}
     }
