@@ -87,6 +87,14 @@ struct StorageDirectoryUpdate {
     restart_required: bool,
 }
 
+/// Shared state for ignored applications list, synced between capture thread and Tauri commands.
+#[derive(Clone)]
+struct IgnoredAppsState(Arc<Mutex<Vec<String>>>);
+
+/// Shared state for self-trigger guard to prevent capturing app's own clipboard writes.
+#[derive(Clone)]
+struct SelfTriggerState(Arc<Mutex<content::hash::SelfTriggerGuard>>);
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StorageCleanupResult {
@@ -1115,6 +1123,7 @@ fn start_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     paths: tauri::State<'_, StoragePaths>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+    self_trigger: tauri::State<'_, SelfTriggerState>,
 ) -> Result<bool, String> {
     let mut guard = monitor
         .lock()
@@ -1135,6 +1144,8 @@ fn start_clipboard_monitoring(
         Arc::new(Mutex::new(p.paused))
     };
 
+    let self_trigger_clone = self_trigger.0.clone();
+
     thread::spawn(move || {
         let database = match Database::open(&db_path) {
             Ok(db) => Arc::new(db),
@@ -1144,7 +1155,7 @@ fn start_clipboard_monitoring(
             }
         };
 
-        let mut self_trigger_guard = content::hash::SelfTriggerGuard::new();
+        let self_trigger_guard = self_trigger_clone;
         let mut consecutive_errors = 0u32;
 
         loop {
@@ -1181,8 +1192,8 @@ fn start_clipboard_monitoring(
                         None,
                     );
 
-                    if self_trigger_guard.is_self_triggered(&content_hash) {
-                        self_trigger_guard.mark_as_self_triggered(&content_hash);
+                    if self_trigger_guard.lock().unwrap().is_self_triggered(&content_hash) {
+                        self_trigger_guard.lock().unwrap().mark_as_self_triggered(&content_hash);
                         continue;
                     }
 
@@ -1276,13 +1287,29 @@ struct ClipboardMonitorStatus {
 #[tauri::command]
 fn set_clipboard_ignored_apps(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+    ignored_state: tauri::State<'_, IgnoredAppsState>,
     apps: Vec<String>,
 ) -> Result<Vec<String>, String> {
     let mut monitor = monitor
         .lock()
         .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
-    monitor.set_ignored_apps(apps);
+    monitor.set_ignored_apps(apps.clone());
+    if let Ok(mut shared) = ignored_state.0.lock() {
+        *shared = monitor.ignored_applications.clone();
+    }
     Ok(monitor.ignored_applications.clone())
+}
+
+#[tauri::command]
+fn mark_self_triggered(
+    self_trigger: tauri::State<'_, SelfTriggerState>,
+    text: String,
+) -> Result<(), String> {
+    let hash = content::hash::compute_content_hash("text", &text, None);
+    self_trigger.0.lock()
+        .map_err(|_| "self-trigger lock poisoned".to_owned())?
+        .mark_as_self_triggered(&hash);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1562,9 +1589,19 @@ pub fn run() {
             let db_path = paths.database.clone();
             let storage_path = paths.storage.clone();
             let privacy_paused = Arc::new(Mutex::new(false));
+            let initial_ignored = config.ignored_applications().to_vec();
+            let ignored_apps = Arc::new(Mutex::new(initial_ignored));
+            let ignored_apps_managed = IgnoredAppsState(ignored_apps.clone());
+            app.manage(ignored_apps_managed);
+
+            let self_trigger_guard = Arc::new(Mutex::new(content::hash::SelfTriggerGuard::new()));
+            let self_trigger_guard_managed = SelfTriggerState(self_trigger_guard.clone());
+            app.manage(self_trigger_guard_managed);
 
             if clipboard_monitor.start().is_ok() {
                 if let Some(receiver) = clipboard_monitor.take_receiver() {
+                    let ignored_apps_clone = ignored_apps.clone();
+                    let self_trigger_clone = self_trigger_guard.clone();
                     thread::spawn(move || {
                     let database = match Database::open(&db_path) {
                         Ok(db) => db,
@@ -1574,7 +1611,7 @@ pub fn run() {
                         }
                     };
 
-                    let mut self_trigger_guard = content::hash::SelfTriggerGuard::new();
+                    let self_trigger_guard = self_trigger_clone;
                     let mut consecutive_errors = 0u32;
 
                     loop {
@@ -1591,6 +1628,13 @@ pub fn run() {
 
                                 let app_info = platform::windows_clipboard::get_foreground_app();
                                 let source_app = if app_info.name.is_empty() { None } else { Some(app_info.name.clone()) };
+
+                                if let Some(ref app) = source_app {
+                                    let ignored = ignored_apps_clone.lock().map(|g| g.clone()).unwrap_or_default();
+                                    if ignored.iter().any(|i| i.to_lowercase() == app.to_lowercase()) {
+                                        continue;
+                                    }
+                                }
 
                                 // Extract and cache app icon
                                 let icon_dir = storage_path.join("icons");
@@ -1795,7 +1839,7 @@ pub fn run() {
                                     None,
                                 );
 
-                                if self_trigger_guard.is_self_triggered(&content_hash) {
+                                if self_trigger_guard.lock().unwrap().is_self_triggered(&content_hash) {
                                     continue;
                                 }
 
@@ -1932,6 +1976,7 @@ pub fn run() {
             restart_ocr_engine,
             install_ppocr,
             check_ppocr_status,
+            mark_self_triggered,
             open_external_url,
             reveal_in_explorer,
             copy_file_to,
