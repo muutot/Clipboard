@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,
@@ -106,7 +107,7 @@
   <div class="settings-state">{_t("keyboard.readingConfig")}</div>
 {:else if config}
   <div class="settings-scroll">
-    <section class="setting-card">
+    <section class="setting-card setting-card-row">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
         <div>
@@ -114,7 +115,9 @@
           <p>{_t("keyboard.shortcutConfigDesc")}</p>
         </div>
       </div>
-      <code class="path-value" title={configPath}>{configPath}</code>
+      <button type="button" class="open-btn" onclick={() => invoke("open_external_url", { url: configPath })}>
+        <AppIcon name="file" size={14} /> 打开文件
+      </button>
     </section>
 
     {#each Object.entries(config.shortcuts) as [action]}
@@ -288,22 +291,6 @@
     color: #888;
   }
 
-  .path-value {
-    display: block;
-    overflow: hidden;
-    margin-top: 11px;
-    padding: 8px 9px;
-    border: 1px solid #2f2f2f;
-    border-radius: 6px;
-    color: #a7a7a7;
-    background: #181818;
-    font:
-      9.5px "Cascadia Code",
-      Consolas,
-      monospace;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
   .binding-count {
     flex: 0 0 auto;
     padding: 3px 7px;
@@ -447,5 +434,34 @@
     color: #888;
     font-size: 10.5px;
     margin-left: 6px;
+  }
+
+  .open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #999;
+    background: #222;
+    font: inherit;
+    font-size: 10.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .open-btn:hover {
+    color: #ccc;
+    background: #2e2e2e;
+  }
+
+  .setting-card-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
 </style>
