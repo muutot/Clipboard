@@ -89,8 +89,23 @@ struct StorageDirectoryUpdate {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct StorageCleanupResult {
+    removed_files: u64,
+    freed_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiscoveredApplication {
+    name: String,
+    icon_path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ApplicationFilterSettings {
     discovered_applications: Vec<String>,
+    discovered_applications_with_icons: Vec<DiscoveredApplication>,
     ignored_applications: Vec<String>,
 }
 
@@ -266,6 +281,9 @@ fn get_application_filter_settings(
     let discovered_applications = database
         .list_source_applications()
         .map_err(|error| error.to_string())?;
+    let discovered_with_icons = database
+        .list_source_applications_with_icons()
+        .map_err(|error| error.to_string())?;
     let ignored_applications = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
@@ -274,6 +292,10 @@ fn get_application_filter_settings(
 
     Ok(ApplicationFilterSettings {
         discovered_applications,
+        discovered_applications_with_icons: discovered_with_icons
+            .into_iter()
+            .map(|(name, icon_path)| DiscoveredApplication { name, icon_path })
+            .collect(),
         ignored_applications,
     })
 }
@@ -821,6 +843,7 @@ fn restore_clipboard_item(database: tauri::State<'_, Database>, id: String) -> R
 fn enforce_history_cleanup(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    paths: tauri::State<'_, StoragePaths>,
 ) -> Result<u64, String> {
     let (retention_days, max_items, recycle_bin_days) = {
         let guard = config
@@ -843,7 +866,68 @@ fn enforce_history_cleanup(
         .cleanup_orphan_search_index()
         .map_err(|error| error.to_string())?;
 
+    let _ = cleanup_orphan_storage_files(&database, &paths);
+
     Ok(total_deleted)
+}
+
+fn cleanup_orphan_storage_files(
+    database: &Database,
+    paths: &StoragePaths,
+) -> Result<StorageCleanupResult, String> {
+    let active_paths: std::collections::HashSet<String> = database
+        .list_active_file_paths()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .collect();
+
+    let mut removed_files = 0u64;
+    let mut freed_bytes = 0u64;
+
+    let scan_dirs: &[&std::path::Path] = &[
+        &paths.images,
+        &paths.previews,
+        &paths.files,
+        &paths.storage.join("icons"),
+    ];
+
+    for dir in scan_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_dir() {
+                continue;
+            }
+            let path_str = entry_path.to_string_lossy().to_string();
+            if active_paths.contains(&path_str) {
+                continue;
+            }
+            if let Ok(metadata) = entry.metadata() {
+                freed_bytes += metadata.len();
+            }
+            if let Err(e) = std::fs::remove_file(&entry_path) {
+                eprintln!("[cleanup] failed to remove orphan file {}: {e}", entry_path.display());
+            } else {
+                removed_files += 1;
+            }
+        }
+    }
+
+    Ok(StorageCleanupResult {
+        removed_files,
+        freed_bytes,
+    })
+}
+
+#[tauri::command]
+fn cleanup_storage_files(
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<StorageCleanupResult, String> {
+    cleanup_orphan_storage_files(&database, &paths)
 }
 
 #[tauri::command]
@@ -1855,6 +1939,7 @@ pub fn run() {
             get_performance_metrics,
             repair_database,
             validate_search_index,
+            cleanup_storage_files,
             restart_app
         ])
         .run(tauri::generate_context!())

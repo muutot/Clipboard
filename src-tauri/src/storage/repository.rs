@@ -29,6 +29,7 @@ pub trait ClipboardRepository {
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_source_applications(&self) -> Result<Vec<String>, StorageError>;
+    fn list_source_applications_with_icons(&self) -> Result<Vec<(String, Option<String>)>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
     fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
     fn item_count(&self) -> Result<u64, StorageError>;
@@ -41,6 +42,7 @@ pub trait ClipboardRepository {
     fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
     fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
     fn size_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
+    fn list_active_file_paths(&self) -> Result<Vec<String>, StorageError>;
 }
 
 impl ClipboardRepository for Database {
@@ -197,6 +199,37 @@ impl ClipboardRepository for Database {
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(applications)
+        })
+    }
+
+    fn list_source_applications_with_icons(&self) -> Result<Vec<(String, Option<String>)>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare_cached(
+                "SELECT
+                    MIN(TRIM(c.source_app)) AS app,
+                    (SELECT ci.icon_path
+                     FROM clipboard_items ci
+                     WHERE LOWER(TRIM(ci.source_app)) = LOWER(TRIM(c.source_app))
+                       AND ci.icon_path IS NOT NULL
+                       AND ci.deleted = 0
+                     ORDER BY ci.created_at_ms DESC
+                     LIMIT 1) AS icon
+                 FROM clipboard_items c
+                 WHERE c.source_app IS NOT NULL
+                   AND TRIM(c.source_app) <> ''
+                   AND c.deleted = 0
+                 GROUP BY LOWER(TRIM(c.source_app))
+                 ORDER BY LOWER(app) ASC",
+            )?;
+            let apps = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(apps)
         })
     }
 
@@ -388,6 +421,22 @@ impl ClipboardRepository for Database {
                 field: "clipboard_items.size",
                 value: total,
             })
+        })
+    }
+
+    fn list_active_file_paths(&self) -> Result<Vec<String>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT resource_path FROM clipboard_items WHERE resource_path IS NOT NULL AND deleted = 0
+                 UNION
+                 SELECT preview_path FROM clipboard_items WHERE preview_path IS NOT NULL AND deleted = 0
+                 UNION
+                 SELECT icon_path FROM clipboard_items WHERE icon_path IS NOT NULL AND deleted = 0",
+            )?;
+            let paths = statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(paths)
         })
     }
 }
