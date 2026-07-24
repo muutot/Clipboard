@@ -7,6 +7,7 @@
   import { formatRelativeTime } from "$lib/utils/time";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
+  import { untrack } from "svelte";
   import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { generalSettings } from "$lib/services/settings";
@@ -32,9 +33,10 @@
     onsaveedit: (id: string, content: string) => void;
     onplainpaste: (id: string) => void;
     onformatpaste: (id: string) => void;
+    oncopyfilename: (id: string) => void;
   }
 
-  let { item, onclose, oncopy, onedit, onsaveedit, onplainpaste, onformatpaste }: Props = $props();
+  let { item, onclose, oncopy, onedit, onsaveedit, onplainpaste, onformatpaste, oncopyfilename }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
@@ -48,19 +50,55 @@
   let dragStartY = 0;
   let panStartX = 0;
   let panStartY = 0;
+  let viewerWindow: any = null;
 
   async function openImageFullscreen() {
     if (!item?.previewPath && !item?.resourcePath) return;
-    // Defer state change to avoid click event reaching the new backdrop handler
+    const filePath = item.previewPath || item.resourcePath;
+    if (!filePath) return;
+
+    if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
+      try {
+        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+        const { emit } = await import("@tauri-apps/api/event");
+        const opacity = get(generalSettings).viewerBackdropOpacity / 100;
+
+        const existing = await WebviewWindow.getByLabel("image-viewer");
+        if (existing) {
+          await existing.show();
+          await existing.setFocus();
+          await emit("viewer:open", { src: filePath, opacity });
+          return;
+        }
+
+        viewerWindow = new WebviewWindow("image-viewer", {
+          url: `/viewer?src=${encodeURIComponent(filePath)}&opacity=${opacity}`,
+          title: "",
+          width: 800,
+          height: 600,
+          center: true,
+          decorations: false,
+          transparent: true,
+          maximized: true,
+          skipTaskbar: true,
+          alwaysOnTop: true,
+        });
+        viewerWindow.on("tauri://error", (e: any) => {
+          console.error("[viewer] window error", e);
+        });
+      } catch (e) {
+        console.error("[viewer] failed to open", e);
+      }
+      return;
+    }
+
+    // Overlay mode: show within app window
     setTimeout(() => {
       zoom = 1;
       panX = 0;
       panY = 0;
       imageFullscreen = true;
     }, 0);
-    if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try { await getCurrentWindow().setFullscreen(true); } catch {}
-    }
   }
 
   async function closeImageFullscreen() {
@@ -68,8 +106,8 @@
     zoom = 1;
     panX = 0;
     panY = 0;
-    if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try { await getCurrentWindow().setFullscreen(false); } catch {}
+    if (viewerWindow) {
+      try { await viewerWindow.hide(); } catch {}
     }
   }
 
@@ -108,9 +146,23 @@
     }
   }
 
+  function formatFileSize(bytes: number): string {
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    const precision = unitIndex === 0 || value >= 100 ? 0 : 1;
+    return `${value.toFixed(precision)} ${units[unitIndex]}`;
+  }
+
   $effect(() => {
     if (item) {
-      if (imageFullscreen) { closeImageFullscreen(); }
+      untrack(() => {
+        if (imageFullscreen) { closeImageFullscreen(); }
+      });
       imageFullscreen = false;
       zoom = 1;
       panX = 0;
@@ -227,7 +279,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if item}
-  <div class="detail-backdrop" class:fullscreen-backdrop={imageFullscreen} onclick={imageFullscreen ? () => (imageFullscreen = false) : onclose} aria-hidden="true"></div>
+  <div class="detail-backdrop" class:fullscreen-backdrop={imageFullscreen} onclick={imageFullscreen ? closeImageFullscreen : onclose} aria-hidden="true"></div>
   <div class="detail-panel" class:fullscreen={imageFullscreen} role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
     <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
       <button class="back-btn" type="button" onclick={onclose} aria-label={_t("detail.back")}>
@@ -251,7 +303,13 @@
             </button>
           </div>
         {:else}
-          <span class="header-title">{item.title.split("\n")[0]}</span>
+          <span class="header-title">
+            {#if item.kind === "file" && item.fileMeta && item.fileMeta.length > 1}
+              <AppIcon name="file" size={15} /> {item.fileMeta.length} {_t("detail.files")}
+            {:else}
+              {item.title.split("\n")[0]}
+            {/if}
+          </span>
         {/if}
       </div>
     </div>
@@ -292,25 +350,29 @@
             </div>
           {:else if item.kind === "file"}
             <div class="file-full-preview">
-              {#if item.textContent && item.textContent.startsWith("[")}
-                {@const paths = (() => { try { return JSON.parse(item.textContent); } catch { return null; } })()}
-                {#if paths && paths.length > 1}
-                  <AppIcon name="file" size={36} strokeWidth={1.5} />
-                  <strong>{paths.length} {_t("detail.files")}</strong>
-                  <div class="file-list">
-                    {#each paths as filePath}
-                      <span class="file-list-item">{filePath.split(/[\\/]/).pop()}</span>
-                    {/each}
-                  </div>
-                {:else}
-                  <AppIcon name="file" size={48} strokeWidth={1.5} />
-                  <strong>{item.fileName ?? item.title}</strong>
-                {/if}
+              {#if item.fileMeta && item.fileMeta.length > 1}
+                <div class="file-tree">
+                  {#each item.fileMeta as file, i}
+                    <div class="file-tree-item">
+                      <span class="file-tree-icon">
+                        {#if i === item.fileMeta!.length - 1}
+                          └─
+                        {:else}
+                          ├─
+                        {/if}
+                      </span>
+                      <span class="file-tree-name">{file.name}</span>
+                      <span class="file-tree-size">{formatFileSize(file.size)}</span>
+                    </div>
+                  {/each}
+                </div>
               {:else}
                 <AppIcon name="file" size={48} strokeWidth={1.5} />
                 <strong>{item.fileName ?? item.title}</strong>
+                {#if item.sizeBytes}
+                  <span class="file-tree-size">{formatFileSize(item.sizeBytes)}</span>
+                {/if}
               {/if}
-              <span>{item.preview}</span>
             </div>
           {:else if isCode && !isMarkdown}
             <CodePreview content={item.title} />
@@ -350,7 +412,7 @@
               <AppIcon name="download" size={15} /> {_t("detail.openFolder")}
             </button>
           {/if}
-          {#if !editing}
+          {#if !editing && (!item.fileMeta || item.fileMeta.length <= 1)}
             <button type="button" onclick={() => {
               editContent = item.title.split("\n")[0];
               editing = true;
@@ -358,9 +420,15 @@
               <AppIcon name="edit" size={15} /> {item.kind === "image" || item.kind === "file" ? _t("edit.editFileName") : _t("edit.edit")}
             </button>
           {/if}
-          <button type="button" onclick={() => onplainpaste(item.id)}>
-            <AppIcon name="type" size={15} /> {_t("paste.plainText")}
-          </button>
+          {#if item.kind === "image" || item.kind === "file"}
+            <button type="button" onclick={() => oncopyfilename(item.id)}>
+              <AppIcon name="file" size={15} /> {_t("paste.copyFileName")}
+            </button>
+          {:else}
+            <button type="button" onclick={() => onplainpaste(item.id)}>
+              <AppIcon name="type" size={15} /> {_t("paste.plainText")}
+            </button>
+          {/if}
           <button type="button" onclick={() => onformatpaste(item.id)}>
             <AppIcon name="copy-plus" size={15} /> {_t("paste.withFormat")}
           </button>
@@ -382,7 +450,7 @@
               <dd>{formatDateTime(item.createdAt)}</dd>
             </div>
             <div class="detail-row">
-              <dt>{_t("detail.size")}</dt>
+              <dt><AppIcon name="ruler" size={14} /> {_t("detail.size")}</dt>
               <dd>{item.sizeLabel}</dd>
             </div>
             {#if item.detailLabel}
@@ -405,12 +473,31 @@
             {/if}
             {#if item.ocrStatus}
               <div class="detail-row">
-                <dt>{_t("detail.ocrStatus")}</dt>
+                <dt><AppIcon name="scan" size={14} /> {_t("detail.ocrStatus")}</dt>
                 <dd class="ocr-badge" class:ocr-completed={item.ocrStatus === "completed"}
                   class:ocr-pending={item.ocrStatus === "pending"}>
                   {item.ocrStatus === "completed" ? _t("detail.completed") : item.ocrStatus === "pending" ? _t("detail.pending") : item.ocrStatus}
                 </dd>
               </div>
+            {/if}
+            {#if item.kind === "image" && item.imageMeta}
+              <div class="detail-row">
+                <dt><AppIcon name="image" size={14} /> {_t("detail.dimensions")}</dt>
+                <dd>{item.imageMeta.width} × {item.imageMeta.height}</dd>
+              </div>
+            {/if}
+            {#if item.metadataJson}
+              {@const meta = (() => { try { return JSON.parse(item.metadataJson!); } catch { return null; } })()}
+              {#if meta}
+                {#each Object.entries(meta) as [key, value]}
+                  {#if key !== "width" && key !== "height"}
+                    <div class="detail-row">
+                      <dt>{key}</dt>
+                      <dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd>
+                    </div>
+                  {/if}
+                {/each}
+              {/if}
             {/if}
           </dl>
 
@@ -486,6 +573,7 @@
   {#if imageFullscreen}
     <div
       class="image-viewer-overlay"
+      style="background: rgba(0, 0, 0, {get(generalSettings).viewerBackdropOpacity / 100})"
       onwheel={onWheel}
       onmousedown={onMouseDown}
       onmousemove={onMouseMove}
@@ -521,6 +609,10 @@
     backdrop-filter: blur(3px);
   }
 
+  .detail-backdrop.fullscreen-backdrop {
+    display: none;
+  }
+
   .detail-panel {
     position: fixed;
     z-index: 52;
@@ -534,6 +626,10 @@
     background: #1b1b1b;
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
     animation: slide-in 220ms ease-out;
+  }
+
+  .detail-panel.fullscreen {
+    display: none;
   }
 
   @keyframes slide-in {
@@ -734,21 +830,44 @@
     font-size: 11px;
   }
 
-  .file-list {
+  .file-tree {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    max-height: 200px;
+    gap: 2px;
+    max-height: 300px;
     overflow-y: auto;
     width: 100%;
-    padding: 0 8px;
+    padding: 8px;
+    background: #1a1a1a;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 13px;
   }
 
-  .file-list-item {
-    font-size: 12px;
-    color: #aaa;
-    text-align: left;
+  .file-tree-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+  }
+
+  .file-tree-icon {
+    color: #555;
+    white-space: pre;
+    flex-shrink: 0;
+  }
+
+  .file-tree-name {
+    color: #ccc;
     word-break: break-all;
+    flex: 1;
+  }
+
+  .file-tree-size {
+    color: #777;
+    white-space: nowrap;
+    margin-left: 8px;
+    flex-shrink: 0;
   }
 
   .detail-actions {
@@ -1099,16 +1218,10 @@
     background: rgba(0, 0, 0, 0.92);
     cursor: grab;
     user-select: none;
-    animation: viewer-fade-in 180ms ease-out;
   }
 
   .image-viewer-overlay:active {
     cursor: grabbing;
-  }
-
-  @keyframes viewer-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
   }
 
   .viewer-image {

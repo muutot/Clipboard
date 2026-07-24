@@ -221,6 +221,28 @@
 
   <section class="setting-card">
     <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+      <div>
+        <strong>{_t("general.viewerBackdropOpacity")}</strong>
+        <p>{_t("general.viewerBackdropOpacityDescription")}</p>
+      </div>
+    </div>
+    <div class="slider-row">
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value={s.viewerBackdropOpacity}
+        oninput={(e) => { generalSettings.updateSetting("viewerBackdropOpacity", Number((e.target as HTMLInputElement).value)); updateSliderTrack(e.target as HTMLInputElement); }}
+        aria-label={_t("general.viewerBackdropOpacity")}
+      />
+      <span class="slider-value">{s.viewerBackdropOpacity}%</span>
+    </div>
+  </section>
+
+  <section class="setting-card">
+    <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
       <div>
         <strong>{_t("general.theme")}</strong>
@@ -290,6 +312,21 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
+    scrollbar-color: #9a9a9a transparent;
+    scrollbar-width: thin;
+  }
+
+  .settings-scroll::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .settings-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .settings-scroll::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: #858585;
   }
 
   .setting-card {
@@ -522,5 +559,79 @@
     color: #5a5a5a;
     font-size: 9.5px;
     font-style: italic;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    height: 4px;
+    border: none;
+    border-radius: 2px;
+    background: #2a2a2a;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4aa8ff;
+    border: 2px solid #1a1a1a;
+    margin-top: -5px;
+    cursor: pointer;
+    transition: transform 100ms ease;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+  }
+
+  .slider-row input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a2a;
+  }
+
+  .slider-row input[type="range"]::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #4aa8ff;
+  }
+
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4aa8ff;
+    border: 2px solid #1a1a1a;
+    cursor: pointer;
+  }
+
+  .slider-row input[type="range"]::-moz-range-thumb:hover {
+    transform: scale(1.15);
+  }
+
+  .slider-value {
+    min-width: 36px;
+    text-align: right;
+    color: #aaa;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
 </style>

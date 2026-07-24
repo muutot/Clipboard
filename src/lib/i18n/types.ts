@@ -238,6 +238,8 @@ export interface LocaleDefinition {
     useSystemTitleBarDescription: string;
     desktopFullscreen: string;
     desktopFullscreenDescription: string;
+    viewerBackdropOpacity: string;
+    viewerBackdropOpacityDescription: string;
     theme: string;
     themeDescription: string;
     themeDark: string;

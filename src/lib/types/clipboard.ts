@@ -45,6 +45,7 @@ export interface GeneralSettings {
   useSystemTitleBar: boolean;
   theme: ThemeMode;
   imageFullscreenMode: "overlay" | "desktop";
+  viewerBackdropOpacity: number;
 }
 
 export interface CaptureSettings {

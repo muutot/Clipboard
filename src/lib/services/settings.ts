@@ -21,6 +21,7 @@ function createSettingsStore() {
     useSystemTitleBar: false,
     theme: "dark",
     imageFullscreenMode: "overlay",
+    viewerBackdropOpacity: 92,
   };
 
   const stored = loadFromStorage();
@@ -33,6 +34,17 @@ function createSettingsStore() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
     } catch {}
   });
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", (e) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue) as Partial<GeneralSettings>;
+          store.update((s) => ({ ...s, ...parsed }));
+        } catch {}
+      }
+    });
+  }
 
   return {
     ...store,

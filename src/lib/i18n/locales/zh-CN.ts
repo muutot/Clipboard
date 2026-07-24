@@ -238,6 +238,8 @@ const zhCN: LocaleDefinition = {
     useSystemTitleBarDescription: "使用操作系统原生标题栏",
     desktopFullscreen: "桌面全屏预览",
     desktopFullscreenDescription: "开启时图片全屏覆盖桌面，关闭时仅在应用内全屏",
+    viewerBackdropOpacity: "全屏蒙版透明度",
+    viewerBackdropOpacityDescription: "全屏预览图片时蒙版的透明度",
     theme: "主题",
     themeDescription: "仅支持暗黑主题",
     themeDark: "暗黑",
