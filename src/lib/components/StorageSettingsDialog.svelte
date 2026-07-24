@@ -40,6 +40,7 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let restartNeeded = $state(false);
   let activeSection = $state<"general" | "compact" | "capture" | "storage" | "keyboard" | "ocr">("storage");
 
   let retentionPeriodDays = $state(90);
@@ -245,6 +246,7 @@
     try {
       pending = await configureStorageDirectory(directory);
       dataDirectory = pending.dataDirectoryPath;
+      restartNeeded = pending.restartRequired;
       feedback = pending.restartRequired
         ? _t("storage.savedAndRestart")
         : _t("storage.alreadyUsingDir");
@@ -254,6 +256,14 @@
       feedback = error instanceof Error ? error.message : String(error);
     } finally {
       saving = false;
+    }
+  }
+
+  async function restartApp() {
+    try {
+      await invoke("restart_app");
+    } catch {
+      console.error("Unable to restart app");
     }
   }
 
@@ -635,6 +645,9 @@
               <div class="pending-path">
                 <span>下次启动</span>
                 <code title={pending.storagePath}>{pending.storagePath}</code>
+                {#if restartNeeded}
+                  <button class="restart-btn" type="button" onclick={restartApp}>立即重启</button>
+                {/if}
               </div>
             {/if}
           </section>
@@ -1439,5 +1452,21 @@
     font-size: 11px;
     cursor: pointer;
     flex-shrink: 0;
+  }
+
+  .restart-btn {
+    margin-left: auto;
+    padding: 5px 12px;
+    border: 1px solid #4aa8ff;
+    border-radius: 6px;
+    color: #4aa8ff;
+    background: rgba(74, 168, 255, 0.1);
+    font-size: 11px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .restart-btn:hover {
+    background: rgba(74, 168, 255, 0.2);
   }
 </style>

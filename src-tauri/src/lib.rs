@@ -1264,6 +1264,12 @@ fn set_export_config(
 }
 
 #[tauri::command]
+fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.restart();
+    Ok(())
+}
+
+#[tauri::command]
 fn run_cli_command(
     database: tauri::State<'_, Database>,
     command: String,
@@ -1806,7 +1812,8 @@ pub fn run() {
             clear_all_non_favorite_items,
             get_performance_metrics,
             repair_database,
-            validate_search_index
+            validate_search_index,
+            restart_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
