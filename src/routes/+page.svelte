@@ -363,8 +363,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
     function applySettings(s: typeof $generalSettings) {
       const r = document.documentElement.style;
-      r.setProperty("--font-size-base", `${s.fontSizes.base}px`);
-      r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
+      if (s.fontSizes) {
+        r.setProperty("--font-size-base", `${s.fontSizes.base}px`);
+        r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
+      }
       if ("__TAURI_INTERNALS__" in window) {
         getCurrentWindow()
           .setAlwaysOnTop(s.alwaysOnTop)
@@ -384,6 +386,13 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
+    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number } }>(
+      "settings-font-changed",
+      (event) => {
+        document.documentElement.style.setProperty("--font-size-base", `${event.payload.fontSizes.base}px`);
+        document.documentElement.style.setProperty("--font-size-secondary", `${event.payload.fontSizes.secondary}px`);
+      },
+    );
 
     let unlistenMove: (() => void) | undefined;
     if ("__TAURI_INTERNALS__" in window) {
