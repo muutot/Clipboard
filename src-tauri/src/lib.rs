@@ -365,6 +365,38 @@ fn set_ocr_config(
 }
 
 #[tauri::command]
+fn restart_ocr_engine(
+    app: tauri::AppHandle,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<(), String> {
+    let cfg = config.lock().map_err(|_| "config lock".to_owned())?;
+    let ocr_engine_name = cfg.ocr_engine().to_string();
+    let langs = cfg.tesseract_languages().to_string();
+    drop(cfg);
+
+    let engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" {
+        let ppocr = PpOcrEngine::new(paths.storage.join("ppocr-models"));
+        if ppocr.is_available() {
+            Arc::new(ppocr)
+        } else {
+            return Err("PP-OCR models not downloaded".to_string());
+        }
+    } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
+        Arc::new(TesseractOcrEngine::with_languages(langs))
+    } else if TesseractOcrEngine::is_available() {
+        Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
+    } else {
+        return Err("no OCR engine available".to_string());
+    };
+
+    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
+    let worker = OcrWorker::start(engine, Arc::new(database));
+    app.manage(worker);
+    Ok(())
+}
+
+#[tauri::command]
 fn install_ppocr(
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<String, String> {
@@ -1506,6 +1538,7 @@ pub fn run() {
             get_ocr_status,
             get_ocr_config,
             set_ocr_config,
+            restart_ocr_engine,
             install_ppocr,
             check_ppocr_status,
             open_external_url,

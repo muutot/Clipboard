@@ -219,7 +219,8 @@
     try {
       await invoke("set_ocr_config", { engine });
       ocrEngine = engine;
-      feedback = `OCR 引擎已切换为 ${engine === 'ppocr' ? 'PP-OCRv6' : 'Tesseract'}，重启应用生效`;
+      await invoke("restart_ocr_engine");
+      feedback = `OCR 引擎已切换为 ${engine === 'ppocr' ? 'PP-OCRv6' : 'Tesseract'}，立即生效`;
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save OCR config", error);
