@@ -395,7 +395,7 @@
             <div style="padding:8px 0; color:#51b96b; font-size:12px;">✓ 模型已下载到 storage/ppocr-models/</div>
           {:else}
             <label for="model-variant" style="margin:8px 0 4px; display:block; font-size:10px; color:#8a8a8a;">模型规格</label>
-            <select bind:value={modelVariant} class="model-select" style="width:100%; margin-bottom:8px;">
+            <select bind:value={modelVariant} class="model-select">
               <option value="tiny">PP-OCRv6 tiny (快速, ~5MB)</option>
               <option value="medium">PP-OCRv6 medium (平衡, ~15MB)</option>
               <option value="large">PP-OCRv6 large (高精度, ~30MB)</option>
@@ -1044,6 +1044,30 @@
   }
 
   input:focus {
+    border-color: #555;
+  }
+
+  select,
+  .model-select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 10px;
+    border: 1px solid #343434;
+    border-radius: 7px;
+    outline: none;
+    color: #d7d7d7;
+    background: #171717;
+    font-size: 11.5px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+
+  select:focus,
+  .model-select:focus {
     border-color: #555;
   }
 
