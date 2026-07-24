@@ -501,22 +501,13 @@
         <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button>
       </header>
       <div class="settings-scroll">
-        <section class="setting-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-            <div>
-              <strong>OCR 引擎</strong>
-              <p>PP-OCRv6 需安装 Python + paddleocr，Tesseract 需手动安装。</p>
-            </div>
-          </div>
-          <div class="setting-actions" style="flex-wrap: wrap;">
-            <button class:primary={ocrEngine === 'ppocr'} type="button" onclick={() => saveOcrEngine('ppocr')}>
-              PP-OCRv6
-            </button>
-            <button class:primary={ocrEngine === 'tesseract'} type="button" onclick={() => saveOcrEngine('tesseract')}>
-              Tesseract
-            </button>
-          </div>
+        <section class="setting-card setting-card-row">
+          <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+          <span class="setting-label">OCR 引擎</span>
+          <select class="model-select" style="flex:1; max-width:180px;" bind:value={ocrEngine} onchange={() => saveOcrEngine(ocrEngine)}>
+            <option value="ppocr">PP-OCRv6</option>
+            <option value="tesseract">Tesseract</option>
+          </select>
         </section>
 
         <section class="setting-card setting-card-row">
