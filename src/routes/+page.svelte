@@ -941,6 +941,7 @@
 <main class="app-shell">
   <div class="resize-edge"></div>
   <header class="search-header" data-tauri-drag-region>
+    <div class="drag-spacer" data-tauri-drag-region></div>
     <div class="search-box">
       <input
         bind:value={query}
@@ -974,6 +975,7 @@
         >
       {/if}
     </div>
+    <div class="drag-spacer" data-tauri-drag-region></div>
     <button
       type="button"
       tabindex="-1"
@@ -985,6 +987,7 @@
       onclick={() => (regexMode = !regexMode)}
       ><AppIcon name="regex" size={15} strokeWidth={2} /></button
     >
+    <div class="drag-spacer" data-tauri-drag-region></div>
     <img
       class="brand-icon"
       src="{assets}/app-icon.png"
@@ -993,6 +996,7 @@
       width="28"
       height="28"
     />
+    <div class="drag-spacer" data-tauri-drag-region></div>
   </header>
 
   <div class="toolbar" data-tauri-drag-region>
@@ -1328,6 +1332,13 @@
     align-items: center;
     gap: 10px;
     padding: 15px 16px 8px;
+  }
+
+  .drag-spacer {
+    flex: 1;
+    min-width: 6px;
+    height: 100%;
+    align-self: stretch;
   }
 
   .search-box {
