@@ -802,7 +802,11 @@
     }
 
     if (event.key === "Escape") {
-      if ("__TAURI_INTERNALS__" in window) {
+      if (detailItem) {
+        // DetailPanel handles its own Escape
+      } else if (selectedIds.size > 0) {
+        selectedIds = new Set();
+      } else if ("__TAURI_INTERNALS__" in window) {
         getCurrentWindow()
           .hide()
           .catch(() => {});
