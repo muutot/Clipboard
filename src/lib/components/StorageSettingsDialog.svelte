@@ -1437,6 +1437,7 @@
     color: #d7d7d7;
     background: #1a1a1a;
     font: 12px inherit;
+    text-align: right;
     outline: none;
     transition: border-color 120ms ease;
     -moz-appearance: textfield;
