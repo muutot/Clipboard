@@ -698,8 +698,10 @@
 ├─ image/                          ← 图片原图
 │  └─ previews/                    ← 缩略图
 ├─ files/                          ← 文件副本
+├─ icons/                          ← 应用图标缓存
 └─ database/
    ├─ clipboard.sqlite3            ← 剪贴板数据库
+   ├─ clipboard.sqlite3-wal        ← 预写日志
    └─ search-index/                ← 全文搜索索引</pre>
           </section>
 

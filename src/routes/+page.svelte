@@ -219,7 +219,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(i => editingId === i.id ? editHeight((i.textContent || "").split("\n").length, !!i.customTitle) : itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText, !!i.customTitle, compactCustomTitle)),
+      filteredItems.map(i => editingId === i.id ? editHeight((i.textContent || "").split("\n").length, !!i.customTitle, compactCardGap) : itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText, !!i.customTitle, compactCustomTitle)),
     ),
   );
 
@@ -1253,7 +1253,7 @@ showCheckbox={false}
                   compactPaddingBottom={compactPaddingBottom}
                   compactCardGap={compactCardGap}
                   compactCardBorderRadius={compactCardBorderRadius}
-                  compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.customTitle ? compactCustomTitle : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText)) : 0}
+                  compactCardHeight={compactMode ? (item.customTitle ? (compactCustomTitle ?? 80) : item.kind === "image" ? (compactImage ?? 130) : ((item.kind !== "file" && !!item.preview && showSecondaryText !== false) ? (compactTallText ?? 70) : (compactText ?? 58))) : 0}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1284,7 +1284,7 @@ showCheckbox={false}
                 compactPaddingBottom={compactPaddingBottom}
                 compactCardGap={compactCardGap}
                 compactCardBorderRadius={compactCardBorderRadius}
-                compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.customTitle ? compactCustomTitle : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText)) : 0}
+                compactCardHeight={compactMode ? (item.customTitle ? (compactCustomTitle ?? 80) : item.kind === "image" ? (compactImage ?? 130) : ((item.kind !== "file" && !!item.preview && showSecondaryText !== false) ? (compactTallText ?? 70) : (compactText ?? 58))) : 0}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}
