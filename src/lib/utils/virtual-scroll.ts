@@ -21,10 +21,12 @@ export function itemHeight(
   compactTallText?: number,
   compactImage?: number,
   cardGap?: number,
+  showPreview?: boolean,
 ): number {
+  const effectivePreview = hasPreview && showPreview !== false;
   if (kind === "image") return compact ? (compactImage ?? 130) : IMAGE_HEIGHT;
-  if (compact) return (hasPreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
-  return hasPreview ? TALL_TEXT_HEIGHT : TEXT_HEIGHT;
+  if (compact) return (effectivePreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
+  return effectivePreview ? TALL_TEXT_HEIGHT : TEXT_HEIGHT;
 }
 
 export function createVirtualList(

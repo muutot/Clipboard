@@ -220,6 +220,15 @@
     editing = false;
     oncanceledit(item.id);
   }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (editing && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      editing = false;
+      oncanceledit(item.id);
+    }
+  }
 </script>
 
 <article
@@ -230,12 +239,13 @@
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
   style:--cg={compact ? `${compactCardGap}px` : undefined}
   style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
-  style:height={compact && compactCardHeight ? `${compactCardHeight}px` : undefined}
+  style:height={editing ? 'auto' : compact && compactCardHeight ? `${compactCardHeight}px` : undefined}
   tabindex="-1"
   data-id={item.id}
   draggable="true"
   ondragstart={handleDragStart}
   onfocus={() => onselect(item.id)}
+  onkeydown={handleKeydown}
 >
   <button
     class="card-select"
@@ -446,9 +456,12 @@
         bind:value={editContent}
         rows={Math.min(12, Math.max(3, editContent.split("\n").length))}
         placeholder={_t("edit.placeholder")}
+        autofocus
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e) => {
           if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
             editing = false;
             oncanceledit(item.id);
           }

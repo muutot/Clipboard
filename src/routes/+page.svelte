@@ -205,6 +205,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   const compactSearchHeight = $derived($generalSettings.compactSearchHeight);
   const compactSearchFontSize = $derived($generalSettings.compactSearchFontSize);
   const compactCardBorderRadius = $derived($generalSettings.compactCardBorderRadius);
+  const showSecondaryText = $derived($generalSettings.display.showSecondaryText);
 
   const virtualList = $derived(
     createVirtualList(
@@ -212,7 +213,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(i => itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap)),
+      filteredItems.map(i => itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText)),
     ),
   );
 
@@ -558,9 +559,19 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       });
   }
 
+  function moveToTop(id: string) {
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx > 0) {
+      const [item] = items.splice(idx, 1);
+      items = [item, ...items];
+    }
+  }
+
   async function copyItem(id: string) {
     const item = items.find((i) => i.id === id);
     if (!item) return;
+
+    if ($generalSettings.pinCopiedToTop) moveToTop(id);
 
     if (item.kind === "image" && item.resourcePath) {
       try {
@@ -580,6 +591,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         try {
           const paths = JSON.parse(item.textContent) as string[];
           if (paths.length > 1) {
+            invoke("mark_self_triggered", { text: paths.join("\n") }).catch(() => {});
             await navigator.clipboard.writeText(paths.join("\n"));
             showToast(_t("toast.copySuccess"), "success");
             return;
@@ -588,6 +600,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       }
       if (item.resourcePath) {
         try {
+          invoke("mark_self_triggered", { text: item.resourcePath }).catch(() => {});
           await navigator.clipboard.writeText(item.resourcePath);
           showToast(_t("toast.copySuccess"), "success");
         } catch {
@@ -600,6 +613,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     void navigator.clipboard
       .writeText(item.textContent || item.title)
       .then(() => {
+        invoke("mark_self_triggered", { text: item.textContent || item.title }).catch(() => {});
         showToast(_t("toast.copySuccess"), "success");
       })
       .catch(() => {
@@ -616,11 +630,14 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     detailItem = null;
   }
 
+  let editingId = $state<string | null>(null);
+
   function startEdit(id: string) {
-    // handled within ClipboardCard
+    editingId = id;
   }
 
   async function saveEdit(id: string, content: string) {
+    editingId = null;
     const item = items.find((i) => i.id === id);
     const isText = item?.kind === "text" || item?.kind === "link";
     const isMedia = item?.kind === "image" || item?.kind === "file";
@@ -665,14 +682,17 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   }
 
   function cancelEdit(_id: string) {
-    // handled within ClipboardCard
+    editingId = null;
   }
 
   function plainPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
+    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
+    const text = item.textContent || item.title;
+    invoke("mark_self_triggered", { text }).catch(() => {});
     void navigator.clipboard
-      .writeText(item.textContent || item.title)
+      .writeText(text)
       .then(() => {
         showToast(_t("toast.plainPasteSuccess"), "success");
       })
@@ -698,7 +718,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
+    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
     const text = item.textContent || item.title;
+    invoke("mark_self_triggered", { text }).catch(() => {});
     const html = "<div>" + text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>") + "</div>";
     void navigator.clipboard
       .write([
@@ -724,6 +746,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   function bulkCopy() {
     const selectedItems = items.filter((i) => selectedIds.has(i.id));
     const text = selectedItems.map((i) => i.title).join("\n");
+    invoke("mark_self_triggered", { text }).catch(() => {});
     void navigator.clipboard
       .writeText(text)
       .then(() => {
@@ -852,7 +875,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     }
 
     if (event.key === "Escape") {
-      if (detailItem) {
+      if (editingId || document.activeElement instanceof HTMLTextAreaElement) {
+        return;
+      } else if (detailItem) {
         // DetailPanel handles its own Escape
       } else if (selectedIds.size > 0) {
         selectedIds = new Set();
@@ -1206,7 +1231,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                   compactPaddingBottom={compactPaddingBottom}
                   compactCardGap={compactCardGap}
                   compactCardBorderRadius={compactCardBorderRadius}
-                  compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : item.kind !== "file" && !!item.preview ? compactTallText : compactText) : 0}
+                  compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText) : 0}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1233,7 +1258,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                 compactPaddingBottom={compactPaddingBottom}
                 compactCardGap={compactCardGap}
                 compactCardBorderRadius={compactCardBorderRadius}
-                compactCardHeight={itemHeight(item.kind, item.kind !== "image" && item.kind !== "file" && !!item.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap)}
+                compactCardHeight={compactMode ? (item.kind === "image" ? compactImage : (item.kind !== "file" && !!item.preview && showSecondaryText) ? compactTallText : compactText) : 0}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}
