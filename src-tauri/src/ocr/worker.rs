@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::domain::OcrResult;
@@ -21,9 +21,12 @@ impl OcrWorker {
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = Arc::clone(&running);
 
-        thread::spawn(move || {
+        let handle: JoinHandle<()> = thread::spawn(move || {
             Self::run_loop(engine, database, running_clone);
         });
+
+        // Detach the thread — it will exit when `running` is set to false
+        drop(handle);
 
         Self { running }
     }

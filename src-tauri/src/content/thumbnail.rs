@@ -5,7 +5,7 @@ use std::{
         mpsc::{self, Sender},
         Arc,
     },
-    thread,
+    thread::{self, JoinHandle},
 };
 
 use image::codecs::jpeg::JpegEncoder;
@@ -117,6 +117,7 @@ enum ThumbnailTask {
 
 pub struct ThumbnailWorker {
     sender: Sender<ThumbnailTask>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl ThumbnailWorker {
@@ -126,7 +127,7 @@ impl ThumbnailWorker {
     ) -> Self {
         let (sender, receiver) = mpsc::channel::<ThumbnailTask>();
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let generator = ThumbnailGenerator::new();
             loop {
                 match receiver.recv() {
@@ -156,7 +157,7 @@ impl ThumbnailWorker {
             }
         });
 
-        Self { sender }
+        Self { sender, handle: Some(handle) }
     }
 
     pub fn enqueue(&self, item_id: String, image_path: PathBuf) {
@@ -166,7 +167,10 @@ impl ThumbnailWorker {
         });
     }
 
-    pub fn stop(&self) {
+    pub fn stop(&mut self) {
         let _ = self.sender.send(ThumbnailTask::Shutdown);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
     }
 }
