@@ -41,19 +41,24 @@
   function handleTransparency(event: Event) {
     const val = Number((event.target as HTMLInputElement).value);
     generalSettings.updateSetting("windowTransparency", val);
-    updateSliderTrack(event.target as HTMLInputElement);
+    updateSliderTrack(transparencyEl);
   }
 
-  function updateSliderTrack(el: HTMLInputElement) {
+  function updateSliderTrack(el: HTMLInputElement | null) {
+    if (!el) return;
     const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
     el.style.setProperty("--slider-pct", pct + "%");
   }
 
+  let transparencyEl = $state<HTMLInputElement | null>(null);
+  let viewerOpacityEl = $state<HTMLInputElement | null>(null);
+
   $effect(() => {
-    const el = document.querySelector<HTMLInputElement>(".transparency-slider");
-    if (el) {
-      updateSliderTrack(el);
-    }
+    updateSliderTrack(transparencyEl);
+  });
+
+  $effect(() => {
+    updateSliderTrack(viewerOpacityEl);
   });
 
   const fontSizeOptions = $derived([
@@ -134,6 +139,7 @@
       value={s.windowTransparency}
       oninput={handleTransparency}
       class="transparency-slider"
+      bind:this={transparencyEl}
     />
     <p class="placeholder-note">{_t("general.windowTransparencyDescription")}</p>
   </section>
@@ -237,8 +243,9 @@
         max="100"
         step="1"
         value={s.viewerBackdropOpacity}
-        oninput={(e) => { generalSettings.updateSetting("viewerBackdropOpacity", Number((e.target as HTMLInputElement).value)); updateSliderTrack(e.target as HTMLInputElement); }}
+        oninput={(e) => { generalSettings.updateSetting("viewerBackdropOpacity", Number((e.target as HTMLInputElement).value)); updateSliderTrack(viewerOpacityEl); }}
         aria-label={_t("general.viewerBackdropOpacity")}
+        bind:this={viewerOpacityEl}
       />
       <span class="slider-value">{s.viewerBackdropOpacity}%</span>
     </div>
