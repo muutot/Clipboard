@@ -973,26 +973,28 @@
     align-items: center;
     gap: 9px;
     width: 100%;
-    padding: 9px 10px;
-    border: 0;
-    border-radius: 7px;
-    color: #777;
-    background: transparent;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #999;
+    background: #1a1a1a;
     font: inherit;
-    font-size: 13px;
+    font-size: 12.5px;
     text-align: left;
     cursor: pointer;
-    transition: background 100ms ease, color 100ms ease;
+    transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
   }
 
   nav button:hover {
-    color: #aaa;
-    background: #1f1f1f;
+    color: #ccc;
+    background: #252525;
+    border-color: #3a3a3a;
   }
 
   nav button.active {
-    color: #e4e4e4;
-    background: #292929;
+    border-color: #5a5a5a;
+    color: #f0f0f0;
+    background: #333;
   }
 
   nav button:disabled {
@@ -1074,7 +1076,7 @@
 
   .settings-scroll {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
@@ -1096,7 +1098,7 @@
   }
 
   .setting-card {
-    padding: 13px;
+    padding: 10px 13px;
     border: 1px solid #303030;
     border-radius: 9px;
     background: #1e1e1e;

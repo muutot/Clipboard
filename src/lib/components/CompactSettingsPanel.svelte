@@ -287,7 +287,7 @@
 
   .settings-scroll {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;

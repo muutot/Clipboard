@@ -339,7 +339,7 @@
 
   .settings-scroll {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
@@ -361,7 +361,7 @@
   }
 
   .setting-card {
-    padding: 13px;
+    padding: 10px 13px;
     border: 1px solid #303030;
     border-radius: 9px;
     background: #1e1e1e;
