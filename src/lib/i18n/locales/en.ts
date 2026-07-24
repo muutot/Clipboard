@@ -224,7 +224,7 @@ const en: LocaleDefinition = {
     cancel: "Cancel",
     placeholder: "Enter text content...",
   },
-  paste: {
+  copy: {
     plainText: "Paste as plain text",
     withFormat: "Paste with formatting",
     copyFileName: "Copy file name",

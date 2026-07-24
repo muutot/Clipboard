@@ -106,7 +106,7 @@ const zhCN: LocaleDefinition = {
     shortcutConfigTitle: "独立快捷键配置",
     shortcutConfigDesc: "常规设置与快捷键分文件保存，切换数据目录时都不会迁移。",
     toggleWindow: "唤起或隐藏主窗口",
-    quickPaste: "快速粘贴当前条目",
+    quickPaste: "快速复制当前条目",
     actionCode: "多组绑定使用逗号分隔",
     shortcutInput: "快捷键组合",
     inputPlaceholder: "例如 Alt+V, Shift+Shift",
@@ -182,7 +182,7 @@ const zhCN: LocaleDefinition = {
     bulkFavoriteSuccess: "已收藏 {count} 项",
     bulkDeleteSuccess: "已删除 {count} 项",
     editSaved: "已保存编辑内容",
-    plainPasteSuccess: "已粘贴为纯文本",
+    plainPasteSuccess: "已复制为纯文本",
   },
   detail: {
     title: "内容详情",
@@ -217,9 +217,9 @@ const zhCN: LocaleDefinition = {
     cancel: "取消",
     placeholder: "输入文本内容...",
   },
-  paste: {
-    plainText: "粘贴为纯文本",
-    withFormat: "保留格式粘贴",
+  copy: {
+    plainText: "复制纯文本",
+    withFormat: "保留格式复制",
     copyFileName: "复制文件名",
   },
   general: {

@@ -217,7 +217,7 @@ export interface LocaleDefinition {
     cancel: string;
     placeholder: string;
   };
-  paste: {
+  copy: {
     plainText: string;
     withFormat: string;
     copyFileName: string;
