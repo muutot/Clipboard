@@ -173,6 +173,27 @@
 
   <section class="setting-card toggle-card">
     <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+      <div>
+        <strong>{_t("general.useRecycleBin")}</strong>
+        <p>{_t("general.useRecycleBinDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.useRecycleBin}
+      onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
+      aria-checked={s.useRecycleBin}
+      aria-label={_t("general.useRecycleBin")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
       <div>
         <strong>{_t("general.useSystemTitleBar")}</strong>
