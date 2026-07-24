@@ -64,6 +64,7 @@ export interface LocaleDefinition {
     storageTab: string;
     keyboardTab: string;
     generalTab: string;
+    compactTab: string;
     configPath: string;
     readingConfig: string;
     systemMessage: string;
@@ -244,6 +245,23 @@ export interface LocaleDefinition {
     themeDescription: string;
     themeDark: string;
     autoSaveNote: string;
+  };
+  compact: {
+    title: string;
+    eyebrow: string;
+    description: string;
+    paddingTop: string;
+    paddingTopDescription: string;
+    paddingBottom: string;
+    paddingBottomDescription: string;
+    cardGap: string;
+    cardGapDescription: string;
+    shortTextHeight: string;
+    shortTextHeightDescription: string;
+    tallTextHeight: string;
+    tallTextHeightDescription: string;
+    imageHeight: string;
+    imageHeightDescription: string;
   };
   statistics: {
     title: string;

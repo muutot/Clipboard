@@ -11,6 +11,7 @@ export interface ClipboardItem {
   sourceApp: string;
   sourceTone: "red" | "blue" | "violet" | "neutral";
   sizeLabel: string;
+  sizeBytes?: number;
   detailLabel?: string;
   createdAt: number;
   favorite: boolean;
@@ -19,6 +20,10 @@ export interface ClipboardItem {
     width: number;
     height: number;
   };
+  fileMeta?: {
+    name: string;
+    size: number;
+  }[];
   mimeType?: string;
   ocrText?: string;
   ocrStatus?: "pending" | "completed" | "none";
@@ -41,6 +46,12 @@ export interface GeneralSettings {
   fontSize: FontSize;
   windowTransparency: number;
   compactMode: boolean;
+  compactPaddingTop: number;
+  compactPaddingBottom: number;
+  compactCardGap: number;
+  compactTextHeight: number;
+  compactTallTextHeight: number;
+  compactImageHeight: number;
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;
