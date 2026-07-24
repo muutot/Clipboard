@@ -394,14 +394,16 @@
           {#if ocrAvailable}
             <div style="padding:8px 0; color:#51b96b; font-size:12px;">✓ 模型已下载到 storage/ppocr-models/</div>
           {:else}
-            <label for="model-variant" style="margin:8px 0 4px; display:block; font-size:10px; color:#8a8a8a;">模型规格</label>
-            <select bind:value={modelVariant} class="model-select">
-              <option value="tiny">PP-OCRv6 tiny (快速, ~5MB)</option>
-              <option value="medium">PP-OCRv6 medium (平衡, ~15MB)</option>
-              <option value="large">PP-OCRv6 large (高精度, ~30MB)</option>
-            </select>
-            <div class="setting-actions">
-              <button class="primary" type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
+            <div style="display:flex; gap:8px; align-items:stretch;">
+              <div style="flex:1; min-width:0;">
+                <label for="model-variant" style="display:block; font-size:10px; color:#8a8a8a; margin-bottom:4px;">模型规格</label>
+                <select bind:value={modelVariant} class="model-select">
+                  <option value="tiny">tiny (快速, ~5MB)</option>
+                  <option value="medium">medium (平衡, ~15MB)</option>
+                  <option value="large">large (高精度, ~30MB)</option>
+                </select>
+              </div>
+              <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="align-self:flex-end; white-space:nowrap; padding:9px 14px; border:1px solid #343434; border-radius:7px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:11.5px;">
                 {ocrInstalling ? '下载中...' : '下载模型'}
               </button>
             </div>

@@ -6,7 +6,10 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -46,18 +49,22 @@
   let panStartX = 0;
   let panStartY = 0;
 
-  function openImageFullscreen() {
+  async function openImageFullscreen() {
     imageFullscreen = true;
     zoom = 1;
     panX = 0;
     panY = 0;
+    if (get(generalSettings).imageFullscreenMode === "desktop") {
+      try { await getCurrentWindow().setFullscreen(true); } catch {}
+    }
   }
 
-  function closeImageFullscreen() {
+  async function closeImageFullscreen() {
     imageFullscreen = false;
     zoom = 1;
     panX = 0;
     panY = 0;
+    try { await getCurrentWindow().setFullscreen(false); } catch {}
   }
 
   function onWheel(e: WheelEvent) {
@@ -97,6 +104,7 @@
 
   $effect(() => {
     if (item) {
+      if (imageFullscreen) { getCurrentWindow().setFullscreen(false).catch(() => {}); }
       imageFullscreen = false;
       zoom = 1;
       panX = 0;
@@ -182,7 +190,12 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (item && event.key === "Escape") {
-      if (imageFullscreen) { closeImageFullscreen(); return; }
+      if (imageFullscreen) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeImageFullscreen();
+        return;
+      }
       if (editing) { editing = false; return; }
       event.preventDefault();
       event.stopPropagation();

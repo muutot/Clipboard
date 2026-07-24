@@ -20,6 +20,7 @@ function createSettingsStore() {
     alwaysOnTop: false,
     useSystemTitleBar: false,
     theme: "dark",
+    imageFullscreenMode: "overlay",
   };
 
   const stored = loadFromStorage();

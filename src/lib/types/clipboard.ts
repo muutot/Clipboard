@@ -43,6 +43,7 @@ export interface GeneralSettings {
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;
+  imageFullscreenMode: "overlay" | "desktop";
 }
 
 export interface CaptureSettings {

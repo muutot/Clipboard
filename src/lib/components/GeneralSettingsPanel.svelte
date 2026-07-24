@@ -198,6 +198,27 @@
     </button>
   </section>
 
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="maximize" size={17} /></span>
+      <div>
+        <strong>桌面全屏预览</strong>
+        <p>开启时图片全屏覆盖桌面，关闭时仅在应用内全屏</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.imageFullscreenMode === "desktop"}
+      onclick={() => generalSettings.updateSetting("imageFullscreenMode", s.imageFullscreenMode === "desktop" ? "overlay" : "desktop")}
+      aria-checked={s.imageFullscreenMode === "desktop"}
+      aria-label="桌面全屏预览"
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
   <section class="setting-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
