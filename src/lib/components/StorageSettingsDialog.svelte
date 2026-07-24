@@ -1468,7 +1468,15 @@
   }
 
   .setting-card-row button {
+    height: 34px;
+    box-sizing: border-box;
     padding: 5px 12px;
+
+  .setting-card-row select,
+  .setting-card-row .model-select {
+    height: 34px;
+    box-sizing: border-box;
+  }
     border: 1px solid #3a3a3a;
     border-radius: 5px;
     color: #a3a3a3;
