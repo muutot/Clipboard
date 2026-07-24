@@ -553,7 +553,7 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
     }
 
     const SHGFI_ICON: u32 = 0x100;
-    const SHGFI_SMALLICON: u32 = 0x1;
+    const SHGFI_LARGEICON: u32 = 0x0;
 
     let app_key = app_name.to_lowercase().chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
@@ -566,11 +566,25 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
     }
 
     let icon_path = icon_dir.join(format!("{}.png", app_key));
+
+    std::fs::create_dir_all(icon_dir).ok();
+
+    let version_marker = icon_dir.join(".icon-v2");
+    if !version_marker.exists() {
+        if let Ok(entries) = std::fs::read_dir(icon_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map_or(false, |e| e == "png") {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+        }
+        let _ = std::fs::write(&version_marker, b"32");
+    }
+
     if icon_path.exists() {
         return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
     }
-
-    std::fs::create_dir_all(icon_dir).ok();
 
     let path_for_icon = if exe_path.is_empty() {
         format!("{}.exe", app_name)
@@ -596,7 +610,7 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
             0,
             &mut info,
             std::mem::size_of::<SHFILEINFOW>() as u32,
-            SHGFI_ICON | SHGFI_SMALLICON,
+            SHGFI_ICON | SHGFI_LARGEICON,
         );
 
         if result != 0 && info.hIcon != 0 {
