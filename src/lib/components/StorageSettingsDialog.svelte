@@ -669,24 +669,15 @@
           </section>
 
           <section class="setting-card">
-            <div class="setting-heading split-heading">
-              <div class="heading-copy">
-                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-                <div>
-                  <strong>{_t("storage.searchIndexTitle")}</strong>
-                  <p>{_t("storage.searchIndexDesc")}</p>
-                </div>
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+              <div>
+                <strong>{_t("storage.searchIndexTitle")}</strong>
+                <p>{_t("storage.searchIndexDesc")}</p>
               </div>
-              <span class:custom={!status.searchIndexRebuildRequired} class="directory-badge">
-                {status.searchIndexRebuildRequired
-                  ? _t("storage.rebuildRequired")
-                  : _t("storage.ready", { version: status.searchIndexVersion })}
-              </span>
             </div>
-            <code class="path-value" title={status.searchIndexPath}
-              >{relativePath(status.searchIndexPath)}</code
-            >
-            <div class="setting-actions">
+            <div class="path-button-row">
+              <code class="path-value-inline" title={status.searchIndexPath}>{relativePath(status.searchIndexPath)}</code>
               <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
                 {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
               </button>
@@ -1564,6 +1555,51 @@
   }
 
   .dir-input-row button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .path-button-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .path-value-inline {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 9px;
+    border: 1px solid #2f2f2f;
+    border-radius: 6px;
+    color: #a7a7a7;
+    background: #181818;
+    font: 10.5px "Cascadia Code", Consolas, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .path-button-row button {
+    padding: 6px 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #a3a3a3;
+    background: #252525;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .path-button-row button:hover {
+    color: #ccc;
+    background: #2e2e2e;
+  }
+
+  .path-button-row button:disabled {
     opacity: 0.55;
     cursor: default;
   }
