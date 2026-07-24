@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -367,6 +367,15 @@
         getCurrentWindow()
           .setAlwaysOnTop(s.alwaysOnTop)
           .catch(() => {});
+        if (s.rememberWindowPosition) {
+          const pos = localStorage.getItem("windowPosition");
+          if (pos) {
+            try {
+              const { x, y } = JSON.parse(pos);
+              getCurrentWindow().setPosition(new PhysicalPosition(x, y)).catch(() => {});
+            } catch {}
+          }
+        }
       }
       const shell = document.querySelector('.app-shell');
       if (shell) { shell.classList.toggle('compact', s.compactMode); }
@@ -374,10 +383,23 @@
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
 
+    let unlistenMove: (() => void) | undefined;
+    if ("__TAURI_INTERNALS__" in window) {
+      getCurrentWindow().onMoved((event) => {
+        if ($generalSettings.rememberWindowPosition) {
+          localStorage.setItem("windowPosition", JSON.stringify({
+            x: event.payload.x,
+            y: event.payload.y,
+          }));
+        }
+      }).then((fn) => { unlistenMove = fn; });
+    }
+
     return () => {
       window.clearInterval(clock);
       unlisten.then((fn) => fn());
       unsubSettings();
+      if (unlistenMove) unlistenMove();
     };
   });
 
@@ -973,7 +995,7 @@
     />
   </header>
 
-  <div class="toolbar">
+  <div class="toolbar" data-tauri-drag-region>
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button

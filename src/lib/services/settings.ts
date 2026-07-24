@@ -26,6 +26,7 @@ function createSettingsStore() {
     compactSearchHeight: 40,
     compactSearchFontSize: 14,
     compactCardBorderRadius: 10,
+    rememberWindowPosition: false,
     alwaysOnTop: false,
     useSystemTitleBar: false,
     theme: "dark",

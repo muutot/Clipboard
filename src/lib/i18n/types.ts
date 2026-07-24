@@ -249,6 +249,8 @@ export interface LocaleDefinition {
     theme: string;
     themeDescription: string;
     themeDark: string;
+    rememberWindowPosition: string;
+    rememberWindowPositionDescription: string;
     autoSaveNote: string;
   };
   compact: {

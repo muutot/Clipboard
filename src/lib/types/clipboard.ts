@@ -55,6 +55,7 @@ export interface GeneralSettings {
   compactSearchHeight: number;
   compactSearchFontSize: number;
   compactCardBorderRadius: number;
+  rememberWindowPosition: boolean;
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;

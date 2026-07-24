@@ -251,6 +251,27 @@
     </div>
   </section>
 
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="pin" size={17} /></span>
+      <div>
+        <strong>{_t("general.rememberWindowPosition")}</strong>
+        <p>{_t("general.rememberWindowPositionDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.rememberWindowPosition}
+      onclick={() => generalSettings.updateSetting("rememberWindowPosition", !s.rememberWindowPosition)}
+      aria-checked={s.rememberWindowPosition}
+      aria-label={_t("general.rememberWindowPosition")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
   <section class="setting-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
