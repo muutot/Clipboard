@@ -1,8 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
 
+export interface DiscoveredApplication {
+  name: string;
+  iconPath: string | null;
+}
+
 export interface ApplicationFilterSettings {
   discoveredApplications: string[];
+  discoveredApplicationsWithIcons: DiscoveredApplication[];
   ignoredApplications: string[];
 }
 

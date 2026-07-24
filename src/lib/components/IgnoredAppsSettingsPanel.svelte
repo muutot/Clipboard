@@ -5,20 +5,31 @@
     configureIgnoredApplications,
     getApplicationFilterSettings,
     type ApplicationFilterSettings,
+    type DiscoveredApplication,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
+  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { isTauriRuntime } from "$lib/services/runtime";
 
   const _t = (
     path: string,
     params?: Record<string, string | number>,
   ) => resolvePath($messages, path, params);
 
+  function appIconUrl(iconFileName: string | null | undefined): string | undefined {
+    if (!iconFileName || !isTauriRuntime()) return undefined;
+    if (!iconsDir) return undefined;
+    const fullPath = `${iconsDir}/${iconFileName}`.replace(/\\/g, "/");
+    return convertFileSrc(fullPath);
+  }
+
   interface Props {
     configPath?: string;
+    iconsDir?: string;
     onclose: () => void;
   }
 
-  let { configPath = "conf/conf.json", onclose }: Props = $props();
+  let { configPath = "conf/conf.json", iconsDir = "", onclose }: Props = $props();
   let settings = $state<ApplicationFilterSettings | null>(null);
   let availableSearch = $state("");
   let ignoredSearch = $state("");
@@ -31,6 +42,14 @@
 
   const ignoredKeys = $derived(
     new Set((settings?.ignoredApplications ?? []).map(normalizeApplication)),
+  );
+  const appIconMap = $derived(
+    new Map(
+      (settings?.discoveredApplicationsWithIcons ?? []).map((app) => [
+        app.name,
+        app.iconPath,
+      ]),
+    ),
   );
   const availableApplications = $derived(
     (settings?.discoveredApplications ?? []).filter(
@@ -155,15 +174,19 @@
         </label>
         <div class="application-list">
           {#each visibleAvailable as application}
-            <label class="application-row">
-              <input
-                type="checkbox"
-                checked={selectedAvailable.includes(application)}
-                onchange={() => toggleAvailable(application)}
-              />
-              <span class="app-avatar">{application.slice(0, 1).toLocaleUpperCase()}</span>
+            <button
+              type="button"
+              class="application-row"
+              class:selected={selectedAvailable.includes(application)}
+              onclick={() => toggleAvailable(application)}
+            >
+              {#if appIconMap.get(application)}
+                <img class="app-icon" src={appIconUrl(appIconMap.get(application))} alt={application} />
+              {:else}
+                <span class="app-avatar">{application.slice(0, 1).toLocaleUpperCase()}</span>
+              {/if}
               <strong>{application}</strong>
-            </label>
+            </button>
           {:else}
             <p class="empty-list">{_t("capture.noAppsFound")}</p>
           {/each}
@@ -204,7 +227,11 @@
         <div class="application-list">
           {#each visibleIgnored as application}
             <div class="application-row ignored-row">
-              <span class="app-avatar locked">{application.slice(0, 1).toLocaleUpperCase()}</span>
+              {#if appIconMap.get(application)}
+                <img class="app-icon" src={appIconUrl(appIconMap.get(application))} alt={application} />
+              {:else}
+                <span class="app-avatar locked">{application.slice(0, 1).toLocaleUpperCase()}</span>
+              {/if}
               <strong>{application}</strong>
               <button
                 type="button"
@@ -393,19 +420,31 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
     min-height: 36px;
     padding: 3px 5px;
+    border: 0;
     border-radius: 7px;
     color: #d8d8d8;
+    background: transparent;
     font-size: 10.5px;
+    cursor: pointer;
+  }
+  .application-row + .application-row {
+    margin-top: 2px;
   }
   .application-row:hover {
     background: #242424;
   }
-  .application-row > input {
-    width: 14px;
-    height: 14px;
-    accent-color: #4d8dff;
+  .application-row.selected {
+    background: #252f3d;
+    box-shadow: inset 0 0 0 1px #3d5a80;
+  }
+  .application-row.ignored-row {
+    cursor: default;
+  }
+  .application-row.ignored-row:hover {
+    background: #242424;
   }
   .application-row strong {
     overflow: hidden;
@@ -440,6 +479,13 @@
   .app-avatar.locked {
     color: #c9d7ff;
     background: linear-gradient(145deg, #3d4770, #242a44);
+  }
+  .app-icon {
+    width: 25px;
+    height: 25px;
+    flex: 0 0 auto;
+    border-radius: 7px;
+    object-fit: contain;
   }
   .transfer-column {
     display: grid;

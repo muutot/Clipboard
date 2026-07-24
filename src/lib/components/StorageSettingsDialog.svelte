@@ -495,7 +495,7 @@
     {:else if activeSection === "compact"}
       <CompactSettingsPanel {onclose} />
     {:else if activeSection === "capture"}
-      <IgnoredAppsSettingsPanel configPath={status?.configPath} {onclose} />
+      <IgnoredAppsSettingsPanel configPath={status?.configPath} iconsDir={status?.iconsDir} {onclose} />
     {:else if activeSection === "keyboard"}
       <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
     {:else if activeSection === "ocr"}
@@ -1162,6 +1162,8 @@
     font-size: 13px;
     cursor: pointer;
     appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23999' d='M2 3l3 4 3-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
