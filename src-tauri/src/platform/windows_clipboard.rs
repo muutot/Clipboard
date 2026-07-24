@@ -221,7 +221,7 @@ pub fn read_clipboard_text() -> Option<String> {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;
-        fn GlobalLock(handle: isize) -> *const u16;
+        fn GlobalLock(handle: isize) -> *const u8;
         fn GlobalUnlock(handle: isize) -> i32;
         fn IsClipboardFormatAvailable(format: u32) -> i32;
     }
@@ -241,7 +241,7 @@ pub fn read_clipboard_text() -> Option<String> {
             return None;
         }
 
-        let ptr = GlobalLock(handle);
+        let ptr = GlobalLock(handle) as *const u16;
         if ptr.is_null() {
             CloseClipboard();
             return None;
