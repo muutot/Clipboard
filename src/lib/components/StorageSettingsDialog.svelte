@@ -793,7 +793,7 @@
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                 <div>
                   <strong>性能</strong>
-                  <p>启动 {perfMetrics.startup.totalStartupMs}ms · DB {perfMetrics.startup.dbOpenMs}ms · 搜索 {perfMetrics.startup.searchInitMs}ms</p>
+                  <p>启动 {perfMetrics.startup.totalStartupMs}ms · DB {perfMetrics.startup.dbOpenMs}ms · 搜索 {perfMetrics.startup.searchInitMs}ms · 运行 {perfMetrics.memory.uptimeSeconds}s · 峰值 {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</p>
                 </div>
               </div>
               {#if perfMetrics.searchLatency.searchesRecorded > 0}
@@ -816,9 +816,6 @@
                   </div>
                 </div>
               {/if}
-              <div class="perf-mem">
-                <span>运行 {perfMetrics.memory.uptimeSeconds}s · 峰值内存 {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
-              </div>
             </section>
           {/if}
 
