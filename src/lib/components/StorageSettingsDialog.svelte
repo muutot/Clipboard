@@ -508,28 +508,24 @@
               <p>{ocrAvailable ? 'PP-OCRv6 模型已就绪' : '下载 ONNX 模型到本地存储'}</p>
             </div>
           </div>
-          {#if ocrAvailable}
-            <div style="padding:8px 0; color:#51b96b; font-size:13px;">✓ 模型已下载到 storage/ppocr-models/</div>
-          {:else}
-            <div style="display:flex; gap:8px; align-items:stretch;">
-              <div style="flex:1; min-width:0;">
-                <label for="model-variant" style="display:block; font-size:11.5px; color:#8a8a8a; margin-bottom:4px;">模型规格</label>
-                <select bind:value={modelVariant} class="model-select">
-                  <option value="tiny">tiny (快速, ~5MB)</option>
-                  <option value="medium">medium (平衡, ~15MB)</option>
-                  <option value="large">large (高精度, ~30MB)</option>
-                </select>
-              </div>
-              <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="align-self:flex-end; white-space:nowrap; padding:9px 14px; border:1px solid #343434; border-radius:7px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px;">
-                {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载模型'}
-              </button>
+          <div style="display:flex; gap:8px; align-items:flex-end;">
+            <div style="flex:1; min-width:0;">
+              <label for="model-variant" style="display:block; font-size:11.5px; color:#8a8a8a; margin-bottom:4px;">模型规格</label>
+              <select bind:value={modelVariant} class="model-select">
+                <option value="tiny">tiny (快速, ~5MB)</option>
+                <option value="medium">medium (平衡, ~15MB)</option>
+                <option value="large">large (高精度, ~30MB)</option>
+              </select>
             </div>
-            {#if ocrInstalling && ocrProgressPct >= 0}
-              <div style="margin-top:2px; color:#888; font-size:10px;">{formatBytes(ocrProgressCurrent)} / {formatBytes(ocrProgressTotal)}</div>
-              <div style="margin-top:4px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
-                <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
-              </div>
-            {/if}
+            <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()} style="padding:9px 14px; border:1px solid #3a3a3a; border-radius:6px; background:#252525; color:#d7d7d7; cursor:pointer; font-size:13px; white-space:nowrap;">
+              {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
+            </button>
+          </div>
+          {#if ocrInstalling && ocrProgressPct >= 0}
+            <div style="margin-top:2px; color:#888; font-size:10px;">{formatBytes(ocrProgressCurrent)} / {formatBytes(ocrProgressTotal)}</div>
+            <div style="margin-top:4px; height:4px; background:#2a2a2a; border-radius:2px; overflow:hidden;">
+              <div style="height:100%; width:{Math.min(100, Math.max(0, ocrProgressPct))}%; background:#4a90d9; border-radius:2px; transition:width 0.2s ease;"></div>
+            </div>
           {/if}
         </section>
 
