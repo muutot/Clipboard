@@ -939,9 +939,8 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <div class="resize-edge"></div>
-  <header class="search-header">
-    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
+  <div class="drag-bar" data-tauri-drag-region></div>
+  <header class="search-header" data-tauri-drag-region>
     <div class="search-box">
       <input
         bind:value={query}
@@ -975,7 +974,6 @@
         >
       {/if}
     </div>
-    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
     <button
       type="button"
       tabindex="-1"
@@ -987,7 +985,6 @@
       onclick={() => (regexMode = !regexMode)}
       ><AppIcon name="regex" size={15} strokeWidth={2} /></button
     >
-    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
     <img
       class="brand-icon"
       src="{assets}/app-icon.png"
@@ -996,11 +993,9 @@
       width="28"
       height="28"
     />
-    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
   </header>
 
-  <div class="toolbar">
-    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
+  <div class="toolbar" data-tauri-drag-region>
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
@@ -1137,7 +1132,6 @@
         onclick={openSettings}><AppIcon name="settings" size={17} /></button
       >
     </div>
-    <div class="drag-handle" onmousedown={() => getCurrentWindow().startDragging()}></div>
   </div>
 
   {#if regexError}
@@ -1297,8 +1291,9 @@
     background: rgba(27, 27, 27, 0.985);
   }
 
-  .resize-edge {
-    height: 4px;
+  .drag-bar {
+    height: 10px;
+    width: 100%;
     background: transparent;
   }
 
@@ -1333,16 +1328,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 15px 16px 8px;
-  }
-
-  .drag-handle {
-    width: 8px;
-    min-width: 8px;
-    height: 100%;
-    align-self: stretch;
-    cursor: default;
-    flex-shrink: 0;
+    padding: 14px 20px 8px;
   }
 
   .search-box {
