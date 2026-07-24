@@ -156,7 +156,10 @@
         ocrCompleted = result.completedTasks;
       }
       const status = await invoke<{ available: boolean }>("check_ppocr_status");
-      if (status) ocrAvailable = status.available;
+      if (status) {
+        ocrAvailable = status.available;
+        if (status.available) installedVariants = new Set([...installedVariants, modelVariant]);
+      }
     } catch { /* ignore */ }
     try {
       const cfg = await invoke<{ engine: string; detScoreThreshold: number; detBoxThreshold: number; detUnclipRatio: number }>("get_ocr_config");
