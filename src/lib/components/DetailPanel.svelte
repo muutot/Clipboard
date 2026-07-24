@@ -295,12 +295,7 @@
                 <textarea bind:value={editContent} rows={8}></textarea>
               </div>
               <div class="edit-actions">
-                <button type="button" class="edit-save" onclick={() => {
-                  if (item) onsaveedit(item.id, editContent);
-                  item!.title = editContent.slice(0, 200);
-                  item!.textContent = editContent;
-                  editing = false;
-                }}>
+                <button type="button" class="edit-save" onclick={saveEdit}>
                   <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
                 </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
