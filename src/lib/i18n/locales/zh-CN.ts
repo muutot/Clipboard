@@ -15,7 +15,7 @@ const zhCN: LocaleDefinition = {
     historyEmpty: "剪贴板历史为空，复制内容后会出现在这里",
     searchHitSummary: "索引搜索命中 {count} 条记录",
     searchFailed: "索引搜索失败，已保留本地筛选结果",
-    activateItem: '已选择"{title}" · 平台粘贴服务待接入',
+    copiedItem: '已选择"{title}"',
     favoriteFailed: "收藏状态保存失败",
     deleteFailed: "删除记录失败",
     browserPreview: "浏览器预览",

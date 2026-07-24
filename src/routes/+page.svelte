@@ -592,6 +592,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         const response = await fetch(src);
         const blob = await response.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+        statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
         showToast(_t("toast.copySuccess"), "success");
       } catch {
         showToast(_t("toast.copyFailed"), "error");
@@ -606,6 +607,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
           if (paths.length > 1) {
             invoke("mark_self_triggered", { text: paths.join("\n") }).catch(() => {});
             await navigator.clipboard.writeText(paths.join("\n"));
+            statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
             showToast(_t("toast.copySuccess"), "success");
             return;
           }
@@ -615,6 +617,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         try {
           invoke("mark_self_triggered", { text: item.resourcePath }).catch(() => {});
           await navigator.clipboard.writeText(item.resourcePath);
+          statusMessage = _t("app.copiedItem", { title: item.fileName || item.title.split("\n")[0] });
           showToast(_t("toast.copySuccess"), "success");
         } catch {
           showToast(_t("toast.copyFailed"), "error");
@@ -627,6 +630,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       .writeText(item.textContent || item.title)
       .then(() => {
         invoke("mark_self_triggered", { text: item.textContent || item.title }).catch(() => {});
+        statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
         showToast(_t("toast.copySuccess"), "success");
       })
       .catch(() => {
@@ -814,10 +818,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   }
 
   function activateSelected() {
-    const item = filteredItems.find((candidate) => candidate.id === selectedId);
-    if (!item) return;
-
-    statusMessage = _t("app.activateItem", { title: item.title.split("\n")[0] });
+    if (!selectedId) return;
+    copyItem(selectedId);
   }
 
   function moveSelection(offset: number) {
@@ -1342,7 +1344,7 @@ showCheckbox={false}
       <span class="result-count">{resultSummary}</span>
       <span class="runtime-status"><i></i>{runtimeLabel}</span>
     </span>
-    <span>{statusMessage}</span>
+    <span class="status-msg">{statusMessage}</span>
     <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
   </footer>
 </main>
@@ -1867,6 +1869,7 @@ showCheckbox={false}
     color: #6f6f6f;
     background: #181818;
     font-size: 11.5px;
+    overflow: hidden;
   }
 
   .status-left {
@@ -1876,10 +1879,12 @@ showCheckbox={false}
     flex-shrink: 0;
   }
 
-  .status-bar > span {
+  .status-msg {
+    flex: 1 1 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    min-width: 0;
   }
 
   .shortcut-hints {

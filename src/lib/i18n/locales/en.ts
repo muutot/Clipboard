@@ -15,7 +15,7 @@ const en: LocaleDefinition = {
     historyEmpty: "Clipboard history is empty. Copied content will appear here.",
     searchHitSummary: "Search index returned {count} results",
     searchFailed: "Search index failed, showing local filter results",
-    activateItem: 'Selected "{title}" · Platform paste service pending',
+    copiedItem: 'Copied "{title}"',
     favoriteFailed: "Failed to update favorite status",
     deleteFailed: "Failed to delete record",
     browserPreview: "Browser Preview",

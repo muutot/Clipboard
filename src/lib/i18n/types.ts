@@ -15,7 +15,7 @@ export interface LocaleDefinition {
     historyEmpty: string;
     searchHitSummary: string;
     searchFailed: string;
-    activateItem: string;
+    copiedItem: string;
     favoriteFailed: string;
     deleteFailed: string;
     browserPreview: string;
