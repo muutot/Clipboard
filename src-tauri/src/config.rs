@@ -58,6 +58,7 @@ pub struct OcrConfig {
     pub tesseract_languages: String,
     pub models_dir: Option<PathBuf>,
     pub ppocr_model_path: Option<String>,
+    pub ppocr_model_variant: String,
     pub det_score_threshold: f32,
     pub det_box_threshold: f32,
     pub det_unclip_ratio: f32,
@@ -72,6 +73,7 @@ impl Default for OcrConfig {
             tesseract_languages: "chi_sim+eng".to_string(),
             models_dir: None,
             ppocr_model_path: None,
+            ppocr_model_variant: "small".to_string(),
             det_score_threshold: 0.3,
             det_box_threshold: 0.6,
             det_unclip_ratio: 1.5,
@@ -365,6 +367,15 @@ impl ConfigStore {
 
     pub fn det_score_threshold(&self) -> f32 {
         self.config.ocr.det_score_threshold
+    }
+
+    pub fn ppocr_model_variant(&self) -> &str {
+        &self.config.ocr.ppocr_model_variant
+    }
+
+    pub fn set_ppocr_model_variant(&mut self, value: String) -> Result<(), StorageError> {
+        self.config.ocr.ppocr_model_variant = value;
+        self.save()
     }
 
     pub fn det_box_threshold(&self) -> f32 {

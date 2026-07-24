@@ -473,6 +473,7 @@ fn get_ocr_config(config: tauri::State<'_, Mutex<ConfigStore>>) -> Result<OcrCon
     Ok(OcrConfigResponse {
         engine: config.ocr_engine().to_string(),
         tesseract_languages: config.tesseract_languages().to_string(),
+        ppocr_model_variant: config.ppocr_model_variant().to_string(),
         det_score_threshold: config.det_score_threshold(),
         det_box_threshold: config.det_box_threshold(),
         det_unclip_ratio: config.det_unclip_ratio(),
@@ -551,11 +552,14 @@ struct PpOcrDownloadProgress {
 async fn install_ppocr(
     app: tauri::AppHandle,
     paths: tauri::State<'_, StoragePaths>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     variant: String,
 ) -> Result<String, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
     std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
     if ocr::models::all_models_present(&models_dir) {
+        let mut cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+        let _ = cfg.set_ppocr_model_variant(variant.to_string());
         return Ok("PP-OCR models already installed".to_string());
     }
     let det_url = match variant.as_str() {
@@ -631,6 +635,10 @@ async fn install_ppocr(
             );
         }
     }
+
+    let mut cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+    cfg.set_ppocr_model_variant(variant).map_err(|e| e.to_string())?;
+    drop(cfg);
 
     Ok("PP-OCRv6 models downloaded successfully".to_string())
 }
@@ -739,6 +747,7 @@ struct OcrConfigResponse {
     det_score_threshold: f32,
     det_box_threshold: f32,
     det_unclip_ratio: f32,
+    ppocr_model_variant: String,
 }
 
 #[tauri::command]

@@ -105,8 +105,8 @@
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
   let ocrAvailable = $state(false);
-  let installedVariants = $state<Set<string>>(new Set());
-  let activeVariant = $state<string>("tiny");
+  let installedVariant = $state<string>("");
+  let activeVariant = $state<string>("");
   let ocrInstalling = $state(false);
   let ocrProgressLabel = $state("");
   let ocrProgressPct = $state(-1);
@@ -158,16 +158,21 @@
       const status = await invoke<{ available: boolean }>("check_ppocr_status");
       if (status) {
         ocrAvailable = status.available;
-        if (status.available) installedVariants = new Set([...installedVariants, modelVariant]);
+        if (status.available) installedVariant = installedVariant || modelVariant;
       }
     } catch { /* ignore */ }
     try {
-      const cfg = await invoke<{ engine: string; detScoreThreshold: number; detBoxThreshold: number; detUnclipRatio: number }>("get_ocr_config");
+      const cfg = await invoke<{ engine: string; ppocrModelVariant: string; detScoreThreshold: number; detBoxThreshold: number; detUnclipRatio: number }>("get_ocr_config");
       if (cfg) {
         ocrEngine = cfg.engine;
         detScoreThreshold = cfg.detScoreThreshold;
         detBoxThreshold = cfg.detBoxThreshold;
         detUnclipRatio = cfg.detUnclipRatio;
+        if (cfg.ppocrModelVariant) {
+          installedVariant = cfg.ppocrModelVariant;
+          activeVariant = cfg.ppocrModelVariant;
+          modelVariant = cfg.ppocrModelVariant;
+        }
       }
     } catch { /* ignore */ }
   }
@@ -194,7 +199,8 @@
       const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
       feedback = msg;
       feedbackSuccess = true;
-      installedVariants = new Set([...installedVariants, modelVariant]);
+      installedVariant = modelVariant;
+      activeVariant = modelVariant;
       loadOcrStatus();
     } catch (e) {
       feedback = String(e);
@@ -535,11 +541,11 @@
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
           <span class="setting-label">模型</span>
           <select bind:value={modelVariant} class="model-select" style="flex:1; max-width:200px;">
-            <option value="tiny">tiny (~5MB){installedVariants.has("tiny") ? " ✓" : ""}</option>
-            <option value="medium">medium (~15MB){installedVariants.has("medium") ? " ✓" : ""}</option>
-            <option value="large">large (~30MB){installedVariants.has("large") ? " ✓" : ""}</option>
+            <option value="tiny">tiny (~5MB){installedVariant === "tiny" ? " ✓" : ""}</option>
+            <option value="medium">medium (~15MB){installedVariant === "medium" ? " ✓" : ""}</option>
+            <option value="large">large (~30MB){installedVariant === "large" ? " ✓" : ""}</option>
           </select>
-          {#if installedVariants.has(modelVariant)}
+          {#if installedVariant === modelVariant}
             <button type="button" onclick={applyModel}>应用</button>
           {:else}
             <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
@@ -683,13 +689,18 @@
                 <p>{_t("storage.directoryTreeDesc")}</p>
               </div>
             </div>
-            <pre>storage/
-├─ image/
-│  └─ previews/
-├─ files/
+            <pre>data/
+├─ conf/                           ← 配置文件
+│  ├─ conf.json                    ← 常规设置
+│  └─ keyboard.json                ← 快捷键
+├─ models/                         ← OCR 模型
+│  └─ ppocr/
+├─ image/                          ← 图片原图
+│  └─ previews/                    ← 缩略图
+├─ files/                          ← 文件副本
 └─ database/
-   ├─ clipboard.sqlite3
-   └─ search-index/</pre>
+   ├─ clipboard.sqlite3            ← 剪贴板数据库
+   └─ search-index/                ← 全文搜索索引</pre>
           </section>
 
           <section class="setting-card">
@@ -1228,7 +1239,7 @@
     color: #999;
     background: #181818;
     font:
-      9.5px/1.55 "Cascadia Code",
+      11px/1.55 "Cascadia Code",
       "SFMono-Regular",
       Consolas,
       monospace;
