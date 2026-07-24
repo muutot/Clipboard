@@ -44,7 +44,19 @@ export async function persistFavorite(id: string, isFavorite: boolean): Promise<
 export async function persistDelete(id: string): Promise<boolean | null> {
   if (!isTauriRuntime()) return null;
 
+  return invoke<boolean>("soft_delete_clipboard_item", { id });
+}
+
+export async function persistHardDelete(id: string): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
   return invoke<boolean>("delete_clipboard_item", { id });
+}
+
+export async function persistRestore(id: string): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("restore_clipboard_item", { id });
 }
 
 export async function persistBatchFavorite(
