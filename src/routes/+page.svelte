@@ -11,6 +11,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
     loadClipboardHistory,
     persistDelete,
+    persistHardDelete,
+    persistRestore,
     persistFavorite,
     persistBatchFavorite,
     persistBatchDelete,
@@ -43,6 +45,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     { id: "image" as ClipboardFilter, label: _t("filter.image"), icon: "image" as IconName },
     { id: "file" as ClipboardFilter, label: _t("filter.file"), icon: "file" as IconName },
     { id: "favorite" as ClipboardFilter, label: _t("filter.favorite"), icon: "star" as IconName },
+    ...($generalSettings.useRecycleBin ? [{ id: "deleted" as ClipboardFilter, label: _t("filter.deleted"), icon: "trash" as IconName }] : []),
   ]);
 
   const dateFilterOptions = $derived([
@@ -144,9 +147,11 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     const effectiveDateRange = dateRange ?? dateRangeFromNl;
 
     return candidates.filter((item) => {
+      const isDeleted = !!item.deleted;
       const matchesFilter =
-        activeFilter === "all" ||
-        (activeFilter === "favorite" ? item.favorite : item.kind === activeFilter);
+        activeFilter === "all" ? !isDeleted :
+        activeFilter === "deleted" ? isDeleted :
+        activeFilter === "favorite" ? item.favorite : item.kind === activeFilter;
 
       if (!matchesFilter) return false;
 
@@ -526,14 +531,14 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   }
 
   function deleteItem(id: string) {
-    const deleted = filteredItems.find((item) => item.id === id);
-    if (!deleted) return;
+    const item = items.find((i) => i.id === id);
+    if (item?.deleted) { hardDeleteItem(id); return; }
+    if (!$generalSettings.useRecycleBin) { hardDeleteItem(id); return; }
 
-    const historyIndex = items.findIndex((item) => item.id === id);
-    const searchIndex = indexedItems?.findIndex((item) => item.id === id) ?? -1;
-    items = items.filter((item) => item.id !== id);
+    // Soft delete: mark as deleted, don't remove from list
+    items = items.map((item) => item.id === id ? { ...item, deleted: true } : item);
     if (indexedItems) {
-      indexedItems = indexedItems.filter((item) => item.id !== id);
+      indexedItems = indexedItems.map((item) => item.id === id ? { ...item, deleted: true } : item);
     }
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
@@ -544,19 +549,25 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        if (historyIndex >= 0) {
-          items = [...items.slice(0, historyIndex), deleted, ...items.slice(historyIndex)];
-        }
-        if (indexedItems && searchIndex >= 0) {
-          indexedItems = [
-            ...indexedItems.slice(0, searchIndex),
-            deleted,
-            ...indexedItems.slice(searchIndex),
-          ];
-        }
-        statusMessage = _t("app.deleteFailed");
+        items = items.map((item) => item.id === id ? { ...item, deleted: false } : item);
         showToast(_t("app.deleteFailed"), "error");
       });
+  }
+
+  function hardDeleteItem(id: string) {
+    items = items.filter((item) => item.id !== id);
+    if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
+    selectedIds = new Set([...selectedIds].filter((x) => x !== id));
+    void persistHardDelete(id).catch(() => {});
+  }
+
+  function restoreItem(id: string) {
+    items = items.map((item) => item.id === id ? { ...item, deleted: false } : item);
+    if (indexedItems) {
+      indexedItems = indexedItems.map((item) => item.id === id ? { ...item, deleted: false } : item);
+    }
+    void persistRestore(id).catch(() => {});
+    showToast(_t("toast.restoreSuccess") || "已恢复", "success");
   }
 
   function moveToTop(id: string) {
@@ -893,17 +904,20 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
       if (event.key === "c") {
         event.preventDefault();
-        copyItem(selectedId);
+        if (selectedIds.size > 0) bulkCopy();
+        else copyItem(selectedId);
         return;
       }
       if (event.key === "d") {
         event.preventDefault();
-        if (!item.favorite) deleteItem(selectedId);
+        if (selectedIds.size > 0) bulkDelete();
+        else if (!item.favorite) deleteItem(selectedId);
         return;
       }
       if (event.key === "f") {
         event.preventDefault();
-        toggleFavorite(selectedId);
+        if (selectedIds.size > 0) bulkFavorite();
+        else toggleFavorite(selectedId);
         return;
       }
       if (event.key === "e") {
@@ -1197,9 +1211,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                   {item}
                   index={filteredItems.indexOf(item)}
                   now={currentTime}
-                  selected={item.id === selectedId}
+                  selected={selectedIds.has(item.id) || item.id === selectedId}
                   checked={selectedIds.has(item.id)}
-                  showCheckbox={selectedIds.size > 0}
+showCheckbox={false}
+                  hideActions={selectedIds.size > 0}
                   compact={compactMode}
                   compactPaddingTop={compactPaddingTop}
                   compactPaddingBottom={compactPaddingBottom}
@@ -1216,6 +1231,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                   onsaveedit={saveEdit}
                   oncanceledit={cancelEdit}
                   onplainpaste={plainPaste}
+                  onrestore={restoreItem}
 
                 />
               </div>
@@ -1224,9 +1240,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                 {item}
                 index={filteredItems.indexOf(item)}
                 now={currentTime}
-                selected={item.id === selectedId}
+                selected={selectedIds.has(item.id) || item.id === selectedId}
                 checked={selectedIds.has(item.id)}
-                showCheckbox={selectedIds.size > 0}
+                showCheckbox={false}
+                hideActions={selectedIds.size > 0}
                 compact={compactMode}
                 compactPaddingTop={compactPaddingTop}
                 compactPaddingBottom={compactPaddingBottom}
@@ -1243,6 +1260,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
                 onsaveedit={saveEdit}
                 oncanceledit={cancelEdit}
                 onplainpaste={plainPaste}
+                  onrestore={restoreItem}
               /> 
             {/if}
           {/each}

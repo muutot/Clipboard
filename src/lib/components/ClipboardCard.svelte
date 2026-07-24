@@ -46,6 +46,7 @@
     compactCardGap?: number;
     compactCardBorderRadius?: number;
     compactCardHeight?: number;
+    hideActions?: boolean;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
@@ -56,6 +57,7 @@
     onsaveedit: (id: string, content: string) => void;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
+    onrestore?: (id: string) => void;
   }
 
   let {
@@ -71,6 +73,7 @@
     compactCardGap = 5,
     compactCardBorderRadius = 10,
     compactCardHeight = 0,
+    hideActions = false,
     onselect,
     ontoggleSelect,
     ontoggleFavorite,
@@ -81,6 +84,7 @@
     onsaveedit,
     oncanceledit,
     onplainpaste,
+    onrestore,
   }: Props = $props();
 
   let editing = $state(false);
@@ -317,7 +321,7 @@
       {#if item.detailLabel}<span>{item.detailLabel}</span>{/if}
       <span>{formatRelativeTime(item.createdAt, now)}</span>
       {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
-      <div class="actions" aria-label={_t("card.itemActions")}>
+      <div class="actions" aria-label={_t("card.itemActions")} class:actions-hidden={hideActions}>
         {#if contentActions?.hasUrl}
           <button
             type="button"
@@ -425,6 +429,17 @@
             ontoggleFavorite(item.id);
           }}><AppIcon name="star" size={16} filled={item.favorite} /></button
         >
+        {#if item.deleted && onrestore}
+          <button
+            type="button"
+            title="恢复"
+            aria-label="恢复"
+            onclick={(event) => {
+              event.stopPropagation();
+              onrestore(item.id);
+            }}><AppIcon name="edit" size={16} /></button
+          >
+        {/if}
         {#if !item.favorite}
           <button
             type="button"
@@ -713,6 +728,11 @@
     opacity: 0;
     pointer-events: auto;
     transition: opacity 120ms ease;
+  }
+
+  .actions-hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   .clip-card:hover .actions,
