@@ -677,84 +677,56 @@
             </div>
           </section>
 
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
-              <div>
-                <strong>{_t("captureSettings.retentionPeriod")}</strong>
-                <p>{_t("captureSettings.retentionPeriodDesc")}</p>
-              </div>
-            </div>
-            <div class="number-input-row">
-              <input
-                type="number"
-                bind:value={retentionPeriodDays}
-                min="1"
-                max="365"
-                onchange={saveHistoryConfig}
-              />
-              <span class="number-suffix">{_t("captureSettings.days")}</span>
-            </div>
+          <section class="setting-card setting-card-row">
+            <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
+            <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
+            <input
+              type="number"
+              bind:value={retentionPeriodDays}
+              min="1"
+              max="365"
+              onchange={saveHistoryConfig}
+            />
+            <span class="number-suffix">{_t("captureSettings.days")}</span>
           </section>
 
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <div>
-                <strong>{_t("captureSettings.maxItemCount")}</strong>
-                <p>{_t("captureSettings.maxItemCountDesc")}</p>
-              </div>
-            </div>
-            <div class="number-input-row">
-              <input
-                type="number"
-                bind:value={maxItemCount}
-                min="100"
-                step="100"
-                onchange={saveHistoryConfig}
-              />
-              <span class="number-suffix">条</span>
-            </div>
+          <section class="setting-card setting-card-row">
+            <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+            <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
+            <input
+              type="number"
+              bind:value={maxItemCount}
+              min="100"
+              step="100"
+              onchange={saveHistoryConfig}
+            />
+            <span class="number-suffix">条</span>
           </section>
 
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-              <div>
-                <strong>{_t("captureSettings.recycleBinDays")}</strong>
-                <p>{_t("captureSettings.recycleBinDaysDesc")}</p>
-              </div>
-            </div>
-            <div class="number-input-row">
-              <input
-                type="number"
-                bind:value={recycleBinDays}
-                min="0"
-                max="365"
-                onchange={saveHistoryConfig}
-              />
-              <span class="number-suffix">{_t("captureSettings.days")}</span>
-            </div>
+          <section class="setting-card setting-card-row">
+            <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+            <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
+            <input
+              type="number"
+              bind:value={recycleBinDays}
+              min="0"
+              max="365"
+              onchange={saveHistoryConfig}
+            />
+            <span class="number-suffix">{_t("captureSettings.days")}</span>
           </section>
 
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-              <div>
-                <strong>{_t("captureSettings.maxFileCopySize")}</strong>
-                <p>{_t("captureSettings.maxFileCopySizeDesc")}</p>
-              </div>
-            </div>
-            <div class="number-input-row">
-              <input
-                type="number"
-                bind:value={maxFileCopySize}
-                min="1024"
-                step="1048576"
-                onchange={saveMaxFileCopySize}
-              />
-              <span class="number-suffix">{_t("captureSettings.bytes")}</span>
-            </div>
+          <section class="setting-card setting-card-row">
+            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+            <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
+            <input
+              type="number"
+              bind:value={maxFileCopySize}
+              min="1024"
+              step="1048576"
+              onchange={saveMaxFileCopySize}
+            />
+            <span class="number-suffix">{_t("captureSettings.bytes")}</span>
           </section>
 
           <div class="storage-summary">
@@ -1387,5 +1359,36 @@
     color: #666;
     font-size: 11.5px;
     text-align: center;
+  }
+
+  .setting-card-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 13px;
+  }
+
+  .setting-card-row .setting-icon {
+    flex-shrink: 0;
+  }
+
+  .setting-label {
+    flex: 1;
+    min-width: 0;
+    color: #dedede;
+    font-size: 11.5px;
+    font-weight: 560;
+  }
+
+  .setting-card-row input {
+    width: 100px;
+    flex-shrink: 0;
+    padding: 6px 8px;
+  }
+
+  .setting-card-row .number-suffix {
+    color: #888;
+    font-size: 11px;
+    flex-shrink: 0;
   }
 </style>
