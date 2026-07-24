@@ -1317,7 +1317,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let startup_timer = &mut StartupTimer::start();
-            let project_directory = app.path().app_data_dir()?;
+            let project_directory = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_default());
             let config = ConfigStore::load(&project_directory)?;
             let keyboard = KeyboardManager::load(&project_directory)?;
             let paths = StoragePaths::initialize_with_data_directory(
