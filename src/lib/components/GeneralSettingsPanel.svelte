@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
@@ -421,7 +421,7 @@
 
   .value-label {
     color: #aaa;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -439,7 +439,7 @@
     color: #999;
     background: #1a1a1a;
     font: inherit;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
   }
@@ -558,7 +558,7 @@
     color: #d8d8d8;
     background: #1a1a1a;
     font: inherit;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     flex-shrink: 0;
     outline: none;
@@ -585,7 +585,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
 
   .settings-feedback.success {
@@ -598,7 +598,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
 

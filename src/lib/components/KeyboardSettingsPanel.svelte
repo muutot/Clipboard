@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -152,13 +152,6 @@
       </section>
     {/each}
 
-    <section class="shortcut-help">
-      <strong>{_t("keyboard.formatHint")}</strong>
-      <span>{_t("keyboard.chordFormat")}</span>
-      <span>{_t("keyboard.doubleFormat")}</span>
-      <span>{_t("keyboard.noDuplicate")}</span>
-    </section>
-
     <section class="shortcut-reference">
       <strong>当前快捷键参考</strong>
       <div class="ref-grid">
@@ -195,7 +188,7 @@
 
   .eyebrow {
     color: #777;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -213,7 +206,7 @@
   }
   header p {
     max-width: 430px;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
 
   .close-button {
@@ -279,7 +272,7 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
   .setting-heading p {
@@ -296,13 +289,13 @@
     border: 1px solid #393939;
     border-radius: 999px;
     color: #999;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
   label {
     display: block;
     margin: 12px 0 6px;
     color: #8a8a8a;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
   input {
     width: 100%;
@@ -334,7 +327,7 @@
     color: #1c1c1c;
     background: #e3e3e3;
     font: inherit;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
   button {
     cursor: pointer;
@@ -343,24 +336,12 @@
     cursor: wait;
     opacity: 0.55;
   }
-
-  .shortcut-help {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px 12px;
-    padding: 4px 3px;
-    color: #686868;
--size: var(--font-size-tiny, 10px);
-  }
-  .shortcut-help strong {
-    color: #898989;
-  }
   .settings-state {
     display: grid;
     flex: 1;
     place-items: center;
     color: #777;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
   }
   .settings-feedback {
     position: absolute;
@@ -372,7 +353,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
   .settings-feedback.success {
     border-color: #35513f;
@@ -384,7 +365,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
 
@@ -399,7 +380,7 @@
     display: block;
     margin-bottom: 10px;
     color: #dedede;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
 
@@ -431,7 +412,7 @@
 
   .ref-row span {
     color: #888;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     margin-left: 6px;
   }
 
@@ -445,7 +426,7 @@
     color: #999;
     background: #222;
     font: inherit;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;

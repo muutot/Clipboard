@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
@@ -217,7 +217,7 @@
 
   .eyebrow {
     color: #777;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -233,7 +233,7 @@
     max-width: 430px;
     margin: 0;
     color: #777;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     line-height: 1.5;
   }
 
@@ -310,7 +310,7 @@
   .setting-heading strong {
     display: block;
     color: #dedede;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     font-weight: 560;
   }
 
@@ -331,7 +331,7 @@
 
   .value-label {
     color: #aaa;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -440,7 +440,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
 </style>

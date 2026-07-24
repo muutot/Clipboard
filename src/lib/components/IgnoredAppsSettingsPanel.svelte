@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import {
@@ -268,7 +268,7 @@
   }
   .eyebrow {
     color: #777;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -282,7 +282,7 @@
     max-width: 570px;
     margin: 0;
     color: #777;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     line-height: 1.5;
   }
   .close-button {
@@ -349,7 +349,7 @@
     justify-content: space-between;
     min-height: 25px;
     color: #ddd;
--size: var(--font-size-secondary, 11px);
+    font-size: var(--font-size-secondary, 11px);
   }
   .column-heading strong span {
     margin-left: 4px;
@@ -357,7 +357,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 999px;
     color: #898989;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     font-weight: 500;
   }
   .column-heading button,
@@ -368,7 +368,7 @@
     border: 0;
     color: #888;
     background: transparent;
--size: var(--font-size-base, 14px);
+    font-size: var(--font-size-base, 14px);
   }
   .search-field {
     display: flex;
@@ -407,7 +407,7 @@
     color: #c8c8c8;
     background: #303030;
     font: inherit;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
   .application-list {
     flex: 1;
@@ -427,7 +427,7 @@
     border-radius: 7px;
     color: #d8d8d8;
     background: transparent;
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     cursor: pointer;
   }
   .application-row + .application-row {
@@ -461,7 +461,7 @@
     border: 0;
     color: #666;
     background: transparent;
--size: var(--font-size-base, 14px);
+    font-size: var(--font-size-base, 14px);
   }
   .app-avatar {
     display: inline-grid;
@@ -473,7 +473,7 @@
     border-radius: 7px;
     color: #ddd;
     background: linear-gradient(145deg, #3d4656, #252a32);
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
     font-weight: 700;
   }
   .app-avatar.locked {
@@ -498,7 +498,7 @@
     border-radius: 50%;
     color: #999;
     background: transparent;
--size: var(--font-size-base, 14px);
+    font-size: var(--font-size-base, 14px);
     transition: background 100ms ease, color 100ms ease;
   }
 
@@ -543,7 +543,7 @@
     border-radius: 7px;
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
--size: var(--font-size-tiny, 10px);
+    font-size: var(--font-size-tiny, 10px);
   }
   .settings-feedback.success {
     border-color: #35513f;
