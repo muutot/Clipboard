@@ -792,19 +792,19 @@
               <div class="setting-heading">
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                 <div>
-                  <strong>Performance</strong>
-                  <p>Startup {perfMetrics.startup.totalStartupMs}ms &bull; DB {perfMetrics.startup.dbOpenMs}ms &bull; Search init {perfMetrics.startup.searchInitMs}ms</p>
+                  <strong>性能</strong>
+                  <p>启动 {perfMetrics.startup.totalStartupMs}ms · DB {perfMetrics.startup.dbOpenMs}ms · 搜索 {perfMetrics.startup.searchInitMs}ms</p>
                 </div>
               </div>
               {#if perfMetrics.searchLatency.searchesRecorded > 0}
                 <div class="perf-grid">
                   <div class="perf-item">
                     <strong>{perfMetrics.searchLatency.searchesRecorded}</strong>
-                    <span>searches</span>
+                    <span>搜索次数</span>
                   </div>
                   <div class="perf-item">
                     <strong>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</strong>
-                    <span>avg latency</span>
+                    <span>平均延迟</span>
                   </div>
                   <div class="perf-item">
                     <strong>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</strong>
@@ -817,7 +817,7 @@
                 </div>
               {/if}
               <div class="perf-mem">
-                <span>Uptime {perfMetrics.memory.uptimeSeconds}s &bull; Peak memory {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
+                <span>运行 {perfMetrics.memory.uptimeSeconds}s · 峰值内存 {Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span>
               </div>
             </section>
           {/if}
