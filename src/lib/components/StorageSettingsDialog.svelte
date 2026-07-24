@@ -4,6 +4,7 @@
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
+  import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import {
@@ -48,7 +49,7 @@
     }
   });
   let restartNeeded = $state(false);
-  let activeSection = $state<"general" | "compact" | "capture" | "storage" | "keyboard" | "ocr">("storage");
+  let activeSection = $state<"general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr">("storage");
 
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
@@ -450,6 +451,14 @@
         <span>{_t("storage.compactTab")}</span>
       </button>
       <button
+        class:active={activeSection === "font"}
+        type="button"
+        onclick={() => (activeSection = "font")}
+      >
+        <AppIcon name="type" size={16} />
+        <span>字体</span>
+      </button>
+      <button
         class:active={activeSection === "capture"}
         type="button"
         onclick={() => (activeSection = "capture")}
@@ -494,6 +503,8 @@
       <GeneralSettingsPanel {onclose} />
     {:else if activeSection === "compact"}
       <CompactSettingsPanel {onclose} />
+    {:else if activeSection === "font"}
+      <FontSizeSettingsPanel {onclose} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel configPath={status?.configPath} iconsDir={status?.iconsDir} {onclose} />
     {:else if activeSection === "keyboard"}

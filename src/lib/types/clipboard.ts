@@ -37,13 +37,16 @@ export interface ClipboardItem {
 
 export type ThemeMode = "dark" | "light";
 
-export type FontSize = number;
+export interface FontSizeSettings {
+  base: number;
+  secondary: number;
+}
 
 export type Language = "zh-CN" | "en";
 
 export interface GeneralSettings {
   language: Language;
-  fontSize: FontSize;
+  fontSizes: FontSizeSettings;
   windowTransparency: number;
   compactMode: boolean;
   compactPaddingTop: number;

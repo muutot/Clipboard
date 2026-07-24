@@ -335,18 +335,25 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
   ```
   CSS: `.toggle-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; }`
 
-- **Slider card** — label+value on same row (`heading-inline`), slider below, NO wrapper div around `<input>`:
+- **Slider card** — label+value on same row (`heading-inline`), slider below, NO wrapper div around `<input>`. If there is a description, nest it inside `<div>` with `<strong>` (description below strong, NOT aligned with icon):
   ```svelte
   <section class="setting-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="..." size={17} /></span>
       <div class="heading-inline">
+        <!-- Without description: -->
         <strong>Label</strong>
+        <!-- With description: -->
+        <div>
+          <strong>Label</strong>
+          <p>Description</p>
+        </div>
         <span class="value-label">{value}px</span>
       </div>
     </div>
-    <!-- optional: <p class="setting-desc">Description</p> -->
     <input type="range" class="transparency-slider" oninput={handler} />
+  </section>
+  ```
   </section>
   ```
   CSS for heading-inline: `display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 0; gap: 8px;`

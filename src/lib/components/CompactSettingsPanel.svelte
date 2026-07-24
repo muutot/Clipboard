@@ -79,171 +79,126 @@
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.paddingTop")}</strong>
+          <div>
+            <strong>{_t("compact.paddingTop")}</strong>
+            <p>{_t("compact.paddingTopDescription")}</p>
+          </div>
           <span class="value-label">{s.compactPaddingTop}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.paddingTopDescription")}</p>
-      <input
-        type="range"
-        min="0"
-        max="20"
-        value={s.compactPaddingTop}
-        oninput={sliderHandler("compactPaddingTop")}
-        class="transparency-slider"
-      />
+      <input type="range" min="0" max="20" value={s.compactPaddingTop} oninput={sliderHandler("compactPaddingTop")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.paddingBottom")}</strong>
+          <div>
+            <strong>{_t("compact.paddingBottom")}</strong>
+            <p>{_t("compact.paddingBottomDescription")}</p>
+          </div>
           <span class="value-label">{s.compactPaddingBottom}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.paddingBottomDescription")}</p>
-      <input
-        type="range"
-        min="0"
-        max="20"
-        value={s.compactPaddingBottom}
-        oninput={sliderHandler("compactPaddingBottom")}
-        class="transparency-slider"
-      />
+      <input type="range" min="0" max="20" value={s.compactPaddingBottom} oninput={sliderHandler("compactPaddingBottom")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="ruler" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.cardGap")}</strong>
+          <div>
+            <strong>{_t("compact.cardGap")}</strong>
+            <p>{_t("compact.cardGapDescription")}</p>
+          </div>
           <span class="value-label">{s.compactCardGap}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.cardGapDescription")}</p>
-      <input
-        type="range"
-        min="0"
-        max="20"
-        value={s.compactCardGap}
-        oninput={sliderHandler("compactCardGap")}
-        class="transparency-slider"
-      />
+      <input type="range" min="0" max="20" value={s.compactCardGap} oninput={sliderHandler("compactCardGap")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="text" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.shortTextHeight")}</strong>
+          <div>
+            <strong>{_t("compact.shortTextHeight")}</strong>
+            <p>{_t("compact.shortTextHeightDescription")}</p>
+          </div>
           <span class="value-label">{s.compactTextHeight}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.shortTextHeightDescription")}</p>
-      <input
-        type="range"
-        min="40"
-        max="90"
-        value={s.compactTextHeight}
-        oninput={sliderHandler("compactTextHeight")}
-        class="transparency-slider"
-      />
+      <input type="range" min="40" max="90" value={s.compactTextHeight} oninput={sliderHandler("compactTextHeight")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="text" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.tallTextHeight")}</strong>
+          <div>
+            <strong>{_t("compact.tallTextHeight")}</strong>
+            <p>{_t("compact.tallTextHeightDescription")}</p>
+          </div>
           <span class="value-label">{s.compactTallTextHeight}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.tallTextHeightDescription")}</p>
-      <input
-        type="range"
-        min="50"
-        max="100"
-        value={s.compactTallTextHeight}
-        oninput={sliderHandler("compactTallTextHeight")}
-        class="transparency-slider"
-      />
+      <input type="range" min="50" max="100" value={s.compactTallTextHeight} oninput={sliderHandler("compactTallTextHeight")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="image" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.imageHeight")}</strong>
+          <div>
+            <strong>{_t("compact.imageHeight")}</strong>
+            <p>{_t("compact.imageHeightDescription")}</p>
+          </div>
           <span class="value-label">{s.compactImageHeight}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.imageHeightDescription")}</p>
-      <input
-        type="range"
-        min="80"
-        max="200"
-        value={s.compactImageHeight}
-        oninput={sliderHandler("compactImageHeight")}
-        class="transparency-slider"
-      />
+      <input type="range" min="80" max="200" value={s.compactImageHeight} oninput={sliderHandler("compactImageHeight")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="search" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.searchHeight")}</strong>
+          <div>
+            <strong>{_t("compact.searchHeight")}</strong>
+            <p>{_t("compact.searchHeightDescription")}</p>
+          </div>
           <span class="value-label">{s.compactSearchHeight}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.searchHeightDescription")}</p>
-      <input
-        type="range"
-        min="28"
-        max="56"
-        value={s.compactSearchHeight}
-        oninput={sliderHandler("compactSearchHeight")}
-        class="transparency-slider"
-      />
+      <input type="range" min="28" max="56" value={s.compactSearchHeight} oninput={sliderHandler("compactSearchHeight")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="type" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.searchFontSize")}</strong>
+          <div>
+            <strong>{_t("compact.searchFontSize")}</strong>
+            <p>{_t("compact.searchFontSizeDescription")}</p>
+          </div>
           <span class="value-label">{s.compactSearchFontSize}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.searchFontSizeDescription")}</p>
-      <input
-        type="range"
-        min="10"
-        max="24"
-        value={s.compactSearchFontSize}
-        oninput={sliderHandler("compactSearchFontSize")}
-        class="transparency-slider"
-      />
+      <input type="range" min="10" max="24" value={s.compactSearchFontSize} oninput={sliderHandler("compactSearchFontSize")} class="transparency-slider" />
     </section>
 
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
         <div class="heading-inline">
-          <strong>{_t("compact.cardBorderRadius")}</strong>
+          <div>
+            <strong>{_t("compact.cardBorderRadius")}</strong>
+            <p>{_t("compact.cardBorderRadiusDescription")}</p>
+          </div>
           <span class="value-label">{s.compactCardBorderRadius}px</span>
         </div>
       </div>
-      <p class="setting-desc">{_t("compact.cardBorderRadiusDescription")}</p>
-      <input
-        type="range"
-        min="0"
-        max="20"
-        value={s.compactCardBorderRadius}
-        oninput={sliderHandler("compactCardBorderRadius")}
-        class="transparency-slider"
-      />
+      <input type="range" min="0" max="20" value={s.compactCardBorderRadius} oninput={sliderHandler("compactCardBorderRadius")} class="transparency-slider" />
     </section>
   {/if}
 
@@ -359,8 +314,7 @@
     font-weight: 560;
   }
 
-  .setting-heading p,
-  .setting-desc {
+  .setting-heading p {
     margin: 2px 0 0;
     color: #777;
     font-size: 9.8px;

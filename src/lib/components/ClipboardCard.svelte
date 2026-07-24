@@ -583,7 +583,7 @@
 
   .text-preview {
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--font-size-base, 13px);
     line-height: 1.55;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -593,7 +593,7 @@
     margin-top: 4px;
     overflow: hidden;
     color: #8e8e8e;
-    font-size: 11.5px;
+    font-size: var(--font-size-secondary, 11.5px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -603,7 +603,7 @@
     align-items: center;
     gap: 8px;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--font-size-base, 13px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -653,7 +653,7 @@
     min-width: 0;
     margin-top: 10px;
     color: #8c8c8c;
-    font-size: 11.5px;
+    font-size: var(--font-size-secondary, 11.5px);
     white-space: nowrap;
     pointer-events: none;
   }
