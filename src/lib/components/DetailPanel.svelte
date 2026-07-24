@@ -37,11 +37,73 @@
   let editing = $state(false);
   let editContent = $state("");
   let imageFullscreen = $state(false);
+  let zoom = $state(1);
+  let panX = $state(0);
+  let panY = $state(0);
+  let isDragging = $state(false);
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let panStartX = 0;
+  let panStartY = 0;
+
+  function openImageFullscreen() {
+    imageFullscreen = true;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function closeImageFullscreen() {
+    imageFullscreen = false;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function onWheel(e: WheelEvent) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    zoom = Math.min(20, Math.max(0.1, zoom * delta));
+  }
+
+  function onMouseDown(e: MouseEvent) {
+    if (e.button !== 0) return;
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    panStartX = panX;
+    panStartY = panY;
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isDragging) return;
+    panX = panStartX + (e.clientX - dragStartX);
+    panY = panStartY + (e.clientY - dragStartY);
+  }
+
+  function onMouseUp() {
+    isDragging = false;
+  }
+
+  function onDblClick() {
+    if (zoom !== 1 || panX !== 0 || panY !== 0) {
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+    } else {
+      zoom = 2;
+    }
+  }
 
   $effect(() => {
-    imageFullscreen = false;
-    activeTab = "preview";
-    editing = false;
+    if (item) {
+      imageFullscreen = false;
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+      activeTab = "preview";
+      editing = false;
+    }
   });
 
   $effect(() => {
@@ -120,7 +182,7 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (item && event.key === "Escape") {
-      if (imageFullscreen) { imageFullscreen = false; return; }
+      if (imageFullscreen) { closeImageFullscreen(); return; }
       if (editing) { editing = false; return; }
       event.preventDefault();
       event.stopPropagation();
@@ -139,9 +201,9 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if item}
-  <div class="detail-backdrop" class:fullscreen-backdrop={imageFullscreen} onclick={imageFullscreen ? () => (imageFullscreen = false) : onclose} aria-hidden="true"></div>
-  <div class="detail-panel" class:fullscreen={imageFullscreen} role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
-    <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
+  <div class="detail-backdrop" onclick={onclose} aria-hidden="true"></div>
+  <div class="detail-panel" role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
+    <div class="detail-header" data-tauri-drag-region>
       <button class="back-btn" type="button" onclick={onclose} aria-label={_t("detail.back")}>
         <AppIcon name="chevron-left" size={18} strokeWidth={2} />
       </button>
@@ -190,6 +252,9 @@
                   src={assetUrl(item.previewPath || item.resourcePath)}
                   alt={item.preview || item.title}
                 />
+                <button type="button" class="image-fullscreen-btn" onclick={openImageFullscreen} aria-label="全屏预览">
+                  <AppIcon name="maximize" size={16} strokeWidth={2} />
+                </button>
               {:else}
                 <div class="image-placeholder">
                   <AppIcon name="image" size={48} strokeWidth={1.5} />
@@ -380,6 +445,32 @@
       {/if}
     </div>
   </div>
+
+  {#if imageFullscreen}
+    <div
+      class="image-viewer-overlay"
+      onwheel={onWheel}
+      onmousedown={onMouseDown}
+      onmousemove={onMouseMove}
+      onmouseup={onMouseUp}
+      onmouseleave={onMouseUp}
+      ondblclick={onDblClick}
+      role="presentation"
+    >
+      <button type="button" class="viewer-close-btn" onclick={closeImageFullscreen} aria-label="关闭">
+        <AppIcon name="x" size={20} strokeWidth={2.5} />
+      </button>
+      <div class="viewer-zoom-hint">{Math.round(zoom * 100)}%</div>
+      <img
+        class="viewer-image"
+        class:dragging={isDragging}
+        src={assetUrl(item.previewPath || item.resourcePath)}
+        alt={item.preview || item.title}
+        draggable="false"
+        style="transform: translate({panX}px, {panY}px) scale({zoom})"
+      />
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -907,5 +998,114 @@
   .edit-actions button.edit-cancel:hover {
     color: #ccc;
     background: #2e2e2e;
+  }
+
+  .image-full-preview {
+    position: relative;
+  }
+
+  .image-fullscreen-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #ccc;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, background 150ms ease;
+  }
+
+  .image-full-preview:hover .image-fullscreen-btn {
+    opacity: 1;
+  }
+
+  .image-fullscreen-btn:hover {
+    color: #fff;
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  .image-viewer-overlay {
+    position: fixed;
+    z-index: 100;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.92);
+    cursor: grab;
+    user-select: none;
+    animation: viewer-fade-in 180ms ease-out;
+  }
+
+  .image-viewer-overlay:active {
+    cursor: grabbing;
+  }
+
+  @keyframes viewer-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .viewer-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    transform-origin: center center;
+    transition: transform 0.05s linear;
+    pointer-events: none;
+  }
+
+  .viewer-image.dragging {
+    transition: none;
+  }
+
+  .viewer-close-btn {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 101;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid #555;
+    border-radius: 8px;
+    color: #ddd;
+    background: rgba(30, 30, 30, 0.7);
+    backdrop-filter: blur(6px);
+    cursor: pointer;
+    transition: color 120ms ease, background 120ms ease;
+  }
+
+  .viewer-close-btn:hover {
+    color: #fff;
+    background: rgba(60, 60, 60, 0.8);
+  }
+
+  .viewer-zoom-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 101;
+    padding: 4px 14px;
+    border-radius: 6px;
+    color: #bbb;
+    background: rgba(30, 30, 30, 0.7);
+    backdrop-filter: blur(6px);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
   }
 </style>
