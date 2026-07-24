@@ -133,7 +133,7 @@
     margin: 0;
     padding: 8px 0;
     overflow-x: auto;
-    font: 13px/1.45 "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+    font: 13px/0.5 "Cascadia Code", Consolas, "SFMono-Regular", monospace;
     color: #d4d4d4;
   }
 
@@ -145,6 +145,7 @@
     display: block;
     padding-right: 16px;
     white-space: pre;
+    line-height: 0.5;
   }
 
   .line-number {
