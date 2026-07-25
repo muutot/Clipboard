@@ -143,6 +143,13 @@ export interface LocaleDefinition {
     saved: string;
     configNote: string;
     captureUnavailable: string;
+    pauseTitle: string;
+    pauseDescription: string;
+    pauseAction: string;
+    resumeAction: string;
+    paused: string;
+    resumed: string;
+    active: string;
   };
   actions: {
     close: string;

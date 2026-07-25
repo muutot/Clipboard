@@ -38,7 +38,8 @@
     | "mime"
     | "maximize"
     | "ruler"
-    | "scan";
+    | "scan"
+    | "pause";
 
   interface Props {
     name: IconName;
@@ -71,6 +72,9 @@
     <path d="M5 4h14" />
     <path d="M9 20h6" />
     <path d="M12 4v16" />
+  {:else if name === "pause"}
+    <path d="M8 5v14" />
+    <path d="M16 5v14" />
   {:else if name === "link"}
     <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
     <path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />
