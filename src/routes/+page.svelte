@@ -2191,6 +2191,7 @@
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     width: 100%;
+    min-width: 730px;
     height: 100vh;
     min-height: 480px;
     overflow: hidden;
