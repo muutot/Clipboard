@@ -55,24 +55,6 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
-  const filters = $derived([
-    { id: "all" as ClipboardFilter, label: _t("filter.all"), icon: "grid" as IconName },
-    { id: "text" as ClipboardFilter, label: _t("filter.text"), icon: "text" as IconName },
-    { id: "link" as ClipboardFilter, label: _t("filter.link"), icon: "link" as IconName },
-    { id: "image" as ClipboardFilter, label: _t("filter.image"), icon: "image" as IconName },
-    { id: "file" as ClipboardFilter, label: _t("filter.file"), icon: "file" as IconName },
-    { id: "favorite" as ClipboardFilter, label: _t("filter.favorite"), icon: "star" as IconName },
-    ...($generalSettings.useRecycleBin
-      ? [
-          {
-            id: "deleted" as ClipboardFilter,
-            label: _t("filter.deleted"),
-            icon: "trash" as IconName,
-          },
-        ]
-      : []),
-  ]);
-
   const dateFilterOptions = $derived([
     { id: "all" as const, label: _t("dateFilter.all") },
     { id: "today" as const, label: _t("dateFilter.today") },
@@ -126,6 +108,26 @@
 
   type MeasuredCardHeight = { height: number; signature: string };
   let measuredCardHeights = $state<Record<string, MeasuredCardHeight>>({});
+
+  const hasDeletedItems = $derived(items.some((item) => !!item.deleted));
+
+  const filters = $derived([
+    { id: "all" as ClipboardFilter, label: _t("filter.all"), icon: "grid" as IconName },
+    { id: "text" as ClipboardFilter, label: _t("filter.text"), icon: "text" as IconName },
+    { id: "link" as ClipboardFilter, label: _t("filter.link"), icon: "link" as IconName },
+    { id: "image" as ClipboardFilter, label: _t("filter.image"), icon: "image" as IconName },
+    { id: "file" as ClipboardFilter, label: _t("filter.file"), icon: "file" as IconName },
+    { id: "favorite" as ClipboardFilter, label: _t("filter.favorite"), icon: "star" as IconName },
+    ...($generalSettings.useRecycleBin && hasDeletedItems
+      ? [
+          {
+            id: "deleted" as ClipboardFilter,
+            label: _t("filter.deleted"),
+            icon: "trash" as IconName,
+          },
+        ]
+      : []),
+  ]);
 
   // --- Date range resolution ---
 
@@ -437,7 +439,7 @@
   });
 
   $effect(() => {
-    if (!$generalSettings.useRecycleBin && activeFilter === "deleted") {
+    if (activeFilter === "deleted" && (!$generalSettings.useRecycleBin || !hasDeletedItems)) {
       activeFilter = "all";
       selectedIds = new Set();
     }
@@ -476,6 +478,10 @@
         console.error("Unable to load clipboard history", error);
         statusMessage = _t("app.databaseLoadFailed");
       });
+
+    // Load one recycle-bin page during startup so the filter reflects the
+    // persisted desktop state even before the user opens the deleted view.
+    void loadDeletedHistoryPage();
 
     void listSourceApplications().then((apps) => {
       if (apps) sourceApps = apps;
@@ -770,7 +776,7 @@
     deletedHistoryOffset = 0;
     deletedHistoryLoaded = false;
     deletedHistoryHasMore = true;
-    if (activeFilter === "deleted") void loadDeletedHistoryPage();
+    void loadDeletedHistoryPage();
   }
 
   async function loadDeletedHistoryPage(): Promise<void> {
@@ -834,7 +840,7 @@
   }
 
   function setFilter(filter: ClipboardFilter) {
-    if (filter === "deleted" && !$generalSettings.useRecycleBin) return;
+    if (filter === "deleted" && (!$generalSettings.useRecycleBin || !hasDeletedItems)) return;
     activeFilter = filter;
     selectedIds = new Set();
     indexedItems = null;
