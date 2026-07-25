@@ -11,6 +11,7 @@
     loadClipboardHistory,
     loadDeletedClipboardHistory,
     persistDelete,
+    persistHardDelete,
     persistRestore,
     persistBatchRestore,
     persistPermanentDelete,
@@ -826,7 +827,7 @@
       return;
     }
     if (!$generalSettings.useRecycleBin) {
-      permanentlyDeleteItem(id);
+      hardDeleteItem(id);
       return;
     }
 
@@ -876,6 +877,35 @@
       })
       .catch((error) => {
         console.error("Unable to permanently delete clipboard item", error);
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        selectedIds = previousSelectedIds;
+        showToast(_t("app.deleteFailed"), "error");
+      });
+  }
+
+  // Direct deletion remains a separate backend path: the recycle-bin
+  // permanent-delete command intentionally accepts only already deleted
+  // rows, while this path handles active rows when the feature is disabled.
+  function hardDeleteItem(id: string) {
+    const target = items.find((item) => item.id === id);
+    if (!target) return;
+
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
+
+    items = items.filter((item) => item.id !== id);
+    if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
+    selectedIds = new Set([...selectedIds].filter((x) => x !== id));
+
+    void persistHardDelete(id)
+      .then((removed) => {
+        if (removed === false) throw new Error("record not found");
+        showToast(_t("toast.deleteSuccess"), "success");
+      })
+      .catch((error) => {
+        console.error("Unable to delete clipboard item", error);
         items = previousItems;
         indexedItems = previousIndexedItems;
         selectedIds = previousSelectedIds;
@@ -1271,10 +1301,11 @@
     const softIds = useRecycleBin
       ? selectedItems.filter((item) => !item.deleted).map((item) => item.id)
       : [];
-    const permanentIds = useRecycleBin
-      ? selectedItems.filter((item) => item.deleted).map((item) => item.id)
-      : selectedItems.map((item) => item.id);
-    const operationIds = new Set([...softIds, ...permanentIds]);
+    const permanentIds = selectedItems.filter((item) => item.deleted).map((item) => item.id);
+    const hardIds = useRecycleBin
+      ? []
+      : selectedItems.filter((item) => !item.deleted).map((item) => item.id);
+    const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
     const previousItems = items.map((entry) => ({ ...entry }));
@@ -1283,30 +1314,38 @@
     const previousDetailItem = detailItem;
 
     items = items
-      .filter((item) => !permanentIds.includes(item.id))
+      .filter((item) => !permanentIds.includes(item.id) && !hardIds.includes(item.id))
       .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
     if (indexedItems) {
       indexedItems = indexedItems
-        .filter((item) => !permanentIds.includes(item.id))
+        .filter((item) => !permanentIds.includes(item.id) && !hardIds.includes(item.id))
         .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
     }
     selectedIds = new Set();
-    if (detailItem && permanentIds.includes(detailItem.id)) detailItem = null;
+    if (
+      detailItem &&
+      (permanentIds.includes(detailItem.id) || hardIds.includes(detailItem.id))
+    ) {
+      detailItem = null;
+    }
 
     const operations: {
       ids: string[];
-      permanent: boolean;
+      mode: "soft" | "permanent" | "hard";
       run: () => Promise<boolean | null>;
     }[] = [];
     if (softIds.length > 0) {
-      operations.push({ ids: softIds, permanent: false, run: () => persistBatchDelete(softIds) });
+      operations.push({ ids: softIds, mode: "soft", run: () => persistBatchDelete(softIds) });
     }
     if (permanentIds.length > 0) {
       operations.push({
         ids: permanentIds,
-        permanent: true,
+        mode: "permanent",
         run: () => persistBatchPermanentDelete(permanentIds),
       });
+    }
+    for (const id of hardIds) {
+      operations.push({ ids: [id], mode: "hard", run: () => persistHardDelete(id) });
     }
 
     void Promise.all(
@@ -1316,7 +1355,11 @@
           return { ...operation, ok: result !== false };
         } catch (error) {
           console.error(
-            operation.permanent ? "Bulk permanent delete failed" : "Bulk delete failed",
+            operation.mode === "permanent"
+              ? "Bulk permanent delete failed"
+              : operation.mode === "hard"
+                ? "Bulk hard delete failed"
+                : "Bulk delete failed",
             error,
           );
           return { ...operation, ok: false };
@@ -1324,32 +1367,38 @@
       }),
     ).then((outcomes) => {
       const successfulSoft = new Set(
-        outcomes.filter((outcome) => outcome.ok && !outcome.permanent).flatMap((o) => o.ids),
+        outcomes.filter((outcome) => outcome.ok && outcome.mode === "soft").flatMap((o) => o.ids),
       );
       const successfulPermanent = new Set(
-        outcomes.filter((outcome) => outcome.ok && outcome.permanent).flatMap((o) => o.ids),
+        outcomes
+          .filter((outcome) => outcome.ok && outcome.mode === "permanent")
+          .flatMap((o) => o.ids),
+      );
+      const successfulHard = new Set(
+        outcomes.filter((outcome) => outcome.ok && outcome.mode === "hard").flatMap((o) => o.ids),
       );
       const failedIds = new Set(
         outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids),
       );
-      const succeededIds = new Set([...successfulSoft, ...successfulPermanent]);
+      const removedIds = new Set([...successfulPermanent, ...successfulHard]);
+      const succeededIds = new Set([...successfulSoft, ...removedIds]);
 
       // Rebuild from the snapshot so a partially failed mixed batch mirrors
       // exactly which backend transaction succeeded.
       items = previousItems
-        .filter((item) => !successfulPermanent.has(item.id))
+        .filter((item) => !removedIds.has(item.id))
         .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
       if (previousIndexedItems) {
         indexedItems = previousIndexedItems
-          .filter((item) => !successfulPermanent.has(item.id))
+          .filter((item) => !removedIds.has(item.id))
           .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
       } else {
         indexedItems = null;
       }
       selectedIds = new Set([...previousSelectedIds].filter((id) => !succeededIds.has(id)));
-      if (previousDetailItem && !successfulPermanent.has(previousDetailItem.id)) {
+      if (previousDetailItem && !removedIds.has(previousDetailItem.id)) {
         detailItem = previousDetailItem;
-      } else if (successfulPermanent.has(previousDetailItem?.id ?? "")) {
+      } else if (removedIds.has(previousDetailItem?.id ?? "")) {
         detailItem = null;
       }
 
