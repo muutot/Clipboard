@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use cli::{CliArgs, CliCommand};
+use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
     ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation,
@@ -1934,6 +1934,58 @@ fn run_cli_command(
     cli::run_cli_command(&args, database.inner())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalApiStatus {
+    running: bool,
+    port: u16,
+}
+
+#[tauri::command]
+fn start_local_api(
+    api: tauri::State<'_, Mutex<LocalApiServer>>,
+    paths: tauri::State<'_, StoragePaths>,
+    port: Option<u16>,
+) -> Result<LocalApiStatus, String> {
+    let database = Arc::new(Database::open(&paths.database).map_err(|error| error.to_string())?);
+    let mut api = api
+        .lock()
+        .map_err(|_| "local API server lock is poisoned".to_owned())?;
+    if let Some(port) = port {
+        api.set_port(port)?;
+    }
+    let bound_port = api.start_with_database(database)?;
+    Ok(LocalApiStatus {
+        running: true,
+        port: bound_port,
+    })
+}
+
+#[tauri::command]
+fn stop_local_api(api: tauri::State<'_, Mutex<LocalApiServer>>) -> Result<LocalApiStatus, String> {
+    let mut api = api
+        .lock()
+        .map_err(|_| "local API server lock is poisoned".to_owned())?;
+    api.stop()?;
+    Ok(LocalApiStatus {
+        running: false,
+        port: api.port,
+    })
+}
+
+#[tauri::command]
+fn get_local_api_status(
+    api: tauri::State<'_, Mutex<LocalApiServer>>,
+) -> Result<LocalApiStatus, String> {
+    let api = api
+        .lock()
+        .map_err(|_| "local API server lock is poisoned".to_owned())?;
+    Ok(LocalApiStatus {
+        running: api.is_running(),
+        port: api.port,
+    })
+}
+
 #[tauri::command]
 fn get_performance_metrics(
     performance_tracker: tauri::State<'_, PerformanceTracker>,
@@ -2421,6 +2473,7 @@ pub fn run() {
             app.manage(Mutex::new(clipboard_monitor));
             app.manage(Mutex::new(shortcut_manager));
             app.manage(ocr_worker);
+            app.manage(Mutex::new(LocalApiServer::new(0)));
 
             let _tray = SystemTray::create().ok();
 
@@ -2481,6 +2534,9 @@ pub fn run() {
             get_export_config,
             set_export_config,
             run_cli_command,
+            start_local_api,
+            stop_local_api,
+            get_local_api_status,
             get_clipboard_formats,
             get_ocr_status,
             get_ocr_config,

@@ -79,6 +79,14 @@ impl LocalApiServer {
         self.handle.is_some()
     }
 
+    pub fn set_port(&mut self, port: u16) -> Result<(), String> {
+        if self.is_running() {
+            return Err("local API server is already running".to_owned());
+        }
+        self.port = port;
+        Ok(())
+    }
+
     pub fn stop(&mut self) -> Result<(), String> {
         if let Some(sender) = self.stop_sender.take() {
             let _ = sender.send(());
