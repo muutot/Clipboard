@@ -93,9 +93,6 @@ struct StorageDirectoryUpdate {
 }
 
 /// Shared state for ignored applications list, synced between capture thread and Tauri commands.
-#[derive(Clone)]
-struct IgnoredAppsState(Arc<Mutex<Vec<String>>>);
-
 /// Capture policy shared by every clipboard ingestion path.
 ///
 /// The command handlers and background workers do not share a Tauri `State`
@@ -111,7 +108,7 @@ struct CaptureState {
 
 #[derive(Clone)]
 struct CapturePolicy {
-    sensitive_patterns: Arc<Vec<String>>,
+    sensitive_patterns: Arc<Vec<regex_lite::Regex>>,
     password_manager_apps: Arc<Vec<String>>,
 }
 
@@ -123,11 +120,22 @@ struct CaptureWorker {
 
 impl CaptureState {
     fn new(privacy: &PrivacyManager, ignored_apps: Vec<String>) -> Self {
+        let sensitive_patterns = privacy
+            .sensitive_patterns
+            .iter()
+            .filter_map(|pattern| match regex_lite::Regex::new(pattern) {
+                Ok(regex) => Some(regex),
+                Err(error) => {
+                    eprintln!("[privacy] ignoring invalid sensitive pattern {pattern:?}: {error}");
+                    None
+                }
+            })
+            .collect();
         Self {
             paused: Arc::new(AtomicBool::new(privacy.is_paused())),
             ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
             policy: Arc::new(CapturePolicy {
-                sensitive_patterns: Arc::new(privacy.sensitive_patterns.clone()),
+                sensitive_patterns: Arc::new(sensitive_patterns),
                 password_manager_apps: Arc::new(privacy.password_manager_apps.clone()),
             }),
             worker: Arc::new(Mutex::new(None)),
@@ -172,21 +180,31 @@ impl CaptureState {
 
     fn install_worker(&self, worker: CaptureWorker) {
         self.stop_worker();
-        if let Ok(mut slot) = self.worker.lock() {
-            *slot = Some(worker);
-        } else {
-            // If the state lock is poisoned, still stop the newly-created
-            // worker instead of leaking a detached thread.
-            let mut worker = worker;
+        let mut slot = self
+            .worker
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *slot = Some(worker);
+    }
+
+    fn stop_worker(&self) {
+        let worker = self
+            .worker
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(mut worker) = worker {
             worker.stop();
         }
     }
 
-    fn stop_worker(&self) {
-        let worker = self.worker.lock().ok().and_then(|mut slot| slot.take());
-        if let Some(mut worker) = worker {
-            worker.stop();
-        }
+    fn worker_running(&self) -> bool {
+        self.worker
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .and_then(|worker| worker.handle.as_ref())
+            .is_some_and(|handle| !handle.is_finished())
     }
 }
 
@@ -204,11 +222,9 @@ impl CapturePolicy {
         }
 
         text.is_some_and(|text| {
-            self.sensitive_patterns.iter().any(|pattern| {
-                regex_lite::Regex::new(pattern)
-                    .map(|regex| regex.is_match(text))
-                    .unwrap_or(false)
-            })
+            self.sensitive_patterns
+                .iter()
+                .any(|pattern| pattern.is_match(text))
         })
     }
 }
@@ -275,9 +291,7 @@ fn normalize_app_name(app: &str) -> String {
 }
 
 fn foreground_app_name(app: &platform::windows_clipboard::ForegroundApp) -> Option<String> {
-    if !app.name.trim().is_empty() {
-        Some(app.name.trim().to_owned())
-    } else if !app.exe_path.trim().is_empty() {
+    if !app.exe_path.trim().is_empty() {
         let leaf = app
             .exe_path
             .rsplit(['/', '\\'])
@@ -286,6 +300,8 @@ fn foreground_app_name(app: &platform::windows_clipboard::ForegroundApp) -> Opti
         Path::new(leaf)
             .file_stem()
             .map(|name| name.to_string_lossy().into_owned())
+    } else if !app.name.trim().is_empty() {
+        Some(app.name.trim().to_owned())
     } else {
         None
     }
@@ -296,6 +312,20 @@ fn stop_signal_requested(receiver: &mpsc::Receiver<()>) -> bool {
         receiver.try_recv(),
         Ok(()) | Err(mpsc::TryRecvError::Disconnected)
     )
+}
+
+fn wait_for_stop(
+    receiver: &mpsc::Receiver<()>,
+    stop_flag: &AtomicBool,
+    duration: Duration,
+) -> bool {
+    if stop_flag.load(Ordering::SeqCst) {
+        return true;
+    }
+    match receiver.recv_timeout(duration) {
+        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => true,
+        Err(mpsc::RecvTimeoutError::Timeout) => stop_flag.load(Ordering::SeqCst),
+    }
 }
 
 /// Shared state for self-trigger guard to prevent capturing app's own clipboard writes.
@@ -526,13 +556,35 @@ fn get_application_filter_settings(
 #[tauri::command]
 fn configure_ignored_applications(
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+    capture: tauri::State<'_, CaptureState>,
     applications: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    config
+    apply_ignored_applications(
+        config.inner(),
+        monitor.inner(),
+        capture.inner(),
+        applications,
+    )
+}
+
+fn apply_ignored_applications(
+    config: &Mutex<ConfigStore>,
+    monitor: &Mutex<ClipboardMonitor>,
+    capture: &CaptureState,
+    applications: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let mut monitor = monitor
+        .lock()
+        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
+    let normalized = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .set_ignored_applications(applications)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let normalized = capture.set_ignored_apps(normalized);
+    monitor.set_ignored_apps(normalized.clone());
+    Ok(normalized)
 }
 
 #[tauri::command]
@@ -1693,7 +1745,13 @@ fn start_clipboard_monitoring(
                                     eprintln!(
                                         "[clipboard-worker] too many consecutive errors, pausing"
                                     );
-                                    thread::sleep(Duration::from_secs(5));
+                                    if wait_for_stop(
+                                        &stop_receiver,
+                                        &stop_flag_for_thread,
+                                        Duration::from_secs(5),
+                                    ) {
+                                        break;
+                                    }
                                     consecutive_errors = 0;
                                 }
                             }
@@ -1740,7 +1798,7 @@ fn get_clipboard_monitor_status(
         .lock()
         .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
     Ok(ClipboardMonitorStatus {
-        running: monitor.running,
+        running: monitor.running && capture.worker_running(),
         ignored_applications: capture.ignored_apps(),
     })
 }
@@ -1754,20 +1812,12 @@ struct ClipboardMonitorStatus {
 
 #[tauri::command]
 fn set_clipboard_ignored_apps(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
-    ignored_state: tauri::State<'_, IgnoredAppsState>,
     capture: tauri::State<'_, CaptureState>,
     apps: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    let mut monitor = monitor
-        .lock()
-        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
-    let normalized = capture.set_ignored_apps(apps);
-    monitor.set_ignored_apps(normalized.clone());
-    if let Ok(mut shared) = ignored_state.0.lock() {
-        *shared = normalized.clone();
-    }
-    Ok(normalized)
+    apply_ignored_applications(config.inner(), monitor.inner(), capture.inner(), apps)
 }
 
 #[tauri::command]
@@ -2102,10 +2152,7 @@ pub fn run() {
             let storage_path = paths.storage.clone();
             let initial_ignored = config.ignored_applications().to_vec();
             let capture_state = CaptureState::new(&privacy_manager, initial_ignored.clone());
-            let ignored_apps = Arc::clone(&capture_state.ignored_apps);
-            let ignored_apps_managed = IgnoredAppsState(ignored_apps);
             app.manage(capture_state.clone());
-            app.manage(ignored_apps_managed);
 
             let self_trigger_guard = Arc::new(Mutex::new(content::hash::SelfTriggerGuard::new()));
             let self_trigger_guard_managed = SelfTriggerState(self_trigger_guard.clone());
@@ -2170,8 +2217,12 @@ pub fn run() {
 
                                 // Extract and cache app icon
                                 let icon_dir = storage_path.join("icons");
-                                let icon_path = if source_app.is_some() {
-                                    platform::windows_clipboard::extract_app_icon(&icon_dir, &app_info.name, &app_info.exe_path)
+                                let icon_path = if let Some(source_name) = source_app.as_deref() {
+                                    platform::windows_clipboard::extract_app_icon(
+                                        &icon_dir,
+                                        source_name,
+                                        &app_info.exe_path,
+                                    )
                                 } else {
                                     None
                                 };
@@ -2435,7 +2486,13 @@ pub fn run() {
                                         consecutive_errors += 1;
                                         if consecutive_errors >= 10 {
                                             eprintln!("[clipboard-worker] too many errors, pausing");
-                                            thread::sleep(Duration::from_secs(5));
+                                            if wait_for_stop(
+                                                &stop_receiver,
+                                                &stop_flag_for_thread,
+                                                Duration::from_secs(5),
+                                            ) {
+                                                break;
+                                            }
                                             consecutive_errors = 0;
                                         }
                                     }
@@ -2639,8 +2696,19 @@ mod capture_tests {
             exe_path: r"C:\Apps\Browser.exe".to_owned(),
         };
 
-        assert_eq!(foreground_app_name(&named).as_deref(), Some("Editor"));
+        assert_eq!(foreground_app_name(&named).as_deref(), Some("editor"));
         assert_eq!(foreground_app_name(&path_only).as_deref(), Some("Browser"));
+    }
+
+    #[test]
+    fn invalid_sensitive_patterns_are_excluded_during_initialization() {
+        let mut privacy = PrivacyManager::new();
+        privacy.sensitive_patterns = vec!["[invalid".to_owned(), "secret".to_owned()];
+        let state = CaptureState::new(&privacy, Vec::new());
+
+        assert_eq!(state.policy.sensitive_patterns.len(), 1);
+        assert!(state.should_skip(Some("Notepad"), Some("a secret value")));
+        assert!(!state.should_skip(Some("Notepad"), Some("ordinary text")));
     }
 
     #[test]
