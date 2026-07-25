@@ -27,14 +27,19 @@ export interface ItemHeightOptions {
   compactCustomTitle?: number;
 }
 
+export function trimTrailingBlankLines(text: string | null | undefined): string {
+  return (text ?? "").replace(/(?:\r\n?|\n)(?:[ \t]*(?:\r\n?|\n))*[ \t]*$/, "");
+}
+
 export function estimateTextLines(text: string | null | undefined, maxLines: number): number {
-  if (!text) return 0;
+  const previewText = trimTrailingBlankLines(text);
+  if (!previewText) return 0;
 
   const limit = Math.min(12, Math.max(1, Number.isFinite(maxLines) ? Math.round(maxLines) : 3));
   // Visual wrapping depends on the live card width and is corrected from the
   // card's ResizeObserver measurement.  Only explicit newlines are stable
   // enough to use for the initial virtual-scroll estimate.
-  return Math.min(limit, text.replace(/\r\n?/g, "\n").split("\n").length);
+  return Math.min(limit, previewText.replace(/\r\n?/g, "\n").split("\n").length);
 }
 
 export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?: number): number {

@@ -12,6 +12,7 @@
     type QuickAction,
     writeClipboardText,
   } from "$lib/services/clipboard";
+  import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
 
@@ -153,6 +154,12 @@
 
   const contentChanged = $derived(
     editContent !== (item.textContent || item.title) || editTitle !== item.title,
+  );
+  const primaryPreviewText = $derived(
+    trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title),
+  );
+  const secondaryPreviewText = $derived(
+    trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
   );
   let contentActions = $state<QuickAction[]>([]);
   let contentActionRequest = 0;
@@ -455,10 +462,10 @@
         </div>
       {:else}
         <div class="text-preview" class:custom-title={item.customTitle}>
-          {item.customTitle ? item.title : item.textContent || item.title}
+          {item.customTitle ? item.title : primaryPreviewText}
         </div>
-        {#if item.customTitle && showSecondaryText && (item.textContent || item.preview)}
-          <div class="content-preview">{item.textContent || item.preview}</div>
+        {#if item.customTitle && showSecondaryText && secondaryPreviewText}
+          <div class="content-preview">{secondaryPreviewText}</div>
         {/if}
       {/if}
     </div>
