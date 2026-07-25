@@ -254,78 +254,7 @@ fn read_system_clipboard_text() -> Result<String, String> {
 
 #[cfg(target_os = "windows")]
 fn write_system_clipboard_text(text: &str) -> Result<(), String> {
-    use std::ffi::OsStr;
-    use std::iter;
-    use std::os::windows::ffi::OsStrExt;
-
-    const CF_UNICODETEXT: u32 = 13;
-    const GMEM_MOVEABLE: u32 = 0x0002;
-
-    #[link(name = "User32")]
-    extern "system" {
-        fn OpenClipboard(window: isize) -> i32;
-        fn CloseClipboard() -> i32;
-        fn EmptyClipboard() -> i32;
-        fn SetClipboardData(format: u32, memory: isize) -> isize;
-    }
-
-    #[link(name = "Kernel32")]
-    extern "system" {
-        fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
-        fn GlobalFree(memory: isize) -> isize;
-        fn GlobalLock(memory: isize) -> *const u8;
-        fn GlobalUnlock(memory: isize) -> i32;
-    }
-
-    struct ClipboardGuard;
-
-    impl Drop for ClipboardGuard {
-        fn drop(&mut self) {
-            unsafe {
-                CloseClipboard();
-            }
-        }
-    }
-
-    let wide = OsStr::new(text)
-        .encode_wide()
-        .chain(iter::once(0))
-        .collect::<Vec<_>>();
-    let byte_len = wide
-        .len()
-        .checked_mul(std::mem::size_of::<u16>())
-        .ok_or_else(|| "clipboard text is too large".to_owned())?;
-
-    unsafe {
-        if OpenClipboard(0) == 0 {
-            return Err("failed to open the system clipboard".to_owned());
-        }
-        let _clipboard_guard = ClipboardGuard;
-
-        if EmptyClipboard() == 0 {
-            return Err("failed to clear the system clipboard".to_owned());
-        }
-
-        let memory = GlobalAlloc(GMEM_MOVEABLE, byte_len);
-        if memory == 0 {
-            return Err("failed to allocate clipboard memory".to_owned());
-        }
-
-        let target = GlobalLock(memory).cast_mut().cast::<u16>();
-        if target.is_null() {
-            GlobalFree(memory);
-            return Err("failed to lock clipboard memory".to_owned());
-        }
-        std::ptr::copy_nonoverlapping(wide.as_ptr(), target, wide.len());
-        GlobalUnlock(memory);
-
-        if SetClipboardData(CF_UNICODETEXT, memory) == 0 {
-            GlobalFree(memory);
-            return Err("failed to write text to the system clipboard".to_owned());
-        }
-    }
-
-    Ok(())
+    crate::platform::windows_clipboard::write_clipboard_text_with_self_trigger(text)
 }
 
 #[cfg(target_os = "macos")]

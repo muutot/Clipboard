@@ -19,6 +19,38 @@ pub const MOD_WIN: u32 = 0x0008;
 pub const VK_V: u32 = 0x56;
 
 const APP_ICON_SIZE: u32 = 32;
+pub const SELF_TRIGGER_FORMAT_NAME: &str = "ClipboardDesktop.SelfTrigger.v1";
+
+/// Encodes all hashes that the capture pipeline may derive from a text write.
+/// Keeping the marker as a small private clipboard format lets a separate CLI
+/// process tell the running monitor that the next change originated here.
+pub fn self_trigger_marker_for_text(text: &str) -> Vec<u8> {
+    crate::content::hash::compute_clipboard_write_hashes(text)
+        .join("\n")
+        .into_bytes()
+}
+
+pub fn clipboard_change_is_self_write(
+    formats: &[String],
+    marker: &[u8],
+    observed_text: &str,
+) -> bool {
+    if !formats
+        .iter()
+        .any(|format| format.trim().eq_ignore_ascii_case(SELF_TRIGGER_FORMAT_NAME))
+    {
+        return false;
+    }
+
+    let Ok(marker_text) = std::str::from_utf8(marker) else {
+        return false;
+    };
+    let marker_hashes = marker_text.trim_matches('\0').split('\n');
+    let expected_hashes = crate::content::hash::compute_clipboard_write_hashes(observed_text);
+    expected_hashes
+        .iter()
+        .any(|expected| marker_hashes.clone().any(|marked| marked == expected))
+}
 
 fn normalize_app_icon(image: image::RgbaImage) -> image::RgbaImage {
     image::imageops::resize(
@@ -98,6 +130,15 @@ impl WindowsClipboardMonitor {
                     sequence = current_sequence;
 
                     let formats = list_clipboard_formats();
+                    if has_self_trigger_format(&formats) {
+                        if let (Some(marker), Some(text)) =
+                            (read_self_trigger_marker(), read_clipboard_text())
+                        {
+                            if clipboard_change_is_self_write(&formats, &marker, &text) {
+                                continue;
+                            }
+                        }
+                    }
 
                     if sender_for_thread
                         .send(ClipboardChange { sequence, formats })
@@ -202,6 +243,192 @@ pub fn list_clipboard_formats() -> Vec<String> {
 #[cfg(not(target_os = "windows"))]
 pub fn list_clipboard_formats() -> Vec<String> {
     vec![]
+}
+
+fn has_self_trigger_format(formats: &[String]) -> bool {
+    formats
+        .iter()
+        .any(|format| format.trim().eq_ignore_ascii_case(SELF_TRIGGER_FORMAT_NAME))
+}
+
+#[cfg(target_os = "windows")]
+fn self_trigger_format_id() -> Option<u32> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    extern "system" {
+        fn RegisterClipboardFormatW(name: *const u16) -> u32;
+    }
+
+    let name = OsStr::new(SELF_TRIGGER_FORMAT_NAME)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
+    (format != 0).then_some(format)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn self_trigger_format_id() -> Option<u32> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn read_self_trigger_marker() -> Option<Vec<u8>> {
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> isize;
+        fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalUnlock(handle: isize) -> i32;
+        fn GlobalSize(handle: isize) -> usize;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+    }
+
+    let format = self_trigger_format_id()?;
+    unsafe {
+        if IsClipboardFormatAvailable(format) == 0 || OpenClipboard(0) == 0 {
+            return None;
+        }
+
+        let handle = GetClipboardData(format);
+        if handle == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let size = GlobalSize(handle);
+        if size == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let ptr = GlobalLock(handle);
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+
+        let marker = std::slice::from_raw_parts(ptr, size).to_vec();
+        GlobalUnlock(handle);
+        CloseClipboard();
+        Some(marker)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn read_self_trigger_marker() -> Option<Vec<u8>> {
+    None
+}
+
+/// Writes CF_UNICODETEXT plus a private hash marker. Marker failures are
+/// intentionally best-effort: the text write must retain its original
+/// behavior even when a clipboard implementation rejects custom formats.
+#[cfg(target_os = "windows")]
+pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> {
+    use std::ffi::OsStr;
+    use std::iter;
+    use std::os::windows::ffi::OsStrExt;
+
+    const GMEM_MOVEABLE: u32 = 0x0002;
+
+    #[link(name = "User32")]
+    extern "system" {
+        fn OpenClipboard(window: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn EmptyClipboard() -> i32;
+        fn SetClipboardData(format: u32, memory: isize) -> isize;
+    }
+
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
+        fn GlobalFree(memory: isize) -> isize;
+        fn GlobalLock(memory: isize) -> *const u8;
+        fn GlobalUnlock(memory: isize) -> i32;
+    }
+
+    struct ClipboardGuard;
+
+    impl Drop for ClipboardGuard {
+        fn drop(&mut self) {
+            unsafe {
+                CloseClipboard();
+            }
+        }
+    }
+
+    unsafe fn allocate_global_bytes(
+        bytes: &[u8],
+        global_alloc: unsafe extern "system" fn(u32, usize) -> isize,
+        global_free: unsafe extern "system" fn(isize) -> isize,
+        global_lock: unsafe extern "system" fn(isize) -> *const u8,
+        global_unlock: unsafe extern "system" fn(isize) -> i32,
+    ) -> Result<isize, String> {
+        let memory = global_alloc(GMEM_MOVEABLE, bytes.len());
+        if memory == 0 {
+            return Err("failed to allocate clipboard memory".to_owned());
+        }
+        let target = global_lock(memory).cast_mut();
+        if target.is_null() {
+            global_free(memory);
+            return Err("failed to lock clipboard memory".to_owned());
+        }
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len());
+        global_unlock(memory);
+        Ok(memory)
+    }
+
+    let wide = OsStr::new(text)
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    let wide_byte_len = wide
+        .len()
+        .checked_mul(std::mem::size_of::<u16>())
+        .ok_or_else(|| "clipboard text is too large".to_owned())?;
+    let marker = self_trigger_marker_for_text(text);
+
+    unsafe {
+        if OpenClipboard(0) == 0 {
+            return Err("failed to open the system clipboard".to_owned());
+        }
+        let _clipboard_guard = ClipboardGuard;
+
+        if EmptyClipboard() == 0 {
+            return Err("failed to clear the system clipboard".to_owned());
+        }
+
+        let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
+        let text_memory = allocate_global_bytes(
+            wide_bytes,
+            GlobalAlloc,
+            GlobalFree,
+            GlobalLock,
+            GlobalUnlock,
+        )?;
+        if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
+            GlobalFree(text_memory);
+            return Err("failed to write text to the system clipboard".to_owned());
+        }
+
+        if let Some(format) = self_trigger_format_id() {
+            if let Ok(marker_memory) =
+                allocate_global_bytes(&marker, GlobalAlloc, GlobalFree, GlobalLock, GlobalUnlock)
+            {
+                if SetClipboardData(format, marker_memory) == 0 {
+                    GlobalFree(marker_memory);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String> {
+    Err("Windows clipboard text writing is not supported on this platform".to_owned())
 }
 
 #[cfg(target_os = "windows")]
@@ -968,6 +1195,62 @@ mod tests {
     #[test]
     fn unknown_format_gets_fallback_name() {
         assert!(format_id_to_name(99999).starts_with("format_"));
+    }
+
+    #[test]
+    fn self_trigger_marker_covers_text_link_file_and_newline_variants() {
+        let text = "https://example.com\nC:\\tmp\\note.txt";
+        let marker = self_trigger_marker_for_text(text);
+        let marker_text = String::from_utf8(marker).unwrap();
+
+        for kind in ["text", "link", "file"] {
+            assert!(
+                marker_text.contains(&crate::content::hash::compute_content_hash(
+                    kind, text, None
+                ))
+            );
+        }
+        assert!(
+            marker_text.contains(&crate::content::hash::compute_content_hash(
+                "text",
+                &text.replace('\n', "\r\n"),
+                None,
+            ))
+        );
+    }
+
+    #[test]
+    fn self_trigger_marker_matches_only_the_marked_clipboard_text() {
+        let text = "https://example.com";
+        let marker = self_trigger_marker_for_text(text);
+        let formats = vec![SELF_TRIGGER_FORMAT_NAME.to_owned()];
+
+        assert!(clipboard_change_is_self_write(&formats, &marker, text));
+        assert!(!clipboard_change_is_self_write(
+            &formats,
+            &marker,
+            "https://other.example.com"
+        ));
+        assert!(!clipboard_change_is_self_write(
+            &["CF_UNICODETEXT".to_owned()],
+            &marker,
+            text
+        ));
+    }
+
+    #[test]
+    fn malformed_or_unrelated_markers_are_not_suppressed() {
+        let formats = vec![SELF_TRIGGER_FORMAT_NAME.to_owned()];
+        assert!(!clipboard_change_is_self_write(
+            &formats,
+            &[0xff, 0xfe],
+            "ordinary text"
+        ));
+        assert!(!clipboard_change_is_self_write(
+            &formats,
+            b"not-a-content-hash",
+            "ordinary text"
+        ));
     }
 
     #[test]
