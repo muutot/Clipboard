@@ -61,18 +61,18 @@ npm run dev
 
 ## Scripts
 
-| Command               | Description                                    |
-| --------------------- | ---------------------------------------------- |
-| `npm run dev`         | Start Vite dev server (frontend only)          |
-| `npm run build`       | Build frontend for production                  |
-| `npm run tauri dev`   | Start Tauri desktop app in dev mode            |
-| `npm run tauri build` | Build production Tauri desktop app             |
-| `npm run check`       | TypeScript type checking                       |
-| `npm run format`      | Format code with Prettier + Cargo fmt          |
-| `npm run format:check`| Check formatting without modifying files       |
-| `npm run test:rust`   | Run Rust unit tests                            |
-| `npm run lint:rust`   | Run Clippy linter on Rust code                 |
-| `npm run verify`      | Run all checks: format, typecheck, build, test |
+| Command                | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `npm run dev`          | Start Vite dev server (frontend only)          |
+| `npm run build`        | Build frontend for production                  |
+| `npm run tauri dev`    | Start Tauri desktop app in dev mode            |
+| `npm run tauri build`  | Build production Tauri desktop app             |
+| `npm run check`        | TypeScript type checking                       |
+| `npm run format`       | Format code with Prettier + Cargo fmt          |
+| `npm run format:check` | Check formatting without modifying files       |
+| `npm run test:rust`    | Run Rust unit tests                            |
+| `npm run lint:rust`    | Run Clippy linter on Rust code                 |
+| `npm run verify`       | Run all checks: format, typecheck, build, test |
 
 ## Project Structure
 
@@ -114,13 +114,13 @@ clipboard/
 
 ## Technology Stack
 
-| Layer    | Technology                                             |
-| -------- | ------------------------------------------------------ |
-| Desktop  | [Tauri 2](https://v2.tauri.app/)                       |
-| Backend  | Rust, rusqlite (SQLite), Tantivy (full-text search)    |
-| Frontend | Svelte 5 + TypeScript, SvelteKit (SPA mode), Vite      |
-| Search   | Tantivy with custom N-gram tokenizer (Chinese-friendly)|
-| Storage  | SQLite with migrations and repository pattern          |
+| Layer    | Technology                                              |
+| -------- | ------------------------------------------------------- |
+| Desktop  | [Tauri 2](https://v2.tauri.app/)                        |
+| Backend  | Rust, rusqlite (SQLite), Tantivy (full-text search)     |
+| Frontend | Svelte 5 + TypeScript, SvelteKit (SPA mode), Vite       |
+| Search   | Tantivy with custom N-gram tokenizer (Chinese-friendly) |
+| Storage  | SQLite with migrations and repository pattern           |
 
 ## Recommended IDE Extensions
 

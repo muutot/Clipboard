@@ -12,7 +12,9 @@
 // BUG: imageFullscreen 变为 true 时 effect 重跑，立刻关掉全屏
 $effect(() => {
   if (item) {
-    if (imageFullscreen) { closeImageFullscreen(); }
+    if (imageFullscreen) {
+      closeImageFullscreen();
+    }
     imageFullscreen = false;
   }
 });
@@ -20,7 +22,11 @@ $effect(() => {
 // FIX: 用 untrack 包裹不想追踪的读取
 $effect(() => {
   if (item) {
-    untrack(() => { if (imageFullscreen) { closeImageFullscreen(); } });
+    untrack(() => {
+      if (imageFullscreen) {
+        closeImageFullscreen();
+      }
+    });
     imageFullscreen = false;
   }
 });
@@ -36,7 +42,8 @@ $effect(() => {
 
 // FIX: 父组件自己检查状态
 if (event.key === "Escape") {
-  if (!detailItem) { // 详情面板打开时不隐藏窗口
+  if (!detailItem) {
+    // 详情面板打开时不隐藏窗口
     getCurrentWindow().hide();
   }
 }
@@ -58,11 +65,11 @@ let s = $state($generalSettings); // 取的是当前值的副本
 
 ```typescript
 // BUG: 主窗口永远读到旧值
-get(generalSettings).imageFullscreenMode // 启动时快照，不会变
+get(generalSettings).imageFullscreenMode; // 启动时快照，不会变
 
 // FIX 1: store 内部通过 storage 事件自动同步（已实现）
 // FIX 2: 读取时始终从 store 取当前值
-get(generalSettings).someSetting  // 调用时读取，不是模块顶层
+get(generalSettings).someSetting; // 调用时读取，不是模块顶层
 ```
 
 ### `setFullscreen()` 需要正确配对
@@ -104,12 +111,12 @@ struct ClipboardItem {
 
 ### z-index 分层已固定，不可打破
 
-| z-index | 元素 | 用途 |
-|---------|------|------|
-| 51 | `.detail-backdrop` | 详情面板半透明背景 |
-| 52 | `.detail-panel` | 详情侧边栏 |
-| 100 | `.image-viewer-overlay` | 全屏图片查看器 |
-| 101 | `.viewer-close-btn` 等 | 全屏查看器内控件 |
+| z-index | 元素                    | 用途               |
+| ------- | ----------------------- | ------------------ |
+| 51      | `.detail-backdrop`      | 详情面板半透明背景 |
+| 52      | `.detail-panel`         | 详情侧边栏         |
+| 100     | `.image-viewer-overlay` | 全屏图片查看器     |
+| 101     | `.viewer-close-btn` 等  | 全屏查看器内控件   |
 
 全屏模式下 `.detail-panel.fullscreen` 和 `.detail-backdrop.fullscreen-backdrop` 设为 `display: none`。
 
@@ -121,7 +128,9 @@ struct ClipboardItem {
 
 ```typescript
 // 避免全屏按钮的 click 冒泡到刚挂载的 backdrop handler
-setTimeout(() => { imageFullscreen = true; }, 0);
+setTimeout(() => {
+  imageFullscreen = true;
+}, 0);
 ```
 
 ### backdrop 关闭必须调用完整关闭函数
@@ -169,15 +178,15 @@ _t("status.recordCount", { count: items.length })
 
 添加新功能时按模块归属放置：
 
-| 模块 | 职责 |
-|------|------|
-| `storage/` | 数据库 CRUD、migrations、paths |
-| `search/` | Tantivy 索引、查询、同步 |
-| `ocr/` | OCR 引擎、worker |
-| `keyboard/` | 全局快捷键解析、注册、匹配 |
-| `content/` | 内容检测、缩略图生成 |
+| 模块        | 职责                                |
+| ----------- | ----------------------------------- |
+| `storage/`  | 数据库 CRUD、migrations、paths      |
+| `search/`   | Tantivy 索引、查询、同步            |
+| `ocr/`      | OCR 引擎、worker                    |
+| `keyboard/` | 全局快捷键解析、注册、匹配          |
+| `content/`  | 内容检测、缩略图生成                |
 | `platform/` | 平台特定实现（Windows/macOS/Linux） |
-| `config.rs` | 配置结构体、读写 |
-| `export/` | 导入导出（JSON/CSV/TXT） |
-| `privacy/` | 隐私管理（暂停录制、应用忽略） |
-| `domain/` | 共享领域模型 |
+| `config.rs` | 配置结构体、读写                    |
+| `export/`   | 导入导出（JSON/CSV/TXT）            |
+| `privacy/`  | 隐私管理（暂停录制、应用忽略）      |
+| `domain/`   | 共享领域模型                        |
