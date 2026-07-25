@@ -282,6 +282,28 @@
 
   <section class="setting-card toggle-card">
     <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="info" size={17} /></span>
+      <div>
+        <strong>{_t("general.toastNotifications")}</strong>
+        <p>{_t("general.toastNotificationsDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.showToastNotifications}
+      onclick={() =>
+        generalSettings.updateSetting("showToastNotifications", !s.showToastNotifications)}
+      aria-checked={s.showToastNotifications}
+      aria-label={_t("general.toastNotifications")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
       <div>
         <strong>{_t("general.useSystemTitleBar")}</strong>

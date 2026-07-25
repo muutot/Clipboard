@@ -91,6 +91,7 @@ pub struct GeneralConfig {
     pub compact_card_border_radius: u16,
     pub pin_copied_to_top: bool,
     pub use_recycle_bin: bool,
+    pub show_toast_notifications: bool,
     pub remember_window_position: bool,
     pub always_on_top: bool,
     pub use_system_title_bar: bool,
@@ -121,6 +122,7 @@ impl Default for GeneralConfig {
             compact_card_border_radius: 10,
             pin_copied_to_top: true,
             use_recycle_bin: true,
+            show_toast_notifications: true,
             remember_window_position: false,
             always_on_top: false,
             use_system_title_bar: false,
@@ -663,6 +665,7 @@ mod tests {
         assert_eq!(saved["general"]["display"]["showSecondaryText"], true);
         assert_eq!(saved["general"]["display"]["maxTextLines"], 3);
         assert_eq!(saved["general"]["compactMode"], false);
+        assert_eq!(saved["general"]["showToastNotifications"], true);
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
         fs::remove_dir_all(project).unwrap();
     }
@@ -677,6 +680,7 @@ mod tests {
         settings.display.show_secondary_text = false;
         settings.display.max_text_lines = 7;
         settings.compact_mode = true;
+        settings.show_toast_notifications = false;
         settings.theme = "light".to_owned();
         settings.image_fullscreen_mode = "desktop".to_owned();
         settings.viewer_backdrop_opacity = 64;
@@ -695,6 +699,7 @@ mod tests {
         assert_eq!(saved["general"]["display"]["showSecondaryText"], false);
         assert_eq!(saved["general"]["display"]["maxTextLines"], 7);
         assert_eq!(saved["general"]["compactMode"], true);
+        assert_eq!(saved["general"]["showToastNotifications"], false);
         assert_eq!(saved["general"]["theme"], "light");
         assert_eq!(saved["general"]["imageFullscreenMode"], "desktop");
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 64);

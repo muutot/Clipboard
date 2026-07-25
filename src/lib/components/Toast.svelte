@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { generalSettings } from "$lib/services/settings";
   import { onToast, type ToastType } from "$lib/services/toast";
 
   interface ToastEntry {
@@ -14,6 +15,7 @@
   }
 
   let toasts = $state<ToastState[]>([]);
+  let toastNotificationsEnabled = $state(true);
 
   function removeToast(id: number) {
     const t = toasts.find((t) => t.entry.id === id);
@@ -26,7 +28,15 @@
   }
 
   $effect(() => {
+    return generalSettings.subscribe((settings) => {
+      toastNotificationsEnabled = settings.showToastNotifications;
+      if (!toastNotificationsEnabled) toasts = [];
+    });
+  });
+
+  $effect(() => {
     return onToast((entry) => {
+      if (!toastNotificationsEnabled) return;
       toasts = [...toasts, { entry, leaving: false }];
       setTimeout(() => removeToast(entry.id), entry.duration);
     });

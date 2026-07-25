@@ -324,6 +324,8 @@ const zhCN: LocaleDefinition = {
     pinCopiedToTopDescription: "点击复制某个条目后将其移动到列表顶部",
     useRecycleBin: "回收站",
     useRecycleBinDescription: "删除条目时移入回收站而非直接删除",
+    toastNotifications: "操作通知",
+    toastNotificationsDescription: "复制、收藏、删除等操作完成后显示 Toast 提示",
     useSystemTitleBar: "使用系统标题栏",
     useSystemTitleBarDescription: "使用操作系统原生标题栏",
     desktopFullscreen: "桌面全屏预览",

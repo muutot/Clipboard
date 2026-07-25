@@ -33,6 +33,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   compactCardBorderRadius: 10,
   pinCopiedToTop: true,
   useRecycleBin: true,
+  showToastNotifications: true,
   rememberWindowPosition: false,
   alwaysOnTop: false,
   useSystemTitleBar: false,
@@ -243,6 +244,10 @@ function normalizeGeneralSettings(
   result.useRecycleBin = booleanValue(
     source.useRecycleBin ?? fallback("useRecycleBin"),
     defaultSettings.useRecycleBin,
+  );
+  result.showToastNotifications = booleanValue(
+    source.showToastNotifications ?? fallback("showToastNotifications"),
+    defaultSettings.showToastNotifications,
   );
   result.rememberWindowPosition = booleanValue(
     source.rememberWindowPosition ?? fallback("rememberWindowPosition"),

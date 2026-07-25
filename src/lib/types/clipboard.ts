@@ -103,6 +103,7 @@ export interface GeneralSettings {
   compactCardBorderRadius: number;
   pinCopiedToTop: boolean;
   useRecycleBin: boolean;
+  showToastNotifications: boolean;
   rememberWindowPosition: boolean;
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;

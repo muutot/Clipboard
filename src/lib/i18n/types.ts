@@ -323,6 +323,8 @@ export interface LocaleDefinition {
     pinCopiedToTopDescription: string;
     useRecycleBin: string;
     useRecycleBinDescription: string;
+    toastNotifications: string;
+    toastNotificationsDescription: string;
     useSystemTitleBar: string;
     useSystemTitleBarDescription: string;
     desktopFullscreen: string;

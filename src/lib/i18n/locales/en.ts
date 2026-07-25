@@ -332,6 +332,9 @@ const en: LocaleDefinition = {
     pinCopiedToTopDescription: "Move a copied item to the top of the list",
     useRecycleBin: "Recycle Bin",
     useRecycleBinDescription: "Move deleted items to recycle bin instead of permanent deletion",
+    toastNotifications: "Action Notifications",
+    toastNotificationsDescription:
+      "Show Toast feedback after copy, favorite, delete, and other actions",
     useSystemTitleBar: "Use System Title Bar",
     useSystemTitleBarDescription: "Use the operating system's native title bar",
     desktopFullscreen: "Desktop Fullscreen Preview",
