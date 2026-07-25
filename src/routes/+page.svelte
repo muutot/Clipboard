@@ -118,6 +118,7 @@
   let selectedIds = $state<Set<string>>(new Set());
   let lastClickedIndex = $state(-1);
 
+  let searchInputEl = $state<HTMLInputElement | null>(null);
   let historyListEl = $state<HTMLElement | null>(null);
   let scrollTop = $state(0);
   let containerHeight = $state(0);
@@ -1631,6 +1632,8 @@
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     const editableTarget = isEditableKeyboardTarget(event.target);
+    const quickCopyIndex =
+      (event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null;
 
     if (event.key === "Escape") {
       if (event.defaultPrevented || editingId) return;
@@ -1647,6 +1650,16 @@
         getCurrentWindow()
           .hide()
           .catch(() => {});
+      }
+      return;
+    }
+
+    if (quickCopyIndex !== null && (!editableTarget || event.target === searchInputEl)) {
+      event.preventDefault();
+      const item = filteredItems[quickCopyIndex];
+      if (item) {
+        selectedId = item.id;
+        activateSelected();
       }
       return;
     }
@@ -1743,17 +1756,6 @@
         return;
       }
     }
-
-    if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
-      const index = Number(event.key) - 1;
-      const item = filteredItems[index];
-      if (item) {
-        selectedId = item.id;
-        activateSelected();
-      }
-    }
   }
 
   function handleHistoryScroll() {
@@ -1811,6 +1813,7 @@
   >
     <div class="search-box">
       <input
+        bind:this={searchInputEl}
         bind:value={query}
         aria-label={_t("app.searchPlaceholder")}
         autocomplete="off"
