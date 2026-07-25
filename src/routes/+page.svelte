@@ -184,8 +184,8 @@
           : activeFilter === "deleted"
             ? isDeleted
             : activeFilter === "favorite"
-              ? item.favorite
-              : item.kind === activeFilter;
+              ? !isDeleted && item.favorite
+              : !isDeleted && item.kind === activeFilter;
 
       if (!matchesFilter) return false;
 
