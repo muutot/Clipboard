@@ -4,6 +4,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(target_os = "linux")]
+use std::fs;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::process::Command;
+
 use serde::Serialize;
 
 const SEARCH_LATENCY_HISTORY_SIZE: usize = 1000;
@@ -40,6 +45,9 @@ impl PerformanceTracker {
 
     pub fn snapshot(&self) -> PerformanceSnapshot {
         let startup = self.startup_metrics.lock().ok().and_then(|m| m.clone());
+        // A metrics request is also a sampling point. This keeps the peak
+        // value useful even when the caller does not run a background ticker.
+        self.memory_monitor.record_snapshot();
 
         PerformanceSnapshot {
             startup: startup.unwrap_or_default(),
@@ -227,7 +235,7 @@ impl MemoryMonitor {
     }
 
     pub fn current_usage_bytes(&self) -> u64 {
-        0
+        current_process_memory_bytes()
     }
 
     pub fn peak_usage_bytes(&self) -> u64 {
@@ -255,6 +263,75 @@ impl MemoryMonitor {
             uptime_seconds: self.started_at.elapsed().as_secs(),
         }
     }
+}
+
+/// Returns the resident set size of this process. Platform APIs are kept
+/// local to this module so metrics remain best-effort and never affect the
+/// clipboard pipeline when a platform denies process introspection.
+fn current_process_memory_bytes() -> u64 {
+    #[cfg(target_os = "linux")]
+    {
+        return fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                status.lines().find_map(|line| {
+                    let value = line.strip_prefix("VmRSS:")?.trim();
+                    let kilobytes = value.split_whitespace().next()?.parse::<u64>().ok()?;
+                    Some(kilobytes.saturating_mul(1024))
+                })
+            })
+            .unwrap_or(0);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("tasklist")
+            .args([
+                "/FI",
+                &format!("PID eq {}", std::process::id()),
+                "/FO",
+                "CSV",
+                "/NH",
+            ])
+            .output();
+        return output
+            .ok()
+            .filter(|result| result.status.success())
+            .and_then(|result| {
+                let line = String::from_utf8_lossy(&result.stdout);
+                let memory_field = line.trim().split(',').skip(4).collect::<Vec<_>>().join(",");
+                let digits = memory_field
+                    .chars()
+                    .filter(|character| character.is_ascii_digit())
+                    .collect::<String>();
+                digits
+                    .parse::<u64>()
+                    .ok()
+                    .map(|kilobytes| kilobytes.saturating_mul(1024))
+            })
+            .unwrap_or(0);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output();
+        return output
+            .ok()
+            .filter(|result| result.status.success())
+            .and_then(|result| {
+                String::from_utf8_lossy(&result.stdout)
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+            })
+            .map(|kilobytes| kilobytes.saturating_mul(1024))
+            .unwrap_or(0);
+    }
+
+    #[allow(unreachable_code)]
+    0
 }
 
 impl Default for MemoryMonitor {
@@ -335,6 +412,16 @@ mod tests {
         assert_eq!(snapshot.snapshot_count, 1);
         // Peak should be >= current
         assert!(snapshot.peak_bytes >= snapshot.current_bytes);
+    }
+
+    #[test]
+    fn memory_usage_probe_is_best_effort_and_non_panicking() {
+        let usage = MemoryMonitor::new().current_usage_bytes();
+        // Some hardened sandboxes do not expose process RSS. In that case
+        // zero is an intentional fallback; otherwise the value is bytes.
+        if usage > 0 {
+            assert_eq!(usage % 1024, 0);
+        }
     }
 
     #[test]

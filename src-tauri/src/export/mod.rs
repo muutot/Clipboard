@@ -30,22 +30,31 @@ pub struct ImportSummary {
 }
 
 pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<String, String> {
+    let filtered = items.iter().filter(|item| {
+        let favorite_matches = options.include_favorites || !item.is_favorite;
+        let from_matches = options
+            .date_from_ms
+            .is_none_or(|from| item.created_at_ms >= from);
+        let to_matches = options.date_to_ms.is_none_or(|to| item.created_at_ms <= to);
+        let kind_matches = options.content_types.is_empty()
+            || options
+                .content_types
+                .iter()
+                .any(|kind| kind.eq_ignore_ascii_case(&clipboard_kind_name(item.kind)));
+        favorite_matches && from_matches && to_matches && kind_matches
+    });
+
     match options.format {
-        ExportFormat::Json => serde_json::to_string_pretty(items).map_err(|e| e.to_string()),
+        ExportFormat::Json => serde_json::to_string_pretty(&filtered.cloned().collect::<Vec<_>>())
+            .map_err(|e| e.to_string()),
         ExportFormat::Csv => {
             let mut wtr = String::new();
             wtr.push_str("id,kind,title,text_content,source_app,created_at_ms,is_favorite\n");
-            for item in items {
-                let kind = match item.kind {
-                    crate::domain::ClipboardKind::Text => "text",
-                    crate::domain::ClipboardKind::Link => "link",
-                    crate::domain::ClipboardKind::Image => "image",
-                    crate::domain::ClipboardKind::File => "file",
-                };
+            for item in filtered {
                 wtr.push_str(&format!(
                     "{},{},{},{},{},{},{}\n",
                     escape_csv(&item.id),
-                    kind,
+                    clipboard_kind_name(item.kind),
                     escape_csv(&item.title),
                     escape_csv(item.text_content.as_deref().unwrap_or("")),
                     escape_csv(item.source_app.as_deref().unwrap_or("")),
@@ -57,7 +66,7 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
         }
         ExportFormat::PlainText => {
             let mut out = String::new();
-            for item in items {
+            for item in filtered {
                 if let Some(ref text) = item.text_content {
                     if !out.is_empty() {
                         out.push_str("\n---\n");
@@ -68,6 +77,26 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
             Ok(out)
         }
     }
+}
+
+/// Exports all active records without the normal UI page-size cap.
+pub fn export_database(database: &Database, options: &ExportOptions) -> Result<String, String> {
+    let mut items = Vec::new();
+    let mut offset = 0u32;
+    const PAGE_SIZE: u32 = 500;
+
+    loop {
+        let page = crate::storage::ClipboardRepository::list_recent(database, PAGE_SIZE, offset)
+            .map_err(|error| error.to_string())?;
+        let page_len = page.len() as u32;
+        items.extend(page);
+        if page_len < PAGE_SIZE {
+            break;
+        }
+        offset = offset.saturating_add(PAGE_SIZE);
+    }
+
+    export_items(&items, options)
 }
 
 pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary, String> {
@@ -95,6 +124,74 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
     })
 }
 
+/// Imports a plain-text backup. Records are separated by a line containing
+/// `---`; blank chunks are ignored and duplicate content is handled by the
+/// database's normal content-hash upsert path.
+pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportSummary, String> {
+    let mut imported = 0u64;
+    let mut skipped = 0u64;
+    let mut errors = Vec::new();
+
+    for (index, chunk) in text.split("\n---\n").enumerate() {
+        let content = chunk.trim_matches(['\r', '\n']);
+        if content.trim().is_empty() {
+            continue;
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128) as i64;
+        let hash = crate::content::hash::compute_content_hash("text", content, None);
+        let item = ClipboardItem {
+            id: format!("import-{hash}-{index}"),
+            kind: crate::domain::ClipboardKind::Text,
+            title: content
+                .lines()
+                .next()
+                .unwrap_or(content)
+                .chars()
+                .take(120)
+                .collect(),
+            text_content: Some(content.to_owned()),
+            resource_path: None,
+            preview_path: None,
+            content_hash: hash,
+            source_app: Some("Plain text import".to_owned()),
+            size_bytes: content.len() as u64,
+            created_at_ms: now_ms,
+            last_used_at_ms: None,
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
+        };
+
+        match crate::storage::ClipboardRepository::save_item(database, &item) {
+            Ok(_) => imported += 1,
+            Err(error) => {
+                skipped += 1;
+                errors.push(format!("failed to import chunk {index}: {error}"));
+            }
+        }
+    }
+
+    Ok(ImportSummary {
+        imported_count: imported,
+        skipped_count: skipped,
+        errors,
+    })
+}
+
+fn clipboard_kind_name(kind: crate::domain::ClipboardKind) -> &'static str {
+    match kind {
+        crate::domain::ClipboardKind::Text => "text",
+        crate::domain::ClipboardKind::Link => "link",
+        crate::domain::ClipboardKind::Image => "image",
+        crate::domain::ClipboardKind::File => "file",
+    }
+}
+
 fn escape_csv(field: &str) -> String {
     if field.contains(',') || field.contains('"') || field.contains('\n') {
         format!("\"{}\"", field.replace('"', "\"\""))
@@ -107,6 +204,7 @@ fn escape_csv(field: &str) -> String {
 mod tests {
     use super::*;
     use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::ClipboardRepository;
 
     fn sample_items() -> Vec<ClipboardItem> {
         vec![
@@ -204,5 +302,67 @@ mod tests {
         assert_eq!(summary.imported_count, 2);
         assert_eq!(summary.skipped_count, 0);
         assert!(summary.errors.is_empty());
+    }
+
+    #[test]
+    fn export_options_filter_favorites_dates_and_types() {
+        let items = sample_items();
+        let options = ExportOptions {
+            format: ExportFormat::Json,
+            include_favorites: false,
+            date_from_ms: Some(1500),
+            date_to_ms: Some(2500),
+            content_types: vec!["link".to_owned()],
+        };
+
+        let result = export_items(&items, &options).unwrap();
+        assert!(result.contains("item-2"));
+        assert!(!result.contains("item-1"));
+    }
+
+    #[test]
+    fn imports_plain_text_chunks() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let summary = import_from_plain_text("first\n---\nsecond\n", &database).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(database.item_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn database_export_reads_more_than_one_page() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        for index in 0..510 {
+            let item = ClipboardItem {
+                id: format!("item-{index}"),
+                kind: ClipboardKind::Text,
+                title: format!("item-{index}"),
+                text_content: Some(format!("text-{index}")),
+                resource_path: None,
+                preview_path: None,
+                content_hash: format!("hash-{index}"),
+                source_app: None,
+                size_bytes: 8,
+                created_at_ms: index,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            };
+            crate::storage::ClipboardRepository::save_item(&database, &item).unwrap();
+        }
+
+        let output = export_database(
+            &database,
+            &ExportOptions {
+                format: ExportFormat::Json,
+                include_favorites: true,
+                date_from_ms: None,
+                date_to_ms: None,
+                content_types: vec![],
+            },
+        )
+        .unwrap();
+        let exported: Vec<ClipboardItem> = serde_json::from_str(&output).unwrap();
+        assert_eq!(exported.len(), 510);
     }
 }

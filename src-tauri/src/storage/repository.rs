@@ -28,6 +28,8 @@ pub trait ClipboardRepository {
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
+    /// Lists soft-deleted records for the recycle-bin view.
+    fn list_deleted(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_source_applications(&self) -> Result<Vec<String>, StorageError>;
     fn list_source_applications_with_icons(
         &self,
@@ -52,6 +54,12 @@ pub trait ClipboardRepository {
     /// changing any record.
     fn soft_delete_batch(&self, ids: &[String]) -> Result<bool, StorageError>;
     fn restore_deleted(&self, id: &str) -> Result<bool, StorageError>;
+    /// Restores all requested soft-deleted records atomically.
+    fn restore_deleted_batch(&self, ids: &[String]) -> Result<bool, StorageError>;
+    /// Permanently removes one already soft-deleted record.
+    fn permanently_delete(&self, id: &str) -> Result<bool, StorageError>;
+    /// Permanently removes requested soft-deleted records atomically.
+    fn permanently_delete_batch(&self, ids: &[String]) -> Result<bool, StorageError>;
     fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError>;
     fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
     fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
@@ -183,6 +191,27 @@ impl ClipboardRepository for Database {
                  FROM clipboard_items
                  WHERE deleted = 0
                  ORDER BY created_at_ms DESC
+                 LIMIT ?1 OFFSET ?2"
+            );
+            let mut statement = connection.prepare_cached(&sql)?;
+            let stored_items = statement
+                .query_map(
+                    params![i64::from(limit.clamp(1, 500)), i64::from(offset)],
+                    StoredClipboardItem::from_row,
+                )?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            stored_items.into_iter().map(TryInto::try_into).collect()
+        })
+    }
+
+    fn list_deleted(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError> {
+        self.with_connection(|connection| {
+            let sql = format!(
+                "SELECT {ITEM_COLUMNS}
+                 FROM clipboard_items
+                 WHERE deleted = 1
+                 ORDER BY COALESCE(deleted_at_ms, created_at_ms) DESC, created_at_ms DESC
                  LIMIT ?1 OFFSET ?2"
             );
             let mut statement = connection.prepare_cached(&sql)?;
@@ -470,6 +499,81 @@ impl ClipboardRepository for Database {
                 )?;
             }
             Ok(affected > 0)
+        })
+    }
+
+    fn restore_deleted_batch(&self, ids: &[String]) -> Result<bool, StorageError> {
+        let ids = unique_ids(ids);
+        if ids.is_empty() {
+            return Ok(false);
+        }
+
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            for id in &ids {
+                let exists = transaction
+                    .query_row(
+                        "SELECT 1 FROM clipboard_items WHERE id = ?1 AND deleted = 1",
+                        [id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()?;
+                if exists.is_none() {
+                    return Ok(false);
+                }
+            }
+
+            for id in &ids {
+                transaction.execute(
+                    "UPDATE clipboard_items
+                     SET deleted = 0, deleted_at_ms = NULL
+                     WHERE id = ?1 AND deleted = 1",
+                    [id],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(true)
+        })
+    }
+
+    fn permanently_delete(&self, id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "DELETE FROM clipboard_items WHERE id = ?1 AND deleted = 1",
+                [id],
+            )? > 0)
+        })
+    }
+
+    fn permanently_delete_batch(&self, ids: &[String]) -> Result<bool, StorageError> {
+        let ids = unique_ids(ids);
+        if ids.is_empty() {
+            return Ok(false);
+        }
+
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            for id in &ids {
+                let exists = transaction
+                    .query_row(
+                        "SELECT 1 FROM clipboard_items WHERE id = ?1 AND deleted = 1",
+                        [id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()?;
+                if exists.is_none() {
+                    return Ok(false);
+                }
+            }
+
+            for id in &ids {
+                transaction.execute(
+                    "DELETE FROM clipboard_items WHERE id = ?1 AND deleted = 1",
+                    [id],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(true)
         })
     }
 
@@ -979,6 +1083,58 @@ mod tests {
 
         database.restore_deleted("restored").unwrap();
         assert_eq!(database.item_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn deleted_records_are_listed_in_recency_order() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&text_item("older", "hash-1", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("newer", "hash-2", 200))
+            .unwrap();
+        database.soft_delete("older").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        database.soft_delete("newer").unwrap();
+
+        let deleted = database.list_deleted(20, 0).unwrap();
+        assert_eq!(
+            deleted
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newer", "older"]
+        );
+        assert!(database.list_recent(20, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn batch_restore_and_permanent_delete_are_atomic() {
+        let database = Database::open_in_memory().unwrap();
+        for id in ["one", "two", "three"] {
+            database
+                .save_item(&text_item(id, &format!("hash-{id}"), 100))
+                .unwrap();
+            database.soft_delete(id).unwrap();
+        }
+
+        assert!(!database
+            .restore_deleted_batch(&["one".to_owned(), "missing".to_owned()])
+            .unwrap());
+        assert_eq!(database.list_deleted(20, 0).unwrap().len(), 3);
+
+        assert!(database
+            .restore_deleted_batch(&["one".to_owned(), "two".to_owned()])
+            .unwrap());
+        assert_eq!(database.list_deleted(20, 0).unwrap().len(), 1);
+
+        assert!(!database
+            .permanently_delete_batch(&["three".to_owned(), "missing".to_owned()])
+            .unwrap());
+        assert!(database.get_item("three").unwrap().is_some());
+        assert!(database.permanently_delete("three").unwrap());
+        assert!(database.get_item("three").unwrap().is_none());
     }
 
     // ── Task 4: Concurrent read/write with multiple connections ──
