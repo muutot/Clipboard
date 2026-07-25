@@ -131,6 +131,99 @@ struct CaptureWorker {
     handle: Option<JoinHandle<()>>,
 }
 
+const HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
+const SCHEDULED_ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
+
+struct CleanupWorker {
+    stop_flag: Arc<AtomicBool>,
+    stop_sender: Mutex<Option<mpsc::Sender<()>>>,
+    handle: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl CleanupWorker {
+    fn start(
+        project_directory: PathBuf,
+        database: Database,
+        paths: StoragePaths,
+    ) -> Result<Self, String> {
+        Self::start_with_interval(project_directory, database, paths, HISTORY_CLEANUP_INTERVAL)
+    }
+
+    fn start_with_interval(
+        project_directory: PathBuf,
+        database: Database,
+        paths: StoragePaths,
+        interval: Duration,
+    ) -> Result<Self, String> {
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let (stop_sender, stop_receiver) = mpsc::channel();
+        let worker_flag = Arc::clone(&stop_flag);
+        let handle = thread::Builder::new()
+            .name("history-cleanup".to_owned())
+            .spawn(move || loop {
+                if worker_flag.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                match ConfigStore::load(&project_directory) {
+                    Ok(config) => match enforce_history_cleanup_for(
+                        &database,
+                        &config,
+                        &paths,
+                        SCHEDULED_ORPHAN_FILE_GRACE,
+                    ) {
+                        Ok(total_deleted) if total_deleted > 0 => {
+                            eprintln!("[cleanup] removed {total_deleted} expired history entries");
+                        }
+                        Ok(_) => {}
+                        Err(error) => eprintln!("[cleanup] scheduled cleanup failed: {error}"),
+                    },
+                    Err(error) => eprintln!("[cleanup] failed to load configuration: {error}"),
+                }
+
+                if wait_for_stop(&stop_receiver, &worker_flag, interval) {
+                    break;
+                }
+            })
+            .map_err(|error| format!("failed to start history cleanup worker: {error}"))?;
+
+        Ok(Self {
+            stop_flag,
+            stop_sender: Mutex::new(Some(stop_sender)),
+            handle: Mutex::new(Some(handle)),
+        })
+    }
+
+    fn stop(&self) {
+        self.stop_flag.store(true, Ordering::SeqCst);
+        if let Some(sender) = self
+            .stop_sender
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        {
+            let _ = sender.send(());
+        }
+
+        let handle = self
+            .handle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(handle) = handle {
+            if handle.thread().id() != thread::current().id() && handle.join().is_err() {
+                eprintln!("[cleanup] history cleanup thread terminated with a panic");
+            }
+        }
+    }
+}
+
+impl Drop for CleanupWorker {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
 impl CaptureState {
     fn new(
         privacy: &PrivacyManager,
@@ -1743,17 +1836,21 @@ fn enforce_history_cleanup(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<u64, String> {
-    let (retention_days, max_items, recycle_bin_days) = {
-        let guard = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?;
-        (
-            guard.retention_days(),
-            guard.max_items(),
-            guard.recycle_bin_days(),
-        )
-    };
+    let guard = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    enforce_history_cleanup_for(&database, &guard, &paths, Duration::ZERO)
+}
 
+fn enforce_history_cleanup_for(
+    database: &Database,
+    config: &ConfigStore,
+    paths: &StoragePaths,
+    orphan_file_grace: Duration,
+) -> Result<u64, String> {
+    let retention_days = config.retention_days();
+    let max_items = config.max_items();
+    let recycle_bin_days = config.recycle_bin_days();
     let mut total_deleted = 0u64;
     total_deleted += database
         .delete_older_than(retention_days)
@@ -1768,7 +1865,7 @@ fn enforce_history_cleanup(
         .cleanup_orphan_search_index()
         .map_err(|error| error.to_string())?;
 
-    let _ = cleanup_orphan_storage_files(&database, &paths);
+    let _ = cleanup_orphan_storage_files_with_grace(database, paths, orphan_file_grace);
 
     Ok(total_deleted)
 }
@@ -1776,6 +1873,14 @@ fn enforce_history_cleanup(
 fn cleanup_orphan_storage_files(
     database: &Database,
     paths: &StoragePaths,
+) -> Result<StorageCleanupResult, String> {
+    cleanup_orphan_storage_files_with_grace(database, paths, Duration::ZERO)
+}
+
+fn cleanup_orphan_storage_files_with_grace(
+    database: &Database,
+    paths: &StoragePaths,
+    orphan_file_grace: Duration,
 ) -> Result<StorageCleanupResult, String> {
     let references = database
         .list_storage_file_references()
@@ -1801,9 +1906,18 @@ fn cleanup_orphan_storage_files(
             if referenced_paths.contains(&normalized_cleanup_path(&entry_path)) {
                 continue;
             }
-            if let Ok(metadata) = entry.metadata() {
-                freed_bytes += metadata.len();
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if !orphan_file_grace.is_zero() {
+                let Ok(modified_at) = metadata.modified() else {
+                    continue;
+                };
+                if modified_at.elapsed().unwrap_or_default() < orphan_file_grace {
+                    continue;
+                }
             }
+            freed_bytes += metadata.len();
             if let Err(e) = std::fs::remove_file(&entry_path) {
                 eprintln!(
                     "[cleanup] failed to remove orphan file {}: {e}",
@@ -2537,6 +2651,13 @@ fn validate_search_index(search_index: tauri::State<'_, SearchIndex>) -> Result<
 }
 
 fn stop_runtime_services(app: &tauri::AppHandle) {
+    if let Some(cleanup) = app.try_state::<Mutex<CleanupWorker>>() {
+        match cleanup.lock() {
+            Ok(cleanup) => cleanup.stop(),
+            Err(_) => eprintln!("[shutdown] history cleanup lock is poisoned"),
+        }
+    }
+
     if let Some(monitor) = app.try_state::<Mutex<ClipboardMonitor>>() {
         match monitor.lock() {
             Ok(mut monitor) => {
@@ -3073,6 +3194,9 @@ pub fn run() {
             eprintln!("[startup] failed to start clipboard monitor");
         }
 
+            let cleanup_database = Database::open(&paths.database)?;
+            let cleanup_worker =
+                CleanupWorker::start(project_directory.clone(), cleanup_database, paths.clone())?;
 
             let launch_at_startup = config.launch_at_startup();
             app.manage(Mutex::new(config));
@@ -3084,6 +3208,7 @@ pub fn run() {
             app.manage(Mutex::new(clipboard_monitor));
             app.manage(Mutex::new(shortcut_manager));
             app.manage(ocr_worker);
+            app.manage(Mutex::new(cleanup_worker));
             app.manage(Mutex::new(LocalApiServer::new(0)));
 
             if let Err(error) = sync_autostart(app.handle(), launch_at_startup) {
@@ -3680,6 +3805,52 @@ mod storage_cleanup_tests {
         assert_eq!(result.removed_files, 1);
         assert!(referenced_icon.exists());
         assert!(!orphan_icon.exists());
+        fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn scheduled_cleanup_worker_stops_and_joins_cleanly() {
+        let paths = temporary_storage("worker-lifecycle");
+        let database = Database::open(&paths.database).unwrap();
+        let worker = CleanupWorker::start_with_interval(
+            paths.project.clone(),
+            database,
+            paths.clone(),
+            Duration::from_millis(5),
+        )
+        .unwrap();
+
+        std::thread::sleep(Duration::from_millis(20));
+        worker.stop();
+
+        assert!(worker.stop_flag.load(Ordering::SeqCst));
+        assert!(worker
+            .handle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_none());
+        fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn scheduled_cleanup_grace_preserves_recent_orphan_files() {
+        let paths = temporary_storage("orphan-grace");
+        let orphan = paths.images.join("recent.png");
+        fs::write(&orphan, b"recent-data").unwrap();
+        let database = Database::open_in_memory().unwrap();
+
+        let scheduled = cleanup_orphan_storage_files_with_grace(
+            &database,
+            &paths,
+            Duration::from_secs(60 * 60),
+        )
+        .unwrap();
+        assert_eq!(scheduled.removed_files, 0);
+        assert!(orphan.exists());
+
+        let manual = cleanup_orphan_storage_files(&database, &paths).unwrap();
+        assert_eq!(manual.removed_files, 1);
+        assert!(!orphan.exists());
         fs::remove_dir_all(&paths.project).unwrap();
     }
 }
