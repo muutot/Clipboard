@@ -52,20 +52,46 @@ fn main() {
 
     match parse_process_args(&args) {
         Ok(ProcessAction::LaunchGui) => clipboard_desktop_lib::run(),
-        Ok(ProcessAction::ShowHelp) => print!("{CLI_USAGE}"),
-        Ok(ProcessAction::ShowVersion) => println!("{}", env!("CARGO_PKG_VERSION")),
-        Ok(ProcessAction::RunCli(cli_args)) => {
-            if let Err(error) = run_cli_process(&cli_args) {
-                eprintln!("error: {error}");
-                std::process::exit(1);
+        action => {
+            ensure_cli_console();
+            match action {
+                Ok(ProcessAction::ShowHelp) => print!("{CLI_USAGE}"),
+                Ok(ProcessAction::ShowVersion) => println!("{}", env!("CARGO_PKG_VERSION")),
+                Ok(ProcessAction::RunCli(cli_args)) => {
+                    if let Err(error) = run_cli_process(&cli_args) {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                }
+                Err(error) => {
+                    eprintln!("error: {error}\n\n{CLI_USAGE}");
+                    std::process::exit(2);
+                }
+                Ok(ProcessAction::LaunchGui) => unreachable!("GUI action handled above"),
             }
-        }
-        Err(error) => {
-            eprintln!("error: {error}\n\n{CLI_USAGE}");
-            std::process::exit(2);
         }
     }
 }
+
+#[cfg(target_os = "windows")]
+fn ensure_cli_console() {
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn AttachConsole(process_id: u32) -> i32;
+        fn AllocConsole() -> i32;
+    }
+
+    unsafe {
+        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
+            let _ = AllocConsole();
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ensure_cli_console() {}
 
 fn parse_process_args(args: &[String]) -> Result<ProcessAction, String> {
     let Some(command) = args.first() else {
