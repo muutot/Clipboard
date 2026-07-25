@@ -1,5 +1,8 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import type { IconName } from "$lib/components/AppIcon.svelte";
+  import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import type { ContextMenuItem } from "$lib/components/ContextMenu.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
@@ -91,6 +94,8 @@
     onsaveasnew,
     onrestore,
   }: Props = $props();
+
+  let contextMenu = $state<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
   let editing = $state(false);
   let editContent = $state("");
@@ -249,6 +254,52 @@
       oncanceledit(item.id);
     }
   }
+
+  function handleContextMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const items: ContextMenuItem[] = [
+      { id: "copy", label: _t("card.copy"), icon: "copy" },
+      ...(item.kind === "text"
+        ? [{ id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName }]
+        : []),
+      { id: "detail", label: _t("card.viewDetail"), icon: "eye" },
+      ...(item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file"
+        ? [{ id: "edit", label: _t("card.edit"), icon: "edit" as IconName }]
+        : []),
+      { id: "duplicate", label: "", icon: "copy-plus" },
+      {
+        id: "favorite",
+        label: item.favorite ? _t("card.unfavorite") : _t("card.favorite"),
+        icon: "star",
+      },
+      {
+        id: "delete",
+        label: _t("card.delete"),
+        icon: "trash",
+        destructive: true,
+      },
+    ];
+    // set duplicate label after because $messages not available in array literal
+    items[items.findIndex((m) => m.id === "duplicate")] = {
+      id: "duplicate",
+      label: _t("edit.saveAsNew"),
+      icon: "copy-plus",
+    };
+    contextMenu = { x: event.clientX, y: event.clientY, items };
+  }
+
+  function handleContextAction(id: string) {
+    switch (id) {
+      case "copy": oncopy(item.id); break;
+      case "plainpaste": onplainpaste(item.id); break;
+      case "detail": ondetail(item.id); break;
+      case "edit": onedit(item.id); break;
+      case "duplicate": onduplicate(item.id); break;
+      case "favorite": ontoggleFavorite(item.id); break;
+      case "delete": ondelete(item.id); break;
+    }
+  }
 </script>
 
 <div
@@ -272,6 +323,7 @@
   data-id={item.id}
   draggable="true"
   ondragstart={handleDragStart}
+  oncontextmenu={handleContextMenu}
   onfocus={() => onselect(item.id)}
   onkeydown={handleKeydown}
 >
@@ -516,6 +568,16 @@
     </div>
   {/if}
 </div>
+
+{#if contextMenu}
+  <ContextMenu
+    x={contextMenu.x}
+    y={contextMenu.y}
+    items={contextMenu.items}
+    onclose={() => { contextMenu = null; }}
+    onaction={handleContextAction}
+  />
+{/if}
 
 <style>
   .clip-card {
