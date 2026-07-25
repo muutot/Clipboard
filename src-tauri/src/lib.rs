@@ -52,6 +52,8 @@ use storage::{
 use tauri::{Emitter, Manager};
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
+const MAIN_WINDOW_MIN_WIDTH: u32 = 730;
+const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
 
 fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> Vec<(u32, u32)> {
     let Some(shortcuts) = config.shortcuts.get(TOGGLE_WINDOW_ACTION) else {
@@ -2677,28 +2679,155 @@ fn save_window_position(
 
 #[tauri::command]
 fn restore_window_position(
+    window: tauri::Window,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<Option<WindowPosition>, String> {
-    let config = config
+    let mut config = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    Ok(
-        WindowManager::restore_position(&config).map(|(x, y, w, h)| WindowPosition {
-            x,
-            y,
-            width: w,
-            height: h,
-        }),
-    )
+    let Some((x, y, width, height)) = WindowManager::restore_position(&config) else {
+        return Ok(None);
+    };
+    let saved = WindowPosition {
+        x,
+        y,
+        width,
+        height,
+    };
+    let work_areas = match window.available_monitors() {
+        Ok(monitors) => monitors
+            .into_iter()
+            .map(|monitor| {
+                let area = monitor.work_area();
+                WindowWorkArea {
+                    x: area.position.x,
+                    y: area.position.y,
+                    width: area.size.width,
+                    height: area.size.height,
+                }
+            })
+            .collect::<Vec<_>>(),
+        Err(error) => {
+            eprintln!("[window] failed to enumerate monitors while restoring bounds: {error}");
+            Vec::new()
+        }
+    };
+    let restored = clamp_window_position_to_work_areas(saved, &work_areas);
+    if restored != saved {
+        WindowManager::save_position(
+            &mut config,
+            restored.x,
+            restored.y,
+            restored.width,
+            restored.height,
+        )?;
+    }
+    Ok(Some(restored))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WindowPosition {
     x: i32,
     y: i32,
     width: u32,
     height: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WindowWorkArea {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+fn window_intersection_area(bounds: WindowPosition, area: WindowWorkArea) -> u64 {
+    let left = i64::from(bounds.x).max(i64::from(area.x));
+    let top = i64::from(bounds.y).max(i64::from(area.y));
+    let right = (i64::from(bounds.x) + i64::from(bounds.width))
+        .min(i64::from(area.x) + i64::from(area.width));
+    let bottom = (i64::from(bounds.y) + i64::from(bounds.height))
+        .min(i64::from(area.y) + i64::from(area.height));
+    if right <= left || bottom <= top {
+        return 0;
+    }
+    ((right - left) as u64).saturating_mul((bottom - top) as u64)
+}
+
+fn window_center_distance_squared(bounds: WindowPosition, area: WindowWorkArea) -> i128 {
+    let bounds_center_x = i128::from(bounds.x) * 2 + i128::from(bounds.width);
+    let bounds_center_y = i128::from(bounds.y) * 2 + i128::from(bounds.height);
+    let area_center_x = i128::from(area.x) * 2 + i128::from(area.width);
+    let area_center_y = i128::from(area.y) * 2 + i128::from(area.height);
+    let dx = bounds_center_x - area_center_x;
+    let dy = bounds_center_y - area_center_y;
+    dx * dx + dy * dy
+}
+
+fn clamp_window_axis(position: i32, area_start: i32, area_size: u32, window_size: u32) -> i32 {
+    let minimum = i64::from(area_start);
+    let maximum = minimum + i64::from(area_size) - i64::from(window_size);
+    if maximum <= minimum {
+        return area_start;
+    }
+    i64::from(position).clamp(minimum, maximum) as i32
+}
+
+fn clamp_window_position_to_work_areas(
+    saved: WindowPosition,
+    work_areas: &[WindowWorkArea],
+) -> WindowPosition {
+    let normalized = WindowPosition {
+        width: saved.width.max(MAIN_WINDOW_MIN_WIDTH),
+        height: saved.height.max(MAIN_WINDOW_MIN_HEIGHT),
+        ..saved
+    };
+    let mut best_overlap: Option<(WindowWorkArea, u64)> = None;
+    let mut nearest: Option<(WindowWorkArea, i128)> = None;
+
+    for area in work_areas
+        .iter()
+        .copied()
+        .filter(|area| area.width > 0 && area.height > 0)
+    {
+        let overlap = window_intersection_area(normalized, area);
+        if best_overlap
+            .as_ref()
+            .is_none_or(|(_, current)| overlap > *current)
+        {
+            best_overlap = Some((area, overlap));
+        }
+
+        let distance = window_center_distance_squared(normalized, area);
+        if nearest
+            .as_ref()
+            .is_none_or(|(_, current)| distance < *current)
+        {
+            nearest = Some((area, distance));
+        }
+    }
+
+    let target = best_overlap
+        .filter(|(_, overlap)| *overlap > 0)
+        .map(|(area, _)| area)
+        .or_else(|| nearest.map(|(area, _)| area));
+    let Some(target) = target else {
+        return normalized;
+    };
+
+    let width = normalized
+        .width
+        .min(target.width.max(MAIN_WINDOW_MIN_WIDTH));
+    let height = normalized
+        .height
+        .min(target.height.max(MAIN_WINDOW_MIN_HEIGHT));
+    WindowPosition {
+        x: clamp_window_axis(normalized.x, target.x, target.width, width),
+        y: clamp_window_axis(normalized.y, target.y, target.height, height),
+        width,
+        height,
+    }
 }
 
 #[tauri::command]
@@ -3978,6 +4107,99 @@ mod title_metadata_tests {
         let value: serde_json::Value = serde_json::from_str(&metadata).unwrap();
         assert_eq!(value["width"], 120);
         assert_eq!(value["customTitle"], true);
+    }
+}
+
+#[cfg(test)]
+mod window_position_tests {
+    use super::*;
+
+    fn bounds(x: i32, y: i32, width: u32, height: u32) -> WindowPosition {
+        WindowPosition {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn work_area(x: i32, y: i32, width: u32, height: u32) -> WindowWorkArea {
+        WindowWorkArea {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn keeps_bounds_inside_the_current_work_area() {
+        let saved = bounds(240, 120, 900, 700);
+        let areas = [work_area(0, 0, 1920, 1040)];
+
+        assert_eq!(clamp_window_position_to_work_areas(saved, &areas), saved);
+    }
+
+    #[test]
+    fn clamps_an_offscreen_window_to_the_visible_edge() {
+        let saved = bounds(2500, 100, 900, 700);
+        let areas = [work_area(0, 0, 1920, 1040)];
+
+        assert_eq!(
+            clamp_window_position_to_work_areas(saved, &areas),
+            bounds(1020, 100, 900, 700)
+        );
+    }
+
+    #[test]
+    fn moves_a_window_from_a_removed_monitor_to_the_nearest_remaining_area() {
+        let saved = bounds(-1600, 80, 900, 700);
+        let areas = [work_area(0, 0, 1920, 1040)];
+
+        assert_eq!(
+            clamp_window_position_to_work_areas(saved, &areas),
+            bounds(0, 80, 900, 700)
+        );
+    }
+
+    #[test]
+    fn preserves_negative_coordinates_for_a_connected_left_monitor() {
+        let saved = bounds(-1800, 120, 800, 700);
+        let areas = [work_area(-1920, 0, 1920, 1040), work_area(0, 0, 1920, 1040)];
+
+        assert_eq!(clamp_window_position_to_work_areas(saved, &areas), saved);
+    }
+
+    #[test]
+    fn chooses_the_monitor_with_the_largest_visible_overlap() {
+        let saved = bounds(1700, 100, 800, 700);
+        let areas = [work_area(0, 0, 1920, 1040), work_area(1920, 0, 1920, 1040)];
+
+        assert_eq!(
+            clamp_window_position_to_work_areas(saved, &areas),
+            bounds(1920, 100, 800, 700)
+        );
+    }
+
+    #[test]
+    fn limits_oversized_bounds_to_the_selected_work_area() {
+        let saved = bounds(-400, -300, 4000, 2400);
+        let areas = [work_area(0, 0, 1920, 1040)];
+
+        assert_eq!(
+            clamp_window_position_to_work_areas(saved, &areas),
+            bounds(0, 0, 1920, 1040)
+        );
+    }
+
+    #[test]
+    fn applies_native_minimums_without_monitor_information() {
+        let saved = bounds(20, 30, 0, 0);
+
+        assert_eq!(
+            clamp_window_position_to_work_areas(saved, &[]),
+            bounds(20, 30, MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT)
+        );
     }
 }
 
