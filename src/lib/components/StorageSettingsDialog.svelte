@@ -466,30 +466,16 @@
       </div>
     </div>
 
-    <nav aria-label="设置分类">
+    <nav class="settings-primary-nav" aria-label="设置分类">
       <button
-        class:active={activeSection === "general"}
+        class:active={activeSection === "general" ||
+          activeSection === "compact" ||
+          activeSection === "font"}
         type="button"
         onclick={() => (activeSection = "general")}
       >
         <AppIcon name="sliders" size={16} />
         <span>{_t("storage.generalTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "compact"}
-        type="button"
-        onclick={() => (activeSection = "compact")}
-      >
-        <AppIcon name="grid" size={16} />
-        <span>{_t("storage.compactTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "font"}
-        type="button"
-        onclick={() => (activeSection = "font")}
-      >
-        <AppIcon name="type" size={16} />
-        <span>字体</span>
       </button>
       <button
         class:active={activeSection === "capture"}
@@ -540,6 +526,34 @@
   </aside>
 
   <div class="settings-content">
+    {#if activeSection === "general" || activeSection === "compact" || activeSection === "font"}
+      <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
+        <button
+          type="button"
+          class:active={activeSection === "general"}
+          aria-current={activeSection === "general" ? "page" : undefined}
+          onclick={() => (activeSection = "general")}
+        >
+          {_t("storage.generalTab")}
+        </button>
+        <button
+          type="button"
+          class:active={activeSection === "compact"}
+          aria-current={activeSection === "compact" ? "page" : undefined}
+          onclick={() => (activeSection = "compact")}
+        >
+          {_t("storage.compactTab")}
+        </button>
+        <button
+          type="button"
+          class:active={activeSection === "font"}
+          aria-current={activeSection === "font" ? "page" : undefined}
+          onclick={() => (activeSection = "font")}
+        >
+          {_t("general.fontSize")}
+        </button>
+      </nav>
+    {/if}
     {#if activeSection === "general"}
       <GeneralSettingsPanel {onclose} />
     {:else if activeSection === "compact"}
@@ -1105,12 +1119,12 @@
     font-size: var(--font-size-secondary, 11px);
   }
 
-  nav {
+  .settings-primary-nav {
     display: grid;
     gap: 4px;
   }
 
-  nav button {
+  .settings-primary-nav button {
     display: flex;
     align-items: center;
     gap: 9px;
@@ -1130,19 +1144,19 @@
       border-color 100ms ease;
   }
 
-  nav button:hover {
+  .settings-primary-nav button:hover {
     color: #ccc;
     background: #252525;
     border-color: #3a3a3a;
   }
 
-  nav button.active {
+  .settings-primary-nav button.active {
     border-color: #5a5a5a;
     color: #f0f0f0;
     background: #333;
   }
 
-  nav button:disabled {
+  .settings-primary-nav button:disabled {
     opacity: 0.45;
     cursor: default;
   }
@@ -1170,6 +1184,42 @@
     min-width: 0;
     min-height: 0;
     flex-direction: column;
+  }
+
+  .settings-subnav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 18px 0;
+    background: #191919;
+  }
+
+  .settings-subnav button {
+    min-height: 28px;
+    padding: 5px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--settings-control-radius);
+    color: #888;
+    background: transparent;
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+    transition:
+      color 100ms ease,
+      background 100ms ease,
+      border-color 100ms ease;
+  }
+
+  .settings-subnav button:hover {
+    border-color: #343434;
+    color: #cfcfcf;
+    background: #222;
+  }
+
+  .settings-subnav button.active {
+    border-color: #3d5a80;
+    color: #e8e8e8;
+    background: #252f3d;
   }
 
   .settings-content > header {
