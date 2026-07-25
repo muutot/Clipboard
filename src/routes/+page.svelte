@@ -25,6 +25,7 @@
     formatSizeSimple,
     generatedClipboardTitle,
     isCustomClipboardTitle,
+    writeClipboardImage,
     writeClipboardText,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
@@ -517,6 +518,7 @@
             : undefined,
         previewPath: record.previewPath,
         resourcePath: record.resourcePath,
+        contentHash: record.contentHash,
         textContent: record.textContent,
         iconPath: record.iconPath,
         metadataJson: record.metadataJson,
@@ -1060,7 +1062,7 @@
         const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
         const response = await fetch(src);
         const blob = await response.blob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+        await writeClipboardImage(blob, item.resourcePath, item.contentHash);
         statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
         showToast(_t("toast.copySuccess"), "success");
       } catch {

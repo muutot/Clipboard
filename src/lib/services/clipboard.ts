@@ -14,6 +14,25 @@ export async function writeClipboardText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
+export async function writeClipboardImage(
+  blob: Blob,
+  resourcePath?: string | null,
+  contentHash?: string,
+): Promise<void> {
+  if (isTauriRuntime() && (resourcePath || contentHash)) {
+    try {
+      await invoke("mark_self_triggered_image", {
+        resourcePath: resourcePath ?? null,
+        contentHash: contentHash ?? null,
+      });
+    } catch (error) {
+      console.warn("Unable to register image self-trigger", error);
+    }
+  }
+
+  await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+}
+
 export async function loadClipboardHistory(
   limit = 100,
   offset = 0,
@@ -200,6 +219,7 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     fileMeta,
     previewPath: record.previewPath,
     resourcePath: record.resourcePath,
+    contentHash: record.contentHash,
     textContent: record.textContent,
     iconPath: record.iconPath,
     metadataJson: record.metadataJson,

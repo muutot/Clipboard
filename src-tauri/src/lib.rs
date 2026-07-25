@@ -332,6 +332,48 @@ fn should_skip_self_triggered_text(
     should_skip_self_triggered_hash(guard, &content_hash)
 }
 
+fn should_skip_self_triggered_media(
+    guard: &mut content::hash::SelfTriggerGuard,
+    kind: &str,
+    data: &[u8],
+) -> bool {
+    content::hash::compute_media_write_hashes(kind, data)
+        .into_iter()
+        .any(|content_hash| should_skip_self_triggered_hash(guard, &content_hash))
+}
+
+fn register_image_self_trigger(
+    guard: &mut content::hash::SelfTriggerGuard,
+    resource_path: Option<&str>,
+    fallback_hash: Option<&str>,
+) -> Result<(), String> {
+    let mut registered = false;
+
+    if let Some(path) = resource_path.filter(|path| !path.trim().is_empty()) {
+        match std::fs::read(path) {
+            Ok(data) => {
+                guard.mark_media_write("image", &data);
+                registered = true;
+            }
+            Err(error) if fallback_hash.is_none() => {
+                return Err(format!("failed to read image for self-trigger: {error}"));
+            }
+            Err(_) => {}
+        }
+    }
+
+    if let Some(content_hash) = fallback_hash.filter(|hash| !hash.trim().is_empty()) {
+        guard.mark_as_self_triggered(content_hash);
+        registered = true;
+    }
+
+    if registered {
+        Ok(())
+    } else {
+        Err("image self-trigger has no readable resource or content hash".to_owned())
+    }
+}
+
 fn stop_signal_requested(receiver: &mpsc::Receiver<()>) -> bool {
     matches!(
         receiver.try_recv(),
@@ -2080,6 +2122,23 @@ fn mark_self_triggered(
 }
 
 #[tauri::command]
+fn mark_self_triggered_image(
+    self_trigger: tauri::State<'_, SelfTriggerState>,
+    resource_path: Option<String>,
+    content_hash: Option<String>,
+) -> Result<(), String> {
+    let mut guard = self_trigger
+        .0
+        .lock()
+        .map_err(|_| "self-trigger lock poisoned".to_owned())?;
+    register_image_self_trigger(
+        &mut guard,
+        resource_path.as_deref(),
+        content_hash.as_deref(),
+    )
+}
+
+#[tauri::command]
 fn save_window_position(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     x: i32,
@@ -2513,6 +2572,13 @@ pub fn run() {
                                     if stop_flag_for_thread.load(Ordering::SeqCst) {
                                         break;
                                     }
+                                    if should_skip_self_triggered_media(
+                                        &mut self_trigger_guard.lock().unwrap(),
+                                        "image",
+                                        &img,
+                                    ) {
+                                        continue;
+                                    }
                                     let img_hash = content::hash::compute_media_hash("image", &img);
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
@@ -2926,6 +2992,7 @@ pub fn run() {
             install_ppocr,
             check_ppocr_status,
             mark_self_triggered,
+            mark_self_triggered_image,
             open_external_url,
             reveal_in_explorer,
             copy_file_to,
@@ -3085,6 +3152,57 @@ mod capture_tests {
             &mut group_guard,
             &group_hash
         ));
+    }
+
+    #[test]
+    fn self_triggered_image_write_matches_normalized_capture_hash() {
+        use std::io::Cursor;
+
+        let image = image::RgbaImage::from_pixel(2, 1, image::Rgba([20, 40, 80, 255]));
+        let mut stored_png = Cursor::new(Vec::new());
+        image
+            .write_to(&mut stored_png, image::ImageFormat::Png)
+            .expect("PNG encoding should succeed");
+        let mut clipboard_bmp = Cursor::new(Vec::new());
+        image
+            .write_to(&mut clipboard_bmp, image::ImageFormat::Bmp)
+            .expect("BMP encoding should succeed");
+
+        let path = std::env::temp_dir().join(format!(
+            "clipboard-self-trigger-image-{}-{}.png",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::write(&path, stored_png.get_ref()).expect("test image should be writable");
+
+        let mut guard = content::hash::SelfTriggerGuard::new();
+        register_image_self_trigger(&mut guard, path.to_str(), None).unwrap();
+        assert!(should_skip_self_triggered_media(
+            &mut guard,
+            "image",
+            clipboard_bmp.get_ref()
+        ));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn image_self_trigger_registration_falls_back_to_persisted_hash() {
+        let bytes = b"legacy-image-bytes";
+        let fallback_hash = content::hash::compute_media_hash("image", bytes);
+        let mut guard = content::hash::SelfTriggerGuard::new();
+
+        register_image_self_trigger(
+            &mut guard,
+            Some("C:\\missing\\clipboard-image.png"),
+            Some(&fallback_hash),
+        )
+        .unwrap();
+
+        assert!(should_skip_self_triggered_hash(&mut guard, &fallback_hash));
     }
 
     #[test]

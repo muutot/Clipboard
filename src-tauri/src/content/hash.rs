@@ -24,6 +24,45 @@ pub fn compute_media_hash(kind: &str, data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Computes an image hash from decoded RGBA pixels instead of the source
+/// container bytes. Windows exposes a `ClipboardItem` image as DIB data and
+/// the capture path re-encodes it as PNG, so hashing pixels keeps a copied
+/// image stable across PNG metadata/encoding differences introduced by the
+/// browser or the clipboard implementation.
+///
+/// Non-image data and undecodable image data intentionally fall back to the
+/// byte hash so callers retain a deterministic identity even for malformed
+/// or legacy records.
+pub fn compute_normalized_media_hash(kind: &str, data: &[u8]) -> String {
+    if kind != "image" {
+        return compute_media_hash(kind, data);
+    }
+
+    let Ok(image) = image::load_from_memory(data) else {
+        return compute_media_hash(kind, data);
+    };
+    let rgba = image.to_rgba8();
+    let mut hasher = Sha256::new();
+    hasher.update(kind.as_bytes());
+    hasher.update(rgba.width().to_le_bytes());
+    hasher.update(rgba.height().to_le_bytes());
+    hasher.update(rgba.as_raw());
+    format!("{:x}", hasher.finalize())
+}
+
+/// Returns the hashes that can be observed for a media write. The raw hash
+/// keeps compatibility with existing persisted image records, while the
+/// normalized hash is the stable identity used across clipboard encodings.
+pub fn compute_media_write_hashes(kind: &str, data: &[u8]) -> Vec<String> {
+    let raw = compute_media_hash(kind, data);
+    let normalized = compute_normalized_media_hash(kind, data);
+    if normalized == raw {
+        vec![raw]
+    } else {
+        vec![raw, normalized]
+    }
+}
+
 pub fn compute_clipboard_write_hashes(text: &str) -> Vec<String> {
     let text_variants = newline_variants(text);
     let mut hashes = Vec::with_capacity(text_variants.len() * 4);
@@ -100,6 +139,12 @@ impl SelfTriggerGuard {
 
     pub fn mark_clipboard_write(&mut self, text: &str) {
         for hash in compute_clipboard_write_hashes(text) {
+            self.mark_as_self_triggered(&hash);
+        }
+    }
+
+    pub fn mark_media_write(&mut self, kind: &str, data: &[u8]) {
+        for hash in compute_media_write_hashes(kind, data) {
             self.mark_as_self_triggered(&hash);
         }
     }
@@ -244,6 +289,51 @@ mod tests {
         assert!(guard.is_self_triggered(&compute_content_hash("text", "first\r\nsecond", None,)));
         assert!(guard.is_self_triggered(&compute_content_hash("link", "first\r\nsecond", None,)));
         assert!(guard.is_self_triggered(&compute_content_hash("files", "first\r\nsecond", None,)));
+    }
+
+    #[test]
+    fn normalized_media_hash_ignores_image_container_encoding() {
+        use std::io::Cursor;
+
+        let image = image::RgbaImage::from_pixel(2, 1, image::Rgba([12, 34, 56, 255]));
+        let mut png = Cursor::new(Vec::new());
+        image
+            .write_to(&mut png, image::ImageFormat::Png)
+            .expect("PNG encoding should succeed");
+        let mut bmp = Cursor::new(Vec::new());
+        image
+            .write_to(&mut bmp, image::ImageFormat::Bmp)
+            .expect("BMP encoding should succeed");
+
+        assert_ne!(
+            compute_media_hash("image", png.get_ref()),
+            compute_media_hash("image", bmp.get_ref())
+        );
+        assert_eq!(
+            compute_normalized_media_hash("image", png.get_ref()),
+            compute_normalized_media_hash("image", bmp.get_ref())
+        );
+    }
+
+    #[test]
+    fn media_write_registration_matches_a_differently_encoded_image() {
+        use std::io::Cursor;
+
+        let image = image::RgbaImage::from_pixel(1, 1, image::Rgba([200, 100, 50, 255]));
+        let mut stored = Cursor::new(Vec::new());
+        image
+            .write_to(&mut stored, image::ImageFormat::Png)
+            .expect("PNG encoding should succeed");
+        let mut clipboard = Cursor::new(Vec::new());
+        image
+            .write_to(&mut clipboard, image::ImageFormat::Bmp)
+            .expect("BMP encoding should succeed");
+
+        let mut guard = SelfTriggerGuard::new();
+        guard.mark_media_write("image", stored.get_ref());
+        assert!(
+            guard.is_self_triggered(&compute_normalized_media_hash("image", clipboard.get_ref()))
+        );
     }
 
     #[test]
