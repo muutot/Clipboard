@@ -4,12 +4,14 @@ use std::sync::Mutex;
 use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::oarocr::OAROCRBuilder;
 
+use super::models::PpOcrModelSpec;
 use super::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
 use crate::domain::OcrTextBlock;
 
 pub struct PpOcrEngine {
     ocr: Mutex<Option<oar_ocr::oarocr::OAROCR>>,
     models_dir: PathBuf,
+    model: &'static PpOcrModelSpec,
     score_threshold: f32,
     box_threshold: f32,
     unclip_ratio: f32,
@@ -23,6 +25,7 @@ unsafe impl Sync for PpOcrEngine {}
 impl PpOcrEngine {
     pub fn new(
         models_dir: PathBuf,
+        model: &'static PpOcrModelSpec,
         score_threshold: f32,
         box_threshold: f32,
         unclip_ratio: f32,
@@ -30,6 +33,7 @@ impl PpOcrEngine {
         Self {
             ocr: Mutex::new(None),
             models_dir,
+            model,
             score_threshold,
             box_threshold,
             unclip_ratio,
@@ -37,7 +41,7 @@ impl PpOcrEngine {
     }
 
     pub fn is_available(&self) -> bool {
-        super::models::all_models_present(&self.models_dir)
+        super::models::model_is_installed(&self.models_dir, self.model)
     }
 
     pub fn models_dir(&self) -> &PathBuf {
@@ -48,9 +52,9 @@ impl PpOcrEngine {
         super::models::set_oar_home(&self.models_dir);
 
         OAROCRBuilder::new(
-            "pp-ocrv6_small_det.onnx",
-            "pp-ocrv6_small_rec.onnx",
-            "ppocrv6_dict.txt",
+            self.model.detection.filename,
+            self.model.recognition.filename,
+            self.model.dictionary.filename,
         )
         .text_detection_config(TextDetectionConfig {
             score_threshold: self.score_threshold,
@@ -65,7 +69,13 @@ impl PpOcrEngine {
 
 impl Default for PpOcrEngine {
     fn default() -> Self {
-        Self::new(PathBuf::new(), 0.3, 0.6, 1.5)
+        Self::new(
+            PathBuf::new(),
+            super::models::default_model_spec(),
+            0.3,
+            0.6,
+            1.5,
+        )
     }
 }
 
@@ -75,7 +85,7 @@ impl OcrEngine for PpOcrEngine {
     }
 
     fn model_version(&self) -> &str {
-        super::models::MODEL_VERSION
+        self.model.model_version
     }
 
     fn recognize(&self, input: &OcrInput) -> Result<OcrOutput, OcrEngineError> {

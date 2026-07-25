@@ -111,15 +111,14 @@
   let ocrEngine = $state("ppocr");
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
-  let ocrAvailable = $state(false);
-  let installedVariant = $state<string>("");
+  let installedVariants = $state<string[]>([]);
   let activeVariant = $state<string>("");
   let ocrInstalling = $state(false);
   let ocrProgressLabel = $state("");
   let ocrProgressPct = $state(-1);
   let ocrProgressCurrent = $state(0);
   let ocrProgressTotal = $state(0);
-  let modelVariant = $state("tiny");
+  let modelVariant = $state("small");
   let detScoreThreshold = $state(0.3);
   let detBoxThreshold = $state(0.6);
   let detUnclipRatio = $state(1.5);
@@ -183,11 +182,6 @@
         ocrPending = result.pendingTasks;
         ocrCompleted = result.completedTasks;
       }
-      const status = await invoke<{ available: boolean }>("check_ppocr_status");
-      if (status) {
-        ocrAvailable = status.available;
-        if (status.available) installedVariant = installedVariant || modelVariant;
-      }
     } catch {
       /* ignore */
     }
@@ -205,7 +199,6 @@
         detBoxThreshold = cfg.detBoxThreshold;
         detUnclipRatio = cfg.detUnclipRatio;
         if (cfg.ppocrModelVariant) {
-          installedVariant = cfg.ppocrModelVariant;
           activeVariant = cfg.ppocrModelVariant;
           modelVariant = cfg.ppocrModelVariant;
         }
@@ -213,10 +206,22 @@
     } catch {
       /* ignore */
     }
+    try {
+      const modelStatus = await invoke<{
+        activeVariant: string;
+        installedVariants: string[];
+      }>("check_ppocr_status");
+      installedVariants = modelStatus.installedVariants;
+      activeVariant = modelStatus.activeVariant;
+      if (!modelVariant) modelVariant = modelStatus.activeVariant;
+    } catch {
+      installedVariants = [];
+    }
   }
 
   async function installPpocr() {
     ocrInstalling = true;
+    feedbackSuccess = false;
     ocrProgressPct = -1;
     ocrProgressLabel = "";
     ocrProgressCurrent = 0;
@@ -237,9 +242,7 @@
       const msg = await invoke<string>("install_ppocr", { variant: modelVariant });
       feedback = msg;
       feedbackSuccess = true;
-      installedVariant = modelVariant;
-      activeVariant = modelVariant;
-      loadOcrStatus();
+      await loadOcrStatus();
     } catch (e) {
       feedback = String(e);
     } finally {
@@ -255,12 +258,20 @@
       feedbackSuccess = true;
       return;
     }
+    feedbackSuccess = false;
     try {
-      await saveOcrEngine("ppocr");
-      activeVariant = modelVariant;
+      await invoke("set_ocr_config", {
+        settings: {
+          engine: "ppocr",
+          ppocrModelVariant: modelVariant,
+        },
+      });
+      await loadOcrStatus();
+      ocrEngine = "ppocr";
       feedback = "切换成功";
       feedbackSuccess = true;
     } catch (e) {
+      await loadOcrStatus();
       feedback = String(e);
     }
   }
@@ -386,31 +397,41 @@
   }
 
   async function saveOcrEngine(engine: string) {
+    feedbackSuccess = false;
     try {
-      await invoke("set_ocr_config", { engine });
+      await invoke("set_ocr_config", {
+        settings: {
+          engine,
+          ...(engine === "ppocr" ? { ppocrModelVariant: modelVariant } : {}),
+        },
+      });
       ocrEngine = engine;
-      await invoke("restart_ocr_engine");
+      await loadOcrStatus();
       feedback = `OCR 引擎已切换为 ${engine === "ppocr" ? "PP-OCRv6" : "Tesseract"}，立即生效`;
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save OCR config", error);
+      await loadOcrStatus();
       feedback = error instanceof Error ? error.message : String(error);
     }
   }
 
   async function saveDetConfig() {
+    feedbackSuccess = false;
     try {
       await invoke("set_ocr_config", {
-        engine: ocrEngine,
-        detScoreThreshold,
-        detBoxThreshold,
-        detUnclipRatio,
+        settings: {
+          engine: ocrEngine,
+          detScoreThreshold,
+          detBoxThreshold,
+          detUnclipRatio,
+        },
       });
-      await invoke("restart_ocr_engine");
       feedback = "检测参数已保存并生效";
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save detection config", error);
+      await loadOcrStatus();
       feedback = error instanceof Error ? error.message : String(error);
     }
   }
@@ -610,14 +631,28 @@
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
           <span class="setting-label">模型</span>
-          <select bind:value={modelVariant} class="model-select ocr-model-select">
-            <option value="tiny">tiny (~5MB){installedVariant === "tiny" ? " ✓" : ""}</option>
-            <option value="medium">medium (~15MB){installedVariant === "medium" ? " ✓" : ""}</option
+          <select
+            bind:value={modelVariant}
+            class="model-select ocr-model-select"
+            disabled={ocrInstalling}
+          >
+            <option value="tiny">tiny (~6MB){installedVariants.includes("tiny") ? " ✓" : ""}</option
             >
-            <option value="large">large (~30MB){installedVariant === "large" ? " ✓" : ""}</option>
+            <option value="small"
+              >small (~30MB){installedVariants.includes("small") ? " ✓" : ""}</option
+            >
+            <option value="medium"
+              >medium (~135MB){installedVariants.includes("medium") ? " ✓" : ""}</option
+            >
           </select>
-          {#if installedVariant === modelVariant}
-            <button type="button" onclick={applyModel}>应用</button>
+          {#if installedVariants.includes(modelVariant)}
+            <button
+              type="button"
+              disabled={ocrInstalling || activeVariant === modelVariant}
+              onclick={applyModel}
+            >
+              {activeVariant === modelVariant ? "已应用" : "应用"}
+            </button>
           {:else}
             <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
               {ocrInstalling

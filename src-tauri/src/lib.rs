@@ -756,15 +756,19 @@ fn get_ocr_status(
         .map_err(|_| "config lock poisoned".to_owned())?;
     let engine = cfg.ocr_engine().to_string();
     let models_dir = ocr::models::models_dir(&paths.storage);
+    let model = configured_ppocr_model(&cfg);
+    let installed_variants = ocr::models::installed_model_variants(&models_dir);
+    let ppocr_available = ocr::models::model_is_installed(&models_dir, model);
 
     Ok(OcrStatusInfo {
         pending_tasks: pending,
         completed_tasks: completed,
         tesseract_available: TesseractOcrEngine::is_available(),
-        ppocr_available: ocr::models::all_models_present(&models_dir),
-        has_engine: TesseractOcrEngine::is_available()
-            || ocr::models::all_models_present(&models_dir),
+        ppocr_available,
+        has_engine: TesseractOcrEngine::is_available() || !installed_variants.is_empty(),
         engine,
+        ppocr_model_variant: model.id.to_owned(),
+        installed_variants,
     })
 }
 
@@ -777,6 +781,99 @@ struct OcrStatusInfo {
     ppocr_available: bool,
     has_engine: bool,
     engine: String,
+    ppocr_model_variant: String,
+    installed_variants: Vec<&'static str>,
+}
+
+fn configured_ppocr_model(config: &ConfigStore) -> &'static ocr::models::PpOcrModelSpec {
+    ocr::models::model_spec(config.ppocr_model_variant()).unwrap_or_else(|| {
+        eprintln!(
+            "[ocr] unsupported configured PP-OCR model variant '{}', using small",
+            config.ppocr_model_variant()
+        );
+        ocr::models::default_model_spec()
+    })
+}
+
+fn ocr_config_response(config: &ConfigStore) -> OcrConfigResponse {
+    OcrConfigResponse {
+        engine: config.ocr_engine().to_string(),
+        tesseract_languages: config.tesseract_languages().to_string(),
+        ppocr_model_variant: configured_ppocr_model(config).id.to_owned(),
+        det_score_threshold: config.det_score_threshold(),
+        det_box_threshold: config.det_box_threshold(),
+        det_unclip_ratio: config.det_unclip_ratio(),
+    }
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct OcrConfigUpdate {
+    engine: Option<String>,
+    ppocr_model_variant: Option<String>,
+    det_score_threshold: Option<f32>,
+    det_box_threshold: Option<f32>,
+    det_unclip_ratio: Option<f32>,
+}
+
+fn apply_ocr_runtime_settings(
+    config: &Mutex<ConfigStore>,
+    paths: &StoragePaths,
+    worker: &OcrWorkerManager,
+    update: OcrConfigUpdate,
+) -> Result<OcrConfigResponse, String> {
+    let mut cfg = config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_owned())?;
+    let engine = update.engine.unwrap_or_else(|| cfg.ocr_engine().to_owned());
+    let model = match update.ppocr_model_variant {
+        Some(variant) => ocr::models::model_spec(&variant)
+            .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?,
+        None => configured_ppocr_model(&cfg),
+    };
+    let score_threshold = update
+        .det_score_threshold
+        .unwrap_or_else(|| cfg.det_score_threshold());
+    let box_threshold = update
+        .det_box_threshold
+        .unwrap_or_else(|| cfg.det_box_threshold());
+    let unclip_ratio = update
+        .det_unclip_ratio
+        .unwrap_or_else(|| cfg.det_unclip_ratio());
+
+    let runtime_engine: Arc<dyn OcrEngine> = match engine.as_str() {
+        "ppocr" => {
+            let ppocr = PpOcrEngine::new(
+                ocr::models::models_dir(&paths.storage),
+                model,
+                score_threshold,
+                box_threshold,
+                unclip_ratio,
+            );
+            if !ppocr.is_available() {
+                return Err(format!("PP-OCR {} model files are not installed", model.id));
+            }
+            Arc::new(ppocr)
+        }
+        "tesseract" if TesseractOcrEngine::is_available() => Arc::new(
+            TesseractOcrEngine::with_languages(cfg.tesseract_languages().to_owned()),
+        ),
+        "tesseract" => return Err("Tesseract is not available".to_owned()),
+        _ => return Err(format!("unsupported OCR engine: {engine}")),
+    };
+    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
+
+    cfg.set_ocr_settings(
+        engine,
+        model.id.to_owned(),
+        score_threshold,
+        box_threshold,
+        unclip_ratio,
+    )
+    .map_err(|e| e.to_string())?;
+    worker.restart(runtime_engine, Arc::new(database));
+
+    Ok(ocr_config_response(&cfg))
 }
 
 #[tauri::command]
@@ -786,33 +883,20 @@ fn get_ocr_config(
     let config = config
         .lock()
         .map_err(|_| "config lock poisoned".to_owned())?;
-    Ok(OcrConfigResponse {
-        engine: config.ocr_engine().to_string(),
-        tesseract_languages: config.tesseract_languages().to_string(),
-        ppocr_model_variant: config.ppocr_model_variant().to_string(),
-        det_score_threshold: config.det_score_threshold(),
-        det_box_threshold: config.det_box_threshold(),
-        det_unclip_ratio: config.det_unclip_ratio(),
-    })
+    Ok(ocr_config_response(&config))
 }
 
 #[tauri::command]
 fn set_ocr_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
-    engine: String,
-    det_score_threshold: Option<f32>,
-    det_box_threshold: Option<f32>,
-    det_unclip_ratio: Option<f32>,
-) -> Result<(), String> {
-    let mut cfg = config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_owned())?;
-    cfg.set_ocr_engine(engine).map_err(|e| e.to_string())?;
-    let score = det_score_threshold.unwrap_or_else(|| cfg.det_score_threshold());
-    let box_t = det_box_threshold.unwrap_or_else(|| cfg.det_box_threshold());
-    let unclip = det_unclip_ratio.unwrap_or_else(|| cfg.det_unclip_ratio());
-    cfg.set_det_thresholds(score, box_t, unclip)
-        .map_err(|e| e.to_string())
+    paths: tauri::State<'_, StoragePaths>,
+    worker: tauri::State<'_, OcrWorkerManager>,
+    settings: OcrConfigUpdate,
+) -> Result<OcrConfigResponse, String> {
+    if settings.engine.is_none() {
+        return Err("OCR engine is required".to_owned());
+    }
+    apply_ocr_runtime_settings(&config, &paths, &worker, settings)
 }
 
 #[tauri::command]
@@ -821,36 +905,7 @@ fn restart_ocr_engine(
     paths: tauri::State<'_, StoragePaths>,
     worker: tauri::State<'_, OcrWorkerManager>,
 ) -> Result<(), String> {
-    let cfg = config.lock().map_err(|_| "config lock".to_owned())?;
-    let ocr_engine_name = cfg.ocr_engine().to_string();
-    let langs = cfg.tesseract_languages().to_string();
-    let score_threshold = cfg.det_score_threshold();
-    let box_threshold = cfg.det_box_threshold();
-    let unclip_ratio = cfg.det_unclip_ratio();
-    drop(cfg);
-
-    let engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" {
-        let ppocr = PpOcrEngine::new(
-            ocr::models::models_dir(&paths.storage),
-            score_threshold,
-            box_threshold,
-            unclip_ratio,
-        );
-        if ppocr.is_available() {
-            Arc::new(ppocr)
-        } else {
-            return Err("PP-OCR models not downloaded".to_string());
-        }
-    } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
-        Arc::new(TesseractOcrEngine::with_languages(langs))
-    } else if TesseractOcrEngine::is_available() {
-        Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
-    } else {
-        return Err("no OCR engine available".to_string());
-    };
-
-    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
-    worker.restart(engine, Arc::new(database));
+    apply_ocr_runtime_settings(&config, &paths, &worker, OcrConfigUpdate::default())?;
     Ok(())
 }
 
@@ -864,113 +919,144 @@ struct PpOcrDownloadProgress {
     percentage: f64,
 }
 
+async fn download_ppocr_file(
+    app: &tauri::AppHandle,
+    client: &reqwest::Client,
+    models_dir: &Path,
+    model_file: ocr::models::PpOcrModelFile,
+) -> Result<(), String> {
+    if ocr::models::model_file_is_installed(models_dir, &model_file) {
+        return Ok(());
+    }
+
+    let destination = models_dir.join(model_file.filename);
+    let temporary = models_dir.join(format!("{}.part", model_file.filename));
+    if temporary.exists() {
+        std::fs::remove_file(&temporary)
+            .map_err(|e| format!("remove stale {}: {e}", temporary.display()))?;
+    }
+
+    let _ = app.emit(
+        "ppocr-download-progress",
+        PpOcrDownloadProgress {
+            filename: model_file.filename.to_owned(),
+            label: model_file.label.to_owned(),
+            current: 0,
+            total: model_file.size_bytes,
+            percentage: 0.0,
+        },
+    );
+
+    let mut response = client
+        .get(model_file.url)
+        .send()
+        .await
+        .map_err(|e| format!("download {}: {e}", model_file.filename))?
+        .error_for_status()
+        .map_err(|e| format!("download {}: {e}", model_file.filename))?;
+    let total = response.content_length().unwrap_or(model_file.size_bytes);
+    let mut file = std::fs::File::create(&temporary).map_err(|e| e.to_string())?;
+    let mut downloaded = 0u64;
+
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| format!("download {}: {e}", model_file.filename))?
+    {
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        let percentage = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            -1.0
+        };
+        let _ = app.emit(
+            "ppocr-download-progress",
+            PpOcrDownloadProgress {
+                filename: model_file.filename.to_owned(),
+                label: model_file.label.to_owned(),
+                current: downloaded,
+                total,
+                percentage,
+            },
+        );
+    }
+
+    file.flush().map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    drop(file);
+
+    if downloaded != model_file.size_bytes {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!(
+            "downloaded {} has unexpected size: expected {}, got {}",
+            model_file.filename, model_file.size_bytes, downloaded
+        ));
+    }
+    if destination.exists() {
+        std::fs::remove_file(&destination)
+            .map_err(|e| format!("replace {}: {e}", destination.display()))?;
+    }
+    std::fs::rename(&temporary, &destination)
+        .map_err(|e| format!("install {}: {e}", model_file.filename))?;
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn install_ppocr(
     app: tauri::AppHandle,
     paths: tauri::State<'_, StoragePaths>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    worker: tauri::State<'_, OcrWorkerManager>,
     variant: String,
 ) -> Result<String, String> {
+    let model = ocr::models::model_spec(&variant)
+        .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?;
     let models_dir = ocr::models::models_dir(&paths.storage);
     std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
-    if ocr::models::all_models_present(&models_dir) {
-        let mut cfg = config
-            .lock()
-            .map_err(|_| "config lock poisoned".to_owned())?;
-        let _ = cfg.set_ppocr_model_variant(variant.to_string());
-        return Ok("PP-OCR models already installed".to_string());
-    }
-    let det_url = match variant.as_str() {
-        "tiny" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_tiny_det.onnx",
-        "medium" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_medium_det.onnx",
-        _ => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_small_det.onnx",
-    };
-    let rec_url = match variant.as_str() {
-        "tiny" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_tiny_rec.onnx",
-        "medium" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_medium_rec.onnx",
-        _ => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_small_rec.onnx",
-    };
-    let dict_url =
-        "https://raw.githubusercontent.com/hiroi-sora/pp-ocrv6-onnx/main/ppocrv6_dict.txt";
-
-    let files = [
-        (det_url, "pp-ocrv6_small_det.onnx", "检测模型"),
-        (rec_url, "pp-ocrv6_small_rec.onnx", "识别模型"),
-        (dict_url, "ppocrv6_dict.txt", "字典文件"),
-    ];
 
     let client = reqwest::Client::builder()
         .user_agent("clipboard-desktop")
         .build()
         .map_err(|e| format!("create client: {e}"))?;
 
-    for (url, filename, label) in &files {
-        let dest = models_dir.join(filename);
-        if dest.exists() {
-            continue;
-        }
-
-        let _ = app.emit(
-            "ppocr-download-progress",
-            PpOcrDownloadProgress {
-                filename: filename.to_string(),
-                label: label.to_string(),
-                current: 0,
-                total: 0,
-                percentage: 0.0,
-            },
-        );
-
-        let mut response = client
-            .get(*url)
-            .send()
-            .await
-            .map_err(|e| format!("download {filename}: {e}"))?;
-        let total = response.content_length().unwrap_or(0);
-        let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
-        let mut downloaded: u64 = 0;
-
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|e| format!("download {filename}: {e}"))?
-        {
-            file.write_all(&chunk).map_err(|e| e.to_string())?;
-            downloaded += chunk.len() as u64;
-            let percentage = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                -1.0
-            };
-            let _ = app.emit(
-                "ppocr-download-progress",
-                PpOcrDownloadProgress {
-                    filename: filename.to_string(),
-                    label: label.to_string(),
-                    current: downloaded,
-                    total,
-                    percentage,
-                },
-            );
-        }
+    for model_file in model.files() {
+        download_ppocr_file(&app, &client, &models_dir, model_file).await?;
     }
 
-    let mut cfg = config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_owned())?;
-    cfg.set_ppocr_model_variant(variant)
-        .map_err(|e| e.to_string())?;
-    drop(cfg);
+    apply_ocr_runtime_settings(
+        &config,
+        &paths,
+        &worker,
+        OcrConfigUpdate {
+            engine: Some("ppocr".to_owned()),
+            ppocr_model_variant: Some(model.id.to_owned()),
+            ..Default::default()
+        },
+    )?;
 
-    Ok("PP-OCRv6 models downloaded successfully".to_string())
+    Ok(format!(
+        "PP-OCRv6 {} model installed and activated",
+        model.id
+    ))
 }
 
 #[tauri::command]
-fn check_ppocr_status(paths: tauri::State<'_, StoragePaths>) -> Result<PpOcrStatus, String> {
+fn check_ppocr_status(
+    paths: tauri::State<'_, StoragePaths>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<PpOcrStatus, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
+    let config = config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_owned())?;
+    let active_model = configured_ppocr_model(&config);
     Ok(PpOcrStatus {
-        available: ocr::models::all_models_present(&models_dir),
+        available: ocr::models::model_is_installed(&models_dir, active_model),
         tesseract_available: TesseractOcrEngine::is_available(),
+        active_variant: active_model.id.to_owned(),
+        installed_variants: ocr::models::installed_model_variants(&models_dir),
     })
 }
 
@@ -979,6 +1065,8 @@ fn check_ppocr_status(paths: tauri::State<'_, StoragePaths>) -> Result<PpOcrStat
 struct PpOcrStatus {
     available: bool,
     tesseract_available: bool,
+    active_variant: String,
+    installed_variants: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2188,13 +2276,20 @@ pub fn run() {
 
             let ocr_engine_name = config.ocr_engine().to_string();
             let models_dir = ocr::models::models_dir(&paths.storage);
-            let ppocr_ready = ocr::models::all_models_present(&models_dir);
+            let ppocr_model = configured_ppocr_model(&config);
+            let ppocr_ready = ocr::models::model_is_installed(&models_dir, ppocr_model);
             let score_threshold = config.det_score_threshold();
             let box_threshold = config.det_box_threshold();
             let unclip_ratio = config.det_unclip_ratio();
 
             let ocr_engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" && ppocr_ready {
-                Arc::new(PpOcrEngine::new(models_dir, score_threshold, box_threshold, unclip_ratio))
+                Arc::new(PpOcrEngine::new(
+                    models_dir,
+                    ppocr_model,
+                    score_threshold,
+                    box_threshold,
+                    unclip_ratio,
+                ))
             } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
             } else if TesseractOcrEngine::is_available() {

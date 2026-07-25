@@ -479,11 +479,6 @@ impl ConfigStore {
         &self.config.ocr.engine
     }
 
-    pub fn set_ocr_engine(&mut self, value: String) -> Result<(), StorageError> {
-        self.config.ocr.engine = value;
-        self.save()
-    }
-
     pub fn tesseract_languages(&self) -> &str {
         &self.config.ocr.tesseract_languages
     }
@@ -505,9 +500,27 @@ impl ConfigStore {
         &self.config.ocr.ppocr_model_variant
     }
 
-    pub fn set_ppocr_model_variant(&mut self, value: String) -> Result<(), StorageError> {
-        self.config.ocr.ppocr_model_variant = value;
-        self.save()
+    pub fn set_ocr_settings(
+        &mut self,
+        engine: String,
+        ppocr_model_variant: String,
+        score_threshold: f32,
+        box_threshold: f32,
+        unclip_ratio: f32,
+    ) -> Result<(), StorageError> {
+        let previous = self.config.ocr.clone();
+        self.config.ocr.engine = engine;
+        self.config.ocr.ppocr_model_variant = ppocr_model_variant;
+        self.config.ocr.det_score_threshold = score_threshold;
+        self.config.ocr.det_box_threshold = box_threshold;
+        self.config.ocr.det_unclip_ratio = unclip_ratio;
+
+        if let Err(error) = self.save() {
+            self.config.ocr = previous;
+            return Err(error);
+        }
+
+        Ok(())
     }
 
     pub fn det_box_threshold(&self) -> f32 {
@@ -516,18 +529,6 @@ impl ConfigStore {
 
     pub fn det_unclip_ratio(&self) -> f32 {
         self.config.ocr.det_unclip_ratio
-    }
-
-    pub fn set_det_thresholds(
-        &mut self,
-        score_threshold: f32,
-        box_threshold: f32,
-        unclip_ratio: f32,
-    ) -> Result<(), StorageError> {
-        self.config.ocr.det_score_threshold = score_threshold;
-        self.config.ocr.det_box_threshold = box_threshold;
-        self.config.ocr.det_unclip_ratio = unclip_ratio;
-        self.save()
     }
 
     pub fn image_storage_path(&self) -> Option<&Path> {
@@ -658,6 +659,32 @@ mod tests {
         assert_eq!(saved["general"]["theme"], "light");
         assert_eq!(saved["general"]["imageFullscreenMode"], "desktop");
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 64);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn persists_ocr_runtime_settings_as_one_configuration_group() {
+        let project = temporary_test_directory("ocr-settings");
+        let mut store = ConfigStore::load(&project).unwrap();
+
+        store
+            .set_ocr_settings("ppocr".to_owned(), "medium".to_owned(), 0.4, 0.7, 2.0)
+            .unwrap();
+
+        let reloaded = ConfigStore::load(&project).unwrap();
+        assert_eq!(reloaded.ocr_engine(), "ppocr");
+        assert_eq!(reloaded.ppocr_model_variant(), "medium");
+        assert_eq!(reloaded.det_score_threshold(), 0.4);
+        assert_eq!(reloaded.det_box_threshold(), 0.7);
+        assert_eq!(reloaded.det_unclip_ratio(), 2.0);
+
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert_eq!(saved["ocr"]["engine"], "ppocr");
+        assert_eq!(saved["ocr"]["ppocrModelVariant"], "medium");
+        assert_eq!(saved["ocr"]["detScoreThreshold"], json!(0.4_f32));
+        assert_eq!(saved["ocr"]["detBoxThreshold"], json!(0.7_f32));
+        assert_eq!(saved["ocr"]["detUnclipRatio"], json!(2.0_f32));
+
         fs::remove_dir_all(project).unwrap();
     }
 
