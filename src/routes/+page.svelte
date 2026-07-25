@@ -74,6 +74,9 @@
   let deletedHistoryOffset = $state(0);
   let deletedHistoryHasMore = $state(true);
   let deletedHistoryRequestId = 0;
+  // Keep stale in-flight recycle-bin pages from resurrecting rows that were
+  // already restored or permanently removed locally.
+  const deletedHistorySuppressedIds = new Set<string>();
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
   let selectedId = $state(demoClipboardItems[0]?.id ?? "");
@@ -110,7 +113,10 @@
   type MeasuredCardHeight = { height: number; signature: string };
   let measuredCardHeights = $state<Record<string, MeasuredCardHeight>>({});
 
-  const hasDeletedItems = $derived(items.some((item) => !!item.deleted));
+  const hasDeletedItems = $derived(
+    items.some((item) => !!item.deleted) ||
+      (activeFilter === "deleted" && deletedHistoryLoaded && deletedHistoryHasMore),
+  );
 
   const filters = $derived([
     { id: "all" as ClipboardFilter, label: _t("filter.all"), icon: "grid" as IconName },
@@ -755,15 +761,18 @@
 
   function mergeDeletedHistoryPage(page: ClipboardItem[]) {
     const incoming = new Map(page.map((item) => [item.id, item]));
-    const merged = items.map((item) => {
-      const persisted = incoming.get(item.id);
-      // A local restore/delete mutation may have landed while the page was
-      // in flight. Do not let a stale recycle-bin response undo a restore.
-      if (!persisted || !item.deleted) return item;
-      return { ...item, ...persisted, deleted: true };
-    });
+    const merged = items
+      .filter((item) => !item.deleted || !deletedHistorySuppressedIds.has(item.id))
+      .map((item) => {
+        const persisted = incoming.get(item.id);
+        // A local restore/delete mutation may have landed while the page was
+        // in flight. Do not let a stale recycle-bin response undo a restore.
+        if (!persisted || !item.deleted) return item;
+        return { ...item, ...persisted, deleted: true };
+      });
     const existingIds = new Set(merged.map((item) => item.id));
     for (const item of page) {
+      if (deletedHistorySuppressedIds.has(item.id)) continue;
       if (!existingIds.has(item.id)) merged.push({ ...item, deleted: true });
     }
     items = merged;
@@ -776,7 +785,6 @@
     deletedHistoryRequestId += 1;
     deletedHistoryLoading = false;
     deletedHistoryOffset = 0;
-    deletedHistoryLoaded = false;
     deletedHistoryHasMore = true;
     void loadDeletedHistoryPage();
   }
@@ -935,6 +943,7 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
 
+    deletedHistorySuppressedIds.delete(id);
     // Soft delete: mark as deleted, don't remove from list
     items = items.map((item) => (item.id === id ? { ...item, deleted: true } : item));
     if (indexedItems) {
@@ -967,6 +976,7 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
 
+    deletedHistorySuppressedIds.add(id);
     items = items.filter((item) => item.id !== id);
     if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
@@ -979,6 +989,7 @@
       })
       .catch((error) => {
         console.error("Unable to permanently delete clipboard item", error);
+        deletedHistorySuppressedIds.delete(id);
         items = previousItems;
         indexedItems = previousIndexedItems;
         selectedIds = previousSelectedIds;
@@ -1022,6 +1033,7 @@
     const previousItems = items.map((entry) => ({ ...entry }));
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
 
+    deletedHistorySuppressedIds.add(id);
     items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
@@ -1037,6 +1049,7 @@
       })
       .catch((error) => {
         console.error("Unable to restore clipboard item", error);
+        deletedHistorySuppressedIds.delete(id);
         items = previousItems;
         indexedItems = previousIndexedItems;
         showToast(_t("app.deleteFailed"), "error");
@@ -1354,6 +1367,7 @@
     const previousItems = items.map((entry) => ({ ...entry }));
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
+    for (const id of ids) deletedHistorySuppressedIds.add(id);
     items = items.map((item) => (ids.includes(item.id) ? { ...item, deleted: false } : item));
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
@@ -1371,6 +1385,7 @@
       })
       .catch((error) => {
         console.error("Bulk restore failed", error);
+        for (const id of ids) deletedHistorySuppressedIds.delete(id);
         items = previousItems;
         indexedItems = previousIndexedItems;
         selectedIds = previousSelectedIds;
@@ -1389,6 +1404,7 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
     const previousDetailItem = detailItem;
+    for (const id of ids) deletedHistorySuppressedIds.add(id);
     items = items.filter((item) => !ids.includes(item.id));
     if (indexedItems) indexedItems = indexedItems.filter((item) => !ids.includes(item.id));
     selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
@@ -1402,6 +1418,7 @@
       })
       .catch((error) => {
         console.error("Bulk permanent delete failed", error);
+        for (const id of ids) deletedHistorySuppressedIds.delete(id);
         items = previousItems;
         indexedItems = previousIndexedItems;
         selectedIds = previousSelectedIds;
@@ -1430,6 +1447,9 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
     const previousDetailItem = detailItem;
+
+    for (const id of softIds) deletedHistorySuppressedIds.delete(id);
+    for (const id of permanentIds) deletedHistorySuppressedIds.add(id);
 
     items = items
       .filter((item) => !permanentIds.includes(item.id) && !hardIds.includes(item.id))
@@ -1496,6 +1516,12 @@
       const removedIds = new Set([...successfulPermanent, ...successfulHard]);
       const succeededIds = new Set([...successfulSoft, ...removedIds]);
 
+      for (const id of successfulPermanent) deletedHistorySuppressedIds.add(id);
+      for (const id of permanentIds) {
+        if (!successfulPermanent.has(id)) deletedHistorySuppressedIds.delete(id);
+      }
+      for (const id of softIds) deletedHistorySuppressedIds.delete(id);
+
       // Rebuild from the snapshot so a partially failed mixed batch mirrors
       // exactly which backend transaction succeeded.
       items = previousItems
@@ -1515,13 +1541,13 @@
         detailItem = null;
       }
 
+      if (successfulSoft.size > 0 || successfulPermanent.size > 0) {
+        invalidateDeletedHistoryPagination();
+      }
       if (failedIds.size > 0) {
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       } else {
-        if (successfulSoft.size > 0 || successfulPermanent.size > 0) {
-          invalidateDeletedHistoryPagination();
-        }
         showToast(_t("toast.bulkDeleteSuccess", { count: succeededIds.size }), "success");
       }
     });
@@ -1556,6 +1582,7 @@
 
     const ids = nonFavorites.map((item) => item.id);
     const idSet = new Set(ids);
+    for (const id of ids) deletedHistorySuppressedIds.delete(id);
     const previousItems = items.map((entry) => ({ ...entry }));
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
