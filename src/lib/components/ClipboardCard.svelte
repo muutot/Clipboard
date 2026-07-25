@@ -847,22 +847,31 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     min-width: 0;
     margin-top: 10px;
+    overflow: hidden;
     color: #8c8c8c;
     font-size: var(--font-size-secondary, 11.5px);
     white-space: nowrap;
     pointer-events: none;
   }
 
+  .meta-row > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .source-mark {
     display: inline-flex;
+    flex: 0 0 16px;
     align-items: center;
     justify-content: center;
     width: 16px;
     height: 16px;
+    overflow: visible;
     color: #d7c47b;
   }
 
@@ -899,6 +908,7 @@
 
   .actions {
     display: flex;
+    flex: 0 0 auto;
     gap: 2px;
     margin-left: auto;
     opacity: 0;
@@ -939,11 +949,12 @@
   }
 
   .shortcut {
+    flex: 0 0 auto;
     margin-left: 8px;
+    overflow: visible;
     color: #747474;
     font-size: 11.5px;
     pointer-events: none;
-    flex-shrink: 0;
     opacity: 0;
     transition: opacity 120ms ease;
   }
