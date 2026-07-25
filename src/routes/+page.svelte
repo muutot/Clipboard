@@ -304,7 +304,14 @@
 
   function compactCardHeightFor(item: ClipboardItem): number {
     if (!compactMode) return 0;
-    return Math.max(0, estimatedCardHeight(item) - compactCardGap);
+    if (item.kind === "image") return compactImage;
+
+    const visibleLines = displayedTextLines(item);
+    if (item.customTitle) {
+      return showSecondaryText && visibleLines > 0 ? compactCustomTitle : compactText;
+    }
+
+    return showSecondaryText && visibleLines > 1 ? compactTallText : compactText;
   }
 
   function cardLayoutSignature(item: ClipboardItem): string {
