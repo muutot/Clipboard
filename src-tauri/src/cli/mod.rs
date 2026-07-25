@@ -6,6 +6,9 @@ use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::{export_database, ExportFormat, ExportOptions};
 use crate::storage::{ClipboardRepository, Database};
 
+mod api;
+pub use api::LocalApiServer;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CliCommand {
@@ -420,29 +423,6 @@ fn write_clipboard_command(program: &str, args: &[&str], text: &str) -> Result<(
             output.status,
             String::from_utf8_lossy(&output.stderr).trim()
         ))
-    }
-}
-
-pub struct LocalApiServer {
-    pub port: u16,
-}
-
-impl LocalApiServer {
-    pub fn new(port: u16) -> Self {
-        Self { port }
-    }
-
-    pub fn start(&self) -> Result<(), String> {
-        println!(
-            "Local API server starting on port {} (placeholder)",
-            self.port
-        );
-        Ok(())
-    }
-
-    pub fn stop(&self) -> Result<(), String> {
-        println!("Local API server stopped (placeholder)");
-        Ok(())
     }
 }
 
