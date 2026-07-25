@@ -1430,30 +1430,81 @@
   }
 
   function clearHistory() {
-    // The clear-history command soft-deletes active records only. Keep
-    // records already in the recycle bin visible until they are restored or
-    // permanently deleted explicitly.
+    // The clear-history command operates on active records only. Keep rows
+    // already in the recycle bin visible until they are restored or removed.
     const nonFavorites = items.filter((item) => !item.favorite && !item.deleted);
     if (nonFavorites.length === 0) {
       showToast(_t("toast.noRecordsToClear"), "info");
       return;
     }
 
-    const removedIds = new Set(nonFavorites.map((i) => i.id));
-    items = items.filter((item) => item.favorite || item.deleted);
-    if (indexedItems) {
-      indexedItems = indexedItems.filter((item) => item.favorite || item.deleted);
-    }
-    selectedIds = new Set([...selectedIds].filter((x) => !removedIds.has(x)));
+    const ids = nonFavorites.map((item) => item.id);
+    const idSet = new Set(ids);
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
 
-    void invoke<number>("clear_all_non_favorite_items")
-      .then((count) => {
-        showToast(_t("toast.clearHistorySuccess", { count }), "success");
-      })
-      .catch((error) => {
-        console.error("Unable to clear history", error);
+    if ($generalSettings.useRecycleBin) {
+      // Soft clear: retain rows locally so they immediately appear in the
+      // recycle-bin filter and can be restored without a reload.
+      items = items.map((item) => (idSet.has(item.id) ? { ...item, deleted: true } : item));
+      if (indexedItems) {
+        indexedItems = indexedItems.map((item) =>
+          idSet.has(item.id) ? { ...item, deleted: true } : item,
+        );
+      }
+      selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
+
+      void invoke<number>("clear_all_non_favorite_items")
+        .then((count) => {
+          showToast(_t("toast.clearHistorySuccess", { count }), "success");
+        })
+        .catch((error) => {
+          console.error("Unable to clear history", error);
+          items = previousItems;
+          indexedItems = previousIndexedItems;
+          selectedIds = previousSelectedIds;
+          showToast(_t("app.deleteFailed"), "error");
+        });
+      return;
+    }
+
+    // Direct clear when the recycle bin is disabled. The backend's compact
+    // clear command is intentionally soft-delete-only, so use the existing
+    // direct-delete command for each active record instead.
+    items = items.filter((item) => !idSet.has(item.id));
+    if (indexedItems) indexedItems = indexedItems.filter((item) => !idSet.has(item.id));
+    selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
+
+    void Promise.all(
+      ids.map(async (id) => {
+        try {
+          const removed = await persistHardDelete(id);
+          return { id, ok: removed !== false };
+        } catch (error) {
+          console.error("Unable to directly delete history item", id, error);
+          return { id, ok: false };
+        }
+      }),
+    ).then((outcomes) => {
+      const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).map((o) => o.id));
+      if (failedIds.size > 0) {
+        const successfulIds = new Set(
+          outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id),
+        );
+        items = previousItems.filter((item) => !successfulIds.has(item.id));
+        if (previousIndexedItems) {
+          indexedItems = previousIndexedItems.filter((item) => !successfulIds.has(item.id));
+        } else {
+          indexedItems = null;
+        }
+        selectedIds = new Set([...previousSelectedIds].filter((id) => !successfulIds.has(id)));
+        statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
-      });
+        return;
+      }
+      showToast(_t("toast.clearHistorySuccess", { count: ids.length }), "success");
+    });
   }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
