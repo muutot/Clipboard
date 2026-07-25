@@ -24,6 +24,12 @@ const OCR_COLUMNS: &str = "
 pub trait OcrRepository {
     fn enqueue_ocr(&self, item_id: &str) -> Result<bool, StorageError>;
     fn claim_next_ocr(&self) -> Result<Option<OcrInput>, StorageError>;
+    /// Persist a terminal failure for a task currently being processed.
+    ///
+    /// Restricting the transition to `processing` prevents a late result from
+    /// an interrupted worker from overwriting a task that has already been
+    /// retried or completed elsewhere.
+    fn mark_ocr_failed(&self, item_id: &str, error_message: &str) -> Result<bool, StorageError>;
     fn retry_ocr(&self, item_id: &str) -> Result<bool, StorageError>;
     fn requeue_interrupted_ocr(&self) -> Result<u64, StorageError>;
     fn save_ocr_result(&self, result: &OcrResult) -> Result<(), StorageError>;
@@ -107,6 +113,19 @@ impl OcrRepository for Database {
         })
     }
 
+    fn mark_ocr_failed(&self, item_id: &str, error_message: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "UPDATE ocr_results
+                 SET status = 'failed',
+                     error_message = ?2,
+                     completed_at_ms = NULL
+                 WHERE item_id = ?1 AND status = 'processing'",
+                params![item_id, error_message],
+            )? > 0)
+        })
+    }
+
     fn retry_ocr(&self, item_id: &str) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
             Ok(connection.execute(
@@ -122,7 +141,9 @@ impl OcrRepository for Database {
         self.with_connection(|connection| {
             let count = connection.execute(
                 "UPDATE ocr_results
-                 SET status = 'pending'
+                 SET status = 'pending',
+                     error_message = NULL,
+                     completed_at_ms = NULL
                  WHERE status = 'processing'",
                 [],
             )?;
@@ -433,6 +454,94 @@ mod tests {
         assert_eq!(
             database.get_ocr_result("image").unwrap().unwrap().status,
             OcrStatus::Pending
+        );
+    }
+
+    #[test]
+    fn persists_failure_and_allows_a_manual_retry() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&image_item("image", "image-hash"))
+            .unwrap();
+        database.enqueue_ocr("image").unwrap();
+        database.claim_next_ocr().unwrap().unwrap();
+
+        assert!(database
+            .mark_ocr_failed("image", "decoder unavailable")
+            .unwrap());
+        let failed = database.get_ocr_result("image").unwrap().unwrap();
+        assert_eq!(failed.status, OcrStatus::Failed);
+        assert_eq!(failed.error_message.as_deref(), Some("decoder unavailable"));
+        assert!(!database.mark_ocr_failed("image", "late failure").unwrap());
+
+        assert!(database.retry_ocr("image").unwrap());
+        let pending = database.get_ocr_result("image").unwrap().unwrap();
+        assert_eq!(pending.status, OcrStatus::Pending);
+        assert_eq!(pending.error_message, None);
+    }
+
+    #[test]
+    fn requeue_clears_stale_processing_metadata_and_is_reentrant() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&image_item("image", "image-hash"))
+            .unwrap();
+        database.enqueue_ocr("image").unwrap();
+        database.claim_next_ocr().unwrap().unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE ocr_results
+                     SET error_message = 'interrupted', completed_at_ms = 123
+                     WHERE item_id = 'image'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(database.requeue_interrupted_ocr().unwrap(), 1);
+        let pending = database.get_ocr_result("image").unwrap().unwrap();
+        assert_eq!(pending.status, OcrStatus::Pending);
+        assert_eq!(pending.error_message, None);
+        assert_eq!(pending.completed_at_ms, None);
+
+        // A recovered task can be claimed exactly once and remains protected
+        // from a second claimant until it is explicitly requeued again.
+        assert_eq!(database.claim_next_ocr().unwrap().unwrap().item_id, "image");
+        assert!(database.claim_next_ocr().unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_transition_is_a_noop_for_pending_and_completed_tasks() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&image_item("pending", "pending-hash"))
+            .unwrap();
+        database.enqueue_ocr("pending").unwrap();
+        assert!(!database
+            .mark_ocr_failed("pending", "should not claim")
+            .unwrap());
+        assert_eq!(
+            database.get_ocr_result("pending").unwrap().unwrap().status,
+            OcrStatus::Pending
+        );
+
+        database
+            .save_item(&image_item("completed", "completed-hash"))
+            .unwrap();
+        let completed = completed_result("completed", "completed-hash");
+        database.save_ocr_result(&completed).unwrap();
+        assert!(!database
+            .mark_ocr_failed("completed", "should not overwrite")
+            .unwrap());
+        assert_eq!(
+            database
+                .get_ocr_result("completed")
+                .unwrap()
+                .unwrap()
+                .status,
+            OcrStatus::Completed
         );
     }
 }
