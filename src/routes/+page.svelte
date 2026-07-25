@@ -1046,6 +1046,8 @@
     const newTitle = isText ? (item.customTitle ? item.title : content.slice(0, 200)) : content;
     const newTextContent = isText ? content : (item?.textContent ?? null);
     const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? "");
+    const newSizeBytes = new TextEncoder().encode(content).byteLength;
+    const newSizeLabel = formatTextLength(content.length);
 
     if (isMedia && content) {
       try {
@@ -1102,6 +1104,8 @@
             ...item,
             textContent: newTextContent,
             preview: newPreview,
+            sizeBytes: newSizeBytes,
+            sizeLabel: newSizeLabel,
             ...(item.customTitle ? {} : { title: newTitle }),
           }
         : item,
@@ -1111,6 +1115,8 @@
         ...detailItem,
         textContent: newTextContent,
         preview: newPreview,
+        sizeBytes: newSizeBytes,
+        sizeLabel: newSizeLabel,
         ...(detailItem.customTitle ? {} : { title: newTitle }),
       };
     }
@@ -1121,6 +1127,8 @@
               ...item,
               textContent: newTextContent,
               preview: newPreview,
+              sizeBytes: newSizeBytes,
+              sizeLabel: newSizeLabel,
               ...(item.customTitle ? {} : { title: newTitle }),
             }
           : item,

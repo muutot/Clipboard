@@ -25,6 +25,21 @@ const ITEM_COLUMNS: &str = "
 
 pub trait ClipboardRepository {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError>;
+    /// Atomically replaces the textual payload of an active text/link item.
+    ///
+    /// Keeping this operation in the repository ensures the content hash and
+    /// byte count are updated together with the text.  SQLite's UNIQUE(kind,
+    /// content_hash) constraint rejects an edit that would collide with a
+    /// different history record without partially updating either row.
+    fn update_text_item(
+        &self,
+        id: &str,
+        kind: ClipboardKind,
+        title: &str,
+        text_content: &str,
+        content_hash: &str,
+        size_bytes: u64,
+    ) -> Result<bool, StorageError>;
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
@@ -137,6 +152,43 @@ impl ClipboardRepository for Database {
                 ],
                 |row| row.get(0),
             )?)
+        })
+    }
+
+    fn update_text_item(
+        &self,
+        id: &str,
+        kind: ClipboardKind,
+        title: &str,
+        text_content: &str,
+        content_hash: &str,
+        size_bytes: u64,
+    ) -> Result<bool, StorageError> {
+        let size_bytes = i64::try_from(size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+            field: "size_bytes",
+        })?;
+
+        self.with_connection(|connection| {
+            let changed = connection.execute(
+                "UPDATE clipboard_items
+                 SET kind = ?2,
+                     title = ?3,
+                     text_content = ?4,
+                     content_hash = ?5,
+                     size_bytes = ?6
+                 WHERE id = ?1
+                   AND deleted = 0
+                   AND kind IN ('text', 'link')",
+                params![
+                    id,
+                    kind_to_storage(kind),
+                    title,
+                    text_content,
+                    content_hash,
+                    size_bytes,
+                ],
+            )?;
+            Ok(changed == 1)
         })
     }
 
@@ -757,7 +809,7 @@ mod tests {
     use crate::domain::{ClipboardItem, ClipboardKind};
 
     use super::{ClipboardRepository, Database};
-    use crate::storage::StorageError;
+    use crate::storage::{SearchRepository, StorageError};
 
     fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
         ClipboardItem {
@@ -856,6 +908,64 @@ mod tests {
         assert_eq!(stored.created_at_ms, 500);
         assert!(stored.is_favorite);
         assert_eq!(database.item_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn update_text_item_replaces_payload_and_preserves_record_metadata() {
+        let database = Database::open_in_memory().unwrap();
+        let mut original = text_item("editable", "old-hash", 100);
+        original.last_used_at_ms = Some(150);
+        original.is_favorite = true;
+        original.icon_path = Some("icons/test.png".to_owned());
+        original.metadata_json = Some(r#"{"custom":"value"}"#.to_owned());
+        database.save_item(&original).unwrap();
+
+        assert!(database
+            .update_text_item(
+                "editable",
+                ClipboardKind::Link,
+                "updated title",
+                "https://example.com",
+                "new-hash",
+                19,
+            )
+            .unwrap());
+
+        let saved = database.get_item("editable").unwrap().unwrap();
+        assert_eq!(saved.kind, ClipboardKind::Link);
+        assert_eq!(saved.title, "updated title");
+        assert_eq!(saved.text_content.as_deref(), Some("https://example.com"));
+        assert_eq!(saved.content_hash, "new-hash");
+        assert_eq!(saved.size_bytes, 19);
+        assert_eq!(saved.source_app, original.source_app);
+        assert_eq!(saved.created_at_ms, original.created_at_ms);
+        assert_eq!(saved.last_used_at_ms, original.last_used_at_ms);
+        assert_eq!(saved.is_favorite, original.is_favorite);
+        assert_eq!(saved.icon_path, original.icon_path);
+        assert_eq!(saved.metadata_json, original.metadata_json);
+        assert_eq!(database.read_search_outbox(20).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn update_text_item_rejects_hash_collisions_without_partial_changes() {
+        let database = Database::open_in_memory().unwrap();
+        let original = text_item("original", "original-hash", 100);
+        let existing = text_item("existing", "existing-hash", 200);
+        database.save_item(&original).unwrap();
+        database.save_item(&existing).unwrap();
+
+        let result = database.update_text_item(
+            "original",
+            ClipboardKind::Text,
+            "colliding title",
+            "colliding content",
+            "existing-hash",
+            17,
+        );
+
+        assert!(matches!(result, Err(StorageError::Sqlite(_))));
+        assert_eq!(database.get_item("original").unwrap().unwrap(), original);
+        assert_eq!(database.read_search_outbox(20).unwrap().len(), 2);
     }
 
     #[test]

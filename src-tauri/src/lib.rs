@@ -1173,17 +1173,39 @@ fn update_clipboard_text(
     new_title: String,
     new_text_content: String,
 ) -> Result<bool, String> {
+    if new_text_content.trim().is_empty() {
+        return Err("text content cannot be empty".to_owned());
+    }
+
     let items = database
         .get_items_by_ids(std::slice::from_ref(&id))
         .map_err(|e| e.to_string())?;
-    let mut item = items
+    let item = items
         .into_iter()
         .next()
         .ok_or_else(|| "item not found".to_string())?;
-    item.title = new_title;
-    item.text_content = Some(new_text_content);
-    database.save_item(&item).map_err(|e| e.to_string())?;
-    Ok(true)
+    if !matches!(item.kind, ClipboardKind::Text | ClipboardKind::Link) {
+        return Err("only text and link items can be edited".to_owned());
+    }
+
+    let kind_name = match item.kind {
+        ClipboardKind::Text => "text",
+        ClipboardKind::Link => "link",
+        ClipboardKind::Image | ClipboardKind::File => unreachable!(),
+    };
+    let content_hash = content::hash::compute_content_hash(kind_name, &new_text_content, None);
+    let size_bytes = new_text_content.len() as u64;
+
+    database
+        .update_text_item(
+            &id,
+            item.kind,
+            &new_title,
+            &new_text_content,
+            &content_hash,
+            size_bytes,
+        )
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
