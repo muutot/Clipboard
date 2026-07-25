@@ -1994,7 +1994,6 @@
                   onsaveasnew={saveAsNew}
                   oncanceledit={cancelEdit}
                   onplainpaste={plainPaste}
-                  onduplicate={duplicateItem}
                   onrestore={restoreItem}
                 />
               </div>
@@ -2032,7 +2031,6 @@
                 onsaveasnew={saveAsNew}
                 oncanceledit={cancelEdit}
                 onplainpaste={plainPaste}
-                onduplicate={duplicateItem}
                 onrestore={restoreItem}
               />
             {/if}

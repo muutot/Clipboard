@@ -61,10 +61,20 @@
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
-    onduplicate: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
   }
+
+  const cardActionIds = [
+    "copy",
+    "plainpaste",
+    "detail",
+    "edit",
+    "favorite",
+    "delete",
+    "restore",
+  ] as const;
+  type CardActionId = (typeof cardActionIds)[number];
 
   let {
     item,
@@ -90,7 +100,6 @@
     onsaveedit,
     oncanceledit,
     onplainpaste,
-    onduplicate,
     onsaveasnew,
     onrestore,
   }: Props = $props();
@@ -188,8 +197,7 @@
 
   function handleDoubleClick(event: MouseEvent) {
     event.preventDefault();
-    event.stopPropagation();
-    ondetail(item.id);
+    runCardAction("detail", event);
   }
 
   function handleDragStart(event: DragEvent) {
@@ -220,12 +228,39 @@
     }
   }
 
-  function startEdit(event: MouseEvent) {
-    event.stopPropagation();
+  function beginEdit() {
     editContent = item.textContent || item.title;
     editTitle = item.title;
     editing = true;
     onedit(item.id);
+  }
+
+  function runCardAction(action: CardActionId, event?: Event) {
+    event?.stopPropagation();
+
+    switch (action) {
+      case "copy":
+        oncopy(item.id);
+        return;
+      case "plainpaste":
+        onplainpaste(item.id);
+        return;
+      case "detail":
+        ondetail(item.id);
+        return;
+      case "edit":
+        beginEdit();
+        return;
+      case "favorite":
+        ontoggleFavorite(item.id);
+        return;
+      case "delete":
+        ondelete(item.id);
+        return;
+      case "restore":
+        onrestore?.(item.id);
+        return;
+    }
   }
 
   async function saveEdit(event: Event) {
@@ -258,46 +293,52 @@
   function handleContextMenu(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
+    const canEdit =
+      (item.kind === "text" ||
+        item.kind === "link" ||
+        item.kind === "image" ||
+        item.kind === "file") &&
+      (!item.fileMeta || item.fileMeta.length <= 1);
     const items: ContextMenuItem[] = [
       { id: "copy", label: _t("card.copy"), icon: "copy" },
       ...(item.kind === "text"
         ? [{ id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName }]
         : []),
       { id: "detail", label: _t("card.viewDetail"), icon: "eye" },
-      ...(item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file"
-        ? [{ id: "edit", label: _t("card.edit"), icon: "edit" as IconName }]
+      ...(canEdit
+        ? [
+            {
+              id: "edit",
+              label:
+                item.kind === "image" || item.kind === "file"
+                  ? _t("edit.editFileName")
+                  : _t("card.edit"),
+              icon: "edit" as IconName,
+            },
+          ]
         : []),
-      { id: "duplicate", label: "", icon: "copy-plus" },
       {
         id: "favorite",
         label: item.favorite ? _t("card.unfavorite") : _t("card.favorite"),
         icon: "star",
       },
-      {
-        id: "delete",
-        label: _t("card.delete"),
-        icon: "trash",
-        destructive: true,
-      },
+      ...(!item.favorite
+        ? [
+            {
+              id: "delete",
+              label: _t("card.delete"),
+              icon: "trash" as IconName,
+              destructive: true,
+            },
+          ]
+        : []),
     ];
-    // set duplicate label after because $messages not available in array literal
-    items[items.findIndex((m) => m.id === "duplicate")] = {
-      id: "duplicate",
-      label: _t("edit.saveAsNew"),
-      icon: "copy-plus",
-    };
     contextMenu = { x: event.clientX, y: event.clientY, items };
   }
 
   function handleContextAction(id: string) {
-    switch (id) {
-      case "copy": oncopy(item.id); break;
-      case "plainpaste": onplainpaste(item.id); break;
-      case "detail": ondetail(item.id); break;
-      case "edit": onedit(item.id); break;
-      case "duplicate": onduplicate(item.id); break;
-      case "favorite": ontoggleFavorite(item.id); break;
-      case "delete": ondelete(item.id); break;
+    if (cardActionIds.includes(id as CardActionId)) {
+      runCardAction(id as CardActionId);
     }
   }
 </script>
@@ -431,19 +472,15 @@
           type="button"
           title={_t("card.viewDetail")}
           aria-label={_t("card.viewDetail")}
-          onclick={(event) => {
-            event.stopPropagation();
-            ondetail(item.id);
-          }}><AppIcon name="eye" size={16} /></button
+          onclick={(event) => runCardAction("detail", event)}
+          ><AppIcon name="eye" size={16} /></button
         >
         <button
           type="button"
           title={_t("card.copy")}
           aria-label={_t("card.copy")}
-          onclick={(event) => {
-            event.stopPropagation();
-            oncopy(item.id);
-          }}><AppIcon name="copy" size={16} /></button
+          onclick={(event) => runCardAction("copy", event)}
+          ><AppIcon name="copy" size={16} /></button
         >
         {#if item.kind === "image" || item.kind === "file"}
           <button
@@ -478,7 +515,8 @@
             aria-label={item.kind === "image" || item.kind === "file"
               ? _t("edit.editFileName")
               : _t("card.edit")}
-            onclick={startEdit}><AppIcon name="edit" size={16} /></button
+            onclick={(event) => runCardAction("edit", event)}
+            ><AppIcon name="edit" size={16} /></button
           >
         {/if}
         {#if item.kind === "text"}
@@ -486,10 +524,8 @@
             type="button"
             title={_t("card.pastePlain")}
             aria-label={_t("card.pastePlain")}
-            onclick={(event) => {
-              event.stopPropagation();
-              onplainpaste(item.id);
-            }}><AppIcon name="type" size={16} /></button
+            onclick={(event) => runCardAction("plainpaste", event)}
+            ><AppIcon name="type" size={16} /></button
           >
         {/if}
         <button
@@ -497,20 +533,16 @@
           class:active={item.favorite}
           title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
           aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-          onclick={(event) => {
-            event.stopPropagation();
-            ontoggleFavorite(item.id);
-          }}><AppIcon name="star" size={16} filled={item.favorite} /></button
+          onclick={(event) => runCardAction("favorite", event)}
+          ><AppIcon name="star" size={16} filled={item.favorite} /></button
         >
         {#if item.deleted && onrestore}
           <button
             type="button"
             title="恢复"
             aria-label="恢复"
-            onclick={(event) => {
-              event.stopPropagation();
-              onrestore(item.id);
-            }}><AppIcon name="edit" size={16} /></button
+            onclick={(event) => runCardAction("restore", event)}
+            ><AppIcon name="edit" size={16} /></button
           >
         {/if}
         {#if !item.favorite}
@@ -518,10 +550,8 @@
             type="button"
             title={_t("card.delete")}
             aria-label={_t("card.delete")}
-            onclick={(event) => {
-              event.stopPropagation();
-              ondelete(item.id);
-            }}><AppIcon name="trash" size={16} /></button
+            onclick={(event) => runCardAction("delete", event)}
+            ><AppIcon name="trash" size={16} /></button
           >
         {/if}
       </div>
@@ -574,7 +604,9 @@
     x={contextMenu.x}
     y={contextMenu.y}
     items={contextMenu.items}
-    onclose={() => { contextMenu = null; }}
+    onclose={() => {
+      contextMenu = null;
+    }}
     onaction={handleContextAction}
   />
 {/if}
