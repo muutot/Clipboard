@@ -43,6 +43,7 @@ use std::io::Write;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use storage::{
+    quarantine_search_index, recover_database_if_needed, refresh_database_backup,
     ClipboardRepository, Database, OcrRepository, RepairResult, StorageFileReferences,
     StoragePaths, TextItemUpdate,
 };
@@ -2798,8 +2799,15 @@ fn get_performance_metrics(
 }
 
 #[tauri::command]
-fn repair_database(database: tauri::State<'_, Database>) -> Result<RepairResult, String> {
-    database.repair().map_err(|e| e.to_string())
+fn repair_database(
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<RepairResult, String> {
+    let result = database.repair().map_err(|e| e.to_string())?;
+    if result.integrity_ok {
+        refresh_database_backup(database.inner(), &paths.database).map_err(|e| e.to_string())?;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -2897,21 +2905,37 @@ pub fn run() {
                 config.image_storage_path().map(PathBuf::from),
                 config.file_storage_path().map(PathBuf::from),
             )?;
+            let recovery_report = recover_database_if_needed(&paths.database)?;
+            if let Some(report) = &recovery_report {
+                eprintln!(
+                    "[recovery] restored database from {}",
+                    report.restored_from.display()
+                );
+                if let Some(quarantined_database) = &report.quarantined_database {
+                    eprintln!(
+                        "[recovery] quarantined damaged database at {}",
+                        quarantined_database.display()
+                    );
+                }
+                if let Some(quarantined_index) = quarantine_search_index(&paths.search_index)? {
+                    eprintln!(
+                        "[recovery] quarantined stale search index at {}",
+                        quarantined_index.display()
+                    );
+                }
+            }
             let database = Database::open(&paths.database)?;
 
-            // Auto-recovery: check and repair if needed
-            match database.repair() {
-                Ok(result) => {
-                    if !result.integrity_ok {
-                        eprintln!(
-                            "[recovery] database integrity check failed: {}",
-                            result.integrity_message
-                        );
-                    }
+            let repair_result = database.repair()?;
+            if !repair_result.integrity_ok {
+                return Err(storage::StorageError::DatabaseRecoveryUnavailable {
+                    database: paths.database.clone(),
+                    reason: repair_result.integrity_message,
                 }
-                Err(e) => {
-                    eprintln!("[recovery] database repair check failed: {e}");
-                }
+                .into());
+            }
+            if let Err(error) = refresh_database_backup(&database, &paths.database) {
+                eprintln!("[recovery] failed to refresh database backup: {error}");
             }
 
             database.requeue_interrupted_ocr()?;

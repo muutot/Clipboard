@@ -4,6 +4,7 @@ mod migrations;
 mod ocr_repository;
 mod paths;
 mod pool;
+mod recovery;
 mod repository;
 mod search_repository;
 
@@ -12,5 +13,9 @@ pub use error::StorageError;
 pub use ocr_repository::OcrRepository;
 pub use paths::StoragePaths;
 pub use pool::{DatabasePool, PooledConnection, RepairResult};
+pub use recovery::{
+    backup_path, quarantine_search_index, recover_database_if_needed, refresh_database_backup,
+    DatabaseRecoveryReport,
+};
 pub use repository::{ClipboardRepository, StorageFileReferences, TextItemUpdate};
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};

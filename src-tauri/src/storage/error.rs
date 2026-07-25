@@ -6,6 +6,18 @@ pub enum StorageError {
     Json(serde_json::Error),
     Sqlite(rusqlite::Error),
     ConnectionPoisoned,
+    DatabaseBackupFailed {
+        database: PathBuf,
+        reason: String,
+    },
+    DatabaseRecoveryFailed {
+        database: PathBuf,
+        reason: String,
+    },
+    DatabaseRecoveryUnavailable {
+        database: PathBuf,
+        reason: String,
+    },
     FavoriteMustBeRemoved(String),
     DataDirectoryMustBeAbsolute(PathBuf),
     ResourceDirectoryMustBeAbsolute {
@@ -40,6 +52,21 @@ impl fmt::Display for StorageError {
             Self::Json(error) => write!(formatter, "JSON storage error: {error}"),
             Self::Sqlite(error) => write!(formatter, "SQLite error: {error}"),
             Self::ConnectionPoisoned => formatter.write_str("database connection lock is poisoned"),
+            Self::DatabaseBackupFailed { database, reason } => write!(
+                formatter,
+                "database backup failed for {}: {reason}",
+                database.display()
+            ),
+            Self::DatabaseRecoveryFailed { database, reason } => write!(
+                formatter,
+                "database recovery failed for {}: {reason}",
+                database.display()
+            ),
+            Self::DatabaseRecoveryUnavailable { database, reason } => write!(
+                formatter,
+                "database recovery unavailable for {}: {reason}",
+                database.display()
+            ),
             Self::FavoriteMustBeRemoved(id) => {
                 write!(
                     formatter,
