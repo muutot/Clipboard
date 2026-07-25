@@ -91,9 +91,7 @@ export interface ContentActions {
   colors: string[];
 }
 
-export async function detectContentActions(
-  contentId: string,
-): Promise<ContentActions | null> {
+export async function detectContentActions(contentId: string): Promise<ContentActions | null> {
   if (!isTauriRuntime()) return null;
 
   return invoke<ContentActions>("detect_content_actions", { contentId });
@@ -102,8 +100,7 @@ export async function detectContentActions(
 function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;
-  const sourceApp = record.sourceApp?.trim()
-    || resolvePath(messages, "app.name");
+  const sourceApp = record.sourceApp?.trim() || resolvePath(messages, "app.name");
 
   const fileLabel = locale === "zh-CN" ? "个文件" : " file(s)";
   const imageLabel = locale === "zh-CN" ? "图片记录" : "Image record";
@@ -113,13 +110,19 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   if (record.metadataJson) {
     try {
       const meta = JSON.parse(record.metadataJson);
-      if (record.kind === "image" && typeof meta.width === "number" && typeof meta.height === "number") {
+      if (
+        record.kind === "image" &&
+        typeof meta.width === "number" &&
+        typeof meta.height === "number"
+      ) {
         imageMeta = { width: meta.width, height: meta.height };
       }
       if (record.kind === "file" && Array.isArray(meta.files)) {
         fileMeta = meta.files;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return {
@@ -147,7 +150,8 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
 
 function buildPreview(
   record: PersistedClipboardItem,
-  fileLabel: string, imageLabel: string,
+  fileLabel: string,
+  imageLabel: string,
 ): string {
   if (record.textContent && record.textContent !== record.title) {
     const lines = record.textContent.split("\n");
@@ -159,7 +163,9 @@ function buildPreview(
       try {
         const paths = JSON.parse(record.textContent) as string[];
         if (paths.length > 1) return `${paths.length} ${fileLabel}`;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     return `1 ${fileLabel}`;
   }

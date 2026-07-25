@@ -103,9 +103,7 @@ fn extract_phone_numbers(text: &str) -> Vec<String> {
 
     // Chinese landline: 0xx-xxxxxxxx or 0xxx-xxxxxxx
     if let Some(re) = try_match(r"\b0\d{2}[\-]?\d{7,8}\b|\b0\d{3}[\-]?\d{7,8}\b", text) {
-        results.extend(
-            re.find_iter(text).map(|m| m.as_str().to_string())
-        );
+        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
     }
 
     // International format: +xx xxx xxx xxx or +x (xxx) xxx-xxxx
@@ -137,10 +135,7 @@ fn extract_colors(text: &str) -> Vec<String> {
         );
     }
 
-    if let Some(re) = try_match(
-        r"rgba?\([^)]+\)",
-        text,
-    ) {
+    if let Some(re) = try_match(r"rgba?\([^)]+\)", text) {
         results.extend(
             re.find_iter(text)
                 .filter(|m| {
@@ -152,10 +147,7 @@ fn extract_colors(text: &str) -> Vec<String> {
         );
     }
 
-    if let Some(re) = try_match(
-        r"hsla?\([^)]+\)",
-        text,
-    ) {
+    if let Some(re) = try_match(r"hsla?\([^)]+\)", text) {
         results.extend(
             re.find_iter(text)
                 .filter(|m| m.as_str().contains('%'))
@@ -169,9 +161,7 @@ fn extract_colors(text: &str) -> Vec<String> {
 fn extract_currency(text: &str) -> Vec<String> {
     let mut results = Vec::new();
 
-    let symbols = [
-        "¥", "$", "€", "£", "USD", "CNY", "EUR", "GBP", "JPY",
-    ];
+    let symbols = ["¥", "$", "€", "£", "USD", "CNY", "EUR", "GBP", "JPY"];
     for symbol in symbols.iter() {
         if let Some(re) = try_match(
             &format!(
@@ -211,10 +201,7 @@ fn extract_ip_addresses(text: &str) -> Vec<String> {
         results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
     }
 
-    if let Some(re) = try_match(
-        r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b",
-        text,
-    ) {
+    if let Some(re) = try_match(r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b", text) {
         results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
     }
 

@@ -185,7 +185,10 @@ mod tests {
 
     #[test]
     fn very_long_query_with_spaces() {
-        let long = (0..200).map(|i| format!("term{i}")).collect::<Vec<_>>().join(" ");
+        let long = (0..200)
+            .map(|i| format!("term{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         let query = SearchQuery::parse(&long);
         assert_eq!(query.terms().len(), 200);
         // All terms should be deduplicated (they are all unique here)

@@ -27,10 +27,7 @@ pub fn run_cli_command(args: &CliArgs, database: &Database) -> Result<String, St
     match args.command {
         CliCommand::List => {
             let items = database
-                .list_recent(
-                    args.limit.unwrap_or(20) as u32,
-                    0,
-                )
+                .list_recent(args.limit.unwrap_or(20) as u32, 0)
                 .map_err(|e| e.to_string())?;
             format_items(&items)
         }
@@ -69,9 +66,7 @@ pub fn run_cli_command(args: &CliArgs, database: &Database) -> Result<String, St
                 .query
                 .as_deref()
                 .ok_or_else(|| "delete requires an item id".to_owned())?;
-            database
-                .delete_item(query)
-                .map_err(|e| e.to_string())?;
+            database.delete_item(query).map_err(|e| e.to_string())?;
             Ok(format!("deleted item: {query}"))
         }
         CliCommand::Export => {

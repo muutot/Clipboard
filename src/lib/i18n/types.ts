@@ -228,7 +228,6 @@ export interface LocaleDefinition {
     duplicateItem: string;
   };
 
-
   general: {
     title: string;
     eyebrow: string;

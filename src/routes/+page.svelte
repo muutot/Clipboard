@@ -26,7 +26,12 @@
   import type { IconName } from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { assets } from "$app/paths";
-  import { createVirtualList, editHeight, itemHeight, type VirtualScrollConfig } from "$lib/utils/virtual-scroll";
+  import {
+    createVirtualList,
+    editHeight,
+    itemHeight,
+    type VirtualScrollConfig,
+  } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
@@ -44,7 +49,15 @@
     { id: "image" as ClipboardFilter, label: _t("filter.image"), icon: "image" as IconName },
     { id: "file" as ClipboardFilter, label: _t("filter.file"), icon: "file" as IconName },
     { id: "favorite" as ClipboardFilter, label: _t("filter.favorite"), icon: "star" as IconName },
-    ...($generalSettings.useRecycleBin ? [{ id: "deleted" as ClipboardFilter, label: _t("filter.deleted"), icon: "trash" as IconName }] : []),
+    ...($generalSettings.useRecycleBin
+      ? [
+          {
+            id: "deleted" as ClipboardFilter,
+            label: _t("filter.deleted"),
+            icon: "trash" as IconName,
+          },
+        ]
+      : []),
   ]);
 
   const dateFilterOptions = $derived([
@@ -152,9 +165,13 @@
     return candidates.filter((item) => {
       const isDeleted = !!item.deleted;
       const matchesFilter =
-        activeFilter === "all" ? !isDeleted :
-        activeFilter === "deleted" ? isDeleted :
-        activeFilter === "favorite" ? item.favorite : item.kind === activeFilter;
+        activeFilter === "all"
+          ? !isDeleted
+          : activeFilter === "deleted"
+            ? isDeleted
+            : activeFilter === "favorite"
+              ? item.favorite
+              : item.kind === activeFilter;
 
       if (!matchesFilter) return false;
 
@@ -222,7 +239,22 @@
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(i => editingId === i.id ? editHeight((i.textContent || "").split("\n").length, !!i.customTitle, compactCardGap) : itemHeight(i.kind, i.kind !== "image" && i.kind !== "file" && !!i.preview, compactMode, compactText, compactTallText, compactImage, compactCardGap, showSecondaryText, !!i.customTitle, compactCustomTitle)),
+      filteredItems.map((i) =>
+        editingId === i.id
+          ? editHeight((i.textContent || "").split("\n").length, !!i.customTitle, compactCardGap)
+          : itemHeight(
+              i.kind,
+              i.kind !== "image" && i.kind !== "file" && !!i.preview,
+              compactMode,
+              compactText,
+              compactTallText,
+              compactImage,
+              compactCardGap,
+              showSecondaryText,
+              !!i.customTitle,
+              compactCustomTitle,
+            ),
+      ),
     ),
   );
 
@@ -399,45 +431,65 @@
           if (pos) {
             try {
               const { x, y } = JSON.parse(pos);
-              getCurrentWindow().setPosition(new PhysicalPosition(x, y)).catch(() => {});
+              getCurrentWindow()
+                .setPosition(new PhysicalPosition(x, y))
+                .catch(() => {});
             } catch {}
           }
         }
       }
-      const shell = document.querySelector('.app-shell');
-      if (shell) { shell.classList.toggle('compact', s.compactMode); }
+      const shell = document.querySelector(".app-shell");
+      if (shell) {
+        shell.classList.toggle("compact", s.compactMode);
+      }
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
-    const unsubFontEvent = listen<{ fontSizes: { base: number; secondary: number; tiny: number; cardTitle: number; cardPreview: number }; display: { showSecondaryText: boolean } }>(
-      "settings-font-changed",
-      (event) => {
-        const { base, secondary, tiny, cardTitle, cardPreview } = event.payload.fontSizes || {};
-        const display = event.payload.display;
-        if (base !== undefined) {
-          document.documentElement.style.fontSize = `${base}px`;
-          document.documentElement.style.setProperty("--font-size-base", `${base}px`);
-          document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
-          document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
-          document.documentElement.style.setProperty("--font-size-cardTitle", `${cardTitle}px`);
-          document.documentElement.style.setProperty("--font-size-cardPreview", `${cardPreview}px`);
-        }
-        if (display) {
-          document.documentElement.style.setProperty("--show-secondary", display.showSecondaryText ? "block" : "none");
-        }
-      },
-    );
+    const unsubFontEvent = listen<{
+      fontSizes: {
+        base: number;
+        secondary: number;
+        tiny: number;
+        cardTitle: number;
+        cardPreview: number;
+      };
+      display: { showSecondaryText: boolean };
+    }>("settings-font-changed", (event) => {
+      const { base, secondary, tiny, cardTitle, cardPreview } = event.payload.fontSizes || {};
+      const display = event.payload.display;
+      if (base !== undefined) {
+        document.documentElement.style.fontSize = `${base}px`;
+        document.documentElement.style.setProperty("--font-size-base", `${base}px`);
+        document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
+        document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
+        document.documentElement.style.setProperty("--font-size-cardTitle", `${cardTitle}px`);
+        document.documentElement.style.setProperty("--font-size-cardPreview", `${cardPreview}px`);
+      }
+      if (display) {
+        document.documentElement.style.setProperty(
+          "--show-secondary",
+          display.showSecondaryText ? "block" : "none",
+        );
+      }
+    });
 
     let unlistenMove: (() => void) | undefined;
     if ("__TAURI_INTERNALS__" in window) {
-      getCurrentWindow().onMoved((event) => {
-        if ($generalSettings.rememberWindowPosition) {
-          localStorage.setItem("windowPosition", JSON.stringify({
-            x: event.payload.x,
-            y: event.payload.y,
-          }));
-        }
-      }).then((fn) => { unlistenMove = fn; });
+      getCurrentWindow()
+        .onMoved((event) => {
+          if ($generalSettings.rememberWindowPosition) {
+            localStorage.setItem(
+              "windowPosition",
+              JSON.stringify({
+                x: event.payload.x,
+                y: event.payload.y,
+              }),
+            );
+          }
+        })
+        .then((fn) => {
+          unlistenMove = fn;
+        });
     }
 
     return () => {
@@ -546,13 +598,21 @@
 
   function deleteItem(id: string) {
     const item = items.find((i) => i.id === id);
-    if (item?.deleted) { hardDeleteItem(id); return; }
-    if (!$generalSettings.useRecycleBin) { hardDeleteItem(id); return; }
+    if (item?.deleted) {
+      hardDeleteItem(id);
+      return;
+    }
+    if (!$generalSettings.useRecycleBin) {
+      hardDeleteItem(id);
+      return;
+    }
 
     // Soft delete: mark as deleted, don't remove from list
-    items = items.map((item) => item.id === id ? { ...item, deleted: true } : item);
+    items = items.map((item) => (item.id === id ? { ...item, deleted: true } : item));
     if (indexedItems) {
-      indexedItems = indexedItems.map((item) => item.id === id ? { ...item, deleted: true } : item);
+      indexedItems = indexedItems.map((item) =>
+        item.id === id ? { ...item, deleted: true } : item,
+      );
     }
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
@@ -563,7 +623,7 @@
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        items = items.map((item) => item.id === id ? { ...item, deleted: false } : item);
+        items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -576,9 +636,11 @@
   }
 
   function restoreItem(id: string) {
-    items = items.map((item) => item.id === id ? { ...item, deleted: false } : item);
+    items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
     if (indexedItems) {
-      indexedItems = indexedItems.map((item) => item.id === id ? { ...item, deleted: false } : item);
+      indexedItems = indexedItems.map((item) =>
+        item.id === id ? { ...item, deleted: false } : item,
+      );
     }
     void persistRestore(id).catch(() => {});
     showToast(_t("toast.restoreSuccess") || "已恢复", "success");
@@ -623,13 +685,17 @@
             showToast(_t("toast.copySuccess"), "success");
             return;
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
       if (item.resourcePath) {
         try {
           invoke("mark_self_triggered", { text: item.resourcePath }).catch(() => {});
           await navigator.clipboard.writeText(item.resourcePath);
-          statusMessage = _t("app.copiedItem", { title: item.fileName || item.title.split("\n")[0] });
+          statusMessage = _t("app.copiedItem", {
+            title: item.fileName || item.title.split("\n")[0],
+          });
           showToast(_t("toast.copySuccess"), "success");
         } catch {
           showToast(_t("toast.copyFailed"), "error");
@@ -689,7 +755,12 @@
             : item,
         );
         if (detailItem?.id === id) {
-          detailItem = { ...detailItem, title: updated.title, resourcePath: updated.resourcePath, previewPath: updated.previewPath };
+          detailItem = {
+            ...detailItem,
+            title: updated.title,
+            resourcePath: updated.resourcePath,
+            previewPath: updated.previewPath,
+          };
         }
         editingId = null;
         showToast(_t("toast.editSaved"), "success");
@@ -705,7 +776,11 @@
 
     if (isTauriRuntime()) {
       try {
-        const saved = await invoke<boolean>("update_clipboard_text", { id, newTitle, newTextContent });
+        const saved = await invoke<boolean>("update_clipboard_text", {
+          id,
+          newTitle,
+          newTextContent,
+        });
         if (saved === false) throw new Error("record not found");
       } catch (error) {
         statusMessage = _t("toast.saveFailed");
@@ -717,16 +792,31 @@
 
     items = items.map((item) =>
       item.id === id
-        ? { ...item, textContent: newTextContent, preview: newPreview, ...(item.customTitle ? {} : { title: newTitle }) }
+        ? {
+            ...item,
+            textContent: newTextContent,
+            preview: newPreview,
+            ...(item.customTitle ? {} : { title: newTitle }),
+          }
         : item,
     );
     if (detailItem?.id === id) {
-      detailItem = { ...detailItem, textContent: newTextContent, preview: newPreview, ...(detailItem.customTitle ? {} : { title: newTitle }) };
+      detailItem = {
+        ...detailItem,
+        textContent: newTextContent,
+        preview: newPreview,
+        ...(detailItem.customTitle ? {} : { title: newTitle }),
+      };
     }
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
         item.id === id
-          ? { ...item, textContent: newTextContent, preview: newPreview, ...(item.customTitle ? {} : { title: newTitle }) }
+          ? {
+              ...item,
+              textContent: newTextContent,
+              preview: newPreview,
+              ...(item.customTitle ? {} : { title: newTitle }),
+            }
           : item,
       );
     }
@@ -740,10 +830,12 @@
   }
 
   function renameTitle(id: string, title: string) {
-    items = items.map((item) => item.id === id ? { ...item, title, customTitle: true } : item);
+    items = items.map((item) => (item.id === id ? { ...item, title, customTitle: true } : item));
     if (detailItem?.id === id) detailItem = { ...detailItem, title, customTitle: true };
     if (indexedItems) {
-      indexedItems = indexedItems.map((item) => item.id === id ? { ...item, title, customTitle: true } : item);
+      indexedItems = indexedItems.map((item) =>
+        item.id === id ? { ...item, title, customTitle: true } : item,
+      );
     }
     invoke("rename_item", { id, newName: title }).catch(() => {});
   }
@@ -778,7 +870,11 @@
     editingId = null;
     try {
       const newId: string = await invoke("duplicate_clipboard_item", { id });
-      await invoke("update_clipboard_text", { id: newId, newTitle: title, newTextContent: content });
+      await invoke("update_clipboard_text", {
+        id: newId,
+        newTitle: title,
+        newTextContent: content,
+      });
       showToast(_t("toast.duplicateSuccess"), "success");
     } catch {
       showToast(_t("toast.saveFailed"), "error");
@@ -1067,7 +1163,14 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <header class="search-header" role="presentation" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) void getCurrentWindow().startDragging(); }}>
+  <header
+    class="search-header"
+    role="presentation"
+    aria-label="拖拽窗口"
+    onmousedown={(e) => {
+      if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
+    }}
+  >
     <div class="search-box">
       <input
         bind:value={query}
@@ -1075,7 +1178,9 @@
         autocomplete="off"
         placeholder={_t("app.searchPlaceholder")}
         spellcheck="false"
-        style={compactMode ? `height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;` : undefined}
+        style={compactMode
+          ? `height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;`
+          : undefined}
         onkeydown={(e) => {
           if (e.key === "Backspace") {
             const now = Date.now();
@@ -1122,7 +1227,14 @@
     />
   </header>
 
-  <div class="toolbar" role="presentation" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) void getCurrentWindow().startDragging(); }}>
+  <div
+    class="toolbar"
+    role="presentation"
+    aria-label="拖拽窗口"
+    onmousedown={(e) => {
+      if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
+    }}
+  >
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
@@ -1287,7 +1399,8 @@
           {#each visiblePageItems as item, visibleIdx (item.id)}
             {#if useVirtualScroll}
               <div
-                style="position: absolute; top: {virtualList.visibleItems[visibleIdx].top}px; left: 0; right: 0;"
+                style="position: absolute; top: {virtualList.visibleItems[visibleIdx]
+                  .top}px; left: 0; right: 0;"
               >
                 <ClipboardCard
                   {item}
@@ -1295,14 +1408,22 @@
                   now={currentTime}
                   selected={selectedIds.has(item.id) || item.id === selectedId}
                   checked={selectedIds.has(item.id)}
-showCheckbox={false}
+                  showCheckbox={false}
                   hideActions={selectedIds.size > 0}
                   compact={compactMode}
-                  compactPaddingTop={compactPaddingTop}
-                  compactPaddingBottom={compactPaddingBottom}
-                  compactCardGap={compactCardGap}
-                  compactCardBorderRadius={compactCardBorderRadius}
-                  compactCardHeight={compactMode ? (item.customTitle ? (compactCustomTitle ?? 80) : item.kind === "image" ? (compactImage ?? 130) : ((item.kind !== "file" && !!item.preview && showSecondaryText !== false) ? (compactTallText ?? 70) : (compactText ?? 58))) : 0}
+                  {compactPaddingTop}
+                  {compactPaddingBottom}
+                  {compactCardGap}
+                  {compactCardBorderRadius}
+                  compactCardHeight={compactMode
+                    ? item.customTitle
+                      ? (compactCustomTitle ?? 80)
+                      : item.kind === "image"
+                        ? (compactImage ?? 130)
+                        : item.kind !== "file" && !!item.preview && showSecondaryText !== false
+                          ? (compactTallText ?? 70)
+                          : (compactText ?? 58)
+                    : 0}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -1316,7 +1437,6 @@ showCheckbox={false}
                   onplainpaste={plainPaste}
                   onduplicate={duplicateItem}
                   onrestore={restoreItem}
-
                 />
               </div>
             {:else}
@@ -1329,11 +1449,19 @@ showCheckbox={false}
                 showCheckbox={false}
                 hideActions={selectedIds.size > 0}
                 compact={compactMode}
-                compactPaddingTop={compactPaddingTop}
-                compactPaddingBottom={compactPaddingBottom}
-                compactCardGap={compactCardGap}
-                compactCardBorderRadius={compactCardBorderRadius}
-                compactCardHeight={compactMode ? (item.customTitle ? (compactCustomTitle ?? 80) : item.kind === "image" ? (compactImage ?? 130) : ((item.kind !== "file" && !!item.preview && showSecondaryText !== false) ? (compactTallText ?? 70) : (compactText ?? 58))) : 0}
+                {compactPaddingTop}
+                {compactPaddingBottom}
+                {compactCardGap}
+                {compactCardBorderRadius}
+                compactCardHeight={compactMode
+                  ? item.customTitle
+                    ? (compactCustomTitle ?? 80)
+                    : item.kind === "image"
+                      ? (compactImage ?? 130)
+                      : item.kind !== "file" && !!item.preview && showSecondaryText !== false
+                        ? (compactTallText ?? 70)
+                        : (compactText ?? 58)
+                  : 0}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}

@@ -68,13 +68,7 @@ impl WindowsClipboardMonitor {
 
                 let formats = list_clipboard_formats();
 
-                if sender
-                    .send(ClipboardChange {
-                        sequence,
-                        formats,
-                    })
-                    .is_err()
-                {
+                if sender.send(ClipboardChange { sequence, formats }).is_err() {
                     break;
                 }
             }
@@ -282,7 +276,13 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
             return None;
         }
 
-        let format = if has_dibv5 { CF_DIBV5 } else if has_dib { CF_DIB } else { CF_BITMAP };
+        let format = if has_dibv5 {
+            CF_DIBV5
+        } else if has_dib {
+            CF_DIB
+        } else {
+            CF_BITMAP
+        };
 
         if OpenClipboard(0) == 0 {
             return None;
@@ -476,7 +476,10 @@ pub fn get_foreground_app() -> ForegroundApp {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd == 0 {
-            return ForegroundApp { name: String::new(), exe_path: String::new() };
+            return ForegroundApp {
+                name: String::new(),
+                exe_path: String::new(),
+            };
         }
 
         let mut title_buf = [0u16; 256];
@@ -491,12 +494,18 @@ pub fn get_foreground_app() -> ForegroundApp {
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, &mut pid);
         if pid == 0 {
-            return ForegroundApp { name: title.clone(), exe_path: String::new() };
+            return ForegroundApp {
+                name: title.clone(),
+                exe_path: String::new(),
+            };
         }
 
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process == 0 {
-            return ForegroundApp { name: title.clone(), exe_path: String::new() };
+            return ForegroundApp {
+                name: title.clone(),
+                exe_path: String::new(),
+            };
         }
 
         let mut path_buf = [0u16; 520];
@@ -511,16 +520,25 @@ pub fn get_foreground_app() -> ForegroundApp {
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
-            return ForegroundApp { name, exe_path: full_path };
+            return ForegroundApp {
+                name,
+                exe_path: full_path,
+            };
         }
 
-        ForegroundApp { name: title, exe_path: String::new() }
+        ForegroundApp {
+            name: title,
+            exe_path: String::new(),
+        }
     }
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn get_foreground_app() -> ForegroundApp {
-    ForegroundApp { name: String::new(), exe_path: String::new() }
+    ForegroundApp {
+        name: String::new(),
+        exe_path: String::new(),
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -530,8 +548,11 @@ pub struct ForegroundApp {
 }
 
 #[cfg(target_os = "windows")]
-pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &str) -> Option<String> {
-
+pub fn extract_app_icon(
+    icon_dir: &std::path::Path,
+    app_name: &str,
+    exe_path: &str,
+) -> Option<String> {
     extern "system" {
         fn SHGetFileInfoW(
             path: *const u16,
@@ -555,7 +576,9 @@ pub fn extract_app_icon(icon_dir: &std::path::Path, app_name: &str, exe_path: &s
     const SHGFI_ICON: u32 = 0x100;
     const SHGFI_LARGEICON: u32 = 0x0;
 
-    let app_key = app_name.to_lowercase().chars()
+    let app_key = app_name
+        .to_lowercase()
+        .chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect::<String>()
         .trim_matches('_')
@@ -637,32 +660,91 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
         fn DeleteDC(dc: isize) -> i32;
         fn SelectObject(dc: isize, obj: isize) -> isize;
         fn GetObjectW(obj: isize, size: i32, buf: *mut u8) -> i32;
-        fn GetDIBits(dc: isize, bitmap: isize, start: u32, lines: u32, bits: *mut u8, info: *mut BITMAPINFOHEADER, usage: u32) -> i32;
+        fn GetDIBits(
+            dc: isize,
+            bitmap: isize,
+            start: u32,
+            lines: u32,
+            bits: *mut u8,
+            info: *mut BITMAPINFOHEADER,
+            usage: u32,
+        ) -> i32;
     }
 
     #[repr(C)]
-    struct ICONINFO { fIcon: i32, xHotspot: u32, yHotspot: u32, hbmMask: isize, hbmColor: isize }
+    struct ICONINFO {
+        fIcon: i32,
+        xHotspot: u32,
+        yHotspot: u32,
+        hbmMask: isize,
+        hbmColor: isize,
+    }
 
     #[repr(C)]
-    struct BITMAPINFOHEADER { biSize: u32, biWidth: i32, biHeight: i32, biPlanes: u16, biBitCount: u16, biCompression: u32, biSizeImage: u32, biXPelsPerMeter: i32, biYPelsPerMeter: i32, biClrUsed: u32, biClrImportant: u32 }
+    struct BITMAPINFOHEADER {
+        biSize: u32,
+        biWidth: i32,
+        biHeight: i32,
+        biPlanes: u16,
+        biBitCount: u16,
+        biCompression: u32,
+        biSizeImage: u32,
+        biXPelsPerMeter: i32,
+        biYPelsPerMeter: i32,
+        biClrUsed: u32,
+        biClrImportant: u32,
+    }
 
     #[repr(C)]
-    struct BITMAP { bmType: i32, bmWidth: i32, bmHeight: i32, bmWidthBytes: i32, bmPlanes: u16, bmBitsPixel: u16, bmBits: isize }
+    struct BITMAP {
+        bmType: i32,
+        bmWidth: i32,
+        bmHeight: i32,
+        bmWidthBytes: i32,
+        bmPlanes: u16,
+        bmBitsPixel: u16,
+        bmBits: isize,
+    }
 
     const DIB_RGB_COLORS: u32 = 0;
     const BI_RGB: u32 = 0;
 
     unsafe {
-        let mut icon_info = ICONINFO { fIcon: 0, xHotspot: 0, yHotspot: 0, hbmMask: 0, hbmColor: 0 };
+        let mut icon_info = ICONINFO {
+            fIcon: 0,
+            xHotspot: 0,
+            yHotspot: 0,
+            hbmMask: 0,
+            hbmColor: 0,
+        };
         if GetIconInfo(hicon, &mut icon_info) == 0 {
             return false;
         }
 
-        let mut bmp = BITMAP { bmType: 0, bmWidth: 0, bmHeight: 0, bmWidthBytes: 0, bmPlanes: 0, bmBitsPixel: 0, bmBits: 0 };
-        let hbm = if icon_info.hbmColor != 0 { icon_info.hbmColor } else { icon_info.hbmMask };
-        if GetObjectW(hbm, std::mem::size_of::<BITMAP>() as i32, &mut bmp as *mut _ as *mut u8) == 0 {
+        let mut bmp = BITMAP {
+            bmType: 0,
+            bmWidth: 0,
+            bmHeight: 0,
+            bmWidthBytes: 0,
+            bmPlanes: 0,
+            bmBitsPixel: 0,
+            bmBits: 0,
+        };
+        let hbm = if icon_info.hbmColor != 0 {
+            icon_info.hbmColor
+        } else {
+            icon_info.hbmMask
+        };
+        if GetObjectW(
+            hbm,
+            std::mem::size_of::<BITMAP>() as i32,
+            &mut bmp as *mut _ as *mut u8,
+        ) == 0
+        {
             DeleteObject(icon_info.hbmMask);
-            if icon_info.hbmColor != 0 { DeleteObject(icon_info.hbmColor); }
+            if icon_info.hbmColor != 0 {
+                DeleteObject(icon_info.hbmColor);
+            }
             return false;
         }
 
@@ -679,15 +761,25 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
             biBitCount: 32,
             biCompression: BI_RGB,
             biSizeImage: image_size,
-            biXPelsPerMeter: 0, biYPelsPerMeter: 0,
-            biClrUsed: 0, biClrImportant: 0,
+            biXPelsPerMeter: 0,
+            biYPelsPerMeter: 0,
+            biClrUsed: 0,
+            biClrImportant: 0,
         };
 
         let dc = GetDC(0);
         let mem_dc = CreateCompatibleDC(dc);
         let old_bmp = SelectObject(mem_dc, hbm);
         let mut pixels = vec![0u8; image_size as usize];
-        GetDIBits(mem_dc, hbm, 0, height, pixels.as_mut_ptr(), &mut bi, DIB_RGB_COLORS);
+        GetDIBits(
+            mem_dc,
+            hbm,
+            0,
+            height,
+            pixels.as_mut_ptr(),
+            &mut bi,
+            DIB_RGB_COLORS,
+        );
         SelectObject(mem_dc, old_bmp);
         DeleteDC(mem_dc);
         ReleaseDC(0, dc);
@@ -710,13 +802,19 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
             .is_some();
 
         DeleteObject(icon_info.hbmMask);
-        if icon_info.hbmColor != 0 { DeleteObject(icon_info.hbmColor); }
+        if icon_info.hbmColor != 0 {
+            DeleteObject(icon_info.hbmColor);
+        }
         result
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn extract_app_icon(_icon_dir: &std::path::Path, _app_name: &str, _exe_path: &str) -> Option<String> {
+pub fn extract_app_icon(
+    _icon_dir: &std::path::Path,
+    _app_name: &str,
+    _exe_path: &str,
+) -> Option<String> {
     None
 }
 
@@ -745,7 +843,12 @@ pub fn register_global_hotkey(hwnd: isize, id: i32, modifiers: u32, vk: u32) -> 
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn register_global_hotkey(_hwnd: isize, _id: i32, _modifiers: u32, _vk: u32) -> Result<(), String> {
+pub fn register_global_hotkey(
+    _hwnd: isize,
+    _id: i32,
+    _modifiers: u32,
+    _vk: u32,
+) -> Result<(), String> {
     Err("global hotkey registration is not supported on this platform".to_string())
 }
 

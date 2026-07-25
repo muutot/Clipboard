@@ -15,7 +15,7 @@ impl OcrEngine for NoopOcrEngine {
 
     fn recognize(&self, _input: &OcrInput) -> Result<OcrOutput, OcrEngineError> {
         Err(OcrEngineError::new(
-            "no OCR engine configured — install tesseract or configure PP-OCR"
+            "no OCR engine configured — install tesseract or configure PP-OCR",
         ))
     }
 }

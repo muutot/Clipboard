@@ -9,10 +9,8 @@
   } from "$lib/services/keyboard";
   import { messages, resolvePath } from "$lib/i18n";
 
-  const _t = (
-    path: string,
-    params?: Record<string, string | number>,
-  ) => resolvePath($messages, path, params);
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
 
   interface Props {
     configPath?: string;
@@ -94,11 +92,8 @@
     <h2>{_t("keyboard.title")}</h2>
     <p>每个操作可绑定多个组合；双击修饰键写法: Shift+Shift、Ctrl+Ctrl</p>
   </div>
-  <button
-    class="close-button"
-    type="button"
-    aria-label={_t("actions.close")}
-    onclick={onclose}>×</button
+  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+    >×</button
   >
 </header>
 
@@ -114,7 +109,11 @@
           <p>{_t("keyboard.shortcutConfigDesc")}</p>
         </div>
       </div>
-      <button type="button" class="open-btn" onclick={() => invoke("open_external_url", { url: configPath })}>
+      <button
+        type="button"
+        class="open-btn"
+        onclick={() => invoke("open_external_url", { url: configPath })}
+      >
         <AppIcon name="file" size={14} /> 打开文件
       </button>
     </section>
@@ -159,7 +158,11 @@
         <div class="ref-row"><kbd>←</kbd><kbd>→</kbd><kbd>Tab</kbd><span>切换分类</span></div>
         <div class="ref-row"><kbd>Enter</kbd><span>激活</span></div>
         <div class="ref-row"><kbd>ESC</kbd><span>隐藏窗口</span></div>
-        <div class="ref-row"><kbd>Ctrl</kbd>+<kbd>C</kbd><kbd>D</kbd><kbd>F</kbd><kbd>E</kbd><span>复制 / 删除 / 收藏 / 编辑</span></div>
+        <div class="ref-row">
+          <kbd>Ctrl</kbd>+<kbd>C</kbd><kbd>D</kbd><kbd>F</kbd><kbd>E</kbd><span
+            >复制 / 删除 / 收藏 / 编辑</span
+          >
+        </div>
         <div class="ref-row"><kbd>Ctrl</kbd>+<kbd>数字</kbd><span>快速复制第 N 条</span></div>
         <div class="ref-row"><kbd>Alt</kbd>+<kbd>V</kbd><span>唤起窗口</span></div>
         <div class="ref-row"><kbd>Backspace</kbd>×2<span>清空搜索</span></div>
@@ -329,7 +332,9 @@
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .setting-actions button:hover:not(:disabled) {
@@ -437,7 +442,9 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .open-btn:hover {

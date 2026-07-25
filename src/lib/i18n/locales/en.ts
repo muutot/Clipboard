@@ -258,9 +258,11 @@ const en: LocaleDefinition = {
     useSystemTitleBar: "Use System Title Bar",
     useSystemTitleBarDescription: "Use the operating system's native title bar",
     desktopFullscreen: "Desktop Fullscreen Preview",
-    desktopFullscreenDescription: "When enabled, images fullscreen over desktop. When disabled, fullscreen within app only.",
+    desktopFullscreenDescription:
+      "When enabled, images fullscreen over desktop. When disabled, fullscreen within app only.",
     viewerBackdropOpacity: "Viewer Backdrop Opacity",
-    viewerBackdropOpacityDescription: "Opacity of the backdrop when previewing images in fullscreen",
+    viewerBackdropOpacityDescription:
+      "Opacity of the backdrop when previewing images in fullscreen",
     theme: "Theme",
     themeDescription: "Only dark theme is supported",
     themeDark: "Dark",
@@ -326,7 +328,6 @@ const en: LocaleDefinition = {
     dragText: "Drag text content",
     dragFile: "Drag file reference",
   },
-
 };
 
 export default en;

@@ -56,7 +56,8 @@ pub fn detect_formats_from_mime_list(mime_list: &[String]) -> ClipboardFormatInf
                     formats.push(ClipboardFormat::Html);
                 }
             }
-            "image/png" | "image/jpeg" | "image/bmp" | "image/gif" | "image/webp" | "image/tiff" => {
+            "image/png" | "image/jpeg" | "image/bmp" | "image/gif" | "image/webp"
+            | "image/tiff" => {
                 if !formats.contains(&ClipboardFormat::Image) {
                     formats.push(ClipboardFormat::Image);
                 }

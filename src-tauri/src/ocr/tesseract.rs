@@ -108,10 +108,7 @@ impl OcrEngine for TesseractOcrEngine {
 }
 
 fn detect_tesseract_version() -> Option<String> {
-    let output = Command::new("tesseract")
-        .arg("--version")
-        .output()
-        .ok()?;
+    let output = Command::new("tesseract").arg("--version").output().ok()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let first_line = stdout.lines().next()?;

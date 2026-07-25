@@ -15,7 +15,7 @@ const IMAGE_HEIGHT = 150;
 
 export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?: number): number {
   const rows = Math.min(12, Math.max(3, lineCount));
-  let h = 25 + 8 + (rows * 20) + 36;
+  let h = 25 + 8 + rows * 20 + 36;
   if (hasCustomTitle) h += 34;
   return h + (cardGap ?? 0);
 }
@@ -35,7 +35,8 @@ export function itemHeight(
   if (customTitle && compact) return (compactCustomTitle ?? 80) + (cardGap ?? 5);
   const effectivePreview = hasPreview && showPreview !== false;
   if (kind === "image") return compact ? (compactImage ?? 130) + (cardGap ?? 5) : IMAGE_HEIGHT;
-  if (compact) return (effectivePreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
+  if (compact)
+    return (effectivePreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
   return effectivePreview ? TALL_TEXT_HEIGHT : TEXT_HEIGHT;
 }
 

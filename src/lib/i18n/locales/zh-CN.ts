@@ -319,7 +319,6 @@ const zhCN: LocaleDefinition = {
     dragText: "拖拽文本内容",
     dragFile: "拖拽文件引用",
   },
-
 };
 
 export default zhCN;

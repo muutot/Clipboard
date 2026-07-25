@@ -19,7 +19,9 @@
   let feedbackSuccess = $state(false);
 
   $effect(() => {
-    const unsub = generalSettings.subscribe((v) => { s = v; });
+    const unsub = generalSettings.subscribe((v) => {
+      s = v;
+    });
     return unsub;
   });
 
@@ -57,7 +59,6 @@
   $effect(() => {
     updateSliderTrack(viewerOpacityEl);
   });
-
 </script>
 
 <header>
@@ -66,11 +67,8 @@
     <h2>{_t("general.title")}</h2>
     <p>{_t("general.description")}</p>
   </div>
-  <button
-    class="close-button"
-    type="button"
-    aria-label={_t("actions.close")}
-    onclick={onclose}>×</button
+  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+    >×</button
   >
 </header>
 
@@ -84,8 +82,14 @@
       </div>
     </div>
     <div class="lang-toggle">
-      <button type="button" class:active={s.language === "zh-CN"} onclick={() => changeLanguage("zh-CN")}>中文</button>
-      <button type="button" class:active={s.language === "en"} onclick={() => changeLanguage("en")}>English</button>
+      <button
+        type="button"
+        class:active={s.language === "zh-CN"}
+        onclick={() => changeLanguage("zh-CN")}>中文</button
+      >
+      <button type="button" class:active={s.language === "en"} onclick={() => changeLanguage("en")}
+        >English</button
+      >
     </div>
   </section>
 
@@ -225,7 +229,11 @@
       type="button"
       class="toggle-switch"
       class:active={s.imageFullscreenMode === "desktop"}
-      onclick={() => generalSettings.updateSetting("imageFullscreenMode", s.imageFullscreenMode === "desktop" ? "overlay" : "desktop")}
+      onclick={() =>
+        generalSettings.updateSetting(
+          "imageFullscreenMode",
+          s.imageFullscreenMode === "desktop" ? "overlay" : "desktop",
+        )}
       aria-checked={s.imageFullscreenMode === "desktop"}
       aria-label={_t("general.desktopFullscreen")}
       role="switch"
@@ -247,7 +255,13 @@
       min="0"
       max="100"
       value={s.viewerBackdropOpacity}
-      oninput={(e) => { generalSettings.updateSetting("viewerBackdropOpacity", Number((e.target as HTMLInputElement).value)); updateSliderTrack(viewerOpacityEl); }}
+      oninput={(e) => {
+        generalSettings.updateSetting(
+          "viewerBackdropOpacity",
+          Number((e.target as HTMLInputElement).value),
+        );
+        updateSliderTrack(viewerOpacityEl);
+      }}
       class="transparency-slider"
       bind:this={viewerOpacityEl}
     />
@@ -265,7 +279,8 @@
       type="button"
       class="toggle-switch"
       class:active={s.rememberWindowPosition}
-      onclick={() => generalSettings.updateSetting("rememberWindowPosition", !s.rememberWindowPosition)}
+      onclick={() =>
+        generalSettings.updateSetting("rememberWindowPosition", !s.rememberWindowPosition)}
       aria-checked={s.rememberWindowPosition}
       aria-label={_t("general.rememberWindowPosition")}
       role="switch"
@@ -282,7 +297,11 @@
         <p>{_t("general.themeDescription")}</p>
       </div>
     </div>
-    <select class="theme-select" value={s.theme} onchange={(e) => changeTheme((e.target as HTMLSelectElement).value as ThemeMode)}>
+    <select
+      class="theme-select"
+      value={s.theme}
+      onchange={(e) => changeTheme((e.target as HTMLSelectElement).value as ThemeMode)}
+    >
       <option value="dark">{_t("general.themeDark")}</option>
       <option value="light">{_t("general.themeLight")}</option>
     </select>
@@ -441,7 +460,10 @@
     font: inherit;
     font-size: var(--font-size-secondary, 11px);
     cursor: pointer;
-    transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease,
+      color 100ms ease;
   }
 
   .lang-toggle button:hover {
@@ -470,7 +492,13 @@
   .transparency-slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
-    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
+    background: linear-gradient(
+      to right,
+      #4aa8ff 0%,
+      #4aa8ff var(--slider-pct, 50%),
+      #2a2a2a var(--slider-pct, 50%),
+      #2a2a2a 100%
+    );
   }
 
   .transparency-slider::-webkit-slider-thumb {
@@ -482,7 +510,9 @@
     border: 2px solid #4aa8ff;
     background: #1a1a1a;
     cursor: pointer;
-    transition: box-shadow 100ms ease, transform 100ms ease;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
   }
 
   .transparency-slider::-webkit-slider-thumb:hover {
@@ -509,7 +539,9 @@
     border: 2px solid #4aa8ff;
     background: #1a1a1a;
     cursor: pointer;
-    transition: box-shadow 100ms ease, transform 100ms ease;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
   }
 
   .transparency-slider::-moz-range-thumb:hover {
@@ -527,7 +559,9 @@
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
-    transition: border-color 100ms ease, background 100ms ease;
+    transition:
+      border-color 100ms ease,
+      background 100ms ease;
   }
 
   .toggle-switch.active {
@@ -543,7 +577,9 @@
     height: 16px;
     border-radius: 50%;
     background: #666;
-    transition: transform 120ms ease, background 100ms ease;
+    transition:
+      transform 120ms ease,
+      background 100ms ease;
   }
 
   .toggle-switch.active .toggle-knob {
@@ -601,5 +637,4 @@
     font-size: var(--font-size-tiny, 10px);
     text-align: center;
   }
-
 </style>

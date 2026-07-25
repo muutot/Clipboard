@@ -100,10 +100,7 @@ mod tests {
 
     #[test]
     fn strip_whitespace_removes_spaces_and_tabs() {
-        assert_eq!(
-            TransformOperation::StripWhitespace.apply("a b\tc"),
-            "abc"
-        );
+        assert_eq!(TransformOperation::StripWhitespace.apply("a b\tc"), "abc");
     }
 
     #[test]

@@ -38,7 +38,18 @@
     oncopyfilename: (id: string) => void;
   }
 
-  let { item, onclose, oncopy, onedit, onsaveedit, onrenametitle, onplainpaste, onduplicate, onsaveasnew, oncopyfilename }: Props = $props();
+  let {
+    item,
+    onclose,
+    oncopy,
+    onedit,
+    onsaveedit,
+    onrenametitle,
+    onplainpaste,
+    onduplicate,
+    onsaveasnew,
+    oncopyfilename,
+  }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
@@ -111,7 +122,9 @@
     panX = 0;
     panY = 0;
     if (viewerWindow) {
-      try { await viewerWindow.hide(); } catch {}
+      try {
+        await viewerWindow.hide();
+      } catch {}
     }
   }
 
@@ -165,7 +178,9 @@
   $effect(() => {
     if (item) {
       untrack(() => {
-        if (imageFullscreen) { closeImageFullscreen(); }
+        if (imageFullscreen) {
+          closeImageFullscreen();
+        }
       });
       imageFullscreen = false;
       zoom = 1;
@@ -189,13 +204,15 @@
     const poll = () => {
       if (item.ocrStatus === "completed") return;
       invoke<{ fullText: string; status: string }>("get_clipboard_item_ocr", { id: item.id })
-        .then(result => {
+        .then((result) => {
           if (result) {
             item.ocrStatus = result.status === "completed" ? "completed" : "pending";
             if (result.fullText) item.ocrText = result.fullText;
           }
         })
-        .catch(() => { item.ocrStatus = "none"; });
+        .catch(() => {
+          item.ocrStatus = "none";
+        });
     };
 
     poll();
@@ -204,38 +221,115 @@
   });
 
   const emails = $derived(
-    item ? [...new Set(([item.title, item.preview].filter(Boolean).join(" ").match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? []))] : [],
+    item
+      ? [
+          ...new Set(
+            [item.title, item.preview]
+              .filter(Boolean)
+              .join(" ")
+              .match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [],
+          ),
+        ]
+      : [],
   );
   const urls = $derived(
-    item ? [...new Set(([item.title, item.preview].filter(Boolean).join(" ").match(/https?:\/\/[^\s)]+/g) ?? []))] : [],
+    item
+      ? [
+          ...new Set(
+            [item.title, item.preview]
+              .filter(Boolean)
+              .join(" ")
+              .match(/https?:\/\/[^\s)]+/g) ?? [],
+          ),
+        ]
+      : [],
   );
   const phones = $derived(
-    item ? [...new Set(([item.title, item.preview].filter(Boolean).join(" ").match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? []))] : [],
+    item
+      ? [
+          ...new Set(
+            [item.title, item.preview]
+              .filter(Boolean)
+              .join(" ")
+              .match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [],
+          ),
+        ]
+      : [],
   );
   const colors = $derived(
-    item ? [...new Set(([item.title, item.preview].filter(Boolean).join(" ").match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? []))] : [],
+    item
+      ? [
+          ...new Set(
+            [item.title, item.preview]
+              .filter(Boolean)
+              .join(" ")
+              .match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [],
+          ),
+        ]
+      : [],
   );
 
   const hasSpecialMarkers = $derived(
     emails.length > 0 || urls.length > 0 || phones.length > 0 || colors.length > 0,
   );
 
-  const detailContent = $derived(item ? (item.textContent || item.title) : "");
+  const detailContent = $derived(item ? item.textContent || item.title : "");
   const isCode = $derived(item ? detectCodeLanguage(detailContent) !== null : false);
-  const isMarkdown = $derived(item ? /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m.test(detailContent) : false);
+  const isMarkdown = $derived(
+    item ? /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m.test(detailContent) : false,
+  );
 
   function detectCodeLanguage(text: string): string | null {
     const patterns: [RegExp, string][] = [
-      [new RegExp("^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function", "ms"), "TypeScript"],
+      [
+        new RegExp(
+          "^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function",
+          "ms",
+        ),
+        "TypeScript",
+      ],
       [new RegExp("^<\\w+[^>]*>|<\\/\\w+>|className=|useState|useEffect|props\\.", "m"), "JSX"],
-      [new RegExp("^use\\s|^fn\\s|let\\s+mut|struct\\s|impl\\s|^\\s*pub\\s|^\\s*mod\\s", "m"), "Rust"],
-      [new RegExp("^def\\s|^import\\s\\w|^\\s*class\\s|^\\s*from\\s|print\\(|lambda\\s", "m"), "Python"],
-      [new RegExp('^\\s*[{\\[]\\s*$|"[^"]*"\\s*:|^\\s*"|function\\s*\\(|require\\(|module\\.exports', "m"), "JSON"],
-      [new RegExp("^<!DOCTYPE|<html|<head|<body|<div|<span|\\.class\\s*\\{|#id\\s*\\{", "m"), "HTML"],
-      [new RegExp("^SELECT\\s|^INSERT\\s|^UPDATE\\s|^DELETE\\s|^CREATE\\s|^\\s*FROM\\s|^\\s*WHERE\\s", "mi"), "SQL"],
-      [new RegExp("^#!/|^\\s*(echo|export|cd|ls|grep|mkdir|sudo|apt|npm|yarn|git)\\s", "m"), "Shell"],
-      [new RegExp("^\\.\\w+\\s*\\{|^\\s*color:|^\\s*margin:|^\\s*padding:|@media|@keyframes", "m"), "CSS"],
-      [new RegExp("^(function|var|const|let)\\s|^\\s*console\\.|document\\.|window\\.|require\\(", "m"), "JavaScript"],
+      [
+        new RegExp("^use\\s|^fn\\s|let\\s+mut|struct\\s|impl\\s|^\\s*pub\\s|^\\s*mod\\s", "m"),
+        "Rust",
+      ],
+      [
+        new RegExp("^def\\s|^import\\s\\w|^\\s*class\\s|^\\s*from\\s|print\\(|lambda\\s", "m"),
+        "Python",
+      ],
+      [
+        new RegExp(
+          '^\\s*[{\\[]\\s*$|"[^"]*"\\s*:|^\\s*"|function\\s*\\(|require\\(|module\\.exports',
+          "m",
+        ),
+        "JSON",
+      ],
+      [
+        new RegExp("^<!DOCTYPE|<html|<head|<body|<div|<span|\\.class\\s*\\{|#id\\s*\\{", "m"),
+        "HTML",
+      ],
+      [
+        new RegExp(
+          "^SELECT\\s|^INSERT\\s|^UPDATE\\s|^DELETE\\s|^CREATE\\s|^\\s*FROM\\s|^\\s*WHERE\\s",
+          "mi",
+        ),
+        "SQL",
+      ],
+      [
+        new RegExp("^#!/|^\\s*(echo|export|cd|ls|grep|mkdir|sudo|apt|npm|yarn|git)\\s", "m"),
+        "Shell",
+      ],
+      [
+        new RegExp("^\\.\\w+\\s*\\{|^\\s*color:|^\\s*margin:|^\\s*padding:|@media|@keyframes", "m"),
+        "CSS",
+      ],
+      [
+        new RegExp(
+          "^(function|var|const|let)\\s|^\\s*console\\.|document\\.|window\\.|require\\(",
+          "m",
+        ),
+        "JavaScript",
+      ],
     ];
 
     for (const [regex, lang] of patterns) {
@@ -266,7 +360,10 @@
         closeImageFullscreen();
         return;
       }
-      if (editing) { editing = false; return; }
+      if (editing) {
+        editing = false;
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       onclose();
@@ -280,7 +377,10 @@
   }
 
   function saveTitleEdit() {
-    if (!item || !editTitleContent.trim()) { editingTitle = false; return; }
+    if (!item || !editTitleContent.trim()) {
+      editingTitle = false;
+      return;
+    }
     onrenametitle(item.id, editTitleContent.trim());
     editingTitle = false;
   }
@@ -295,8 +395,19 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if item}
-  <div class="detail-backdrop" class:fullscreen-backdrop={imageFullscreen} onclick={imageFullscreen ? closeImageFullscreen : onclose} aria-hidden="true"></div>
-  <div class="detail-panel" class:fullscreen={imageFullscreen} role="dialog" aria-modal="true" aria-label={_t("detail.title")}>
+  <div
+    class="detail-backdrop"
+    class:fullscreen-backdrop={imageFullscreen}
+    onclick={imageFullscreen ? closeImageFullscreen : onclose}
+    aria-hidden="true"
+  ></div>
+  <div
+    class="detail-panel"
+    class:fullscreen={imageFullscreen}
+    role="dialog"
+    aria-modal="true"
+    aria-label={_t("detail.title")}
+  >
     <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
       <button class="back-btn" type="button" onclick={onclose} aria-label={_t("detail.back")}>
         <AppIcon name="chevron-left" size={18} strokeWidth={2} />
@@ -309,8 +420,12 @@
               class="header-title-input"
               bind:value={editTitleContent}
               onkeydown={(e) => {
-                if (e.key === 'Enter') { saveTitleEdit(); }
-                if (e.key === 'Escape') { editingTitle = false; }
+                if (e.key === "Enter") {
+                  saveTitleEdit();
+                }
+                if (e.key === "Escape") {
+                  editingTitle = false;
+                }
               }}
               onblur={() => saveTitleEdit()}
             />
@@ -324,7 +439,10 @@
             role="button"
             tabindex="0"
             aria-label={_t("edit.edit")}
-            ondblclick={() => { editTitleContent = item.title; editingTitle = true; }}
+            ondblclick={() => {
+              editTitleContent = item.title;
+              editingTitle = true;
+            }}
             onkeydown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -344,10 +462,18 @@
     </div>
 
     <nav class="detail-tabs" aria-label={_t("detail.tabAriaLabel")}>
-      <button class:active={activeTab === "preview"} type="button" onclick={() => (activeTab = "preview")}>
+      <button
+        class:active={activeTab === "preview"}
+        type="button"
+        onclick={() => (activeTab = "preview")}
+      >
         {_t("detail.preview")}
       </button>
-      <button class:active={activeTab === "details"} type="button" onclick={() => (activeTab = "details")}>
+      <button
+        class:active={activeTab === "details"}
+        type="button"
+        onclick={() => (activeTab = "details")}
+      >
         {_t("detail.details")}
       </button>
       <button class:active={activeTab === "ocr"} type="button" onclick={() => (activeTab = "ocr")}>
@@ -365,7 +491,15 @@
                   src={assetUrl(item.previewPath || item.resourcePath)}
                   alt={item.preview || item.title}
                 />
-                <button type="button" class="image-fullscreen-btn" onclick={(e) => { e.stopPropagation(); openImageFullscreen(); }} aria-label={_t("detail.fullscreenPreview")}>
+                <button
+                  type="button"
+                  class="image-fullscreen-btn"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    openImageFullscreen();
+                  }}
+                  aria-label={_t("detail.fullscreenPreview")}
+                >
                   <AppIcon name="maximize" size={16} strokeWidth={2} />
                 </button>
               {:else}
@@ -406,17 +540,23 @@
           {:else if isCode && !isMarkdown}
             {#if editing}
               <div class="edit-area">
-                <textarea bind:value={editContent} rows={Math.min(20, Math.max(5, editContent.split("\n").length))} placeholder={_t("edit.placeholder")}></textarea>
+                <textarea
+                  bind:value={editContent}
+                  rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
+                  placeholder={_t("edit.placeholder")}></textarea>
               </div>
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={saveEdit}>
-                  <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                  <AppIcon name="check" size={14} strokeWidth={2.5} />
+                  {_t("edit.save")}
                 </button>
                 <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
-                  <AppIcon name="copy" size={14} strokeWidth={2.5} /> {_t("edit.saveAsNew")}
+                  <AppIcon name="copy" size={14} strokeWidth={2.5} />
+                  {_t("edit.saveAsNew")}
                 </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
-                  <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
+                  <AppIcon name="x" size={14} strokeWidth={2.5} />
+                  {_t("edit.cancel")}
                 </button>
               </div>
             {:else}
@@ -425,17 +565,23 @@
           {:else if isMarkdown}
             {#if editing}
               <div class="edit-area">
-                <textarea bind:value={editContent} rows={Math.min(20, Math.max(5, editContent.split("\n").length))} placeholder={_t("edit.placeholder")}></textarea>
+                <textarea
+                  bind:value={editContent}
+                  rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
+                  placeholder={_t("edit.placeholder")}></textarea>
               </div>
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={saveEdit}>
-                  <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                  <AppIcon name="check" size={14} strokeWidth={2.5} />
+                  {_t("edit.save")}
                 </button>
                 <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
-                  <AppIcon name="copy" size={14} strokeWidth={2.5} /> {_t("edit.saveAsNew")}
+                  <AppIcon name="copy" size={14} strokeWidth={2.5} />
+                  {_t("edit.saveAsNew")}
                 </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
-                  <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
+                  <AppIcon name="x" size={14} strokeWidth={2.5} />
+                  {_t("edit.cancel")}
                 </button>
               </div>
             {:else}
@@ -444,17 +590,23 @@
           {:else}
             {#if editing}
               <div class="edit-area">
-                <textarea bind:value={editContent} rows={Math.min(20, Math.max(5, editContent.split("\n").length))} placeholder={_t("edit.placeholder")}></textarea>
+                <textarea
+                  bind:value={editContent}
+                  rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
+                  placeholder={_t("edit.placeholder")}></textarea>
               </div>
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={saveEdit}>
-                  <AppIcon name="check" size={14} strokeWidth={2.5} /> {_t("edit.save")}
+                  <AppIcon name="check" size={14} strokeWidth={2.5} />
+                  {_t("edit.save")}
                 </button>
                 <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
-                  <AppIcon name="copy" size={14} strokeWidth={2.5} /> {_t("edit.saveAsNew")}
+                  <AppIcon name="copy" size={14} strokeWidth={2.5} />
+                  {_t("edit.saveAsNew")}
                 </button>
                 <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
-                  <AppIcon name="x" size={14} strokeWidth={2.5} /> {_t("edit.cancel")}
+                  <AppIcon name="x" size={14} strokeWidth={2.5} />
+                  {_t("edit.cancel")}
                 </button>
               </div>
             {:else}
@@ -465,46 +617,64 @@
 
         <div class="detail-actions">
           <button type="button" onclick={() => oncopy(item.id)}>
-            <AppIcon name="copy" size={15} /> {_t("card.copy")}
+            <AppIcon name="copy" size={15} />
+            {_t("card.copy")}
           </button>
           {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
-            <button type="button" onclick={() => invoke("reveal_in_explorer", { path: item.resourcePath })}>
-              <AppIcon name="file" size={15} /> {_t("detail.locateFile")}
+            <button
+              type="button"
+              onclick={() => invoke("reveal_in_explorer", { path: item.resourcePath })}
+            >
+              <AppIcon name="file" size={15} />
+              {_t("detail.locateFile")}
             </button>
-            <button type="button" onclick={() => {
-              const folder = item.resourcePath!.replace(/[^\\/]+$/, '');
-              invoke("open_external_url", { url: folder });
-            }}>
-              <AppIcon name="download" size={15} /> {_t("detail.openFolder")}
+            <button
+              type="button"
+              onclick={() => {
+                const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
+                invoke("open_external_url", { url: folder });
+              }}
+            >
+              <AppIcon name="download" size={15} />
+              {_t("detail.openFolder")}
             </button>
           {/if}
           {#if !editing && (item.kind === "text" || item.kind === "link")}
-            <button type="button" onclick={() => {
-              editContent = item.textContent || item.title;
-              editing = true;
-            }}>
-              <AppIcon name="edit" size={15} /> {_t("edit.edit")}
+            <button
+              type="button"
+              onclick={() => {
+                editContent = item.textContent || item.title;
+                editing = true;
+              }}
+            >
+              <AppIcon name="edit" size={15} />
+              {_t("edit.edit")}
             </button>
           {/if}
           {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
-            <button type="button" onclick={() => {
-              editContent = item.title.split("\n")[0];
-              editing = true;
-            }}>
-              <AppIcon name="edit" size={15} /> {_t("edit.editFileName")}
+            <button
+              type="button"
+              onclick={() => {
+                editContent = item.title.split("\n")[0];
+                editing = true;
+              }}
+            >
+              <AppIcon name="edit" size={15} />
+              {_t("edit.editFileName")}
             </button>
           {/if}
           {#if item.kind === "image" || item.kind === "file"}
             <button type="button" onclick={() => oncopyfilename(item.id)}>
-              <AppIcon name="file" size={15} /> {_t("copy.copyFileName")}
+              <AppIcon name="file" size={15} />
+              {_t("copy.copyFileName")}
             </button>
           {:else}
             <button type="button" onclick={() => onplainpaste(item.id)}>
-              <AppIcon name="type" size={15} /> {_t("copy.plainText")}
+              <AppIcon name="type" size={15} />
+              {_t("copy.plainText")}
             </button>
           {/if}
         </div>
-
       {:else if activeTab === "details"}
         <div class="details-section">
           <dl class="detail-list">
@@ -545,9 +715,16 @@
             {#if item.ocrStatus}
               <div class="detail-row">
                 <dt><AppIcon name="scan" size={14} /> {_t("detail.ocrStatus")}</dt>
-                <dd class="ocr-badge" class:ocr-completed={item.ocrStatus === "completed"}
-                  class:ocr-pending={item.ocrStatus === "pending"}>
-                  {item.ocrStatus === "completed" ? _t("detail.completed") : item.ocrStatus === "pending" ? _t("detail.pending") : item.ocrStatus}
+                <dd
+                  class="ocr-badge"
+                  class:ocr-completed={item.ocrStatus === "completed"}
+                  class:ocr-pending={item.ocrStatus === "pending"}
+                >
+                  {item.ocrStatus === "completed"
+                    ? _t("detail.completed")
+                    : item.ocrStatus === "pending"
+                      ? _t("detail.pending")
+                      : item.ocrStatus}
                 </dd>
               </div>
             {/if}
@@ -558,7 +735,13 @@
               </div>
             {/if}
             {#if item.metadataJson}
-              {@const meta = (() => { try { return JSON.parse(item.metadataJson!); } catch { return null; } })()}
+              {@const meta = (() => {
+                try {
+                  return JSON.parse(item.metadataJson!);
+                } catch {
+                  return null;
+                }
+              })()}
               {#if meta}
                 {#each Object.entries(meta) as [key, value]}
                   {#if key !== "width" && key !== "height"}
@@ -616,14 +799,17 @@
             </div>
           {/if}
         </div>
-
       {:else if activeTab === "ocr"}
         <div class="ocr-section">
           {#if item.ocrStatus === "completed" && item.ocrText}
             <div class="ocr-status ocr-completed">
               <span class="ocr-dot"></span>
               {_t("detail.completed")}
-              <button type="button" class="ocr-copy-btn" onclick={() => navigator.clipboard.writeText(item.ocrText ?? "")}>
+              <button
+                type="button"
+                class="ocr-copy-btn"
+                onclick={() => navigator.clipboard.writeText(item.ocrText ?? "")}
+              >
                 {_t("detail.copyOcrText")}
               </button>
             </div>
@@ -656,7 +842,12 @@
       ondblclick={onDblClick}
       role="presentation"
     >
-      <button type="button" class="viewer-close-btn" onclick={closeImageFullscreen} aria-label={_t("actions.close")}>
+      <button
+        type="button"
+        class="viewer-close-btn"
+        onclick={closeImageFullscreen}
+        aria-label={_t("actions.close")}
+      >
         <AppIcon name="x" size={20} strokeWidth={2.5} />
       </button>
       <div class="viewer-zoom-hint">{Math.round(zoom * 100)}%</div>
@@ -707,8 +898,12 @@
   }
 
   @keyframes slide-in {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
   }
 
   .detail-header {
@@ -731,7 +926,9 @@
     color: #999;
     background: #222;
     cursor: pointer;
-    transition: color 100ms ease, background 100ms ease;
+    transition:
+      color 100ms ease,
+      background 100ms ease;
   }
 
   .back-btn:hover {
@@ -816,7 +1013,9 @@
     font: inherit;
     font-size: var(--font-size-secondary, 12px);
     cursor: pointer;
-    transition: color 100ms ease, background 100ms ease;
+    transition:
+      color 100ms ease,
+      background 100ms ease;
   }
 
   .detail-tabs button:hover {
@@ -965,7 +1164,9 @@
     font: inherit;
     font-size: 11.5px;
     cursor: pointer;
-    transition: background 100ms ease, border-color 100ms ease;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease;
   }
 
   .detail-actions button:hover {
@@ -1132,7 +1333,10 @@
     border-radius: 4px;
     color: #b7b7b7;
     background: #1a1a1a;
-    font: 10px "Cascadia Code", Consolas, monospace;
+    font:
+      10px "Cascadia Code",
+      Consolas,
+      monospace;
   }
 
   .ocr-section {
@@ -1172,7 +1376,9 @@
     border-radius: 4px;
     color: #b0b0b0;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition:
+      background 0.15s,
+      color 0.15s;
   }
 
   .ocr-copy-btn:hover {
@@ -1196,7 +1402,10 @@
     border-radius: 8px;
     color: #d7d7d7;
     background: #141414;
-    font: 12px/1.6 "Cascadia Code", Consolas, monospace;
+    font:
+      12px/1.6 "Cascadia Code",
+      Consolas,
+      monospace;
     white-space: pre-wrap;
     overflow-wrap: break-word;
   }
@@ -1232,7 +1441,10 @@
     border-radius: 7px;
     color: #e4e4e4;
     background: #141414;
-    font: 12px/1.55 "Cascadia Code", Consolas, monospace;
+    font:
+      12px/1.55 "Cascadia Code",
+      Consolas,
+      monospace;
     resize: vertical;
     outline: none;
   }
@@ -1256,7 +1468,9 @@
     font: inherit;
     font-size: 11.5px;
     cursor: pointer;
-    transition: background 100ms ease, border-color 100ms ease;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease;
   }
 
   .edit-actions button.edit-save {
@@ -1314,7 +1528,9 @@
     backdrop-filter: blur(4px);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 150ms ease, background 150ms ease;
+    transition:
+      opacity 150ms ease,
+      background 150ms ease;
   }
 
   .image-full-preview:hover .image-fullscreen-btn {
@@ -1372,7 +1588,9 @@
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
     cursor: pointer;
-    transition: color 120ms ease, background 120ms ease;
+    transition:
+      color 120ms ease,
+      background 120ms ease;
   }
 
   .viewer-close-btn:hover {

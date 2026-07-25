@@ -5,7 +5,9 @@
 
   let s = $state($generalSettings);
   $effect(() => {
-    const unsub = generalSettings.subscribe((v) => { s = v; });
+    const unsub = generalSettings.subscribe((v) => {
+      s = v;
+    });
     return unsub;
   });
 

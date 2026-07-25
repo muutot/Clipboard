@@ -256,19 +256,23 @@
   }
 </script>
 
-  <div
+<div
   role="button"
   aria-pressed={selected}
   aria-label={item.title}
   class:selected
   class:compact
-  class:editing={editing}
+  class:editing
   class="clip-card"
   style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
   style:--cg={compact ? `${compactCardGap}px` : undefined}
   style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
-  style:height={editing ? 'auto' : compact && compactCardHeight ? `${compactCardHeight}px` : undefined}
+  style:height={editing
+    ? "auto"
+    : compact && compactCardHeight
+      ? `${compactCardHeight}px`
+      : undefined}
   tabindex="-1"
   data-id={item.id}
   draggable="true"
@@ -317,7 +321,10 @@
         <div class="file-title">
           <span class="file-icon"><AppIcon name="file" size={15} /></span>
           {#if item.fileMeta && item.fileMeta.length > 1}
-            <span>{item.fileMeta[0].name}{item.fileMeta.length > 2 ? `, ${item.fileMeta[1].name}` : ""} 等 {item.fileMeta.length} 个文件</span>
+            <span
+              >{item.fileMeta[0].name}{item.fileMeta.length > 2 ? `, ${item.fileMeta[1].name}` : ""} 等
+              {item.fileMeta.length} 个文件</span
+            >
           {:else}
             <span>{item.fileName ?? item.title}</span>
           {/if}
@@ -325,7 +332,9 @@
       {:else}
         <div class="text-preview">{item.title}</div>
         {#if item.customTitle}
-          <div class="content-preview">{(item.textContent || item.preview || "").split("\n")[0].slice(0, 200)}</div>
+          <div class="content-preview">
+            {(item.textContent || item.preview || "").split("\n")[0].slice(0, 200)}
+          </div>
         {:else if item.preview}
           <div class="secondary-preview">{item.preview}</div>
         {/if}
@@ -507,7 +516,12 @@
           <AppIcon name="check" size={14} strokeWidth={2.5} />
           {_t("edit.save")}
         </button>
-        <button type="button" class="edit-save-as-new" disabled={!contentChanged} onclick={saveAsNew}>
+        <button
+          type="button"
+          class="edit-save-as-new"
+          disabled={!contentChanged}
+          onclick={saveAsNew}
+        >
           <AppIcon name="copy" size={14} strokeWidth={2.5} />
           {_t("edit.saveAsNew")}
         </button>
@@ -531,8 +545,7 @@
     cursor: default;
     overflow: hidden;
     outline: none;
-    transition:
-      background 120ms ease;
+    transition: background 120ms ease;
   }
 
   .clip-card.compact {

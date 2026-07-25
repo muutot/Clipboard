@@ -243,11 +243,7 @@ mod x11_ffi {
         pub fn XNextEvent(display: *mut Display, event: *mut XEvent) -> i32;
 
         // Atoms
-        pub fn XInternAtom(
-            display: *mut Display,
-            name: *const i8,
-            only_if_exists: Bool,
-        ) -> Atom;
+        pub fn XInternAtom(display: *mut Display, name: *const i8, only_if_exists: Bool) -> Atom;
         pub fn XGetAtomName(display: *mut Display, atom: Atom) -> *mut i8;
 
         // Windows

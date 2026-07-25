@@ -88,9 +88,7 @@ extern "C" {
 
     // ---- NSWorkspace ---------------------------------------------------
     fn NSWorkspace_sharedWorkspace() -> *mut std::ffi::c_void;
-    fn NSWorkspace_frontmostApplication(
-        workspace: *mut std::ffi::c_void,
-    ) -> *mut std::ffi::c_void;
+    fn NSWorkspace_frontmostApplication(workspace: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn NSRunningApplication_localizedName(app: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn NSRunningApplication_bundleIdentifier(app: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
@@ -515,7 +513,11 @@ impl MacOSKeyboardHook {
     ///
     /// Returns `MacOSError::HotkeyRegistrationFailed` if a Carbon hotkey is
     /// already taken by another application.
-    pub fn register(&mut self, _action_id: &str, _shortcuts: &[ShortcutBinding]) -> MacOSResult<()> {
+    pub fn register(
+        &mut self,
+        _action_id: &str,
+        _shortcuts: &[ShortcutBinding],
+    ) -> MacOSResult<()> {
         // Implementation outline:
         //
         // 1. For each ShortcutBinding:

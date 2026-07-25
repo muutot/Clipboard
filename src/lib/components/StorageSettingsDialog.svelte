@@ -21,10 +21,8 @@
   } from "$lib/services/storage";
   import { messages, resolvePath } from "$lib/i18n";
 
-  const _t = (
-    path: string,
-    params?: Record<string, string | number>,
-  ) => resolvePath($messages, path, params);
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
 
   interface Props {
     open: boolean;
@@ -44,12 +42,16 @@
 
   $effect(() => {
     if (feedback) {
-      const t = setTimeout(() => { feedback = ""; }, 2000);
+      const t = setTimeout(() => {
+        feedback = "";
+      }, 2000);
       return () => clearTimeout(t);
     }
   });
   let restartNeeded = $state(false);
-  let activeSection = $state<"general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr" | "statistics">("storage");
+  let activeSection = $state<
+    "general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
+  >("storage");
 
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
@@ -58,7 +60,12 @@
   let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
   let maxFileCopyDisplay = $state(50);
 
-  const unitMultipliers: Record<string, number> = { byte: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+  const unitMultipliers: Record<string, number> = {
+    byte: 1,
+    KB: 1024,
+    MB: 1048576,
+    GB: 1073741824,
+  };
 
   function toDisplaySize(bytes: number, unit: string): number {
     return Math.round(bytes / (unitMultipliers[unit] || 1));
@@ -150,7 +157,9 @@
 
   async function loadOcrStatus() {
     try {
-      const result = await invoke<{ pendingTasks: number; completedTasks: number; engine: string }>("get_ocr_status");
+      const result = await invoke<{ pendingTasks: number; completedTasks: number; engine: string }>(
+        "get_ocr_status",
+      );
       if (result) {
         ocrPending = result.pendingTasks;
         ocrCompleted = result.completedTasks;
@@ -160,9 +169,17 @@
         ocrAvailable = status.available;
         if (status.available) installedVariant = installedVariant || modelVariant;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     try {
-      const cfg = await invoke<{ engine: string; ppocrModelVariant: string; detScoreThreshold: number; detBoxThreshold: number; detUnclipRatio: number }>("get_ocr_config");
+      const cfg = await invoke<{
+        engine: string;
+        ppocrModelVariant: string;
+        detScoreThreshold: number;
+        detBoxThreshold: number;
+        detUnclipRatio: number;
+      }>("get_ocr_config");
       if (cfg) {
         ocrEngine = cfg.engine;
         detScoreThreshold = cfg.detScoreThreshold;
@@ -174,7 +191,9 @@
           modelVariant = cfg.ppocrModelVariant;
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   async function installPpocr() {
@@ -218,7 +237,7 @@
       return;
     }
     try {
-      await saveOcrEngine('ppocr');
+      await saveOcrEngine("ppocr");
       activeVariant = modelVariant;
       feedback = "切换成功";
       feedbackSuccess = true;
@@ -229,7 +248,11 @@
 
   async function loadHistoryConfig() {
     try {
-      const result = await invoke<{ maxItems: number; retentionDays: number; recycleBinDays: number }>("get_history_config");
+      const result = await invoke<{
+        maxItems: number;
+        retentionDays: number;
+        recycleBinDays: number;
+      }>("get_history_config");
       if (result) {
         maxItemCount = result.maxItems;
         retentionPeriodDays = result.retentionDays;
@@ -271,7 +294,8 @@
       }
     } catch (error) {
       console.error("Database repair failed", error);
-      feedback = "Database repair failed: " + (error instanceof Error ? error.message : String(error));
+      feedback =
+        "Database repair failed: " + (error instanceof Error ? error.message : String(error));
       feedbackSuccess = false;
     } finally {
       repairLoading = false;
@@ -347,7 +371,7 @@
       await invoke("set_ocr_config", { engine });
       ocrEngine = engine;
       await invoke("restart_ocr_engine");
-      feedback = `OCR 引擎已切换为 ${engine === 'ppocr' ? 'PP-OCRv6' : 'Tesseract'}，立即生效`;
+      feedback = `OCR 引擎已切换为 ${engine === "ppocr" ? "PP-OCRv6" : "Tesseract"}，立即生效`;
       feedbackSuccess = true;
     } catch (error) {
       console.error("Unable to save OCR config", error);
@@ -533,13 +557,19 @@
           <h2>文字识别</h2>
           <p>OCR 引擎选择与状态</p>
         </div>
-        <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button>
+        <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button
+        >
       </header>
       <div class="settings-scroll">
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
           <span class="setting-label">OCR 引擎</span>
-          <select class="model-select" style="flex:1; max-width:180px;" bind:value={ocrEngine} onchange={() => saveOcrEngine(ocrEngine)}>
+          <select
+            class="model-select"
+            style="flex:1; max-width:180px;"
+            bind:value={ocrEngine}
+            onchange={() => saveOcrEngine(ocrEngine)}
+          >
             <option value="ppocr">PP-OCRv6</option>
             <option value="tesseract">Tesseract</option>
           </select>
@@ -550,14 +580,19 @@
           <span class="setting-label">模型</span>
           <select bind:value={modelVariant} class="model-select" style="flex:1; max-width:200px;">
             <option value="tiny">tiny (~5MB){installedVariant === "tiny" ? " ✓" : ""}</option>
-            <option value="medium">medium (~15MB){installedVariant === "medium" ? " ✓" : ""}</option>
+            <option value="medium">medium (~15MB){installedVariant === "medium" ? " ✓" : ""}</option
+            >
             <option value="large">large (~30MB){installedVariant === "large" ? " ✓" : ""}</option>
           </select>
           {#if installedVariant === modelVariant}
             <button type="button" onclick={applyModel}>应用</button>
           {:else}
             <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
-              {ocrInstalling ? (ocrProgressPct >= 0 ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%` : '下载中...') : '下载'}
+              {ocrInstalling
+                ? ocrProgressPct >= 0
+                  ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%`
+                  : "下载中..."
+                : "下载"}
             </button>
           {/if}
         </section>
@@ -572,32 +607,74 @@
           </div>
           <div style="display:grid; gap:12px;">
             <div>
-              <label for="det-score" style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;">
+              <label
+                for="det-score"
+                style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;"
+              >
                 <span>分数阈值 (score)</span>
                 <span style="color:#d7d7d7;">{detScoreThreshold.toFixed(2)}</span>
               </label>
-              <input id="det-score" type="range" min="0.05" max="0.95" step="0.05" bind:value={detScoreThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
-              <div style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;">
+              <input
+                id="det-score"
+                type="range"
+                min="0.05"
+                max="0.95"
+                step="0.05"
+                bind:value={detScoreThreshold}
+                onchange={() => saveDetConfig()}
+                style="width:100%; accent-color:#4a90d9;"
+              />
+              <div
+                style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;"
+              >
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
             <div>
-              <label for="det-box" style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;">
+              <label
+                for="det-box"
+                style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;"
+              >
                 <span>框阈值 (box)</span>
                 <span style="color:#d7d7d7;">{detBoxThreshold.toFixed(2)}</span>
               </label>
-              <input id="det-box" type="range" min="0.1" max="0.95" step="0.05" bind:value={detBoxThreshold} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
-              <div style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;">
+              <input
+                id="det-box"
+                type="range"
+                min="0.1"
+                max="0.95"
+                step="0.05"
+                bind:value={detBoxThreshold}
+                onchange={() => saveDetConfig()}
+                style="width:100%; accent-color:#4a90d9;"
+              />
+              <div
+                style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;"
+              >
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
             <div>
-              <label for="det-unclip" style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;">
+              <label
+                for="det-unclip"
+                style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;"
+              >
                 <span>扩展比例 (unclip)</span>
                 <span style="color:#d7d7d7;">{detUnclipRatio.toFixed(1)}</span>
               </label>
-              <input id="det-unclip" type="range" min="1.0" max="4.0" step="0.1" bind:value={detUnclipRatio} onchange={() => saveDetConfig()} style="width:100%; accent-color:#4a90d9;" />
-              <div style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;">
+              <input
+                id="det-unclip"
+                type="range"
+                min="1.0"
+                max="4.0"
+                step="0.1"
+                bind:value={detUnclipRatio}
+                onchange={() => saveDetConfig()}
+                style="width:100%; accent-color:#4a90d9;"
+              />
+              <div
+                style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;"
+              >
                 <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
               </div>
             </div>
@@ -613,10 +690,14 @@
             </div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-            <div class="stat-item"><span class="stat-value">{ocrPending}</span><span class="stat-label">待处理</span></div>
-            <div class="stat-item"><span class="stat-value">{ocrCompleted}</span><span class="stat-label">已完成</span></div>
+            <div class="stat-item">
+              <span class="stat-value">{ocrPending}</span><span class="stat-label">待处理</span>
             </div>
-          </section>
+            <div class="stat-item">
+              <span class="stat-value">{ocrCompleted}</span><span class="stat-label">已完成</span>
+            </div>
+          </div>
+        </section>
 
         <p class="auto-save-note">修改即时生效，无需手动保存</p>
       </div>
@@ -712,15 +793,15 @@
                 </div>
                 <div class="stat-row">
                   <span>平均搜索耗时</span>
-                  <span>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? '-'}ms</span>
+                  <span>{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? "-"}ms</span>
                 </div>
                 <div class="stat-row">
                   <span>P95 搜索耗时</span>
-                  <span>{perfMetrics.searchLatency.p95Ms ?? '-'}ms</span>
+                  <span>{perfMetrics.searchLatency.p95Ms ?? "-"}ms</span>
                 </div>
                 <div class="stat-row">
                   <span>P99 搜索耗时</span>
-                  <span>{perfMetrics.searchLatency.p99Ms ?? '-'}ms</span>
+                  <span>{perfMetrics.searchLatency.p99Ms ?? "-"}ms</span>
                 </div>
               {/if}
             </div>
@@ -754,7 +835,11 @@
             <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
             <span class="setting-label">常规配置文件</span>
             <span class="config-path">{relativePath(status!.configPath)}</span>
-            <button type="button" class="open-btn" onclick={() => invoke("open_external_url", { url: status!.configPath })}>
+            <button
+              type="button"
+              class="open-btn"
+              onclick={() => invoke("open_external_url", { url: status!.configPath })}
+            >
               <AppIcon name="file" size={14} /> 打开
             </button>
           </section>
@@ -780,8 +865,12 @@
                 spellcheck="false"
                 placeholder={_t("storage.placeholderPath")}
               />
-              <button type="button" disabled={saving} onclick={restoreDefaultDirectory}>{_t("storage.restoreDefault")}</button>
-              <button type="button" disabled={saving} onclick={saveCustomDirectory}>{saving ? _t("storage.saving") : _t("storage.saveDirectory")}</button>
+              <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
+                >{_t("storage.restoreDefault")}</button
+              >
+              <button type="button" disabled={saving} onclick={saveCustomDirectory}
+                >{saving ? _t("storage.saving") : _t("storage.saveDirectory")}</button
+              >
             </div>
 
             {#if pending}
@@ -828,7 +917,9 @@
               </div>
             </div>
             <div class="path-button-row">
-              <code class="path-value-inline" title={status.searchIndexPath}>{relativePath(status.searchIndexPath)}</code>
+              <code class="path-value-inline" title={status.searchIndexPath}
+                >{relativePath(status.searchIndexPath)}</code
+              >
               <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
                 {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
               </button>
@@ -883,7 +974,11 @@
               oninput={updateMaxFileSizeFromDisplay}
               onchange={saveMaxFileCopySize}
             />
-            <select class="unit-select" bind:value={maxFileCopySizeUnit} onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}>
+            <select
+              class="unit-select"
+              bind:value={maxFileCopySizeUnit}
+              onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}
+            >
               <option value="byte">B</option>
               <option value="KB">KB</option>
               <option value="MB">MB</option>
@@ -895,13 +990,13 @@
             <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
             <span class="setting-label">数据库维护</span>
             <button type="button" disabled={repairLoading} onclick={doRepair}>
-              {repairLoading ? '检查中...' : '修复数据库'}
+              {repairLoading ? "检查中..." : "修复数据库"}
             </button>
           </section>
           {#if repairResult}
             <div class="repair-result">
               <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
-                {repairResult.integrityOk ? '完整性正常' : '发现问题'}
+                {repairResult.integrityOk ? "完整性正常" : "发现问题"}
               </span>
               <code>{repairResult.integrityMessage}</code>
             </div>
@@ -1029,7 +1124,10 @@
     font-size: var(--settings-control-size);
     text-align: left;
     cursor: pointer;
-    transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease,
+      border-color 100ms ease;
   }
 
   nav button:hover {
@@ -1246,7 +1344,9 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23999' d='M2 3l3 4 3-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
-    transition: border-color 120ms ease, background-color 120ms ease;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
   }
 
   select:hover,
@@ -1479,7 +1579,9 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .setting-card-row select,
@@ -1532,7 +1634,9 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .open-btn:hover {
@@ -1555,7 +1659,10 @@
     border-radius: 6px;
     color: #d7d7d7;
     background: #1a1a1a;
-    font: 12px "Cascadia Code", Consolas, monospace;
+    font:
+      12px "Cascadia Code",
+      Consolas,
+      monospace;
     outline: none;
     transition: border-color 120ms ease;
   }
@@ -1575,7 +1682,9 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .dir-input-row button:hover {
@@ -1603,7 +1712,10 @@
     border-radius: 6px;
     color: #a7a7a7;
     background: #181818;
-    font: 10.5px "Cascadia Code", Consolas, monospace;
+    font:
+      10.5px "Cascadia Code",
+      Consolas,
+      monospace;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1620,7 +1732,9 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .path-button-row button:hover {
@@ -1646,7 +1760,9 @@
     text-align: center;
     text-align-last: center;
     outline: none;
-    transition: border-color 120ms ease, background-color 120ms ease;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
   }
 
   .unit-select:hover {
@@ -1663,7 +1779,10 @@
     font-size: var(--font-size-secondary, 11px);
     cursor: pointer;
     flex-shrink: 0;
-    transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease,
+      color 100ms ease;
   }
 
   .restart-btn:hover {

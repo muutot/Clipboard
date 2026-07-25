@@ -20,15 +20,17 @@
 
     let parsed: URL;
     try {
-      const base = typeof window === "undefined" ? "https://clipboard.invalid/" : window.location.href;
+      const base =
+        typeof window === "undefined" ? "https://clipboard.invalid/" : window.location.href;
       parsed = new URL(value, base);
     } catch {
       return null;
     }
 
-    const allowedSchemes = kind === "image"
-      ? new Set(["http:", "https:"])
-      : new Set(["http:", "https:", "mailto:", "tel:"]);
+    const allowedSchemes =
+      kind === "image"
+        ? new Set(["http:", "https:"])
+        : new Set(["http:", "https:", "mailto:", "tel:"]);
     if (!allowedSchemes.has(parsed.protocol.toLowerCase())) return null;
 
     return escapeHtml(parsed.href);
@@ -38,37 +40,37 @@
     let html = escapeHtml(text);
 
     // Code blocks (```)
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g,
+    html = html.replace(
+      /```(\w*)\n([\s\S]*?)```/g,
       (_m: string, lang: string, code: string) =>
-        `<pre class="md-code"><code class="language-${lang}">${code.trim()}</code></pre>`);
+        `<pre class="md-code"><code class="language-${lang}">${code.trim()}</code></pre>`,
+    );
 
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
 
     // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 
     // Italic
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
 
     // Images.  Unsafe URLs are kept as text instead of becoming a live
     // resource in the webview.
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
-      (_m: string, alt: string, rawUrl: string) => {
-        const url = sanitizeUrl(rawUrl, "image");
-        return url
-          ? `<img src="${url}" alt="${alt}" class="md-image" />`
-          : `<span class="md-unsafe-image">${alt}</span>`;
-      });
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m: string, alt: string, rawUrl: string) => {
+      const url = sanitizeUrl(rawUrl, "image");
+      return url
+        ? `<img src="${url}" alt="${alt}" class="md-image" />`
+        : `<span class="md-unsafe-image">${alt}</span>`;
+    });
 
     // Links.  Keep the label visible when a scheme is not explicitly allowed.
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
-      (_m: string, label: string, rawUrl: string) => {
-        const url = sanitizeUrl(rawUrl, "link");
-        return url
-          ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`
-          : `<span class="md-unsafe-link">${label}</span>`;
-      });
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m: string, label: string, rawUrl: string) => {
+      const url = sanitizeUrl(rawUrl, "link");
+      return url
+        ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`
+        : `<span class="md-unsafe-link">${label}</span>`;
+    });
 
     // Horizontal rules
     html = html.replace(/^(---|\*\*\*|___)\s*$/gm, '<hr class="md-hr" />');
@@ -85,7 +87,7 @@
     html = html.replace(/^> (.+)$/gm, '<blockquote class="md-blockquote"><p>$1</p></blockquote>');
 
     // Nested blockquotes - merge consecutive
-    html = html.replace(/<\/blockquote>\n<blockquote[^>]*>/g, '\n');
+    html = html.replace(/<\/blockquote>\n<blockquote[^>]*>/g, "\n");
 
     // Unordered lists - handle items
     html = html.replace(/^[\-\*] (.+)$/gm, '<li class="md-li">$1</li>');
@@ -95,7 +97,10 @@
 
     // Wrap consecutive <li> in <ul> or <ol>
     html = html.replace(/((?:<li class="md-li">[^<]*<\/li>\n?)+)/g, '<ul class="md-ul">$1</ul>');
-    html = html.replace(/((?:<li class="md-li-ordered">[^<]*<\/li>\n?)+)/g, '<ol class="md-ol">$1</ol>');
+    html = html.replace(
+      /((?:<li class="md-li-ordered">[^<]*<\/li>\n?)+)/g,
+      '<ol class="md-ol">$1</ol>',
+    );
 
     // Paragraphs: wrap remaining non-empty non-tag lines
     const lines = html.split("\n");
@@ -126,7 +131,7 @@
         result.push('<p class="md-p">');
         inParagraph = true;
       } else {
-        result.push('<br />');
+        result.push("<br />");
       }
       result.push(trimmed);
     }
@@ -233,7 +238,10 @@
     border: 1px solid #2e2e2e;
     border-radius: 6px;
     background: #0d0d0d;
-    font: 11px/1.55 "Cascadia Code", Consolas, monospace;
+    font:
+      11px/1.55 "Cascadia Code",
+      Consolas,
+      monospace;
     overflow-x: auto;
   }
 
@@ -243,7 +251,10 @@
     border-radius: 4px;
     color: #ce9178;
     background: #1a1a1a;
-    font: 11px "Cascadia Code", Consolas, monospace;
+    font:
+      11px "Cascadia Code",
+      Consolas,
+      monospace;
   }
 
   :global(.markdown-body .md-ul),

@@ -15,7 +15,9 @@
 
   let s = $state($generalSettings);
   $effect(() => {
-    const unsub = generalSettings.subscribe((v) => { s = v; });
+    const unsub = generalSettings.subscribe((v) => {
+      s = v;
+    });
     return unsub;
   });
 
@@ -28,7 +30,10 @@
     generalSettings.updateSetting("fontSizes", { ...s.fontSizes, [category]: value });
     document.documentElement.style.fontSize = `${s.fontSizes.base}px`;
     document.documentElement.style.setProperty(`--font-size-${category}`, `${value}px`);
-    emit("settings-font-changed", { fontSizes: { ...s.fontSizes, [category]: value }, display: s.display }).catch(() => {});
+    emit("settings-font-changed", {
+      fontSizes: { ...s.fontSizes, [category]: value },
+      display: s.display,
+    }).catch(() => {});
   }
 
   function updateDisplay(partial: Partial<typeof s.display>) {
@@ -53,11 +58,23 @@
   $effect(() => {
     document.documentElement.style.fontSize = `${s.fontSizes.base}px`;
     document.documentElement.style.setProperty("--font-size-base", `${s.fontSizes.base}px`);
-    document.documentElement.style.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
+    document.documentElement.style.setProperty(
+      "--font-size-secondary",
+      `${s.fontSizes.secondary}px`,
+    );
     document.documentElement.style.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
-    document.documentElement.style.setProperty("--font-size-cardTitle", `${s.fontSizes.cardTitle}px`);
-    document.documentElement.style.setProperty("--font-size-cardPreview", `${s.fontSizes.cardPreview}px`);
-    document.documentElement.style.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
+    document.documentElement.style.setProperty(
+      "--font-size-cardTitle",
+      `${s.fontSizes.cardTitle}px`,
+    );
+    document.documentElement.style.setProperty(
+      "--font-size-cardPreview",
+      `${s.fontSizes.cardPreview}px`,
+    );
+    document.documentElement.style.setProperty(
+      "--show-secondary",
+      s.display.showSecondaryText ? "block" : "none",
+    );
   });
 </script>
 
@@ -82,7 +99,14 @@
         <span class="value-label">{s.fontSizes.base}px</span>
       </div>
     </div>
-    <input type="range" min="11" max="20" value={s.fontSizes.base} oninput={sliderHandler("base")} class="transparency-slider" />
+    <input
+      type="range"
+      min="11"
+      max="20"
+      value={s.fontSizes.base}
+      oninput={sliderHandler("base")}
+      class="transparency-slider"
+    />
   </section>
 
   <section class="setting-card">
@@ -96,7 +120,14 @@
         <span class="value-label">{s.fontSizes.secondary}px</span>
       </div>
     </div>
-    <input type="range" min="9" max="16" value={s.fontSizes.secondary} oninput={sliderHandler("secondary")} class="transparency-slider" />
+    <input
+      type="range"
+      min="9"
+      max="16"
+      value={s.fontSizes.secondary}
+      oninput={sliderHandler("secondary")}
+      class="transparency-slider"
+    />
   </section>
 
   <section class="setting-card">
@@ -110,7 +141,14 @@
         <span class="value-label">{s.fontSizes.tiny}px</span>
       </div>
     </div>
-    <input type="range" min="8" max="13" value={s.fontSizes.tiny} oninput={sliderHandler("tiny")} class="transparency-slider" />
+    <input
+      type="range"
+      min="8"
+      max="13"
+      value={s.fontSizes.tiny}
+      oninput={sliderHandler("tiny")}
+      class="transparency-slider"
+    />
   </section>
 
   <section class="setting-card">
@@ -124,7 +162,14 @@
         <span class="value-label">{s.fontSizes.cardTitle}px</span>
       </div>
     </div>
-    <input type="range" min="10" max="20" value={s.fontSizes.cardTitle} oninput={sliderHandler("cardTitle")} class="transparency-slider" />
+    <input
+      type="range"
+      min="10"
+      max="20"
+      value={s.fontSizes.cardTitle}
+      oninput={sliderHandler("cardTitle")}
+      class="transparency-slider"
+    />
   </section>
 
   <section class="setting-card">
@@ -138,7 +183,14 @@
         <span class="value-label">{s.fontSizes.cardPreview}px</span>
       </div>
     </div>
-    <input type="range" min="8" max="16" value={s.fontSizes.cardPreview} oninput={sliderHandler("cardPreview")} class="transparency-slider" />
+    <input
+      type="range"
+      min="8"
+      max="16"
+      value={s.fontSizes.cardPreview}
+      oninput={sliderHandler("cardPreview")}
+      class="transparency-slider"
+    />
   </section>
 
   <section class="setting-card toggle-card">
@@ -149,9 +201,15 @@
         <p>列表条目下方的小字预览文本</p>
       </div>
     </div>
-    <button type="button" class="toggle-switch" class:active={s.display.showSecondaryText}
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.display.showSecondaryText}
       onclick={() => updateDisplay({ showSecondaryText: !s.display.showSecondaryText })}
-      role="switch" aria-checked={s.display.showSecondaryText} aria-label="显示辅助文字">
+      role="switch"
+      aria-checked={s.display.showSecondaryText}
+      aria-label="显示辅助文字"
+    >
       <span class="toggle-knob"></span>
     </button>
   </section>
@@ -213,9 +271,16 @@
     scrollbar-width: thin;
   }
 
-  .settings-scroll::-webkit-scrollbar { width: 7px; }
-  .settings-scroll::-webkit-scrollbar-track { background: transparent; }
-  .settings-scroll::-webkit-scrollbar-thumb { border-radius: 10px; background: #858585; }
+  .settings-scroll::-webkit-scrollbar {
+    width: 7px;
+  }
+  .settings-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .settings-scroll::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: #858585;
+  }
 
   .setting-card {
     padding: 10px 13px;
@@ -291,7 +356,13 @@
   .transparency-slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
-    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
+    background: linear-gradient(
+      to right,
+      #4aa8ff 0%,
+      #4aa8ff var(--slider-pct, 50%),
+      #2a2a2a var(--slider-pct, 50%),
+      #2a2a2a 100%
+    );
   }
 
   .transparency-slider::-webkit-slider-thumb {
@@ -303,7 +374,9 @@
     border: 2px solid #4aa8ff;
     background: #1a1a1a;
     cursor: pointer;
-    transition: box-shadow 100ms ease, transform 100ms ease;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
   }
 
   .transparency-slider::-webkit-slider-thumb:hover {
@@ -311,12 +384,26 @@
     transform: scale(1.15);
   }
 
-  .transparency-slider::-moz-range-track { height: 4px; border-radius: 2px; background: #2a2a2a; }
-  .transparency-slider::-moz-range-progress { height: 4px; border-radius: 2px; background: #4aa8ff; }
+  .transparency-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a2a;
+  }
+  .transparency-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #4aa8ff;
+  }
   .transparency-slider::-moz-range-thumb {
-    width: 16px; height: 16px; border-radius: 50%;
-    border: 2px solid #4aa8ff; background: #1a1a1a;
-    cursor: pointer; transition: box-shadow 100ms ease, transform 100ms ease;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #4aa8ff;
+    background: #1a1a1a;
+    cursor: pointer;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
   }
   .transparency-slider::-moz-range-thumb:hover {
     box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
@@ -348,7 +435,9 @@
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
-    transition: border-color 100ms ease, background 100ms ease;
+    transition:
+      border-color 100ms ease,
+      background 100ms ease;
   }
 
   .toggle-switch.active {
@@ -364,7 +453,9 @@
     height: 16px;
     border-radius: 50%;
     background: #666;
-    transition: transform 120ms ease, background 100ms ease;
+    transition:
+      transform 120ms ease,
+      background 100ms ease;
   }
 
   .toggle-switch.active .toggle-knob {
@@ -372,5 +463,7 @@
     background: #4aa8ff;
   }
 
-  button { cursor: pointer; }
+  button {
+    cursor: pointer;
+  }
 </style>

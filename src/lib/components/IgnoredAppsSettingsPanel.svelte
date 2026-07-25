@@ -11,10 +11,8 @@
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
 
-  const _t = (
-    path: string,
-    params?: Record<string, string | number>,
-  ) => resolvePath($messages, path, params);
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
 
   function appIconUrl(iconFileName: string | null | undefined): string | undefined {
     if (!iconFileName || !isTauriRuntime()) return undefined;
@@ -44,10 +42,7 @@
   );
   const appIconMap = $derived(
     new Map(
-      (settings?.discoveredApplicationsWithIcons ?? []).map((app) => [
-        app.name,
-        app.iconPath,
-      ]),
+      (settings?.discoveredApplicationsWithIcons ?? []).map((app) => [app.name, app.iconPath]),
     ),
   );
   const availableApplications = $derived(
@@ -144,11 +139,8 @@
     <h2>{_t("capture.title")}</h2>
     <p>{_t("capture.description")}</p>
   </div>
-  <button
-    class="close-button"
-    type="button"
-    aria-label={_t("actions.close")}
-    onclick={onclose}>×</button
+  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+    >×</button
   >
 </header>
 
@@ -180,7 +172,11 @@
               onclick={() => toggleAvailable(application)}
             >
               {#if appIconMap.get(application)}
-                <img class="app-icon" src={appIconUrl(appIconMap.get(application))} alt={application} />
+                <img
+                  class="app-icon"
+                  src={appIconUrl(appIconMap.get(application))}
+                  alt={application}
+                />
               {:else}
                 <span class="app-avatar">{application.slice(0, 1).toLocaleUpperCase()}</span>
               {/if}
@@ -204,7 +200,9 @@
 
       <div class="application-column">
         <div class="column-heading">
-          <strong>{_t("capture.ignoredApps")} <span>{settings.ignoredApplications.length}</span></strong>
+          <strong
+            >{_t("capture.ignoredApps")} <span>{settings.ignoredApplications.length}</span></strong
+          >
           <span class="plus-mark">+</span>
         </div>
         <label class="search-field">
@@ -227,7 +225,11 @@
           {#each visibleIgnored as application}
             <div class="application-row ignored-row">
               {#if appIconMap.get(application)}
-                <img class="app-icon" src={appIconUrl(appIconMap.get(application))} alt={application} />
+                <img
+                  class="app-icon"
+                  src={appIconUrl(appIconMap.get(application))}
+                  alt={application}
+                />
               {:else}
                 <span class="app-avatar locked">{application.slice(0, 1).toLocaleUpperCase()}</span>
               {/if}
@@ -499,7 +501,9 @@
     color: #999;
     background: transparent;
     font-size: var(--font-size-base, 14px);
-    transition: background 100ms ease, color 100ms ease;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
   .transfer-column button:hover:not(:disabled) {

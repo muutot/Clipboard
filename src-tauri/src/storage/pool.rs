@@ -108,18 +108,18 @@ impl Database {
 
     pub fn repair(&self) -> Result<RepairResult, StorageError> {
         self.with_connection(|connection| {
-            let integrity: String = connection
-                .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+            let integrity: String =
+                connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
 
             let is_ok = integrity == "ok";
             if !is_ok {
                 let _ = connection.execute("PRAGMA quick_check", []);
             }
 
-            let page_count: i64 = connection
-                .query_row("PRAGMA page_count", [], |row| row.get(0))?;
-            let freelist_count: i64 = connection
-                .query_row("PRAGMA freelist_count", [], |row| row.get(0))?;
+            let page_count: i64 =
+                connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
+            let freelist_count: i64 =
+                connection.query_row("PRAGMA freelist_count", [], |row| row.get(0))?;
 
             Ok(RepairResult {
                 integrity_ok: is_ok,
@@ -214,11 +214,11 @@ mod tests {
     fn set_preview_path_updates_database() {
         let db_path = temporary_path("preview-path");
         let database = Database::open(&db_path).unwrap();
-        database
-            .save_item(&text_item("item", 100))
-            .unwrap();
+        database.save_item(&text_item("item", 100)).unwrap();
 
-        assert!(database.set_preview_path("item", "previews/thumb.jpg").unwrap());
+        assert!(database
+            .set_preview_path("item", "previews/thumb.jpg")
+            .unwrap());
         let stored = database.get_item("item").unwrap().unwrap();
         assert_eq!(stored.preview_path.unwrap(), "previews/thumb.jpg");
 

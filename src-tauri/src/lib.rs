@@ -15,28 +15,30 @@ use std::{path::PathBuf, sync::Mutex};
 
 use cli::{CliArgs, CliCommand};
 use config::ConfigStore;
-use content::{ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation};
+use content::{
+    ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation,
+};
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
+use platform::windows_hotkey::{shortcut_to_windows_hotkey, HotkeyManager};
 use platform::{
     ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
     WindowManager,
 };
-use platform::windows_hotkey::{HotkeyManager, shortcut_to_windows_hotkey};
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
-use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
-use tauri::{Emitter, Manager};
 use std::io::Write;
-use std::sync::Arc;
+use std::str::FromStr;
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::str::FromStr;
+use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
+use tauri::{Emitter, Manager};
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
 
@@ -212,7 +214,11 @@ fn migrate_storage_data(
     let dirs_to_migrate: &[(PathBuf, PathBuf, &str)] = &[
         (old.images.clone(), new.images.clone(), "images"),
         (old.files.clone(), new.files.clone(), "files"),
-        (old.search_index.clone(), new.search_index.clone(), "search-index"),
+        (
+            old.search_index.clone(),
+            new.search_index.clone(),
+            "search-index",
+        ),
     ];
 
     for (old_dir, new_dir, label) in dirs_to_migrate {
@@ -248,7 +254,11 @@ fn copy_dir_contents(from: &PathBuf, to: &PathBuf) -> Result<(), String> {
         } else {
             // Skip locked files, continue with others
             if let Err(e) = std::fs::copy(entry.path(), &dest) {
-                eprintln!("[migrate] skip locked file {}: {}", entry.path().display(), e);
+                eprintln!(
+                    "[migrate] skip locked file {}: {}",
+                    entry.path().display(),
+                    e
+                );
             }
         }
     }
@@ -384,9 +394,7 @@ fn get_clipboard_item_ocr(
 }
 
 #[tauri::command]
-fn list_source_applications(
-    database: tauri::State<'_, Database>,
-) -> Result<Vec<String>, String> {
+fn list_source_applications(database: tauri::State<'_, Database>) -> Result<Vec<String>, String> {
     database
         .list_source_applications()
         .map_err(|error| error.to_string())
@@ -475,7 +483,9 @@ fn get_ocr_status(
 ) -> Result<OcrStatusInfo, String> {
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
-    let cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+    let cfg = config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_owned())?;
     let engine = cfg.ocr_engine().to_string();
     let models_dir = ocr::models::models_dir(&paths.storage);
 
@@ -502,8 +512,12 @@ struct OcrStatusInfo {
 }
 
 #[tauri::command]
-fn get_ocr_config(config: tauri::State<'_, Mutex<ConfigStore>>) -> Result<OcrConfigResponse, String> {
-    let config = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+fn get_ocr_config(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<OcrConfigResponse, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_owned())?;
     Ok(OcrConfigResponse {
         engine: config.ocr_engine().to_string(),
         tesseract_languages: config.tesseract_languages().to_string(),
@@ -522,12 +536,15 @@ fn set_ocr_config(
     det_box_threshold: Option<f32>,
     det_unclip_ratio: Option<f32>,
 ) -> Result<(), String> {
-    let mut cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+    let mut cfg = config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_owned())?;
     cfg.set_ocr_engine(engine).map_err(|e| e.to_string())?;
     let score = det_score_threshold.unwrap_or_else(|| cfg.det_score_threshold());
     let box_t = det_box_threshold.unwrap_or_else(|| cfg.det_box_threshold());
     let unclip = det_unclip_ratio.unwrap_or_else(|| cfg.det_unclip_ratio());
-    cfg.set_det_thresholds(score, box_t, unclip).map_err(|e| e.to_string())
+    cfg.set_det_thresholds(score, box_t, unclip)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -549,7 +566,12 @@ fn restart_ocr_engine(
     drop(cfg);
 
     let engine: Arc<dyn OcrEngine> = if ocr_engine_name == "ppocr" {
-        let ppocr = PpOcrEngine::new(ocr::models::models_dir(&paths.storage), score_threshold, box_threshold, unclip_ratio);
+        let ppocr = PpOcrEngine::new(
+            ocr::models::models_dir(&paths.storage),
+            score_threshold,
+            box_threshold,
+            unclip_ratio,
+        );
         if ppocr.is_available() {
             Arc::new(ppocr)
         } else {
@@ -592,7 +614,9 @@ async fn install_ppocr(
     let models_dir = ocr::models::models_dir(&paths.storage);
     std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
     if ocr::models::all_models_present(&models_dir) {
-        let mut cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
+        let mut cfg = config
+            .lock()
+            .map_err(|_| "config lock poisoned".to_owned())?;
         let _ = cfg.set_ppocr_model_variant(variant.to_string());
         return Ok("PP-OCR models already installed".to_string());
     }
@@ -606,7 +630,8 @@ async fn install_ppocr(
         "medium" => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_medium_rec.onnx",
         _ => "https://github.com/hiroi-sora/pp-ocrv6-onnx/releases/download/v1.0/pp-ocrv6_small_rec.onnx",
     };
-    let dict_url = "https://raw.githubusercontent.com/hiroi-sora/pp-ocrv6-onnx/main/ppocrv6_dict.txt";
+    let dict_url =
+        "https://raw.githubusercontent.com/hiroi-sora/pp-ocrv6-onnx/main/ppocrv6_dict.txt";
 
     let files = [
         (det_url, "pp-ocrv6_small_det.onnx", "检测模型"),
@@ -670,17 +695,18 @@ async fn install_ppocr(
         }
     }
 
-    let mut cfg = config.lock().map_err(|_| "config lock poisoned".to_owned())?;
-    cfg.set_ppocr_model_variant(variant).map_err(|e| e.to_string())?;
+    let mut cfg = config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_owned())?;
+    cfg.set_ppocr_model_variant(variant)
+        .map_err(|e| e.to_string())?;
     drop(cfg);
 
     Ok("PP-OCRv6 models downloaded successfully".to_string())
 }
 
 #[tauri::command]
-fn check_ppocr_status(
-    paths: tauri::State<'_, StoragePaths>,
-) -> Result<PpOcrStatus, String> {
+fn check_ppocr_status(paths: tauri::State<'_, StoragePaths>) -> Result<PpOcrStatus, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
     Ok(PpOcrStatus {
         available: ocr::models::all_models_present(&models_dir),
@@ -768,7 +794,9 @@ fn set_storage_config(
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
     if let Some(v) = max_file_copy_size_bytes {
-        config.set_max_file_copy_size_bytes(v).map_err(|e| e.to_string())?;
+        config
+            .set_max_file_copy_size_bytes(v)
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -786,7 +814,9 @@ struct OcrConfigResponse {
 
 #[tauri::command]
 fn copy_file_to(src: String, dst: String) -> Result<(), String> {
-    std::fs::copy(&src, &dst).map(|_| ()).map_err(|e| format!("copy failed: {e}"))
+    std::fs::copy(&src, &dst)
+        .map(|_| ())
+        .map_err(|e| format!("copy failed: {e}"))
 }
 
 #[tauri::command]
@@ -795,9 +825,16 @@ fn rename_item(
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
-    let items = database.get_items_by_ids(&[id.clone()]).map_err(|e| e.to_string())?;
-    let item = items.into_iter().next().ok_or_else(|| "item not found".to_string())?;
-    if new_name.trim().is_empty() { return Err("name cannot be empty".to_string()); }
+    let items = database
+        .get_items_by_ids(&[id.clone()])
+        .map_err(|e| e.to_string())?;
+    let item = items
+        .into_iter()
+        .next()
+        .ok_or_else(|| "item not found".to_string())?;
+    if new_name.trim().is_empty() {
+        return Err("name cannot be empty".to_string());
+    }
     let mut updated = item.clone();
     if item.kind == ClipboardKind::Image || item.kind == ClipboardKind::File {
         if let Some(ref old_path) = item.resource_path {
@@ -807,7 +844,9 @@ fn rename_item(
                 let parent = old.parent().unwrap_or(std::path::Path::new("."));
                 let new_path = parent.join(format!("{}.{}", new_name.trim(), ext));
                 if new_path != old {
-                    if new_path.exists() { return Err(format!("file already exists: {}", new_path.display())); }
+                    if new_path.exists() {
+                        return Err(format!("file already exists: {}", new_path.display()));
+                    }
                     std::fs::rename(old, &new_path).map_err(|e| format!("rename failed: {e}"))?;
                 }
                 updated.resource_path = Some(new_path.to_string_lossy().to_string());
@@ -827,8 +866,13 @@ fn update_clipboard_text(
     new_title: String,
     new_text_content: String,
 ) -> Result<bool, String> {
-    let items = database.get_items_by_ids(&[id.clone()]).map_err(|e| e.to_string())?;
-    let mut item = items.into_iter().next().ok_or_else(|| "item not found".to_string())?;
+    let items = database
+        .get_items_by_ids(&[id.clone()])
+        .map_err(|e| e.to_string())?;
+    let mut item = items
+        .into_iter()
+        .next()
+        .ok_or_else(|| "item not found".to_string())?;
     item.title = new_title;
     item.text_content = Some(new_text_content);
     database.save_item(&item).map_err(|e| e.to_string())?;
@@ -837,7 +881,7 @@ fn update_clipboard_text(
 
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
-        open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
+    open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
 }
 
 #[tauri::command]
@@ -876,22 +920,21 @@ fn soft_delete_clipboard_item(
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    database
-        .soft_delete(&id)
-        .map_err(|error| error.to_string())
+    database.soft_delete(&id).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn clear_all_non_favorite_items(
-    database: tauri::State<'_, Database>,
-) -> Result<u64, String> {
+fn clear_all_non_favorite_items(database: tauri::State<'_, Database>) -> Result<u64, String> {
     database
         .clear_all_non_favorite_items()
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn restore_clipboard_item(database: tauri::State<'_, Database>, id: String) -> Result<bool, String> {
+fn restore_clipboard_item(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<bool, String> {
     database
         .restore_deleted(&id)
         .map_err(|error| error.to_string())
@@ -903,8 +946,13 @@ fn duplicate_clipboard_item(
     app: tauri::AppHandle,
     id: String,
 ) -> Result<String, String> {
-    let items = database.get_items_by_ids(&[id.clone()]).map_err(|e| e.to_string())?;
-    let mut item = items.into_iter().next().ok_or_else(|| "item not found".to_string())?;
+    let items = database
+        .get_items_by_ids(&[id.clone()])
+        .map_err(|e| e.to_string())?;
+    let mut item = items
+        .into_iter()
+        .next()
+        .ok_or_else(|| "item not found".to_string())?;
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -929,7 +977,11 @@ fn enforce_history_cleanup(
         let guard = config
             .lock()
             .map_err(|_| "configuration lock is poisoned".to_owned())?;
-        (guard.retention_days(), guard.max_items(), guard.recycle_bin_days())
+        (
+            guard.retention_days(),
+            guard.max_items(),
+            guard.recycle_bin_days(),
+        )
     };
 
     let mut total_deleted = 0u64;
@@ -989,7 +1041,10 @@ fn cleanup_orphan_storage_files(
                 freed_bytes += metadata.len();
             }
             if let Err(e) = std::fs::remove_file(&entry_path) {
-                eprintln!("[cleanup] failed to remove orphan file {}: {e}", entry_path.display());
+                eprintln!(
+                    "[cleanup] failed to remove orphan file {}: {e}",
+                    entry_path.display()
+                );
             } else {
                 removed_files += 1;
             }
@@ -1137,9 +1192,7 @@ fn export_clipboard_items(
         }),
     };
 
-    let items = database
-        .list_recent(10_000, 0)
-        .map_err(|e| e.to_string())?;
+    let items = database.list_recent(10_000, 0).map_err(|e| e.to_string())?;
 
     export_items(&items, &options)
 }
@@ -1224,10 +1277,7 @@ fn start_clipboard_monitoring(
         loop {
             match receiver.recv_timeout(Duration::from_millis(500)) {
                 Ok(_change) => {
-                    let is_paused = privacy_arc
-                        .lock()
-                        .map(|g| *g)
-                        .unwrap_or(false);
+                    let is_paused = privacy_arc.lock().map(|g| *g).unwrap_or(false);
 
                     if is_paused {
                         continue;
@@ -1250,20 +1300,28 @@ fn start_clipboard_monitoring(
                     };
 
                     let content_hash = content::hash::compute_content_hash(
-                        if kind == ClipboardKind::Link { "link" } else { "text" },
+                        if kind == ClipboardKind::Link {
+                            "link"
+                        } else {
+                            "text"
+                        },
                         &text,
                         None,
                     );
 
-                    if self_trigger_guard.lock().unwrap().is_self_triggered(&content_hash) {
-                        self_trigger_guard.lock().unwrap().mark_as_self_triggered(&content_hash);
+                    if self_trigger_guard
+                        .lock()
+                        .unwrap()
+                        .is_self_triggered(&content_hash)
+                    {
+                        self_trigger_guard
+                            .lock()
+                            .unwrap()
+                            .mark_as_self_triggered(&content_hash);
                         continue;
                     }
 
-                    let title = text
-                        .chars()
-                        .take(200)
-                        .collect::<String>();
+                    let title = text.chars().take(200).collect::<String>();
                     let size_bytes = text.len() as u64;
                     let now_ms = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
@@ -1369,7 +1427,9 @@ fn mark_self_triggered(
     text: String,
 ) -> Result<(), String> {
     let hash = content::hash::compute_content_hash("text", &text, None);
-    self_trigger.0.lock()
+    self_trigger
+        .0
+        .lock()
         .map_err(|_| "self-trigger lock poisoned".to_owned())?
         .mark_as_self_triggered(&hash);
     Ok(())
@@ -1386,13 +1446,7 @@ fn save_window_position(
     let mut guard = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    WindowManager::save_position(
-        &mut *guard,
-        x,
-        y,
-        width,
-        height,
-    )
+    WindowManager::save_position(&mut *guard, x, y, width, height)
 }
 
 #[tauri::command]
@@ -1402,7 +1456,14 @@ fn restore_window_position(
     let config = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    Ok(WindowManager::restore_position(&config).map(|(x, y, w, h)| WindowPosition { x, y, width: w, height: h }))
+    Ok(
+        WindowManager::restore_position(&config).map(|(x, y, w, h)| WindowPosition {
+            x,
+            y,
+            width: w,
+            height: h,
+        }),
+    )
 }
 
 #[derive(Debug, Serialize)]
@@ -1528,16 +1589,12 @@ fn get_performance_metrics(
 }
 
 #[tauri::command]
-fn repair_database(
-    database: tauri::State<'_, Database>,
-) -> Result<RepairResult, String> {
+fn repair_database(database: tauri::State<'_, Database>) -> Result<RepairResult, String> {
     database.repair().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn validate_search_index(
-    search_index: tauri::State<'_, SearchIndex>,
-) -> Result<bool, String> {
+fn validate_search_index(search_index: tauri::State<'_, SearchIndex>) -> Result<bool, String> {
     Ok(search_index.validate())
 }
 

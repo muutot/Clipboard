@@ -59,10 +59,7 @@ impl ThumbnailGenerator {
         let resized = img.resize_exact(w.max(1), h.max(1), image::imageops::FilterType::Lanczos3);
 
         fs::create_dir_all(preview_dir)?;
-        let preview_filename = format!(
-            "{}.jpg",
-            hash_path(image_path)
-        );
+        let preview_filename = format!("{}.jpg", hash_path(image_path));
         let preview_path = preview_dir.join(&preview_filename);
 
         let rgb = resized.into_rgb8();
@@ -121,10 +118,7 @@ pub struct ThumbnailWorker {
 }
 
 impl ThumbnailWorker {
-    pub fn start(
-        preview_dir: PathBuf,
-        database: Arc<Database>,
-    ) -> Self {
+    pub fn start(preview_dir: PathBuf, database: Arc<Database>) -> Self {
         let (sender, receiver) = mpsc::channel::<ThumbnailTask>();
 
         let handle = thread::spawn(move || {
@@ -134,30 +128,28 @@ impl ThumbnailWorker {
                     Ok(ThumbnailTask::Generate {
                         item_id,
                         image_path,
-                    }) => {
-                        match generator.generate(&image_path, &preview_dir) {
-                            Ok(info) => {
-                                let preview_path = &info.preview_path;
-                                if let Err(e) = database.set_preview_path(&item_id, preview_path)
-                                {
-                                    eprintln!(
-                                        "[thumbnail] failed to update preview for {item_id}: {e}"
-                                    );
-                                }
-                            }
-                            Err(e) => {
+                    }) => match generator.generate(&image_path, &preview_dir) {
+                        Ok(info) => {
+                            let preview_path = &info.preview_path;
+                            if let Err(e) = database.set_preview_path(&item_id, preview_path) {
                                 eprintln!(
-                                    "[thumbnail] thumbnail generation failed for {item_id}: {e}"
+                                    "[thumbnail] failed to update preview for {item_id}: {e}"
                                 );
                             }
                         }
-                    }
+                        Err(e) => {
+                            eprintln!("[thumbnail] thumbnail generation failed for {item_id}: {e}");
+                        }
+                    },
                     Ok(ThumbnailTask::Shutdown) | Err(_) => break,
                 }
             }
         });
 
-        Self { sender, handle: Some(handle) }
+        Self {
+            sender,
+            handle: Some(handle),
+        }
     }
 
     pub fn enqueue(&self, item_id: String, image_path: PathBuf) {

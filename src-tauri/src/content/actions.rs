@@ -20,7 +20,10 @@ pub fn detect_actions(markers: &ContentMarkers) -> Vec<QuickAction> {
     }
 
     for phone in &markers.phone_numbers {
-        let cleaned = phone.chars().filter(|c| c.is_ascii_digit() || *c == '+').collect::<String>();
+        let cleaned = phone
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '+')
+            .collect::<String>();
         actions.push(QuickAction {
             label: format!("Call {}", phone),
             action_type: "open".to_owned(),
@@ -90,7 +93,9 @@ mod tests {
         let markers = detect_markers("call 138-1234-5678");
         let actions = detect_actions(&markers);
         assert!(!actions.is_empty());
-        assert!(actions.iter().any(|a| a.action_type == "open" && a.payload.starts_with("tel:")));
+        assert!(actions
+            .iter()
+            .any(|a| a.action_type == "open" && a.payload.starts_with("tel:")));
     }
 
     #[test]

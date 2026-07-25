@@ -86,9 +86,10 @@ impl OcrEngine for PpOcrEngine {
             )));
         }
 
-        let mut guard = self.ocr.lock().map_err(|_| {
-            OcrEngineError::new("OCR engine lock is poisoned")
-        })?;
+        let mut guard = self
+            .ocr
+            .lock()
+            .map_err(|_| OcrEngineError::new("OCR engine lock is poisoned"))?;
 
         if guard.is_none() {
             let ocr = self.build_ocr()?;
@@ -104,7 +105,9 @@ impl OcrEngine for PpOcrEngine {
             .predict(vec![image])
             .map_err(|e| OcrEngineError::new(format!("OCR recognition failed: {e}")))?;
 
-        let page = result.into_iter().next()
+        let page = result
+            .into_iter()
+            .next()
             .ok_or_else(|| OcrEngineError::new("OCR returned no results"))?;
 
         if page.text_regions.is_empty() {
@@ -128,10 +131,28 @@ impl OcrEngine for PpOcrEngine {
             full_text.push_str(text);
 
             let bbox = &region.bounding_box;
-            let left = bbox.points.iter().map(|p| p.x as f32).fold(f32::MAX, f32::min).max(0.0) as u32;
-            let top = bbox.points.iter().map(|p| p.y as f32).fold(f32::MAX, f32::min).max(0.0) as u32;
-            let right = bbox.points.iter().map(|p| p.x as f32).fold(f32::MIN, f32::max);
-            let bottom = bbox.points.iter().map(|p| p.y as f32).fold(f32::MIN, f32::max);
+            let left = bbox
+                .points
+                .iter()
+                .map(|p| p.x as f32)
+                .fold(f32::MAX, f32::min)
+                .max(0.0) as u32;
+            let top = bbox
+                .points
+                .iter()
+                .map(|p| p.y as f32)
+                .fold(f32::MAX, f32::min)
+                .max(0.0) as u32;
+            let right = bbox
+                .points
+                .iter()
+                .map(|p| p.x as f32)
+                .fold(f32::MIN, f32::max);
+            let bottom = bbox
+                .points
+                .iter()
+                .map(|p| p.y as f32)
+                .fold(f32::MIN, f32::max);
             let width = (right - left as f32).round().max(1.0) as u32;
             let height = (bottom - top as f32).round().max(1.0) as u32;
 

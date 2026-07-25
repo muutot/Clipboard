@@ -12,7 +12,9 @@ pub use clipboard_format::{
     ClipboardFormatReader,
 };
 pub use detector::{detect_markers, ContentMarkers};
-pub use file_store::{FileStore, FileStorageInfo};
-pub use hash::{compute_content_hash, compute_media_hash, icon_key, AppIconStore, DedupResult, SelfTriggerGuard};
+pub use file_store::{FileStorageInfo, FileStore};
+pub use hash::{
+    compute_content_hash, compute_media_hash, icon_key, AppIconStore, DedupResult, SelfTriggerGuard,
+};
 pub use thumbnail::{ThumbnailGenerator, ThumbnailInfo, ThumbnailWorker};
 pub use transform::{TextTransform, TransformOperation};

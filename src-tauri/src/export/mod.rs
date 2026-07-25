@@ -29,14 +29,9 @@ pub struct ImportSummary {
     pub errors: Vec<String>,
 }
 
-pub fn export_items(
-    items: &[ClipboardItem],
-    options: &ExportOptions,
-) -> Result<String, String> {
+pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<String, String> {
     match options.format {
-        ExportFormat::Json => {
-            serde_json::to_string_pretty(items).map_err(|e| e.to_string())
-        }
+        ExportFormat::Json => serde_json::to_string_pretty(items).map_err(|e| e.to_string()),
         ExportFormat::Csv => {
             let mut wtr = String::new();
             wtr.push_str("id,kind,title,text_content,source_app,created_at_ms,is_favorite\n");
@@ -75,10 +70,7 @@ pub fn export_items(
     }
 }
 
-pub fn import_from_json(
-    json: &str,
-    database: &Database,
-) -> Result<ImportSummary, String> {
+pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary, String> {
     let items: Vec<ClipboardItem> =
         serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
 

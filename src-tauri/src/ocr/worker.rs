@@ -14,10 +14,7 @@ pub struct OcrWorker {
 }
 
 impl OcrWorker {
-    pub fn start(
-        engine: Arc<dyn OcrEngine>,
-        database: Arc<Database>,
-    ) -> Self {
+    pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = Arc::clone(&running);
 
@@ -39,11 +36,7 @@ impl OcrWorker {
         self.running.load(Ordering::SeqCst)
     }
 
-    fn run_loop(
-        engine: Arc<dyn OcrEngine>,
-        database: Arc<Database>,
-        running: Arc<AtomicBool>,
-    ) {
+    fn run_loop(engine: Arc<dyn OcrEngine>, database: Arc<Database>, running: Arc<AtomicBool>) {
         let poll_interval = Duration::from_millis(500);
         let mut consecutive_errors = 0u32;
         let max_consecutive_errors = 5;
@@ -54,7 +47,9 @@ impl OcrWorker {
                     consecutive_errors = 0;
 
                     // Check if OCR result already exists for this image hash
-                    if let Ok(Some(existing)) = database.find_completed_ocr_by_hash(&input.image_hash) {
+                    if let Ok(Some(existing)) =
+                        database.find_completed_ocr_by_hash(&input.image_hash)
+                    {
                         let result = OcrResult::completed(
                             &input.item_id,
                             &existing.engine,
@@ -91,19 +86,14 @@ impl OcrWorker {
                             }
                         }
                         Err(error) => {
-                            eprintln!(
-                                "[ocr] recognition failed for {}: {}",
-                                input.item_id, error
-                            );
+                            eprintln!("[ocr] recognition failed for {}: {}", input.item_id, error);
                             let _ = database.retry_ocr(&input.item_id);
                         }
                     }
 
                     true
                 }
-                Ok(None) => {
-                    false
-                }
+                Ok(None) => false,
                 Err(error) => {
                     eprintln!("[ocr] failed to claim next task: {}", error);
                     consecutive_errors += 1;

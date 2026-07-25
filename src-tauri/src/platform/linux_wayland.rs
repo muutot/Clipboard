@@ -180,10 +180,9 @@ impl WaylandCapabilities {
             global_shortcuts: false,
             system_tray: false,
             requires_config: true,
-            notes: vec![
-                "Compositor not recognized. Clipboard and global shortcuts \
-                 may not function.".into(),
-            ],
+            notes: vec!["Compositor not recognized. Clipboard and global shortcuts \
+                 may not function."
+                .into()],
         }
     }
 
@@ -220,7 +219,10 @@ impl WaylandCapabilities {
             available(self.global_shortcuts),
             available(self.system_tray),
             if self.requires_config {
-                format!("\n⚠  Additional configuration required.\n   {}", self.notes.join("\n   "))
+                format!(
+                    "\n⚠  Additional configuration required.\n   {}",
+                    self.notes.join("\n   ")
+                )
             } else {
                 String::new()
             }
@@ -444,26 +446,21 @@ impl WaylandGlobalShortcut {
     /// current compositor.
     pub fn setup_instructions(&self) -> String {
         match self.compositor.as_str() {
-            "Sway" => {
-                "Edit ~/.config/sway/config and add:\n\
-                 bindsym $mod+Shift+V exec clipboard-manager toggle".into()
-            }
-            "Hyprland" => {
-                "Edit ~/.config/hypr/hyprland.conf and add:\n\
-                 bind = $mainMod SHIFT, V, exec, clipboard-manager toggle".into()
-            }
-            "KDE Plasma" => {
-                "Open System Settings → Shortcuts → Custom Shortcuts and add\n\
-                 an entry pointing to the clipboard manager.".into()
-            }
-            "GNOME Shell" => {
-                "Open Settings → Keyboard → Keyboard Shortcuts → Custom Shortcuts\n\
-                 and add a shortcut for the clipboard manager.".into()
-            }
-            _ => {
-                "Consult your compositor documentation for configuring\n\
-                 global keyboard shortcuts.".into()
-            }
+            "Sway" => "Edit ~/.config/sway/config and add:\n\
+                 bindsym $mod+Shift+V exec clipboard-manager toggle"
+                .into(),
+            "Hyprland" => "Edit ~/.config/hypr/hyprland.conf and add:\n\
+                 bind = $mainMod SHIFT, V, exec, clipboard-manager toggle"
+                .into(),
+            "KDE Plasma" => "Open System Settings → Shortcuts → Custom Shortcuts and add\n\
+                 an entry pointing to the clipboard manager."
+                .into(),
+            "GNOME Shell" => "Open Settings → Keyboard → Keyboard Shortcuts → Custom Shortcuts\n\
+                 and add a shortcut for the clipboard manager."
+                .into(),
+            _ => "Consult your compositor documentation for configuring\n\
+                 global keyboard shortcuts."
+                .into(),
         }
     }
 }
@@ -595,12 +592,32 @@ impl WaylandTrayManager {
     /// Returns information about tray support on various compositors.
     pub fn compositor_tray_support() -> Vec<(&'static str, &'static str, &'static str)> {
         vec![
-            ("Sway / wlroots", "SNI", "Built-in. Enable `bar` block with `tray_output`."),
+            (
+                "Sway / wlroots",
+                "SNI",
+                "Built-in. Enable `bar` block with `tray_output`.",
+            ),
             ("Hyprland", "SNI", "Built-in via `hyprctl` tray plugin."),
-            ("KDE Plasma", "SNI", "Full native support for StatusNotifierItem."),
-            ("GNOME Shell", "SNI†", "Requires 'AppIndicator' or 'Tray Icons Reloaded' extension."),
-            ("river", "None", "No native tray support. Use waybar or similar bar."),
-            ("dwl", "None", "Minimal compositor; tray support via external bar."),
+            (
+                "KDE Plasma",
+                "SNI",
+                "Full native support for StatusNotifierItem.",
+            ),
+            (
+                "GNOME Shell",
+                "SNI†",
+                "Requires 'AppIndicator' or 'Tray Icons Reloaded' extension.",
+            ),
+            (
+                "river",
+                "None",
+                "No native tray support. Use waybar or similar bar.",
+            ),
+            (
+                "dwl",
+                "None",
+                "Minimal compositor; tray support via external bar.",
+            ),
         ]
     }
 }
@@ -749,7 +766,8 @@ impl WaylandCompositorInfo {
 
     /// Returns a markdown-formatted compatibility table.
     pub fn compatibility_table() -> String {
-        let header = "| Compositor | Clipboard Read | Clipboard Write | PRIMARY | Shortcuts | Tray |";
+        let header =
+            "| Compositor | Clipboard Read | Clipboard Write | PRIMARY | Shortcuts | Tray |";
         let sep = "|------------|:---:|:---:|:---:|:---:|:---:|";
         let mut lines = vec![header.to_owned(), sep.to_owned()];
 

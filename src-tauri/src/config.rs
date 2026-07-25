@@ -335,10 +335,7 @@ impl ConfigStore {
         self.config.export.schedule_auto_export.as_deref()
     }
 
-    pub fn set_schedule_auto_export(
-        &mut self,
-        value: Option<String>,
-    ) -> Result<(), StorageError> {
+    pub fn set_schedule_auto_export(&mut self, value: Option<String>) -> Result<(), StorageError> {
         self.config.export.schedule_auto_export = value;
         self.save()
     }
@@ -590,10 +587,7 @@ mod tests {
         store
             .set_schedule_auto_export(Some("0 */6 * * *".to_owned()))
             .unwrap();
-        assert_eq!(
-            store.schedule_auto_export(),
-            Some("0 */6 * * *")
-        );
+        assert_eq!(store.schedule_auto_export(), Some("0 */6 * * *"));
 
         store.set_schedule_auto_export(None).unwrap();
         assert!(store.schedule_auto_export().is_none());

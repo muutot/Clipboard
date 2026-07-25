@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    io::Read,
-    path::Path,
-};
+use std::{fs, io::Read, path::Path};
 
 use sha2::{Digest, Sha256};
 

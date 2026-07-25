@@ -30,7 +30,8 @@ impl PerformanceTracker {
     }
 
     pub fn record_search(&self, query: &str, duration_ms: u64, result_count: usize) {
-        self.search_tracker.record_search(query, duration_ms, result_count);
+        self.search_tracker
+            .record_search(query, duration_ms, result_count);
     }
 
     pub fn record_memory_snapshot(&self) {
@@ -38,11 +39,7 @@ impl PerformanceTracker {
     }
 
     pub fn snapshot(&self) -> PerformanceSnapshot {
-        let startup = self
-            .startup_metrics
-            .lock()
-            .ok()
-            .and_then(|m| m.clone());
+        let startup = self.startup_metrics.lock().ok().and_then(|m| m.clone());
 
         PerformanceSnapshot {
             startup: startup.unwrap_or_default(),
@@ -71,10 +68,7 @@ impl StartupMetrics {
     pub fn log_summary(&self) {
         eprintln!(
             "[perf] startup: {}ms (db: {}ms, search: {}ms, migrations: {}ms)",
-            self.total_startup_ms,
-            self.db_open_ms,
-            self.search_init_ms,
-            self.migrations_ms
+            self.total_startup_ms, self.db_open_ms, self.search_init_ms, self.migrations_ms
         );
     }
 }
@@ -253,11 +247,7 @@ impl MemoryMonitor {
     }
 
     pub fn snapshot(&self) -> MemoryMetrics {
-        let snapshot_count = self
-            .snapshot_count
-            .lock()
-            .map(|c| *c)
-            .unwrap_or(0);
+        let snapshot_count = self.snapshot_count.lock().map(|c| *c).unwrap_or(0);
         MemoryMetrics {
             current_bytes: self.current_usage_bytes(),
             peak_bytes: self.peak_usage_bytes(),

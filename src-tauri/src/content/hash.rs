@@ -56,9 +56,7 @@ impl SelfTriggerGuard {
 
     pub fn is_self_triggered(&mut self, content_hash: &str) -> bool {
         self.cleanup_expired();
-        self.entries
-            .iter()
-            .any(|entry| entry.hash == content_hash)
+        self.entries.iter().any(|entry| entry.hash == content_hash)
     }
 
     fn cleanup_expired(&mut self) {

@@ -10,9 +10,7 @@
     Math.min(1, Math.max(0, Number($page.url.searchParams.get("opacity")) || 0.92)),
   );
 
-  const viewerSrc = $derived(
-    src ? convertFileSrc(src.replace(/\\/g, "/")) : undefined,
-  );
+  const viewerSrc = $derived(src ? convertFileSrc(src.replace(/\\/g, "/")) : undefined);
 
   let zoom = $state(1);
   let panX = $state(0);
@@ -28,7 +26,10 @@
   async function hideWindow() {
     try {
       const w = await WebviewWindow.getByLabel(windowLabel);
-      if (w) { await w.hide(); return; }
+      if (w) {
+        await w.hide();
+        return;
+      }
     } catch {}
   }
 
@@ -52,7 +53,9 @@
         zoom = 1;
         panX = 0;
         panY = 0;
-      }).then((fn) => { if (alive) unlisten = fn; });
+      }).then((fn) => {
+        if (alive) unlisten = fn;
+      });
     });
 
     return () => {
@@ -113,10 +116,21 @@
   onmouseup={onMouseUp}
   onmouseleave={onMouseUp}
   ondblclick={onDblClick}
-  onkeydown={(e) => { if (e.key === "Escape") hideWindow(); }}
+  onkeydown={(e) => {
+    if (e.key === "Escape") hideWindow();
+  }}
 >
   <button type="button" class="close-btn" onclick={hideWindow} aria-label="Close">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   </button>
@@ -174,7 +188,9 @@
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
     cursor: pointer;
-    transition: color 120ms ease, background 120ms ease;
+    transition:
+      color 120ms ease,
+      background 120ms ease;
   }
 
   .close-btn:hover {

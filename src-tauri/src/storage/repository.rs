@@ -29,7 +29,9 @@ pub trait ClipboardRepository {
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_source_applications(&self) -> Result<Vec<String>, StorageError>;
-    fn list_source_applications_with_icons(&self) -> Result<Vec<(String, Option<String>)>, StorageError>;
+    fn list_source_applications_with_icons(
+        &self,
+    ) -> Result<Vec<(String, Option<String>)>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
     /// Update the favorite flag for all requested records atomically.
     ///
@@ -215,7 +217,9 @@ impl ClipboardRepository for Database {
         })
     }
 
-    fn list_source_applications_with_icons(&self) -> Result<Vec<(String, Option<String>)>, StorageError> {
+    fn list_source_applications_with_icons(
+        &self,
+    ) -> Result<Vec<(String, Option<String>)>, StorageError> {
         self.with_connection(|connection| {
             let mut statement = connection.prepare_cached(
                 "SELECT
@@ -236,10 +240,7 @@ impl ClipboardRepository for Database {
             )?;
             let apps = statement
                 .query_map([], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                    ))
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(apps)
@@ -269,11 +270,9 @@ impl ClipboardRepository for Database {
             // applying a stale selection from the UI.
             for id in &ids {
                 let exists = transaction
-                    .query_row(
-                        "SELECT 1 FROM clipboard_items WHERE id = ?1",
-                        [id],
-                        |row| row.get::<_, i64>(0),
-                    )
+                    .query_row("SELECT 1 FROM clipboard_items WHERE id = ?1", [id], |row| {
+                        row.get::<_, i64>(0)
+                    })
                     .optional()?;
                 if exists.is_none() {
                     return Ok(false);
@@ -312,9 +311,11 @@ impl ClipboardRepository for Database {
 
     fn item_count(&self) -> Result<u64, StorageError> {
         self.with_connection(|connection| {
-            let count: i64 =
-                connection
-                    .query_row("SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0", [], |row| row.get(0))?;
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0",
+                [],
+                |row| row.get(0),
+            )?;
 
             u64::try_from(count).map_err(|_| StorageError::InvalidStoredValue {
                 field: "clipboard_items.count",
@@ -771,8 +772,12 @@ mod tests {
     #[test]
     fn batch_favorite_is_atomic_and_deduplicates_ids() {
         let database = Database::open_in_memory().unwrap();
-        database.save_item(&text_item("first", "hash-first", 100)).unwrap();
-        database.save_item(&text_item("second", "hash-second", 200)).unwrap();
+        database
+            .save_item(&text_item("first", "hash-first", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("second", "hash-second", 200))
+            .unwrap();
 
         assert!(database
             .set_favorite_batch(
@@ -793,8 +798,12 @@ mod tests {
     #[test]
     fn batch_soft_delete_protects_favorites_without_partial_changes() {
         let database = Database::open_in_memory().unwrap();
-        database.save_item(&text_item("regular", "hash-regular", 100)).unwrap();
-        database.save_item(&text_item("favorite", "hash-favorite", 200)).unwrap();
+        database
+            .save_item(&text_item("regular", "hash-regular", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("favorite", "hash-favorite", 200))
+            .unwrap();
         database.set_favorite("favorite", true).unwrap();
 
         let result = database.soft_delete_batch(&["regular".to_owned(), "favorite".to_owned()]);
@@ -809,19 +818,33 @@ mod tests {
             .soft_delete_batch(&["regular".to_owned(), "regular".to_owned()])
             .unwrap());
         assert!(database.get_item("regular").unwrap().is_some());
-        assert!(!database.list_recent(10, 0).unwrap().iter().any(|item| item.id == "regular"));
+        assert!(!database
+            .list_recent(10, 0)
+            .unwrap()
+            .iter()
+            .any(|item| item.id == "regular"));
     }
 
     #[test]
     fn batch_lookup_excludes_soft_deleted_items() {
         let database = Database::open_in_memory().unwrap();
-        database.save_item(&text_item("active", "hash-active", 100)).unwrap();
-        database.save_item(&text_item("deleted", "hash-deleted", 200)).unwrap();
+        database
+            .save_item(&text_item("active", "hash-active", 100))
+            .unwrap();
+        database
+            .save_item(&text_item("deleted", "hash-deleted", 200))
+            .unwrap();
         database.soft_delete("deleted").unwrap();
 
         let ids = vec!["deleted".to_owned(), "active".to_owned()];
         let items = database.get_items_by_ids(&ids).unwrap();
-        assert_eq!(items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["active"]);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            ["active"]
+        );
     }
 
     #[test]
@@ -874,15 +897,9 @@ mod tests {
     #[test]
     fn pagination_single_page_returns_all_items() {
         let database = Database::open_in_memory().unwrap();
-        database
-            .save_item(&text_item("a", "hash-a", 100))
-            .unwrap();
-        database
-            .save_item(&text_item("b", "hash-b", 200))
-            .unwrap();
-        database
-            .save_item(&text_item("c", "hash-c", 300))
-            .unwrap();
+        database.save_item(&text_item("a", "hash-a", 100)).unwrap();
+        database.save_item(&text_item("b", "hash-b", 200)).unwrap();
+        database.save_item(&text_item("c", "hash-c", 300)).unwrap();
 
         let items = database.list_recent(50, 0).unwrap();
         assert_eq!(items.len(), 3);
@@ -891,9 +908,7 @@ mod tests {
     #[test]
     fn pagination_beyond_bounds_returns_empty() {
         let database = Database::open_in_memory().unwrap();
-        database
-            .save_item(&text_item("a", "hash-a", 100))
-            .unwrap();
+        database.save_item(&text_item("a", "hash-a", 100)).unwrap();
 
         let items = database.list_recent(100, 1000).unwrap();
         assert!(items.is_empty());
@@ -904,7 +919,11 @@ mod tests {
         let database = Database::open_in_memory().unwrap();
         for i in 0..5 {
             database
-                .save_item(&text_item(&format!("item-{i}"), &format!("hash-{i}"), i * 100))
+                .save_item(&text_item(
+                    &format!("item-{i}"),
+                    &format!("hash-{i}"),
+                    i * 100,
+                ))
                 .unwrap();
         }
 
@@ -917,7 +936,11 @@ mod tests {
         let database = Database::open_in_memory().unwrap();
         for i in 0..600 {
             database
-                .save_item(&text_item(&format!("item-{i}"), &format!("hash-{i}"), i as i64 * 100))
+                .save_item(&text_item(
+                    &format!("item-{i}"),
+                    &format!("hash-{i}"),
+                    i as i64 * 100,
+                ))
                 .unwrap();
         }
 
@@ -963,14 +986,10 @@ mod tests {
     #[test]
     fn concurrent_read_does_not_block_writes() {
         let database = Database::open_in_memory().unwrap();
-        database
-            .save_item(&text_item("a", "hash-a", 100))
-            .unwrap();
+        database.save_item(&text_item("a", "hash-a", 100)).unwrap();
 
         let read_result = database.get_item("a");
-        database
-            .save_item(&text_item("b", "hash-b", 200))
-            .unwrap();
+        database.save_item(&text_item("b", "hash-b", 200)).unwrap();
 
         assert!(read_result.is_ok());
         assert_eq!(database.item_count().unwrap(), 2);

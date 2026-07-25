@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod integration_tests {
-    use clipboard_desktop_lib::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus, OcrTextBlock};
+    use clipboard_desktop_lib::domain::{
+        ClipboardItem, ClipboardKind, OcrResult, OcrStatus, OcrTextBlock,
+    };
     use clipboard_desktop_lib::search::{SearchIndex, SearchSynchronizer};
     use clipboard_desktop_lib::storage::{ClipboardRepository, Database, OcrRepository};
 
@@ -172,9 +174,7 @@ mod integration_tests {
     fn item_count_excludes_soft_deleted_items() {
         let database = Database::open_in_memory().unwrap();
 
-        database
-            .save_item(&text_item("a", "active", 100))
-            .unwrap();
+        database.save_item(&text_item("a", "active", 100)).unwrap();
         database
             .save_item(&text_item("b", "to-delete", 200))
             .unwrap();
@@ -197,9 +197,7 @@ mod integration_tests {
     #[test]
     fn pagination_beyond_bounds_returns_empty() {
         let database = Database::open_in_memory().unwrap();
-        database
-            .save_item(&text_item("a", "content", 100))
-            .unwrap();
+        database.save_item(&text_item("a", "content", 100)).unwrap();
 
         let items = database.list_recent(100, 1000).unwrap();
         assert!(items.is_empty());

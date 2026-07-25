@@ -14,7 +14,9 @@
 
   let s = $state($generalSettings);
   $effect(() => {
-    const unsub = generalSettings.subscribe((v) => { s = v; });
+    const unsub = generalSettings.subscribe((v) => {
+      s = v;
+    });
     return unsub;
   });
 
@@ -44,11 +46,8 @@
     <h2>{_t("compact.title")}</h2>
     <p>{_t("compact.description")}</p>
   </div>
-  <button
-    class="close-button"
-    type="button"
-    aria-label={_t("actions.close")}
-    onclick={onclose}>×</button
+  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+    >×</button
   >
 </header>
 
@@ -86,7 +85,14 @@
           <span class="value-label">{s.compactPaddingTop}px</span>
         </div>
       </div>
-      <input type="range" min="0" max="20" value={s.compactPaddingTop} oninput={sliderHandler("compactPaddingTop")} class="transparency-slider" />
+      <input
+        type="range"
+        min="0"
+        max="20"
+        value={s.compactPaddingTop}
+        oninput={sliderHandler("compactPaddingTop")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -100,7 +106,14 @@
           <span class="value-label">{s.compactPaddingBottom}px</span>
         </div>
       </div>
-      <input type="range" min="0" max="20" value={s.compactPaddingBottom} oninput={sliderHandler("compactPaddingBottom")} class="transparency-slider" />
+      <input
+        type="range"
+        min="0"
+        max="20"
+        value={s.compactPaddingBottom}
+        oninput={sliderHandler("compactPaddingBottom")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -114,7 +127,14 @@
           <span class="value-label">{s.compactCardGap}px</span>
         </div>
       </div>
-      <input type="range" min="0" max="20" value={s.compactCardGap} oninput={sliderHandler("compactCardGap")} class="transparency-slider" />
+      <input
+        type="range"
+        min="0"
+        max="20"
+        value={s.compactCardGap}
+        oninput={sliderHandler("compactCardGap")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -128,7 +148,14 @@
           <span class="value-label">{s.compactTextHeight}px</span>
         </div>
       </div>
-      <input type="range" min="40" max="90" value={s.compactTextHeight} oninput={sliderHandler("compactTextHeight")} class="transparency-slider" />
+      <input
+        type="range"
+        min="40"
+        max="90"
+        value={s.compactTextHeight}
+        oninput={sliderHandler("compactTextHeight")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -142,7 +169,14 @@
           <span class="value-label">{s.compactTallTextHeight}px</span>
         </div>
       </div>
-      <input type="range" min="50" max="100" value={s.compactTallTextHeight} oninput={sliderHandler("compactTallTextHeight")} class="transparency-slider" />
+      <input
+        type="range"
+        min="50"
+        max="100"
+        value={s.compactTallTextHeight}
+        oninput={sliderHandler("compactTallTextHeight")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -156,7 +190,14 @@
           <span class="value-label">{s.compactImageHeight}px</span>
         </div>
       </div>
-      <input type="range" min="80" max="200" value={s.compactImageHeight} oninput={sliderHandler("compactImageHeight")} class="transparency-slider" />
+      <input
+        type="range"
+        min="80"
+        max="200"
+        value={s.compactImageHeight}
+        oninput={sliderHandler("compactImageHeight")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -170,7 +211,14 @@
           <span class="value-label">{s.compactSearchHeight}px</span>
         </div>
       </div>
-      <input type="range" min="28" max="56" value={s.compactSearchHeight} oninput={sliderHandler("compactSearchHeight")} class="transparency-slider" />
+      <input
+        type="range"
+        min="28"
+        max="56"
+        value={s.compactSearchHeight}
+        oninput={sliderHandler("compactSearchHeight")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -184,7 +232,14 @@
           <span class="value-label">{s.compactSearchFontSize}px</span>
         </div>
       </div>
-      <input type="range" min="10" max="24" value={s.compactSearchFontSize} oninput={sliderHandler("compactSearchFontSize")} class="transparency-slider" />
+      <input
+        type="range"
+        min="10"
+        max="24"
+        value={s.compactSearchFontSize}
+        oninput={sliderHandler("compactSearchFontSize")}
+        class="transparency-slider"
+      />
     </section>
 
     <section class="setting-card">
@@ -198,7 +253,14 @@
           <span class="value-label">{s.compactCardBorderRadius}px</span>
         </div>
       </div>
-      <input type="range" min="0" max="20" value={s.compactCardBorderRadius} oninput={sliderHandler("compactCardBorderRadius")} class="transparency-slider" />
+      <input
+        type="range"
+        min="0"
+        max="20"
+        value={s.compactCardBorderRadius}
+        oninput={sliderHandler("compactCardBorderRadius")}
+        class="transparency-slider"
+      />
     </section>
   {/if}
 
@@ -351,7 +413,13 @@
   .transparency-slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
-    background: linear-gradient(to right, #4aa8ff 0%, #4aa8ff var(--slider-pct, 50%), #2a2a2a var(--slider-pct, 50%), #2a2a2a 100%);
+    background: linear-gradient(
+      to right,
+      #4aa8ff 0%,
+      #4aa8ff var(--slider-pct, 50%),
+      #2a2a2a var(--slider-pct, 50%),
+      #2a2a2a 100%
+    );
   }
 
   .transparency-slider::-webkit-slider-thumb {
@@ -363,7 +431,9 @@
     border: 2px solid #4aa8ff;
     background: #1a1a1a;
     cursor: pointer;
-    transition: box-shadow 100ms ease, transform 100ms ease;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
   }
 
   .transparency-slider::-webkit-slider-thumb:hover {
@@ -390,7 +460,9 @@
     border: 2px solid #4aa8ff;
     background: #1a1a1a;
     cursor: pointer;
-    transition: box-shadow 100ms ease, transform 100ms ease;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
   }
 
   .transparency-slider::-moz-range-thumb:hover {
@@ -408,7 +480,9 @@
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
-    transition: border-color 100ms ease, background 100ms ease;
+    transition:
+      border-color 100ms ease,
+      background 100ms ease;
   }
 
   .toggle-switch.active {
@@ -424,7 +498,9 @@
     height: 16px;
     border-radius: 50%;
     background: #666;
-    transition: transform 120ms ease, background 100ms ease;
+    transition:
+      transform 120ms ease,
+      background 100ms ease;
   }
 
   .toggle-switch.active .toggle-knob {

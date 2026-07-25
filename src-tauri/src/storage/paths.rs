@@ -29,7 +29,11 @@ impl StoragePaths {
             return Err(StorageError::DataDirectoryMustBeAbsolute(data_directory));
         }
 
-        let storage = if data_directory.file_name().map(|n| n == "storage").unwrap_or(false) {
+        let storage = if data_directory
+            .file_name()
+            .map(|n| n == "storage")
+            .unwrap_or(false)
+        {
             data_directory.clone()
         } else {
             data_directory.join("storage")

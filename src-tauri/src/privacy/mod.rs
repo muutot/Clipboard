@@ -86,8 +86,7 @@ mod tests {
     #[test]
     fn detects_private_key_patterns() {
         let manager = PrivacyManager::new();
-        assert!(manager
-            .is_sensitive_content("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQE..."));
+        assert!(manager.is_sensitive_content("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQE..."));
     }
 
     #[test]

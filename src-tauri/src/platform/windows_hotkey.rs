@@ -20,11 +20,7 @@ pub fn spawn_hotkey_thread(
     })
 }
 
-fn hotkey_message_loop(
-    hotkey_id: i32,
-    modifiers: u32,
-    vk: u32,
-) -> Result<(), String> {
+fn hotkey_message_loop(hotkey_id: i32, modifiers: u32, vk: u32) -> Result<(), String> {
     extern "system" {
         fn GetModuleHandleW(module: *const u16) -> isize;
         fn RegisterClassExW(class: *const WndClassExW) -> u16;
@@ -42,12 +38,7 @@ fn hotkey_message_loop(
             instance: isize,
             param: *const std::ffi::c_void,
         ) -> isize;
-        fn GetMessageW(
-            msg: *mut Msg,
-            hwnd: isize,
-            filter_min: u32,
-            filter_max: u32,
-        ) -> i32;
+        fn GetMessageW(msg: *mut Msg, hwnd: isize, filter_min: u32, filter_max: u32) -> i32;
         fn TranslateMessage(msg: *const Msg) -> i32;
         fn DispatchMessageW(msg: *const Msg) -> isize;
         fn DestroyWindow(hwnd: isize) -> i32;
@@ -192,7 +183,11 @@ pub fn clear_hotkey_state() {
 pub fn stop_hotkey_thread() {
     let hwnd = HOTKEY_HWND.lock().ok().and_then(|g| {
         let h = *g;
-        if h != 0 { Some(h) } else { None }
+        if h != 0 {
+            Some(h)
+        } else {
+            None
+        }
     });
     if let Some(hwnd) = hwnd {
         extern "system" {
@@ -213,7 +208,10 @@ pub struct HotkeyManager {
 
 impl HotkeyManager {
     pub fn new() -> Self {
-        Self { handle: None, window: None }
+        Self {
+            handle: None,
+            window: None,
+        }
     }
 
     pub fn start_with_window(&mut self, modifiers: u32, vk: u32, window: tauri::WebviewWindow) {
@@ -255,14 +253,18 @@ impl HotkeyManager {
     }
 }
 
-pub fn shortcut_to_windows_hotkey(binding: &crate::keyboard::ShortcutBinding) -> Option<(u32, u32)> {
+pub fn shortcut_to_windows_hotkey(
+    binding: &crate::keyboard::ShortcutBinding,
+) -> Option<(u32, u32)> {
     match binding {
         crate::keyboard::ShortcutBinding::Chord { modifiers, key } => {
             let mut mod_flags: u32 = 0;
             for m in modifiers {
                 match m {
                     crate::keyboard::Modifier::Alt => mod_flags |= windows_clipboard::MOD_ALT,
-                    crate::keyboard::Modifier::Control => mod_flags |= windows_clipboard::MOD_CONTROL,
+                    crate::keyboard::Modifier::Control => {
+                        mod_flags |= windows_clipboard::MOD_CONTROL
+                    }
                     crate::keyboard::Modifier::Shift => mod_flags |= windows_clipboard::MOD_SHIFT,
                     crate::keyboard::Modifier::Meta => mod_flags |= windows_clipboard::MOD_WIN,
                 }

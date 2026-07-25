@@ -25,7 +25,10 @@ export function formatRelativeTime(timestamp: number, currentTime = Date.now()):
 
   for (const { unit, milliseconds } of units) {
     if (Math.abs(difference) >= milliseconds) {
-      return relativeTime.format(Math.round(difference / milliseconds), unit as Intl.RelativeTimeFormatUnit);
+      return relativeTime.format(
+        Math.round(difference / milliseconds),
+        unit as Intl.RelativeTimeFormatUnit,
+      );
     }
   }
 

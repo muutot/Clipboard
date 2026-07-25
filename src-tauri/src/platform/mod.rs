@@ -155,7 +155,8 @@ pub fn get_platform_info() -> PlatformInfo {
         if !macos::MacOSAccessibilityHelper::is_trusted() {
             notes.push(
                 "Accessibility permission is not granted. Some features require it. \
-                 Open System Settings → Privacy & Security → Accessibility.".into(),
+                 Open System Settings → Privacy & Security → Accessibility."
+                    .into(),
             );
         }
     }
@@ -170,7 +171,8 @@ pub fn get_platform_info() -> PlatformInfo {
         } else {
             notes.push(
                 "X11 session detected. Clipboard monitoring should work on most \
-                 desktop environments.".into(),
+                 desktop environments."
+                    .into(),
             );
         }
     }
@@ -356,7 +358,7 @@ fn current_capabilities() -> PlatformCapabilities {
 //  ClipboardMonitor
 // ---------------------------------------------------------------------------
 
-use windows_clipboard::{WindowsClipboardMonitor, ClipboardChange};
+use windows_clipboard::{ClipboardChange, WindowsClipboardMonitor};
 
 pub struct ClipboardMonitor {
     monitor: WindowsClipboardMonitor,
@@ -435,10 +437,18 @@ impl GlobalShortcutManager {
                     let mut mod_flags: u32 = 0;
                     for m in modifiers {
                         match m {
-                            crate::keyboard::Modifier::Alt => mod_flags |= windows_clipboard::MOD_ALT,
-                            crate::keyboard::Modifier::Control => mod_flags |= windows_clipboard::MOD_CONTROL,
-                            crate::keyboard::Modifier::Shift => mod_flags |= windows_clipboard::MOD_SHIFT,
-                            crate::keyboard::Modifier::Meta => mod_flags |= windows_clipboard::MOD_WIN,
+                            crate::keyboard::Modifier::Alt => {
+                                mod_flags |= windows_clipboard::MOD_ALT
+                            }
+                            crate::keyboard::Modifier::Control => {
+                                mod_flags |= windows_clipboard::MOD_CONTROL
+                            }
+                            crate::keyboard::Modifier::Shift => {
+                                mod_flags |= windows_clipboard::MOD_SHIFT
+                            }
+                            crate::keyboard::Modifier::Meta => {
+                                mod_flags |= windows_clipboard::MOD_WIN
+                            }
                         }
                     }
                     let vk = match key.to_uppercase().as_str() {
@@ -485,14 +495,13 @@ impl GlobalShortcutManager {
         Ok(())
     }
 
-    pub fn register(
-        &mut self,
-        action: &str,
-        shortcuts: &[ShortcutBinding],
-    ) -> Result<(), String> {
-        self.shortcuts
-            .insert(action.to_owned(), shortcuts.to_vec());
-        println!("registered {} shortcut(s) for action: {}", shortcuts.len(), action);
+    pub fn register(&mut self, action: &str, shortcuts: &[ShortcutBinding]) -> Result<(), String> {
+        self.shortcuts.insert(action.to_owned(), shortcuts.to_vec());
+        println!(
+            "registered {} shortcut(s) for action: {}",
+            shortcuts.len(),
+            action
+        );
         Ok(())
     }
 
@@ -587,7 +596,9 @@ impl SingleInstanceGuard {
                             .create_new(true)
                             .write(true)
                             .open(&lock_path)
-                            .map_err(|e| format!("failed to create lock file after cleanup: {e}"))?;
+                            .map_err(|e| {
+                                format!("failed to create lock file after cleanup: {e}")
+                            })?;
                         writeln!(file, "{}", std::process::id())
                             .map_err(|e| format!("failed to write lock file: {e}"))?;
                         return Ok(Self { lock_path });
@@ -658,7 +669,14 @@ mod tests {
     #[test]
     fn platform_detect_returns_variant() {
         let p = Platform::detect();
-        assert!(matches!(p, Platform::Windows | Platform::MacOS | Platform::LinuxX11 | Platform::LinuxWayland | Platform::Unknown));
+        assert!(matches!(
+            p,
+            Platform::Windows
+                | Platform::MacOS
+                | Platform::LinuxX11
+                | Platform::LinuxWayland
+                | Platform::Unknown
+        ));
     }
 
     #[test]
@@ -682,10 +700,7 @@ mod tests {
             info.global_shortcut_supported,
             info.capabilities.global_shortcut
         );
-        assert_eq!(
-            info.system_tray_supported,
-            info.capabilities.system_tray
-        );
+        assert_eq!(info.system_tray_supported, info.capabilities.system_tray);
     }
 
     // ---- Existing tests (unchanged) ----
