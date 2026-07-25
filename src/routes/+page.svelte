@@ -2,7 +2,6 @@
   import { onMount, tick } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -21,7 +20,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     formatTextLength,
     formatSizeSimple,
   } from "$lib/services/clipboard";
-  import { getRuntimeInfo } from "$lib/services/runtime";
+  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
   import type { IconName } from "$lib/components/AppIcon.svelte";
@@ -138,13 +137,17 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   const filteredItems = $derived.by(() => {
     const normalizedQuery = query.trim();
-    const keywords = normalizedQuery.toLocaleLowerCase().split(/\s+/).filter(Boolean);
     const usesIndexedResults = indexedItems !== null && indexedQuery === normalizedQuery;
     const candidates = usesIndexedResults ? (indexedItems ?? []) : items;
 
     const dateRange = resolveDateRange(dateFilter);
     const dateRangeFromNl = !dateRange ? parseDateQuery(normalizedQuery) : null;
     const effectiveDateRange = dateRange ?? dateRangeFromNl;
+    // A natural-language date token is a filter, not content that must occur
+    // in the record text (e.g. "昨天" should not be required in the title).
+    const keywords = dateRangeFromNl
+      ? []
+      : normalizedQuery.toLocaleLowerCase().split(/\s+/).filter(Boolean);
 
     return candidates.filter((item) => {
       const isDeleted = !!item.deleted;
@@ -176,14 +179,14 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         try {
           const re = new RegExp(normalizedQuery, "i");
           regexError = "";
-          return re.test([item.title, item.preview, item.sourceApp].join(" "));
+          return re.test([item.title, item.preview, item.textContent, item.sourceApp].join(" "));
         } catch {
           regexError = _t("search.regexError");
-          return true;
+          return false;
         }
       }
 
-      const searchableText = [item.title, item.preview, item.sourceApp]
+      const searchableText = [item.title, item.preview, item.textContent, item.sourceApp]
         .join(" ")
         .toLocaleLowerCase();
 
@@ -241,6 +244,15 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     indexedQuery = "";
 
     if (!requestedQuery) {
+      searchPending = false;
+      return;
+    }
+
+    // Regex and natural-language date queries are intentionally evaluated
+    // against the full local snapshot. The Tantivy endpoint only implements
+    // tokenized AND search, so replacing the candidates here would silently
+    // disable those two modes in the desktop runtime.
+    if (regexMode || parseDateQuery(requestedQuery)) {
       searchPending = false;
       return;
     }
@@ -653,12 +665,13 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     editingId = id;
   }
 
-  async function saveEdit(id: string, content: string) {
-    editingId = null;
+  async function saveEdit(id: string, content: string): Promise<boolean> {
     const item = items.find((i) => i.id === id);
+    if (!item) return false;
+
     const isMedia = item?.kind === "image" || item?.kind === "file";
     const isText = item?.kind === "text" || item?.kind === "link";
-    const newTitle = isText ? content.slice(0, 200) : content;
+    const newTitle = isText ? (item.customTitle ? item.title : content.slice(0, 200)) : content;
     const newTextContent = isText ? content : (item?.textContent ?? null);
     const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? "");
 
@@ -678,16 +691,28 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
         if (detailItem?.id === id) {
           detailItem = { ...detailItem, title: updated.title, resourcePath: updated.resourcePath, previewPath: updated.previewPath };
         }
+        editingId = null;
         showToast(_t("toast.editSaved"), "success");
-        return;
+        return true;
       } catch (e) {
+        statusMessage = _t("toast.saveFailed");
         showToast(String(e), "error");
-        return;
+        return false;
       }
     }
 
-    if (isText) {
-      invoke("update_clipboard_text", { id, newTitle, newTextContent }).catch(() => {});
+    if (!isText) return false;
+
+    if (isTauriRuntime()) {
+      try {
+        const saved = await invoke<boolean>("update_clipboard_text", { id, newTitle, newTextContent });
+        if (saved === false) throw new Error("record not found");
+      } catch (error) {
+        statusMessage = _t("toast.saveFailed");
+        showToast(_t("toast.saveFailed"), "error");
+        console.error("Unable to save clipboard text", error);
+        return false;
+      }
     }
 
     items = items.map((item) =>
@@ -705,7 +730,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
           : item,
       );
     }
+    editingId = null;
     showToast(_t("toast.editSaved"), "success");
+    return true;
   }
 
   function cancelEdit(_id: string) {
@@ -790,30 +817,52 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   function bulkFavorite() {
     const ids = [...selectedIds];
+    const previousItems = items;
+    const previousIndexedItems = indexedItems;
     items = items.map((item) => (selectedIds.has(item.id) ? { ...item, favorite: true } : item));
+    if (indexedItems) {
+      indexedItems = indexedItems.map((item) =>
+        selectedIds.has(item.id) ? { ...item, favorite: true } : item,
+      );
+    }
     void persistBatchFavorite(ids, true)
-      .then(() => {
+      .then((updated) => {
+        if (updated === false) throw new Error("batch favorite failed");
         showToast(_t("toast.bulkFavoriteSuccess", { count: ids.length }), "success");
         selectedIds = new Set();
       })
       .catch((error) => {
         console.error("Bulk favorite failed", error);
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        statusMessage = _t("app.favoriteFailed");
+        showToast(_t("app.favoriteFailed"), "error");
       });
   }
 
   function bulkDelete() {
     const ids = [...selectedIds];
-    const removed = items.filter((i) => selectedIds.has(i.id));
+    const previousItems = items;
+    const previousIndexedItems = indexedItems;
+    const previousSelectedIds = new Set(selectedIds);
     items = items.filter((i) => !selectedIds.has(i.id));
+    if (indexedItems) {
+      indexedItems = indexedItems.filter((item) => !selectedIds.has(item.id));
+    }
     selectedIds = new Set();
 
     void persistBatchDelete(ids)
-      .then(() => {
+      .then((removed) => {
+        if (removed === false) throw new Error("batch delete failed");
         showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
       })
       .catch((error) => {
         console.error("Bulk delete failed", error);
-        items = [...items, ...removed];
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        selectedIds = previousSelectedIds;
+        statusMessage = _t("app.deleteFailed");
+        showToast(_t("app.deleteFailed"), "error");
       });
   }
 
@@ -1018,7 +1067,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
-  <header class="search-header" role="presentation" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
+  <header class="search-header" role="presentation" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) void getCurrentWindow().startDragging(); }}>
     <div class="search-box">
       <input
         bind:value={query}
@@ -1073,7 +1122,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
     />
   </header>
 
-  <div class="toolbar" role="presentation" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) getCurrentWebviewWindow().startDragging(); }}>
+  <div class="toolbar" role="presentation" aria-label="拖拽窗口" onmousedown={(e) => { if (e.target === e.currentTarget) void getCurrentWindow().startDragging(); }}>
     <nav class="filters" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
@@ -1705,17 +1754,6 @@ showCheckbox={false}
     padding: 0 17px 7px;
     color: #777777;
     font-size: 11.5px;
-  }
-
-  .section-heading > div {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-  }
-
-  .eyebrow {
-    color: #bcbcbc;
-    font-weight: 600;
   }
 
   .result-count {

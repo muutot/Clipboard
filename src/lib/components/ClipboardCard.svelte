@@ -54,7 +54,7 @@
     oncopy: (id: string) => void;
     ondetail: (id: string) => void;
     onedit: (id: string) => void;
-    onsaveedit: (id: string, content: string) => void;
+    onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
     onduplicate: (id: string) => void;
@@ -94,6 +94,13 @@
   let editing = $state(false);
   let editContent = $state("");
   let editTitle = $state("");
+  let editTextarea = $state<HTMLTextAreaElement | null>(null);
+
+  $effect(() => {
+    if (!editing || !editTextarea) return;
+    const textarea = editTextarea;
+    queueMicrotask(() => textarea.focus());
+  });
 
   const contentChanged = $derived(
     editContent !== (item.textContent || item.title) || editTitle !== item.title,
@@ -221,10 +228,10 @@
     onedit(item.id);
   }
 
-  function saveEdit(event: Event) {
+  async function saveEdit(event: Event) {
     event.stopPropagation();
-    onsaveedit(item.id, editContent);
-    editing = false;
+    const saved = await onsaveedit(item.id, editContent);
+    if (saved !== false) editing = false;
   }
 
   function cancelEdit(event: Event) {
@@ -249,7 +256,10 @@
   }
 </script>
 
-  <article
+  <div
+  role="button"
+  aria-pressed={selected}
+  aria-label={item.title}
   class:selected
   class:compact
   class:editing={editing}
@@ -480,9 +490,9 @@
       {/if}
       <textarea
         bind:value={editContent}
+        bind:this={editTextarea}
         rows={Math.min(12, Math.max(3, editContent.split("\n").length))}
         placeholder={_t("edit.placeholder")}
-        autofocus
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e) => {
           if (e.key === "Escape") {
@@ -508,7 +518,7 @@
       </div>
     </div>
   {/if}
-</article>
+</div>
 
 <style>
   .clip-card {

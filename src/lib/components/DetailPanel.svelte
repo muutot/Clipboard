@@ -6,7 +6,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { untrack } from "svelte";
   import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
@@ -30,7 +30,7 @@
     onclose: () => void;
     oncopy: (id: string) => void;
     onedit: (id: string) => void;
-    onsaveedit: (id: string, content: string) => void;
+    onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     onrenametitle: (id: string, title: string) => void;
     onplainpaste: (id: string) => void;
     onduplicate: (id: string) => void;
@@ -273,10 +273,10 @@
     }
   }
 
-  function saveEdit() {
-    if (!item || !editContent.trim()) { editing = false; return; }
-    onsaveedit(item.id, editContent.trim());
-    editing = false;
+  async function saveEdit() {
+    if (!item || !editContent.trim()) return;
+    const saved = await onsaveedit(item.id, editContent.trim());
+    if (saved !== false) editing = false;
   }
 
   function saveTitleEdit() {
@@ -319,7 +319,20 @@
             </button>
           </div>
         {:else}
-          <span class="header-title" ondblclick={() => { editTitleContent = item.title; editingTitle = true; }}>
+          <span
+            class="header-title"
+            role="button"
+            tabindex="0"
+            aria-label={_t("edit.edit")}
+            ondblclick={() => { editTitleContent = item.title; editingTitle = true; }}
+            onkeydown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                editTitleContent = item.title;
+                editingTitle = true;
+              }
+            }}
+          >
             {#if item.kind === "file" && item.fileMeta && item.fileMeta.length > 1}
               <AppIcon name="file" size={15} /> {item.fileMeta.length} {_t("detail.files")}
             {:else}
