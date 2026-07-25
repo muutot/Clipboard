@@ -255,10 +255,19 @@ impl MemoryMonitor {
     }
 
     pub fn snapshot(&self) -> MemoryMetrics {
+        let current_bytes = self.current_usage_bytes();
+        let peak_bytes = self
+            .peak_bytes
+            .lock()
+            .map(|mut peak| {
+                *peak = (*peak).max(current_bytes);
+                *peak
+            })
+            .unwrap_or(current_bytes);
         let snapshot_count = self.snapshot_count.lock().map(|c| *c).unwrap_or(0);
         MemoryMetrics {
-            current_bytes: self.current_usage_bytes(),
-            peak_bytes: self.peak_usage_bytes(),
+            current_bytes,
+            peak_bytes,
             snapshot_count,
             uptime_seconds: self.started_at.elapsed().as_secs(),
         }
