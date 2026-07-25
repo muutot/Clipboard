@@ -107,6 +107,15 @@ export interface LocaleDefinition {
     savedAndRestart: string;
     alreadyUsingDir: string;
     rebuildComplete: string;
+    ocrModelInstalled: string;
+    ocrModelInstallFailed: string;
+    ocrModelAlreadyApplied: string;
+    ocrModelApplied: string;
+    ocrModelApplyFailed: string;
+    ocrEngineChanged: string;
+    ocrEngineChangeFailed: string;
+    ocrDetectionSaved: string;
+    ocrDetectionSaveFailed: string;
   };
   keyboard: {
     settings: string;
