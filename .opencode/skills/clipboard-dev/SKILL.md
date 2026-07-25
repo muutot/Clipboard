@@ -1,9 +1,13 @@
 ---
 name: clipboard-dev
-description: Use when working on the clipboard-desktop project. Covers development workflow, project architecture, code conventions, build commands, and references to known pitfalls.
+description: Use when working on the clipboard-desktop project, including TODO audits, feature implementation, settings UI styling, verification, and minimal Git commits. Covers project architecture, evidence requirements, code conventions, build commands, agent isolation, and known pitfalls.
 ---
 
 # Clipboard Desktop — Development Guide
+
+## Mandatory Maintenance Workflow
+
+Before auditing TODOs, changing settings styles, assigning parallel agents, or committing a feature, read [references/maintenance-workflow.md](references/maintenance-workflow.md) and follow it. Treat `TODO.md`, the current worktree, tests, and rendered/runtime behavior as evidence; never infer completion from intent or from the existence of similarly named code.
 
 ## Tech Stack
 
@@ -242,11 +246,11 @@ listen<PersistedClipboardItem>("clipboard-item-added", (event) => { ... });
 
 ### Settings (Two Layers)
 
-| Layer                        | Storage            | Managed By                |
-| ---------------------------- | ------------------ | ------------------------- |
-| Frontend (`GeneralSettings`) | localStorage       | `settings.ts` store       |
-| Backend (`AppConfig`)        | JSON file on disk  | Rust `ConfigStore`        |
-| Keyboard (`KeyboardConfig`)  | Separate JSON file | Rust `keyboard/config.rs` |
+| Layer                        | Storage                                                 | Managed By                |
+| ---------------------------- | ------------------------------------------------------- | ------------------------- |
+| Frontend (`GeneralSettings`) | Backend config; localStorage is browser/legacy fallback | `settings.ts` store       |
+| Backend (`AppConfig`)        | JSON file on disk                                       | Rust `ConfigStore`        |
+| Keyboard (`KeyboardConfig`)  | Separate JSON file                                      | Rust `keyboard/config.rs` |
 
 ### Search (Outbox Pattern)
 
@@ -296,6 +300,10 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - CSS custom properties for theming in `app.css`
 - BEM-like naming (`.detail-panel`, `.viewer-close-btn`)
 - Glass morphism: `backdrop-filter: blur()`, semi-transparent backgrounds
+- Preserve the main-page visual language unless the task explicitly targets it.
+- Before editing settings styles, compare every settings panel and reuse the existing card, heading, description, control, feedback, spacing, and typography patterns.
+- Prefer shared CSS variables for settings typography and spacing. Do not introduce a one-off font size when an existing semantic variable fits.
+- Keep setting titles, descriptions, values, controls, and feedback text on one consistent semantic scale across panels.
 
 **Form control styling rules (must follow strictly):**
 
@@ -334,7 +342,6 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
       </div>
     </div>
     <!-- toggle switch, lang-toggle buttons, font-size-input, or theme-select here -->
-  </section>
   ```
 
   CSS: `.toggle-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; }`

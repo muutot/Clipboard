@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clipboard Development"
+  short_description: "Audit TODOs and maintain Clipboard consistently"
+  default_prompt: "Use $clipboard-dev to audit the next TODO and implement one verified minimal feature."
