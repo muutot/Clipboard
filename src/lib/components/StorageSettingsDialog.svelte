@@ -119,8 +119,13 @@
   }
 
   let ocrEngine = $state("ppocr");
+  let ocrEngineAvailable = $state(false);
+  let ocrHasEngine = $state(false);
+  let ocrStatusLoading = $state(false);
+  let ocrTotal = $state(0);
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
+  let ocrFailed = $state(0);
   let installedVariants = $state<string[]>([]);
   let activeVariant = $state<string>("");
   let ocrInstalling = $state(false);
@@ -158,6 +163,14 @@
     }
   });
 
+  $effect(() => {
+    if (!open || activeSection !== "ocr") return;
+
+    void loadOcrStatus();
+    const interval = setInterval(() => void loadOcrStatus(), 2000);
+    return () => clearInterval(interval);
+  });
+
   async function loadStatus() {
     loading = true;
     pending = null;
@@ -182,17 +195,29 @@
 
     void loadPerformanceMetrics();
     void loadHistoryConfig();
-    void loadOcrStatus();
   }
 
   async function loadOcrStatus() {
+    if (ocrStatusLoading) return;
+    ocrStatusLoading = true;
     try {
-      const result = await invoke<{ pendingTasks: number; completedTasks: number; engine: string }>(
-        "get_ocr_status",
-      );
+      const result = await invoke<{
+        totalTasks: number;
+        pendingTasks: number;
+        completedTasks: number;
+        failedTasks: number;
+        engine: string;
+        engineAvailable: boolean;
+        hasEngine: boolean;
+      }>("get_ocr_status");
       if (result) {
+        ocrTotal = result.totalTasks;
         ocrPending = result.pendingTasks;
         ocrCompleted = result.completedTasks;
+        ocrFailed = result.failedTasks;
+        ocrEngine = result.engine;
+        ocrEngineAvailable = result.engineAvailable;
+        ocrHasEngine = result.hasEngine;
       }
     } catch {
       /* ignore */
@@ -228,6 +253,8 @@
       if (!modelVariant) modelVariant = modelStatus.activeVariant;
     } catch {
       installedVariants = [];
+    } finally {
+      ocrStatusLoading = false;
     }
   }
 
@@ -789,11 +816,36 @@
           </div>
           <div class="ocr-stat-grid">
             <div class="stat-item">
-              <span class="stat-value">{ocrPending}</span><span class="stat-label">待处理</span>
+              <span class="stat-value">{ocrTotal}</span><span class="stat-label"
+                >{_t("statistics.ocrTotal")}</span
+              >
             </div>
             <div class="stat-item">
-              <span class="stat-value">{ocrCompleted}</span><span class="stat-label">已完成</span>
+              <span class="stat-value">{ocrPending}</span><span class="stat-label"
+                >{_t("statistics.ocrPending")}</span
+              >
             </div>
+            <div class="stat-item">
+              <span class="stat-value">{ocrCompleted}</span><span class="stat-label"
+                >{_t("statistics.ocrCompleted")}</span
+              >
+            </div>
+            <div class="stat-item">
+              <span class="stat-value">{ocrFailed}</span><span class="stat-label"
+                >{_t("statistics.ocrFailed")}</span
+              >
+            </div>
+          </div>
+          <div class:available={ocrEngineAvailable} class="ocr-engine-status">
+            <span class="ocr-engine-status-label">{_t("statistics.ocrEngine")}</span>
+            <strong>{ocrEngine === "ppocr" ? "PP-OCRv6" : "Tesseract"}</strong>
+            <span class="ocr-engine-status-state">
+              {ocrEngineAvailable
+                ? _t("statistics.ocrEngineAvailable")
+                : ocrHasEngine
+                  ? _t("statistics.ocrEngineUnavailable")
+                  : _t("statistics.ocrNoEngine")}
+            </span>
           </div>
         </section>
 
@@ -1596,8 +1648,47 @@
 
   .ocr-stat-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .ocr-engine-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 9px 10px;
+    border: 1px solid #583b3b;
+    border-radius: var(--settings-card-radius);
+    color: #c78b8b;
+    background: rgba(52, 29, 29, 0.45);
+    font-size: var(--settings-description-size);
+  }
+
+  .ocr-engine-status.available {
+    border-color: #35513f;
+    color: #9dc6aa;
+    background: rgba(27, 45, 33, 0.45);
+  }
+
+  .ocr-engine-status-label {
+    color: #888;
+  }
+
+  .ocr-engine-status strong {
+    color: #dedede;
+    font-size: var(--settings-control-size);
+    font-weight: 560;
+  }
+
+  .ocr-engine-status-state {
+    margin-left: auto;
+  }
+
+  @media (max-width: 760px) {
+    .ocr-stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .pending-path code {

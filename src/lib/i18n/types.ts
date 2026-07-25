@@ -328,8 +328,14 @@ export interface LocaleDefinition {
     dbSize: string;
     indexSize: string;
     ocrTasks: string;
+    ocrTotal: string;
     ocrPending: string;
     ocrCompleted: string;
+    ocrFailed: string;
+    ocrEngine: string;
+    ocrEngineAvailable: string;
+    ocrEngineUnavailable: string;
+    ocrNoEngine: string;
     text: string;
     link: string;
     image: string;

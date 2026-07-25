@@ -956,6 +956,7 @@ fn get_ocr_status(
 ) -> Result<OcrStatusInfo, String> {
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
+    let failed = database.count_failed_ocr().map_err(|e| e.to_string())?;
     let cfg = config
         .lock()
         .map_err(|_| "config lock poisoned".to_owned())?;
@@ -964,13 +965,22 @@ fn get_ocr_status(
     let model = configured_ppocr_model(&cfg);
     let installed_variants = ocr::models::installed_model_variants(&models_dir);
     let ppocr_available = ocr::models::model_is_installed(&models_dir, model);
+    let tesseract_available = TesseractOcrEngine::is_available();
+    let engine_available = match engine.as_str() {
+        "ppocr" => ppocr_available,
+        "tesseract" => tesseract_available,
+        _ => false,
+    };
 
     Ok(OcrStatusInfo {
+        total_tasks: pending.saturating_add(completed).saturating_add(failed),
         pending_tasks: pending,
         completed_tasks: completed,
-        tesseract_available: TesseractOcrEngine::is_available(),
+        failed_tasks: failed,
+        tesseract_available,
         ppocr_available,
-        has_engine: TesseractOcrEngine::is_available() || !installed_variants.is_empty(),
+        has_engine: tesseract_available || !installed_variants.is_empty(),
+        engine_available,
         engine,
         ppocr_model_variant: model.id.to_owned(),
         installed_variants,
@@ -980,11 +990,14 @@ fn get_ocr_status(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OcrStatusInfo {
+    total_tasks: u64,
     pending_tasks: u64,
     completed_tasks: u64,
+    failed_tasks: u64,
     tesseract_available: bool,
     ppocr_available: bool,
     has_engine: bool,
+    engine_available: bool,
     engine: String,
     ppocr_model_variant: String,
     installed_variants: Vec<&'static str>,

@@ -45,6 +45,7 @@ pub trait OcrRepository {
     ) -> Result<Option<OcrResult>, StorageError>;
     fn count_pending_ocr(&self) -> Result<u64, StorageError>;
     fn count_completed_ocr(&self) -> Result<u64, StorageError>;
+    fn count_failed_ocr(&self) -> Result<u64, StorageError>;
 }
 
 impl OcrRepository for Database {
@@ -339,6 +340,17 @@ impl OcrRepository for Database {
             Ok(count as u64)
         })
     }
+
+    fn count_failed_ocr(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM ocr_results WHERE status = 'failed'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count as u64)
+        })
+    }
 }
 
 struct StoredOcrResult {
@@ -568,12 +580,14 @@ mod tests {
         let failed = database.get_ocr_result("image").unwrap().unwrap();
         assert_eq!(failed.status, OcrStatus::Failed);
         assert_eq!(failed.error_message.as_deref(), Some("decoder unavailable"));
+        assert_eq!(database.count_failed_ocr().unwrap(), 1);
         assert!(!database.mark_ocr_failed("image", "late failure").unwrap());
 
         assert!(database.retry_ocr("image").unwrap());
         let pending = database.get_ocr_result("image").unwrap().unwrap();
         assert_eq!(pending.status, OcrStatus::Pending);
         assert_eq!(pending.error_message, None);
+        assert_eq!(database.count_failed_ocr().unwrap(), 0);
     }
 
     #[test]
