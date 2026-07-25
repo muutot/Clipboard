@@ -149,7 +149,7 @@ fn read_clipboard_sequence() -> Option<u32> {
 }
 
 #[cfg(target_os = "windows")]
-fn list_clipboard_formats() -> Vec<String> {
+pub fn list_clipboard_formats() -> Vec<String> {
     extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
@@ -183,7 +183,7 @@ fn list_clipboard_formats() -> Vec<String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn list_clipboard_formats() -> Vec<String> {
+pub fn list_clipboard_formats() -> Vec<String> {
     vec![]
 }
 

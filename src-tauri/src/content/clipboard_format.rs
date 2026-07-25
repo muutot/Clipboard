@@ -41,7 +41,13 @@ pub fn detect_formats_from_mime_list(mime_list: &[String]) -> ClipboardFormatInf
 
     for mime in mime_list {
         match mime.to_lowercase().as_str() {
-            "text/plain" | "text/plain;charset=utf-8" | "utf8_string" | "text" => {
+            "text/plain"
+            | "text/plain;charset=utf-8"
+            | "utf8_string"
+            | "text"
+            | "cf_text"
+            | "cf_oemtext"
+            | "cf_unicodetext" => {
                 if !formats.contains(&ClipboardFormat::PlainText) {
                     formats.push(ClipboardFormat::PlainText);
                 }
@@ -57,7 +63,7 @@ pub fn detect_formats_from_mime_list(mime_list: &[String]) -> ClipboardFormatInf
                 }
             }
             "image/png" | "image/jpeg" | "image/bmp" | "image/gif" | "image/webp"
-            | "image/tiff" => {
+            | "image/tiff" | "cf_bitmap" | "cf_dib" | "cf_dibv5" => {
                 if !formats.contains(&ClipboardFormat::Image) {
                     formats.push(ClipboardFormat::Image);
                 }
@@ -129,5 +135,18 @@ mod tests {
     fn parse_mime_types_delegates() {
         let info = parse_mime_types(&["text/plain".to_string()]);
         assert_eq!(info.available_formats, vec![ClipboardFormat::PlainText]);
+    }
+
+    #[test]
+    fn recognizes_windows_predefined_clipboard_formats() {
+        let info = parse_mime_types(&[
+            "CF_UNICODETEXT".to_owned(),
+            "CF_DIBV5".to_owned(),
+            "CF_HDROP".to_owned(),
+        ]);
+
+        assert!(info.available_formats.contains(&ClipboardFormat::PlainText));
+        assert!(info.available_formats.contains(&ClipboardFormat::Image));
+        assert!(info.available_formats.contains(&ClipboardFormat::FileList));
     }
 }
