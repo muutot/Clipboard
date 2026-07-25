@@ -2536,9 +2536,48 @@ fn validate_search_index(search_index: tauri::State<'_, SearchIndex>) -> Result<
     Ok(search_index.validate())
 }
 
+fn stop_runtime_services(app: &tauri::AppHandle) {
+    if let Some(monitor) = app.try_state::<Mutex<ClipboardMonitor>>() {
+        match monitor.lock() {
+            Ok(mut monitor) => {
+                if let Err(error) = monitor.stop() {
+                    eprintln!("[shutdown] failed to stop clipboard monitor: {error}");
+                }
+            }
+            Err(_) => eprintln!("[shutdown] clipboard monitor lock is poisoned"),
+        }
+    }
+
+    if let Some(capture) = app.try_state::<CaptureState>() {
+        capture.stop_worker();
+    }
+
+    if let Some(worker) = app.try_state::<OcrWorkerManager>() {
+        worker.stop();
+    }
+
+    if let Some(hotkey) = app.try_state::<Mutex<HotkeyManager>>() {
+        match hotkey.lock() {
+            Ok(mut hotkey) => hotkey.stop(),
+            Err(_) => eprintln!("[shutdown] hotkey manager lock is poisoned"),
+        }
+    }
+
+    if let Some(api) = app.try_state::<Mutex<LocalApiServer>>() {
+        match api.lock() {
+            Ok(mut api) => {
+                if let Err(error) = api.stop() {
+                    eprintln!("[shutdown] failed to stop local API: {error}");
+                }
+            }
+            Err(_) => eprintln!("[shutdown] local API lock is poisoned"),
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_autostart::Builder::new()
@@ -2671,17 +2710,12 @@ pub fn run() {
             let self_trigger_guard_managed = SelfTriggerState(self_trigger_guard.clone());
             app.manage(self_trigger_guard_managed);
 
-            // Graceful shutdown handler
-            let ocr_worker_for_shutdown = ocr_worker.clone();
-            let capture_for_shutdown = capture_state.clone();
-            let paths_for_shutdown = paths.clone();
+            // Route interrupt signals through the Tauri event loop so every
+            // runtime service follows the same shutdown path.
+            let app_handle_for_shutdown = app.handle().clone();
             ctrlc::set_handler(move || {
-                eprintln!("[shutdown] received interrupt signal, cleaning up...");
-                capture_for_shutdown.stop_worker();
-                ocr_worker_for_shutdown.stop();
-                // Config is auto-saved on drop
-                let _ = paths_for_shutdown;
-                std::process::exit(0);
+                eprintln!("[shutdown] received interrupt signal");
+                app_handle_for_shutdown.exit(0);
             })
             .ok();
 
@@ -3183,8 +3217,14 @@ pub fn run() {
             cleanup_storage_files,
             restart_app
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+            stop_runtime_services(app_handle);
+        }
+    });
 }
 
 #[cfg(test)]
