@@ -855,15 +855,16 @@
         <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
       {/if}
     {:else if activeSection === "statistics"}
+      <header>
+        <div>
+          <span class="eyebrow">设置 / 统计</span>
+          <h2>数据统计</h2>
+          <p>存储分布与性能</p>
+        </div>
+        <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button
+        >
+      </header>
       <div class="settings-scroll">
-        <header>
-          <div>
-            <span class="eyebrow">设置 / 统计</span>
-            <h2>数据统计</h2>
-            <p>存储分布与性能</p>
-          </div>
-        </header>
-
         {#if status}
           <section class="setting-card">
             <div class="setting-heading">
@@ -1827,33 +1828,33 @@
   }
 
   .stat-row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: flex-start;
-    flex-wrap: wrap;
     gap: 4px 12px;
     min-width: 0;
-    padding: 6px 10px;
-    border: 1px solid #2b2b2b;
-    border-radius: 6px;
-    background: #161616;
-    font-size: var(--settings-description-size);
+    padding: 8px 0;
+    border-bottom: 1px solid #292929;
+    font-size: var(--settings-control-size);
+  }
+
+  .stat-row:last-child {
+    border-bottom: 0;
   }
 
   .stat-row span:first-child {
-    flex: 1 1 9rem;
     min-width: 0;
     color: #999;
     overflow-wrap: anywhere;
   }
 
   .stat-row span:last-child {
-    flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
     margin-left: auto;
     color: #d8d8d8;
     font-weight: 560;
+    font-variant-numeric: tabular-nums;
     text-align: right;
     overflow-wrap: anywhere;
   }
