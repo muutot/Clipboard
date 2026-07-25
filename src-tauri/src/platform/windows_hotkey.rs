@@ -206,6 +206,12 @@ pub struct HotkeyManager {
     window: Option<tauri::WebviewWindow>,
 }
 
+impl Default for HotkeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HotkeyManager {
     pub fn new() -> Self {
         Self {
@@ -220,19 +226,16 @@ impl HotkeyManager {
         let (tx, rx) = mpsc::channel::<()>();
         let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
 
-        thread::spawn(move || loop {
-            match rx.recv() {
-                Ok(()) => {
-                    let is_visible = window.is_visible().unwrap_or(false);
-                    let is_focused = window.is_focused().unwrap_or(false);
-                    if !is_visible {
-                        let _ = window.show();
-                    }
-                    if !is_focused {
-                        let _ = window.set_focus();
-                    }
+        thread::spawn(move || {
+            while let Ok(()) = rx.recv() {
+                let is_visible = window.is_visible().unwrap_or(false);
+                let is_focused = window.is_focused().unwrap_or(false);
+                if !is_visible {
+                    let _ = window.show();
                 }
-                Err(_) => break,
+                if !is_focused {
+                    let _ = window.set_focus();
+                }
             }
         });
 

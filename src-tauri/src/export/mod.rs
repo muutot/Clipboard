@@ -47,8 +47,8 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
                     escape_csv(&item.id),
                     kind,
                     escape_csv(&item.title),
-                    escape_csv(&item.text_content.as_deref().unwrap_or("")),
-                    escape_csv(&item.source_app.as_deref().unwrap_or("")),
+                    escape_csv(item.text_content.as_deref().unwrap_or("")),
+                    escape_csv(item.source_app.as_deref().unwrap_or("")),
                     item.created_at_ms,
                     item.is_favorite,
                 ));

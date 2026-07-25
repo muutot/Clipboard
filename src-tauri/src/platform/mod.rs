@@ -368,6 +368,12 @@ pub struct ClipboardMonitor {
     receiver: Option<std::sync::mpsc::Receiver<ClipboardChange>>,
 }
 
+impl Default for ClipboardMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClipboardMonitor {
     pub fn new() -> Self {
         Self {
@@ -414,6 +420,12 @@ impl ClipboardMonitor {
 pub struct GlobalShortcutManager {
     pub shortcuts: HashMap<String, Vec<ShortcutBinding>>,
     registered_ids: Vec<i32>,
+}
+
+impl Default for GlobalShortcutManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GlobalShortcutManager {

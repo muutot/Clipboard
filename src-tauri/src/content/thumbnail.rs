@@ -44,10 +44,7 @@ impl ThumbnailGenerator {
     ) -> Result<ThumbnailInfo, StorageError> {
         let original_size = fs::metadata(image_path)?.len();
         let img = image::open(image_path).map_err(|e| {
-            StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("image decode error: {e}"),
-            ))
+            StorageError::Io(std::io::Error::other(format!("image decode error: {e}")))
         })?;
         let (orig_w, orig_h) = img.dimensions();
         let (w, h) = if orig_w > self.max_width {
@@ -73,10 +70,7 @@ impl ThumbnailGenerator {
                 image::ExtendedColorType::Rgb8,
             )
             .map_err(|e| {
-                StorageError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("jpeg encode error: {e}"),
-                ))
+                StorageError::Io(std::io::Error::other(format!("jpeg encode error: {e}")))
             })?;
 
         let preview_size = fs::metadata(&preview_path)?.len();
@@ -123,25 +117,21 @@ impl ThumbnailWorker {
 
         let handle = thread::spawn(move || {
             let generator = ThumbnailGenerator::new();
-            loop {
-                match receiver.recv() {
-                    Ok(ThumbnailTask::Generate {
-                        item_id,
-                        image_path,
-                    }) => match generator.generate(&image_path, &preview_dir) {
-                        Ok(info) => {
-                            let preview_path = &info.preview_path;
-                            if let Err(e) = database.set_preview_path(&item_id, preview_path) {
-                                eprintln!(
-                                    "[thumbnail] failed to update preview for {item_id}: {e}"
-                                );
-                            }
+            while let Ok(ThumbnailTask::Generate {
+                item_id,
+                image_path,
+            }) = receiver.recv()
+            {
+                match generator.generate(&image_path, &preview_dir) {
+                    Ok(info) => {
+                        let preview_path = &info.preview_path;
+                        if let Err(e) = database.set_preview_path(&item_id, preview_path) {
+                            eprintln!("[thumbnail] failed to update preview for {item_id}: {e}");
                         }
-                        Err(e) => {
-                            eprintln!("[thumbnail] thumbnail generation failed for {item_id}: {e}");
-                        }
-                    },
-                    Ok(ThumbnailTask::Shutdown) | Err(_) => break,
+                    }
+                    Err(e) => {
+                        eprintln!("[thumbnail] thumbnail generation failed for {item_id}: {e}");
+                    }
                 }
             }
         });

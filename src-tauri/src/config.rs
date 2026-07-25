@@ -178,21 +178,12 @@ impl Default for WindowConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ExportConfig {
     pub schedule_auto_export: Option<String>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
-}
-
-impl Default for ExportConfig {
-    fn default() -> Self {
-        Self {
-            schedule_auto_export: None,
-            extra: BTreeMap::new(),
-        }
-    }
 }
 
 #[derive(Debug)]

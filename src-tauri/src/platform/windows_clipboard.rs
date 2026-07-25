@@ -30,6 +30,12 @@ pub struct ClipboardChange {
     pub formats: Vec<String>,
 }
 
+impl Default for WindowsClipboardMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WindowsClipboardMonitor {
     pub fn new() -> Self {
         Self {
@@ -374,7 +380,7 @@ fn bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
 #[cfg(target_os = "windows")]
 fn bgr_to_rgb(data: &[u8], width: u32, height: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len());
-    let row_padded = ((width * 3 + 3) / 4) * 4;
+    let row_padded = (width * 3).div_ceil(4) * 4;
     for y in (0..height).rev() {
         let start = (y as usize) * row_padded as usize;
         let row = &data[start..start + (width * 3) as usize];
@@ -565,6 +571,7 @@ pub fn extract_app_icon(
     }
 
     #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
     struct SHFILEINFOW {
         hIcon: isize,
         iIcon: i32,
@@ -597,7 +604,7 @@ pub fn extract_app_icon(
         if let Ok(entries) = std::fs::read_dir(icon_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "png") {
+                if path.extension().is_some_and(|e| e == "png") {
                     let _ = std::fs::remove_file(&path);
                 }
             }
@@ -672,6 +679,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
     }
 
     #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
     struct ICONINFO {
         fIcon: i32,
         xHotspot: u32,
@@ -681,6 +689,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
     }
 
     #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
     struct BITMAPINFOHEADER {
         biSize: u32,
         biWidth: i32,
@@ -696,6 +705,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
     }
 
     #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
     struct BITMAP {
         bmType: i32,
         bmWidth: i32,
@@ -748,9 +758,9 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
             return false;
         }
 
-        let width = bmp.bmWidth.abs() as u32;
-        let height = bmp.bmHeight.abs() as u32;
-        let row_size = ((width * 32 + 31) / 32) * 4;
+        let width = bmp.bmWidth.unsigned_abs();
+        let height = bmp.bmHeight.unsigned_abs();
+        let row_size = (width * 32).div_ceil(32) * 4;
         let image_size = row_size * height;
 
         let mut bi = BITMAPINFOHEADER {

@@ -320,6 +320,12 @@ pub struct MacOSClipboardMonitor {
     poll_thread: Option<thread::JoinHandle<()>>,
 }
 
+impl Default for MacOSClipboardMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MacOSClipboardMonitor {
     /// Creates a new, stopped clipboard monitor.
     pub fn new() -> Self {
@@ -471,6 +477,8 @@ impl MacOSClipboardMonitor {
 /// 3. Modifier-normalisation: the tap translates CGEventFlags into our
 ///    `Modifier` enum, accounting for the left/right key distinction (e.g.
 ///    `kCGEventFlagMaskAlternate` vs `kCGEventFlagMaskOption`).
+type HotkeyCallback = Box<dyn Fn(&str) + Send + Sync + 'static>;
+
 pub struct MacOSKeyboardHook {
     /// The CGEventTap reference (NULL when not active).
     #[allow(dead_code)]
@@ -480,13 +488,19 @@ pub struct MacOSKeyboardHook {
     hotkey_refs: Vec<usize>,
     /// Callback invoked when a registered hotkey fires.
     #[allow(dead_code)]
-    on_hotkey: Option<Box<dyn Fn(&str) + Send + Sync + 'static>>,
+    on_hotkey: Option<HotkeyCallback>,
     /// Timestamp of the last modifier-key press (for double-modifier detection).
     #[allow(dead_code)]
     last_modifier_tap_ms: u64,
     /// The modifier that was last tapped (for double-modifier detection).
     #[allow(dead_code)]
     last_modifier: Option<crate::keyboard::Modifier>,
+}
+
+impl Default for MacOSKeyboardHook {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MacOSKeyboardHook {

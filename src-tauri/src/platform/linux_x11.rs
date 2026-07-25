@@ -553,6 +553,12 @@ pub enum X11Selection {
     Clipboard,
 }
 
+impl Default for X11ClipboardMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl X11ClipboardMonitor {
     /// Creates a new, stopped monitor.
     pub fn new() -> Self {
@@ -693,13 +699,21 @@ impl X11ClipboardMonitor {
 ///   key).  Double-modifier shortcuts require a different strategy: listen
 ///   for raw KeyPress events on modifier keys and detect double-taps in
 ///   software.
+type HotkeyCallback = Box<dyn Fn(&str) + Send + Sync + 'static>;
+
 pub struct X11GlobalHotkey {
     /// Set of registered (keycode, modifiers) pairs currently grabbed.
     registered: HashSet<(u32, u32)>,
     /// Map from (keycode, modifiers) to action_id for callback dispatch.
     action_map: HashMap<(u32, u32), String>,
     /// Callback invoked when a grabbed key fires.
-    on_hotkey: Option<Box<dyn Fn(&str) + Send + Sync + 'static>>,
+    on_hotkey: Option<HotkeyCallback>,
+}
+
+impl Default for X11GlobalHotkey {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl X11GlobalHotkey {

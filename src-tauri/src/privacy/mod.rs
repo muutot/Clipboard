@@ -6,6 +6,12 @@ pub struct PrivacyManager {
     pub password_manager_apps: Vec<String>,
 }
 
+impl Default for PrivacyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PrivacyManager {
     pub fn new() -> Self {
         Self {

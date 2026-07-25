@@ -202,8 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn is_available_detects_tesseract() {
-        let available = TesseractOcrEngine::is_available();
-        assert!(available || !available);
+    fn is_available_does_not_panic_when_tesseract_is_optional() {
+        let _ = TesseractOcrEngine::is_available();
     }
 }

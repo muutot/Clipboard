@@ -265,6 +265,12 @@ pub struct WaylandClipboardMonitor {
     ignored_apps: Arc<Mutex<HashSet<String>>>,
 }
 
+impl Default for WaylandClipboardMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WaylandClipboardMonitor {
     /// Creates a new, stopped monitor.
     pub fn new() -> Self {
@@ -285,8 +291,8 @@ impl WaylandClipboardMonitor {
     /// 5. Set up event listeners for `data_offer` and `selection` events.
     /// 6. On `selection` event with a new offer:
     ///    a. Read the offer's MIME types.
-    ///    b. If `text/plain;charset=utf-8` or `text/plain` is available,
-    ///       call `zwlr_data_control_offer_v1.receive()` with a pipe fd.
+    ///    b. If `text/plain;charset=utf-8` or `text/plain` is available, call
+    ///    `zwlr_data_control_offer_v1.receive()` with a pipe fd.
     ///    c. Read data from the pipe.
     ///    d. Check whether the source application is ignored.
     ///    e. Emit snapshot.
@@ -381,6 +387,12 @@ pub struct WaylandGlobalShortcut {
     portal_available: bool,
     /// Set of registered shortcut IDs (for Portal-based registration).
     registered: HashSet<String>,
+}
+
+impl Default for WaylandGlobalShortcut {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WaylandGlobalShortcut {

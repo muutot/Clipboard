@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentMarkers {
     pub is_link: bool,
@@ -17,27 +17,6 @@ pub struct ContentMarkers {
     pub currency_values: Vec<String>,
     pub ip_addresses: Vec<String>,
     pub urls: Vec<String>,
-}
-
-impl Default for ContentMarkers {
-    fn default() -> Self {
-        Self {
-            is_link: false,
-            has_email: false,
-            has_phone: false,
-            has_color: false,
-            has_date: false,
-            has_currency: false,
-            has_ip_address: false,
-            has_url: false,
-            emails: Vec::new(),
-            phone_numbers: Vec::new(),
-            color_values: Vec::new(),
-            currency_values: Vec::new(),
-            ip_addresses: Vec::new(),
-            urls: Vec::new(),
-        }
-    }
 }
 
 pub fn detect_markers(text: &str) -> ContentMarkers {
@@ -112,7 +91,7 @@ fn extract_phone_numbers(text: &str) -> Vec<String> {
             re.find_iter(text)
                 .filter(|m| {
                     let digit_count = m.as_str().chars().filter(|c| c.is_ascii_digit()).count();
-                    digit_count >= 8 && digit_count <= 15
+                    (8..=15).contains(&digit_count)
                 })
                 .map(|m| m.as_str().to_string()),
         );

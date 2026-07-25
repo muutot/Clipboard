@@ -826,7 +826,7 @@ fn rename_item(
     new_name: String,
 ) -> Result<ClipboardItem, String> {
     let items = database
-        .get_items_by_ids(&[id.clone()])
+        .get_items_by_ids(std::slice::from_ref(&id))
         .map_err(|e| e.to_string())?;
     let item = items
         .into_iter()
@@ -867,7 +867,7 @@ fn update_clipboard_text(
     new_text_content: String,
 ) -> Result<bool, String> {
     let items = database
-        .get_items_by_ids(&[id.clone()])
+        .get_items_by_ids(std::slice::from_ref(&id))
         .map_err(|e| e.to_string())?;
     let mut item = items
         .into_iter()
@@ -947,7 +947,7 @@ fn duplicate_clipboard_item(
     id: String,
 ) -> Result<String, String> {
     let items = database
-        .get_items_by_ids(&[id.clone()])
+        .get_items_by_ids(std::slice::from_ref(&id))
         .map_err(|e| e.to_string())?;
     let mut item = items
         .into_iter()
@@ -1446,7 +1446,7 @@ fn save_window_position(
     let mut guard = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    WindowManager::save_position(&mut *guard, x, y, width, height)
+    WindowManager::save_position(&mut guard, x, y, width, height)
 }
 
 #[tauri::command]
@@ -1767,8 +1767,7 @@ pub fn run() {
                                 let image_data = platform::windows_clipboard::read_clipboard_image();
                                 let file_paths = platform::windows_clipboard::read_clipboard_file_paths();
 
-                                if image_data.is_some() {
-                                    let (img, img_width, img_height) = image_data.unwrap();
+                                if let Some((img, img_width, img_height)) = image_data {
                                     let img_hash = content::hash::compute_media_hash("image", &img);
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
