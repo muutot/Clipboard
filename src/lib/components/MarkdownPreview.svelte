@@ -7,6 +7,33 @@
 
   const html = $derived(parseMarkdown(content));
 
+  type MarkdownUrlKind = "link" | "image";
+
+  /**
+   * Only allow URLs that the preview can safely hand to the webview.  In
+   * particular, clipboard content must never be able to create a javascript:
+   * or data: URL inside the {@html} output below.
+   */
+  function sanitizeUrl(raw: string, kind: MarkdownUrlKind): string | null {
+    const value = decodeHtmlEntities(raw).trim();
+    if (!value || /[\u0000-\u001f\u007f]/.test(value)) return null;
+
+    let parsed: URL;
+    try {
+      const base = typeof window === "undefined" ? "https://clipboard.invalid/" : window.location.href;
+      parsed = new URL(value, base);
+    } catch {
+      return null;
+    }
+
+    const allowedSchemes = kind === "image"
+      ? new Set(["http:", "https:"])
+      : new Set(["http:", "https:", "mailto:", "tel:"]);
+    if (!allowedSchemes.has(parsed.protocol.toLowerCase())) return null;
+
+    return escapeHtml(parsed.href);
+  }
+
   function parseMarkdown(text: string): string {
     let html = escapeHtml(text);
 
@@ -24,11 +51,24 @@
     // Italic
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-    // Images
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-image" />');
+    // Images.  Unsafe URLs are kept as text instead of becoming a live
+    // resource in the webview.
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
+      (_m: string, alt: string, rawUrl: string) => {
+        const url = sanitizeUrl(rawUrl, "image");
+        return url
+          ? `<img src="${url}" alt="${alt}" class="md-image" />`
+          : `<span class="md-unsafe-image">${alt}</span>`;
+      });
 
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="md-link">$1</a>');
+    // Links.  Keep the label visible when a scheme is not explicitly allowed.
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+      (_m: string, label: string, rawUrl: string) => {
+        const url = sanitizeUrl(rawUrl, "link");
+        return url
+          ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`
+          : `<span class="md-unsafe-link">${label}</span>`;
+      });
 
     // Horizontal rules
     html = html.replace(/^(---|\*\*\*|___)\s*$/gm, '<hr class="md-hr" />');
@@ -102,7 +142,20 @@
     return text
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function decodeHtmlEntities(text: string): string {
+    // The parser escapes text before applying markdown substitutions, so
+    // decode only the entities we create when validating a captured URL.
+    return text
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
   }
 </script>
 
