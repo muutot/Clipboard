@@ -9,9 +9,12 @@
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
     loadClipboardHistory,
+    loadDeletedClipboardHistory,
     persistDelete,
-    persistHardDelete,
     persistRestore,
+    persistBatchRestore,
+    persistPermanentDelete,
+    persistBatchPermanentDelete,
     persistFavorite,
     persistBatchFavorite,
     persistBatchDelete,
@@ -74,8 +77,14 @@
 
   const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 150, overscan: 5 };
   const VIRTUAL_SCROLL_THRESHOLD = 50;
+  const DELETED_HISTORY_PAGE_SIZE = 100;
 
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
+  let deletedHistoryLoaded = $state(false);
+  let deletedHistoryLoading = $state(false);
+  let deletedHistoryOffset = $state(0);
+  let deletedHistoryHasMore = $state(true);
+  let deletedHistoryRequestId = 0;
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
   let selectedId = $state(demoClipboardItems[0]?.id ?? "");
@@ -154,7 +163,8 @@
 
   const filteredItems = $derived.by(() => {
     const normalizedQuery = query.trim();
-    const usesIndexedResults = indexedItems !== null && indexedQuery === normalizedQuery;
+    const usesIndexedResults =
+      activeFilter !== "deleted" && indexedItems !== null && indexedQuery === normalizedQuery;
     const candidates = usesIndexedResults ? (indexedItems ?? []) : items;
 
     const dateRange = resolveDateRange(dateFilter);
@@ -216,6 +226,12 @@
   });
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
+  const selectedDeletedCount = $derived(
+    items.filter((item) => selectedIds.has(item.id) && !!item.deleted).length,
+  );
+  const selectedActiveCount = $derived(
+    items.filter((item) => selectedIds.has(item.id) && !item.deleted).length,
+  );
   const resultSummary = $derived(
     searchPending
       ? _t("status.searching")
@@ -279,7 +295,7 @@
     indexedItems = null;
     indexedQuery = "";
 
-    if (!requestedQuery) {
+    if (!requestedQuery || activeFilter === "deleted") {
       searchPending = false;
       return;
     }
@@ -333,6 +349,13 @@
       }
     }
     if (!changed && selectedIds.size > 0 && filteredItems.length === 0) {
+      selectedIds = new Set();
+    }
+  });
+
+  $effect(() => {
+    if (!$generalSettings.useRecycleBin && activeFilter === "deleted") {
+      activeFilter = "all";
       selectedIds = new Set();
     }
   });
@@ -633,6 +656,58 @@
     };
   });
 
+  function mergeDeletedHistoryPage(page: ClipboardItem[]) {
+    const incoming = new Map(page.map((item) => [item.id, item]));
+    const merged = items.map((item) => {
+      const persisted = incoming.get(item.id);
+      // A local restore/delete mutation may have landed while the page was
+      // in flight. Do not let a stale recycle-bin response undo a restore.
+      if (!persisted || !item.deleted) return item;
+      return { ...item, ...persisted, deleted: true };
+    });
+    const existingIds = new Set(merged.map((item) => item.id));
+    for (const item of page) {
+      if (!existingIds.has(item.id)) merged.push({ ...item, deleted: true });
+    }
+    items = merged;
+  }
+
+  async function loadDeletedHistoryPage(): Promise<void> {
+    if (deletedHistoryLoading || !deletedHistoryHasMore) return;
+
+    // The browser preview has no persisted recycle bin. Mark the page as
+    // exhausted so selecting the filter remains a harmless local operation.
+    if (!isTauriRuntime()) {
+      deletedHistoryLoaded = true;
+      deletedHistoryHasMore = false;
+      return;
+    }
+
+    deletedHistoryLoading = true;
+    const requestId = ++deletedHistoryRequestId;
+    const offset = deletedHistoryOffset;
+    try {
+      const page = await loadDeletedClipboardHistory(DELETED_HISTORY_PAGE_SIZE, offset);
+      if (requestId !== deletedHistoryRequestId) return;
+      if (page === null) {
+        deletedHistoryLoaded = true;
+        deletedHistoryHasMore = false;
+        return;
+      }
+
+      mergeDeletedHistoryPage(page);
+      deletedHistoryOffset += page.length;
+      deletedHistoryLoaded = true;
+      deletedHistoryHasMore = page.length === DELETED_HISTORY_PAGE_SIZE;
+    } catch (error) {
+      if (requestId !== deletedHistoryRequestId) return;
+      console.error("Unable to load deleted clipboard history", error);
+      statusMessage = _t("app.databaseLoadFailed");
+    } finally {
+      if (requestId === deletedHistoryRequestId) deletedHistoryLoading = false;
+    }
+  }
+
   // --- Handlers ---
 
   async function openSettings() {
@@ -658,7 +733,14 @@
   }
 
   function setFilter(filter: ClipboardFilter) {
+    if (filter === "deleted" && !$generalSettings.useRecycleBin) return;
     activeFilter = filter;
+    selectedIds = new Set();
+    indexedItems = null;
+    indexedQuery = "";
+    if (filter === "deleted" && !deletedHistoryLoaded) {
+      void loadDeletedHistoryPage();
+    }
   }
 
   function selectItem(id: string, event?: MouseEvent) {
@@ -732,13 +814,17 @@
   function deleteItem(id: string) {
     const item = items.find((i) => i.id === id);
     if (item?.deleted) {
-      hardDeleteItem(id);
+      permanentlyDeleteItem(id);
       return;
     }
     if (!$generalSettings.useRecycleBin) {
-      hardDeleteItem(id);
+      permanentlyDeleteItem(id);
       return;
     }
+
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
 
     // Soft delete: mark as deleted, don't remove from list
     items = items.map((item) => (item.id === id ? { ...item, deleted: true } : item));
@@ -756,27 +842,64 @@
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        selectedIds = previousSelectedIds;
         showToast(_t("app.deleteFailed"), "error");
       });
   }
 
-  function hardDeleteItem(id: string) {
+  function permanentlyDeleteItem(id: string) {
+    const target = items.find((item) => item.id === id);
+    if (!target) return;
+
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
+
     items = items.filter((item) => item.id !== id);
     if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
-    void persistHardDelete(id).catch(() => {});
+
+    void persistPermanentDelete(id)
+      .then((removed) => {
+        if (removed === false) throw new Error("record not found");
+        showToast(_t("toast.deleteSuccess"), "success");
+      })
+      .catch((error) => {
+        console.error("Unable to permanently delete clipboard item", error);
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        selectedIds = previousSelectedIds;
+        showToast(_t("app.deleteFailed"), "error");
+      });
   }
 
   function restoreItem(id: string) {
+    const target = items.find((item) => item.id === id);
+    if (!target?.deleted) return;
+
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+
     items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
         item.id === id ? { ...item, deleted: false } : item,
       );
     }
-    void persistRestore(id).catch(() => {});
-    showToast(_t("toast.restoreSuccess") || "已恢复", "success");
+    void persistRestore(id)
+      .then((restored) => {
+        if (restored === false) throw new Error("record not found");
+        const translated = _t("toast.restoreSuccess");
+        showToast(translated === "toast.restoreSuccess" ? "Restored" : translated, "success");
+      })
+      .catch((error) => {
+        console.error("Unable to restore clipboard item", error);
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        showToast(_t("app.deleteFailed"), "error");
+      });
   }
 
   function moveToTop(id: string) {
@@ -1069,30 +1192,166 @@
       });
   }
 
-  function bulkDelete() {
-    const ids = [...selectedIds];
-    const previousItems = items;
-    const previousIndexedItems = indexedItems;
-    const previousSelectedIds = new Set(selectedIds);
-    items = items.filter((i) => !selectedIds.has(i.id));
-    if (indexedItems) {
-      indexedItems = indexedItems.filter((item) => !selectedIds.has(item.id));
-    }
-    selectedIds = new Set();
+  function bulkRestore() {
+    const ids = items.filter((item) => selectedIds.has(item.id) && item.deleted).map((item) => item.id);
+    if (ids.length === 0) return;
 
-    void persistBatchDelete(ids)
-      .then((removed) => {
-        if (removed === false) throw new Error("batch delete failed");
-        showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
+    items = items.map((item) => (ids.includes(item.id) ? { ...item, deleted: false } : item));
+    if (indexedItems) {
+      indexedItems = indexedItems.map((item) =>
+        ids.includes(item.id) ? { ...item, deleted: false } : item,
+      );
+    }
+    selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
+
+    void persistBatchRestore(ids)
+      .then((restored) => {
+        if (restored === false) throw new Error("batch restore failed");
+        const translated = _t("toast.restoreSuccess");
+        showToast(
+          translated === "toast.restoreSuccess" ? "Restored" : translated,
+          "success",
+        );
       })
       .catch((error) => {
-        console.error("Bulk delete failed", error);
+        console.error("Bulk restore failed", error);
         items = previousItems;
         indexedItems = previousIndexedItems;
         selectedIds = previousSelectedIds;
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       });
+  }
+
+  function bulkPermanentDelete() {
+    const ids = items.filter((item) => selectedIds.has(item.id) && item.deleted).map((item) => item.id);
+    if (ids.length === 0) return;
+
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
+    const previousDetailItem = detailItem;
+    items = items.filter((item) => !ids.includes(item.id));
+    if (indexedItems) indexedItems = indexedItems.filter((item) => !ids.includes(item.id));
+    selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
+    if (detailItem && ids.includes(detailItem.id)) detailItem = null;
+
+    void persistBatchPermanentDelete(ids)
+      .then((removed) => {
+        if (removed === false) throw new Error("batch permanent delete failed");
+        showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
+      })
+      .catch((error) => {
+        console.error("Bulk permanent delete failed", error);
+        items = previousItems;
+        indexedItems = previousIndexedItems;
+        selectedIds = previousSelectedIds;
+        detailItem = previousDetailItem;
+        statusMessage = _t("app.deleteFailed");
+        showToast(_t("app.deleteFailed"), "error");
+      });
+  }
+
+  function bulkDelete() {
+    const selectedItems = items.filter((item) => selectedIds.has(item.id));
+    if (selectedItems.length === 0) return;
+
+    const useRecycleBin = $generalSettings.useRecycleBin;
+    const softIds = useRecycleBin
+      ? selectedItems.filter((item) => !item.deleted).map((item) => item.id)
+      : [];
+    const permanentIds = useRecycleBin
+      ? selectedItems.filter((item) => item.deleted).map((item) => item.id)
+      : selectedItems.map((item) => item.id);
+    const operationIds = new Set([...softIds, ...permanentIds]);
+    if (operationIds.size === 0) return;
+
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSelectedIds = new Set(selectedIds);
+    const previousDetailItem = detailItem;
+
+    items = items
+      .filter((item) => !permanentIds.includes(item.id))
+      .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
+    if (indexedItems) {
+      indexedItems = indexedItems
+        .filter((item) => !permanentIds.includes(item.id))
+        .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
+    }
+    selectedIds = new Set();
+    if (detailItem && permanentIds.includes(detailItem.id)) detailItem = null;
+
+    const operations: {
+      ids: string[];
+      permanent: boolean;
+      run: () => Promise<boolean | null>;
+    }[] = [];
+    if (softIds.length > 0) {
+      operations.push({ ids: softIds, permanent: false, run: () => persistBatchDelete(softIds) });
+    }
+    if (permanentIds.length > 0) {
+      operations.push({
+        ids: permanentIds,
+        permanent: true,
+        run: () => persistBatchPermanentDelete(permanentIds),
+      });
+    }
+
+    void Promise.all(
+      operations.map(async (operation) => {
+        try {
+          const result = await operation.run();
+          return { ...operation, ok: result !== false };
+        } catch (error) {
+          console.error(
+            operation.permanent ? "Bulk permanent delete failed" : "Bulk delete failed",
+            error,
+          );
+          return { ...operation, ok: false };
+        }
+      }),
+    ).then((outcomes) => {
+      const successfulSoft = new Set(
+        outcomes.filter((outcome) => outcome.ok && !outcome.permanent).flatMap((o) => o.ids),
+      );
+      const successfulPermanent = new Set(
+        outcomes.filter((outcome) => outcome.ok && outcome.permanent).flatMap((o) => o.ids),
+      );
+      const failedIds = new Set(
+        outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids),
+      );
+      const succeededIds = new Set([...successfulSoft, ...successfulPermanent]);
+
+      // Rebuild from the snapshot so a partially failed mixed batch mirrors
+      // exactly which backend transaction succeeded.
+      items = previousItems
+        .filter((item) => !successfulPermanent.has(item.id))
+        .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
+      if (previousIndexedItems) {
+        indexedItems = previousIndexedItems
+          .filter((item) => !successfulPermanent.has(item.id))
+          .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
+      } else {
+        indexedItems = null;
+      }
+      selectedIds = new Set([...previousSelectedIds].filter((id) => !succeededIds.has(id)));
+      if (previousDetailItem && !successfulPermanent.has(previousDetailItem.id)) {
+        detailItem = previousDetailItem;
+      } else if (successfulPermanent.has(previousDetailItem?.id ?? "")) {
+        detailItem = null;
+      }
+
+      if (failedIds.size > 0) {
+        statusMessage = _t("app.deleteFailed");
+        showToast(_t("app.deleteFailed"), "error");
+      } else {
+        showToast(_t("toast.bulkDeleteSuccess", { count: succeededIds.size }), "success");
+      }
+    });
   }
 
   function activateSelected() {
@@ -1114,16 +1373,19 @@
   }
 
   function clearHistory() {
-    const nonFavorites = items.filter((item) => !item.favorite);
+    // The clear-history command soft-deletes active records only. Keep
+    // records already in the recycle bin visible until they are restored or
+    // permanently deleted explicitly.
+    const nonFavorites = items.filter((item) => !item.favorite && !item.deleted);
     if (nonFavorites.length === 0) {
       showToast(_t("toast.noRecordsToClear"), "info");
       return;
     }
 
     const removedIds = new Set(nonFavorites.map((i) => i.id));
-    items = items.filter((item) => item.favorite);
+    items = items.filter((item) => item.favorite || item.deleted);
     if (indexedItems) {
-      indexedItems = indexedItems.filter((item) => item.favorite);
+      indexedItems = indexedItems.filter((item) => item.favorite || item.deleted);
     }
     selectedIds = new Set([...selectedIds].filter((x) => !removedIds.has(x)));
 
@@ -1263,6 +1525,14 @@
   function handleHistoryScroll() {
     if (historyListEl) {
       scrollTop = historyListEl.scrollTop;
+      if (
+        activeFilter === "deleted" &&
+        deletedHistoryHasMore &&
+        !deletedHistoryLoading &&
+        historyListEl.scrollTop + historyListEl.clientHeight >= historyListEl.scrollHeight - 180
+      ) {
+        void loadDeletedHistoryPage();
+      }
     }
   }
 
@@ -1642,9 +1912,28 @@
         <button type="button" onclick={bulkFavorite}
           >&#42; {_t("bulk.favoriteN", { count: selectedIds.size })}</button
         >
-        <button type="button" class="danger" onclick={bulkDelete}
-          >&#47;&#47; {_t("bulk.deleteN", { count: selectedIds.size })}</button
-        >
+        {#if selectedActiveCount > 0}
+          <button type="button" class="danger" onclick={bulkDelete}
+            >&#47;&#47; {_t("bulk.deleteN", { count: selectedActiveCount })}</button
+          >
+        {/if}
+        {#if selectedDeletedCount > 0}
+          <button
+            type="button"
+            onclick={bulkRestore}
+            title="Restore selected records"
+            aria-label="Restore selected records"
+            >&#8634; {selectedDeletedCount}</button
+          >
+          <button
+            type="button"
+            class="danger"
+            onclick={bulkPermanentDelete}
+            title="Permanently delete selected records"
+            aria-label="Permanently delete selected records"
+            >&#47;&#47; {_t("bulk.deleteN", { count: selectedDeletedCount })}</button
+          >
+        {/if}
       </div>
     </div>
   {/if}

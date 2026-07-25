@@ -21,6 +21,23 @@ export async function loadClipboardHistory(
   return records.map(toClipboardItem);
 }
 
+/** Loads the persisted recycle-bin page. Deleted records are marked locally
+ * because the regular ClipboardItem payload intentionally represents active
+ * history only. */
+export async function loadDeletedClipboardHistory(
+  limit = 100,
+  offset = 0,
+): Promise<ClipboardItem[] | null> {
+  if (!isTauriRuntime()) return null;
+
+  const records = await invoke<PersistedClipboardItem[]>("list_deleted_clipboard_items", {
+    limit,
+    offset,
+  });
+
+  return records.map((record) => ({ ...toClipboardItem(record), deleted: true }));
+}
+
 export async function searchClipboardHistory(
   query: string,
   limit = 100,
@@ -57,6 +74,24 @@ export async function persistRestore(id: string): Promise<boolean | null> {
   if (!isTauriRuntime()) return null;
 
   return invoke<boolean>("restore_clipboard_item", { id });
+}
+
+export async function persistBatchRestore(ids: string[]): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("batch_restore_clipboard_items", { ids });
+}
+
+export async function persistPermanentDelete(id: string): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("permanently_delete_clipboard_item", { id });
+}
+
+export async function persistBatchPermanentDelete(ids: string[]): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("batch_permanently_delete_clipboard_items", { ids });
 }
 
 export async function persistBatchFavorite(
