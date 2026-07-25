@@ -66,6 +66,7 @@
   const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 150, overscan: 5 };
   const VIRTUAL_SCROLL_THRESHOLD = 50;
   const DELETED_HISTORY_PAGE_SIZE = 100;
+  const MAIN_WINDOW_MIN_WIDTH = 730;
 
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
   let deletedHistoryLoaded = $state(false);
@@ -548,7 +549,7 @@
       return {
         x: position.x,
         y: position.y,
-        width: size.width,
+        width: Math.max(size.width, MAIN_WINDOW_MIN_WIDTH),
         height: size.height,
       };
     }
@@ -614,8 +615,12 @@
         const saved = await restoreWindowPosition();
         if (!$generalSettings.rememberWindowPosition) return;
         if (saved && saved.width > 0 && saved.height > 0) {
-          await appWindow.setSize(new PhysicalSize(saved.width, saved.height));
+          const width = Math.max(saved.width, MAIN_WINDOW_MIN_WIDTH);
+          await appWindow.setSize(new PhysicalSize(width, saved.height));
           await appWindow.setPosition(new PhysicalPosition(saved.x, saved.y));
+          if (width !== saved.width) {
+            await saveWindowPosition({ ...saved, width });
+          }
           try {
             localStorage.removeItem("windowPosition");
           } catch {}
@@ -630,7 +635,7 @@
         const migrated: WindowPosition = {
           x: legacy.x,
           y: legacy.y,
-          width: size.width,
+          width: Math.max(size.width, MAIN_WINDOW_MIN_WIDTH),
           height: size.height,
         };
         if (!$generalSettings.rememberWindowPosition) return;
