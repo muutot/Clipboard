@@ -123,6 +123,25 @@
   let detScoreThreshold = $state(0.3);
   let detBoxThreshold = $state(0.6);
   let detUnclipRatio = $state(1.5);
+  let detScoreSlider = $state<HTMLInputElement | null>(null);
+  let detBoxSlider = $state<HTMLInputElement | null>(null);
+  let detUnclipSlider = $state<HTMLInputElement | null>(null);
+
+  function updateSliderTrack(el: HTMLInputElement | null) {
+    if (!el) return;
+    const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
+    el.style.setProperty("--slider-pct", `${pct}%`);
+  }
+
+  $effect(() => {
+    if (activeSection !== "ocr") return;
+    detScoreThreshold;
+    detBoxThreshold;
+    detUnclipRatio;
+    updateSliderTrack(detScoreSlider);
+    updateSliderTrack(detBoxSlider);
+    updateSliderTrack(detUnclipSlider);
+  });
 
   $effect(() => {
     if (open) {
@@ -579,8 +598,7 @@
           <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
           <span class="setting-label">OCR 引擎</span>
           <select
-            class="model-select"
-            style="flex:1; max-width:180px;"
+            class="model-select ocr-engine-select"
             bind:value={ocrEngine}
             onchange={() => saveOcrEngine(ocrEngine)}
           >
@@ -592,7 +610,7 @@
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
           <span class="setting-label">模型</span>
-          <select bind:value={modelVariant} class="model-select" style="flex:1; max-width:200px;">
+          <select bind:value={modelVariant} class="model-select ocr-model-select">
             <option value="tiny">tiny (~5MB){installedVariant === "tiny" ? " ✓" : ""}</option>
             <option value="medium">medium (~15MB){installedVariant === "medium" ? " ✓" : ""}</option
             >
@@ -619,76 +637,64 @@
               <p>调整文本区域检测参数，影响空格与换行的识别</p>
             </div>
           </div>
-          <div style="display:grid; gap:12px;">
-            <div>
-              <label
-                for="det-score"
-                style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;"
-              >
+          <div class="ocr-parameter-grid">
+            <div class="ocr-parameter">
+              <label class="ocr-parameter-label" for="det-score">
                 <span>分数阈值 (score)</span>
-                <span style="color:#d7d7d7;">{detScoreThreshold.toFixed(2)}</span>
+                <span class="ocr-parameter-value">{detScoreThreshold.toFixed(2)}</span>
               </label>
               <input
                 id="det-score"
+                class="transparency-slider"
                 type="range"
                 min="0.05"
                 max="0.95"
                 step="0.05"
                 bind:value={detScoreThreshold}
+                bind:this={detScoreSlider}
                 onchange={() => saveDetConfig()}
-                style="width:100%; accent-color:#4a90d9;"
               />
-              <div
-                style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;"
-              >
+              <div class="ocr-parameter-scale">
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
-            <div>
-              <label
-                for="det-box"
-                style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;"
-              >
+            <div class="ocr-parameter">
+              <label class="ocr-parameter-label" for="det-box">
                 <span>框阈值 (box)</span>
-                <span style="color:#d7d7d7;">{detBoxThreshold.toFixed(2)}</span>
+                <span class="ocr-parameter-value">{detBoxThreshold.toFixed(2)}</span>
               </label>
               <input
                 id="det-box"
+                class="transparency-slider"
                 type="range"
                 min="0.1"
                 max="0.95"
                 step="0.05"
                 bind:value={detBoxThreshold}
+                bind:this={detBoxSlider}
                 onchange={() => saveDetConfig()}
-                style="width:100%; accent-color:#4a90d9;"
               />
-              <div
-                style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;"
-              >
+              <div class="ocr-parameter-scale">
                 <span>低 (更多区域)</span><span>高 (更少区域)</span>
               </div>
             </div>
-            <div>
-              <label
-                for="det-unclip"
-                style="display:flex; justify-content:space-between; font-size:var(--font-size-secondary,11px); color:#8a8a8a; margin-bottom:4px;"
-              >
+            <div class="ocr-parameter">
+              <label class="ocr-parameter-label" for="det-unclip">
                 <span>扩展比例 (unclip)</span>
-                <span style="color:#d7d7d7;">{detUnclipRatio.toFixed(1)}</span>
+                <span class="ocr-parameter-value">{detUnclipRatio.toFixed(1)}</span>
               </label>
               <input
                 id="det-unclip"
+                class="transparency-slider"
                 type="range"
                 min="1.0"
                 max="4.0"
                 step="0.1"
                 bind:value={detUnclipRatio}
+                bind:this={detUnclipSlider}
                 onchange={() => saveDetConfig()}
-                style="width:100%; accent-color:#4a90d9;"
               />
-              <div
-                style="display:flex; justify-content:space-between; font-size:var(--font-size-tiny,10px); color:#555; margin-top:2px;"
-              >
+              <div class="ocr-parameter-scale">
                 <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
               </div>
             </div>
@@ -703,7 +709,7 @@
               <p>当前 OCR 队列与已识别统计</p>
             </div>
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="ocr-stat-grid">
             <div class="stat-item">
               <span class="stat-value">{ocrPending}</span><span class="stat-label">待处理</span>
             </div>
@@ -1319,6 +1325,127 @@
   .setting-heading p {
     margin-top: 2px;
     font-size: var(--settings-description-size);
+  }
+
+  .ocr-engine-select {
+    flex: 1;
+    max-width: 180px;
+  }
+
+  .ocr-model-select {
+    flex: 1;
+    max-width: 200px;
+  }
+
+  .ocr-parameter-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .ocr-parameter-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    color: #8a8a8a;
+    font-size: var(--settings-description-size);
+  }
+
+  .ocr-parameter-value {
+    flex-shrink: 0;
+    color: #d7d7d7;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ocr-parameter-scale {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 8px;
+    color: #555;
+    font-size: var(--settings-note-size);
+  }
+
+  .transparency-slider {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 12px;
+    padding: 0;
+    border: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a2a;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .transparency-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      #4aa8ff 0%,
+      #4aa8ff var(--slider-pct, 50%),
+      #2a2a2a var(--slider-pct, 50%),
+      #2a2a2a 100%
+    );
+  }
+
+  .transparency-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    border: 2px solid #4aa8ff;
+    background: #1a1a1a;
+    cursor: pointer;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
+  }
+
+  .transparency-slider::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    transform: scale(1.15);
+  }
+
+  .transparency-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a2a;
+  }
+
+  .transparency-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #4aa8ff;
+  }
+
+  .transparency-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #4aa8ff;
+    background: #1a1a1a;
+    cursor: pointer;
+    transition:
+      box-shadow 100ms ease,
+      transform 100ms ease;
+  }
+
+  .transparency-slider::-moz-range-thumb:hover {
+    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    transform: scale(1.15);
+  }
+
+  .ocr-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 
   .pending-path code {
