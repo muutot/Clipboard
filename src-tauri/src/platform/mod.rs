@@ -6,6 +6,12 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, Runtime,
+};
+use tauri_plugin_autostart::ManagerExt;
 
 use crate::config::ConfigStore;
 use crate::keyboard::ShortcutBinding;
@@ -525,26 +531,106 @@ impl GlobalShortcutManager {
 }
 
 // ---------------------------------------------------------------------------
-//  TrayMenuItem + SystemTray (unchanged)
+//  Autostart + system tray
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
-pub enum TrayMenuItem {
-    Item { label: String, action: String },
-    Separator,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutostartAction {
+    Enable,
+    Disable,
+    NoChange,
+}
+
+pub fn decide_autostart_action(desired: bool, actual: bool) -> AutostartAction {
+    match (desired, actual) {
+        (true, false) => AutostartAction::Enable,
+        (false, true) => AutostartAction::Disable,
+        _ => AutostartAction::NoChange,
+    }
+}
+
+pub fn sync_autostart<R: Runtime>(app: &AppHandle<R>, desired: bool) -> Result<(), String> {
+    let manager = app.autolaunch();
+    let actual = manager
+        .is_enabled()
+        .map_err(|error| format!("failed to inspect the autostart registration: {error}"))?;
+
+    match decide_autostart_action(desired, actual) {
+        AutostartAction::Enable => manager
+            .enable()
+            .map_err(|error| format!("failed to enable autostart: {error}")),
+        AutostartAction::Disable => manager
+            .disable()
+            .map_err(|error| format!("failed to disable autostart: {error}")),
+        AutostartAction::NoChange => Ok(()),
+    }
 }
 
 pub struct SystemTray;
 
 impl SystemTray {
-    pub fn create() -> Result<Self, String> {
-        println!("system tray icon created (placeholder)");
+    const SHOW_MENU_ID: &'static str = "tray-show";
+    const QUIT_MENU_ID: &'static str = "tray-quit";
+
+    pub fn create<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
+        let show_item =
+            MenuItem::with_id(app, Self::SHOW_MENU_ID, "显示主窗口", true, None::<&str>)
+                .map_err(|error| format!("failed to create the tray show item: {error}"))?;
+        let quit_item = MenuItem::with_id(app, Self::QUIT_MENU_ID, "退出", true, None::<&str>)
+            .map_err(|error| format!("failed to create the tray quit item: {error}"))?;
+        let menu = Menu::with_items(app, &[&show_item, &quit_item])
+            .map_err(|error| format!("failed to create the tray menu: {error}"))?;
+
+        let mut builder = TrayIconBuilder::with_id("main-tray")
+            .menu(&menu)
+            .tooltip("Clipboard")
+            .show_menu_on_left_click(false)
+            .on_menu_event(|app, event| {
+                if event.id() == Self::SHOW_MENU_ID {
+                    show_main_window(app);
+                } else if event.id() == Self::QUIT_MENU_ID {
+                    app.exit(0);
+                }
+            })
+            .on_tray_icon_event(|tray, event| {
+                if matches!(
+                    event,
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    }
+                ) {
+                    show_main_window(tray.app_handle());
+                }
+            });
+
+        if let Some(icon) = app.default_window_icon() {
+            builder = builder.icon(icon.clone());
+        }
+
+        builder
+            .build(app)
+            .map_err(|error| format!("failed to create the system tray icon: {error}"))?;
+
         Ok(Self)
     }
+}
 
-    pub fn set_menu(&mut self, _items: Vec<TrayMenuItem>) -> Result<(), String> {
-        println!("system tray menu updated (placeholder)");
-        Ok(())
+fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        eprintln!("[tray] main window is unavailable");
+        return;
+    };
+
+    if let Err(error) = window.show() {
+        eprintln!("[tray] failed to show the main window: {error}");
+    }
+    if let Err(error) = window.unminimize() {
+        eprintln!("[tray] failed to restore the main window: {error}");
+    }
+    if let Err(error) = window.set_focus() {
+        eprintln!("[tray] failed to focus the main window: {error}");
     }
 }
 
@@ -746,6 +832,26 @@ mod tests {
 
         manager.unregister_all().unwrap();
         assert!(manager.shortcuts.is_empty());
+    }
+
+    #[test]
+    fn autostart_action_only_changes_mismatched_state() {
+        assert_eq!(
+            decide_autostart_action(true, false),
+            AutostartAction::Enable
+        );
+        assert_eq!(
+            decide_autostart_action(false, true),
+            AutostartAction::Disable
+        );
+        assert_eq!(
+            decide_autostart_action(true, true),
+            AutostartAction::NoChange
+        );
+        assert_eq!(
+            decide_autostart_action(false, false),
+            AutostartAction::NoChange
+        );
     }
 
     #[test]

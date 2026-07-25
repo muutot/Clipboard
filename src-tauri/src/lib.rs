@@ -31,8 +31,8 @@ use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::windows_hotkey::{shortcut_to_windows_hotkey, HotkeyManager};
 use platform::{
-    ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard, SystemTray,
-    WindowManager,
+    sync_autostart, ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard,
+    SystemTray, WindowManager,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
@@ -1920,6 +1920,7 @@ struct WindowConfigInfo {
 
 #[tauri::command]
 fn set_window_config(
+    app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     launch_at_startup: Option<bool>,
     close_to_tray: Option<bool>,
@@ -1937,6 +1938,12 @@ fn set_window_config(
     if let Some(v) = single_instance {
         config.set_single_instance(v).map_err(|e| e.to_string())?;
     }
+
+    drop(config);
+    if let Some(desired) = launch_at_startup {
+        sync_autostart(&app, desired)?;
+    }
+
     Ok(())
 }
 
@@ -2079,6 +2086,11 @@ fn validate_search_index(search_index: tauri::State<'_, SearchIndex>) -> Result<
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("Clipboard")
+                .build(),
+        )
         .setup(|app| {
             let startup_timer = &mut StartupTimer::start();
             let project_directory = std::env::current_exe()
@@ -2543,6 +2555,7 @@ pub fn run() {
         }
 
 
+            let launch_at_startup = config.launch_at_startup();
             app.manage(Mutex::new(config));
             app.manage(paths);
             app.manage(database);
@@ -2554,7 +2567,39 @@ pub fn run() {
             app.manage(ocr_worker);
             app.manage(Mutex::new(LocalApiServer::new(0)));
 
-            let _tray = SystemTray::create().ok();
+            if let Err(error) = sync_autostart(app.handle(), launch_at_startup) {
+                eprintln!("[autostart] failed to synchronize startup registration: {error}");
+            }
+
+            SystemTray::create(app.handle())?;
+
+            if let Some(window) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                let window_to_hide = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        let close_to_tray = match app_handle
+                            .state::<Mutex<ConfigStore>>()
+                            .lock()
+                        {
+                            Ok(config) => config.close_to_tray(),
+                            Err(_) => {
+                                eprintln!(
+                                    "[tray] configuration lock is poisoned; allowing window close"
+                                );
+                                false
+                            }
+                        };
+
+                        if close_to_tray {
+                            api.prevent_close();
+                            if let Err(error) = window_to_hide.hide() {
+                                eprintln!("[tray] failed to hide the main window: {error}");
+                            }
+                        }
+                    }
+                });
+            }
 
             // Register global hotkey from keyboard config
             let mut hotkey_manager = HotkeyManager::new();
