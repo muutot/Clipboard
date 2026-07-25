@@ -387,10 +387,7 @@
         // locally mutated during that window instead of replacing them.
         const deletedItems = items.filter((item) => item.deleted);
         const storedIds = new Set(storedItems.map((item) => item.id));
-        items = [
-          ...storedItems,
-          ...deletedItems.filter((item) => !storedIds.has(item.id)),
-        ];
+        items = [...storedItems, ...deletedItems.filter((item) => !storedIds.has(item.id))];
         selectedId = storedItems[0]?.id ?? "";
       })
       .catch((error) => {
@@ -681,6 +678,18 @@
     items = merged;
   }
 
+  // Deleting, restoring, or permanently removing a row changes the result
+  // set behind the recycle-bin OFFSET. Reset the cursor before loading again
+  // so a mutation in an earlier page cannot cause the next row to be skipped.
+  function invalidateDeletedHistoryPagination() {
+    deletedHistoryRequestId += 1;
+    deletedHistoryLoading = false;
+    deletedHistoryOffset = 0;
+    deletedHistoryLoaded = false;
+    deletedHistoryHasMore = true;
+    if (activeFilter === "deleted") void loadDeletedHistoryPage();
+  }
+
   async function loadDeletedHistoryPage(): Promise<void> {
     if (deletedHistoryLoading || !deletedHistoryHasMore) return;
 
@@ -847,6 +856,7 @@
     void persistDelete(id)
       .then((removed) => {
         if (removed === false) throw new Error("record not found");
+        invalidateDeletedHistoryPagination();
         showToast(_t("toast.deleteSuccess"), "success");
       })
       .catch((error) => {
@@ -873,6 +883,7 @@
     void persistPermanentDelete(id)
       .then((removed) => {
         if (removed === false) throw new Error("record not found");
+        invalidateDeletedHistoryPagination();
         showToast(_t("toast.deleteSuccess"), "success");
       })
       .catch((error) => {
@@ -929,6 +940,7 @@
     void persistRestore(id)
       .then((restored) => {
         if (restored === false) throw new Error("record not found");
+        invalidateDeletedHistoryPagination();
         const translated = _t("toast.restoreSuccess");
         showToast(translated === "toast.restoreSuccess" ? "Restored" : translated, "success");
       })
@@ -1231,7 +1243,9 @@
   }
 
   function bulkRestore() {
-    const ids = items.filter((item) => selectedIds.has(item.id) && item.deleted).map((item) => item.id);
+    const ids = items
+      .filter((item) => selectedIds.has(item.id) && item.deleted)
+      .map((item) => item.id);
     if (ids.length === 0) return;
 
     const previousItems = items.map((entry) => ({ ...entry }));
@@ -1248,11 +1262,9 @@
     void persistBatchRestore(ids)
       .then((restored) => {
         if (restored === false) throw new Error("batch restore failed");
+        invalidateDeletedHistoryPagination();
         const translated = _t("toast.restoreSuccess");
-        showToast(
-          translated === "toast.restoreSuccess" ? "Restored" : translated,
-          "success",
-        );
+        showToast(translated === "toast.restoreSuccess" ? "Restored" : translated, "success");
       })
       .catch((error) => {
         console.error("Bulk restore failed", error);
@@ -1265,7 +1277,9 @@
   }
 
   function bulkPermanentDelete() {
-    const ids = items.filter((item) => selectedIds.has(item.id) && item.deleted).map((item) => item.id);
+    const ids = items
+      .filter((item) => selectedIds.has(item.id) && item.deleted)
+      .map((item) => item.id);
     if (ids.length === 0) return;
 
     const previousItems = items.map((entry) => ({ ...entry }));
@@ -1280,6 +1294,7 @@
     void persistBatchPermanentDelete(ids)
       .then((removed) => {
         if (removed === false) throw new Error("batch permanent delete failed");
+        invalidateDeletedHistoryPagination();
         showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
       })
       .catch((error) => {
@@ -1322,10 +1337,7 @@
         .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
     }
     selectedIds = new Set();
-    if (
-      detailItem &&
-      (permanentIds.includes(detailItem.id) || hardIds.includes(detailItem.id))
-    ) {
+    if (detailItem && (permanentIds.includes(detailItem.id) || hardIds.includes(detailItem.id))) {
       detailItem = null;
     }
 
@@ -1377,9 +1389,7 @@
       const successfulHard = new Set(
         outcomes.filter((outcome) => outcome.ok && outcome.mode === "hard").flatMap((o) => o.ids),
       );
-      const failedIds = new Set(
-        outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids),
-      );
+      const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids));
       const removedIds = new Set([...successfulPermanent, ...successfulHard]);
       const succeededIds = new Set([...successfulSoft, ...removedIds]);
 
@@ -1406,6 +1416,9 @@
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       } else {
+        if (successfulSoft.size > 0 || successfulPermanent.size > 0) {
+          invalidateDeletedHistoryPagination();
+        }
         showToast(_t("toast.bulkDeleteSuccess", { count: succeededIds.size }), "success");
       }
     });
@@ -1457,6 +1470,7 @@
 
       void invoke<number>("clear_all_non_favorite_items")
         .then((count) => {
+          invalidateDeletedHistoryPagination();
           showToast(_t("toast.clearHistorySuccess", { count }), "success");
         })
         .catch((error) => {
@@ -2030,8 +2044,7 @@
             type="button"
             onclick={bulkRestore}
             title="Restore selected records"
-            aria-label="Restore selected records"
-            >&#8634; {selectedDeletedCount}</button
+            aria-label="Restore selected records">&#8634; {selectedDeletedCount}</button
           >
           <button
             type="button"
