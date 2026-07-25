@@ -50,6 +50,34 @@
     };
   }
 
+  function commitNumberInput(
+    input: HTMLInputElement,
+    category: keyof typeof s.fontSizes,
+    min: number,
+    max: number,
+  ) {
+    const parsed = Number(input.value);
+    const fallback = s.fontSizes[category];
+    const value = Number.isFinite(parsed)
+      ? Math.round(Math.min(max, Math.max(min, parsed)))
+      : fallback;
+    input.value = String(value);
+    applyFontSize(category, value);
+  }
+
+  function numberInputHandler(category: keyof typeof s.fontSizes, min: number, max: number) {
+    return (event: Event) => {
+      const input = event.target as HTMLInputElement;
+      if (input.value.trim() !== "") commitNumberInput(input, category, min, max);
+    };
+  }
+
+  function numberBlurHandler(category: keyof typeof s.fontSizes, min: number, max: number) {
+    return (event: Event) => {
+      commitNumberInput(event.target as HTMLInputElement, category, min, max);
+    };
+  }
+
   $effect(() => {
     const el = document.querySelectorAll<HTMLInputElement>(".transparency-slider");
     el.forEach(updateSliderTrack);
@@ -96,7 +124,20 @@
           <strong>界面基础</strong>
           <p>列表标题、设置文字等主体内容的字体大小</p>
         </div>
-        <span class="value-label">{s.fontSizes.base}px</span>
+        <label class="font-size-control">
+          <input
+            class="font-size-input"
+            type="number"
+            min="11"
+            max="20"
+            step="1"
+            value={s.fontSizes.base}
+            oninput={numberInputHandler("base", 11, 20)}
+            onblur={numberBlurHandler("base", 11, 20)}
+            aria-label="界面基础字号"
+          />
+          <span>px</span>
+        </label>
       </div>
     </div>
     <input
@@ -117,7 +158,20 @@
           <strong>描述文字</strong>
           <p>时间戳、来源名称、文件大小等描述性信息</p>
         </div>
-        <span class="value-label">{s.fontSizes.secondary}px</span>
+        <label class="font-size-control">
+          <input
+            class="font-size-input"
+            type="number"
+            min="9"
+            max="16"
+            step="1"
+            value={s.fontSizes.secondary}
+            oninput={numberInputHandler("secondary", 9, 16)}
+            onblur={numberBlurHandler("secondary", 9, 16)}
+            aria-label="描述文字字号"
+          />
+          <span>px</span>
+        </label>
       </div>
     </div>
     <input
@@ -138,7 +192,20 @@
           <strong>备注文字</strong>
           <p>标签、标记、角标等最小号文字的字体大小</p>
         </div>
-        <span class="value-label">{s.fontSizes.tiny}px</span>
+        <label class="font-size-control">
+          <input
+            class="font-size-input"
+            type="number"
+            min="8"
+            max="13"
+            step="1"
+            value={s.fontSizes.tiny}
+            oninput={numberInputHandler("tiny", 8, 13)}
+            onblur={numberBlurHandler("tiny", 8, 13)}
+            aria-label="备注文字字号"
+          />
+          <span>px</span>
+        </label>
       </div>
     </div>
     <input
@@ -159,7 +226,20 @@
           <strong>条目标题</strong>
           <p>列表卡片上的标题文字大小</p>
         </div>
-        <span class="value-label">{s.fontSizes.cardTitle}px</span>
+        <label class="font-size-control">
+          <input
+            class="font-size-input"
+            type="number"
+            min="10"
+            max="20"
+            step="1"
+            value={s.fontSizes.cardTitle}
+            oninput={numberInputHandler("cardTitle", 10, 20)}
+            onblur={numberBlurHandler("cardTitle", 10, 20)}
+            aria-label="条目标题字号"
+          />
+          <span>px</span>
+        </label>
       </div>
     </div>
     <input
@@ -180,7 +260,20 @@
           <strong>条目辅助文字</strong>
           <p>列表卡片上的辅助预览/自定义标题首行文字</p>
         </div>
-        <span class="value-label">{s.fontSizes.cardPreview}px</span>
+        <label class="font-size-control">
+          <input
+            class="font-size-input"
+            type="number"
+            min="8"
+            max="16"
+            step="1"
+            value={s.fontSizes.cardPreview}
+            oninput={numberInputHandler("cardPreview", 8, 16)}
+            onblur={numberBlurHandler("cardPreview", 8, 16)}
+            aria-label="条目辅助文字字号"
+          />
+          <span>px</span>
+        </label>
       </div>
     </div>
     <input
@@ -369,6 +462,46 @@
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
+  }
+
+  .font-size-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    margin: 0;
+    color: #888;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  }
+
+  .font-size-input {
+    width: 46px;
+    box-sizing: border-box;
+    padding: 5px 6px;
+    border: 1px solid #3a3a3a;
+    border-radius: var(--settings-control-radius, 6px);
+    outline: none;
+    color: #d7d7d7;
+    background: #1a1a1a;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    transition: border-color 120ms ease;
+  }
+
+  .font-size-input:focus {
+    border-color: #5a5a5a;
+  }
+
+  .font-size-input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .font-size-input[type="number"]::-webkit-inner-spin-button,
+  .font-size-input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
   .transparency-slider {
