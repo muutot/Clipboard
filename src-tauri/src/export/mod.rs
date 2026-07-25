@@ -40,7 +40,7 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
             || options
                 .content_types
                 .iter()
-                .any(|kind| kind.eq_ignore_ascii_case(&clipboard_kind_name(item.kind)));
+                .any(|kind| kind.eq_ignore_ascii_case(clipboard_kind_name(item.kind)));
         favorite_matches && from_matches && to_matches && kind_matches
     });
 
