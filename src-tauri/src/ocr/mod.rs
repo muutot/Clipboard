@@ -9,4 +9,4 @@ pub use engine::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
 pub use noop::NoopOcrEngine;
 pub use ppocr::PpOcrEngine;
 pub use tesseract::TesseractOcrEngine;
-pub use worker::OcrWorker;
+pub use worker::{OcrWorker, OcrWorkerManager};

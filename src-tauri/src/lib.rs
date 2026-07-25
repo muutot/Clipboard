@@ -28,7 +28,7 @@ use export::{
     ImportSummary,
 };
 use keyboard::{KeyboardConfig, KeyboardManager};
-use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine};
+use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::windows_hotkey::{shortcut_to_windows_hotkey, HotkeyManager};
 use platform::{
@@ -817,14 +817,10 @@ fn set_ocr_config(
 
 #[tauri::command]
 fn restart_ocr_engine(
-    app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     paths: tauri::State<'_, StoragePaths>,
-    _old_worker: tauri::State<'_, OcrWorker>,
+    worker: tauri::State<'_, OcrWorkerManager>,
 ) -> Result<(), String> {
-    // Stop old worker
-    _old_worker.stop();
-
     let cfg = config.lock().map_err(|_| "config lock".to_owned())?;
     let ocr_engine_name = cfg.ocr_engine().to_string();
     let langs = cfg.tesseract_languages().to_string();
@@ -854,11 +850,7 @@ fn restart_ocr_engine(
     };
 
     let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
-    let new_worker = OcrWorker::start(engine, Arc::new(database));
-    // Store new worker by replacing app state - use manage to add after removing
-    // Tauri 2 doesn't support replacing state directly, so we'll use the old worker's clone mechanism
-    // The old worker was stopped above; the new one will take over
-    let _ = app.manage(new_worker);
+    worker.restart(engine, Arc::new(database));
     Ok(())
 }
 
@@ -2213,7 +2205,7 @@ pub fn run() {
                 Arc::new(NoopOcrEngine)
             };
             let ocr_database = Database::open(&paths.database)?;
-            let ocr_worker = OcrWorker::start(ocr_engine, Arc::new(ocr_database));
+            let ocr_worker = OcrWorkerManager::start(ocr_engine, Arc::new(ocr_database));
 
             let mut privacy_manager = PrivacyManager::new();
             privacy_manager.sync_with_config(&config);

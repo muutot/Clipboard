@@ -25,6 +25,33 @@ pub struct OcrWorker {
     inner: Arc<WorkerInner>,
 }
 
+#[derive(Clone)]
+pub struct OcrWorkerManager {
+    worker: Arc<Mutex<OcrWorker>>,
+}
+
+impl OcrWorkerManager {
+    pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Self {
+        Self {
+            worker: Arc::new(Mutex::new(OcrWorker::start(engine, database))),
+        }
+    }
+
+    pub fn restart(&self, engine: Arc<dyn OcrEngine>, database: Arc<Database>) {
+        let mut worker = lock_unpoisoned(&self.worker);
+        worker.stop();
+        *worker = OcrWorker::start(engine, database);
+    }
+
+    pub fn stop(&self) {
+        lock_unpoisoned(&self.worker).stop();
+    }
+
+    pub fn is_running(&self) -> bool {
+        lock_unpoisoned(&self.worker).is_running()
+    }
+}
+
 impl OcrWorker {
     pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Self {
         // A previous process may have exited after claiming a task.  Recover
@@ -259,7 +286,7 @@ mod tests {
     use crate::ocr::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
     use crate::storage::{ClipboardRepository, Database, OcrRepository};
 
-    use super::OcrWorker;
+    use super::{OcrWorker, OcrWorkerManager};
 
     fn image_item(id: &str) -> ClipboardItem {
         ClipboardItem {
@@ -424,5 +451,46 @@ mod tests {
 
         worker.stop();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn manager_restart_replaces_the_worker_for_all_clones() {
+        let first_engine_dropped = Arc::new(AtomicBool::new(false));
+        let first_database = Arc::new(Database::open_in_memory().unwrap());
+        let manager = OcrWorkerManager::start(
+            Arc::new(FailingEngine {
+                calls: Arc::new(AtomicUsize::new(0)),
+                dropped: Arc::clone(&first_engine_dropped),
+            }),
+            first_database,
+        );
+        let observer = manager.clone();
+
+        let second_database = Arc::new(Database::open_in_memory().unwrap());
+        second_database.save_item(&image_item("image")).unwrap();
+        second_database.enqueue_ocr("image").unwrap();
+        let second_calls = Arc::new(AtomicUsize::new(0));
+        manager.restart(
+            Arc::new(SuccessfulEngine {
+                calls: Arc::clone(&second_calls),
+            }),
+            Arc::clone(&second_database),
+        );
+
+        assert!(first_engine_dropped.load(Ordering::SeqCst));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while second_database
+            .get_ocr_result("image")
+            .unwrap()
+            .is_none_or(|result| result.status != OcrStatus::Completed)
+        {
+            assert!(Instant::now() < deadline, "replacement worker did not run");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert!(observer.is_running());
+        observer.stop();
+        assert!(!manager.is_running());
+        assert_eq!(second_calls.load(Ordering::SeqCst), 1);
     }
 }
