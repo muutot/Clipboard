@@ -304,6 +304,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - Before editing settings styles, compare every settings panel and reuse the existing card, heading, description, control, feedback, spacing, and typography patterns.
 - Prefer shared CSS variables for settings typography and spacing. Do not introduce a one-off font size when an existing semantic variable fits.
 - Keep setting titles, descriptions, values, controls, and feedback text on one consistent semantic scale across panels.
+- Keep primary settings categories in the left navigation. When a category has multiple secondary sections, render them as one compact horizontal tab row at the top of the right content pane, before the setting cards.
 
 **Form control styling rules (must follow strictly):**
 
