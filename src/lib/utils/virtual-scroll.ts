@@ -10,8 +10,32 @@ export interface VirtualListResult {
 }
 
 const TEXT_HEIGHT = 88;
-const TALL_TEXT_HEIGHT = 88;
 const IMAGE_HEIGHT = 150;
+const TEXT_LINE_HEIGHT = 20;
+const PREVIEW_LINE_HEIGHT = 16;
+
+export interface ItemHeightOptions {
+  kind: string;
+  textLines?: number;
+  compact?: boolean;
+  compactText?: number;
+  compactTallText?: number;
+  compactImage?: number;
+  cardGap?: number;
+  showPreview?: boolean;
+  customTitle?: boolean;
+  compactCustomTitle?: number;
+}
+
+export function estimateTextLines(text: string | null | undefined, maxLines: number): number {
+  if (!text) return 0;
+
+  const limit = Math.min(12, Math.max(1, Number.isFinite(maxLines) ? Math.round(maxLines) : 3));
+  // Visual wrapping depends on the live card width and is corrected from the
+  // card's ResizeObserver measurement.  Only explicit newlines are stable
+  // enough to use for the initial virtual-scroll estimate.
+  return Math.min(limit, text.replace(/\r\n?/g, "\n").split("\n").length);
+}
 
 export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?: number): number {
   const rows = Math.min(12, Math.max(3, lineCount));
@@ -20,24 +44,36 @@ export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?
   return h + (cardGap ?? 0);
 }
 
-export function itemHeight(
-  kind: string,
-  hasPreview?: boolean,
-  compact?: boolean,
-  compactText?: number,
-  compactTallText?: number,
-  compactImage?: number,
-  cardGap?: number,
-  showPreview?: boolean,
-  customTitle?: boolean,
-  compactCustomTitle?: number,
-): number {
-  if (customTitle && compact) return (compactCustomTitle ?? 80) + (cardGap ?? 5);
-  const effectivePreview = hasPreview && showPreview !== false;
-  if (kind === "image") return compact ? (compactImage ?? 130) + (cardGap ?? 5) : IMAGE_HEIGHT;
-  if (compact)
-    return (effectivePreview ? (compactTallText ?? 70) : (compactText ?? 58)) + (cardGap ?? 5);
-  return effectivePreview ? TALL_TEXT_HEIGHT : TEXT_HEIGHT;
+export function itemHeight({
+  kind,
+  textLines = 1,
+  compact = false,
+  compactText,
+  compactTallText,
+  compactImage,
+  cardGap,
+  showPreview = true,
+  customTitle = false,
+  compactCustomTitle,
+}: ItemHeightOptions): number {
+  const gap = cardGap ?? 5;
+  if (kind === "image") return compact ? (compactImage ?? 130) + gap : IMAGE_HEIGHT;
+
+  if (customTitle) {
+    const bodyLines = showPreview ? Math.max(0, textLines) : 0;
+    if (compact) {
+      const baseHeight = bodyLines > 0 ? (compactCustomTitle ?? 80) : (compactText ?? 58);
+      return baseHeight + Math.max(0, bodyLines - 1) * PREVIEW_LINE_HEIGHT + gap;
+    }
+    return TEXT_HEIGHT + (bodyLines > 0 ? 4 + bodyLines * PREVIEW_LINE_HEIGHT : 0);
+  }
+
+  const visibleLines = showPreview ? Math.max(1, textLines) : 1;
+  if (compact) {
+    const baseHeight = visibleLines > 1 ? (compactTallText ?? 70) : (compactText ?? 58);
+    return baseHeight + Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT + gap;
+  }
+  return TEXT_HEIGHT + Math.max(0, visibleLines - 1) * TEXT_LINE_HEIGHT;
 }
 
 export function createVirtualList(

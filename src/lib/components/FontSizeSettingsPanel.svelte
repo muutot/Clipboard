@@ -193,6 +193,31 @@
     />
   </section>
 
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+      <div class="heading-inline">
+        <div>
+          <strong>主界面文本行数</strong>
+          <p>文本和链接条目最多显示的正文行数</p>
+        </div>
+        <span class="value-label">{s.display.maxTextLines} 行</span>
+      </div>
+    </div>
+    <input
+      type="range"
+      min="1"
+      max="12"
+      value={s.display.maxTextLines}
+      oninput={(event) => {
+        const input = event.target as HTMLInputElement;
+        updateDisplay({ maxTextLines: Number(input.value) });
+        updateSliderTrack(input);
+      }}
+      class="transparency-slider"
+    />
+  </section>
+
   <section class="setting-card toggle-card">
     <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="eye" size={17} /></span>

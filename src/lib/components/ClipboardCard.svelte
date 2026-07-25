@@ -50,6 +50,8 @@
     compactCardGap?: number;
     compactCardBorderRadius?: number;
     compactCardHeight?: number;
+    maxTextLines?: number;
+    showSecondaryText?: boolean;
     hideActions?: boolean;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
@@ -63,6 +65,8 @@
     onplainpaste: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
+    onheightchange?: (id: string, height: number) => void;
+    heightMeasurementKey?: string;
   }
 
   const cardActionIds = [
@@ -89,6 +93,8 @@
     compactCardGap = 5,
     compactCardBorderRadius = 10,
     compactCardHeight = 0,
+    maxTextLines = 3,
+    showSecondaryText = true,
     hideActions = false,
     onselect,
     ontoggleSelect,
@@ -102,14 +108,38 @@
     onplainpaste,
     onsaveasnew,
     onrestore,
+    onheightchange,
+    heightMeasurementKey,
   }: Props = $props();
 
   let contextMenu = $state<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  let cardElement = $state<HTMLDivElement | null>(null);
 
   let editing = $state(false);
   let editContent = $state("");
   let editTitle = $state("");
   let editTextarea = $state<HTMLTextAreaElement | null>(null);
+
+  $effect(() => {
+    const element = cardElement;
+    const reportHeight = onheightchange;
+    void heightMeasurementKey;
+    if (!element || !reportHeight || typeof ResizeObserver === "undefined") return;
+
+    let lastHeight = -1;
+    const report = () => {
+      const height = Math.ceil(
+        element.getBoundingClientRect().height + (compact ? compactCardGap : 0),
+      );
+      if (height === lastHeight) return;
+      lastHeight = height;
+      reportHeight(item.id, height);
+    };
+    const observer = new ResizeObserver(report);
+    observer.observe(element);
+    report();
+    return () => observer.disconnect();
+  });
 
   $effect(() => {
     if (!editing || !editTextarea) return;
@@ -344,6 +374,7 @@
 </script>
 
 <div
+  bind:this={cardElement}
   role="button"
   aria-pressed={selected}
   aria-label={item.title}
@@ -355,7 +386,8 @@
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
   style:--cg={compact ? `${compactCardGap}px` : undefined}
   style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
-  style:height={editing
+  style:--max-text-lines={`${showSecondaryText ? maxTextLines : 1}`}
+  style:min-height={editing
     ? "auto"
     : compact && compactCardHeight
       ? `${compactCardHeight}px`
@@ -418,13 +450,11 @@
           {/if}
         </div>
       {:else}
-        <div class="text-preview">{item.title}</div>
-        {#if item.customTitle}
-          <div class="content-preview">
-            {(item.textContent || item.preview || "").split("\n")[0].slice(0, 200)}
-          </div>
-        {:else if item.preview}
-          <div class="secondary-preview">{item.preview}</div>
+        <div class="text-preview" class:custom-title={item.customTitle}>
+          {item.customTitle ? item.title : item.textContent || item.title}
+        </div>
+        {#if item.customTitle && showSecondaryText && (item.textContent || item.preview)}
+          <div class="content-preview">{item.textContent || item.preview}</div>
         {/if}
       {/if}
     </div>
@@ -736,28 +766,34 @@
 
   .text-preview {
     overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--max-text-lines, 3);
+    line-clamp: var(--max-text-lines, 3);
     font-size: var(--font-size-cardTitle, 13px);
     line-height: 1.55;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
     text-overflow: ellipsis;
   }
 
-  .secondary-preview {
-    margin-top: 4px;
-    overflow: hidden;
-    display: var(--show-secondary, block);
-    color: #8e8e8e;
-    font-size: var(--font-size-cardPreview, 11px);
+  .text-preview.custom-title {
+    display: block;
     white-space: nowrap;
-    text-overflow: ellipsis;
   }
 
   .content-preview {
     margin-top: 4px;
     overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--max-text-lines, 3);
+    line-clamp: var(--max-text-lines, 3);
     color: #8e8e8e;
     font-size: var(--font-size-cardPreview, 11px);
-    white-space: nowrap;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
     text-overflow: ellipsis;
   }
 

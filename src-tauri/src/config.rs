@@ -56,6 +56,7 @@ impl Default for FontSizeConfig {
 #[serde(default, rename_all = "camelCase")]
 pub struct DisplayConfig {
     pub show_secondary_text: bool,
+    pub max_text_lines: u16,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -64,6 +65,7 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             show_secondary_text: true,
+            max_text_lines: 3,
             extra: BTreeMap::new(),
         }
     }
@@ -625,6 +627,7 @@ mod tests {
         assert_eq!(saved["general"]["fontSizes"]["base"], 14);
         assert_eq!(saved["general"]["fontSizes"]["secondary"], 11);
         assert_eq!(saved["general"]["display"]["showSecondaryText"], true);
+        assert_eq!(saved["general"]["display"]["maxTextLines"], 3);
         assert_eq!(saved["general"]["compactMode"], false);
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
         fs::remove_dir_all(project).unwrap();
@@ -638,6 +641,7 @@ mod tests {
         settings.language = "en".to_owned();
         settings.font_sizes.base = 17;
         settings.display.show_secondary_text = false;
+        settings.display.max_text_lines = 7;
         settings.compact_mode = true;
         settings.theme = "light".to_owned();
         settings.image_fullscreen_mode = "desktop".to_owned();
@@ -655,6 +659,7 @@ mod tests {
         assert_eq!(saved["general"]["language"], "en");
         assert_eq!(saved["general"]["fontSizes"]["base"], 17);
         assert_eq!(saved["general"]["display"]["showSecondaryText"], false);
+        assert_eq!(saved["general"]["display"]["maxTextLines"], 7);
         assert_eq!(saved["general"]["compactMode"], true);
         assert_eq!(saved["general"]["theme"], "light");
         assert_eq!(saved["general"]["imageFullscreenMode"], "desktop");

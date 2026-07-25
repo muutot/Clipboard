@@ -35,6 +35,7 @@
   import {
     createVirtualList,
     editHeight,
+    estimateTextLines,
     itemHeight,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
@@ -119,6 +120,10 @@
   let historyListEl = $state<HTMLElement | null>(null);
   let scrollTop = $state(0);
   let containerHeight = $state(0);
+  let containerWidth = $state(0);
+
+  type MeasuredCardHeight = { height: number; signature: string };
+  let measuredCardHeights = $state<Record<string, MeasuredCardHeight>>({});
 
   // --- Date range resolution ---
 
@@ -256,6 +261,93 @@
   const compactSearchFontSize = $derived($generalSettings.compactSearchFontSize);
   const compactCardBorderRadius = $derived($generalSettings.compactCardBorderRadius);
   const showSecondaryText = $derived($generalSettings.display.showSecondaryText);
+  const maxTextLines = $derived($generalSettings.display.maxTextLines);
+
+  function displayedTextLines(item: ClipboardItem): number {
+    if (item.kind !== "text" && item.kind !== "link") return 1;
+    if (item.customTitle) {
+      return showSecondaryText
+        ? estimateTextLines(item.textContent || item.preview, maxTextLines)
+        : 0;
+    }
+    return Math.max(
+      1,
+      estimateTextLines(item.textContent || item.title, showSecondaryText ? maxTextLines : 1),
+    );
+  }
+
+  function estimatedCardHeight(item: ClipboardItem): number {
+    return itemHeight({
+      kind: item.kind,
+      textLines: displayedTextLines(item),
+      compact: compactMode,
+      compactText,
+      compactTallText,
+      compactImage,
+      cardGap: compactCardGap,
+      showPreview: showSecondaryText,
+      customTitle: !!item.customTitle,
+      compactCustomTitle,
+    });
+  }
+
+  function compactCardHeightFor(item: ClipboardItem): number {
+    if (!compactMode) return 0;
+    return Math.max(0, estimatedCardHeight(item) - compactCardGap);
+  }
+
+  function cardLayoutSignature(item: ClipboardItem): string {
+    const text = item.textContent || item.title;
+    const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
+    return [
+      containerWidth,
+      compactMode,
+      compactText,
+      compactTallText,
+      compactImage,
+      compactCustomTitle,
+      compactCardGap,
+      compactPaddingTop,
+      compactPaddingBottom,
+      showSecondaryText,
+      maxTextLines,
+      $generalSettings.fontSizes.cardTitle,
+      $generalSettings.fontSizes.cardPreview,
+      $generalSettings.fontSizes.secondary,
+      editingId === item.id,
+      item.kind,
+      item.customTitle,
+      text.length,
+      logicalLineCount,
+      item.title.length,
+      item.preview.length,
+    ].join(":");
+  }
+
+  function recordCardHeight(id: string, height: number) {
+    const item = filteredItems.find((candidate) => candidate.id === id);
+    if (!item || !Number.isFinite(height) || height <= 0) return;
+    const signature = cardLayoutSignature(item);
+    const previous = measuredCardHeights[id];
+    if (previous?.signature === signature && previous.height === height) return;
+    measuredCardHeights = {
+      ...measuredCardHeights,
+      [id]: { height, signature },
+    };
+  }
+
+  function virtualHeightFor(item: ClipboardItem): number {
+    const measured = measuredCardHeights[item.id];
+    if (measured?.signature === cardLayoutSignature(item)) return measured.height;
+    if (editingId === item.id) {
+      return editHeight(
+        (item.textContent || "").split("\n").length,
+        !!item.customTitle,
+        compactCardGap,
+      );
+    }
+    return estimatedCardHeight(item);
+  }
 
   const virtualList = $derived(
     createVirtualList(
@@ -263,22 +355,7 @@
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map((i) =>
-        editingId === i.id
-          ? editHeight((i.textContent || "").split("\n").length, !!i.customTitle, compactCardGap)
-          : itemHeight(
-              i.kind,
-              i.kind !== "image" && i.kind !== "file" && !!i.preview,
-              compactMode,
-              compactText,
-              compactTallText,
-              compactImage,
-              compactCardGap,
-              showSecondaryText,
-              !!i.customTitle,
-              compactCustomTitle,
-            ),
-      ),
+      filteredItems.map(virtualHeightFor),
     ),
   );
 
@@ -617,7 +694,7 @@
         cardTitle: number;
         cardPreview: number;
       };
-      display: { showSecondaryText: boolean };
+      display: { showSecondaryText: boolean; maxTextLines: number };
     }>("settings-font-changed", (event) => {
       const { base, secondary, tiny, cardTitle, cardPreview } = event.payload.fontSizes || {};
       const display = event.payload.display;
@@ -1695,6 +1772,7 @@
   async function measureContainer() {
     if (historyListEl) {
       containerHeight = historyListEl.clientHeight;
+      containerWidth = historyListEl.clientWidth;
     }
   }
 
@@ -1974,15 +2052,11 @@
                   {compactPaddingBottom}
                   {compactCardGap}
                   {compactCardBorderRadius}
-                  compactCardHeight={compactMode
-                    ? item.customTitle
-                      ? (compactCustomTitle ?? 80)
-                      : item.kind === "image"
-                        ? (compactImage ?? 130)
-                        : item.kind !== "file" && !!item.preview && showSecondaryText !== false
-                          ? (compactTallText ?? 70)
-                          : (compactText ?? 58)
-                    : 0}
+                  compactCardHeight={compactCardHeightFor(item)}
+                  {maxTextLines}
+                  {showSecondaryText}
+                  onheightchange={recordCardHeight}
+                  heightMeasurementKey={cardLayoutSignature(item)}
                   onselect={selectItem}
                   ontoggleSelect={toggleSelectItem}
                   ontoggleFavorite={toggleFavorite}
@@ -2011,15 +2085,11 @@
                 {compactPaddingBottom}
                 {compactCardGap}
                 {compactCardBorderRadius}
-                compactCardHeight={compactMode
-                  ? item.customTitle
-                    ? (compactCustomTitle ?? 80)
-                    : item.kind === "image"
-                      ? (compactImage ?? 130)
-                      : item.kind !== "file" && !!item.preview && showSecondaryText !== false
-                        ? (compactTallText ?? 70)
-                        : (compactText ?? 58)
-                  : 0}
+                compactCardHeight={compactCardHeightFor(item)}
+                {maxTextLines}
+                {showSecondaryText}
+                onheightchange={recordCardHeight}
+                heightMeasurementKey={cardLayoutSignature(item)}
                 onselect={selectItem}
                 ontoggleSelect={toggleSelectItem}
                 ontoggleFavorite={toggleFavorite}

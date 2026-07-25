@@ -49,6 +49,7 @@ export interface FontSizeSettings {
 
 export interface DisplaySettings {
   showSecondaryText: boolean;
+  maxTextLines: number;
 }
 
 export type Language = "zh-CN" | "en";

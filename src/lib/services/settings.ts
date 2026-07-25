@@ -17,7 +17,7 @@ const PERSIST_DEBOUNCE_MS = 120;
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   language: "zh-CN",
   fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
-  display: { showSecondaryText: true },
+  display: { showSecondaryText: true, maxTextLines: 3 },
   windowTransparency: 95,
   compactMode: false,
   compactPaddingTop: 6,
@@ -158,6 +158,12 @@ function normalizeGeneralSettings(
   result.display.showSecondaryText = booleanValue(
     sourceDisplay.showSecondaryText ?? fallbackDisplay("showSecondaryText"),
     defaultSettings.display.showSecondaryText,
+  );
+  result.display.maxTextLines = integerInRange(
+    sourceDisplay.maxTextLines ?? fallbackDisplay("maxTextLines"),
+    defaultSettings.display.maxTextLines,
+    1,
+    12,
   );
   result.windowTransparency = integerInRange(
     source.windowTransparency ?? fallback("windowTransparency"),
@@ -352,10 +358,7 @@ function applyDirtySettings(
 
 function createSettingsStore() {
   const desktop = isTauriRuntime();
-  const browserInitial = normalizeGeneralSettings(
-    parseStorageObject(STORAGE_KEY),
-    cloneDefaults(),
-  );
+  const browserInitial = normalizeGeneralSettings(parseStorageObject(STORAGE_KEY), cloneDefaults());
   const store = writable<GeneralSettings>(desktop ? cloneDefaults() : browserInitial);
   let applyingExternalValue = false;
   let initialized = !desktop;
@@ -470,11 +473,7 @@ function createSettingsStore() {
         const legacy = readLegacySettings();
         hydrated = normalizeGeneralSettings(legacy.settings, hydrated);
         const legacyRecord = isRecord(legacy.settings) ? legacy.settings : {};
-        if (
-          legacy.locale &&
-          legacyRecord.language !== "zh-CN" &&
-          legacyRecord.language !== "en"
-        ) {
+        if (legacy.locale && legacyRecord.language !== "zh-CN" && legacyRecord.language !== "en") {
           hydrated.language = legacy.locale;
         }
         hydrated = applyDirtySettings(hydrated, localAtHydration, dirtyAtHydration);
