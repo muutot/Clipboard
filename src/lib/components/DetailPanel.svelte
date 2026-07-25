@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
@@ -284,7 +285,7 @@
     const patterns: [RegExp, string][] = [
       [
         new RegExp(
-          "^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function",
+          "^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|:\\s*(string|number|boolean|unknown|any)\\b|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function",
           "ms",
         ),
         "TypeScript",
@@ -552,12 +553,14 @@
             </div>
           {:else if isCode && !isMarkdown}
             {#if editing}
-              <div class="edit-area">
-                <textarea
-                  bind:value={editContent}
-                  rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
-                  placeholder={_t("edit.placeholder")}></textarea>
-              </div>
+              <CodeEditor
+                content={editContent}
+                language={detectCodeLanguage(editContent)}
+                editorLabel={_t("edit.edit")}
+                previewLabel={_t("detail.preview")}
+                placeholder={_t("edit.placeholder")}
+                oncontentchange={(content) => (editContent = content)}
+              />
               <div class="edit-actions">
                 <button type="button" class="edit-save" onclick={saveEdit}>
                   <AppIcon name="check" size={14} strokeWidth={2.5} />
