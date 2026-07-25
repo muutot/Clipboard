@@ -37,6 +37,7 @@
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
+  import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
   import {
@@ -1529,7 +1530,44 @@
     });
   }
 
+  function handleEscapePriority(event: KeyboardEvent) {
+    if (
+      event.key !== "Escape" ||
+      selectedIds.size === 0 ||
+      editingId ||
+      isEditableKeyboardTarget(event.target)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    selectedIds = new Set();
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
+    const editableTarget = isEditableKeyboardTarget(event.target);
+
+    if (event.key === "Escape") {
+      if (event.defaultPrevented || editingId) return;
+
+      const detailEditorTarget =
+        editableTarget &&
+        event.target instanceof Element &&
+        event.target.closest(".detail-panel") !== null;
+      if (detailEditorTarget) return;
+
+      if (detailItem) {
+        // DetailPanel handles its own Escape
+      } else if ("__TAURI_INTERNALS__" in window) {
+        getCurrentWindow()
+          .hide()
+          .catch(() => {});
+      }
+      return;
+    }
+
+    if (editableTarget) return;
+
     if (event.key === "ArrowDown") {
       event.preventDefault();
       moveSelection(1);
@@ -1570,26 +1608,7 @@
       return;
     }
 
-    if (event.key === "Escape") {
-      if (editingId || document.activeElement instanceof HTMLTextAreaElement) {
-        return;
-      } else if (detailItem) {
-        // DetailPanel handles its own Escape
-      } else if (selectedIds.size > 0) {
-        selectedIds = new Set();
-      } else if ("__TAURI_INTERNALS__" in window) {
-        getCurrentWindow()
-          .hide()
-          .catch(() => {});
-      }
-      return;
-    }
-
-    if (
-      event.key === "Backspace" &&
-      !(event.target instanceof HTMLInputElement) &&
-      !(event.target instanceof HTMLTextAreaElement)
-    ) {
+    if (event.key === "Backspace") {
       if (selectedIds.size > 0) {
         selectedIds = new Set();
       }
@@ -1693,7 +1712,7 @@
   );
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
+<svelte:window onkeydowncapture={handleEscapePriority} onkeydown={handleGlobalKeydown} />
 
 <main class="app-shell">
   <header

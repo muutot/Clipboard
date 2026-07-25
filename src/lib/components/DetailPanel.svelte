@@ -4,6 +4,7 @@
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
+  import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -353,21 +354,33 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (item && event.key === "Escape") {
-      if (imageFullscreen) {
-        event.preventDefault();
-        event.stopPropagation();
-        closeImageFullscreen();
-        return;
-      }
-      if (editing) {
-        editing = false;
-        return;
-      }
+    if (!item || event.key !== "Escape" || event.defaultPrevented) return;
+
+    if (imageFullscreen) {
       event.preventDefault();
-      event.stopPropagation();
-      onclose();
+      closeImageFullscreen();
+      return;
     }
+
+    const editorTarget =
+      isEditableKeyboardTarget(event.target) &&
+      event.target instanceof Element &&
+      event.target.closest(".detail-panel") !== null;
+    if (editorTarget) {
+      event.preventDefault();
+      editing = false;
+      editingTitle = false;
+      return;
+    }
+
+    if (editing) {
+      event.preventDefault();
+      editing = false;
+      return;
+    }
+
+    event.preventDefault();
+    onclose();
   }
 
   async function saveEdit() {
