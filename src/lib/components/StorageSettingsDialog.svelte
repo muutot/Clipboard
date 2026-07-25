@@ -54,6 +54,7 @@
   let activeSection = $state<
     "general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
   >("storage");
+  let activeStatisticsTab = $state<"storage" | "performance">("storage");
 
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
@@ -665,6 +666,25 @@
           {_t("general.fontSize")}
         </button>
       </nav>
+    {:else if activeSection === "statistics"}
+      <nav class="settings-subnav" aria-label="统计分类">
+        <button
+          type="button"
+          class:active={activeStatisticsTab === "storage"}
+          aria-current={activeStatisticsTab === "storage" ? "page" : undefined}
+          onclick={() => (activeStatisticsTab = "storage")}
+        >
+          存储分布
+        </button>
+        <button
+          type="button"
+          class:active={activeStatisticsTab === "performance"}
+          aria-current={activeStatisticsTab === "performance" ? "page" : undefined}
+          onclick={() => (activeStatisticsTab = "performance")}
+        >
+          性能
+        </button>
+      </nav>
     {/if}
     {#if activeSection === "general"}
       <GeneralSettingsPanel {onclose} />
@@ -860,227 +880,227 @@
       <header>
         <div>
           <span class="eyebrow">设置 / 统计</span>
-          <h2>数据统计</h2>
-          <p>存储分布与性能</p>
+          <h2>{activeStatisticsTab === "storage" ? "存储统计" : "性能统计"}</h2>
+          <p>
+            {activeStatisticsTab === "storage"
+              ? "记录数量与各项数据占用空间"
+              : "应用启动、搜索延迟与运行资源"}
+          </p>
         </div>
         <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button
         >
       </header>
       <div class="settings-scroll stats-scroll">
-        {#if status}
-          <div class="stats-section-heading">
-            <AppIcon name="bar-chart" size={15} />
-            <strong>存储分布</strong>
-            <span>各项数据占用空间</span>
-          </div>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>总记录数</strong>
-                <p>数据库中保留的全部记录</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{status.itemCount}</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>文本</strong>
-                <p>纯文本记录数量</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{status.textCount}</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="link" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>链接</strong>
-                <p>链接记录数量</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{status.linkCount}</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>图片</strong>
-                <p>托管图片数量与占用空间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value"
-              >{status.imageCount} 张 · {formatBytes(status.imageSizeBytes)}</span
-            >
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>文件</strong>
-                <p>托管文件数量与占用空间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value"
-              >{status.fileCount} 个 · {formatBytes(status.fileSizeBytes)}</span
-            >
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>数据库</strong>
-                <p>SQLite 数据库文件大小</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{formatBytes(status.databaseSizeBytes)}</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>搜索索引</strong>
-                <p>用于全文搜索的索引文件大小</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{formatBytes(status.searchIndexSizeBytes)}</span>
-          </section>
-        {/if}
-
-        {#if perfMetrics}
-          <div class="stats-section-heading">
-            <AppIcon name="settings" size={15} />
-            <strong>性能</strong>
-            <span>应用启动与搜索耗时统计</span>
-          </div>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>启动总耗时</strong>
-                <p>应用完成初始化所需时间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{perfMetrics.startup.totalStartupMs}ms</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>数据库打开</strong>
-                <p>打开本地 SQLite 数据库所需时间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{perfMetrics.startup.dbOpenMs}ms</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>搜索初始化</strong>
-                <p>加载搜索索引所需时间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{perfMetrics.startup.searchInitMs}ms</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>数据库迁移</strong>
-                <p>启动时执行数据迁移所需时间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{perfMetrics.startup.migrationsMs}ms</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>运行时长</strong>
-                <p>本次应用进程已运行时间</p>
-              </div>
-            </div>
-            <span class="stats-metric-value">{perfMetrics.memory.uptimeSeconds}s</span>
-          </section>
-
-          <section class="setting-card stats-metric-card">
-            <div class="setting-heading stats-metric-heading">
-              <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
-              <div class="stats-metric-copy">
-                <strong>内存峰值</strong>
-                <p>进程运行期间的最高内存占用</p>
-              </div>
-            </div>
-            <span class="stats-metric-value"
-              >{Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span
-            >
-          </section>
-
-          {#if perfMetrics.searchLatency.searchesRecorded > 0}
+        {#if activeStatisticsTab === "storage"}
+          {#if status}
             <section class="setting-card stats-metric-card">
               <div class="setting-heading stats-metric-heading">
-                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>搜索次数</strong>
-                  <p>已纳入延迟统计的搜索次数</p>
+                  <strong>总记录数</strong>
+                  <p>数据库中保留的全部记录</p>
                 </div>
               </div>
-              <span class="stats-metric-value">{perfMetrics.searchLatency.searchesRecorded}</span>
+              <span class="stats-metric-value">{status.itemCount}</span>
             </section>
 
             <section class="setting-card stats-metric-card">
               <div class="setting-heading stats-metric-heading">
-                <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                <span class="setting-icon"><AppIcon name="text" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>平均搜索耗时</strong>
-                  <p>所有已记录搜索的平均耗时</p>
+                  <strong>文本</strong>
+                  <p>纯文本记录数量</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{status.textCount}</span>
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="link" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>链接</strong>
+                  <p>链接记录数量</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{status.linkCount}</span>
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>图片</strong>
+                  <p>托管图片数量与占用空间</p>
                 </div>
               </div>
               <span class="stats-metric-value"
-                >{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? "-"}ms</span
+                >{status.imageCount} 张 · {formatBytes(status.imageSizeBytes)}</span
               >
             </section>
 
             <section class="setting-card stats-metric-card">
               <div class="setting-heading stats-metric-heading">
-                <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>P95 搜索耗时</strong>
-                  <p>95% 的搜索会在此时间内完成</p>
+                  <strong>文件</strong>
+                  <p>托管文件数量与占用空间</p>
                 </div>
               </div>
-              <span class="stats-metric-value">{perfMetrics.searchLatency.p95Ms ?? "-"}ms</span>
+              <span class="stats-metric-value"
+                >{status.fileCount} 个 · {formatBytes(status.fileSizeBytes)}</span
+              >
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>数据库</strong>
+                  <p>SQLite 数据库文件大小</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{formatBytes(status.databaseSizeBytes)}</span>
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>搜索索引</strong>
+                  <p>用于全文搜索的索引文件大小</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{formatBytes(status.searchIndexSizeBytes)}</span>
+            </section>
+          {:else}
+            <div class="settings-state stats-empty-state">
+              {loading ? "正在读取存储统计..." : "存储统计暂不可用"}
+            </div>
+          {/if}
+          <p class="auto-save-note">统计数据来自当前项目存储</p>
+        {:else}
+          {#if perfMetrics}
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>启动总耗时</strong>
+                  <p>应用完成初始化所需时间</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{perfMetrics.startup.totalStartupMs}ms</span>
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>数据库打开</strong>
+                  <p>打开本地 SQLite 数据库所需时间</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{perfMetrics.startup.dbOpenMs}ms</span>
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>搜索初始化</strong>
+                  <p>加载搜索索引所需时间</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{perfMetrics.startup.searchInitMs}ms</span>
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>数据库迁移</strong>
+                  <p>启动时执行数据迁移所需时间</p>
+                </div>
+              </div>
+              <span class="stats-metric-value">{perfMetrics.startup.migrationsMs}ms</span>
             </section>
 
             <section class="setting-card stats-metric-card">
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>P99 搜索耗时</strong>
-                  <p>99% 的搜索会在此时间内完成</p>
+                  <strong>运行时长</strong>
+                  <p>本次应用进程已运行时间</p>
                 </div>
               </div>
-              <span class="stats-metric-value">{perfMetrics.searchLatency.p99Ms ?? "-"}ms</span>
+              <span class="stats-metric-value">{perfMetrics.memory.uptimeSeconds}s</span>
             </section>
-          {/if}
-        {/if}
 
-        <p class="auto-save-note">启动性能为应用初始化耗时，搜索延迟需触发搜索后统计</p>
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>内存峰值</strong>
+                  <p>进程运行期间的最高内存占用</p>
+                </div>
+              </div>
+              <span class="stats-metric-value"
+                >{Math.round(perfMetrics.memory.peakBytes / 1048576)} MB</span
+              >
+            </section>
+
+            {#if perfMetrics.searchLatency.searchesRecorded > 0}
+              <section class="setting-card stats-metric-card">
+                <div class="setting-heading stats-metric-heading">
+                  <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+                  <div class="stats-metric-copy">
+                    <strong>搜索次数</strong>
+                    <p>已纳入延迟统计的搜索次数</p>
+                  </div>
+                </div>
+                <span class="stats-metric-value">{perfMetrics.searchLatency.searchesRecorded}</span>
+              </section>
+
+              <section class="setting-card stats-metric-card">
+                <div class="setting-heading stats-metric-heading">
+                  <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                  <div class="stats-metric-copy">
+                    <strong>平均搜索耗时</strong>
+                    <p>所有已记录搜索的平均耗时</p>
+                  </div>
+                </div>
+                <span class="stats-metric-value"
+                  >{perfMetrics.searchLatency.averageMs?.toFixed(1) ?? "-"}ms</span
+                >
+              </section>
+
+              <section class="setting-card stats-metric-card">
+                <div class="setting-heading stats-metric-heading">
+                  <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                  <div class="stats-metric-copy">
+                    <strong>P95 搜索耗时</strong>
+                    <p>95% 的搜索会在此时间内完成</p>
+                  </div>
+                </div>
+                <span class="stats-metric-value">{perfMetrics.searchLatency.p95Ms ?? "-"}ms</span>
+              </section>
+
+              <section class="setting-card stats-metric-card">
+                <div class="setting-heading stats-metric-heading">
+                  <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                  <div class="stats-metric-copy">
+                    <strong>P99 搜索耗时</strong>
+                    <p>99% 的搜索会在此时间内完成</p>
+                  </div>
+                </div>
+                <span class="stats-metric-value">{perfMetrics.searchLatency.p99Ms ?? "-"}ms</span>
+              </section>
+            {/if}
+          {:else}
+            <div class="settings-state stats-empty-state">性能统计暂不可用</div>
+          {/if}
+          <p class="auto-save-note">启动性能为应用初始化耗时，搜索延迟需触发搜索后统计</p>
+        {/if}
       </div>
     {:else}
       <header>
@@ -1951,32 +1971,6 @@
     align-content: start;
   }
 
-  .stats-section-heading {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    margin: 5px 2px 0;
-    color: #8d8d8d;
-    font-size: var(--settings-description-size);
-  }
-
-  .stats-section-heading :global(svg) {
-    flex: 0 0 auto;
-    color: #a9a9a9;
-  }
-
-  .stats-section-heading strong {
-    color: #d4d4d4;
-    font-size: var(--settings-heading-size);
-    font-weight: 560;
-  }
-
-  .stats-section-heading span {
-    min-width: 0;
-    color: #777;
-    overflow-wrap: anywhere;
-  }
-
   .stats-metric-card {
     display: flex;
     align-items: center;
@@ -1997,6 +1991,10 @@
   .stats-metric-copy strong,
   .stats-metric-copy p {
     overflow-wrap: anywhere;
+  }
+
+  .stats-empty-state {
+    min-height: 140px;
   }
 
   .stats-metric-value {
