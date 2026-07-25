@@ -23,6 +23,8 @@
     listSourceApplications,
     formatTextLength,
     formatSizeSimple,
+    generatedClipboardTitle,
+    isCustomClipboardTitle,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -423,6 +425,7 @@
             : formatSizeSimple(record),
         createdAt: record.createdAtMs,
         favorite: record.isFavorite,
+        customTitle: isCustomClipboardTitle(record),
         fileName:
           record.kind === "file"
             ? record.resourcePath?.split(/[\\/]/).pop() || record.title
@@ -1044,7 +1047,11 @@
 
     const isMedia = item?.kind === "image" || item?.kind === "file";
     const isText = item?.kind === "text" || item?.kind === "link";
-    const newTitle = isText ? (item.customTitle ? item.title : content.slice(0, 200)) : content;
+    const newTitle = isText
+      ? item.customTitle
+        ? item.title
+        : generatedClipboardTitle(content)
+      : content;
     const newTextContent = isText ? content : (item?.textContent ?? null);
     const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? "");
     const newSizeBytes = new TextEncoder().encode(content).byteLength;

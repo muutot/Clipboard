@@ -42,7 +42,8 @@ use std::io::Write;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use storage::{
-    ClipboardRepository, Database, OcrRepository, RepairResult, StorageFileReferences, StoragePaths,
+    ClipboardRepository, Database, OcrRepository, RepairResult, StorageFileReferences,
+    StoragePaths, TextItemUpdate,
 };
 use tauri::{Emitter, Manager};
 
@@ -1209,6 +1210,45 @@ fn copy_file_to(src: String, dst: String) -> Result<(), String> {
         .map_err(|e| format!("copy failed: {e}"))
 }
 
+fn generated_clipboard_title(text: &str) -> String {
+    text.chars().take(200).collect()
+}
+
+fn metadata_custom_title(metadata_json: Option<&str>) -> Option<bool> {
+    let value =
+        metadata_json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())?;
+    value
+        .get("customTitle")
+        .and_then(serde_json::Value::as_bool)
+}
+
+fn resolve_custom_title(title: &str, text_content: &str, metadata_json: Option<&str>) -> bool {
+    metadata_custom_title(metadata_json)
+        .unwrap_or_else(|| title != generated_clipboard_title(text_content))
+}
+
+fn set_custom_title_metadata(
+    metadata_json: Option<&str>,
+    custom_title: bool,
+) -> Result<String, String> {
+    let mut value = metadata_json
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    if !value.is_object() {
+        value = serde_json::json!({});
+    }
+    value
+        .as_object_mut()
+        .expect("custom-title metadata must be an object")
+        .insert(
+            "customTitle".to_owned(),
+            serde_json::Value::Bool(custom_title),
+        );
+    serde_json::to_string(&value)
+        .map_err(|error| format!("serialize custom title metadata: {error}"))
+}
+
 #[tauri::command]
 fn rename_item(
     database: tauri::State<'_, Database>,
@@ -1245,6 +1285,12 @@ fn rename_item(
         }
     }
     updated.title = new_name.trim().to_string();
+    if matches!(updated.kind, ClipboardKind::Text | ClipboardKind::Link) {
+        updated.metadata_json = Some(set_custom_title_metadata(
+            updated.metadata_json.as_deref(),
+            true,
+        )?);
+    }
     database.save_item(&updated).map_err(|e| e.to_string())?;
     Ok(updated)
 }
@@ -1276,18 +1322,22 @@ fn update_clipboard_text(
         ClipboardKind::Link => "link",
         ClipboardKind::Image | ClipboardKind::File => unreachable!(),
     };
+    let custom_title =
+        resolve_custom_title(&new_title, &new_text_content, item.metadata_json.as_deref());
+    let metadata_json = set_custom_title_metadata(item.metadata_json.as_deref(), custom_title)?;
     let content_hash = content::hash::compute_content_hash(kind_name, &new_text_content, None);
     let size_bytes = new_text_content.len() as u64;
 
     database
-        .update_text_item(
-            &id,
-            item.kind,
-            &new_title,
-            &new_text_content,
-            &content_hash,
+        .update_text_item(&TextItemUpdate {
+            id: &id,
+            kind: item.kind,
+            title: &new_title,
+            text_content: &new_text_content,
+            content_hash: &content_hash,
             size_bytes,
-        )
+            metadata_json: Some(&metadata_json),
+        })
         .map_err(|e| e.to_string())
 }
 
@@ -2926,6 +2976,47 @@ mod capture_tests {
         assert!(stop_flag.load(Ordering::SeqCst));
         assert!(exited.load(Ordering::SeqCst));
         assert!(worker.handle.is_none());
+    }
+}
+
+#[cfg(test)]
+mod title_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_records_infer_custom_titles_from_the_generated_title() {
+        assert!(!resolve_custom_title(
+            "first line\nsecond line",
+            "first line\nsecond line",
+            None,
+        ));
+        assert!(resolve_custom_title(
+            "Pinned note",
+            "first line\nsecond line",
+            None,
+        ));
+    }
+
+    #[test]
+    fn explicit_custom_title_metadata_overrides_legacy_inference() {
+        assert!(resolve_custom_title(
+            "first line",
+            "first line\nsecond line",
+            Some(r#"{"customTitle":true}"#),
+        ));
+        assert!(!resolve_custom_title(
+            "Pinned note",
+            "first line\nsecond line",
+            Some(r#"{"customTitle":false}"#),
+        ));
+    }
+
+    #[test]
+    fn setting_custom_title_metadata_preserves_existing_object_fields() {
+        let metadata = set_custom_title_metadata(Some(r#"{"width":120}"#), true).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&metadata).unwrap();
+        assert_eq!(value["width"], 120);
+        assert_eq!(value["customTitle"], true);
     }
 }
 

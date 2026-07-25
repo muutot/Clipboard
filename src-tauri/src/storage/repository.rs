@@ -30,6 +30,16 @@ pub struct StorageFileReferences {
     pub icon_paths: Vec<String>,
 }
 
+pub struct TextItemUpdate<'a> {
+    pub id: &'a str,
+    pub kind: ClipboardKind,
+    pub title: &'a str,
+    pub text_content: &'a str,
+    pub content_hash: &'a str,
+    pub size_bytes: u64,
+    pub metadata_json: Option<&'a str>,
+}
+
 pub trait ClipboardRepository {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError>;
     /// Atomically replaces the textual payload of an active text/link item.
@@ -38,15 +48,7 @@ pub trait ClipboardRepository {
     /// byte count are updated together with the text.  SQLite's UNIQUE(kind,
     /// content_hash) constraint rejects an edit that would collide with a
     /// different history record without partially updating either row.
-    fn update_text_item(
-        &self,
-        id: &str,
-        kind: ClipboardKind,
-        title: &str,
-        text_content: &str,
-        content_hash: &str,
-        size_bytes: u64,
-    ) -> Result<bool, StorageError>;
+    fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError>;
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
@@ -166,18 +168,11 @@ impl ClipboardRepository for Database {
         })
     }
 
-    fn update_text_item(
-        &self,
-        id: &str,
-        kind: ClipboardKind,
-        title: &str,
-        text_content: &str,
-        content_hash: &str,
-        size_bytes: u64,
-    ) -> Result<bool, StorageError> {
-        let size_bytes = i64::try_from(size_bytes).map_err(|_| StorageError::ValueOutOfRange {
-            field: "size_bytes",
-        })?;
+    fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError> {
+        let size_bytes =
+            i64::try_from(update.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+                field: "size_bytes",
+            })?;
 
         self.with_connection(|connection| {
             let changed = connection.execute(
@@ -186,17 +181,19 @@ impl ClipboardRepository for Database {
                      title = ?3,
                      text_content = ?4,
                      content_hash = ?5,
-                     size_bytes = ?6
+                     size_bytes = ?6,
+                     metadata_json = COALESCE(?7, metadata_json)
                  WHERE id = ?1
                    AND deleted = 0
                    AND kind IN ('text', 'link')",
                 params![
-                    id,
-                    kind_to_storage(kind),
-                    title,
-                    text_content,
-                    content_hash,
+                    update.id,
+                    kind_to_storage(update.kind),
+                    update.title,
+                    update.text_content,
+                    update.content_hash,
                     size_bytes,
+                    update.metadata_json,
                 ],
             )?;
             Ok(changed == 1)
@@ -835,7 +832,7 @@ fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageError> {
 mod tests {
     use crate::domain::{ClipboardItem, ClipboardKind};
 
-    use super::{ClipboardRepository, Database};
+    use super::{ClipboardRepository, Database, TextItemUpdate};
     use crate::storage::{SearchRepository, StorageError};
 
     fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
@@ -948,14 +945,15 @@ mod tests {
         database.save_item(&original).unwrap();
 
         assert!(database
-            .update_text_item(
-                "editable",
-                ClipboardKind::Link,
-                "updated title",
-                "https://example.com",
-                "new-hash",
-                19,
-            )
+            .update_text_item(&TextItemUpdate {
+                id: "editable",
+                kind: ClipboardKind::Link,
+                title: "updated title",
+                text_content: "https://example.com",
+                content_hash: "new-hash",
+                size_bytes: 19,
+                metadata_json: None,
+            })
             .unwrap());
 
         let saved = database.get_item("editable").unwrap().unwrap();
@@ -974,6 +972,33 @@ mod tests {
     }
 
     #[test]
+    fn update_text_item_can_replace_metadata_without_dropping_the_record() {
+        let database = Database::open_in_memory().unwrap();
+        let mut original = text_item("metadata-edit", "old-metadata-hash", 100);
+        original.metadata_json = Some(r#"{"width":120,"custom":"value"}"#.to_owned());
+        database.save_item(&original).unwrap();
+
+        assert!(database
+            .update_text_item(&TextItemUpdate {
+                id: "metadata-edit",
+                kind: ClipboardKind::Text,
+                title: "Custom heading",
+                text_content: "body text",
+                content_hash: "new-metadata-hash",
+                size_bytes: 9,
+                metadata_json: Some(r#"{"width":120,"custom":"value","customTitle":true}"#),
+            })
+            .unwrap());
+
+        let saved = database.get_item("metadata-edit").unwrap().unwrap();
+        let metadata: serde_json::Value =
+            serde_json::from_str(saved.metadata_json.as_deref().unwrap()).unwrap();
+        assert_eq!(metadata["width"], 120);
+        assert_eq!(metadata["custom"], "value");
+        assert_eq!(metadata["customTitle"], true);
+    }
+
+    #[test]
     fn update_text_item_rejects_hash_collisions_without_partial_changes() {
         let database = Database::open_in_memory().unwrap();
         let original = text_item("original", "original-hash", 100);
@@ -981,14 +1006,15 @@ mod tests {
         database.save_item(&original).unwrap();
         database.save_item(&existing).unwrap();
 
-        let result = database.update_text_item(
-            "original",
-            ClipboardKind::Text,
-            "colliding title",
-            "colliding content",
-            "existing-hash",
-            17,
-        );
+        let result = database.update_text_item(&TextItemUpdate {
+            id: "original",
+            kind: ClipboardKind::Text,
+            title: "colliding title",
+            text_content: "colliding content",
+            content_hash: "existing-hash",
+            size_bytes: 17,
+            metadata_json: None,
+        });
 
         assert!(matches!(result, Err(StorageError::Sqlite(_))));
         assert_eq!(database.get_item("original").unwrap().unwrap(), original);

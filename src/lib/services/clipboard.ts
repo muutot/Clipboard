@@ -127,6 +127,26 @@ export async function detectContentActions(text: string): Promise<QuickAction[] 
   return invoke<QuickAction[]>("detect_content_actions", { text });
 }
 
+export function isCustomClipboardTitle(
+  record: Pick<PersistedClipboardItem, "title" | "textContent" | "metadataJson">,
+): boolean {
+  if (record.metadataJson) {
+    try {
+      const customTitle = JSON.parse(record.metadataJson)?.customTitle;
+      if (typeof customTitle === "boolean") return customTitle;
+    } catch {
+      /* fall back to the legacy title rule */
+    }
+  }
+
+  if (!record.textContent) return false;
+  return record.title !== generatedClipboardTitle(record.textContent);
+}
+
+export function generatedClipboardTitle(text: string): string {
+  return Array.from(text).slice(0, 200).join("");
+}
+
 function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;
@@ -166,6 +186,7 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     sizeBytes: record.sizeBytes,
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
+    customTitle: isCustomClipboardTitle(record),
     fileName:
       record.kind === "file" ? fileNameFromPath(record.resourcePath) || record.title : undefined,
     imageMeta,
