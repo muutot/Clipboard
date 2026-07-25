@@ -72,6 +72,7 @@ impl SearchRepository for Database {
                         clipboard_items.kind,
                         clipboard_items.title,
                         clipboard_items.text_content,
+                        clipboard_items.source_app,
                         CASE
                             WHEN ocr_results.status = 'completed' THEN ocr_results.full_text
                             ELSE NULL
@@ -81,7 +82,8 @@ impl SearchRepository for Database {
                      FROM clipboard_items
                      LEFT JOIN ocr_results
                         ON ocr_results.item_id = clipboard_items.id
-                     WHERE clipboard_items.id = ?1",
+                     WHERE clipboard_items.id = ?1
+                       AND clipboard_items.deleted = 0",
                     [item_id],
                     SearchDocument::from_row,
                 )
@@ -109,6 +111,7 @@ impl SearchRepository for Database {
                 "INSERT INTO search_outbox (item_id, operation, created_at_ms)
                  SELECT id, 'upsert', created_at_ms
                  FROM clipboard_items
+                 WHERE deleted = 0
                  ORDER BY id",
                 [],
             )?;
@@ -123,10 +126,12 @@ impl SearchDocument {
     fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
         let title = row.get::<_, String>(2)?;
         let text_content = row.get::<_, Option<String>>(3)?;
-        let ocr_text = row.get::<_, Option<String>>(4)?;
-        let content = [Some(title), text_content, ocr_text]
+        let source_app = row.get::<_, Option<String>>(4)?;
+        let ocr_text = row.get::<_, Option<String>>(5)?;
+        let content = [Some(title), text_content, ocr_text, source_app]
             .into_iter()
             .flatten()
+            .map(|part| part.trim().to_owned())
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
@@ -135,8 +140,8 @@ impl SearchDocument {
             item_id: row.get(0)?,
             kind: row.get(1)?,
             content,
-            created_at_ms: row.get(5)?,
-            is_favorite: row.get(6)?,
+            created_at_ms: row.get(6)?,
+            is_favorite: row.get(7)?,
         })
     }
 }
@@ -166,7 +171,7 @@ mod tests {
                 .then(|| "image/screenshot.png".to_owned()),
             preview_path: None,
             content_hash: content_hash.to_owned(),
-            source_app: Some("test-suite".to_owned()),
+            source_app: None,
             size_bytes: 32,
             created_at_ms: 100,
             last_used_at_ms: None,
@@ -218,6 +223,31 @@ mod tests {
         let document = database.get_search_document("image").unwrap().unwrap();
 
         assert_eq!(document.content, "title-image\n图片里的文字");
+    }
+
+    #[test]
+    fn indexes_source_application_alongside_content() {
+        let database = Database::open_in_memory().unwrap();
+        let mut source_item = item("source", ClipboardKind::Text, "source-hash");
+        source_item.source_app = Some("Zen Browser".to_owned());
+        database.save_item(&source_item).unwrap();
+
+        let document = database.get_search_document("source").unwrap().unwrap();
+        assert!(document.content.contains("Zen Browser"));
+    }
+
+    #[test]
+    fn soft_deleted_items_have_no_current_search_document() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&item("soft-deleted", ClipboardKind::Text, "soft-hash"))
+            .unwrap();
+        database.soft_delete("soft-deleted").unwrap();
+
+        assert!(database
+            .get_search_document("soft-deleted")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -279,5 +309,22 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].item_id, "keep");
         assert_eq!(events[0].operation, SearchOperation::Upsert);
+    }
+
+    #[test]
+    fn full_rebuild_skips_soft_deleted_items() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&item("keep", ClipboardKind::Text, "keep-hash"))
+            .unwrap();
+        database
+            .save_item(&item("soft-delete", ClipboardKind::Text, "soft-hash"))
+            .unwrap();
+        database.soft_delete("soft-delete").unwrap();
+
+        assert_eq!(database.enqueue_full_search_rebuild().unwrap(), 1);
+        let events = database.read_search_outbox(100).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].item_id, "keep");
     }
 }

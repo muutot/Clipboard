@@ -342,9 +342,35 @@ fn set_clipboard_item_favorite(
         .map_err(|error| error.to_string())
 }
 
+/// Update the favorite flag for a selected group of records in one
+/// transaction. The repository validates every id before changing anything,
+/// so a stale selection cannot leave the UI and database out of sync.
+#[tauri::command]
+fn batch_set_favorite(
+    database: tauri::State<'_, Database>,
+    ids: Vec<String>,
+    is_favorite: bool,
+) -> Result<bool, String> {
+    database
+        .set_favorite_batch(&ids, is_favorite)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 fn delete_clipboard_item(database: tauri::State<'_, Database>, id: String) -> Result<bool, String> {
     database.delete_item(&id).map_err(|error| error.to_string())
+}
+
+/// Soft-delete a selected group of records. Favorite protection and error
+/// wording intentionally match `soft_delete_clipboard_item`.
+#[tauri::command]
+fn batch_delete_clipboard_items(
+    database: tauri::State<'_, Database>,
+    ids: Vec<String>,
+) -> Result<bool, String> {
+    database
+        .soft_delete_batch(&ids)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1978,7 +2004,9 @@ pub fn run() {
             configure_ignored_applications,
             list_clipboard_items,
             set_clipboard_item_favorite,
+            batch_set_favorite,
             delete_clipboard_item,
+            batch_delete_clipboard_items,
             get_clipboard_item_ocr,
             list_source_applications,
             get_keyboard_config,

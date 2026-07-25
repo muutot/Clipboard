@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::{params, params_from_iter, OptionalExtension, Row};
 
@@ -31,12 +31,24 @@ pub trait ClipboardRepository {
     fn list_source_applications(&self) -> Result<Vec<String>, StorageError>;
     fn list_source_applications_with_icons(&self) -> Result<Vec<(String, Option<String>)>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
+    /// Update the favorite flag for all requested records atomically.
+    ///
+    /// The operation returns `false` and makes no changes when any requested
+    /// id does not exist. An empty id list is a no-op and also returns `false`.
+    fn set_favorite_batch(&self, ids: &[String], is_favorite: bool) -> Result<bool, StorageError>;
     fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
     fn item_count(&self) -> Result<u64, StorageError>;
     fn delete_older_than(&self, days: u32) -> Result<u64, StorageError>;
     fn enforce_capacity_limit(&self, max_items: u64) -> Result<u64, StorageError>;
     fn cleanup_orphan_search_index(&self) -> Result<u64, StorageError>;
     fn soft_delete(&self, id: &str) -> Result<bool, StorageError>;
+    /// Soft-delete all requested active records atomically.
+    ///
+    /// A favorite active record aborts the whole operation with the same
+    /// `FavoriteMustBeRemoved` error as the single-record API. Already deleted
+    /// records are treated as idempotent; unknown ids return `false` without
+    /// changing any record.
+    fn soft_delete_batch(&self, ids: &[String]) -> Result<bool, StorageError>;
     fn restore_deleted(&self, id: &str) -> Result<bool, StorageError>;
     fn permanently_delete_expired(&self, days: u32) -> Result<u64, StorageError>;
     fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
@@ -143,7 +155,8 @@ impl ClipboardRepository for Database {
             let sql = format!(
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
-                 WHERE id IN ({placeholders})"
+                 WHERE deleted = 0
+                   AND id IN ({placeholders})"
             );
             let mut statement = connection.prepare(&sql)?;
             let stored_items = statement
@@ -239,6 +252,43 @@ impl ClipboardRepository for Database {
                 "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1",
                 params![id, is_favorite],
             )? > 0)
+        })
+    }
+
+    fn set_favorite_batch(&self, ids: &[String], is_favorite: bool) -> Result<bool, StorageError> {
+        let ids = unique_ids(ids);
+        if ids.is_empty() {
+            return Ok(false);
+        }
+
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+
+            // Validate the complete request before changing anything. This
+            // keeps the boolean contract deterministic and avoids partially
+            // applying a stale selection from the UI.
+            for id in &ids {
+                let exists = transaction
+                    .query_row(
+                        "SELECT 1 FROM clipboard_items WHERE id = ?1",
+                        [id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()?;
+                if exists.is_none() {
+                    return Ok(false);
+                }
+            }
+
+            for id in &ids {
+                transaction.execute(
+                    "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1",
+                    params![id, is_favorite],
+                )?;
+            }
+
+            transaction.commit()?;
+            Ok(true)
         })
     }
 
@@ -350,6 +400,61 @@ impl ClipboardRepository for Database {
         })
     }
 
+    fn soft_delete_batch(&self, ids: &[String]) -> Result<bool, StorageError> {
+        let ids = unique_ids(ids);
+        if ids.is_empty() {
+            return Ok(false);
+        }
+
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let mut active_ids = Vec::with_capacity(ids.len());
+
+            // Validate first so a favorite never causes a partially deleted
+            // batch. Missing ids are reported as a normal false result, just
+            // like the single-record command reports `false` for a miss.
+            for id in &ids {
+                let state = transaction
+                    .query_row(
+                        "SELECT is_favorite, deleted
+                         FROM clipboard_items
+                         WHERE id = ?1",
+                        [id],
+                        |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                    )
+                    .optional()?;
+
+                let Some((is_favorite, deleted)) = state else {
+                    return Ok(false);
+                };
+
+                if !deleted {
+                    if is_favorite {
+                        return Err(StorageError::FavoriteMustBeRemoved(id.clone()));
+                    }
+                    active_ids.push(id);
+                }
+            }
+
+            if active_ids.is_empty() {
+                return Ok(false);
+            }
+
+            let now = current_time_ms();
+            for id in active_ids {
+                transaction.execute(
+                    "UPDATE clipboard_items
+                     SET deleted = 1, deleted_at_ms = ?2
+                     WHERE id = ?1 AND deleted = 0",
+                    params![id, now],
+                )?;
+            }
+
+            transaction.commit()?;
+            Ok(true)
+        })
+    }
+
     fn restore_deleted(&self, id: &str) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
             let affected = connection.execute(
@@ -447,6 +552,14 @@ fn current_time_ms() -> i64 {
         .unwrap_or_default()
         .as_millis()
         .min(i64::MAX as u128) as i64
+}
+
+fn unique_ids(ids: &[String]) -> Vec<String> {
+    let mut seen = HashSet::with_capacity(ids.len());
+    ids.iter()
+        .filter(|id| seen.insert((*id).clone()))
+        .cloned()
+        .collect()
 }
 
 struct StoredClipboardItem {
@@ -653,6 +766,62 @@ mod tests {
         assert!(database.set_favorite("item", false).unwrap());
         assert!(database.delete_item("item").unwrap());
         assert_eq!(database.item_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn batch_favorite_is_atomic_and_deduplicates_ids() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&text_item("first", "hash-first", 100)).unwrap();
+        database.save_item(&text_item("second", "hash-second", 200)).unwrap();
+
+        assert!(database
+            .set_favorite_batch(
+                &["first".to_owned(), "first".to_owned(), "second".to_owned()],
+                true,
+            )
+            .unwrap());
+        assert!(database.get_item("first").unwrap().unwrap().is_favorite);
+        assert!(database.get_item("second").unwrap().unwrap().is_favorite);
+
+        // A stale id must not leave a partially updated batch behind.
+        assert!(!database
+            .set_favorite_batch(&["first".to_owned(), "missing".to_owned()], false)
+            .unwrap());
+        assert!(database.get_item("first").unwrap().unwrap().is_favorite);
+    }
+
+    #[test]
+    fn batch_soft_delete_protects_favorites_without_partial_changes() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&text_item("regular", "hash-regular", 100)).unwrap();
+        database.save_item(&text_item("favorite", "hash-favorite", 200)).unwrap();
+        database.set_favorite("favorite", true).unwrap();
+
+        let result = database.soft_delete_batch(&["regular".to_owned(), "favorite".to_owned()]);
+        assert!(matches!(
+            result,
+            Err(StorageError::FavoriteMustBeRemoved(id)) if id == "favorite"
+        ));
+        assert!(database.get_item("regular").unwrap().is_some());
+        assert!(database.get_item("favorite").unwrap().is_some());
+
+        assert!(database
+            .soft_delete_batch(&["regular".to_owned(), "regular".to_owned()])
+            .unwrap());
+        assert!(database.get_item("regular").unwrap().is_some());
+        assert!(!database.list_recent(10, 0).unwrap().iter().any(|item| item.id == "regular"));
+    }
+
+    #[test]
+    fn batch_lookup_excludes_soft_deleted_items() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&text_item("active", "hash-active", 100)).unwrap();
+        database.save_item(&text_item("deleted", "hash-deleted", 200)).unwrap();
+        database.soft_delete("deleted").unwrap();
+
+        let ids = vec!["deleted".to_owned(), "active".to_owned()];
+        let items = database.get_items_by_ids(&ids).unwrap();
+        assert_eq!(items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["active"]);
     }
 
     #[test]
