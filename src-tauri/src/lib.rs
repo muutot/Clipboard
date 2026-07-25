@@ -36,6 +36,7 @@ use platform::{
     SingleInstanceError, SingleInstanceGuard, SystemTray, WindowManager,
 };
 use privacy::PrivacyManager;
+use rusqlite::params;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
 use serde::Serialize;
 use std::io::Write;
@@ -726,36 +727,192 @@ fn migrate_storage_data(
 
     let icons_old = old.storage.join("icons");
     let icons_new = new.storage.join("icons");
-    if icons_old.exists() {
+    if icons_old != icons_new && icons_old.exists() {
         copy_dir_contents(&icons_old, &icons_new)
             .map_err(|e| format!("failed to migrate icons: {}", e))?;
     }
 
-    if old.database.exists() {
+    if old.database != new.database && old.database.exists() {
         database
             .vacuum_into(&new.database)
             .map_err(|e| format!("failed to migrate database: {}", e))?;
+        let migrated_database = Database::open(&new.database)
+            .map_err(|e| format!("failed to open migrated database: {e}"))?;
+        rewrite_database_storage_paths(&migrated_database, &storage_path_mappings(old, new))
+            .map_err(|e| format!("failed to update migrated resource paths: {e}"))?;
     }
 
     Ok(())
 }
 
-fn copy_dir_contents(from: &PathBuf, to: &PathBuf) -> Result<(), String> {
+fn storage_path_mappings(old: &StoragePaths, new: &StoragePaths) -> Vec<(PathBuf, PathBuf)> {
+    let mut mappings = vec![
+        (old.previews.clone(), new.previews.clone()),
+        (old.images.clone(), new.images.clone()),
+        (old.files.clone(), new.files.clone()),
+        (old.storage.join("icons"), new.storage.join("icons")),
+        (old.storage.clone(), new.storage.clone()),
+    ];
+    mappings.retain(|(from, to)| from != to);
+    mappings.sort_by_key(|(from, _)| std::cmp::Reverse(from.components().count()));
+    mappings
+}
+
+fn rewrite_database_storage_paths(
+    database: &Database,
+    mappings: &[(PathBuf, PathBuf)],
+) -> Result<u64, storage::StorageError> {
+    database.with_connection(|connection| {
+        let transaction = connection.transaction()?;
+        let records = {
+            let mut statement = transaction.prepare(
+                "SELECT id, kind, text_content, resource_path, preview_path, icon_path, metadata_json
+                 FROM clipboard_items",
+            )?;
+            let rows = statement.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                ))
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+
+        let mut updated = 0u64;
+        for (id, kind, text_content, resource_path, preview_path, icon_path, metadata_json) in
+            records
+        {
+            let rewritten_resource = rewrite_optional_storage_path(resource_path.as_deref(), mappings);
+            let rewritten_preview = rewrite_optional_storage_path(preview_path.as_deref(), mappings);
+            let rewritten_icon = rewrite_optional_storage_path(icon_path.as_deref(), mappings);
+            let rewritten_text = if kind == "file" {
+                rewrite_json_storage_paths(text_content.as_deref(), mappings)
+            } else {
+                text_content.clone()
+            };
+            let rewritten_metadata = rewrite_json_storage_paths(metadata_json.as_deref(), mappings);
+
+            if rewritten_resource == resource_path
+                && rewritten_preview == preview_path
+                && rewritten_icon == icon_path
+                && rewritten_text == text_content
+                && rewritten_metadata == metadata_json
+            {
+                continue;
+            }
+
+            transaction.execute(
+                "UPDATE clipboard_items
+                 SET text_content = ?2,
+                     resource_path = ?3,
+                     preview_path = ?4,
+                     icon_path = ?5,
+                     metadata_json = ?6
+                 WHERE id = ?1",
+                params![
+                    id,
+                    rewritten_text,
+                    rewritten_resource,
+                    rewritten_preview,
+                    rewritten_icon,
+                    rewritten_metadata,
+                ],
+            )?;
+            updated = updated.saturating_add(1);
+        }
+
+        transaction.commit()?;
+        Ok(updated)
+    })
+}
+
+fn rewrite_optional_storage_path(
+    value: Option<&str>,
+    mappings: &[(PathBuf, PathBuf)],
+) -> Option<String> {
+    value.map(|value| rewrite_storage_path(value, mappings))
+}
+
+fn rewrite_storage_path(value: &str, mappings: &[(PathBuf, PathBuf)]) -> String {
+    let path = Path::new(value);
+    for (from, to) in mappings {
+        if let Ok(relative) = path.strip_prefix(from) {
+            return to.join(relative).to_string_lossy().into_owned();
+        }
+    }
+    value.to_owned()
+}
+
+fn rewrite_json_storage_paths(
+    value: Option<&str>,
+    mappings: &[(PathBuf, PathBuf)],
+) -> Option<String> {
+    let value = value?;
+    let Ok(mut json) = serde_json::from_str::<serde_json::Value>(value) else {
+        return Some(value.to_owned());
+    };
+    let changed = rewrite_json_value_paths(&mut json, mappings);
+    if changed {
+        serde_json::to_string(&json)
+            .ok()
+            .or_else(|| Some(value.to_owned()))
+    } else {
+        Some(value.to_owned())
+    }
+}
+
+fn rewrite_json_value_paths(
+    value: &mut serde_json::Value,
+    mappings: &[(PathBuf, PathBuf)],
+) -> bool {
+    match value {
+        serde_json::Value::String(path) => {
+            let rewritten = rewrite_storage_path(path, mappings);
+            if rewritten == *path {
+                false
+            } else {
+                *path = rewritten;
+                true
+            }
+        }
+        serde_json::Value::Array(values) => {
+            let mut changed = false;
+            for value in values {
+                changed |= rewrite_json_value_paths(value, mappings);
+            }
+            changed
+        }
+        serde_json::Value::Object(values) => {
+            let mut changed = false;
+            for value in values.values_mut() {
+                changed |= rewrite_json_value_paths(value, mappings);
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn copy_dir_contents(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| format!("create dir: {}", e))?;
     for entry in std::fs::read_dir(from).map_err(|e| format!("read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("dir entry: {}", e))?;
         let dest = to.join(entry.file_name());
-        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        if entry
+            .file_type()
+            .map_err(|e| format!("read file type for {}: {e}", entry.path().display()))?
+            .is_dir()
+        {
             copy_dir_contents(&entry.path(), &dest)?;
         } else {
-            // Skip locked files, continue with others
-            if let Err(e) = std::fs::copy(entry.path(), &dest) {
-                eprintln!(
-                    "[migrate] skip locked file {}: {}",
-                    entry.path().display(),
-                    e
-                );
-            }
+            std::fs::copy(entry.path(), &dest).map_err(|e| {
+                format!("copy {} to {}: {e}", entry.path().display(), dest.display())
+            })?;
         }
     }
     Ok(())
@@ -3710,16 +3867,19 @@ mod storage_cleanup_tests {
 
     use super::*;
 
-    fn temporary_storage(label: &str) -> StoragePaths {
+    fn temporary_project(label: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let project = std::env::temp_dir().join(format!(
+        std::env::temp_dir().join(format!(
             "clipboard-storage-cleanup-{label}-{}-{unique}",
             std::process::id()
-        ));
-        StoragePaths::initialize(project).unwrap()
+        ))
+    }
+
+    fn temporary_storage(label: &str) -> StoragePaths {
+        StoragePaths::initialize(temporary_project(label)).unwrap()
     }
 
     fn stored_item(
@@ -3852,5 +4012,159 @@ mod storage_cleanup_tests {
         assert_eq!(manual.removed_files, 1);
         assert!(!orphan.exists());
         fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn storage_migration_rewrites_every_managed_resource_reference() {
+        let project = temporary_project("path-migration");
+        let old_paths = StoragePaths::initialize(project.clone()).unwrap();
+        let new_paths = StoragePaths::initialize_with_data_directory(
+            project.clone(),
+            Some(project.join("custom-data")),
+        )
+        .unwrap();
+        let old_icons = old_paths.storage.join("icons");
+        fs::create_dir_all(&old_icons).unwrap();
+
+        let image = old_paths.images.join("image.png");
+        let preview = old_paths.previews.join("image-preview.png");
+        let managed_file = old_paths.files.join("document.txt");
+        let icon = old_icons.join("notepad.png");
+        let external_file = project.join("outside.txt");
+        let search_marker = old_paths.search_index.join("migration-marker");
+        for (path, contents) in [
+            (&image, b"image".as_slice()),
+            (&preview, b"preview".as_slice()),
+            (&managed_file, b"managed".as_slice()),
+            (&icon, b"icon".as_slice()),
+            (&external_file, b"external".as_slice()),
+            (&search_marker, b"search-index".as_slice()),
+        ] {
+            fs::write(path, contents).unwrap();
+        }
+
+        let database = Database::open(&old_paths.database).unwrap();
+        let mut image_item = stored_item(
+            "image",
+            ClipboardKind::Image,
+            Some(image.to_string_lossy().into_owned()),
+            Some(icon.to_string_lossy().into_owned()),
+        );
+        image_item.preview_path = Some(preview.to_string_lossy().into_owned());
+        image_item.metadata_json = Some(r#"{"width":100,"height":80}"#.to_owned());
+        database.save_item(&image_item).unwrap();
+
+        let mut file_item = stored_item(
+            "file",
+            ClipboardKind::File,
+            Some(managed_file.to_string_lossy().into_owned()),
+            None,
+        );
+        file_item.text_content = Some(
+            serde_json::to_string(&[
+                managed_file.to_string_lossy().into_owned(),
+                external_file.to_string_lossy().into_owned(),
+            ])
+            .unwrap(),
+        );
+        file_item.metadata_json = Some(
+            serde_json::json!({
+                "files": [{
+                    "path": managed_file.to_string_lossy(),
+                    "originalPath": external_file.to_string_lossy(),
+                    "copied": true,
+                }],
+            })
+            .to_string(),
+        );
+        database.save_item(&file_item).unwrap();
+
+        migrate_storage_data(&old_paths, &new_paths, &database).unwrap();
+
+        let migrated = Database::open(&new_paths.database).unwrap();
+        let migrated_image = migrated.get_item("image").unwrap().unwrap();
+        assert_eq!(
+            migrated_image.resource_path.as_deref(),
+            Some(
+                new_paths
+                    .images
+                    .join("image.png")
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+        assert_eq!(
+            migrated_image.preview_path.as_deref(),
+            Some(
+                new_paths
+                    .previews
+                    .join("image-preview.png")
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+        assert_eq!(
+            migrated_image.icon_path.as_deref(),
+            Some(
+                new_paths
+                    .storage
+                    .join("icons")
+                    .join("notepad.png")
+                    .to_string_lossy()
+                    .as_ref()
+            )
+        );
+
+        let migrated_file = migrated.get_item("file").unwrap().unwrap();
+        let migrated_paths: Vec<String> =
+            serde_json::from_str(migrated_file.text_content.as_deref().unwrap()).unwrap();
+        assert_eq!(
+            migrated_paths[0],
+            new_paths.files.join("document.txt").to_string_lossy()
+        );
+        assert_eq!(migrated_paths[1], external_file.to_string_lossy());
+        let migrated_metadata: serde_json::Value =
+            serde_json::from_str(migrated_file.metadata_json.as_deref().unwrap()).unwrap();
+        assert_eq!(
+            migrated_metadata["files"][0]["path"],
+            new_paths
+                .files
+                .join("document.txt")
+                .to_string_lossy()
+                .as_ref()
+        );
+        assert_eq!(
+            migrated_metadata["files"][0]["originalPath"],
+            external_file.to_string_lossy().as_ref()
+        );
+        assert!(new_paths.images.join("image.png").exists());
+        assert!(new_paths.files.join("document.txt").exists());
+        assert!(new_paths.storage.join("icons").join("notepad.png").exists());
+        assert!(new_paths.search_index.join("migration-marker").exists());
+
+        let original = database.get_item("image").unwrap().unwrap();
+        assert_eq!(original.resource_path, image_item.resource_path);
+        drop(migrated);
+        drop(database);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn storage_migration_skips_paths_that_already_use_the_target_layout() {
+        let project = temporary_project("same-layout-migration");
+        let old_paths = StoragePaths::initialize(project.clone()).unwrap();
+        let database = Database::open(&old_paths.database).unwrap();
+        let new_paths = StoragePaths::initialize_with_data_directory(
+            project.clone(),
+            Some(old_paths.storage.clone()),
+        )
+        .unwrap();
+
+        assert_ne!(old_paths.data_directory, new_paths.data_directory);
+        assert_eq!(old_paths.storage, new_paths.storage);
+        migrate_storage_data(&old_paths, &new_paths, &database).unwrap();
+
+        drop(database);
+        fs::remove_dir_all(project).unwrap();
     }
 }
