@@ -277,6 +277,10 @@ const en: LocaleDefinition = {
     locateFile: "Locate File",
     openFolder: "Open Folder",
     files: "files",
+    filePreviewLoading: "Reading file content...",
+    filePreviewUnavailable: "Text preview is not available for this file",
+    filePreviewFailed: "Failed to read file content",
+    filePreviewTruncated: "Content is too large; showing the first {size} KB",
   },
   edit: {
     edit: "Edit",

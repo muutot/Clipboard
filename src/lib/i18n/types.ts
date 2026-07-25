@@ -267,6 +267,10 @@ export interface LocaleDefinition {
     locateFile: string;
     openFolder: string;
     files: string;
+    filePreviewLoading: string;
+    filePreviewUnavailable: string;
+    filePreviewFailed: string;
+    filePreviewTruncated: string;
   };
   edit: {
     edit: string;

@@ -269,6 +269,10 @@ const zhCN: LocaleDefinition = {
     locateFile: "定位到文件",
     openFolder: "打开文件夹",
     files: "个文件",
+    filePreviewLoading: "正在读取文件内容…",
+    filePreviewUnavailable: "当前文件不支持文本预览",
+    filePreviewFailed: "读取文件内容失败",
+    filePreviewTruncated: "内容过长，仅显示前 {size} KB",
   },
   edit: {
     edit: "编辑",
