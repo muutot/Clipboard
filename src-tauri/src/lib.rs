@@ -93,6 +93,208 @@ struct StorageDirectoryUpdate {
 #[derive(Clone)]
 struct IgnoredAppsState(Arc<Mutex<Vec<String>>>);
 
+/// Capture policy shared by every clipboard ingestion path.
+///
+/// The command handlers and background workers do not share a Tauri `State`
+/// reference directly.  Instead they hold this small, thread-safe snapshot so
+/// pause/ignore changes take effect without restarting a monitor thread.
+#[derive(Clone)]
+struct CaptureState {
+    paused: Arc<AtomicBool>,
+    ignored_apps: Arc<Mutex<Vec<String>>>,
+    policy: Arc<CapturePolicy>,
+    worker: Arc<Mutex<Option<CaptureWorker>>>,
+}
+
+#[derive(Clone)]
+struct CapturePolicy {
+    sensitive_patterns: Arc<Vec<String>>,
+    password_manager_apps: Arc<Vec<String>>,
+}
+
+struct CaptureWorker {
+    stop_flag: Arc<AtomicBool>,
+    stop_sender: Option<mpsc::Sender<()>>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl CaptureState {
+    fn new(privacy: &PrivacyManager, ignored_apps: Vec<String>) -> Self {
+        Self {
+            paused: Arc::new(AtomicBool::new(privacy.is_paused())),
+            ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
+            policy: Arc::new(CapturePolicy {
+                sensitive_patterns: Arc::new(privacy.sensitive_patterns.clone()),
+                password_manager_apps: Arc::new(privacy.password_manager_apps.clone()),
+            }),
+            worker: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::SeqCst);
+    }
+
+    fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
+    }
+
+    fn set_ignored_apps(&self, apps: Vec<String>) -> Vec<String> {
+        let normalized = normalize_app_list(&apps);
+        if let Ok(mut ignored) = self.ignored_apps.lock() {
+            *ignored = normalized.clone();
+        }
+        normalized
+    }
+
+    fn ignored_apps(&self) -> Vec<String> {
+        self.ignored_apps
+            .lock()
+            .map(|apps| apps.clone())
+            .unwrap_or_default()
+    }
+
+    fn should_skip(&self, source_app: Option<&str>, text: Option<&str>) -> bool {
+        if self.is_paused() {
+            return true;
+        }
+
+        let ignored = self
+            .ignored_apps
+            .lock()
+            .map(|apps| apps.clone())
+            .unwrap_or_default();
+        self.policy.should_skip(&ignored, source_app, text)
+    }
+
+    fn install_worker(&self, worker: CaptureWorker) {
+        self.stop_worker();
+        if let Ok(mut slot) = self.worker.lock() {
+            *slot = Some(worker);
+        } else {
+            // If the state lock is poisoned, still stop the newly-created
+            // worker instead of leaking a detached thread.
+            let mut worker = worker;
+            worker.stop();
+        }
+    }
+
+    fn stop_worker(&self) {
+        let worker = self.worker.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(mut worker) = worker {
+            worker.stop();
+        }
+    }
+}
+
+impl CapturePolicy {
+    fn should_skip(
+        &self,
+        ignored_apps: &[String],
+        source_app: Option<&str>,
+        text: Option<&str>,
+    ) -> bool {
+        if source_app.is_some_and(|app| {
+            app_matches(app, ignored_apps) || app_matches(app, &self.password_manager_apps)
+        }) {
+            return true;
+        }
+
+        text.is_some_and(|text| {
+            self.sensitive_patterns.iter().any(|pattern| {
+                regex_lite::Regex::new(pattern)
+                    .map(|regex| regex.is_match(text))
+                    .unwrap_or(false)
+            })
+        })
+    }
+}
+
+impl CaptureWorker {
+    fn stop(&mut self) {
+        self.stop_flag.store(true, Ordering::SeqCst);
+        if let Some(sender) = self.stop_sender.take() {
+            let _ = sender.send(());
+        }
+
+        if let Some(handle) = self.handle.take() {
+            if handle.thread().id() != thread::current().id() {
+                if handle.join().is_err() {
+                    eprintln!("[clipboard-worker] capture thread terminated with a panic");
+                }
+            } else {
+                // A worker must not join itself.  This path is defensive (the
+                // normal stop command runs on the Tauri thread).
+                self.handle = Some(handle);
+            }
+        }
+    }
+}
+
+impl Drop for CaptureWorker {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+fn normalize_app_list(apps: &[String]) -> Vec<String> {
+    let mut normalized: Vec<String> = Vec::new();
+    for app in apps {
+        let app = app.trim().to_owned();
+        if !app.is_empty()
+            && !normalized
+                .iter()
+                .any(|existing| normalize_app_name(existing) == normalize_app_name(&app))
+        {
+            normalized.push(app);
+        }
+    }
+    normalized
+}
+
+fn app_matches(app: &str, candidates: &[String]) -> bool {
+    let app = normalize_app_name(app);
+    !app.is_empty()
+        && candidates
+            .iter()
+            .map(|candidate| normalize_app_name(candidate))
+            .any(|candidate| candidate == app)
+}
+
+fn normalize_app_name(app: &str) -> String {
+    let trimmed = app.trim();
+    let leaf = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
+    let path_name = Path::new(leaf)
+        .file_stem()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| leaf.to_owned());
+    path_name.to_lowercase()
+}
+
+fn foreground_app_name(app: &platform::windows_clipboard::ForegroundApp) -> Option<String> {
+    if !app.name.trim().is_empty() {
+        Some(app.name.trim().to_owned())
+    } else if !app.exe_path.trim().is_empty() {
+        let leaf = app
+            .exe_path
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&app.exe_path);
+        Path::new(leaf)
+            .file_stem()
+            .map(|name| name.to_string_lossy().into_owned())
+    } else {
+        None
+    }
+}
+
+fn stop_signal_requested(receiver: &mpsc::Receiver<()>) -> bool {
+    matches!(
+        receiver.try_recv(),
+        Ok(()) | Err(mpsc::TryRecvError::Disconnected)
+    )
+}
+
 /// Shared state for self-trigger guard to prevent capturing app's own clipboard writes.
 #[derive(Clone)]
 struct SelfTriggerState(Arc<Mutex<content::hash::SelfTriggerGuard>>);
@@ -1138,18 +1340,22 @@ fn transform_text(input: String, operation: String) -> Result<TextTransform, Str
 fn toggle_privacy_pause(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+    capture: tauri::State<'_, CaptureState>,
 ) -> Result<bool, String> {
-    let mut privacy = privacy
-        .lock()
-        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
-    privacy.toggle_pause();
-
-    let paused = privacy.is_paused();
+    let paused = {
+        let mut privacy = privacy
+            .lock()
+            .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+        privacy.toggle_pause();
+        privacy.is_paused()
+    };
     config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .set_privacy_paused(paused)
         .map_err(|e| e.to_string())?;
+
+    capture.set_paused(paused);
 
     Ok(paused)
 }
@@ -1280,7 +1486,7 @@ struct ExportFormatInfo {
 fn start_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     paths: tauri::State<'_, StoragePaths>,
-    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+    capture: tauri::State<'_, CaptureState>,
     self_trigger: tauri::State<'_, SelfTriggerState>,
 ) -> Result<bool, String> {
     let mut guard = monitor
@@ -1295,122 +1501,149 @@ fn start_clipboard_monitoring(
     drop(guard);
 
     let db_path = paths.database.clone();
-    let privacy_arc = {
-        let p = privacy
-            .lock()
-            .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
-        Arc::new(Mutex::new(p.paused))
-    };
-
     let self_trigger_clone = self_trigger.0.clone();
+    let capture_for_thread = capture.inner().clone();
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_for_thread = Arc::clone(&stop_flag);
+    let (stop_sender, stop_receiver) = mpsc::channel();
 
-    thread::spawn(move || {
-        let database = match Database::open(&db_path) {
-            Ok(db) => Arc::new(db),
-            Err(e) => {
-                eprintln!("[clipboard-worker] failed to open database: {e}");
-                return;
-            }
-        };
+    let handle = thread::Builder::new()
+        .name("clipboard-capture".to_owned())
+        .spawn(move || {
+            let database = match Database::open(&db_path) {
+                Ok(db) => Arc::new(db),
+                Err(e) => {
+                    eprintln!("[clipboard-worker] failed to open database: {e}");
+                    return;
+                }
+            };
 
-        let self_trigger_guard = self_trigger_clone;
-        let mut consecutive_errors = 0u32;
+            let self_trigger_guard = self_trigger_clone;
+            let mut consecutive_errors = 0u32;
 
-        loop {
-            match receiver.recv_timeout(Duration::from_millis(500)) {
-                Ok(_change) => {
-                    let is_paused = privacy_arc.lock().map(|g| *g).unwrap_or(false);
+            loop {
+                if stop_flag_for_thread.load(Ordering::SeqCst)
+                    || stop_signal_requested(&stop_receiver)
+                {
+                    break;
+                }
+                match receiver.recv_timeout(Duration::from_millis(500)) {
+                    Ok(_change) => {
+                        if stop_flag_for_thread.load(Ordering::SeqCst)
+                            || stop_signal_requested(&stop_receiver)
+                        {
+                            break;
+                        }
 
-                    if is_paused {
-                        continue;
-                    }
+                        let app_info = platform::windows_clipboard::get_foreground_app();
+                        let source_app = foreground_app_name(&app_info);
+                        if capture_for_thread.should_skip(source_app.as_deref(), None) {
+                            continue;
+                        }
 
-                    let text = match platform::windows_clipboard::read_clipboard_text() {
-                        Some(t) => t,
-                        None => continue,
-                    };
+                        let text = match platform::windows_clipboard::read_clipboard_text() {
+                            Some(t) => t,
+                            None => continue,
+                        };
 
-                    if text.is_empty() || text.len() > 500_000 {
-                        continue;
-                    }
+                        if text.is_empty() || text.len() > 500_000 {
+                            continue;
+                        }
 
-                    let markers = content::detect_markers(&text);
-                    let kind = if markers.is_link || markers.has_url {
-                        ClipboardKind::Link
-                    } else {
-                        ClipboardKind::Text
-                    };
+                        if capture_for_thread.should_skip(source_app.as_deref(), Some(&text)) {
+                            continue;
+                        }
 
-                    let content_hash = content::hash::compute_content_hash(
-                        if kind == ClipboardKind::Link {
-                            "link"
+                        let markers = content::detect_markers(&text);
+                        let kind = if markers.is_link || markers.has_url {
+                            ClipboardKind::Link
                         } else {
-                            "text"
-                        },
-                        &text,
-                        None,
-                    );
+                            ClipboardKind::Text
+                        };
 
-                    if self_trigger_guard
-                        .lock()
-                        .unwrap()
-                        .is_self_triggered(&content_hash)
-                    {
-                        self_trigger_guard
+                        let content_hash = content::hash::compute_content_hash(
+                            if kind == ClipboardKind::Link {
+                                "link"
+                            } else {
+                                "text"
+                            },
+                            &text,
+                            None,
+                        );
+
+                        if self_trigger_guard
                             .lock()
                             .unwrap()
-                            .mark_as_self_triggered(&content_hash);
-                        continue;
-                    }
-
-                    let title = text.chars().take(200).collect::<String>();
-                    let size_bytes = text.len() as u64;
-                    let now_ms = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as i64;
-
-                    let item = ClipboardItem {
-                        id: content_hash.clone(),
-                        kind,
-                        title,
-                        text_content: Some(text),
-                        resource_path: None,
-                        preview_path: None,
-                        content_hash,
-                        source_app: None,
-                        icon_path: None,
-                        size_bytes,
-                        created_at_ms: now_ms,
-                        last_used_at_ms: None,
-                        is_favorite: false,
-                        metadata_json: None,
-                    };
-
-                    match database.save_item(&item) {
-                        Ok(_) => {
-                            consecutive_errors = 0;
+                            .is_self_triggered(&content_hash)
+                        {
+                            self_trigger_guard
+                                .lock()
+                                .unwrap()
+                                .mark_as_self_triggered(&content_hash);
+                            continue;
                         }
-                        Err(e) => {
-                            eprintln!("[clipboard-worker] failed to save item: {e}");
-                            consecutive_errors += 1;
-                            if consecutive_errors >= 10 {
-                                eprintln!(
-                                    "[clipboard-worker] too many consecutive errors, pausing"
-                                );
-                                thread::sleep(Duration::from_secs(5));
+
+                        let title = text.chars().take(200).collect::<String>();
+                        let size_bytes = text.len() as u64;
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as i64;
+
+                        let item = ClipboardItem {
+                            id: content_hash.clone(),
+                            kind,
+                            title,
+                            text_content: Some(text),
+                            resource_path: None,
+                            preview_path: None,
+                            content_hash,
+                            source_app: source_app.clone(),
+                            icon_path: None,
+                            size_bytes,
+                            created_at_ms: now_ms,
+                            last_used_at_ms: None,
+                            is_favorite: false,
+                            metadata_json: None,
+                        };
+
+                        if stop_flag_for_thread.load(Ordering::SeqCst)
+                            || stop_signal_requested(&stop_receiver)
+                        {
+                            break;
+                        }
+
+                        match database.save_item(&item) {
+                            Ok(_) => {
                                 consecutive_errors = 0;
+                            }
+                            Err(e) => {
+                                eprintln!("[clipboard-worker] failed to save item: {e}");
+                                consecutive_errors += 1;
+                                if consecutive_errors >= 10 {
+                                    eprintln!(
+                                        "[clipboard-worker] too many consecutive errors, pausing"
+                                    );
+                                    thread::sleep(Duration::from_secs(5));
+                                    consecutive_errors = 0;
+                                }
                             }
                         }
                     }
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    eprintln!("[clipboard-worker] monitor channel disconnected, stopping");
-                    break;
+                    Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        eprintln!("[clipboard-worker] monitor channel disconnected, stopping");
+                        break;
+                    }
                 }
             }
-        }
+        })
+        .map_err(|error| format!("failed to start clipboard worker: {error}"))?;
+
+    capture.install_worker(CaptureWorker {
+        stop_flag,
+        stop_sender: Some(stop_sender),
+        handle: Some(handle),
     });
 
     Ok(true)
@@ -1419,24 +1652,27 @@ fn start_clipboard_monitoring(
 #[tauri::command]
 fn stop_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+    capture: tauri::State<'_, CaptureState>,
 ) -> Result<bool, String> {
     monitor
         .lock()
         .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?
         .stop()?;
+    capture.stop_worker();
     Ok(true)
 }
 
 #[tauri::command]
 fn get_clipboard_monitor_status(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
+    capture: tauri::State<'_, CaptureState>,
 ) -> Result<ClipboardMonitorStatus, String> {
     let monitor = monitor
         .lock()
         .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
     Ok(ClipboardMonitorStatus {
         running: monitor.running,
-        ignored_applications: monitor.ignored_applications.clone(),
+        ignored_applications: capture.ignored_apps(),
     })
 }
 
@@ -1451,16 +1687,18 @@ struct ClipboardMonitorStatus {
 fn set_clipboard_ignored_apps(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     ignored_state: tauri::State<'_, IgnoredAppsState>,
+    capture: tauri::State<'_, CaptureState>,
     apps: Vec<String>,
 ) -> Result<Vec<String>, String> {
     let mut monitor = monitor
         .lock()
         .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
-    monitor.set_ignored_apps(apps.clone());
+    let normalized = capture.set_ignored_apps(apps);
+    monitor.set_ignored_apps(normalized.clone());
     if let Ok(mut shared) = ignored_state.0.lock() {
-        *shared = monitor.ignored_applications.clone();
+        *shared = normalized.clone();
     }
-    Ok(monitor.ignored_applications.clone())
+    Ok(normalized)
 }
 
 #[tauri::command]
@@ -1737,11 +1975,28 @@ pub fn run() {
                 }
             }
 
+            // Auto-start clipboard monitoring in background
+            let app_handle = app.handle().clone();
+            let db_path = paths.database.clone();
+            let storage_path = paths.storage.clone();
+            let initial_ignored = config.ignored_applications().to_vec();
+            let capture_state = CaptureState::new(&privacy_manager, initial_ignored.clone());
+            let ignored_apps = Arc::clone(&capture_state.ignored_apps);
+            let ignored_apps_managed = IgnoredAppsState(ignored_apps);
+            app.manage(capture_state.clone());
+            app.manage(ignored_apps_managed);
+
+            let self_trigger_guard = Arc::new(Mutex::new(content::hash::SelfTriggerGuard::new()));
+            let self_trigger_guard_managed = SelfTriggerState(self_trigger_guard.clone());
+            app.manage(self_trigger_guard_managed);
+
             // Graceful shutdown handler
             let ocr_worker_for_shutdown = ocr_worker.clone();
+            let capture_for_shutdown = capture_state.clone();
             let paths_for_shutdown = paths.clone();
             ctrlc::set_handler(move || {
                 eprintln!("[shutdown] received interrupt signal, cleaning up...");
+                capture_for_shutdown.stop_worker();
                 ocr_worker_for_shutdown.stop();
                 // Config is auto-saved on drop
                 let _ = paths_for_shutdown;
@@ -1749,25 +2004,18 @@ pub fn run() {
             })
             .ok();
 
-            // Auto-start clipboard monitoring in background
-            let app_handle = app.handle().clone();
-            let db_path = paths.database.clone();
-            let storage_path = paths.storage.clone();
-            let privacy_paused = Arc::new(Mutex::new(false));
-            let initial_ignored = config.ignored_applications().to_vec();
-            let ignored_apps = Arc::new(Mutex::new(initial_ignored));
-            let ignored_apps_managed = IgnoredAppsState(ignored_apps.clone());
-            app.manage(ignored_apps_managed);
-
-            let self_trigger_guard = Arc::new(Mutex::new(content::hash::SelfTriggerGuard::new()));
-            let self_trigger_guard_managed = SelfTriggerState(self_trigger_guard.clone());
-            app.manage(self_trigger_guard_managed);
+            clipboard_monitor.set_ignored_apps(initial_ignored);
 
             if clipboard_monitor.start().is_ok() {
                 if let Some(receiver) = clipboard_monitor.take_receiver() {
-                    let ignored_apps_clone = ignored_apps.clone();
                     let self_trigger_clone = self_trigger_guard.clone();
-                    thread::spawn(move || {
+                    let capture_for_thread = capture_state.clone();
+                    let stop_flag = Arc::new(AtomicBool::new(false));
+                    let stop_flag_for_thread = Arc::clone(&stop_flag);
+                    let (stop_sender, stop_receiver) = mpsc::channel();
+                    let handle = thread::Builder::new()
+                        .name("clipboard-capture".to_owned())
+                        .spawn(move || {
                     let database = match Database::open(&db_path) {
                         Ok(db) => db,
                         Err(e) => {
@@ -1780,30 +2028,28 @@ pub fn run() {
                     let mut consecutive_errors = 0u32;
 
                     loop {
+                        if stop_flag_for_thread.load(Ordering::SeqCst)
+                            || stop_signal_requested(&stop_receiver)
+                        {
+                            break;
+                        }
                         match receiver.recv_timeout(Duration::from_millis(500)) {
                             Ok(_change) => {
-                                let is_paused = privacy_paused
-                                    .lock()
-                                    .map(|g| *g)
-                                    .unwrap_or(false);
-
-                                if is_paused {
-                                    continue;
+                                if stop_flag_for_thread.load(Ordering::SeqCst)
+                                    || stop_signal_requested(&stop_receiver)
+                                {
+                                    break;
                                 }
 
                                 let app_info = platform::windows_clipboard::get_foreground_app();
-                                let source_app = if app_info.name.is_empty() { None } else { Some(app_info.name.clone()) };
-
-                                if let Some(ref app) = source_app {
-                                    let ignored = ignored_apps_clone.lock().map(|g| g.clone()).unwrap_or_default();
-                                    if ignored.iter().any(|i| i.to_lowercase() == app.to_lowercase()) {
-                                        continue;
-                                    }
+                                let source_app = foreground_app_name(&app_info);
+                                if capture_for_thread.should_skip(source_app.as_deref(), None) {
+                                    continue;
                                 }
 
                                 // Extract and cache app icon
                                 let icon_dir = storage_path.join("icons");
-                                let icon_path = if !app_info.name.is_empty() {
+                                let icon_path = if source_app.is_some() {
                                     platform::windows_clipboard::extract_app_icon(&icon_dir, &app_info.name, &app_info.exe_path)
                                 } else {
                                     None
@@ -1813,7 +2059,14 @@ pub fn run() {
                                 let image_data = platform::windows_clipboard::read_clipboard_image();
                                 let file_paths = platform::windows_clipboard::read_clipboard_file_paths();
 
+                                if capture_for_thread.should_skip(source_app.as_deref(), text.as_deref()) {
+                                    continue;
+                                }
+
                                 if let Some((img, img_width, img_height)) = image_data {
+                                    if stop_flag_for_thread.load(Ordering::SeqCst) {
+                                        break;
+                                    }
                                     let img_hash = content::hash::compute_media_hash("image", &img);
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
@@ -1850,6 +2103,9 @@ pub fn run() {
                                         metadata_json: Some(metadata.to_string()),
                                     };
 
+                                    if stop_flag_for_thread.load(Ordering::SeqCst) {
+                                        break;
+                                    }
                                     match database.save_item(&item) {
                                         Ok(saved_id) => {
                                             consecutive_errors = 0;
@@ -1867,6 +2123,9 @@ pub fn run() {
                                 }
 
                                 if !file_paths.is_empty() {
+                                    if stop_flag_for_thread.load(Ordering::SeqCst) {
+                                        break;
+                                    }
                                     let now_ms = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
@@ -1900,6 +2159,9 @@ pub fn run() {
                                             metadata_json: None,
                                         };
 
+                                        if stop_flag_for_thread.load(Ordering::SeqCst) {
+                                            break;
+                                        }
                                         match database.save_item(&item) {
                                             Ok(saved_id) => {
                                                 consecutive_errors = 0;
@@ -1966,6 +2228,9 @@ pub fn run() {
                                             metadata_json: Some(metadata.to_string()),
                                         };
 
+                                        if stop_flag_for_thread.load(Ordering::SeqCst) {
+                                            break;
+                                        }
                                         match database.save_item(&item) {
                                             Ok(saved_id) => {
                                                 consecutive_errors = 0;
@@ -2034,6 +2299,9 @@ pub fn run() {
                                     metadata_json: None,
                                 };
 
+                                if stop_flag_for_thread.load(Ordering::SeqCst) {
+                                    break;
+                                }
                                 match database.save_item(&item) {
                                     Ok(saved_id) => {
                                         consecutive_errors = 0;
@@ -2059,7 +2327,14 @@ pub fn run() {
                             }
                         }
                     }
-                });
+                        })
+                        .map_err(|error| format!("failed to start startup clipboard worker: {error}"))?;
+
+                    capture_state.install_worker(CaptureWorker {
+                        stop_flag,
+                        stop_sender: Some(stop_sender),
+                        handle: Some(handle),
+                    });
             } else {
                 eprintln!("[startup] clipboard monitor has no receiver");
             }
@@ -2168,4 +2443,97 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+
+    fn capture_state() -> CaptureState {
+        CaptureState::new(&PrivacyManager::new(), vec!["IgnoredApp".to_owned()])
+    }
+
+    #[test]
+    fn pause_state_is_shared_with_capture_policy() {
+        let state = capture_state();
+        assert!(!state.should_skip(Some("Notepad"), Some("ordinary text")));
+
+        state.set_paused(true);
+        assert!(state.should_skip(Some("Notepad"), Some("ordinary text")));
+
+        state.set_paused(false);
+        assert!(!state.should_skip(Some("Notepad"), Some("ordinary text")));
+    }
+
+    #[test]
+    fn ignored_and_password_manager_sources_are_rejected_case_insensitively() {
+        let state = capture_state();
+
+        assert!(state.should_skip(Some("ignoredapp.exe"), None));
+        assert!(state.should_skip(Some(r"C:\Program Files\KeePass\KeePass.exe"), None));
+        assert!(state.should_skip(Some("1PASSWORD"), None));
+        assert!(!state.should_skip(Some("notepad.exe"), None));
+    }
+
+    #[test]
+    fn ignored_application_updates_are_deduplicated_and_immediately_visible() {
+        let state = capture_state();
+        let stored = state.set_ignored_apps(vec![
+            " Browser.exe ".to_owned(),
+            "browser".to_owned(),
+            "Terminal".to_owned(),
+        ]);
+
+        assert_eq!(stored, vec!["Browser.exe", "Terminal"]);
+        assert_eq!(state.ignored_apps(), stored);
+        assert!(state.should_skip(Some("browser.exe"), None));
+        assert!(state.should_skip(Some("TERMINAL"), None));
+    }
+
+    #[test]
+    fn sensitive_text_is_rejected_before_persistence() {
+        let state = capture_state();
+
+        assert!(state.should_skip(Some("Notepad"), Some("password=supersecret123")));
+        assert!(state.should_skip(Some("Notepad"), Some("4111 1111 1111 1111")));
+        assert!(!state.should_skip(Some("Notepad"), Some("meeting notes")));
+    }
+
+    #[test]
+    fn foreground_source_uses_name_then_executable_fallback() {
+        let named = platform::windows_clipboard::ForegroundApp {
+            name: "Editor".to_owned(),
+            exe_path: r"C:\Apps\editor.exe".to_owned(),
+        };
+        let path_only = platform::windows_clipboard::ForegroundApp {
+            name: String::new(),
+            exe_path: r"C:\Apps\Browser.exe".to_owned(),
+        };
+
+        assert_eq!(foreground_app_name(&named).as_deref(), Some("Editor"));
+        assert_eq!(foreground_app_name(&path_only).as_deref(), Some("Browser"));
+    }
+
+    #[test]
+    fn capture_worker_stop_wakes_and_joins_thread() {
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let exited = Arc::new(AtomicBool::new(false));
+        let exited_for_thread = Arc::clone(&exited);
+        let (stop_sender, stop_receiver) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            let _ = stop_receiver.recv();
+            exited_for_thread.store(true, Ordering::SeqCst);
+        });
+        let mut worker = CaptureWorker {
+            stop_flag: Arc::clone(&stop_flag),
+            stop_sender: Some(stop_sender),
+            handle: Some(handle),
+        };
+
+        worker.stop();
+
+        assert!(stop_flag.load(Ordering::SeqCst));
+        assert!(exited.load(Ordering::SeqCst));
+        assert!(worker.handle.is_none());
+    }
 }

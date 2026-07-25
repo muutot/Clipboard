@@ -2,6 +2,7 @@
 
 use std::sync::mpsc;
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 pub const CF_UNICODETEXT: u32 = 13;
@@ -22,6 +23,8 @@ pub struct WindowsClipboardMonitor {
     ignored_apps: Vec<String>,
     last_sequence: u32,
     sender: Option<mpsc::Sender<ClipboardChange>>,
+    stop_sender: Option<mpsc::Sender<()>>,
+    handle: Option<JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +46,8 @@ impl WindowsClipboardMonitor {
             ignored_apps: vec![],
             last_sequence: 0,
             sender: None,
+            stop_sender: None,
+            handle: None,
         }
     }
 
@@ -52,40 +57,59 @@ impl WindowsClipboardMonitor {
         }
 
         let (sender, receiver) = mpsc::channel();
-        self.sender = Some(sender.clone());
+        let (stop_sender, stop_receiver) = mpsc::channel();
+        let sender_for_thread = sender.clone();
+
+        let handle = thread::Builder::new()
+            .name("clipboard-monitor".to_owned())
+            .spawn(move || {
+                let mut sequence = 0u32;
+                loop {
+                    match stop_receiver.recv_timeout(Duration::from_millis(300)) {
+                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    }
+
+                    let current_sequence = match read_clipboard_sequence() {
+                        Some(seq) => seq,
+                        None => continue,
+                    };
+
+                    if current_sequence == sequence {
+                        continue;
+                    }
+                    sequence = current_sequence;
+
+                    let formats = list_clipboard_formats();
+
+                    if sender_for_thread
+                        .send(ClipboardChange { sequence, formats })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+            .map_err(|error| format!("failed to spawn clipboard monitor: {error}"))?;
+        self.sender = Some(sender);
+        self.stop_sender = Some(stop_sender);
+        self.handle = Some(handle);
         self.running = true;
-
-        let _ignored = self.ignored_apps.clone();
-
-        thread::spawn(move || {
-            let mut sequence = 0u32;
-            loop {
-                thread::sleep(Duration::from_millis(300));
-
-                let current_sequence = match read_clipboard_sequence() {
-                    Some(seq) => seq,
-                    None => continue,
-                };
-
-                if current_sequence == sequence {
-                    continue;
-                }
-                sequence = current_sequence;
-
-                let formats = list_clipboard_formats();
-
-                if sender.send(ClipboardChange { sequence, formats }).is_err() {
-                    break;
-                }
-            }
-        });
 
         Ok(receiver)
     }
 
     pub fn stop(&mut self) {
         self.running = false;
+        if let Some(sender) = self.stop_sender.take() {
+            let _ = sender.send(());
+        }
         self.sender = None;
+        if let Some(handle) = self.handle.take() {
+            if handle.thread().id() != thread::current().id() {
+                let _ = handle.join();
+            }
+        }
     }
 
     pub fn is_running(&self) -> bool {
@@ -94,6 +118,12 @@ impl WindowsClipboardMonitor {
 
     pub fn set_ignored_apps(&mut self, apps: Vec<String>) {
         self.ignored_apps = apps;
+    }
+}
+
+impl Drop for WindowsClipboardMonitor {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
