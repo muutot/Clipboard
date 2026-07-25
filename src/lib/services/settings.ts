@@ -7,6 +7,7 @@ import type {
   GeneralSettings,
   GeneralSettingsInfo,
   Language,
+  WindowConfig,
   WindowPosition,
 } from "$lib/types/clipboard";
 
@@ -331,6 +332,26 @@ export async function setGeneralSettings(value: GeneralSettings): Promise<Genera
   const settings = normalizeGeneralSettings(value);
   if (!isTauriRuntime()) return settings;
   return invoke<GeneralSettings>("set_general_settings", { settings });
+}
+
+export async function getWindowConfig(): Promise<WindowConfig> {
+  if (!isTauriRuntime()) {
+    return {
+      launchAtStartup: false,
+      closeToTray: true,
+      singleInstance: true,
+    };
+  }
+  return invoke<WindowConfig>("get_window_config");
+}
+
+export async function setWindowConfig(settings: Partial<WindowConfig>): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("set_window_config", {
+    launchAtStartup: settings.launchAtStartup ?? null,
+    closeToTray: settings.closeToTray ?? null,
+    singleInstance: settings.singleInstance ?? null,
+  });
 }
 
 export async function restoreWindowPosition(): Promise<WindowPosition | null> {

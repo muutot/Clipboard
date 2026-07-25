@@ -252,6 +252,12 @@ export interface LocaleDefinition {
     windowTransparencyDescription: string;
     compactMode: string;
     compactModeDescription: string;
+    launchAtStartup: string;
+    launchAtStartupDescription: string;
+    closeToTray: string;
+    closeToTrayDescription: string;
+    windowConfigLoadFailed: string;
+    windowConfigUpdateFailed: string;
     alwaysOnTop: string;
     alwaysOnTopDescription: string;
     pinCopiedToTop: string;

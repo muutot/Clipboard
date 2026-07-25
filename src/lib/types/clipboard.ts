@@ -92,6 +92,12 @@ export interface WindowPosition {
   height: number;
 }
 
+export interface WindowConfig {
+  launchAtStartup: boolean;
+  closeToTray: boolean;
+  singleInstance: boolean;
+}
+
 export interface CaptureSettings {
   retentionPeriodDays: number;
   maxItemCount: number;

@@ -2,8 +2,8 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { ThemeMode } from "$lib/types/clipboard";
-  import { generalSettings } from "$lib/services/settings";
+  import type { ThemeMode, WindowConfig } from "$lib/types/clipboard";
+  import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -17,6 +17,9 @@
   let s = $state($generalSettings);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let windowConfig = $state<WindowConfig | null>(null);
+  let windowConfigLoading = $state(true);
+  let windowConfigSaving = $state(false);
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -25,12 +28,33 @@
     return unsub;
   });
 
+  $effect(() => {
+    let cancelled = false;
+    void getWindowConfig()
+      .then((config) => {
+        if (!cancelled) windowConfig = config;
+      })
+      .catch(() => {
+        if (!cancelled) showFeedback(_t("general.windowConfigLoadFailed"), false);
+      })
+      .finally(() => {
+        if (!cancelled) windowConfigLoading = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  function showFeedback(message: string, success: boolean) {
+    feedback = message;
+    feedbackSuccess = success;
+    setTimeout(() => (feedback = ""), 2000);
+  }
+
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);
     locale.set(lang);
-    feedback = _t(lang === "zh-CN" ? "已切换至中文" : "Switched to English");
-    feedbackSuccess = true;
-    setTimeout(() => (feedback = ""), 2000);
+    showFeedback(_t(lang === "zh-CN" ? "已切换至中文" : "Switched to English"), true);
   }
 
   function changeTheme(value: ThemeMode) {
@@ -41,6 +65,21 @@
     const val = Number((event.target as HTMLInputElement).value);
     generalSettings.updateSetting("windowTransparency", val);
     updateSliderTrack(transparencyEl);
+  }
+
+  async function changeWindowSetting(key: "launchAtStartup" | "closeToTray", value: boolean) {
+    if (!windowConfig || windowConfigSaving) return;
+    const previous = windowConfig;
+    windowConfig = { ...previous, [key]: value };
+    windowConfigSaving = true;
+    try {
+      await setWindowConfig({ [key]: value });
+    } catch {
+      windowConfig = previous;
+      showFeedback(_t("general.windowConfigUpdateFailed"), false);
+    } finally {
+      windowConfigSaving = false;
+    }
   }
 
   function updateSliderTrack(el: HTMLInputElement | null) {
@@ -91,6 +130,51 @@
         >English</button
       >
     </div>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+      <div>
+        <strong>{_t("general.launchAtStartup")}</strong>
+        <p>{_t("general.launchAtStartupDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={windowConfig?.launchAtStartup ?? false}
+      onclick={() =>
+        void changeWindowSetting("launchAtStartup", !(windowConfig?.launchAtStartup ?? false))}
+      disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
+      aria-checked={windowConfig?.launchAtStartup ?? false}
+      aria-label={_t("general.launchAtStartup")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
+      <div>
+        <strong>{_t("general.closeToTray")}</strong>
+        <p>{_t("general.closeToTrayDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={windowConfig?.closeToTray ?? false}
+      onclick={() => void changeWindowSetting("closeToTray", !(windowConfig?.closeToTray ?? false))}
+      disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
+      aria-checked={windowConfig?.closeToTray ?? false}
+      aria-label={_t("general.closeToTray")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
   </section>
 
   <section class="setting-card">
@@ -572,6 +656,11 @@
   .toggle-switch.active {
     border-color: #4aa8ff;
     background: rgba(74, 168, 255, 0.18);
+  }
+
+  .toggle-switch:disabled {
+    cursor: wait;
+    opacity: 0.6;
   }
 
   .toggle-knob {
