@@ -22,7 +22,10 @@ use content::{
     ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation,
 };
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
-use export::{export_items, import_from_json, ExportFormat, ExportOptions, ImportSummary};
+use export::{
+    export_database, import_from_json, import_from_plain_text, ExportFormat, ExportOptions,
+    ImportSummary,
+};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorker, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
@@ -36,7 +39,7 @@ use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VE
 use serde::Serialize;
 use std::io::Write;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
 use tauri::{Emitter, Manager};
 
@@ -367,7 +370,7 @@ fn get_storage_status(
         files_path: paths.files.display().to_string(),
         image_path: paths.images.display().to_string(),
         search_index_path: paths.search_index.display().to_string(),
-        search_index_size_bytes: dir_size(&paths.database_directory),
+        search_index_size_bytes: dir_size(&paths.search_index),
         search_index_version: SEARCH_INDEX_VERSION,
         search_index_rebuild_required: search_index.requires_full_rebuild(),
     })
@@ -645,20 +648,28 @@ fn configure_keyboard_shortcuts(
 fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
+    performance_tracker: tauri::State<'_, PerformanceTracker>,
     query: String,
     limit: Option<usize>,
 ) -> Result<Vec<ClipboardItem>, String> {
+    let started = Instant::now();
     SearchSynchronizer::default()
         .sync_until_idle(database.inner(), search_index.inner())
         .map_err(|error| error.to_string())?;
     let hits = search_index
-        .search(&query, limit.unwrap_or(100))
+        .search(&query, limit.unwrap_or(100).clamp(1, 500))
         .map_err(|error| error.to_string())?;
     let item_ids = hits.into_iter().map(|hit| hit.item_id).collect::<Vec<_>>();
 
-    database
+    let items = database
         .get_items_by_ids(&item_ids)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    performance_tracker.record_search(
+        &query,
+        started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+        items.len(),
+    );
+    Ok(items)
 }
 
 #[tauri::command]
@@ -1483,17 +1494,32 @@ fn export_clipboard_items(
         }),
     };
 
-    let items = database.list_recent(10_000, 0).map_err(|e| e.to_string())?;
-
-    export_items(&items, &options)
+    export_database(database.inner(), &options)
 }
 
 #[tauri::command]
 fn import_clipboard_items(
     database: tauri::State<'_, Database>,
     json: String,
+    format: Option<String>,
 ) -> Result<ImportSummary, String> {
-    import_from_json(&json, database.inner())
+    let normalized = format
+        .as_deref()
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_else(|| {
+            if json.trim_start().starts_with('[') {
+                "json".to_owned()
+            } else {
+                "plaintext".to_owned()
+            }
+        });
+    match normalized.as_str() {
+        "json" => import_from_json(&json, database.inner()),
+        "text" | "txt" | "plain" | "plaintext" | "plain-text" => {
+            import_from_plain_text(&json, database.inner())
+        }
+        other => Err(format!("unknown import format: {other}")),
+    }
 }
 
 #[tauri::command]
