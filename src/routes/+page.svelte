@@ -667,6 +667,7 @@
       }
       if (appWindow) {
         appWindow.setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
+        appWindow.setDecorations(s.useSystemTitleBar).catch(() => {});
         if (!s.rememberWindowPosition) {
           restoreAttempted = false;
         } else if (!previousRememberWindowPosition) {
