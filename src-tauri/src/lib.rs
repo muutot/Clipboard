@@ -1602,6 +1602,8 @@ fn run_cli_command(
     command: String,
     query: Option<String>,
     limit: Option<usize>,
+    format: Option<String>,
+    output_path: Option<String>,
 ) -> Result<String, String> {
     let command = match command.as_str() {
         "list" => CliCommand::List,
@@ -1618,6 +1620,8 @@ fn run_cli_command(
         command,
         query,
         limit,
+        format,
+        output_path,
     };
 
     cli::run_cli_command(&args, database.inner())
