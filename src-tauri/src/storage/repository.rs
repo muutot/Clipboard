@@ -23,6 +23,13 @@ const ITEM_COLUMNS: &str = "
     metadata_json
 ";
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct StorageFileReferences {
+    pub resource_paths: Vec<String>,
+    pub preview_paths: Vec<String>,
+    pub icon_paths: Vec<String>,
+}
+
 pub trait ClipboardRepository {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError>;
     /// Atomically replaces the textual payload of an active text/link item.
@@ -79,7 +86,11 @@ pub trait ClipboardRepository {
     fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
     fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
     fn size_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
-    fn list_active_file_paths(&self) -> Result<Vec<String>, StorageError>;
+    /// Returns every filesystem reference still owned by a database record.
+    ///
+    /// Soft-deleted records remain recoverable, so their resources must stay
+    /// referenced until the record is permanently removed.
+    fn list_storage_file_references(&self) -> Result<StorageFileReferences, StorageError>;
 }
 
 impl ClipboardRepository for Database {
@@ -686,18 +697,34 @@ impl ClipboardRepository for Database {
         })
     }
 
-    fn list_active_file_paths(&self) -> Result<Vec<String>, StorageError> {
+    fn list_storage_file_references(&self) -> Result<StorageFileReferences, StorageError> {
         self.with_connection(|connection| {
             let mut statement = connection.prepare(
-                "SELECT resource_path FROM clipboard_items WHERE resource_path IS NOT NULL AND deleted = 0
-                 UNION
-                 SELECT preview_path FROM clipboard_items WHERE preview_path IS NOT NULL AND deleted = 0
-                 UNION
-                 SELECT icon_path FROM clipboard_items WHERE icon_path IS NOT NULL AND deleted = 0",
+                "SELECT 'resource', resource_path
+                 FROM clipboard_items
+                 WHERE resource_path IS NOT NULL
+                 UNION ALL
+                 SELECT 'preview', preview_path
+                 FROM clipboard_items
+                 WHERE preview_path IS NOT NULL
+                 UNION ALL
+                 SELECT 'icon', icon_path
+                 FROM clipboard_items
+                 WHERE icon_path IS NOT NULL",
             )?;
-            let paths = statement
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<Result<Vec<_>, _>>()?;
+            let references = statement.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            let mut paths = StorageFileReferences::default();
+            for reference in references {
+                let (kind, path) = reference?;
+                match kind.as_str() {
+                    "resource" => paths.resource_paths.push(path),
+                    "preview" => paths.preview_paths.push(path),
+                    "icon" => paths.icon_paths.push(path),
+                    _ => unreachable!("storage reference query returned an unknown kind"),
+                }
+            }
             Ok(paths)
         })
     }

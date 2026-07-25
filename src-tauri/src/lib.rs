@@ -11,6 +11,7 @@ pub mod privacy;
 pub mod search;
 pub mod storage;
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -40,7 +41,9 @@ use serde::Serialize;
 use std::io::Write;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
+use storage::{
+    ClipboardRepository, Database, OcrRepository, RepairResult, StorageFileReferences, StoragePaths,
+};
 use tauri::{Emitter, Manager};
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
@@ -1379,21 +1382,16 @@ fn cleanup_orphan_storage_files(
     database: &Database,
     paths: &StoragePaths,
 ) -> Result<StorageCleanupResult, String> {
-    let active_paths: std::collections::HashSet<String> = database
-        .list_active_file_paths()
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .collect();
+    let references = database
+        .list_storage_file_references()
+        .map_err(|error| error.to_string())?;
+    let icons = paths.storage.join("icons");
+    let referenced_paths = resolve_storage_file_references(paths, &icons, references);
 
     let mut removed_files = 0u64;
     let mut freed_bytes = 0u64;
 
-    let scan_dirs: &[&std::path::Path] = &[
-        &paths.images,
-        &paths.previews,
-        &paths.files,
-        &paths.storage.join("icons"),
-    ];
+    let scan_dirs: &[&Path] = &[&paths.images, &paths.previews, &paths.files, &icons];
 
     for dir in scan_dirs {
         if !dir.is_dir() {
@@ -1405,8 +1403,7 @@ fn cleanup_orphan_storage_files(
             if entry_path.is_dir() {
                 continue;
             }
-            let path_str = entry_path.to_string_lossy().to_string();
-            if active_paths.contains(&path_str) {
+            if referenced_paths.contains(&normalized_cleanup_path(&entry_path)) {
                 continue;
             }
             if let Ok(metadata) = entry.metadata() {
@@ -1427,6 +1424,56 @@ fn cleanup_orphan_storage_files(
         removed_files,
         freed_bytes,
     })
+}
+
+fn resolve_storage_file_references(
+    paths: &StoragePaths,
+    icons: &Path,
+    references: StorageFileReferences,
+) -> HashSet<PathBuf> {
+    let mut resolved = HashSet::new();
+    extend_cleanup_references(
+        &mut resolved,
+        references.resource_paths,
+        &[&paths.storage, &paths.images, &paths.files],
+    );
+    extend_cleanup_references(
+        &mut resolved,
+        references.preview_paths,
+        &[&paths.storage, &paths.images, &paths.previews],
+    );
+    extend_cleanup_references(
+        &mut resolved,
+        references.icon_paths,
+        &[&paths.storage, icons],
+    );
+    resolved
+}
+
+fn extend_cleanup_references(
+    resolved: &mut HashSet<PathBuf>,
+    references: Vec<String>,
+    relative_bases: &[&Path],
+) {
+    for reference in references {
+        if reference.trim().is_empty() {
+            continue;
+        }
+        let path = Path::new(&reference);
+        if path.is_absolute() {
+            resolved.insert(normalized_cleanup_path(path));
+        } else {
+            resolved.extend(
+                relative_bases
+                    .iter()
+                    .map(|base| normalized_cleanup_path(&base.join(path))),
+            );
+        }
+    }
+}
+
+fn normalized_cleanup_path(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[tauri::command]
@@ -2799,5 +2846,110 @@ mod capture_tests {
         assert!(stop_flag.load(Ordering::SeqCst));
         assert!(exited.load(Ordering::SeqCst));
         assert!(worker.handle.is_none());
+    }
+}
+
+#[cfg(test)]
+mod storage_cleanup_tests {
+    use std::{fs, time::SystemTime};
+
+    use super::*;
+
+    fn temporary_storage(label: &str) -> StoragePaths {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let project = std::env::temp_dir().join(format!(
+            "clipboard-storage-cleanup-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        StoragePaths::initialize(project).unwrap()
+    }
+
+    fn stored_item(
+        id: &str,
+        kind: ClipboardKind,
+        resource_path: Option<String>,
+        icon_path: Option<String>,
+    ) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind,
+            title: format!("record-{id}"),
+            text_content: (kind == ClipboardKind::Text).then(|| format!("content-{id}")),
+            resource_path,
+            preview_path: None,
+            content_hash: format!("hash-{id}"),
+            source_app: Some("test-suite".to_owned()),
+            icon_path,
+            size_bytes: 12,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: None,
+        }
+    }
+
+    #[test]
+    fn cleanup_preserves_soft_deleted_resources_until_permanent_deletion() {
+        let paths = temporary_storage("recycle-bin");
+        let resource = paths.images.join("recoverable.png");
+        let preview = paths.previews.join("recoverable-preview.png");
+        fs::write(&resource, b"image-data").unwrap();
+        fs::write(&preview, b"preview-data").unwrap();
+        let database = Database::open_in_memory().unwrap();
+        let mut item = stored_item(
+            "recoverable",
+            ClipboardKind::Image,
+            Some(resource.to_string_lossy().into_owned()),
+            None,
+        );
+        item.preview_path = Some(preview.to_string_lossy().into_owned());
+        database.save_item(&item).unwrap();
+        database.soft_delete("recoverable").unwrap();
+
+        let first_cleanup = cleanup_orphan_storage_files(&database, &paths).unwrap();
+
+        assert_eq!(first_cleanup.removed_files, 0);
+        assert!(resource.exists());
+        assert!(preview.exists());
+        assert!(database.restore_deleted("recoverable").unwrap());
+
+        database.soft_delete("recoverable").unwrap();
+        assert!(database.permanently_delete("recoverable").unwrap());
+        let second_cleanup = cleanup_orphan_storage_files(&database, &paths).unwrap();
+
+        assert_eq!(second_cleanup.removed_files, 2);
+        assert!(!resource.exists());
+        assert!(!preview.exists());
+        fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn cleanup_resolves_icon_keys_and_removes_only_unreferenced_icons() {
+        let paths = temporary_storage("icon-key");
+        let icons = paths.storage.join("icons");
+        fs::create_dir_all(&icons).unwrap();
+        let referenced_icon = icons.join("notepad.png");
+        let orphan_icon = icons.join("orphan.png");
+        fs::write(&referenced_icon, b"referenced").unwrap();
+        fs::write(&orphan_icon, b"orphan").unwrap();
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&stored_item(
+                "text",
+                ClipboardKind::Text,
+                None,
+                Some("notepad.png".to_owned()),
+            ))
+            .unwrap();
+
+        let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+
+        assert_eq!(result.removed_files, 1);
+        assert!(referenced_icon.exists());
+        assert!(!orphan_icon.exists());
+        fs::remove_dir_all(&paths.project).unwrap();
     }
 }
