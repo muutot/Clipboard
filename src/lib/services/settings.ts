@@ -507,10 +507,7 @@ function createSettingsStore() {
       if (pendingValue || (dirtyAtHydration.size > 0 && !response.legacyMigrationRequired)) {
         schedulePersist();
       }
-    })().finally(() => {
-      // Keep the resolved promise for idempotent callers, while exposing any
-      // failed migration through the retained pending value and a later flush.
-    });
+    })();
     return initialization;
   }
 
