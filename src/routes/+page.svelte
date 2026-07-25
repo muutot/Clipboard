@@ -381,7 +381,15 @@
       .then((storedItems) => {
         if (storedItems === null) return;
 
-        items = storedItems;
+        // The recycle-bin page can be opened while the active-history query
+        // is still in flight. Preserve any deleted rows that were loaded or
+        // locally mutated during that window instead of replacing them.
+        const deletedItems = items.filter((item) => item.deleted);
+        const storedIds = new Set(storedItems.map((item) => item.id));
+        items = [
+          ...storedItems,
+          ...deletedItems.filter((item) => !storedIds.has(item.id)),
+        ];
         selectedId = storedItems[0]?.id ?? "";
       })
       .catch((error) => {
