@@ -300,13 +300,18 @@
   }
 
   .close-button {
-    width: 28px;
-    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--settings-close-size, 28px);
+    height: var(--settings-close-size, 28px);
+    flex: 0 0 auto;
+    padding: 0;
     border: 1px solid #353535;
-    border-radius: 7px;
+    border-radius: var(--settings-close-radius, 7px);
     color: #999;
     background: #222;
-    font-size: 18px;
+    font-size: var(--settings-close-font-size, 19px);
     line-height: 1;
     cursor: pointer;
   }
@@ -364,7 +369,7 @@
     height: 29px;
     flex: 0 0 auto;
     border: 1px solid #363636;
-    border-radius: 7px;
+    border-radius: var(--settings-icon-radius, 7px);
     color: #d2d2d2;
     background: #242424;
   }
@@ -393,7 +398,7 @@
 
   .value-label {
     color: #aaa;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -516,7 +521,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
 </style>

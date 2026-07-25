@@ -1053,8 +1053,14 @@
     --settings-description-size: var(--font-size-secondary, 11px);
     --settings-note-size: var(--font-size-tiny, 10px);
     --settings-control-size: var(--font-size-secondary, 11px);
+    --settings-feedback-size: var(--settings-description-size);
+    --settings-feedback-radius: 7px;
     --settings-card-radius: 9px;
     --settings-control-radius: 6px;
+    --settings-icon-radius: 7px;
+    --settings-close-size: 28px;
+    --settings-close-radius: 7px;
+    --settings-close-font-size: 19px;
     display: grid;
     grid-template-columns: 168px minmax(0, 1fr);
     width: min(728px, 100%);
@@ -1122,7 +1128,7 @@
   .settings-brand small {
     margin-top: 2px;
     color: #6f6f6f;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .settings-primary-nav {
@@ -1137,7 +1143,7 @@
     width: 100%;
     padding: 8px 10px;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #999;
     background: #1a1a1a;
     font: inherit;
@@ -1173,7 +1179,7 @@
     margin-top: auto;
     padding: 10px 6px 0;
     color: #606060;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .sidebar-foot code {
@@ -1264,13 +1270,18 @@
   }
 
   .close-button {
-    width: 28px;
-    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--settings-close-size);
+    height: var(--settings-close-size);
+    flex: 0 0 auto;
+    padding: 0;
     border: 1px solid #353535;
-    border-radius: 7px;
+    border-radius: var(--settings-close-radius);
     color: #999;
     background: #222;
-    font-size: 19px;
+    font-size: var(--settings-close-font-size);
     line-height: 1;
     cursor: pointer;
   }
@@ -1312,7 +1323,7 @@
   .setting-icon {
     width: 29px;
     height: 29px;
-    border-radius: 7px;
+    border-radius: var(--settings-icon-radius);
   }
 
   .setting-heading strong {
@@ -1464,7 +1475,7 @@
     border: 1px solid #393939;
     border-radius: 999px;
     color: #888;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size);
     font-weight: 500;
     vertical-align: middle;
   }
@@ -1479,7 +1490,7 @@
     display: block;
     margin: 12px 0 6px;
     color: #8a8a8a;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   input {
@@ -1543,7 +1554,7 @@
     background: #1e1e1e;
     color: #d7d7d7;
     padding: 6px 10px;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size);
   }
 
   .pending-path {
@@ -1555,11 +1566,11 @@
     padding-top: 9px;
     border-top: 1px solid #2d2d2d;
     color: #6f6f6f;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .pending-path code {
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .directory-tree-card pre {
@@ -1591,7 +1602,7 @@
     border: 1px solid #2b2b2b;
     border-radius: 6px;
     background: #161616;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .stat-row span:first-child {
@@ -1606,7 +1617,7 @@
   .stat-item {
     padding: 10px;
     border: 1px solid #2e2e2e;
-    border-radius: 7px;
+    border-radius: var(--settings-card-radius);
     background: #141414;
     text-align: center;
   }
@@ -1621,12 +1632,12 @@
 
   .stat-label {
     color: #777;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .number-suffix {
     color: #888;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
     flex-shrink: 0;
   }
 
@@ -1635,7 +1646,7 @@
     flex: 1;
     place-items: center;
     color: #777;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .settings-feedback {
@@ -1645,10 +1656,10 @@
     left: 18px;
     padding: 8px 10px;
     border: 1px solid #553434;
-    border-radius: 7px;
+    border-radius: var(--settings-feedback-radius);
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: var(--settings-description-size);
+    font-size: var(--settings-feedback-size);
   }
 
   .settings-feedback.success {
@@ -1674,9 +1685,9 @@
     margin-top: 10px;
     padding: 8px 9px;
     border: 1px solid #2f2f2f;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     background: #181818;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
   }
 
   .repair-result span.ok {
@@ -1691,14 +1702,14 @@
     display: block;
     margin-top: 4px;
     color: #a7a7a7;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size);
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-note-size);
     text-align: center;
   }
 
@@ -1717,7 +1728,7 @@
     flex: 1;
     min-width: 0;
     color: #dedede;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-heading-size);
     font-weight: 560;
   }
 
@@ -1726,10 +1737,11 @@
     flex-shrink: 0;
     padding: 7px 10px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #d7d7d7;
     background: #1a1a1a;
-    font: 12px inherit;
+    font: inherit;
+    font-size: var(--settings-control-size);
     text-align: right;
     outline: none;
     transition: border-color 120ms ease;
@@ -1783,7 +1795,7 @@
 
   .setting-card-row .number-suffix {
     color: #888;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-description-size);
     flex-shrink: 0;
   }
 
@@ -1792,7 +1804,7 @@
     min-width: 0;
     overflow: hidden;
     color: #777;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -1803,11 +1815,11 @@
     gap: 5px;
     padding: 5px 10px;
     border: 1px solid #3a3a3a;
-    border-radius: 5px;
+    border-radius: var(--settings-control-radius);
     color: #999;
     background: #222;
     font: inherit;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-control-size);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1833,13 +1845,11 @@
     min-width: 0;
     padding: 7px 10px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #d7d7d7;
     background: #1a1a1a;
-    font:
-      12px "Cascadia Code",
-      Consolas,
-      monospace;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: var(--settings-control-size);
     outline: none;
     transition: border-color 120ms ease;
   }
@@ -1851,11 +1861,11 @@
   .dir-input-row button {
     padding: 7px 12px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #a3a3a3;
     background: #252525;
     font: inherit;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1886,13 +1896,11 @@
     min-width: 0;
     padding: 6px 9px;
     border: 1px solid #2f2f2f;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #a7a7a7;
     background: #181818;
-    font:
-      10.5px "Cascadia Code",
-      Consolas,
-      monospace;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: var(--settings-note-size);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1901,11 +1909,11 @@
   .path-button-row button {
     padding: 6px 12px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #a3a3a3;
     background: #252525;
     font: inherit;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1928,10 +1936,10 @@
     width: 64px;
     padding: 8px 6px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #d7d7d7;
     background: #1a1a1a;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size);
     cursor: pointer;
     flex-shrink: 0;
     text-align: center;
@@ -1950,10 +1958,10 @@
     margin-left: auto;
     padding: 5px 12px;
     border: 1px solid #4a4a4a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius);
     color: #d8d8d8;
     background: #2a2a2a;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size);
     cursor: pointer;
     flex-shrink: 0;
     transition:

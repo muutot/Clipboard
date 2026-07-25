@@ -291,13 +291,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--settings-close-size, 28px);
+    height: var(--settings-close-size, 28px);
+    flex: 0 0 auto;
+    padding: 0;
     border: 1px solid #353535;
-    border-radius: 7px;
+    border-radius: var(--settings-close-radius, 7px);
     color: #999;
     background: #222;
-    font-size: 18px;
+    font-size: var(--settings-close-font-size, 19px);
     line-height: 1;
   }
   .settings-scroll {
@@ -330,7 +332,7 @@
     min-height: 365px;
     flex: 1;
     border: 1px solid #303030;
-    border-radius: 10px;
+    border-radius: var(--settings-card-radius, 9px);
     background: #1b1b1b;
     overflow: hidden;
   }
@@ -359,7 +361,7 @@
     border: 1px solid #3a3a3a;
     border-radius: 999px;
     color: #898989;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     font-weight: 500;
   }
   .column-heading button,
@@ -379,7 +381,7 @@
     margin: 9px 0;
     padding: 7px 9px;
     border: 1px solid #373737;
-    border-radius: 7px;
+    border-radius: var(--settings-control-radius, 6px);
     color: #676767;
     background: #181818;
   }
@@ -391,7 +393,8 @@
     outline: 0;
     color: #d7d7d7;
     background: transparent;
-    font: var(--settings-control-size, 11px) inherit;
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
   .manual-add {
     display: flex;
@@ -399,17 +402,17 @@
     margin-bottom: 8px;
     padding: 6px 7px 6px 9px;
     border: 1px dashed #363636;
-    border-radius: 7px;
+    border-radius: var(--settings-control-radius, 6px);
     background: #191919;
   }
   .manual-add button {
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--settings-control-radius, 6px);
     padding: 4px 7px;
     color: #c8c8c8;
     background: #303030;
     font: inherit;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
   .application-list {
     flex: 1;
@@ -426,7 +429,7 @@
     min-height: 36px;
     padding: 3px 5px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--settings-control-radius, 6px);
     color: #d8d8d8;
     background: transparent;
     font-size: var(--settings-control-size, 11px);
@@ -472,10 +475,10 @@
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid #424242;
-    border-radius: 7px;
+    border-radius: var(--settings-icon-radius, 7px);
     color: #ddd;
     background: linear-gradient(145deg, #3d4656, #252a32);
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     font-weight: 700;
   }
   .app-avatar.locked {
@@ -486,7 +489,7 @@
     width: 25px;
     height: 25px;
     flex: 0 0 auto;
-    border-radius: 7px;
+    border-radius: var(--settings-icon-radius, 7px);
     object-fit: contain;
   }
   .transfer-column {
@@ -520,7 +523,7 @@
   .empty-list {
     margin: 16px 6px;
     color: #626262;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
   .settings-state {
@@ -528,13 +531,14 @@
     flex: 1;
     place-items: center;
     color: #777;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: right;
   }
   .settings-feedback {
@@ -544,10 +548,10 @@
     left: 18px;
     padding: 8px 10px;
     border: 1px solid #553434;
-    border-radius: 7px;
+    border-radius: var(--settings-feedback-radius, 7px);
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
   }
   .settings-feedback.success {
     border-color: #35513f;

@@ -347,13 +347,18 @@
   }
 
   .close-button {
-    width: 28px;
-    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--settings-close-size, 28px);
+    height: var(--settings-close-size, 28px);
+    flex: 0 0 auto;
+    padding: 0;
     border: 1px solid #353535;
-    border-radius: 7px;
+    border-radius: var(--settings-close-radius, 7px);
     color: #999;
     background: #222;
-    font-size: 18px;
+    font-size: var(--settings-close-font-size, 19px);
     line-height: 1;
     cursor: pointer;
   }
@@ -411,7 +416,7 @@
     height: 29px;
     flex: 0 0 auto;
     border: 1px solid #363636;
-    border-radius: 7px;
+    border-radius: var(--settings-icon-radius, 7px);
     color: #d2d2d2;
     background: #242424;
   }
@@ -440,7 +445,7 @@
 
   .value-label {
     color: #aaa;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -454,11 +459,11 @@
   .lang-toggle button {
     padding: 7px 16px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius, 6px);
     color: #999;
     background: #1a1a1a;
     font: inherit;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     transition:
       background 100ms ease,
@@ -590,11 +595,11 @@
   .theme-select {
     padding: 5px 8px;
     border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius, 6px);
     color: #d8d8d8;
     background: #1a1a1a;
     font: inherit;
-    font-size: var(--font-size-secondary, 11px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     flex-shrink: 0;
     outline: none;
@@ -618,10 +623,10 @@
     left: 18px;
     padding: 8px 10px;
     border: 1px solid #553434;
-    border-radius: 7px;
+    border-radius: var(--settings-feedback-radius, 7px);
     color: #d59c9c;
     background: rgba(48, 27, 27, 0.96);
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
   }
 
   .settings-feedback.success {
@@ -634,7 +639,7 @@
     margin: 0;
     padding: 8px 0 0;
     color: #666;
-    font-size: var(--font-size-tiny, 10px);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
 </style>
