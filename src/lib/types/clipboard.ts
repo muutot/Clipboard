@@ -3,6 +3,38 @@ export const clipboardKinds = ["text", "link", "image", "file"] as const;
 export type ClipboardKind = (typeof clipboardKinds)[number];
 export type ClipboardFilter = "all" | ClipboardKind | "favorite" | "deleted";
 
+export interface ResourceFileMetadata {
+  name: string;
+  size: number;
+  sizeBytes: number;
+  extension?: string;
+  mimeType?: string;
+  storagePath?: string;
+  originalPath?: string;
+  contentHash?: string;
+  copied?: boolean;
+  createdAtMs?: number;
+  modifiedAtMs?: number;
+  accessedAtMs?: number;
+  readOnly?: boolean;
+  isDirectory?: boolean;
+}
+
+export interface ResourceMetadata {
+  schemaVersion?: number;
+  mimeType?: string;
+  extension?: string;
+  sizeBytes?: number;
+  resourcePath?: string;
+  previewPath?: string;
+  storagePath?: string;
+  originalPath?: string;
+  contentHash?: string;
+  width?: number;
+  height?: number;
+  files?: ResourceFileMetadata[];
+}
+
 export interface ClipboardItem {
   id: string;
   kind: ClipboardKind;
@@ -22,10 +54,8 @@ export interface ClipboardItem {
     width: number;
     height: number;
   };
-  fileMeta?: {
-    name: string;
-    size: number;
-  }[];
+  fileMeta?: ResourceFileMetadata[];
+  resourceMetadata?: ResourceMetadata;
   mimeType?: string;
   ocrText?: string;
   ocrStatus?: "pending" | "processing" | "completed" | "failed" | "none";

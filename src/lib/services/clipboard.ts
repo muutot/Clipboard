@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
-import type { ClipboardItem, PersistedClipboardItem } from "$lib/types/clipboard";
+import type {
+  ClipboardItem,
+  PersistedClipboardItem,
+  ResourceFileMetadata,
+  ResourceMetadata,
+} from "$lib/types/clipboard";
 import { getLocale, resolvePath } from "$lib/i18n";
 import zhCN from "$lib/i18n/locales/zh-CN";
 import en from "$lib/i18n/locales/en";
@@ -173,7 +178,7 @@ export function generatedClipboardTitle(text: string): string {
   return Array.from(text).slice(0, 200).join("");
 }
 
-function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
+export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;
   const sourceApp = record.sourceApp?.trim() || resolvePath(messages, "app.name");
@@ -181,25 +186,15 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const fileLabel = locale === "zh-CN" ? "个文件" : " file(s)";
   const imageLabel = locale === "zh-CN" ? "图片记录" : "Image record";
 
-  let imageMeta: { width: number; height: number } | undefined;
-  let fileMeta: { name: string; size: number }[] | undefined;
-  if (record.metadataJson) {
-    try {
-      const meta = JSON.parse(record.metadataJson);
-      if (
-        record.kind === "image" &&
-        typeof meta.width === "number" &&
-        typeof meta.height === "number"
-      ) {
-        imageMeta = { width: meta.width, height: meta.height };
-      }
-      if (record.kind === "file" && Array.isArray(meta.files)) {
-        fileMeta = meta.files;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  const resourceMetadata = parseResourceMetadata(record);
+  const imageMeta =
+    record.kind === "image" &&
+    resourceMetadata?.width !== undefined &&
+    resourceMetadata.height !== undefined
+      ? { width: resourceMetadata.width, height: resourceMetadata.height }
+      : undefined;
+  const fileMeta = record.kind === "file" ? resourceMetadata?.files : undefined;
+  const primaryFile = fileMeta?.[0];
 
   return {
     id: record.id,
@@ -210,15 +205,23 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     sourceTone: sourceTone(sourceApp, locale),
     sizeLabel: formatSizeSimple(record),
     sizeBytes: record.sizeBytes,
+    detailLabel:
+      record.kind === "image" && imageMeta
+        ? `${imageMeta.width} × ${imageMeta.height}`
+        : record.kind === "file" && fileMeta?.length === 1 && primaryFile?.extension
+          ? primaryFile.extension.toLocaleUpperCase()
+          : undefined,
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
     customTitle: isCustomClipboardTitle(record),
     fileName:
-      record.kind === "file"
-        ? fileMeta?.[0]?.name || fileNameFromPath(record.resourcePath) || record.title
+      record.kind === "image" || record.kind === "file"
+        ? primaryFile?.name || fileNameFromPath(record.resourcePath) || record.title
         : undefined,
     imageMeta,
     fileMeta,
+    resourceMetadata,
+    mimeType: resourceMetadata?.mimeType ?? primaryFile?.mimeType,
     previewPath: record.previewPath,
     resourcePath: record.resourcePath,
     contentHash: record.contentHash,
@@ -226,6 +229,233 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     iconPath: record.iconPath,
     metadataJson: record.metadataJson,
   };
+}
+
+export function parseResourceMetadata(
+  record: PersistedClipboardItem,
+): ResourceMetadata | undefined {
+  if (record.kind !== "image" && record.kind !== "file") return undefined;
+
+  const rawMetadata = parseMetadataObject(record.metadataJson);
+  const schemaVersion = optionalNumber(rawMetadata.schemaVersion);
+  const resourcePath = optionalString(rawMetadata.resourcePath) ?? record.resourcePath ?? undefined;
+  const previewPath = optionalString(rawMetadata.previewPath) ?? record.previewPath ?? undefined;
+  const storagePath = optionalString(rawMetadata.storagePath) ?? resourcePath;
+  const topLevelExtension = normalizeExtension(
+    optionalString(rawMetadata.extension) ?? extensionFromPath(resourcePath),
+  );
+  const topLevelMime =
+    optionalString(rawMetadata.mimeType) ??
+    mimeTypeFromExtension(topLevelExtension) ??
+    (record.kind === "file" ? "application/octet-stream" : undefined);
+
+  if (record.kind === "image") {
+    return {
+      schemaVersion,
+      mimeType: topLevelMime,
+      extension: topLevelExtension,
+      sizeBytes: optionalNumber(rawMetadata.sizeBytes) ?? record.sizeBytes,
+      resourcePath,
+      previewPath,
+      storagePath,
+      originalPath: optionalString(rawMetadata.originalPath),
+      contentHash: optionalString(rawMetadata.contentHash) ?? record.contentHash,
+      width: optionalNumber(rawMetadata.width),
+      height: optionalNumber(rawMetadata.height),
+    };
+  }
+
+  const rawFiles = Array.isArray(rawMetadata.files) ? rawMetadata.files : [];
+  const parsedFiles = rawFiles
+    .map((value, index) => parseFileMetadata(value, record, rawFiles.length, index))
+    .filter((value): value is ResourceFileMetadata => value !== undefined);
+  const fallbackFile =
+    parsedFiles.length === 0 && (record.resourcePath || record.title)
+      ? createFallbackFileMetadata(record)
+      : undefined;
+  const files = fallbackFile ? [fallbackFile] : parsedFiles;
+  const primaryFile = files[0];
+
+  const explicitMimeType = optionalString(rawMetadata.mimeType);
+  const commonMimeType =
+    files.length > 1 && files.every((file) => file.mimeType === files[0]?.mimeType)
+      ? files[0]?.mimeType
+      : undefined;
+  const fileMimeType =
+    files.length === 1 ? (topLevelMime ?? primaryFile?.mimeType) : commonMimeType;
+
+  return {
+    schemaVersion,
+    mimeType: explicitMimeType ?? fileMimeType,
+    extension: topLevelExtension ?? (files.length === 1 ? primaryFile?.extension : undefined),
+    sizeBytes: optionalNumber(rawMetadata.sizeBytes) ?? record.sizeBytes,
+    resourcePath: resourcePath ?? primaryFile?.storagePath,
+    storagePath: storagePath ?? primaryFile?.storagePath,
+    originalPath:
+      optionalString(rawMetadata.originalPath) ??
+      (files.length === 1 ? primaryFile?.originalPath : undefined),
+    contentHash: optionalString(rawMetadata.contentHash) ?? record.contentHash,
+    files,
+  };
+}
+
+function parseFileMetadata(
+  value: unknown,
+  record: PersistedClipboardItem,
+  fileCount: number,
+  index: number,
+): ResourceFileMetadata | undefined {
+  if (!isObject(value)) return undefined;
+
+  const storagePath = optionalString(value.storagePath) ?? optionalString(value.path);
+  const originalPath = optionalString(value.originalPath);
+  const name =
+    optionalString(value.name) ??
+    optionalString(value.originalName) ??
+    fileNameFromPath(originalPath ?? storagePath ?? null) ??
+    (index === 0 ? record.title : undefined);
+  if (!name) return undefined;
+
+  const extension = normalizeExtension(
+    optionalString(value.extension) ??
+      extensionFromPath(name) ??
+      extensionFromPath(originalPath) ??
+      extensionFromPath(storagePath),
+  );
+  const sizeBytes =
+    optionalNumber(value.sizeBytes) ??
+    optionalNumber(value.size) ??
+    (fileCount === 1 ? record.sizeBytes : 0);
+
+  return {
+    name,
+    size: sizeBytes,
+    sizeBytes,
+    extension,
+    mimeType:
+      optionalString(value.mimeType) ??
+      mimeTypeFromExtension(extension) ??
+      "application/octet-stream",
+    storagePath: storagePath ?? (index === 0 ? (record.resourcePath ?? undefined) : undefined),
+    originalPath,
+    contentHash: optionalString(value.contentHash),
+    copied: optionalBoolean(value.copied),
+    createdAtMs: optionalNumber(value.createdAtMs),
+    modifiedAtMs: optionalNumber(value.modifiedAtMs),
+    accessedAtMs: optionalNumber(value.accessedAtMs),
+    readOnly: optionalBoolean(value.readOnly),
+    isDirectory: optionalBoolean(value.isDirectory),
+  };
+}
+
+function createFallbackFileMetadata(record: PersistedClipboardItem): ResourceFileMetadata {
+  const name = fileNameFromPath(record.resourcePath) || record.title;
+  const extension = normalizeExtension(extensionFromPath(name));
+  return {
+    name,
+    size: record.sizeBytes,
+    sizeBytes: record.sizeBytes,
+    extension,
+    mimeType: mimeTypeFromExtension(extension) ?? "application/octet-stream",
+    storagePath: record.resourcePath ?? undefined,
+  };
+}
+
+function parseMetadataObject(metadataJson: string | null): Record<string, unknown> {
+  if (!metadataJson) return {};
+  try {
+    const parsed: unknown = JSON.parse(metadataJson);
+    return isObject(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function normalizeExtension(extension: string | undefined): string | undefined {
+  const normalized = extension?.replace(/^\.+/, "").trim().toLocaleLowerCase();
+  return normalized || undefined;
+}
+
+function extensionFromPath(path: string | null | undefined): string | undefined {
+  const name = fileNameFromPath(path ?? null);
+  if (!name || !name.includes(".")) return undefined;
+  return name.split(".").pop();
+}
+
+function mimeTypeFromExtension(extension: string | undefined): string | undefined {
+  if (!extension) return undefined;
+  const mimeTypes: Record<string, string> = {
+    txt: "text/plain",
+    log: "text/plain",
+    md: "text/markdown",
+    html: "text/html",
+    htm: "text/html",
+    css: "text/css",
+    csv: "text/csv",
+    tsv: "text/tab-separated-values",
+    xml: "application/xml",
+    json: "application/json",
+    yaml: "application/yaml",
+    yml: "application/yaml",
+    toml: "application/toml",
+    js: "text/javascript",
+    mjs: "text/javascript",
+    ts: "text/typescript",
+    tsx: "text/typescript",
+    svg: "image/svg+xml",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    ico: "image/x-icon",
+    pdf: "application/pdf",
+    zip: "application/zip",
+    rar: "application/vnd.rar",
+    "7z": "application/x-7z-compressed",
+    gz: "application/gzip",
+    tar: "application/x-tar",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    flac: "audio/flac",
+    ogg: "audio/ogg",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    avi: "video/x-msvideo",
+    webm: "video/webm",
+    mkv: "video/x-matroska",
+    exe: "application/vnd.microsoft.portable-executable",
+    dll: "application/vnd.microsoft.portable-executable",
+    sqlite: "application/vnd.sqlite3",
+    sqlite3: "application/vnd.sqlite3",
+    db: "application/vnd.sqlite3",
+  };
+  return mimeTypes[extension] ?? "application/octet-stream";
 }
 
 function buildPreview(

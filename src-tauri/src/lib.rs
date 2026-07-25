@@ -20,7 +20,9 @@ use std::thread::{self, JoinHandle};
 use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
+    accessed_at_ms, created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms,
     ClipboardFormatInfo, ContentMarkers, FileStore, QuickAction, TextTransform, TransformOperation,
+    RESOURCE_METADATA_SCHEMA_VERSION,
 };
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{
@@ -499,6 +501,14 @@ struct CapturedFileReference {
     storage_path: String,
     original_name: String,
     size_bytes: u64,
+    content_hash: Option<String>,
+    extension: Option<String>,
+    mime_type: String,
+    created_at_ms: Option<i64>,
+    modified_at_ms: Option<i64>,
+    accessed_at_ms: Option<i64>,
+    read_only: bool,
+    is_directory: bool,
     copied: bool,
 }
 
@@ -518,12 +528,21 @@ fn store_captured_file_references(
                     storage_path: info.storage_path,
                     original_name: info.original_name,
                     size_bytes: info.size_bytes,
+                    content_hash: Some(info.content_hash),
+                    extension: info.extension,
+                    mime_type: info.mime_type,
+                    created_at_ms: info.created_at_ms,
+                    modified_at_ms: info.modified_at_ms,
+                    accessed_at_ms: info.accessed_at_ms,
+                    read_only: info.read_only,
+                    is_directory: info.is_directory,
                 },
                 Err(error) => {
                     eprintln!(
                         "[clipboard-worker] failed to store file {}: {error}",
                         source_path.display()
                     );
+                    let metadata = std::fs::metadata(source_path).ok();
                     CapturedFileReference {
                         original_path: file_path.clone(),
                         storage_path: file_path.clone(),
@@ -531,9 +550,17 @@ fn store_captured_file_references(
                             .file_name()
                             .map(|name| name.to_string_lossy().to_string())
                             .unwrap_or_else(|| file_path.clone()),
-                        size_bytes: std::fs::metadata(source_path)
-                            .map(|metadata| metadata.len())
-                            .unwrap_or(0),
+                        size_bytes: metadata.as_ref().map_or(0, std::fs::Metadata::len),
+                        content_hash: None,
+                        extension: extension_for_path(source_path),
+                        mime_type: mime_type_for_path(source_path),
+                        created_at_ms: metadata.as_ref().and_then(created_at_ms),
+                        modified_at_ms: metadata.as_ref().and_then(modified_at_ms),
+                        accessed_at_ms: metadata.as_ref().and_then(accessed_at_ms),
+                        read_only: metadata
+                            .as_ref()
+                            .is_some_and(|metadata| metadata.permissions().readonly()),
+                        is_directory: metadata.as_ref().is_some_and(std::fs::Metadata::is_dir),
                         copied: false,
                     }
                 }
@@ -543,15 +570,41 @@ fn store_captured_file_references(
 }
 
 fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
+    let first = files.first();
     serde_json::json!({
+        "schemaVersion": RESOURCE_METADATA_SCHEMA_VERSION,
+        "mimeType": first.map(|file| file.mime_type.as_str()),
+        "extension": if files.len() == 1 {
+            first.and_then(|file| file.extension.as_deref())
+        } else {
+            None
+        },
+        "sizeBytes": files.iter().map(|file| file.size_bytes).sum::<u64>(),
+        "resourcePath": first.map(|file| file.storage_path.as_str()),
+        "storagePath": first.map(|file| file.storage_path.as_str()),
+        "originalPath": if files.len() == 1 {
+            first.map(|file| file.original_path.as_str())
+        } else {
+            None
+        },
         "files": files
             .iter()
             .map(|file| serde_json::json!({
                 "name": file.original_name,
+                "extension": file.extension,
+                "mimeType": file.mime_type,
                 "size": file.size_bytes,
+                "sizeBytes": file.size_bytes,
                 "path": file.storage_path,
+                "storagePath": file.storage_path,
                 "originalPath": file.original_path,
+                "contentHash": file.content_hash,
                 "copied": file.copied,
+                "createdAtMs": file.created_at_ms,
+                "modifiedAtMs": file.modified_at_ms,
+                "accessedAtMs": file.accessed_at_ms,
+                "readOnly": file.read_only,
+                "isDirectory": file.is_directory,
             }))
             .collect::<Vec<_>>(),
     })
@@ -3131,9 +3184,18 @@ pub fn run() {
                                         Err(e) => eprintln!("[clipboard-worker] failed to write image {}: {}", img_path.display(), e),
                                     }
 
+                                    let image_path = img_path.to_string_lossy().to_string();
                                     let metadata = serde_json::json!({
+                                        "schemaVersion": RESOURCE_METADATA_SCHEMA_VERSION,
                                         "width": img_width,
                                         "height": img_height,
+                                        "mimeType": "image/png",
+                                        "extension": "png",
+                                        "sizeBytes": img.len(),
+                                        "resourcePath": image_path,
+                                        "previewPath": image_path,
+                                        "storagePath": image_path,
+                                        "contentHash": img_hash,
                                     });
 
                                     let item = ClipboardItem {
@@ -3141,8 +3203,8 @@ pub fn run() {
                                         kind: ClipboardKind::Image,
                                         title: img_path.file_stem().unwrap_or_default().to_string_lossy().to_string(),
                                         text_content: None,
-                                        resource_path: Some(img_path.to_string_lossy().to_string()),
-                                        preview_path: Some(img_path.to_string_lossy().to_string()),
+                                        resource_path: Some(image_path.clone()),
+                                        preview_path: Some(image_path),
                                         content_hash: img_hash,
                                             source_app: source_app.clone(),
                                             icon_path: icon_path.clone(),
@@ -3744,7 +3806,12 @@ mod capture_tests {
 
         let metadata: serde_json::Value =
             serde_json::from_str(&captured_file_metadata(&stored)).unwrap();
+        assert_eq!(metadata["schemaVersion"], RESOURCE_METADATA_SCHEMA_VERSION);
         assert_eq!(metadata["files"][0]["name"], "first.txt");
+        assert_eq!(metadata["files"][0]["mimeType"], "text/plain");
+        assert_eq!(metadata["files"][0]["extension"], "txt");
+        assert_eq!(metadata["files"][0]["sizeBytes"], 10);
+        assert!(metadata["files"][0]["contentHash"].is_string());
         assert_eq!(metadata["files"][1]["copied"], true);
 
         let _ = std::fs::remove_dir_all(root);
@@ -3775,6 +3842,8 @@ mod capture_tests {
         assert!(!stored[0].copied);
         assert_eq!(stored[0].storage_path, source.to_string_lossy());
         assert_eq!(stored[0].size_bytes, 32);
+        assert_eq!(stored[0].mime_type, "application/octet-stream");
+        assert_eq!(stored[0].extension.as_deref(), Some("bin"));
         assert_eq!(std::fs::read_dir(&storage_dir).unwrap().count(), 0);
 
         let _ = std::fs::remove_dir_all(root);

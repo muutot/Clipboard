@@ -22,9 +22,8 @@
     searchClipboardHistory,
     listSourceApplications,
     formatTextLength,
-    formatSizeSimple,
     generatedClipboardTitle,
-    isCustomClipboardTitle,
+    toClipboardItem,
     writeClipboardImage,
     writeClipboardText,
   } from "$lib/services/clipboard";
@@ -503,39 +502,7 @@
 
     const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
       const record = event.payload;
-      const sourceApp = record.sourceApp?.trim() || "Clipboard";
-      const newItem: ClipboardItem = {
-        id: record.id,
-        kind: record.kind,
-        title: record.title,
-        preview:
-          record.textContent && record.textContent !== record.title ? record.textContent : "",
-        sourceApp,
-        sourceTone: sourceApp.includes("codex")
-          ? "violet"
-          : sourceApp.includes("Chrome") || sourceApp.includes("Edge")
-            ? "blue"
-            : sourceApp === "Clipboard"
-              ? "neutral"
-              : "red",
-        sizeLabel:
-          record.kind === "text" || record.kind === "link"
-            ? formatTextLength(record.textContent?.length || record.title.length)
-            : formatSizeSimple(record),
-        createdAt: record.createdAtMs,
-        favorite: record.isFavorite,
-        customTitle: isCustomClipboardTitle(record),
-        fileName:
-          record.kind === "file"
-            ? record.resourcePath?.split(/[\\/]/).pop() || record.title
-            : undefined,
-        previewPath: record.previewPath,
-        resourcePath: record.resourcePath,
-        contentHash: record.contentHash,
-        textContent: record.textContent,
-        iconPath: record.iconPath,
-        metadataJson: record.metadataJson,
-      };
+      const newItem = toClipboardItem(record);
       const existingIdx = items.findIndex((i) => i.id === newItem.id);
       if (existingIdx >= 0) {
         items[existingIdx] = newItem;

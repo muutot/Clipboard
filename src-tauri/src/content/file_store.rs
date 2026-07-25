@@ -4,6 +4,11 @@ use sha2::{Digest, Sha256};
 
 use crate::storage::StorageError;
 
+use super::resource_metadata::{
+    accessed_at_ms, created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes,
+    modified_at_ms,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileStorageInfo {
@@ -11,6 +16,13 @@ pub struct FileStorageInfo {
     pub original_name: String,
     pub size_bytes: u64,
     pub content_hash: String,
+    pub extension: Option<String>,
+    pub mime_type: String,
+    pub created_at_ms: Option<i64>,
+    pub modified_at_ms: Option<i64>,
+    pub accessed_at_ms: Option<i64>,
+    pub read_only: bool,
+    pub is_directory: bool,
 }
 
 pub struct FileStore;
@@ -24,6 +36,13 @@ impl FileStore {
         fs::create_dir_all(file_storage_dir)?;
         let metadata = fs::metadata(source_path)?;
         let size_bytes = metadata.len();
+        let extension = extension_for_path(source_path);
+        let mime_type = mime_type_for_path(source_path);
+        let created_at_ms = created_at_ms(&metadata);
+        let modified_at_ms = modified_at_ms(&metadata);
+        let accessed_at_ms = accessed_at_ms(&metadata);
+        let read_only = metadata.permissions().readonly();
+        let is_directory = metadata.is_dir();
 
         let original_name = source_path
             .file_name()
@@ -42,6 +61,13 @@ impl FileStore {
                 original_name,
                 size_bytes,
                 content_hash,
+                extension,
+                mime_type,
+                created_at_ms,
+                modified_at_ms,
+                accessed_at_ms,
+                read_only,
+                is_directory,
             });
         }
 
@@ -54,6 +80,13 @@ impl FileStore {
             original_name,
             size_bytes,
             content_hash,
+            extension,
+            mime_type,
+            created_at_ms,
+            modified_at_ms,
+            accessed_at_ms,
+            read_only,
+            is_directory,
         })
     }
 
@@ -68,14 +101,12 @@ impl FileStore {
         hasher.update(data);
         let content_hash = format!("{:x}", hasher.finalize());
 
-        let ext = if data.len() >= 3 && &data[0..3] == b"\x89PNG" {
-            "png"
-        } else if data.len() >= 3 && &data[0..3] == b"\xff\xd8\xff" {
-            "jpg"
-        } else if data.len() >= 4 && &data[0..4] == b"RIFF" {
-            "webp"
-        } else {
-            "png"
+        let detected_mime_type = mime_type_from_bytes(data, None);
+        let (ext, mime_type) = match detected_mime_type {
+            "image/jpeg" => ("jpg", "image/jpeg"),
+            "image/webp" => ("webp", "image/webp"),
+            "image/png" => ("png", "image/png"),
+            _ => ("png", "image/png"),
         };
 
         let original_name = format!("screenshot.{}", ext);
@@ -86,6 +117,13 @@ impl FileStore {
                 original_name,
                 size_bytes,
                 content_hash,
+                extension: Some(ext.to_owned()),
+                mime_type: mime_type.to_owned(),
+                created_at_ms: None,
+                modified_at_ms: None,
+                accessed_at_ms: None,
+                read_only: false,
+                is_directory: false,
             });
         }
 
@@ -101,6 +139,13 @@ impl FileStore {
             original_name,
             size_bytes,
             content_hash,
+            extension: Some(ext.to_owned()),
+            mime_type: mime_type.to_owned(),
+            created_at_ms: None,
+            modified_at_ms: None,
+            accessed_at_ms: None,
+            read_only: false,
+            is_directory: false,
         })
     }
 
@@ -170,6 +215,9 @@ mod tests {
         assert!(Path::new(&info.storage_path).exists());
         assert_eq!(info.original_name, "source.txt");
         assert_eq!(info.size_bytes, 15);
+        assert_eq!(info.extension.as_deref(), Some("txt"));
+        assert_eq!(info.mime_type, "text/plain");
+        assert!(!info.is_directory);
         assert_eq!(
             Path::new(&info.storage_path).extension(),
             Some(OsStr::new("txt"))
@@ -223,6 +271,8 @@ mod tests {
         assert!(Path::new(&info.storage_path).exists());
         assert_eq!(info.original_name, "screenshot.png");
         assert_eq!(info.size_bytes, 10);
+        assert_eq!(info.extension.as_deref(), Some("png"));
+        assert_eq!(info.mime_type, "image/png");
 
         let _ = fs::remove_dir_all(&temp);
     }

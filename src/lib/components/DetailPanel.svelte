@@ -337,6 +337,9 @@
   );
 
   const detailContent = $derived(item ? item.textContent || item.title : "");
+  const resourceMetadata = $derived(item?.resourceMetadata);
+  const resourceFiles = $derived(item?.fileMeta ?? []);
+  const rawMetadata = $derived(formatMetadataJson(item?.metadataJson));
   const isCode = $derived(item ? detectCodeLanguage(detailContent) !== null : false);
   const isMarkdown = $derived(
     item ? /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m.test(detailContent) : false,
@@ -403,6 +406,23 @@
 
   function formatDateTime(ts: number): string {
     return new Date(ts).toLocaleString();
+  }
+
+  function formatMetadataTime(ts: number | undefined): string {
+    return ts === undefined ? _t("detail.unknown") : formatDateTime(ts);
+  }
+
+  function formatExactSize(bytes: number): string {
+    return `${formatFileSize(bytes)} (${bytes.toLocaleString()} B)`;
+  }
+
+  function formatMetadataJson(metadataJson: string | null | undefined): string {
+    if (!metadataJson) return "";
+    try {
+      return JSON.stringify(JSON.parse(metadataJson), null, 2);
+    } catch {
+      return metadataJson;
+    }
   }
 
   function getKindLabel(kind: string): string {
@@ -794,9 +814,15 @@
                 <dd><code>{item.mimeType}</code></dd>
               </div>
             {/if}
-            {#if item.fileName && item.kind === "file"}
+            {#if resourceMetadata?.extension}
               <div class="detail-row">
-                <dt>{_t("detail.fileInfo")}</dt>
+                <dt><AppIcon name="file" size={14} /> {_t("detail.extension")}</dt>
+                <dd><code>.{resourceMetadata.extension}</code></dd>
+              </div>
+            {/if}
+            {#if item.fileName && (item.kind === "image" || item.kind === "file")}
+              <div class="detail-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.fileName")}</dt>
                 <dd>{item.fileName}</dd>
               </div>
             {/if}
@@ -820,26 +846,148 @@
                 <dd>{item.imageMeta.width} × {item.imageMeta.height}</dd>
               </div>
             {/if}
-            {#if item.metadataJson}
-              {@const meta = (() => {
-                try {
-                  return JSON.parse(item.metadataJson!);
-                } catch {
-                  return null;
-                }
-              })()}
-              {#if meta}
-                {#each Object.entries(meta) as [key, value]}
-                  {#if key !== "width" && key !== "height"}
-                    <div class="detail-row">
-                      <dt>{key}</dt>
-                      <dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd>
-                    </div>
-                  {/if}
-                {/each}
-              {/if}
+            {#if item.kind === "file" && resourceFiles.length > 0}
+              <div class="detail-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.fileCount")}</dt>
+                <dd>{resourceFiles.length}</dd>
+              </div>
+            {/if}
+            {#if item.kind === "image" && (item.resourcePath || resourceMetadata?.resourcePath)}
+              <div class="detail-row path-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.resourcePath")}</dt>
+                <dd class="path-value">
+                  <code>{resourceMetadata?.resourcePath ?? item.resourcePath}</code>
+                </dd>
+              </div>
+            {/if}
+            {#if item.kind === "image" && resourceMetadata?.storagePath && resourceMetadata.storagePath !== resourceMetadata.resourcePath}
+              <div class="detail-row path-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.storagePath")}</dt>
+                <dd class="path-value"><code>{resourceMetadata.storagePath}</code></dd>
+              </div>
+            {/if}
+            {#if item.kind === "image" && resourceMetadata?.previewPath && resourceMetadata.previewPath !== resourceMetadata.resourcePath}
+              <div class="detail-row path-row">
+                <dt><AppIcon name="image" size={14} /> {_t("detail.previewPath")}</dt>
+                <dd class="path-value"><code>{resourceMetadata.previewPath}</code></dd>
+              </div>
+            {/if}
+            {#if item.kind === "image" && resourceMetadata?.originalPath}
+              <div class="detail-row path-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.originalPath")}</dt>
+                <dd class="path-value"><code>{resourceMetadata.originalPath}</code></dd>
+              </div>
+            {/if}
+            {#if item.kind === "image" && resourceMetadata?.contentHash}
+              <div class="detail-row">
+                <dt><AppIcon name="info" size={14} /> {_t("detail.contentHash")}</dt>
+                <dd class="path-value"><code>{resourceMetadata.contentHash}</code></dd>
+              </div>
             {/if}
           </dl>
+
+          {#if item.kind === "file" && resourceFiles.length > 0}
+            <section class="resource-file-list">
+              <strong class="resource-section-title">{_t("detail.resourceMetadata")}</strong>
+              {#each resourceFiles as file, index}
+                <article class="resource-file-card">
+                  <div class="resource-file-heading">
+                    <span class="resource-file-index">{index + 1}</span>
+                    <strong>{file.name}</strong>
+                    <span>{formatExactSize(file.sizeBytes)}</span>
+                  </div>
+                  <dl class="resource-file-details">
+                    {#if file.mimeType}
+                      <div>
+                        <dt>{_t("detail.mimeInfo")}</dt>
+                        <dd><code>{file.mimeType}</code></dd>
+                      </div>
+                    {/if}
+                    {#if file.extension}
+                      <div>
+                        <dt>{_t("detail.extension")}</dt>
+                        <dd><code>.{file.extension}</code></dd>
+                      </div>
+                    {/if}
+                    {#if file.storagePath}
+                      <div class="resource-path-detail">
+                        <dt>{_t("detail.storagePath")}</dt>
+                        <dd><code>{file.storagePath}</code></dd>
+                      </div>
+                    {/if}
+                    {#if file.originalPath}
+                      <div class="resource-path-detail">
+                        <dt>{_t("detail.originalPath")}</dt>
+                        <dd><code>{file.originalPath}</code></dd>
+                      </div>
+                    {/if}
+                    {#if file.contentHash}
+                      <div class="resource-path-detail">
+                        <dt>{_t("detail.contentHash")}</dt>
+                        <dd><code>{file.contentHash}</code></dd>
+                      </div>
+                    {/if}
+                    <div>
+                      <dt>{_t("detail.managedCopy")}</dt>
+                      <dd>
+                        {file.copied === undefined
+                          ? _t("detail.unknown")
+                          : file.copied
+                            ? _t("detail.yes")
+                            : _t("detail.no")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{_t("detail.createdTime")}</dt>
+                      <dd>{formatMetadataTime(file.createdAtMs)}</dd>
+                    </div>
+                    <div>
+                      <dt>{_t("detail.modifiedTime")}</dt>
+                      <dd>{formatMetadataTime(file.modifiedAtMs)}</dd>
+                    </div>
+                    <div>
+                      <dt>{_t("detail.accessedTime")}</dt>
+                      <dd>{formatMetadataTime(file.accessedAtMs)}</dd>
+                    </div>
+                    <div>
+                      <dt>{_t("detail.readOnly")}</dt>
+                      <dd>
+                        {file.readOnly === undefined
+                          ? _t("detail.unknown")
+                          : file.readOnly
+                            ? _t("detail.yes")
+                            : _t("detail.no")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{_t("detail.directory")}</dt>
+                      <dd>
+                        {file.isDirectory === undefined
+                          ? _t("detail.unknown")
+                          : file.isDirectory
+                            ? _t("detail.yes")
+                            : _t("detail.no")}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              {/each}
+            </section>
+          {/if}
+
+          {#if item.kind === "text" || item.kind === "link"}
+            <section class="full-text-details">
+              <strong class="resource-section-title">{_t("detail.fullContent")}</strong>
+              <pre>{detailContent}</pre>
+            </section>
+          {/if}
+
+          {#if rawMetadata}
+            <details class="raw-metadata">
+              <summary>{_t("detail.rawMetadata")}</summary>
+              <pre>{rawMetadata}</pre>
+            </details>
+          {/if}
 
           {#if hasSpecialMarkers}
             <div class="special-section">
@@ -1336,6 +1484,159 @@
     background: #1a1a1a;
     font-family: "Cascadia Code", Consolas, monospace;
     font-size: 10px;
+  }
+
+  .detail-row.path-row {
+    align-items: flex-start;
+  }
+
+  .detail-row .path-value {
+    min-width: 0;
+    max-width: 68%;
+    text-align: left;
+  }
+
+  .detail-row .path-value code {
+    display: block;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .resource-file-list,
+  .full-text-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .resource-section-title {
+    color: #aaa;
+    font-size: 11px;
+    font-weight: 560;
+  }
+
+  .resource-file-card {
+    padding: 10px 12px;
+    border: 1px solid #2e2e2e;
+    border-radius: 8px;
+    background: #141414;
+  }
+
+  .resource-file-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #ddd;
+    font-size: 11px;
+  }
+
+  .resource-file-heading strong {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .resource-file-heading > span:last-child {
+    flex-shrink: 0;
+    color: #888;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .resource-file-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #999;
+    background: #1a1a1a;
+    font-size: 10px;
+  }
+
+  .resource-file-details {
+    display: grid;
+    gap: 1px;
+    margin: 9px 0 0 26px;
+    padding: 0;
+  }
+
+  .resource-file-details > div {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    border-top: 1px solid #242424;
+  }
+
+  .resource-file-details dt {
+    flex-shrink: 0;
+    color: #777;
+    font-size: 10px;
+  }
+
+  .resource-file-details dd {
+    min-width: 0;
+    margin: 0;
+    color: #c8c8c8;
+    font-size: 10px;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .resource-file-details dd code {
+    color: #b7b7b7;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 9.5px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .resource-file-details .resource-path-detail dd {
+    max-width: 70%;
+    text-align: left;
+  }
+
+  .full-text-details pre,
+  .raw-metadata pre {
+    max-height: 360px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid #2e2e2e;
+    border-radius: 7px;
+    color: #c8c8c8;
+    background: #141414;
+    font:
+      11px/1.55 "Cascadia Code",
+      Consolas,
+      monospace;
+    white-space: pre-wrap;
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
+
+  .raw-metadata {
+    border: 1px solid #2e2e2e;
+    border-radius: 7px;
+    background: #141414;
+  }
+
+  .raw-metadata summary {
+    padding: 9px 12px;
+    color: #999;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .raw-metadata pre {
+    max-height: 280px;
+    margin: 0 8px 8px;
   }
 
   .ocr-badge {
