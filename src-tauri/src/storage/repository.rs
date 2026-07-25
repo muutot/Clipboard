@@ -722,6 +722,23 @@ impl ClipboardRepository for Database {
                     _ => unreachable!("storage reference query returned an unknown kind"),
                 }
             }
+
+            let mut file_paths = connection.prepare(
+                "SELECT text_content
+                 FROM clipboard_items
+                 WHERE kind = 'file'
+                   AND text_content IS NOT NULL",
+            )?;
+            let file_paths = file_paths.query_map([], |row| row.get::<_, String>(0))?;
+            for stored_paths in file_paths {
+                if let Ok(stored_paths) = serde_json::from_str::<Vec<String>>(&stored_paths?) {
+                    paths.resource_paths.extend(
+                        stored_paths
+                            .into_iter()
+                            .filter(|path| !path.trim().is_empty()),
+                    );
+                }
+            }
             Ok(paths)
         })
     }
@@ -932,6 +949,40 @@ mod tests {
         assert_eq!(stored.created_at_ms, 500);
         assert!(stored.is_favorite);
         assert_eq!(database.item_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn storage_references_include_every_path_from_multi_file_records() {
+        let database = Database::open_in_memory().unwrap();
+        let item = ClipboardItem {
+            id: "files".to_owned(),
+            kind: ClipboardKind::File,
+            title: "first.txt".to_owned(),
+            text_content: Some(
+                serde_json::to_string(&["C:\\managed\\first.txt", "C:\\managed\\second.txt"])
+                    .unwrap(),
+            ),
+            resource_path: Some("C:\\managed\\first.txt".to_owned()),
+            preview_path: None,
+            content_hash: "files-hash".to_owned(),
+            source_app: Some("Explorer".to_owned()),
+            size_bytes: 20,
+            created_at_ms: 100,
+            last_used_at_ms: None,
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
+        };
+        database.save_item(&item).unwrap();
+
+        let references = database.list_storage_file_references().unwrap();
+
+        assert!(references
+            .resource_paths
+            .contains(&"C:\\managed\\first.txt".to_owned()));
+        assert!(references
+            .resource_paths
+            .contains(&"C:\\managed\\second.txt".to_owned()));
     }
 
     #[test]

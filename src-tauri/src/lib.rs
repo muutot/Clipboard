@@ -13,14 +13,14 @@ pub mod storage;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
-    ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation,
+    ClipboardFormatInfo, ContentMarkers, FileStore, QuickAction, TextTransform, TransformOperation,
 };
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{
@@ -105,6 +105,7 @@ struct StorageDirectoryUpdate {
 #[derive(Clone)]
 struct CaptureState {
     paused: Arc<AtomicBool>,
+    max_file_copy_size_bytes: Arc<AtomicU64>,
     ignored_apps: Arc<Mutex<Vec<String>>>,
     policy: Arc<CapturePolicy>,
     worker: Arc<Mutex<Option<CaptureWorker>>>,
@@ -123,7 +124,11 @@ struct CaptureWorker {
 }
 
 impl CaptureState {
-    fn new(privacy: &PrivacyManager, ignored_apps: Vec<String>) -> Self {
+    fn new(
+        privacy: &PrivacyManager,
+        ignored_apps: Vec<String>,
+        max_file_copy_size_bytes: u64,
+    ) -> Self {
         let sensitive_patterns = privacy
             .sensitive_patterns
             .iter()
@@ -137,6 +142,7 @@ impl CaptureState {
             .collect();
         Self {
             paused: Arc::new(AtomicBool::new(privacy.is_paused())),
+            max_file_copy_size_bytes: Arc::new(AtomicU64::new(max_file_copy_size_bytes)),
             ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
             policy: Arc::new(CapturePolicy {
                 sensitive_patterns: Arc::new(sensitive_patterns),
@@ -152,6 +158,14 @@ impl CaptureState {
 
     fn is_paused(&self) -> bool {
         self.paused.load(Ordering::SeqCst)
+    }
+
+    fn set_max_file_copy_size_bytes(&self, value: u64) {
+        self.max_file_copy_size_bytes.store(value, Ordering::SeqCst);
+    }
+
+    fn max_file_copy_size_bytes(&self) -> u64 {
+        self.max_file_copy_size_bytes.load(Ordering::SeqCst)
     }
 
     fn set_ignored_apps(&self, apps: Vec<String>) -> Vec<String> {
@@ -372,6 +386,71 @@ fn register_image_self_trigger(
     } else {
         Err("image self-trigger has no readable resource or content hash".to_owned())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CapturedFileReference {
+    original_path: String,
+    storage_path: String,
+    original_name: String,
+    size_bytes: u64,
+    copied: bool,
+}
+
+fn store_captured_file_references(
+    file_paths: &[String],
+    file_storage_dir: &Path,
+    max_copy_size_bytes: u64,
+) -> Vec<CapturedFileReference> {
+    file_paths
+        .iter()
+        .map(|file_path| {
+            let source_path = Path::new(file_path);
+            match FileStore::save_file(source_path, file_storage_dir, max_copy_size_bytes) {
+                Ok(info) => CapturedFileReference {
+                    original_path: file_path.clone(),
+                    copied: Path::new(&info.storage_path) != source_path,
+                    storage_path: info.storage_path,
+                    original_name: info.original_name,
+                    size_bytes: info.size_bytes,
+                },
+                Err(error) => {
+                    eprintln!(
+                        "[clipboard-worker] failed to store file {}: {error}",
+                        source_path.display()
+                    );
+                    CapturedFileReference {
+                        original_path: file_path.clone(),
+                        storage_path: file_path.clone(),
+                        original_name: source_path
+                            .file_name()
+                            .map(|name| name.to_string_lossy().to_string())
+                            .unwrap_or_else(|| file_path.clone()),
+                        size_bytes: std::fs::metadata(source_path)
+                            .map(|metadata| metadata.len())
+                            .unwrap_or(0),
+                        copied: false,
+                    }
+                }
+            }
+        })
+        .collect()
+}
+
+fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
+    serde_json::json!({
+        "files": files
+            .iter()
+            .map(|file| serde_json::json!({
+                "name": file.original_name,
+                "size": file.size_bytes,
+                "path": file.storage_path,
+                "originalPath": file.original_path,
+                "copied": file.copied,
+            }))
+            .collect::<Vec<_>>(),
+    })
+    .to_string()
 }
 
 fn stop_signal_requested(receiver: &mpsc::Receiver<()>) -> bool {
@@ -1272,6 +1351,7 @@ fn get_storage_config(
 #[tauri::command]
 fn set_storage_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    capture: tauri::State<'_, CaptureState>,
     max_file_copy_size_bytes: Option<u64>,
 ) -> Result<(), String> {
     let mut config = config
@@ -1281,6 +1361,7 @@ fn set_storage_config(
         config
             .set_max_file_copy_size_bytes(v)
             .map_err(|e| e.to_string())?;
+        capture.set_max_file_copy_size_bytes(v);
     }
     Ok(())
 }
@@ -2483,8 +2564,14 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let db_path = paths.database.clone();
             let storage_path = paths.storage.clone();
+            let image_storage_path = paths.images.clone();
+            let file_storage_path = paths.files.clone();
             let initial_ignored = config.ignored_applications().to_vec();
-            let capture_state = CaptureState::new(&privacy_manager, initial_ignored.clone());
+            let capture_state = CaptureState::new(
+                &privacy_manager,
+                initial_ignored.clone(),
+                config.max_file_copy_size_bytes(),
+            );
             app.manage(capture_state.clone());
 
             let self_trigger_guard = Arc::new(Mutex::new(content::hash::SelfTriggerGuard::new()));
@@ -2585,7 +2672,7 @@ pub fn run() {
                                         .unwrap_or_default()
                                         .as_millis() as i64;
 
-                                    let image_dir = storage_path.join("image");
+                                    let image_dir = image_storage_path.clone();
                                     std::fs::create_dir_all(&image_dir).ok();
                                     let img_path = image_dir.join(format!("{}.png", img_hash));
                                     match std::fs::write(&img_path, &img) {
@@ -2652,29 +2739,28 @@ pub fn run() {
                                         ) {
                                             continue;
                                         }
-                                        let file_size = std::fs::metadata(file_path)
-                                            .map(|m| m.len())
-                                            .unwrap_or(0);
-                                        let file_name = std::path::Path::new(file_path)
-                                            .file_name()
-                                            .map(|n| n.to_string_lossy().to_string())
-                                            .unwrap_or_default();
+                                        let stored_files = store_captured_file_references(
+                                            std::slice::from_ref(file_path),
+                                            &file_storage_path,
+                                            capture_for_thread.max_file_copy_size_bytes(),
+                                        );
+                                        let stored_file = &stored_files[0];
 
                                         let item = ClipboardItem {
                                             id: format!("file_{}", file_hash),
                                             kind: ClipboardKind::File,
-                                            title: file_name,
+                                            title: stored_file.original_name.clone(),
                                             text_content: None,
-                                            resource_path: Some(file_path.clone()),
+                                            resource_path: Some(stored_file.storage_path.clone()),
                                             preview_path: None,
                                             content_hash: file_hash,
                                             source_app: source_app.clone(),
                                             icon_path: icon_path.clone(),
-                                            size_bytes: file_size,
+                                            size_bytes: stored_file.size_bytes,
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
-                                            metadata_json: None,
+                                            metadata_json: Some(captured_file_metadata(&stored_files)),
                                         };
 
                                         if stop_flag_for_thread.load(Ordering::SeqCst) {
@@ -2703,44 +2789,28 @@ pub fn run() {
                                             continue;
                                         }
 
-                                        let total_size: u64 = file_paths
+                                        let stored_files = store_captured_file_references(
+                                            &file_paths,
+                                            &file_storage_path,
+                                            capture_for_thread.max_file_copy_size_bytes(),
+                                        );
+                                        let total_size = stored_files
                                             .iter()
-                                            .map(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0))
+                                            .map(|file| file.size_bytes)
                                             .sum();
-
-                                        let first_name = std::path::Path::new(&file_paths[0])
-                                            .file_name()
-                                            .map(|n| n.to_string_lossy().to_string())
-                                            .unwrap_or_default();
-
-                                        let file_sizes: Vec<(String, u64)> = file_paths
+                                        let stored_paths = stored_files
                                             .iter()
-                                            .map(|p| {
-                                                let name = std::path::Path::new(p)
-                                                    .file_name()
-                                                    .map(|n| n.to_string_lossy().to_string())
-                                                    .unwrap_or_default();
-                                                let size = std::fs::metadata(p)
-                                                    .map(|m| m.len())
-                                                    .unwrap_or(0);
-                                                (name, size)
-                                            })
-                                            .collect();
-
-                                        let paths_json = serde_json::to_string(&file_paths).unwrap_or_default();
-
-                                        let metadata = serde_json::json!({
-                                            "files": file_sizes.iter().map(|(name, size)| {
-                                                serde_json::json!({ "name": name, "size": size })
-                                            }).collect::<Vec<_>>(),
-                                        });
+                                            .map(|file| file.storage_path.clone())
+                                            .collect::<Vec<_>>();
+                                        let paths_json = serde_json::to_string(&stored_paths)
+                                            .unwrap_or_default();
 
                                         let item = ClipboardItem {
                                             id: format!("files_{}", group_hash),
                                             kind: ClipboardKind::File,
-                                            title: first_name,
+                                            title: stored_files[0].original_name.clone(),
                                             text_content: Some(paths_json),
-                                            resource_path: Some(file_paths[0].clone()),
+                                            resource_path: Some(stored_files[0].storage_path.clone()),
                                             preview_path: None,
                                             content_hash: group_hash,
                                             source_app: source_app.clone(),
@@ -2749,7 +2819,7 @@ pub fn run() {
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
-                                            metadata_json: Some(metadata.to_string()),
+                                            metadata_json: Some(captured_file_metadata(&stored_files)),
                                         };
 
                                         if stop_flag_for_thread.load(Ordering::SeqCst) {
@@ -3027,7 +3097,11 @@ mod capture_tests {
     use super::*;
 
     fn capture_state() -> CaptureState {
-        CaptureState::new(&PrivacyManager::new(), vec!["IgnoredApp".to_owned()])
+        CaptureState::new(
+            &PrivacyManager::new(),
+            vec!["IgnoredApp".to_owned()],
+            100 * 1024 * 1024,
+        )
     }
 
     #[test]
@@ -3040,6 +3114,16 @@ mod capture_tests {
 
         state.set_paused(false);
         assert!(!state.should_skip(Some("Notepad"), Some("ordinary text")));
+    }
+
+    #[test]
+    fn file_copy_limit_updates_are_immediately_visible_to_capture() {
+        let state = capture_state();
+        assert_eq!(state.max_file_copy_size_bytes(), 100 * 1024 * 1024);
+
+        state.set_max_file_copy_size_bytes(8 * 1024 * 1024);
+
+        assert_eq!(state.max_file_copy_size_bytes(), 8 * 1024 * 1024);
     }
 
     #[test]
@@ -3155,6 +3239,85 @@ mod capture_tests {
     }
 
     #[test]
+    fn captured_files_are_copied_into_managed_storage() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-captured-files-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source_dir = root.join("source");
+        let storage_dir = root.join("storage/files");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let first = source_dir.join("first.txt");
+        let second = source_dir.join("second.json");
+        std::fs::write(&first, b"first file").unwrap();
+        std::fs::write(&second, b"{\"second\":true}").unwrap();
+
+        let stored = store_captured_file_references(
+            &[
+                first.to_string_lossy().to_string(),
+                second.to_string_lossy().to_string(),
+            ],
+            &storage_dir,
+            1024,
+        );
+
+        assert_eq!(stored.len(), 2);
+        assert!(stored.iter().all(|file| file.copied));
+        assert!(stored
+            .iter()
+            .all(|file| Path::new(&file.storage_path).starts_with(&storage_dir)));
+        assert_eq!(
+            std::fs::read(&stored[0].storage_path).unwrap(),
+            b"first file"
+        );
+        assert_eq!(
+            Path::new(&stored[1].storage_path).extension(),
+            Some(std::ffi::OsStr::new("json"))
+        );
+
+        let metadata: serde_json::Value =
+            serde_json::from_str(&captured_file_metadata(&stored)).unwrap();
+        assert_eq!(metadata["files"][0]["name"], "first.txt");
+        assert_eq!(metadata["files"][1]["copied"], true);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn oversized_captured_file_keeps_the_original_link() {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-captured-file-limit-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source = root.join("source/large.bin");
+        let storage_dir = root.join("storage/files");
+        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+        std::fs::write(&source, vec![7_u8; 32]).unwrap();
+
+        let stored = store_captured_file_references(
+            &[source.to_string_lossy().to_string()],
+            &storage_dir,
+            8,
+        );
+
+        assert_eq!(stored.len(), 1);
+        assert!(!stored[0].copied);
+        assert_eq!(stored[0].storage_path, source.to_string_lossy());
+        assert_eq!(stored[0].size_bytes, 32);
+        assert_eq!(std::fs::read_dir(&storage_dir).unwrap().count(), 0);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn self_triggered_image_write_matches_normalized_capture_hash() {
         use std::io::Cursor;
 
@@ -3209,7 +3372,7 @@ mod capture_tests {
     fn invalid_sensitive_patterns_are_excluded_during_initialization() {
         let mut privacy = PrivacyManager::new();
         privacy.sensitive_patterns = vec!["[invalid".to_owned(), "secret".to_owned()];
-        let state = CaptureState::new(&privacy, Vec::new());
+        let state = CaptureState::new(&privacy, Vec::new(), 100 * 1024 * 1024);
 
         assert_eq!(state.policy.sensitive_patterns.len(), 1);
         assert!(state.should_skip(Some("Notepad"), Some("a secret value")));

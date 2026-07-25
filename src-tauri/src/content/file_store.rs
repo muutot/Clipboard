@@ -1,4 +1,4 @@
-use std::{fs, io::Read, path::Path};
+use std::{ffi::OsStr, fs, io::Read, path::Path};
 
 use sha2::{Digest, Sha256};
 
@@ -33,8 +33,8 @@ impl FileStore {
 
         let content_hash = hash_file(source_path)?;
 
-        let storage_dir = file_storage_dir.to_path_buf();
-        let storage_path = storage_dir.join(&content_hash);
+        let storage_path =
+            file_storage_dir.join(storage_file_name(&content_hash, source_path.extension()));
 
         if max_copy_size > 0 && size_bytes > max_copy_size {
             return Ok(FileStorageInfo {
@@ -112,6 +112,25 @@ impl FileStore {
     }
 }
 
+fn storage_file_name(content_hash: &str, extension: Option<&OsStr>) -> String {
+    let extension = extension
+        .and_then(OsStr::to_str)
+        .map(|value| {
+            value
+                .chars()
+                .filter(char::is_ascii_alphanumeric)
+                .take(16)
+                .collect::<String>()
+                .to_ascii_lowercase()
+        })
+        .filter(|value| !value.is_empty());
+
+    match extension {
+        Some(extension) => format!("{content_hash}.{extension}"),
+        None => content_hash.to_owned(),
+    }
+}
+
 fn hash_file(path: &Path) -> Result<String, StorageError> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
@@ -151,6 +170,10 @@ mod tests {
         assert!(Path::new(&info.storage_path).exists());
         assert_eq!(info.original_name, "source.txt");
         assert_eq!(info.size_bytes, 15);
+        assert_eq!(
+            Path::new(&info.storage_path).extension(),
+            Some(OsStr::new("txt"))
+        );
 
         FileStore::delete_file(Path::new(&info.storage_path)).unwrap();
         assert!(!Path::new(&info.storage_path).exists());

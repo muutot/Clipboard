@@ -214,7 +214,9 @@ function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     favorite: record.isFavorite,
     customTitle: isCustomClipboardTitle(record),
     fileName:
-      record.kind === "file" ? fileNameFromPath(record.resourcePath) || record.title : undefined,
+      record.kind === "file"
+        ? fileMeta?.[0]?.name || fileNameFromPath(record.resourcePath) || record.title
+        : undefined,
     imageMeta,
     fileMeta,
     previewPath: record.previewPath,
