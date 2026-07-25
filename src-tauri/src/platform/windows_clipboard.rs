@@ -18,6 +18,23 @@ pub const MOD_WIN: u32 = 0x0008;
 
 pub const VK_V: u32 = 0x56;
 
+const APP_ICON_SIZE: u32 = 32;
+
+fn normalize_app_icon(image: image::RgbaImage) -> image::RgbaImage {
+    image::imageops::resize(
+        &image,
+        APP_ICON_SIZE,
+        APP_ICON_SIZE,
+        image::imageops::FilterType::Lanczos3,
+    )
+}
+
+fn is_normalized_app_icon(path: &std::path::Path) -> bool {
+    image::image_dimensions(path)
+        .map(|(width, height)| width == APP_ICON_SIZE && height == APP_ICON_SIZE)
+        .unwrap_or(false)
+}
+
 pub struct WindowsClipboardMonitor {
     running: bool,
     ignored_apps: Vec<String>,
@@ -642,8 +659,11 @@ pub fn extract_app_icon(
         let _ = std::fs::write(&version_marker, b"32");
     }
 
-    if icon_path.exists() {
+    if icon_path.exists() && is_normalized_app_icon(&icon_path) {
         return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
+    }
+    if icon_path.exists() {
+        let _ = std::fs::remove_file(&icon_path);
     }
 
     let path_for_icon = if exe_path.is_empty() {
@@ -835,6 +855,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
 
         let result = image::RgbaImage::from_raw(width, height, rgba)
             .and_then(|img| {
+                let img = normalize_app_icon(img);
                 let mut buf = std::io::Cursor::new(Vec::new());
                 img.write_to(&mut buf, image::ImageFormat::Png).ok()?;
                 std::fs::write(path, buf.into_inner()).ok()
@@ -947,5 +968,12 @@ mod tests {
     #[test]
     fn unknown_format_gets_fallback_name() {
         assert!(format_id_to_name(99999).starts_with("format_"));
+    }
+
+    #[test]
+    fn app_icons_are_normalized_to_32_pixels() {
+        let source = image::RgbaImage::new(96, 48);
+        let normalized = normalize_app_icon(source);
+        assert_eq!(normalized.dimensions(), (APP_ICON_SIZE, APP_ICON_SIZE));
     }
 }
