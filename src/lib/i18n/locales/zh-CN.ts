@@ -76,12 +76,15 @@ const zhCN: LocaleDefinition = {
     dataDirectoryTitle: "数据目录",
     dataDirectoryDesc: "所选目录下始终创建统一的 storage 子目录结构。",
     resourcePathsTitle: "独立资源目录",
-    resourcePathsDesc: "可分别指定截图与文件副本目录；留空时使用数据目录下的默认位置。",
+    resourcePathsDesc:
+      "可分别指定截图与文件副本目录；留空时使用数据目录下的默认位置。自定义目录需为空或已有 Clipboard 托管标记，未确认目录不会执行孤儿清理。",
     imageStoragePath: "截图存储目录",
     fileStoragePath: "文件副本目录",
     resourcePathsRestartHint: "目录切换将在重启后应用",
     resourcePathsSavedAndRestart: "资源目录已保存，重启应用后生效",
     resourcePathsSaved: "资源目录配置已保存",
+    resourcePathsCleanupDisabled:
+      "检测到未确认由 Clipboard 托管的资源目录，已跳过孤儿文件清理以保护目录中的其他文件。",
     restartNow: "立即重启",
     custom: "自定义",
     default: "默认",

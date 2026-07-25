@@ -25,6 +25,19 @@ pub enum StorageError {
         path: PathBuf,
     },
     ResourceDirectoriesMustBeDistinct,
+    ResourceDirectoriesOverlap {
+        first: PathBuf,
+        second: PathBuf,
+    },
+    ResourceDirectoryReserved {
+        field: &'static str,
+        path: PathBuf,
+        reserved: PathBuf,
+    },
+    ResourceDirectoryMustBeEmptyOrOwned {
+        field: &'static str,
+        path: PathBuf,
+    },
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
     OcrRegenerationInProgress(String),
@@ -90,6 +103,27 @@ impl fmt::Display for StorageError {
             Self::ResourceDirectoriesMustBeDistinct => {
                 formatter.write_str("file and image storage directories must be different")
             }
+            Self::ResourceDirectoriesOverlap { first, second } => write!(
+                formatter,
+                "file and image storage directories must not overlap: {} and {}",
+                first.display(),
+                second.display()
+            ),
+            Self::ResourceDirectoryReserved {
+                field,
+                path,
+                reserved,
+            } => write!(
+                formatter,
+                "{field} cannot overlap the application directory {}: {}",
+                reserved.display(),
+                path.display()
+            ),
+            Self::ResourceDirectoryMustBeEmptyOrOwned { field, path } => write!(
+                formatter,
+                "{field} must be an empty directory or an application-owned resource directory: {}",
+                path.display()
+            ),
             Self::InvalidClipboardKind(kind) => {
                 write!(formatter, "unknown clipboard item kind: {kind}")
             }

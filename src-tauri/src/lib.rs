@@ -45,7 +45,7 @@ use std::time::{Duration, Instant};
 use storage::{
     quarantine_search_index, recover_database_if_needed, refresh_database_backup,
     ClipboardRepository, Database, OcrRepository, RepairResult, StorageFileReferences,
-    StoragePaths, TextItemUpdate,
+    StoragePaths, TextItemUpdate, RESOURCE_ROOT_MARKER,
 };
 use tauri::{Emitter, Manager};
 
@@ -84,6 +84,8 @@ struct StorageStatus {
     database_size_bytes: u64,
     files_path: String,
     image_path: String,
+    image_cleanup_enabled: bool,
+    file_cleanup_enabled: bool,
     search_index_path: String,
     search_index_size_bytes: u64,
     search_index_version: u32,
@@ -648,6 +650,8 @@ fn get_storage_status(
         database_size_bytes: file_or_dir_size(&paths.database),
         files_path: paths.files.display().to_string(),
         image_path: paths.images.display().to_string(),
+        image_cleanup_enabled: paths.image_cleanup_enabled,
+        file_cleanup_enabled: paths.file_cleanup_enabled,
         search_index_path: paths.search_index.display().to_string(),
         search_index_size_bytes: dir_size(&paths.search_index),
         search_index_version: SEARCH_INDEX_VERSION,
@@ -672,7 +676,7 @@ fn configure_storage_directory(
             config.file_storage_path().map(PathBuf::from),
         )
     };
-    let target_paths = StoragePaths::initialize_with_resource_directories(
+    let target_paths = StoragePaths::initialize_with_resource_directories_for_configuration(
         active_paths.project.clone(),
         requested_directory,
         image_storage_path,
@@ -1686,7 +1690,7 @@ fn set_resource_storage_paths(
         (!path.is_empty()).then(|| PathBuf::from(path))
     });
 
-    let target_paths = StoragePaths::initialize_with_resource_directories(
+    let target_paths = StoragePaths::initialize_with_resource_directories_for_configuration(
         active_paths.project.clone(),
         Some(active_paths.data_directory.clone()),
         image_storage_path.clone(),
@@ -2049,9 +2053,21 @@ fn cleanup_orphan_storage_files_with_grace(
     let mut removed_files = 0u64;
     let mut freed_bytes = 0u64;
 
-    let scan_dirs: &[&Path] = &[&paths.images, &paths.previews, &paths.files, &icons];
+    let scan_dirs: &[(&Path, bool)] = &[
+        (&paths.images, paths.image_cleanup_enabled),
+        (&paths.previews, paths.image_cleanup_enabled),
+        (&paths.files, paths.file_cleanup_enabled),
+        (&icons, true),
+    ];
 
-    for dir in scan_dirs {
+    for (dir, cleanup_enabled) in scan_dirs {
+        if !cleanup_enabled {
+            eprintln!(
+                "[cleanup] skipping unowned resource directory {}",
+                dir.display()
+            );
+            continue;
+        }
         if !dir.is_dir() {
             continue;
         }
@@ -2059,6 +2075,12 @@ fn cleanup_orphan_storage_files_with_grace(
         for entry in entries.flatten() {
             let entry_path = entry.path();
             if entry_path.is_dir() {
+                continue;
+            }
+            if entry_path
+                .file_name()
+                .is_some_and(|name| name == RESOURCE_ROOT_MARKER)
+            {
                 continue;
             }
             if referenced_paths.contains(&normalized_cleanup_path(&entry_path)) {
@@ -4036,6 +4058,70 @@ mod storage_cleanup_tests {
         assert_eq!(manual.removed_files, 1);
         assert!(!orphan.exists());
         fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn cleanup_preserves_unowned_custom_resource_files() {
+        let root = temporary_project("unowned-custom-resource");
+        let project = root.join("project");
+        let images = root.join("user-images");
+        let files = root.join("user-files");
+        fs::create_dir_all(&images).unwrap();
+        fs::create_dir_all(&files).unwrap();
+        let unrelated_image = images.join("family-photo.png");
+        let unrelated_file = files.join("report.docx");
+        fs::write(&unrelated_image, b"user image").unwrap();
+        fs::write(&unrelated_file, b"user document").unwrap();
+
+        let paths = StoragePaths::initialize_with_resource_directories(
+            project,
+            None,
+            Some(images),
+            Some(files),
+        )
+        .unwrap();
+        assert!(!paths.image_cleanup_enabled);
+        assert!(!paths.file_cleanup_enabled);
+
+        let database = Database::open_in_memory().unwrap();
+        let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+
+        assert_eq!(result.removed_files, 0);
+        assert!(unrelated_image.exists());
+        assert!(unrelated_file.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cleanup_removes_orphans_only_from_marked_custom_resource_roots() {
+        let root = temporary_project("marked-custom-resource");
+        let project = root.join("project");
+        let images = root.join("managed-images");
+        let files = root.join("managed-files");
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            project,
+            None,
+            Some(images.clone()),
+            Some(files.clone()),
+        )
+        .unwrap();
+        assert!(paths.image_cleanup_enabled);
+        assert!(paths.file_cleanup_enabled);
+
+        let orphan_image = images.join("orphan.png");
+        let orphan_file = files.join("orphan.txt");
+        fs::write(&orphan_image, b"orphan image").unwrap();
+        fs::write(&orphan_file, b"orphan file").unwrap();
+
+        let database = Database::open_in_memory().unwrap();
+        let result = cleanup_orphan_storage_files(&database, &paths).unwrap();
+
+        assert_eq!(result.removed_files, 2);
+        assert!(!orphan_image.exists());
+        assert!(!orphan_file.exists());
+        assert!(images.join(storage::RESOURCE_ROOT_MARKER).exists());
+        assert!(files.join(storage::RESOURCE_ROOT_MARKER).exists());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

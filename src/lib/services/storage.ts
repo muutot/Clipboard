@@ -20,6 +20,8 @@ export interface StorageStatus {
   databaseSizeBytes: number;
   filesPath: string;
   imagePath: string;
+  imageCleanupEnabled: boolean;
+  fileCleanupEnabled: boolean;
   searchIndexPath: string;
   searchIndexSizeBytes: number;
   searchIndexVersion: number;

@@ -80,12 +80,14 @@ const en: LocaleDefinition = {
       "A unified storage subdirectory structure is always created under the selected directory.",
     resourcePathsTitle: "Independent Resource Directories",
     resourcePathsDesc:
-      "Set separate screenshot and managed-file directories, or leave them empty to use the data-directory defaults.",
+      "Set separate screenshot and managed-file directories, or leave them empty to use the data-directory defaults. Custom roots must be empty or already marked as Clipboard-owned; unconfirmed roots skip orphan cleanup.",
     imageStoragePath: "Screenshot Storage Directory",
     fileStoragePath: "Managed File Directory",
     resourcePathsRestartHint: "Directory changes apply after restart",
     resourcePathsSavedAndRestart: "Resource directories saved. Restart the app to apply them.",
     resourcePathsSaved: "Resource directory configuration saved",
+    resourcePathsCleanupDisabled:
+      "Orphan cleanup is disabled for resource directories that are not confirmed as Clipboard-owned.",
     restartNow: "Restart Now",
     custom: "Custom",
     default: "Default",

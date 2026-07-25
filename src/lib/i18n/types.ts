@@ -82,6 +82,7 @@ export interface LocaleDefinition {
     resourcePathsRestartHint: string;
     resourcePathsSavedAndRestart: string;
     resourcePathsSaved: string;
+    resourcePathsCleanupDisabled: string;
     restartNow: string;
     custom: string;
     default: string;

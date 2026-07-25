@@ -256,6 +256,14 @@ listen<PersistedClipboardItem>("clipboard-item-added", (event) => { ... });
 
 Changes are logged to `search_outbox` table, then a synchronizer processes them in batches into the Tantivy index. This decouples clipboard writes from index updates.
 
+### Resource Directory Ownership
+
+- Never run orphan-file cleanup over an arbitrary user-selected directory.
+- Claim a custom image/file root only during an explicit settings save, and only when the root is empty or already contains a valid Clipboard ownership marker bound to the current project and resource role.
+- Startup must not auto-claim an unmarked directory merely because it is empty. Missing, invalid, foreign, legacy, or unsafe markers keep the directory readable/writable but disable orphan cleanup and require a visible settings warning.
+- Reject new image/file roots that are equal, nested, case-equivalent, symlink-equivalent, or overlap application-reserved storage such as the project/data root, database, search index, icons, or configuration paths.
+- Cleanup must always skip the ownership marker itself and scan only roots whose ownership was positively validated.
+
 ### OCR (Worker Pattern)
 
 A background worker thread processes OCR jobs sequentially via a message queue. The `OcrEngine` trait allows pluggable engines (PpOcr, Tesseract, Noop).
