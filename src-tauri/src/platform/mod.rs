@@ -5,6 +5,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[cfg(target_os = "windows")]
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
+};
+
 use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -617,7 +626,7 @@ impl SystemTray {
     }
 }
 
-fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         eprintln!("[tray] main window is unavailable");
         return;
@@ -665,6 +674,8 @@ impl WindowManager {
 pub struct SingleInstanceGuard {
     lock_path: PathBuf,
     pid: u32,
+    #[cfg(target_os = "windows")]
+    wake_event: WindowsWakeEvent,
 }
 
 #[derive(Debug)]
@@ -689,6 +700,142 @@ impl fmt::Display for SingleInstanceError {
 
 impl std::error::Error for SingleInstanceError {}
 
+#[cfg(target_os = "windows")]
+struct WindowsWakeEvent {
+    handle: isize,
+    stop: Arc<AtomicBool>,
+    listener: Mutex<Option<JoinHandle<()>>>,
+}
+
+#[cfg(target_os = "windows")]
+impl WindowsWakeEvent {
+    const EVENT_MODIFY_STATE: u32 = 0x0002;
+    const INFINITE: u32 = u32::MAX;
+    const WAIT_OBJECT_0: u32 = 0x0000;
+
+    fn name(project_dir: &Path, pid: u32) -> Vec<u16> {
+        let mut project_hash = 14695981039346656037u64;
+        for byte in project_dir
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .as_bytes()
+        {
+            project_hash ^= u64::from(*byte);
+            project_hash = project_hash.wrapping_mul(1099511628211);
+        }
+        format!("Local\\ClipboardDesktopSingleInstance-{project_hash:016x}-{pid}\0")
+            .encode_utf16()
+            .collect()
+    }
+
+    fn create(project_dir: &Path, pid: u32) -> io::Result<Self> {
+        extern "system" {
+            fn CreateEventW(
+                attributes: *const std::ffi::c_void,
+                manual_reset: i32,
+                initial_state: i32,
+                name: *const u16,
+            ) -> isize;
+        }
+
+        let name = Self::name(project_dir, pid);
+        let handle = unsafe { CreateEventW(std::ptr::null(), 0, 0, name.as_ptr()) };
+        if handle == 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        Ok(Self {
+            handle,
+            stop: Arc::new(AtomicBool::new(false)),
+            listener: Mutex::new(None),
+        })
+    }
+
+    fn start_listener<F>(&self, callback: F) -> io::Result<()>
+    where
+        F: Fn() + Send + 'static,
+    {
+        extern "system" {
+            fn WaitForSingleObject(handle: isize, milliseconds: u32) -> u32;
+        }
+
+        let mut listener = self
+            .listener
+            .lock()
+            .map_err(|_| io::Error::other("wake listener lock poisoned"))?;
+        if listener.is_some() {
+            return Ok(());
+        }
+
+        let handle = self.handle;
+        let stop = Arc::clone(&self.stop);
+        let thread = thread::Builder::new()
+            .name("single-instance-wake".to_owned())
+            .spawn(move || loop {
+                let result = unsafe { WaitForSingleObject(handle, Self::INFINITE) };
+                if stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                if result != Self::WAIT_OBJECT_0 {
+                    break;
+                }
+                callback();
+            })?;
+        *listener = Some(thread);
+        Ok(())
+    }
+
+    fn notify(project_dir: &Path, pid: u32) -> bool {
+        extern "system" {
+            fn AllowSetForegroundWindow(process_id: u32) -> i32;
+            fn OpenEventW(desired_access: u32, inherit_handle: i32, name: *const u16) -> isize;
+            fn SetEvent(handle: isize) -> i32;
+            fn CloseHandle(handle: isize) -> i32;
+        }
+
+        let name = Self::name(project_dir, pid);
+        let handle = unsafe { OpenEventW(Self::EVENT_MODIFY_STATE, 0, name.as_ptr()) };
+        if handle == 0 {
+            return false;
+        }
+
+        unsafe {
+            let _ = AllowSetForegroundWindow(pid);
+        }
+        let signaled = unsafe { SetEvent(handle) != 0 };
+        unsafe {
+            CloseHandle(handle);
+        }
+        signaled
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsWakeEvent {
+    fn drop(&mut self) {
+        extern "system" {
+            fn CloseHandle(handle: isize) -> i32;
+            fn SetEvent(handle: isize) -> i32;
+        }
+
+        let listener = match self.listener.get_mut() {
+            Ok(listener) => listener,
+            Err(error) => error.into_inner(),
+        };
+        if let Some(thread) = listener.take() {
+            self.stop.store(true, Ordering::SeqCst);
+            unsafe {
+                let _ = SetEvent(self.handle);
+            }
+            let _ = thread.join();
+        }
+
+        unsafe {
+            CloseHandle(self.handle);
+        }
+    }
+}
+
 fn create_instance_lock(lock_path: &Path, pid: u32) -> io::Result<()> {
     let mut file = fs::OpenOptions::new()
         .create_new(true)
@@ -711,10 +858,23 @@ impl SingleInstanceGuard {
     pub fn acquire(project_dir: &Path) -> Result<Self, SingleInstanceError> {
         let lock_path = project_dir.join("instance.lock");
         let pid = std::process::id();
+        #[cfg(target_os = "windows")]
+        let wake_event = WindowsWakeEvent::create(project_dir, pid).map_err(|error| {
+            SingleInstanceError::LockFile(format!(
+                "failed to create single-instance wake event: {error}"
+            ))
+        })?;
 
         for _ in 0..3 {
             match create_instance_lock(&lock_path, pid) {
-                Ok(()) => return Ok(Self { lock_path, pid }),
+                Ok(()) => {
+                    return Ok(Self {
+                        lock_path,
+                        pid,
+                        #[cfg(target_os = "windows")]
+                        wake_event,
+                    });
+                }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                     match read_instance_lock_pid(&lock_path) {
                         Ok(Some(owner_pid)) if is_process_running(owner_pid) => {
@@ -754,6 +914,38 @@ impl SingleInstanceGuard {
             "instance lock {} changed repeatedly during startup",
             lock_path.display()
         )))
+    }
+
+    pub fn start_wake_listener<F>(&mut self, callback: F) -> Result<(), SingleInstanceError>
+    where
+        F: Fn() + Send + 'static,
+    {
+        #[cfg(target_os = "windows")]
+        {
+            self.wake_event.start_listener(callback).map_err(|error| {
+                SingleInstanceError::LockFile(format!(
+                    "failed to start single-instance wake listener: {error}"
+                ))
+            })?;
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = callback;
+        }
+        Ok(())
+    }
+
+    pub fn notify_existing_instance(project_dir: &Path, owner_pid: u32) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            WindowsWakeEvent::notify(project_dir, owner_pid)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = project_dir;
+            let _ = owner_pid;
+            false
+        }
     }
 }
 
@@ -806,6 +998,9 @@ fn is_process_running(pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use std::{fs, time::SystemTime};
+
+    #[cfg(target_os = "windows")]
+    use std::{sync::mpsc, time::Duration};
 
     use super::*;
 
@@ -932,6 +1127,47 @@ mod tests {
         assert!(!lock_path.exists());
 
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn single_instance_conflict_notifies_wake_listener() {
+        let project = temporary_test_directory("instance-wake");
+        fs::create_dir_all(&project).unwrap();
+
+        let mut guard = SingleInstanceGuard::acquire(&project).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        guard
+            .start_wake_listener(move || {
+                let _ = sender.send(());
+            })
+            .unwrap();
+
+        let Err(SingleInstanceError::AlreadyRunning(owner_pid)) =
+            SingleInstanceGuard::acquire(&project)
+        else {
+            panic!("expected the second instance to detect the owner");
+        };
+        assert_eq!(owner_pid, std::process::id());
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        assert!(SingleInstanceGuard::notify_existing_instance(
+            &project, owner_pid
+        ));
+        receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+
+        drop(guard);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn single_instance_notification_without_listener_is_safe() {
+        assert!(!SingleInstanceGuard::notify_existing_instance(
+            Path::new("missing"),
+            0
+        ));
     }
 
     #[test]

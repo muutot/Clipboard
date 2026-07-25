@@ -32,8 +32,8 @@ use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrE
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
 use platform::windows_hotkey::{shortcut_to_windows_hotkey, HotkeyManager};
 use platform::{
-    sync_autostart, ClipboardMonitor, GlobalShortcutManager, RuntimeInfo, SingleInstanceGuard,
-    SystemTray, WindowManager,
+    show_main_window, sync_autostart, ClipboardMonitor, GlobalShortcutManager, RuntimeInfo,
+    SingleInstanceError, SingleInstanceGuard, SystemTray, WindowManager,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
@@ -2322,7 +2322,24 @@ pub fn run() {
                 .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_default());
             let config = ConfigStore::load(&project_directory)?;
             if config.single_instance() {
-                let guard = SingleInstanceGuard::acquire(&project_directory)?;
+                let mut guard = match SingleInstanceGuard::acquire(&project_directory) {
+                    Ok(guard) => guard,
+                    Err(error) => {
+                        if let SingleInstanceError::AlreadyRunning(owner_pid) = &error {
+                            if !SingleInstanceGuard::notify_existing_instance(
+                                &project_directory,
+                                *owner_pid,
+                            ) {
+                                eprintln!(
+                                    "[single-instance] failed to notify the existing process (PID: {owner_pid})"
+                                );
+                            }
+                        }
+                        return Err(error.into());
+                    }
+                };
+                let app_handle = app.handle().clone();
+                guard.start_wake_listener(move || show_main_window(&app_handle))?;
                 app.manage(guard);
             }
             let keyboard = KeyboardManager::load(&project_directory)?;
