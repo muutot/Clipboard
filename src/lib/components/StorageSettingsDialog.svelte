@@ -9,10 +9,12 @@
   import { listen } from "@tauri-apps/api/event";
   import {
     configureStorageDirectory,
+    getStorageConfig,
     getStorageStatus,
     rebuildSearchIndex,
     getPerformanceMetrics,
     repairDatabase,
+    setResourceStoragePaths,
     validateSearchIndex,
     type StorageDirectoryUpdate,
     type StorageStatus,
@@ -59,6 +61,14 @@
   let maxFileCopySize = $state(50 * 1024 * 1024);
   let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
   let maxFileCopyDisplay = $state(50);
+  let imageStoragePath = $state("");
+  let fileStoragePath = $state("");
+  let resourceStorageRestartNeeded = $state(false);
+  let savingResourceStorage = $state(false);
+  let pendingResourceStorage = $state<{
+    imageStoragePath: string;
+    fileStoragePath: string;
+  } | null>(null);
 
   const unitMultipliers: Record<string, number> = {
     byte: 1,
@@ -151,6 +161,8 @@
   async function loadStatus() {
     loading = true;
     pending = null;
+    pendingResourceStorage = null;
+    resourceStorageRestartNeeded = false;
     feedback = "";
     feedbackSuccess = false;
 
@@ -292,10 +304,12 @@
       console.error("Unable to load history config", error);
     }
     try {
-      const result = await invoke<{ maxFileCopySizeBytes: number }>("get_storage_config");
+      const result = await getStorageConfig();
       if (result) {
         maxFileCopySize = result.maxFileCopySizeBytes;
         maxFileCopyDisplay = toDisplaySize(result.maxFileCopySizeBytes, maxFileCopySizeUnit);
+        imageStoragePath = result.imageStoragePath ?? "";
+        fileStoragePath = result.fileStoragePath ?? "";
       }
     } catch (error) {
       console.error("Unable to load storage config", error);
@@ -373,6 +387,35 @@
     } catch {
       console.error("Unable to restart app");
     }
+  }
+
+  async function saveResourceStoragePaths() {
+    savingResourceStorage = true;
+    feedback = "";
+    feedbackSuccess = false;
+    try {
+      const result = await setResourceStoragePaths(
+        imageStoragePath.trim() || null,
+        fileStoragePath.trim() || null,
+      );
+      pendingResourceStorage = result;
+      resourceStorageRestartNeeded = result.restartRequired;
+      feedback = result.restartRequired
+        ? _t("storage.resourcePathsSavedAndRestart")
+        : _t("storage.resourcePathsSaved");
+      feedbackSuccess = true;
+    } catch (error) {
+      console.error("Unable to save resource storage paths", error);
+      feedback = error instanceof Error ? error.message : String(error);
+    } finally {
+      savingResourceStorage = false;
+    }
+  }
+
+  async function restoreDefaultResourceStoragePaths() {
+    imageStoragePath = "";
+    fileStoragePath = "";
+    await saveResourceStoragePaths();
   }
 
   async function rebuildIndex() {
@@ -934,6 +977,69 @@
                 <code title={pending.storagePath}>{pending.storagePath}</code>
                 {#if restartNeeded}
                   <button class="restart-btn" type="button" onclick={restartApp}>立即重启</button>
+                {/if}
+              </div>
+            {/if}
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <div>
+                <strong>{_t("storage.resourcePathsTitle")}</strong>
+                <p>{_t("storage.resourcePathsDesc")}</p>
+              </div>
+            </div>
+            <div class="resource-path-grid">
+              <label for="image-storage-path">
+                <span>{_t("storage.imageStoragePath")}</span>
+                <input
+                  id="image-storage-path"
+                  bind:value={imageStoragePath}
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder={status.imagePath}
+                />
+              </label>
+              <label for="file-storage-path">
+                <span>{_t("storage.fileStoragePath")}</span>
+                <input
+                  id="file-storage-path"
+                  bind:value={fileStoragePath}
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder={status.filesPath}
+                />
+              </label>
+            </div>
+            <div class="dir-input-row resource-path-actions">
+              <span>{_t("storage.resourcePathsRestartHint")}</span>
+              <button
+                type="button"
+                disabled={savingResourceStorage}
+                onclick={restoreDefaultResourceStoragePaths}>{_t("storage.restoreDefault")}</button
+              >
+              <button
+                type="button"
+                disabled={savingResourceStorage}
+                onclick={saveResourceStoragePaths}
+                >{savingResourceStorage
+                  ? _t("storage.saving")
+                  : _t("storage.saveDirectory")}</button
+              >
+            </div>
+            {#if pendingResourceStorage}
+              <div class="resource-path-summary">
+                <code title={pendingResourceStorage.imageStoragePath}
+                  >{_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}</code
+                >
+                <code title={pendingResourceStorage.fileStoragePath}
+                  >{_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}</code
+                >
+                {#if resourceStorageRestartNeeded}
+                  <button class="restart-btn" type="button" onclick={restartApp}>
+                    {_t("storage.restartNow")}
+                  </button>
                 {/if}
               </div>
             {/if}
@@ -1932,6 +2038,55 @@
   .dir-input-row button:disabled {
     opacity: 0.55;
     cursor: default;
+  }
+
+  .resource-path-grid {
+    display: grid;
+    gap: 9px;
+    margin-top: 10px;
+  }
+
+  .resource-path-grid label {
+    margin: 0;
+  }
+
+  .resource-path-grid label span {
+    display: block;
+    margin-bottom: 5px;
+    color: #888;
+    font-size: var(--settings-description-size);
+  }
+
+  .resource-path-actions span {
+    flex: 1;
+    min-width: 0;
+    color: #777;
+    font-size: var(--settings-description-size);
+  }
+
+  .resource-path-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 10px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid #2d2d2d;
+  }
+
+  .resource-path-summary code {
+    min-width: 0;
+    overflow: hidden;
+    color: #a7a7a7;
+    font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-size: var(--settings-description-size);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .resource-path-summary .restart-btn {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
 
   .path-button-row {

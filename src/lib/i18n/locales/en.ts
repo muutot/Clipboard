@@ -78,6 +78,15 @@ const en: LocaleDefinition = {
     dataDirectoryTitle: "Data Directory",
     dataDirectoryDesc:
       "A unified storage subdirectory structure is always created under the selected directory.",
+    resourcePathsTitle: "Independent Resource Directories",
+    resourcePathsDesc:
+      "Set separate screenshot and managed-file directories, or leave them empty to use the data-directory defaults.",
+    imageStoragePath: "Screenshot Storage Directory",
+    fileStoragePath: "Managed File Directory",
+    resourcePathsRestartHint: "Directory changes apply after restart",
+    resourcePathsSavedAndRestart: "Resource directories saved. Restart the app to apply them.",
+    resourcePathsSaved: "Resource directory configuration saved",
+    restartNow: "Restart Now",
     custom: "Custom",
     default: "Default",
     directoryPath: "Directory absolute path",
@@ -336,7 +345,8 @@ const en: LocaleDefinition = {
     recycleBinDays: "Recycle Bin Days",
     recycleBinDaysDesc: "Days deleted records stay in recycle bin",
     maxFileCopySize: "Max File Copy Size",
-    maxFileCopySizeDesc: "Files larger than this will not be recorded",
+    maxFileCopySizeDesc:
+      "Files larger than this keep their original path without creating a managed copy",
     days: "days",
     bytes: "bytes",
   },

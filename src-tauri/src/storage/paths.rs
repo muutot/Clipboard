@@ -24,6 +24,15 @@ impl StoragePaths {
         project: PathBuf,
         data_directory: Option<PathBuf>,
     ) -> Result<Self, StorageError> {
+        Self::initialize_with_resource_directories(project, data_directory, None, None)
+    }
+
+    pub fn initialize_with_resource_directories(
+        project: PathBuf,
+        data_directory: Option<PathBuf>,
+        image_storage_path: Option<PathBuf>,
+        file_storage_path: Option<PathBuf>,
+    ) -> Result<Self, StorageError> {
         let data_directory = data_directory.unwrap_or_else(|| project.clone());
         if !data_directory.is_absolute() {
             return Err(StorageError::DataDirectoryMustBeAbsolute(data_directory));
@@ -38,11 +47,23 @@ impl StoragePaths {
         } else {
             data_directory.join("storage")
         };
-        let images = storage.join("image");
+        let images = resource_directory(
+            image_storage_path,
+            storage.join("image"),
+            "storage.imageStoragePath",
+        )?;
+        let files = resource_directory(
+            file_storage_path,
+            storage.join("files"),
+            "storage.fileStoragePath",
+        )?;
+        if images == files {
+            return Err(StorageError::ResourceDirectoriesMustBeDistinct);
+        }
         let database_directory = storage.join("database");
         let paths = Self {
             previews: images.join("previews"),
-            files: storage.join("files"),
+            files,
             database: database_directory.join("clipboard.sqlite3"),
             search_index: database_directory.join("search-index"),
             project,
@@ -71,6 +92,21 @@ impl StoragePaths {
     pub fn uses_custom_data_directory(&self) -> bool {
         self.data_directory != self.project
     }
+}
+
+fn resource_directory(
+    configured: Option<PathBuf>,
+    default: PathBuf,
+    field: &'static str,
+) -> Result<PathBuf, StorageError> {
+    let directory = configured.unwrap_or(default);
+    if !directory.is_absolute() {
+        return Err(StorageError::ResourceDirectoryMustBeAbsolute {
+            field,
+            path: directory,
+        });
+    }
+    Ok(directory)
 }
 
 #[cfg(test)]
@@ -129,6 +165,55 @@ mod tests {
         assert_eq!(paths.storage, root.join("data/storage"));
         assert!(paths.uses_custom_data_directory());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn uses_independent_image_and_file_storage_directories() {
+        let root = temporary_test_directory("resource-directories");
+        let project = root.join("project");
+        let images = root.join("screenshots");
+        let files = root.join("managed-files");
+
+        let paths = StoragePaths::initialize_with_resource_directories(
+            project,
+            None,
+            Some(images.clone()),
+            Some(files.clone()),
+        )
+        .unwrap();
+
+        assert_eq!(paths.images, images);
+        assert_eq!(paths.files, files);
+        assert!(paths.images.is_dir());
+        assert!(paths.files.is_dir());
+        assert!(paths.previews.starts_with(&paths.images));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_relative_or_shared_resource_directories() {
+        let project = temporary_test_directory("invalid-resource-directories");
+        let shared = project.join("resources");
+
+        assert!(matches!(
+            StoragePaths::initialize_with_resource_directories(
+                project.clone(),
+                None,
+                Some(PathBuf::from("relative")),
+                None,
+            ),
+            Err(StorageError::ResourceDirectoryMustBeAbsolute { .. })
+        ));
+        assert!(matches!(
+            StoragePaths::initialize_with_resource_directories(
+                project,
+                None,
+                Some(shared.clone()),
+                Some(shared),
+            ),
+            Err(StorageError::ResourceDirectoriesMustBeDistinct)
+        ));
     }
 
     #[test]

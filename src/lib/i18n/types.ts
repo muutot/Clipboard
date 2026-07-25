@@ -75,6 +75,14 @@ export interface LocaleDefinition {
     configSectionDesc: string;
     dataDirectoryTitle: string;
     dataDirectoryDesc: string;
+    resourcePathsTitle: string;
+    resourcePathsDesc: string;
+    imageStoragePath: string;
+    fileStoragePath: string;
+    resourcePathsRestartHint: string;
+    resourcePathsSavedAndRestart: string;
+    resourcePathsSaved: string;
+    restartNow: string;
     custom: string;
     default: string;
     directoryPath: string;

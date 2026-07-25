@@ -96,6 +96,14 @@ struct StorageDirectoryUpdate {
     restart_required: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResourceStorageUpdate {
+    image_storage_path: String,
+    file_storage_path: String,
+    restart_required: bool,
+}
+
 /// Shared state for ignored applications list, synced between capture thread and Tauri commands.
 /// Capture policy shared by every clipboard ingestion path.
 ///
@@ -560,9 +568,20 @@ fn configure_storage_directory(
     data_directory: Option<String>,
 ) -> Result<StorageDirectoryUpdate, String> {
     let requested_directory = data_directory.map(PathBuf::from);
-    let target_paths = StoragePaths::initialize_with_data_directory(
+    let (image_storage_path, file_storage_path) = {
+        let config = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        (
+            config.image_storage_path().map(PathBuf::from),
+            config.file_storage_path().map(PathBuf::from),
+        )
+    };
+    let target_paths = StoragePaths::initialize_with_resource_directories(
         active_paths.project.clone(),
         requested_directory,
+        image_storage_path,
+        file_storage_path,
     )
     .map_err(|error| error.to_string())?;
 
@@ -603,6 +622,9 @@ fn migrate_storage_data(
     ];
 
     for (old_dir, new_dir, label) in dirs_to_migrate {
+        if old_dir == new_dir {
+            continue;
+        }
         if old_dir.exists() {
             copy_dir_contents(old_dir, new_dir)
                 .map_err(|e| format!("failed to migrate {}: {}", label, e))?;
@@ -1333,6 +1355,8 @@ fn set_history_config(
 struct StorageConfigInfo {
     max_file_copy_size_bytes: u64,
     max_screenshot_size_bytes: u64,
+    image_storage_path: Option<String>,
+    file_storage_path: Option<String>,
 }
 
 #[tauri::command]
@@ -1345,6 +1369,12 @@ fn get_storage_config(
     Ok(StorageConfigInfo {
         max_file_copy_size_bytes: config.max_file_copy_size_bytes(),
         max_screenshot_size_bytes: config.max_screenshot_size_bytes(),
+        image_storage_path: config
+            .image_storage_path()
+            .map(|path| path.display().to_string()),
+        file_storage_path: config
+            .file_storage_path()
+            .map(|path| path.display().to_string()),
     })
 }
 
@@ -1364,6 +1394,44 @@ fn set_storage_config(
         capture.set_max_file_copy_size_bytes(v);
     }
     Ok(())
+}
+
+#[tauri::command]
+fn set_resource_storage_paths(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    active_paths: tauri::State<'_, StoragePaths>,
+    image_storage_path: Option<String>,
+    file_storage_path: Option<String>,
+) -> Result<ResourceStorageUpdate, String> {
+    let image_storage_path = image_storage_path.and_then(|path| {
+        let path = path.trim().to_owned();
+        (!path.is_empty()).then(|| PathBuf::from(path))
+    });
+    let file_storage_path = file_storage_path.and_then(|path| {
+        let path = path.trim().to_owned();
+        (!path.is_empty()).then(|| PathBuf::from(path))
+    });
+
+    let target_paths = StoragePaths::initialize_with_resource_directories(
+        active_paths.project.clone(),
+        Some(active_paths.data_directory.clone()),
+        image_storage_path.clone(),
+        file_storage_path.clone(),
+    )
+    .map_err(|error| error.to_string())?;
+
+    config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .set_resource_storage_paths(image_storage_path, file_storage_path)
+        .map_err(|error| error.to_string())?;
+
+    Ok(ResourceStorageUpdate {
+        image_storage_path: target_paths.images.display().to_string(),
+        file_storage_path: target_paths.files.display().to_string(),
+        restart_required: target_paths.images != active_paths.images
+            || target_paths.files != active_paths.files,
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -2483,9 +2551,11 @@ pub fn run() {
                 app.manage(guard);
             }
             let keyboard = KeyboardManager::load(&project_directory)?;
-            let paths = StoragePaths::initialize_with_data_directory(
+            let paths = StoragePaths::initialize_with_resource_directories(
                 project_directory.clone(),
                 config.storage_directory().map(PathBuf::from),
+                config.image_storage_path().map(PathBuf::from),
+                config.file_storage_path().map(PathBuf::from),
             )?;
             let database = Database::open(&paths.database)?;
 
@@ -3071,6 +3141,7 @@ pub fn run() {
             set_history_config,
             get_history_config,
             set_storage_config,
+            set_resource_storage_paths,
             get_storage_config,
             detect_content_actions,
             soft_delete_clipboard_item,

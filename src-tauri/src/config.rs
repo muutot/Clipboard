@@ -373,6 +373,27 @@ impl ConfigStore {
         self.save()
     }
 
+    pub fn set_resource_storage_paths(
+        &mut self,
+        image_storage_path: Option<PathBuf>,
+        file_storage_path: Option<PathBuf>,
+    ) -> Result<(), StorageError> {
+        validate_resource_directory("storage.imageStoragePath", image_storage_path.as_deref())?;
+        validate_resource_directory("storage.fileStoragePath", file_storage_path.as_deref())?;
+
+        if let (Some(image), Some(file)) = (&image_storage_path, &file_storage_path) {
+            let same_path = fs::canonicalize(image).unwrap_or_else(|_| image.clone())
+                == fs::canonicalize(file).unwrap_or_else(|_| file.clone());
+            if same_path {
+                return Err(StorageError::ResourceDirectoriesMustBeDistinct);
+            }
+        }
+
+        self.config.storage.image_storage_path = image_storage_path;
+        self.config.storage.file_storage_path = file_storage_path;
+        self.save()
+    }
+
     pub fn ignored_applications(&self) -> &[String] {
         &self.config.privacy.ignored_applications
     }
@@ -593,6 +614,19 @@ impl ConfigStore {
     }
 }
 
+fn validate_resource_directory(
+    field: &'static str,
+    path: Option<&Path>,
+) -> Result<(), StorageError> {
+    if let Some(path) = path.filter(|path| !path.is_absolute()) {
+        return Err(StorageError::ResourceDirectoryMustBeAbsolute {
+            field,
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, path::PathBuf, time::SystemTime};
@@ -757,6 +791,48 @@ mod tests {
         assert_eq!(store.storage_directory(), Some(custom_data.as_path()));
         assert_eq!(saved["storage"]["copySizeLimitMb"], 128);
         assert_eq!(saved["window"]["useSystemTitlebar"], false);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn persists_independent_resource_storage_paths() {
+        let project = temporary_test_directory("resource-paths");
+        let image_path = project.join("screenshots");
+        let file_path = project.join("managed-files");
+        let mut store = ConfigStore::load(&project).unwrap();
+
+        store
+            .set_resource_storage_paths(Some(image_path.clone()), Some(file_path.clone()))
+            .unwrap();
+
+        assert_eq!(store.image_storage_path(), Some(image_path.as_path()));
+        assert_eq!(store.file_storage_path(), Some(file_path.as_path()));
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert_eq!(
+            saved["storage"]["imageStoragePath"],
+            image_path.to_string_lossy().to_string()
+        );
+        assert_eq!(
+            saved["storage"]["fileStoragePath"],
+            file_path.to_string_lossy().to_string()
+        );
+
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn rejects_relative_or_shared_resource_storage_paths() {
+        let project = temporary_test_directory("invalid-resource-paths");
+        let mut store = ConfigStore::load(&project).unwrap();
+        let shared = project.join("resources");
+
+        assert!(store
+            .set_resource_storage_paths(Some(PathBuf::from("relative")), None)
+            .is_err());
+        assert!(store
+            .set_resource_storage_paths(Some(shared.clone()), Some(shared))
+            .is_err());
+
         fs::remove_dir_all(project).unwrap();
     }
 

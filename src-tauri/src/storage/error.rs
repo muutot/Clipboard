@@ -8,6 +8,11 @@ pub enum StorageError {
     ConnectionPoisoned,
     FavoriteMustBeRemoved(String),
     DataDirectoryMustBeAbsolute(PathBuf),
+    ResourceDirectoryMustBeAbsolute {
+        field: &'static str,
+        path: PathBuf,
+    },
+    ResourceDirectoriesMustBeDistinct,
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
     InvalidSearchOperation(String),
@@ -46,6 +51,16 @@ impl fmt::Display for StorageError {
                     "data directory must be an absolute path: {}",
                     path.display()
                 )
+            }
+            Self::ResourceDirectoryMustBeAbsolute { field, path } => {
+                write!(
+                    formatter,
+                    "{field} must be an absolute path: {}",
+                    path.display()
+                )
+            }
+            Self::ResourceDirectoriesMustBeDistinct => {
+                formatter.write_str("file and image storage directories must be different")
             }
             Self::InvalidClipboardKind(kind) => {
                 write!(formatter, "unknown clipboard item kind: {kind}")

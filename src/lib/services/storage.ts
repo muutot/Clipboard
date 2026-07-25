@@ -32,6 +32,19 @@ export interface StorageDirectoryUpdate {
   restartRequired: boolean;
 }
 
+export interface StorageConfig {
+  maxFileCopySizeBytes: number;
+  maxScreenshotSizeBytes: number;
+  imageStoragePath: string | null;
+  fileStoragePath: string | null;
+}
+
+export interface ResourceStorageUpdate {
+  imageStoragePath: string;
+  fileStoragePath: string;
+  restartRequired: boolean;
+}
+
 export interface PerformanceMetrics {
   startup: {
     totalStartupMs: number;
@@ -108,6 +121,28 @@ export async function configureStorageDirectory(
 
   return invoke<StorageDirectoryUpdate>("configure_storage_directory", {
     dataDirectory,
+  });
+}
+
+export async function getStorageConfig(): Promise<StorageConfig> {
+  if (!isTauriRuntime()) {
+    throw new Error("Storage configuration is only available in the desktop app");
+  }
+
+  return invoke<StorageConfig>("get_storage_config");
+}
+
+export async function setResourceStoragePaths(
+  imageStoragePath: string | null,
+  fileStoragePath: string | null,
+): Promise<ResourceStorageUpdate> {
+  if (!isTauriRuntime()) {
+    throw new Error("Storage configuration is only available in the desktop app");
+  }
+
+  return invoke<ResourceStorageUpdate>("set_resource_storage_paths", {
+    imageStoragePath,
+    fileStoragePath,
   });
 }
 
