@@ -311,6 +311,27 @@ fn foreground_app_name(app: &platform::windows_clipboard::ForegroundApp) -> Opti
     }
 }
 
+fn should_skip_self_triggered_hash(
+    guard: &mut content::hash::SelfTriggerGuard,
+    content_hash: &str,
+) -> bool {
+    guard.is_self_triggered(content_hash)
+}
+
+fn should_skip_self_triggered_text(
+    guard: &mut content::hash::SelfTriggerGuard,
+    kind: ClipboardKind,
+    text: &str,
+) -> bool {
+    let kind_name = match kind {
+        ClipboardKind::Text => "text",
+        ClipboardKind::Link => "link",
+        ClipboardKind::Image | ClipboardKind::File => return false,
+    };
+    let content_hash = content::hash::compute_content_hash(kind_name, text, None);
+    should_skip_self_triggered_hash(guard, &content_hash)
+}
+
 fn stop_signal_requested(receiver: &mpsc::Receiver<()>) -> bool {
     matches!(
         receiver.try_recv(),
@@ -1921,15 +1942,11 @@ fn start_clipboard_monitoring(
                             None,
                         );
 
-                        if self_trigger_guard
-                            .lock()
-                            .unwrap()
-                            .is_self_triggered(&content_hash)
-                        {
-                            self_trigger_guard
-                                .lock()
-                                .unwrap()
-                                .mark_as_self_triggered(&content_hash);
+                        if should_skip_self_triggered_text(
+                            &mut self_trigger_guard.lock().unwrap(),
+                            kind,
+                            &text,
+                        ) {
                             continue;
                         }
 
@@ -2054,12 +2071,11 @@ fn mark_self_triggered(
     self_trigger: tauri::State<'_, SelfTriggerState>,
     text: String,
 ) -> Result<(), String> {
-    let hash = content::hash::compute_content_hash("text", &text, None);
     self_trigger
         .0
         .lock()
         .map_err(|_| "self-trigger lock poisoned".to_owned())?
-        .mark_as_self_triggered(&hash);
+        .mark_clipboard_write(&text);
     Ok(())
 }
 
@@ -2547,6 +2563,12 @@ pub fn run() {
                                     if file_paths.len() == 1 {
                                         let file_path = &file_paths[0];
                                         let file_hash = content::hash::compute_content_hash("file", file_path, None);
+                                        if should_skip_self_triggered_hash(
+                                            &mut self_trigger_guard.lock().unwrap(),
+                                            &file_hash,
+                                        ) {
+                                            continue;
+                                        }
                                         let file_size = std::fs::metadata(file_path)
                                             .map(|m| m.len())
                                             .unwrap_or(0);
@@ -2591,6 +2613,12 @@ pub fn run() {
                                         sorted_paths.sort();
                                         let joined = sorted_paths.join("\n");
                                         let group_hash = content::hash::compute_content_hash("files", &joined, None);
+                                        if should_skip_self_triggered_hash(
+                                            &mut self_trigger_guard.lock().unwrap(),
+                                            &group_hash,
+                                        ) {
+                                            continue;
+                                        }
 
                                         let total_size: u64 = file_paths
                                             .iter()
@@ -2681,7 +2709,11 @@ pub fn run() {
                                     None,
                                 );
 
-                                if self_trigger_guard.lock().unwrap().is_self_triggered(&content_hash) {
+                                if should_skip_self_triggered_text(
+                                    &mut self_trigger_guard.lock().unwrap(),
+                                    kind,
+                                    &text,
+                                ) {
                                     continue;
                                 }
 
@@ -2973,6 +3005,69 @@ mod capture_tests {
 
         assert_eq!(foreground_app_name(&named).as_deref(), Some("editor"));
         assert_eq!(foreground_app_name(&path_only).as_deref(), Some("Browser"));
+    }
+
+    #[test]
+    fn self_triggered_link_write_is_skipped_before_source_metadata_can_change() {
+        let text = "https://example.com";
+        let database = Database::open_in_memory().unwrap();
+        let original = ClipboardItem {
+            id: "original".to_owned(),
+            kind: ClipboardKind::Link,
+            title: text.to_owned(),
+            text_content: Some(text.to_owned()),
+            resource_path: None,
+            preview_path: None,
+            content_hash: content::hash::compute_content_hash("link", text, None),
+            source_app: Some("Browser".to_owned()),
+            icon_path: Some("browser.png".to_owned()),
+            size_bytes: text.len() as u64,
+            created_at_ms: 100,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: None,
+        };
+        database.save_item(&original).unwrap();
+
+        let mut guard = content::hash::SelfTriggerGuard::new();
+        guard.mark_clipboard_write(text);
+        assert!(should_skip_self_triggered_text(
+            &mut guard,
+            ClipboardKind::Link,
+            text,
+        ));
+
+        let stored = database.get_item("original").unwrap().unwrap();
+        assert_eq!(stored.source_app, original.source_app);
+        assert_eq!(stored.icon_path, original.icon_path);
+        assert_eq!(stored.created_at_ms, original.created_at_ms);
+    }
+
+    #[test]
+    fn self_triggered_file_writes_match_single_and_group_hashes() {
+        let single_path = r"C:\Users\admin\Documents\report.txt";
+        let mut single_guard = content::hash::SelfTriggerGuard::new();
+        single_guard.mark_clipboard_write(single_path);
+        let single_hash = content::hash::compute_content_hash("file", single_path, None);
+        assert!(should_skip_self_triggered_hash(
+            &mut single_guard,
+            &single_hash
+        ));
+
+        let paths = [
+            r"C:\Users\admin\Documents\zeta.txt",
+            r"C:\Users\admin\Documents\alpha.txt",
+        ];
+        let mut group_guard = content::hash::SelfTriggerGuard::new();
+        group_guard.mark_clipboard_write(&paths.join("\n"));
+        let mut sorted_paths = paths.to_vec();
+        sorted_paths.sort();
+        let group_hash =
+            content::hash::compute_content_hash("files", &sorted_paths.join("\n"), None);
+        assert!(should_skip_self_triggered_hash(
+            &mut group_guard,
+            &group_hash
+        ));
     }
 
     #[test]

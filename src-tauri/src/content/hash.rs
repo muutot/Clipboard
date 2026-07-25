@@ -24,6 +24,42 @@ pub fn compute_media_hash(kind: &str, data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+pub fn compute_clipboard_write_hashes(text: &str) -> Vec<String> {
+    let text_variants = newline_variants(text);
+    let mut hashes = Vec::with_capacity(text_variants.len() * 4);
+    for variant in &text_variants {
+        for kind in ["text", "link", "file"] {
+            hashes.push(compute_content_hash(kind, variant, None));
+        }
+    }
+
+    let mut sorted_paths = text_variants
+        .first()
+        .filter(|variant| variant.contains('\n'))
+        .map(|variant| variant.lines().map(str::to_owned).collect::<Vec<_>>());
+    if let Some(paths) = &mut sorted_paths {
+        paths.sort();
+        let joined = paths.join("\n");
+        for variant in newline_variants(&joined) {
+            hashes.push(compute_content_hash("files", &variant, None));
+        }
+    }
+
+    hashes
+}
+
+fn newline_variants(text: &str) -> Vec<String> {
+    let normalized_lf = text.replace("\r\n", "\n").replace('\r', "\n");
+    let normalized_crlf = normalized_lf.replace('\n', "\r\n");
+    let mut variants = vec![text.to_owned()];
+    for variant in [normalized_lf, normalized_crlf] {
+        if !variants.contains(&variant) {
+            variants.push(variant);
+        }
+    }
+    variants
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DedupResult {
     pub is_duplicate: bool,
@@ -48,10 +84,24 @@ impl SelfTriggerGuard {
 
     pub fn mark_as_self_triggered(&mut self, content_hash: &str) {
         self.cleanup_expired();
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.hash == content_hash)
+        {
+            entry.timestamp = Instant::now();
+            return;
+        }
         self.entries.push(SelfTriggerEntry {
             hash: content_hash.to_owned(),
             timestamp: Instant::now(),
         });
+    }
+
+    pub fn mark_clipboard_write(&mut self, text: &str) {
+        for hash in compute_clipboard_write_hashes(text) {
+            self.mark_as_self_triggered(&hash);
+        }
     }
 
     pub fn is_self_triggered(&mut self, content_hash: &str) -> bool {
@@ -174,6 +224,26 @@ mod tests {
     fn self_trigger_guard_has_no_entries_by_default() {
         let mut guard = SelfTriggerGuard::new();
         assert!(!guard.is_self_triggered("anything"));
+    }
+
+    #[test]
+    fn text_write_hashes_cover_text_and_link_capture_kinds() {
+        let text = "https://example.com";
+        let hashes = compute_clipboard_write_hashes(text);
+
+        assert!(hashes.contains(&compute_content_hash("text", text, None)));
+        assert!(hashes.contains(&compute_content_hash("link", text, None)));
+        assert!(hashes.contains(&compute_content_hash("file", text, None)));
+    }
+
+    #[test]
+    fn self_trigger_guard_matches_windows_newline_normalization() {
+        let mut guard = SelfTriggerGuard::new();
+        guard.mark_clipboard_write("first\nsecond");
+
+        assert!(guard.is_self_triggered(&compute_content_hash("text", "first\r\nsecond", None,)));
+        assert!(guard.is_self_triggered(&compute_content_hash("link", "first\r\nsecond", None,)));
+        assert!(guard.is_self_triggered(&compute_content_hash("files", "first\r\nsecond", None,)));
     }
 
     #[test]

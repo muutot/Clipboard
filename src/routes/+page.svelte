@@ -25,6 +25,7 @@
     formatSizeSimple,
     generatedClipboardTitle,
     isCustomClipboardTitle,
+    writeClipboardText,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -1066,8 +1067,7 @@
         try {
           const paths = JSON.parse(item.textContent) as string[];
           if (paths.length > 1) {
-            invoke("mark_self_triggered", { text: paths.join("\n") }).catch(() => {});
-            await navigator.clipboard.writeText(paths.join("\n"));
+            await writeClipboardText(paths.join("\n"));
             statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
             showToast(_t("toast.copySuccess"), "success");
             return;
@@ -1078,8 +1078,7 @@
       }
       if (item.resourcePath) {
         try {
-          invoke("mark_self_triggered", { text: item.resourcePath }).catch(() => {});
-          await navigator.clipboard.writeText(item.resourcePath);
+          await writeClipboardText(item.resourcePath);
           statusMessage = _t("app.copiedItem", {
             title: item.fileName || item.title.split("\n")[0],
           });
@@ -1091,10 +1090,8 @@
       return;
     }
 
-    void navigator.clipboard
-      .writeText(item.textContent || item.title)
+    void writeClipboardText(item.textContent || item.title)
       .then(() => {
-        invoke("mark_self_triggered", { text: item.textContent || item.title }).catch(() => {});
         statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
         showToast(_t("toast.copySuccess"), "success");
       })
@@ -1245,10 +1242,7 @@
     if ($generalSettings.pinCopiedToTop) moveToTop(_id);
     const text = item.textContent || item.title;
     try {
-      if (isTauriRuntime()) {
-        await invoke("mark_self_triggered", { text }).catch(() => {});
-      }
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       if (!isTauriRuntime()) {
         showToast(_t("toast.plainCopySuccess"), "success");
         return;
@@ -1294,8 +1288,7 @@
     const item = items.find((i) => i.id === _id);
     if (!item) return;
     const name = item.fileName ?? item.title;
-    void navigator.clipboard
-      .writeText(name)
+    void writeClipboardText(name)
       .then(() => {
         showToast(_t("toast.copySuccess"), "success");
       })
@@ -1309,9 +1302,7 @@
   function bulkCopy() {
     const selectedItems = items.filter((i) => selectedIds.has(i.id));
     const text = selectedItems.map((i) => i.title).join("\n");
-    invoke("mark_self_triggered", { text }).catch(() => {});
-    void navigator.clipboard
-      .writeText(text)
+    void writeClipboardText(text)
       .then(() => {
         showToast(_t("toast.bulkCopySuccess", { count: selectedIds.size }), "success");
       })

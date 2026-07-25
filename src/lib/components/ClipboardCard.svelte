@@ -7,7 +7,11 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { detectContentActions, type QuickAction } from "$lib/services/clipboard";
+  import {
+    detectContentActions,
+    type QuickAction,
+    writeClipboardText,
+  } from "$lib/services/clipboard";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
 
@@ -221,7 +225,7 @@
         window.open(action.payload, "_blank");
       }
     } else {
-      void navigator.clipboard.writeText(action.payload).catch(() => {});
+      void writeClipboardText(action.payload).catch(() => {});
     }
   }
 

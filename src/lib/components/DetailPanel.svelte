@@ -12,6 +12,7 @@
   import { untrack } from "svelte";
   import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { writeClipboardText } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -52,6 +53,10 @@
     onsaveasnew,
     oncopyfilename,
   }: Props = $props();
+
+  function copyText(text: string) {
+    void writeClipboardText(text).catch(() => {});
+  }
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
@@ -779,7 +784,7 @@
                   <div class="marker-item">
                     <AppIcon name="mail" size={13} />
                     <span>{email}</span>
-                    <button type="button" onclick={() => navigator.clipboard.writeText(email)}>
+                    <button type="button" onclick={() => copyText(email)}>
                       <AppIcon name="copy" size={11} />
                     </button>
                   </div>
@@ -788,7 +793,7 @@
                   <div class="marker-item">
                     <AppIcon name="globe" size={13} />
                     <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
-                    <button type="button" onclick={() => navigator.clipboard.writeText(url)}>
+                    <button type="button" onclick={() => copyText(url)}>
                       <AppIcon name="copy" size={11} />
                     </button>
                   </div>
@@ -797,7 +802,7 @@
                   <div class="marker-item">
                     <AppIcon name="phone" size={13} />
                     <span>{phone}</span>
-                    <button type="button" onclick={() => navigator.clipboard.writeText(phone)}>
+                    <button type="button" onclick={() => copyText(phone)}>
                       <AppIcon name="copy" size={11} />
                     </button>
                   </div>
@@ -806,7 +811,7 @@
                   <div class="marker-item color-marker">
                     <span class="color-swatch" style="background:{color}"></span>
                     <code>{color}</code>
-                    <button type="button" onclick={() => navigator.clipboard.writeText(color)}>
+                    <button type="button" onclick={() => copyText(color)}>
                       <AppIcon name="copy" size={11} />
                     </button>
                   </div>
@@ -824,7 +829,7 @@
               <button
                 type="button"
                 class="ocr-copy-btn"
-                onclick={() => navigator.clipboard.writeText(item.ocrText ?? "")}
+                onclick={() => copyText(item.ocrText ?? "")}
               >
                 {_t("detail.copyOcrText")}
               </button>

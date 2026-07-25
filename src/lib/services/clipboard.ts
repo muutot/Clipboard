@@ -7,6 +7,13 @@ import en from "$lib/i18n/locales/en";
 
 const locales = { "zh-CN": zhCN, en };
 
+export async function writeClipboardText(text: string): Promise<void> {
+  if (isTauriRuntime()) {
+    await invoke("mark_self_triggered", { text });
+  }
+  await navigator.clipboard.writeText(text);
+}
+
 export async function loadClipboardHistory(
   limit = 100,
   offset = 0,
