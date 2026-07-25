@@ -32,7 +32,7 @@ use export::{
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceSnapshot, PerformanceTracker, StartupMetrics, StartupTimer};
-use platform::windows_hotkey::{shortcut_to_windows_hotkey, HotkeyManager};
+use platform::windows_hotkey::{shortcut_bindings_to_windows_hotkeys, HotkeyManager};
 use platform::{
     show_main_window, sync_autostart, ClipboardMonitor, GlobalShortcutManager, RuntimeInfo,
     SingleInstanceError, SingleInstanceGuard, SystemTray, WindowManager,
@@ -53,16 +53,17 @@ use tauri::{Emitter, Manager};
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
 
-fn resolve_toggle_hotkey(config: &KeyboardConfig) -> Option<(u32, u32)> {
-    let shortcuts = config.shortcuts.get(TOGGLE_WINDOW_ACTION)?;
-    for shortcut in shortcuts {
-        if let Ok(binding) = keyboard::ShortcutBinding::from_str(shortcut) {
-            if let Some(hotkey) = shortcut_to_windows_hotkey(&binding) {
-                return Some(hotkey);
-            }
-        }
-    }
-    None
+fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> Vec<(u32, u32)> {
+    let Some(shortcuts) = config.shortcuts.get(TOGGLE_WINDOW_ACTION) else {
+        return Vec::new();
+    };
+
+    let bindings = shortcuts
+        .iter()
+        .filter_map(|shortcut| keyboard::ShortcutBinding::from_str(shortcut).ok())
+        .collect::<Vec<_>>();
+
+    shortcut_bindings_to_windows_hotkeys(&bindings)
 }
 
 #[derive(Debug, Serialize)]
@@ -1171,11 +1172,14 @@ fn configure_keyboard_shortcuts(
             .lock()
             .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
             .config();
-        if let Some((mod_flags, vk)) = resolve_toggle_hotkey(&config) {
-            let mut hm = hotkey_manager
-                .lock()
-                .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
-            hm.restart(mod_flags, vk);
+        let bindings = resolve_toggle_hotkeys(&config);
+        let mut hm = hotkey_manager
+            .lock()
+            .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
+        if bindings.is_empty() {
+            hm.stop();
+        } else {
+            hm.restart_with_bindings(bindings);
         }
     }
 
@@ -3515,8 +3519,9 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 let kb_config = keyboard.config();
-                if let Some((mod_flags, vk)) = resolve_toggle_hotkey(&kb_config) {
-                    hotkey_manager.start_with_window(mod_flags, vk, window.clone());
+                let bindings = resolve_toggle_hotkeys(&kb_config);
+                if !bindings.is_empty() {
+                    hotkey_manager.start_with_bindings(bindings, window.clone());
                 } else {
                     eprintln!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+V");
                     use platform::windows_clipboard;

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 #[cfg(target_os = "windows")]
@@ -6,6 +7,7 @@ use std::time::Duration;
 use super::windows_clipboard;
 
 const WM_HOTKEY: u32 = 0x0312;
+const FIRST_HOTKEY_ID: i32 = 1;
 #[cfg(target_os = "windows")]
 const QUICK_PASTE_FOCUS_DELAY: Duration = Duration::from_millis(60);
 
@@ -38,24 +40,64 @@ impl QuickPasteTarget {
     }
 }
 
+type HotkeyRegistration = (i32, u32, u32);
+
+fn deduplicate_hotkeys(bindings: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    let mut seen = HashSet::new();
+    bindings
+        .iter()
+        .copied()
+        .filter(|binding| seen.insert(*binding))
+        .collect()
+}
+
+fn assign_hotkey_ids(bindings: &[(u32, u32)]) -> Vec<HotkeyRegistration> {
+    deduplicate_hotkeys(bindings)
+        .into_iter()
+        .enumerate()
+        .map(|(index, (modifiers, vk))| (FIRST_HOTKEY_ID + index as i32, modifiers, vk))
+        .collect()
+}
+
 pub fn spawn_hotkey_thread(
     hotkey_id: i32,
     modifiers: u32,
     vk: u32,
     tx: mpsc::Sender<()>,
 ) -> thread::JoinHandle<()> {
+    spawn_hotkey_thread_with_registrations(vec![(hotkey_id, modifiers, vk)], tx)
+}
+
+pub fn spawn_hotkey_thread_with_bindings(
+    bindings: Vec<(u32, u32)>,
+    tx: mpsc::Sender<()>,
+) -> thread::JoinHandle<()> {
+    spawn_hotkey_thread_with_registrations(assign_hotkey_ids(&bindings), tx)
+}
+
+fn spawn_hotkey_thread_with_registrations(
+    registrations: Vec<HotkeyRegistration>,
+    tx: mpsc::Sender<()>,
+) -> thread::JoinHandle<()> {
     set_hotkey_sender(&tx);
     thread::spawn(move || {
-        if hotkey_message_loop(hotkey_id, modifiers, vk).is_err() {
-            eprintln!("[hotkey] message loop exited with error");
+        let result = hotkey_message_loop(&registrations);
+        clear_hotkey_state();
+        if let Err(error) = result {
+            eprintln!("[hotkey] message loop exited with error: {error}");
         }
         drop(tx);
     })
 }
 
-fn hotkey_message_loop(hotkey_id: i32, modifiers: u32, vk: u32) -> Result<(), String> {
+fn hotkey_message_loop(registrations: &[HotkeyRegistration]) -> Result<(), String> {
+    if registrations.is_empty() {
+        return Err("no supported hotkey bindings were provided".to_owned());
+    }
+
     extern "system" {
         fn GetModuleHandleW(module: *const u16) -> isize;
+        fn GetLastError() -> u32;
         fn RegisterClassExW(class: *const WndClassExW) -> u16;
         fn CreateWindowExW(
             ex_style: u32,
@@ -123,7 +165,7 @@ fn hotkey_message_loop(hotkey_id: i32, modifiers: u32, vk: u32) -> Result<(), St
         };
 
         let atom = RegisterClassExW(&wc);
-        if atom == 0 {
+        if atom == 0 && GetLastError() != 1410 {
             return Err("RegisterClassExW failed".to_string());
         }
 
@@ -147,9 +189,19 @@ fn hotkey_message_loop(hotkey_id: i32, modifiers: u32, vk: u32) -> Result<(), St
 
         set_hotkey_hwnd(hwnd);
 
-        if let Err(e) = windows_clipboard::register_global_hotkey(hwnd, hotkey_id, modifiers, vk) {
-            DestroyWindow(hwnd);
-            return Err(e);
+        let mut registered_ids = Vec::with_capacity(registrations.len());
+        for (id, modifiers, vk) in registrations {
+            if let Err(error) =
+                windows_clipboard::register_global_hotkey(hwnd, *id, *modifiers, *vk)
+            {
+                for registered_id in registered_ids {
+                    let _ = windows_clipboard::unregister_global_hotkey(hwnd, registered_id);
+                }
+                clear_hotkey_state();
+                DestroyWindow(hwnd);
+                return Err(error);
+            }
+            registered_ids.push(*id);
         }
 
         let mut msg: Msg = std::mem::zeroed();
@@ -162,7 +214,9 @@ fn hotkey_message_loop(hotkey_id: i32, modifiers: u32, vk: u32) -> Result<(), St
             DispatchMessageW(&msg);
         }
 
-        let _ = windows_clipboard::unregister_global_hotkey(hwnd, hotkey_id);
+        for id in registered_ids {
+            let _ = windows_clipboard::unregister_global_hotkey(hwnd, id);
+        }
         DestroyWindow(hwnd);
     }
 
@@ -175,7 +229,7 @@ unsafe extern "system" fn hotkey_window_proc(
     wparam: usize,
     lparam: isize,
 ) -> isize {
-    if msg == WM_HOTKEY && wparam == 1 {
+    if msg == WM_HOTKEY && wparam != 0 {
         if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
             let _ = tx.send(());
         }
@@ -255,10 +309,14 @@ impl HotkeyManager {
     }
 
     pub fn start_with_window(&mut self, modifiers: u32, vk: u32, window: tauri::WebviewWindow) {
+        self.start_with_bindings(vec![(modifiers, vk)], window);
+    }
+
+    pub fn start_with_bindings(&mut self, bindings: Vec<(u32, u32)>, window: tauri::WebviewWindow) {
         self.stop();
         self.window = Some(window.clone());
         let (tx, rx) = mpsc::channel::<()>();
-        let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
+        let handle = spawn_hotkey_thread_with_bindings(bindings, tx);
         let quick_paste_target = Arc::clone(&self.quick_paste_target);
 
         thread::spawn(move || {
@@ -283,8 +341,12 @@ impl HotkeyManager {
     }
 
     pub fn restart(&mut self, modifiers: u32, vk: u32) {
+        self.restart_with_bindings(vec![(modifiers, vk)]);
+    }
+
+    pub fn restart_with_bindings(&mut self, bindings: Vec<(u32, u32)>) {
         if let Some(window) = self.window.clone() {
-            self.start_with_window(modifiers, vk, window);
+            self.start_with_bindings(bindings, window);
         }
     }
 
@@ -441,28 +503,67 @@ pub fn shortcut_to_windows_hotkey(
                     crate::keyboard::Modifier::Meta => mod_flags |= windows_clipboard::MOD_WIN,
                 }
             }
-            let vk = match key.to_uppercase().as_str() {
-                "V" => windows_clipboard::VK_V,
-                "SPACE" => 0x20,
-                other if other.len() == 1 => {
-                    let c = other.chars().next().unwrap();
-                    if c.is_ascii_alphabetic() {
-                        c.to_ascii_uppercase() as u8 as u32
-                    } else {
-                        return None;
-                    }
-                }
-                _ => return None,
-            };
+            let vk = windows_virtual_key(key)?;
             Some((mod_flags, vk))
         }
         crate::keyboard::ShortcutBinding::DoubleModifier { .. } => None,
     }
 }
 
+fn windows_virtual_key(key: &str) -> Option<u32> {
+    let normalized = key.to_ascii_uppercase();
+    if let Some(function_key) = normalized
+        .strip_prefix('F')
+        .and_then(|number| number.parse::<u32>().ok())
+        .filter(|number| (1..=24).contains(number))
+    {
+        return Some(0x6F + function_key);
+    }
+
+    match normalized.as_str() {
+        "BACKSPACE" => Some(0x08),
+        "TAB" => Some(0x09),
+        "ENTER" | "RETURN" => Some(0x0D),
+        "ESC" | "ESCAPE" => Some(0x1B),
+        "SPACE" => Some(0x20),
+        "PAGEUP" => Some(0x21),
+        "PAGEDOWN" => Some(0x22),
+        "END" => Some(0x23),
+        "HOME" => Some(0x24),
+        "LEFT" | "ARROWLEFT" => Some(0x25),
+        "UP" | "ARROWUP" => Some(0x26),
+        "RIGHT" | "ARROWRIGHT" => Some(0x27),
+        "DOWN" | "ARROWDOWN" => Some(0x28),
+        "INSERT" => Some(0x2D),
+        "DELETE" | "DEL" => Some(0x2E),
+        other if other.len() == 1 => {
+            let byte = other.as_bytes()[0];
+            (byte.is_ascii_alphanumeric()).then_some(byte as u32)
+        }
+        _ => None,
+    }
+}
+
+pub fn shortcut_bindings_to_windows_hotkeys(
+    bindings: &[crate::keyboard::ShortcutBinding],
+) -> Vec<(u32, u32)> {
+    let converted = bindings
+        .iter()
+        .filter_map(shortcut_to_windows_hotkey)
+        .collect::<Vec<_>>();
+    deduplicate_hotkeys(&converted)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::QuickPasteTarget;
+    use std::str::FromStr;
+
+    use crate::keyboard::ShortcutBinding;
+
+    use super::{
+        assign_hotkey_ids, shortcut_bindings_to_windows_hotkeys, shortcut_to_windows_hotkey,
+        QuickPasteTarget, FIRST_HOTKEY_ID,
+    };
 
     #[test]
     fn quick_paste_target_is_consumed_once() {
@@ -479,5 +580,39 @@ mod tests {
         target.remember(0);
 
         assert_eq!(target.take(), None);
+    }
+
+    #[test]
+    fn converts_supported_windows_keys() {
+        let bindings = [
+            ShortcutBinding::from_str("Alt+V").unwrap(),
+            ShortcutBinding::from_str("Ctrl+Enter").unwrap(),
+            ShortcutBinding::from_str("Shift+F5").unwrap(),
+            ShortcutBinding::from_str("Meta+1").unwrap(),
+        ];
+
+        assert_eq!(
+            shortcut_bindings_to_windows_hotkeys(&bindings),
+            vec![(1, b'V' as u32), (2, 0x0D), (4, 0x74), (8, b'1' as u32)]
+        );
+    }
+
+    #[test]
+    fn batches_bindings_without_duplicate_registration_ids() {
+        let bindings = [(1, b'V' as u32), (1, b'V' as u32), (2, 0x20)];
+
+        assert_eq!(
+            assign_hotkey_ids(&bindings),
+            vec![
+                (FIRST_HOTKEY_ID, 1, b'V' as u32),
+                (FIRST_HOTKEY_ID + 1, 2, 0x20)
+            ]
+        );
+    }
+
+    #[test]
+    fn double_modifier_bindings_are_left_for_the_software_matcher() {
+        let binding = ShortcutBinding::from_str("Shift+Shift").unwrap();
+        assert_eq!(shortcut_to_windows_hotkey(&binding), None);
     }
 }
