@@ -117,6 +117,12 @@ export interface LocaleDefinition {
     ocrEngineChangeFailed: string;
     ocrDetectionSaved: string;
     ocrDetectionSaveFailed: string;
+    settingsSearchLabel: string;
+    settingsSearchPlaceholder: string;
+    clearSettingsSearch: string;
+    settingsCount: string;
+    settingsFilteredCount: string;
+    settingsSearchNoResults: string;
   };
   keyboard: {
     settings: string;
@@ -191,6 +197,9 @@ export interface LocaleDefinition {
   search: {
     regex: string;
     regexError: string;
+    suggestionsLabel: string;
+    recent: string;
+    suggestions: string;
   };
   bulk: {
     copyN: string;

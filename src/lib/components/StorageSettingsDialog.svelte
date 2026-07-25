@@ -1,4 +1,5 @@
 ﻿<script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
@@ -55,6 +56,72 @@
     "general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
   >("storage");
   let activeStatisticsTab = $state<"storage" | "performance">("storage");
+
+  let settingsSearch = $state("");
+  let settingsContent = $state<HTMLElement | null>(null);
+  let settingsItemCount = $state(0);
+  let settingsMatchCount = $state(0);
+  let settingsSearchReady = $state(false);
+
+  function normalizeSettingsSearch(value: string): string {
+    return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  }
+
+  function searchableSettingsText(item: HTMLElement): string {
+    const labels = item.querySelectorAll<HTMLElement>(
+      "strong, p, label, .setting-label, .config-path, .path-value-inline, .column-heading, code",
+    );
+    const text = Array.from(labels)
+      .map((element) => element.textContent ?? "")
+      .join(" ");
+    return normalizeSettingsSearch(text || item.textContent || "");
+  }
+
+  function applySettingsSearch(): void {
+    if (!settingsContent) return;
+
+    const items = Array.from(
+      settingsContent.querySelectorAll<HTMLElement>(".setting-card, .filter-board"),
+    );
+    const query = normalizeSettingsSearch(settingsSearch);
+    let matches = 0;
+
+    for (const item of items) {
+      const matchesQuery = !query || searchableSettingsText(item).includes(query);
+      item.hidden = !matchesQuery;
+      if (matchesQuery) matches += 1;
+    }
+
+    settingsItemCount = items.length;
+    settingsMatchCount = matches;
+    settingsSearchReady = true;
+  }
+
+  async function refreshSettingsSearch(): Promise<void> {
+    await tick();
+    applySettingsSearch();
+  }
+
+  function clearSettingsSearch(): void {
+    settingsSearch = "";
+  }
+
+  $effect(() => {
+    const root = settingsContent;
+    if (!root || typeof MutationObserver === "undefined") return;
+
+    applySettingsSearch();
+    const observer = new MutationObserver(() => applySettingsSearch());
+    observer.observe(root, { childList: true, characterData: true, subtree: true });
+    return () => observer.disconnect();
+  });
+
+  $effect(() => {
+    settingsSearch;
+    activeSection;
+    activeStatisticsTab;
+    void refreshSettingsSearch();
+  });
 
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
@@ -638,7 +705,7 @@
     </div>
   </aside>
 
-  <div class="settings-content">
+  <div id="settings-content" class="settings-content" bind:this={settingsContent}>
     {#if activeSection === "general" || activeSection === "compact" || activeSection === "font"}
       <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
         <button
@@ -686,6 +753,52 @@
         </button>
       </nav>
     {/if}
+
+    <div
+      class="settings-search-toolbar"
+      role="search"
+      aria-label={_t("storage.settingsSearchLabel")}
+    >
+      <div class="settings-search-field">
+        <AppIcon name="search" size={15} />
+        <label class="visually-hidden" for="settings-search-input"
+          >{_t("storage.settingsSearchLabel")}</label
+        >
+        <input
+          id="settings-search-input"
+          type="search"
+          bind:value={settingsSearch}
+          aria-label={_t("storage.settingsSearchLabel")}
+          placeholder={_t("storage.settingsSearchPlaceholder")}
+          autocomplete="off"
+          spellcheck="false"
+        />
+        {#if settingsSearch}
+          <button
+            type="button"
+            class="settings-search-clear"
+            aria-label={_t("storage.clearSettingsSearch")}
+            onclick={clearSettingsSearch}>×</button
+          >
+        {/if}
+      </div>
+      <span class="settings-count" aria-live="polite">
+        {#if settingsSearch.trim() && settingsItemCount !== settingsMatchCount}
+          {_t("storage.settingsFilteredCount", {
+            matched: settingsMatchCount,
+            total: settingsItemCount,
+          })}
+        {:else}
+          {_t("storage.settingsCount", { count: settingsItemCount })}
+        {/if}
+      </span>
+    </div>
+    {#if settingsSearchReady && settingsSearch.trim() && settingsItemCount > 0 && settingsMatchCount === 0}
+      <div class="settings-search-empty" role="status">
+        {_t("storage.settingsSearchNoResults", { query: settingsSearch.trim() })}
+      </div>
+    {/if}
+
     {#if activeSection === "general"}
       <GeneralSettingsPanel {onclose} />
     {:else if activeSection === "compact"}
@@ -1575,6 +1688,107 @@
     background: #252f3d;
   }
 
+  .settings-search-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px 0;
+  }
+
+  .settings-search-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+    padding: 0 9px;
+    border: 1px solid #343434;
+    border-radius: var(--settings-control-radius);
+    color: #777;
+    background: #1a1a1a;
+    transition:
+      border-color 100ms ease,
+      background 100ms ease;
+  }
+
+  .settings-search-field:focus-within {
+    border-color: #5a5a5a;
+    background: #242424;
+  }
+
+  .settings-search-field input {
+    width: 100%;
+    min-width: 0;
+    padding: 7px 0;
+    border: 0;
+    outline: none;
+    color: #d8d8d8;
+    background: transparent;
+    font: inherit;
+    font-size: var(--settings-control-size);
+  }
+
+  .settings-search-field input::placeholder {
+    color: #666;
+  }
+
+  .settings-search-field input::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  .settings-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: #999;
+    background: transparent;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .settings-search-clear:hover {
+    color: #e0e0e0;
+    background: #2a2a2a;
+  }
+
+  .settings-count {
+    flex: 0 0 auto;
+    color: #888;
+    font-size: var(--settings-note-size);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .settings-search-empty {
+    margin: 10px 18px 0;
+    padding: 9px 10px;
+    border: 1px dashed #3a3a3a;
+    border-radius: var(--settings-control-radius);
+    color: #888;
+    background: rgba(30, 30, 30, 0.72);
+    font-size: var(--settings-description-size);
+    text-align: center;
+  }
+
+  .visually-hidden,
+  label.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .settings-content > header {
     display: flex;
     align-items: flex-start;
@@ -2077,6 +2291,14 @@
     }
     .settings-sidebar {
       display: none;
+    }
+    .settings-search-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .settings-count {
+      align-self: flex-end;
     }
   }
 

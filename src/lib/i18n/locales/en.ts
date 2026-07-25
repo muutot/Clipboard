@@ -124,6 +124,12 @@ const en: LocaleDefinition = {
     ocrEngineChangeFailed: "Failed to switch OCR engine: {error}",
     ocrDetectionSaved: "Detection parameters saved and active",
     ocrDetectionSaveFailed: "Failed to save detection parameters: {error}",
+    settingsSearchLabel: "Search current settings",
+    settingsSearchPlaceholder: "Search setting names or descriptions",
+    clearSettingsSearch: "Clear settings search",
+    settingsCount: "{count} settings",
+    settingsFilteredCount: "{matched} of {total} settings",
+    settingsSearchNoResults: "No settings match “{query}”",
   },
   keyboard: {
     settings: "Settings / Shortcuts",
@@ -201,6 +207,9 @@ const en: LocaleDefinition = {
   search: {
     regex: "Regex",
     regexError: "Invalid regex",
+    suggestionsLabel: "Search suggestions",
+    recent: "Recent searches",
+    suggestions: "Matching suggestions",
   },
   bulk: {
     copyN: "Copy {count} items",

@@ -119,6 +119,12 @@ const zhCN: LocaleDefinition = {
     ocrEngineChangeFailed: "OCR 引擎切换失败：{error}",
     ocrDetectionSaved: "检测参数已保存并生效",
     ocrDetectionSaveFailed: "检测参数保存失败：{error}",
+    settingsSearchLabel: "搜索当前设置",
+    settingsSearchPlaceholder: "搜索设置名称或说明",
+    clearSettingsSearch: "清除设置搜索",
+    settingsCount: "{count} 项设置",
+    settingsFilteredCount: "匹配 {matched}/{total} 项",
+    settingsSearchNoResults: "没有匹配“{query}”的设置",
   },
   keyboard: {
     settings: "设置 / 快捷键",
@@ -193,6 +199,9 @@ const zhCN: LocaleDefinition = {
   search: {
     regex: "正则",
     regexError: "正则表达式无效",
+    suggestionsLabel: "搜索建议",
+    recent: "最近搜索",
+    suggestions: "匹配建议",
   },
   bulk: {
     copyN: "复制 {count} 项",

@@ -67,6 +67,15 @@
   const VIRTUAL_SCROLL_THRESHOLD = 50;
   const DELETED_HISTORY_PAGE_SIZE = 100;
   const MAIN_WINDOW_MIN_WIDTH = 730;
+  const SEARCH_HISTORY_STORAGE_KEY = "clipboard.search-history.v1";
+  const SEARCH_HISTORY_LIMIT = 8;
+  const SEARCH_TERM_MAX_LENGTH = 120;
+  const SEARCH_SUGGESTION_LIMIT = 8;
+
+  type SearchOption = {
+    value: string;
+    kind: "history" | "suggestion";
+  };
 
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
   let deletedHistoryLoaded = $state(false);
@@ -88,6 +97,10 @@
   let indexedQuery = $state("");
   let searchPending = $state(false);
   let searchRequestId = 0;
+  let searchHistory = $state<string[]>([]);
+  let searchSuggestionsOpen = $state(false);
+  let searchSuggestionIndex = $state(-1);
+  let pendingSearchHistoryQuery = "";
 
   let dateFilter = $state<string>("all");
   let sourceAppFilter = $state("");
@@ -177,6 +190,66 @@
       default:
         return null;
     }
+  }
+
+  function normalizeSearchTerm(value: string): string {
+    return value.trim().slice(0, SEARCH_TERM_MAX_LENGTH);
+  }
+
+  function loadSearchHistory(): string[] {
+    try {
+      const raw = window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      const seen = new Set<string>();
+      const result: string[] = [];
+      for (const value of parsed) {
+        if (typeof value !== "string") continue;
+        const term = normalizeSearchTerm(value);
+        const key = term.toLocaleLowerCase();
+        if (!term || seen.has(key)) continue;
+        seen.add(key);
+        result.push(term);
+        if (result.length >= SEARCH_HISTORY_LIMIT) break;
+      }
+      return result;
+    } catch {
+      return [];
+    }
+  }
+
+  function persistSearchHistory(history: string[]) {
+    try {
+      window.localStorage.setItem(
+        SEARCH_HISTORY_STORAGE_KEY,
+        JSON.stringify(history.slice(0, SEARCH_HISTORY_LIMIT)),
+      );
+    } catch {
+      // Browser privacy settings and desktop webview policies may disable
+      // localStorage. Search history remains available for this session.
+    }
+  }
+
+  function rememberSearchTerm(value: string) {
+    const term = normalizeSearchTerm(value);
+    if (!term) return;
+
+    const key = term.toLocaleLowerCase();
+    const next = [
+      term,
+      ...searchHistory.filter((entry) => entry.toLocaleLowerCase() !== key),
+    ].slice(0, SEARCH_HISTORY_LIMIT);
+    searchHistory = next;
+    persistSearchHistory(next);
+  }
+
+  function suggestionCandidate(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const candidate = value.replace(/\s+/g, " ").trim();
+    if (candidate.length < 2 || candidate.length > SEARCH_TERM_MAX_LENGTH) return null;
+    return candidate;
   }
 
   // --- Filtering ---
@@ -416,6 +489,10 @@
           indexedItems = results;
           indexedQuery = requestedQuery;
           statusMessage = _t("app.searchHitSummary", { count: results.length });
+          if (pendingSearchHistoryQuery === requestedQuery) {
+            rememberSearchTerm(requestedQuery);
+            pendingSearchHistoryQuery = "";
+          }
         })
         .catch((error) => {
           if (requestId !== searchRequestId) return;
@@ -460,6 +537,8 @@
   });
 
   onMount(() => {
+    searchHistory = loadSearchHistory();
+
     const clock = window.setInterval(() => {
       currentTime = Date.now();
     }, 30_000);
@@ -806,6 +885,111 @@
   }
 
   // --- Handlers ---
+
+  function commitSearchQuery(value = query) {
+    const term = normalizeSearchTerm(value);
+    searchSuggestionsOpen = false;
+    searchSuggestionIndex = -1;
+
+    if (!term) {
+      pendingSearchHistoryQuery = "";
+      return;
+    }
+
+    pendingSearchHistoryQuery = term;
+
+    if (regexMode) {
+      try {
+        new RegExp(term, "i");
+        regexError = "";
+        rememberSearchTerm(term);
+        pendingSearchHistoryQuery = "";
+      } catch {
+        regexError = _t("search.regexError");
+        pendingSearchHistoryQuery = "";
+      }
+      return;
+    }
+
+    if (
+      !isTauriRuntime() ||
+      activeFilter === "deleted" ||
+      parseDateQuery(term) ||
+      (indexedItems !== null && indexedQuery === term)
+    ) {
+      rememberSearchTerm(term);
+      pendingSearchHistoryQuery = "";
+    }
+  }
+
+  function chooseSearchOption(value: string) {
+    const term = normalizeSearchTerm(value);
+    if (!term) return;
+    query = term;
+    searchSuggestionIndex = -1;
+    searchSuggestionsOpen = false;
+    commitSearchQuery(term);
+    searchInputEl?.focus();
+  }
+
+  function handleSearchInputKeydown(event: KeyboardEvent) {
+    if (event.isComposing) return;
+
+    if (event.key === "Backspace") {
+      const now = Date.now();
+      if (now - lastBackspaceAt < 400 && query) {
+        event.preventDefault();
+        query = "";
+        pendingSearchHistoryQuery = "";
+        searchSuggestionIndex = -1;
+        lastBackspaceAt = 0;
+      } else {
+        lastBackspaceAt = now;
+      }
+      return;
+    }
+    lastBackspaceAt = 0;
+
+    if (
+      (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+      searchSuggestionsOpen &&
+      searchOptions.length > 0
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      searchSuggestionIndex =
+        (searchSuggestionIndex + direction + searchOptions.length) % searchOptions.length;
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (activeSearchOption) {
+        chooseSearchOption(activeSearchOption.value);
+      } else {
+        commitSearchQuery();
+      }
+      return;
+    }
+
+    if (event.key === "Escape" && searchSuggestionsOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      searchSuggestionsOpen = false;
+      searchSuggestionIndex = -1;
+    }
+  }
+
+  function handleSearchInputBlur() {
+    window.setTimeout(() => {
+      if (document.activeElement !== searchInputEl) {
+        searchSuggestionsOpen = false;
+        searchSuggestionIndex = -1;
+      }
+    }, 0);
+  }
 
   async function openSettings() {
     if ("__TAURI_INTERNALS__" in window) {
@@ -1813,6 +1997,52 @@
       ? sourceApps.filter((a) => a.toLowerCase().includes(sourceAppSearch.toLowerCase()))
       : sourceApps,
   );
+
+  const matchingSearchHistory = $derived.by<SearchOption[]>(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return searchHistory
+      .filter((term) => !normalizedQuery || term.toLocaleLowerCase().includes(normalizedQuery))
+      .map((value) => ({ value, kind: "history" as const }));
+  });
+
+  const matchingSearchSuggestions = $derived.by<SearchOption[]>(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery || regexMode || parseDateQuery(query)) return [];
+
+    const historyKeys = new Set(searchHistory.map((term) => term.toLocaleLowerCase()));
+    const seen = new Set<string>(historyKeys);
+    const candidates: SearchOption[] = [];
+    const values = [
+      ...sourceApps,
+      ...items.filter((item) => !item.deleted).map((item) => item.title),
+    ];
+
+    for (const rawValue of values) {
+      const value = suggestionCandidate(rawValue);
+      if (!value) continue;
+      const key = value.toLocaleLowerCase();
+      if (seen.has(key) || !key.includes(normalizedQuery)) continue;
+      seen.add(key);
+      candidates.push({ value, kind: "suggestion" });
+      if (candidates.length >= SEARCH_SUGGESTION_LIMIT) break;
+    }
+    return candidates;
+  });
+
+  const visibleSearchHistory = $derived(matchingSearchHistory.slice(0, SEARCH_SUGGESTION_LIMIT));
+  const visibleSearchSuggestions = $derived(
+    matchingSearchSuggestions.slice(
+      0,
+      Math.max(SEARCH_SUGGESTION_LIMIT - visibleSearchHistory.length, 0),
+    ),
+  );
+  const searchOptions = $derived([...visibleSearchHistory, ...visibleSearchSuggestions]);
+  const showSearchSuggestions = $derived(searchSuggestionsOpen && searchOptions.length > 0);
+  const activeSearchOption = $derived(searchOptions[searchSuggestionIndex] ?? null);
+
+  $effect(() => {
+    if (searchSuggestionIndex >= searchOptions.length) searchSuggestionIndex = -1;
+  });
 </script>
 
 <svelte:window onkeydowncapture={handleEscapePriority} onkeydown={handleGlobalKeydown} />
@@ -1831,27 +2061,76 @@
         bind:this={searchInputEl}
         bind:value={query}
         aria-label={_t("app.searchPlaceholder")}
+        aria-autocomplete="list"
+        aria-controls="search-suggestions"
+        aria-expanded={showSearchSuggestions}
+        aria-activedescendant={activeSearchOption
+          ? `search-option-${searchOptions.indexOf(activeSearchOption)}`
+          : undefined}
         autocomplete="off"
         placeholder={_t("app.searchPlaceholder")}
         spellcheck="false"
         style={compactMode
           ? `height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;`
           : undefined}
-        onkeydown={(e) => {
-          if (e.key === "Backspace") {
-            const now = Date.now();
-            if (now - lastBackspaceAt < 400 && query) {
-              e.preventDefault();
-              query = "";
-              lastBackspaceAt = 0;
-            } else {
-              lastBackspaceAt = now;
-            }
-          } else {
-            lastBackspaceAt = 0;
+        onfocus={() => (searchSuggestionsOpen = true)}
+        oninput={() => {
+          searchSuggestionsOpen = true;
+          searchSuggestionIndex = -1;
+          if (pendingSearchHistoryQuery && query.trim() !== pendingSearchHistoryQuery) {
+            pendingSearchHistoryQuery = "";
           }
         }}
+        onblur={handleSearchInputBlur}
+        onkeydown={handleSearchInputKeydown}
       />
+      {#if showSearchSuggestions}
+        <div
+          id="search-suggestions"
+          class="search-suggestions"
+          role="listbox"
+          aria-label={_t("search.suggestionsLabel")}
+        >
+          {#if visibleSearchHistory.length > 0}
+            <div class="search-suggestions-heading">{_t("search.recent")}</div>
+            {#each visibleSearchHistory as option, index (option.value)}
+              {@const optionIndex = index}
+              <button
+                id={`search-option-${optionIndex}`}
+                type="button"
+                role="option"
+                tabindex="-1"
+                aria-selected={searchSuggestionIndex === optionIndex}
+                class:active={searchSuggestionIndex === optionIndex}
+                onmousedown={(event) => event.preventDefault()}
+                onclick={() => chooseSearchOption(option.value)}
+              >
+                <AppIcon name="clock" size={14} />
+                <span>{option.value}</span>
+              </button>
+            {/each}
+          {/if}
+          {#if visibleSearchSuggestions.length > 0}
+            <div class="search-suggestions-heading">{_t("search.suggestions")}</div>
+            {#each visibleSearchSuggestions as option, index (option.value)}
+              {@const optionIndex = visibleSearchHistory.length + index}
+              <button
+                id={`search-option-${optionIndex}`}
+                type="button"
+                role="option"
+                tabindex="-1"
+                aria-selected={searchSuggestionIndex === optionIndex}
+                class:active={searchSuggestionIndex === optionIndex}
+                onmousedown={(event) => event.preventDefault()}
+                onclick={() => chooseSearchOption(option.value)}
+              >
+                <AppIcon name="search" size={14} />
+                <span>{option.value}</span>
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {/if}
       {#if query}
         <button
           class="clear-button"
@@ -2253,12 +2532,73 @@
   }
 
   .search-box {
+    position: relative;
     display: flex;
     flex: 1;
     align-items: center;
     gap: 10px;
     min-width: 0;
     color: #777777;
+  }
+
+  .search-suggestions {
+    position: absolute;
+    z-index: 110;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    max-height: min(280px, calc(100vh - 100px));
+    padding: 6px 0;
+    overflow-y: auto;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background: #1e1e1e;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.48);
+  }
+
+  .search-suggestions-heading {
+    padding: 5px 12px 3px;
+    color: #666;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .search-suggestions button {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 0;
+    color: #bdbdbd;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .search-suggestions button :global(svg) {
+    flex: 0 0 auto;
+    color: #777;
+  }
+
+  .search-suggestions button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .search-suggestions button:hover,
+  .search-suggestions button.active {
+    color: #f1f1f1;
+    background: #2c2c2c;
+  }
+
+  .search-suggestions button.active :global(svg) {
+    color: #4aa8ff;
   }
 
   .search-box input {
