@@ -2145,6 +2145,10 @@ pub fn run() {
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_default());
             let config = ConfigStore::load(&project_directory)?;
+            if config.single_instance() {
+                let guard = SingleInstanceGuard::acquire(&project_directory)?;
+                app.manage(guard);
+            }
             let keyboard = KeyboardManager::load(&project_directory)?;
             let paths = StoragePaths::initialize_with_data_directory(
                 project_directory.clone(),
@@ -2215,17 +2219,6 @@ pub fn run() {
             privacy_manager.sync_with_config(&config);
             let mut clipboard_monitor = ClipboardMonitor::new();
             let shortcut_manager = GlobalShortcutManager::new();
-
-            if config.single_instance() {
-                match SingleInstanceGuard::acquire(&project_directory) {
-                    Ok(guard) => {
-                        app.manage(guard);
-                    }
-                    Err(e) => {
-                        eprintln!("[startup] {}", e);
-                    }
-                }
-            }
 
             // Auto-start clipboard monitoring in background
             let app_handle = app.handle().clone();

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
-    fs,
-    io::Write,
+    fmt, fs,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
@@ -659,62 +659,109 @@ impl WindowManager {
 }
 
 // ---------------------------------------------------------------------------
-//  SingleInstanceGuard (unchanged)
+//  SingleInstanceGuard
 // ---------------------------------------------------------------------------
 
 pub struct SingleInstanceGuard {
     lock_path: PathBuf,
+    pid: u32,
+}
+
+#[derive(Debug)]
+pub enum SingleInstanceError {
+    AlreadyRunning(u32),
+    LockFile(String),
+}
+
+impl fmt::Display for SingleInstanceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AlreadyRunning(pid) => {
+                write!(
+                    formatter,
+                    "another instance is already running (PID: {pid})"
+                )
+            }
+            Self::LockFile(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for SingleInstanceError {}
+
+fn create_instance_lock(lock_path: &Path, pid: u32) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(lock_path)?;
+    if let Err(error) = writeln!(file, "{pid}").and_then(|_| file.sync_all()) {
+        drop(file);
+        let _ = fs::remove_file(lock_path);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn read_instance_lock_pid(lock_path: &Path) -> io::Result<Option<u32>> {
+    let content = fs::read_to_string(lock_path)?;
+    Ok(content.trim().parse::<u32>().ok().filter(|pid| *pid != 0))
 }
 
 impl SingleInstanceGuard {
-    pub fn acquire(project_dir: &Path) -> Result<Self, String> {
+    pub fn acquire(project_dir: &Path) -> Result<Self, SingleInstanceError> {
         let lock_path = project_dir.join("instance.lock");
+        let pid = std::process::id();
 
-        // Try to create a fresh lock file
-        match fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&lock_path)
-        {
-            Ok(mut file) => {
-                writeln!(file, "{}", std::process::id())
-                    .map_err(|e| format!("failed to write lock file: {e}"))?;
-                Ok(Self { lock_path })
-            }
-            Err(_) => {
-                // Lock file already exists — check if the previous process is still alive
-                let content = fs::read_to_string(&lock_path).unwrap_or_default();
-                let pid_str = content.trim();
+        for _ in 0..3 {
+            match create_instance_lock(&lock_path, pid) {
+                Ok(()) => return Ok(Self { lock_path, pid }),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    match read_instance_lock_pid(&lock_path) {
+                        Ok(Some(owner_pid)) if is_process_running(owner_pid) => {
+                            return Err(SingleInstanceError::AlreadyRunning(owner_pid));
+                        }
+                        Ok(_) => {}
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                        Err(error) => {
+                            return Err(SingleInstanceError::LockFile(format!(
+                                "failed to read instance lock {}: {error}",
+                                lock_path.display()
+                            )));
+                        }
+                    }
 
-                if let Ok(pid) = pid_str.parse::<u32>() {
-                    if !is_process_running(pid) {
-                        // Stale lock — remove and retry
-                        let _ = fs::remove_file(&lock_path);
-                        let mut file = fs::OpenOptions::new()
-                            .create_new(true)
-                            .write(true)
-                            .open(&lock_path)
-                            .map_err(|e| {
-                                format!("failed to create lock file after cleanup: {e}")
-                            })?;
-                        writeln!(file, "{}", std::process::id())
-                            .map_err(|e| format!("failed to write lock file: {e}"))?;
-                        return Ok(Self { lock_path });
+                    match fs::remove_file(&lock_path) {
+                        Ok(()) => continue,
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                        Err(error) => {
+                            return Err(SingleInstanceError::LockFile(format!(
+                                "failed to remove stale instance lock {}: {error}",
+                                lock_path.display()
+                            )));
+                        }
                     }
                 }
-
-                Err(format!(
-                    "another instance is already running (PID: {})",
-                    pid_str
-                ))
+                Err(error) => {
+                    return Err(SingleInstanceError::LockFile(format!(
+                        "failed to create instance lock {}: {error}",
+                        lock_path.display()
+                    )));
+                }
             }
         }
+
+        Err(SingleInstanceError::LockFile(format!(
+            "instance lock {} changed repeatedly during startup",
+            lock_path.display()
+        )))
     }
 }
 
 impl Drop for SingleInstanceGuard {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.lock_path);
+        if read_instance_lock_pid(&self.lock_path).ok().flatten() == Some(self.pid) {
+            let _ = fs::remove_file(&self.lock_path);
+        }
     }
 }
 
@@ -726,11 +773,11 @@ fn is_process_running(pid: u32) -> bool {
         fn GetExitCodeProcess(process: isize, exit_code: *mut u32) -> i32;
     }
 
-    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     const STILL_ACTIVE: u32 = 259;
 
     unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid);
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle == 0 {
             return false;
         }
@@ -876,11 +923,54 @@ mod tests {
         assert!(lock_path.exists());
 
         let second = SingleInstanceGuard::acquire(&project);
-        assert!(second.is_err());
+        assert!(matches!(
+            second,
+            Err(SingleInstanceError::AlreadyRunning(pid)) if pid == std::process::id()
+        ));
 
         drop(guard);
         assert!(!lock_path.exists());
 
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn single_instance_guard_recovers_corrupted_and_stale_locks() {
+        let project = temporary_test_directory("instance-recovery");
+        fs::create_dir_all(&project).unwrap();
+        let lock_path = project.join("instance.lock");
+
+        fs::write(&lock_path, "not-a-pid\n").unwrap();
+        let corrupted_guard = SingleInstanceGuard::acquire(&project).unwrap();
+        assert_eq!(
+            fs::read_to_string(&lock_path).unwrap().trim(),
+            std::process::id().to_string()
+        );
+        drop(corrupted_guard);
+
+        fs::write(&lock_path, format!("{}\n", i32::MAX)).unwrap();
+        let stale_guard = SingleInstanceGuard::acquire(&project).unwrap();
+        assert_eq!(
+            fs::read_to_string(&lock_path).unwrap().trim(),
+            std::process::id().to_string()
+        );
+        drop(stale_guard);
+
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn single_instance_guard_only_removes_the_lock_it_owns() {
+        let project = temporary_test_directory("instance-ownership");
+        fs::create_dir_all(&project).unwrap();
+        let lock_path = project.join("instance.lock");
+
+        let guard = SingleInstanceGuard::acquire(&project).unwrap();
+        fs::write(&lock_path, format!("{}\n", i32::MAX)).unwrap();
+        drop(guard);
+
+        assert!(lock_path.exists());
+        fs::remove_file(&lock_path).unwrap();
         fs::remove_dir_all(project).unwrap();
     }
 
