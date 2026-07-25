@@ -1632,7 +1632,10 @@
   .stat-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    min-width: 0;
     padding: 6px 10px;
     border: 1px solid #2b2b2b;
     border-radius: 6px;
@@ -1641,15 +1644,25 @@
   }
 
   .stat-row span:first-child {
+    flex: 1 1 9rem;
+    min-width: 0;
     color: #999;
+    overflow-wrap: anywhere;
   }
 
   .stat-row span:last-child {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: auto;
     color: #d8d8d8;
     font-weight: 560;
+    text-align: right;
+    overflow-wrap: anywhere;
   }
 
   .stat-item {
+    min-width: 0;
     padding: 10px;
     border: 1px solid #2e2e2e;
     border-radius: var(--settings-card-radius);
@@ -1659,10 +1672,12 @@
 
   .stat-value {
     display: block;
+    min-width: 0;
     color: #e4e4e4;
     font-size: 17px;
     font-weight: 600;
     margin-bottom: 4px;
+    overflow-wrap: anywhere;
   }
 
   .stat-label {
