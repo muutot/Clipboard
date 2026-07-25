@@ -4,6 +4,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { detectContentActions, type QuickAction } from "$lib/services/clipboard";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
 
@@ -105,84 +106,78 @@
   const contentChanged = $derived(
     editContent !== (item.textContent || item.title) || editTitle !== item.title,
   );
-  let contentActions = $state<{
-    hasEmail: boolean;
-    hasUrl: boolean;
-    hasPhone: boolean;
-    hasColor: boolean;
-    emails: string[];
-    urls: string[];
-    phones: string[];
-    colors: string[];
-  } | null>(null);
+  let contentActions = $state<QuickAction[]>([]);
+  let contentActionRequest = 0;
 
-  function detectInlineActions(): {
-    hasEmail: boolean;
-    hasUrl: boolean;
-    hasPhone: boolean;
-    hasColor: boolean;
-    emails: string[];
-    urls: string[];
-    phones: string[];
-    colors: string[];
-  } {
-    const text = [item.title, item.preview].filter(Boolean).join(" ");
+  function detectInlineActions(text: string): QuickAction[] {
     const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [];
     const urls = text.match(/https?:\/\/[^\s)]+/g) ?? [];
     const phones =
       text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [];
     const colors = text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [];
 
-    return {
-      hasEmail: emails.length > 0,
-      hasUrl: urls.length > 0,
-      hasPhone: phones.length > 0,
-      hasColor: colors.length > 0,
-      emails,
-      urls,
-      phones,
-      colors,
-    };
+    return [
+      ...emails.map((value) => ({
+        label: `Send email to ${value}`,
+        actionType: "open" as const,
+        payload: `mailto:${value}`,
+      })),
+      ...phones.map((value) => ({
+        label: `Call ${value}`,
+        actionType: "open" as const,
+        payload: `tel:${value.replace(/[^+\d]/g, "")}`,
+      })),
+      ...urls.map((value) => ({
+        label: `Open ${value}`,
+        actionType: "open" as const,
+        payload: value,
+      })),
+      ...colors.map((value) => ({
+        label: `Copy color ${value}`,
+        actionType: "copy" as const,
+        payload: value,
+      })),
+    ];
   }
 
   $effect(() => {
+    const text = item.textContent || [item.title, item.preview].filter(Boolean).join("\n");
+    const request = ++contentActionRequest;
     if (!isTauriRuntime()) {
-      contentActions = detectInlineActions();
+      contentActions = detectInlineActions(text);
       return;
     }
-    void invoke<{
-      hasEmail: boolean;
-      hasUrl: boolean;
-      hasPhone: boolean;
-      hasColor: boolean;
-      emails: string[];
-      urls: string[];
-      phones: string[];
-      colors: string[];
-    }>("detect_content_actions", { contentId: item.id })
+    void detectContentActions(text)
       .then((actions) => {
-        contentActions = actions;
+        if (request === contentActionRequest) {
+          contentActions = actions ?? detectInlineActions(text);
+        }
       })
       .catch(() => {
-        contentActions = detectInlineActions();
+        if (request === contentActionRequest) {
+          contentActions = detectInlineActions(text);
+        }
       });
   });
 
-  async function handleAction(event: MouseEvent, action: string, value: string) {
+  function quickActionKind(action: QuickAction): "url" | "email" | "phone" | "color" | "copy" {
+    if (action.payload.startsWith("mailto:")) return "email";
+    if (action.payload.startsWith("tel:")) return "phone";
+    if (/^https?:\/\//i.test(action.payload)) return "url";
+    if (/^(?:#[0-9a-f]{3,8}|rgba?\(|hsla?\()/i.test(action.payload)) return "color";
+    return "copy";
+  }
+
+  async function handleAction(event: MouseEvent, action: QuickAction) {
     event.stopPropagation();
-    if (action === "url" || action === "email" || action === "phone") {
+    if (action.actionType === "open") {
       try {
-        await invoke("open_external_url", {
-          url: action === "email" ? `mailto:${value}` : action === "phone" ? `tel:${value}` : value,
-        });
+        await invoke("open_external_url", { url: action.payload });
       } catch {
-        window.open(
-          action === "email" ? `mailto:${value}` : action === "phone" ? `tel:${value}` : value,
-          "_blank",
-        );
+        window.open(action.payload, "_blank");
       }
-    } else if (action === "color") {
-      void navigator.clipboard.writeText(value).catch(() => {});
+    } else {
+      void navigator.clipboard.writeText(action.payload).catch(() => {});
     }
   }
 
@@ -360,38 +355,26 @@
       <span>{formatRelativeTime(item.createdAt, now)}</span>
       {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
       <div class="actions" aria-label={_t("card.itemActions")} class:actions-hidden={hideActions}>
-        {#if contentActions?.hasUrl}
+        {#each contentActions as action (`${action.actionType}:${action.payload}`)}
           <button
             type="button"
-            title={_t("actions.openUrl")}
-            onclick={(e) => handleAction(e, "url", contentActions!.urls[0])}
-            ><AppIcon name="globe" size={16} /></button
+            title={action.label}
+            aria-label={action.label}
+            onclick={(event) => handleAction(event, action)}
           >
-        {/if}
-        {#if contentActions?.hasEmail}
-          <button
-            type="button"
-            title={_t("actions.sendEmail")}
-            onclick={(e) => handleAction(e, "email", contentActions!.emails[0])}
-            ><AppIcon name="mail" size={16} /></button
-          >
-        {/if}
-        {#if contentActions?.hasPhone}
-          <button
-            type="button"
-            title={_t("actions.callPhone")}
-            onclick={(e) => handleAction(e, "phone", contentActions!.phones[0])}
-            ><AppIcon name="phone" size={16} /></button
-          >
-        {/if}
-        {#if contentActions?.hasColor}
-          <button
-            type="button"
-            title={_t("actions.copyColor")}
-            onclick={(e) => handleAction(e, "color", contentActions!.colors[0])}
-            ><AppIcon name="palette" size={16} /></button
-          >
-        {/if}
+            {#if quickActionKind(action) === "url"}
+              <AppIcon name="globe" size={16} />
+            {:else if quickActionKind(action) === "email"}
+              <AppIcon name="mail" size={16} />
+            {:else if quickActionKind(action) === "phone"}
+              <AppIcon name="phone" size={16} />
+            {:else if quickActionKind(action) === "color"}
+              <AppIcon name="palette" size={16} />
+            {:else}
+              <AppIcon name="copy" size={16} />
+            {/if}
+          </button>
+        {/each}
         <button
           type="button"
           title={_t("card.viewDetail")}

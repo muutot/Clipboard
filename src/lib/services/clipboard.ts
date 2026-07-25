@@ -115,21 +115,16 @@ export async function listSourceApplications(): Promise<string[] | null> {
   return invoke<string[]>("list_source_applications");
 }
 
-export interface ContentActions {
-  hasEmail: boolean;
-  hasUrl: boolean;
-  hasPhone: boolean;
-  hasColor: boolean;
-  emails: string[];
-  urls: string[];
-  phones: string[];
-  colors: string[];
+export interface QuickAction {
+  label: string;
+  actionType: "open" | "copy";
+  payload: string;
 }
 
-export async function detectContentActions(contentId: string): Promise<ContentActions | null> {
+export async function detectContentActions(text: string): Promise<QuickAction[] | null> {
   if (!isTauriRuntime()) return null;
 
-  return invoke<ContentActions>("detect_content_actions", { contentId });
+  return invoke<QuickAction[]>("detect_content_actions", { text });
 }
 
 function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
