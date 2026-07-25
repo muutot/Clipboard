@@ -1184,6 +1184,49 @@ fn restore_clipboard_item(
         .map_err(|error| error.to_string())
 }
 
+/// List soft-deleted records for the recycle-bin view.  The repository keeps
+/// the same bounded pagination contract as the active history endpoint.
+#[tauri::command]
+fn list_deleted_clipboard_items(
+    database: tauri::State<'_, Database>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<ClipboardItem>, String> {
+    database
+        .list_deleted(limit.unwrap_or(100), offset.unwrap_or(0))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn batch_restore_clipboard_items(
+    database: tauri::State<'_, Database>,
+    ids: Vec<String>,
+) -> Result<bool, String> {
+    database
+        .restore_deleted_batch(&ids)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn permanently_delete_clipboard_item(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<bool, String> {
+    database
+        .permanently_delete(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn batch_permanently_delete_clipboard_items(
+    database: tauri::State<'_, Database>,
+    ids: Vec<String>,
+) -> Result<bool, String> {
+    database
+        .permanently_delete_batch(&ids)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 fn duplicate_clipboard_item(
     database: tauri::State<'_, Database>,
@@ -2432,6 +2475,10 @@ pub fn run() {
             detect_content_actions,
             soft_delete_clipboard_item,
             restore_clipboard_item,
+            list_deleted_clipboard_items,
+            batch_restore_clipboard_items,
+            permanently_delete_clipboard_item,
+            batch_permanently_delete_clipboard_items,
             duplicate_clipboard_item,
             enforce_history_cleanup,
             clear_all_non_favorite_items,
