@@ -79,6 +79,18 @@ export interface GeneralSettings {
   viewerBackdropOpacity: number;
 }
 
+export interface GeneralSettingsInfo {
+  settings: GeneralSettings;
+  legacyMigrationRequired: boolean;
+}
+
+export interface WindowPosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface CaptureSettings {
   retentionPeriodDays: number;
   maxItemCount: number;

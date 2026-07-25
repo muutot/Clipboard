@@ -10,6 +10,10 @@ const locales: Record<Locale, LocaleDefinition> = {
 
 const STORAGE_KEY = "clipboard-locale";
 
+function isDesktopRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 function detectLocale(): Locale {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -29,10 +33,12 @@ export const locale = writable<Locale>(detectLocale());
 export const messages = derived(locale, ($locale) => locales[$locale]);
 
 locale.subscribe(($locale) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, $locale);
-  } catch {
-    // localStorage unavailable
+  if (!isDesktopRuntime()) {
+    try {
+      localStorage.setItem(STORAGE_KEY, $locale);
+    } catch {
+      // localStorage unavailable
+    }
   }
   if (typeof document !== "undefined") {
     document.documentElement.lang = $locale;

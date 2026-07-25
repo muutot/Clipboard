@@ -20,10 +20,114 @@ pub struct AppConfig {
     pub privacy: PrivacyConfig,
     pub permissions: PermissionConfig,
     pub window: WindowConfig,
+    pub general: GeneralConfig,
     pub export: ExportConfig,
     pub ocr: OcrConfig,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct FontSizeConfig {
+    pub base: u16,
+    pub secondary: u16,
+    pub tiny: u16,
+    pub card_title: u16,
+    pub card_preview: u16,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
+impl Default for FontSizeConfig {
+    fn default() -> Self {
+        Self {
+            base: 14,
+            secondary: 11,
+            tiny: 10,
+            card_title: 13,
+            card_preview: 11,
+            extra: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DisplayConfig {
+    pub show_secondary_text: bool,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
+impl Default for DisplayConfig {
+    fn default() -> Self {
+        Self {
+            show_secondary_text: true,
+            extra: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GeneralConfig {
+    pub language: String,
+    pub font_sizes: FontSizeConfig,
+    pub display: DisplayConfig,
+    pub window_transparency: u8,
+    pub compact_mode: bool,
+    pub compact_padding_top: u16,
+    pub compact_padding_bottom: u16,
+    pub compact_card_gap: u16,
+    pub compact_text_height: u16,
+    pub compact_tall_text_height: u16,
+    pub compact_image_height: u16,
+    pub compact_custom_title_height: u16,
+    pub compact_search_height: u16,
+    pub compact_search_font_size: u16,
+    pub compact_card_border_radius: u16,
+    pub pin_copied_to_top: bool,
+    pub use_recycle_bin: bool,
+    pub remember_window_position: bool,
+    pub always_on_top: bool,
+    pub use_system_title_bar: bool,
+    pub theme: String,
+    pub image_fullscreen_mode: String,
+    pub viewer_backdrop_opacity: u8,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        Self {
+            language: "zh-CN".to_owned(),
+            font_sizes: FontSizeConfig::default(),
+            display: DisplayConfig::default(),
+            window_transparency: 95,
+            compact_mode: false,
+            compact_padding_top: 6,
+            compact_padding_bottom: 4,
+            compact_card_gap: 5,
+            compact_text_height: 58,
+            compact_tall_text_height: 70,
+            compact_image_height: 130,
+            compact_custom_title_height: 80,
+            compact_search_height: 40,
+            compact_search_font_size: 14,
+            compact_card_border_radius: 10,
+            pin_copied_to_top: true,
+            use_recycle_bin: true,
+            remember_window_position: false,
+            always_on_top: false,
+            use_system_title_bar: false,
+            theme: "dark".to_owned(),
+            image_fullscreen_mode: "overlay".to_owned(),
+            viewer_backdrop_opacity: 92,
+            extra: BTreeMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -190,6 +294,7 @@ pub struct ExportConfig {
 pub struct ConfigStore {
     path: PathBuf,
     config: AppConfig,
+    general_settings_present: bool,
 }
 
 impl ConfigStore {
@@ -197,12 +302,28 @@ impl ConfigStore {
         let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
         fs::create_dir_all(&config_directory)?;
         let path = config_directory.join(CONFIG_FILE_NAME);
-        let config = if path.exists() {
-            serde_json::from_slice(&fs::read(&path)?)?
+        let (config, general_settings_present) = if path.exists() {
+            let mut raw: Value = serde_json::from_slice(&fs::read(&path)?)?;
+            let general_settings_present =
+                raw.get("general").map(Value::is_object).unwrap_or(false);
+
+            // A pre-GeneralSettings configuration has no `general` object. Remove
+            // malformed/null values as well so serde can apply the typed default.
+            if !general_settings_present {
+                if let Value::Object(object) = &mut raw {
+                    object.remove("general");
+                }
+            }
+
+            (serde_json::from_value(raw)?, general_settings_present)
         } else {
-            AppConfig::default()
+            (AppConfig::default(), true)
         };
-        let store = Self { path, config };
+        let store = Self {
+            path,
+            config,
+            general_settings_present,
+        };
 
         if !store.path.exists() {
             store.save()?;
@@ -213,6 +334,29 @@ impl ConfigStore {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn general_settings(&self) -> &GeneralConfig {
+        &self.config.general
+    }
+
+    pub fn has_general_settings(&self) -> bool {
+        self.general_settings_present
+    }
+
+    pub fn set_general_settings(&mut self, settings: GeneralConfig) -> Result<(), StorageError> {
+        let previous_settings = self.config.general.clone();
+        let previous_present = self.general_settings_present;
+        self.config.general = settings;
+        self.general_settings_present = true;
+
+        if let Err(error) = self.save() {
+            self.config.general = previous_settings;
+            self.general_settings_present = previous_present;
+            return Err(error);
+        }
+
+        Ok(())
     }
 
     pub fn storage_directory(&self) -> Option<&Path> {
@@ -435,7 +579,13 @@ impl ConfigStore {
     }
 
     fn save(&self) -> Result<(), StorageError> {
-        fs::write(&self.path, serde_json::to_vec_pretty(&self.config)?)?;
+        let mut value = serde_json::to_value(&self.config)?;
+        if !self.general_settings_present {
+            if let Value::Object(object) = &mut value {
+                object.remove("general");
+            }
+        }
+        fs::write(&self.path, serde_json::to_vec_pretty(&value)?)?;
         Ok(())
     }
 }
@@ -470,6 +620,78 @@ mod tests {
         assert_eq!(saved["window"]["launchAtStartup"], false);
         assert_eq!(saved["window"]["closeToTray"], true);
         assert_eq!(saved["window"]["singleInstance"], true);
+        assert_eq!(saved["general"]["language"], "zh-CN");
+        assert_eq!(saved["general"]["fontSizes"]["base"], 14);
+        assert_eq!(saved["general"]["fontSizes"]["secondary"], 11);
+        assert_eq!(saved["general"]["display"]["showSecondaryText"], true);
+        assert_eq!(saved["general"]["compactMode"], false);
+        assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn persists_general_settings_as_one_configuration_group() {
+        let project = temporary_test_directory("general");
+        let mut store = ConfigStore::load(&project).unwrap();
+        let mut settings = store.general_settings().clone();
+        settings.language = "en".to_owned();
+        settings.font_sizes.base = 17;
+        settings.display.show_secondary_text = false;
+        settings.compact_mode = true;
+        settings.theme = "light".to_owned();
+        settings.image_fullscreen_mode = "desktop".to_owned();
+        settings.viewer_backdrop_opacity = 64;
+
+        store.set_general_settings(settings.clone()).unwrap();
+
+        assert!(store.has_general_settings());
+        assert_eq!(store.general_settings(), &settings);
+        let reloaded = ConfigStore::load(&project).unwrap();
+        assert!(reloaded.has_general_settings());
+        assert_eq!(reloaded.general_settings(), &settings);
+
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert_eq!(saved["general"]["language"], "en");
+        assert_eq!(saved["general"]["fontSizes"]["base"], 17);
+        assert_eq!(saved["general"]["display"]["showSecondaryText"], false);
+        assert_eq!(saved["general"]["compactMode"], true);
+        assert_eq!(saved["general"]["theme"], "light");
+        assert_eq!(saved["general"]["imageFullscreenMode"], "desktop");
+        assert_eq!(saved["general"]["viewerBackdropOpacity"], 64);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn old_configuration_without_general_settings_stays_compatible_until_migrated() {
+        let project = temporary_test_directory("legacy-general");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("conf.json"),
+            serde_json::to_vec_pretty(&json!({
+                "storage": { "copySizeLimitMb": 128 },
+                "window": { "useSystemTitlebar": false }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut store = ConfigStore::load(&project).unwrap();
+        assert!(!store.has_general_settings());
+        assert_eq!(store.general_settings().language, "zh-CN");
+
+        // Existing config setters must not make an un-migrated file look migrated.
+        store.set_max_items(123).unwrap();
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert!(saved.get("general").is_none());
+        assert_eq!(saved["history"]["maxItems"], 123);
+
+        let mut settings = store.general_settings().clone();
+        settings.language = "en".to_owned();
+        store.set_general_settings(settings).unwrap();
+        assert!(store.has_general_settings());
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert_eq!(saved["general"]["language"], "en");
         fs::remove_dir_all(project).unwrap();
     }
 

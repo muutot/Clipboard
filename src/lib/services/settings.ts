@@ -1,72 +1,553 @@
-import { writable, get } from "svelte/store";
-import type { GeneralSettings } from "$lib/types/clipboard";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { get, writable } from "svelte/store";
+import { setLocale } from "$lib/i18n";
+import { isTauriRuntime } from "$lib/services/runtime";
+import type {
+  GeneralSettings,
+  GeneralSettingsInfo,
+  Language,
+  WindowPosition,
+} from "$lib/types/clipboard";
 
 const STORAGE_KEY = "generalSettings";
+const LOCALE_STORAGE_KEY = "clipboard-locale";
+const PERSIST_DEBOUNCE_MS = 120;
 
-function loadFromStorage(): Partial<GeneralSettings> {
+export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
+  language: "zh-CN",
+  fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
+  display: { showSecondaryText: true },
+  windowTransparency: 95,
+  compactMode: false,
+  compactPaddingTop: 6,
+  compactPaddingBottom: 4,
+  compactCardGap: 5,
+  compactTextHeight: 58,
+  compactTallTextHeight: 70,
+  compactImageHeight: 130,
+  compactCustomTitleHeight: 80,
+  compactSearchHeight: 40,
+  compactSearchFontSize: 14,
+  compactCardBorderRadius: 10,
+  pinCopiedToTop: true,
+  useRecycleBin: true,
+  rememberWindowPosition: false,
+  alwaysOnTop: false,
+  useSystemTitleBar: false,
+  theme: "dark",
+  imageFullscreenMode: "overlay",
+  viewerBackdropOpacity: 92,
+};
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneDefaults(): GeneralSettings {
+  return {
+    ...DEFAULT_GENERAL_SETTINGS,
+    fontSizes: { ...DEFAULT_GENERAL_SETTINGS.fontSizes },
+    display: { ...DEFAULT_GENERAL_SETTINGS.display },
+  };
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function integerInRange(value: unknown, fallback: number, min: number, max: number): number {
+  return Math.round(Math.min(max, Math.max(min, finiteNumber(value, fallback))));
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function validLanguage(value: unknown, fallback: Language): Language {
+  return value === "zh-CN" || value === "en" ? value : fallback;
+}
+
+function validTheme(value: unknown, fallback: GeneralSettings["theme"]): GeneralSettings["theme"] {
+  return value === "dark" || value === "light" ? value : fallback;
+}
+
+function validFullscreenMode(
+  value: unknown,
+  fallback: GeneralSettings["imageFullscreenMode"],
+): GeneralSettings["imageFullscreenMode"] {
+  return value === "overlay" || value === "desktop" ? value : fallback;
+}
+
+/**
+ * Merge and validate a backend/legacy payload while retaining unknown fields.
+ * The Rust config deliberately has flattened extension fields, so rebuilding
+ * only the known keys here would silently discard future settings.
+ */
+function normalizeGeneralSettings(
+  input: unknown,
+  base: GeneralSettings = cloneDefaults(),
+): GeneralSettings {
+  const source = isRecord(input) ? input : {};
+  const baseRecord = base as unknown as UnknownRecord;
+  const sourceFontSizes = isRecord(source.fontSizes) ? source.fontSizes : {};
+  const baseFontSizes = isRecord(baseRecord.fontSizes) ? baseRecord.fontSizes : {};
+  const sourceDisplay = isRecord(source.display) ? source.display : {};
+  const baseDisplay = isRecord(baseRecord.display) ? baseRecord.display : {};
+
+  const result = {
+    ...baseRecord,
+    ...source,
+    fontSizes: {
+      ...baseFontSizes,
+      ...sourceFontSizes,
+    },
+    display: {
+      ...baseDisplay,
+      ...sourceDisplay,
+    },
+  } as unknown as GeneralSettings;
+
+  const defaultSettings = DEFAULT_GENERAL_SETTINGS;
+  const fallback = (key: keyof GeneralSettings) => {
+    const baseValue = (base as unknown as UnknownRecord)[key];
+    return baseValue === undefined ? defaultSettings[key] : baseValue;
+  };
+  const fallbackFont = (key: keyof GeneralSettings["fontSizes"]) => {
+    const baseValue = (base.fontSizes as unknown as UnknownRecord)[key];
+    return baseValue === undefined ? defaultSettings.fontSizes[key] : baseValue;
+  };
+  const fallbackDisplay = (key: keyof GeneralSettings["display"]) => {
+    const baseValue = (base.display as unknown as UnknownRecord)[key];
+    return baseValue === undefined ? defaultSettings.display[key] : baseValue;
+  };
+
+  result.language = validLanguage(source.language ?? fallback("language"), "zh-CN");
+  result.fontSizes.base = integerInRange(
+    sourceFontSizes.base ?? fallbackFont("base"),
+    defaultSettings.fontSizes.base,
+    11,
+    20,
+  );
+  result.fontSizes.secondary = integerInRange(
+    sourceFontSizes.secondary ?? fallbackFont("secondary"),
+    defaultSettings.fontSizes.secondary,
+    9,
+    16,
+  );
+  result.fontSizes.tiny = integerInRange(
+    sourceFontSizes.tiny ?? fallbackFont("tiny"),
+    defaultSettings.fontSizes.tiny,
+    8,
+    13,
+  );
+  result.fontSizes.cardTitle = integerInRange(
+    sourceFontSizes.cardTitle ?? fallbackFont("cardTitle"),
+    defaultSettings.fontSizes.cardTitle,
+    10,
+    20,
+  );
+  result.fontSizes.cardPreview = integerInRange(
+    sourceFontSizes.cardPreview ?? fallbackFont("cardPreview"),
+    defaultSettings.fontSizes.cardPreview,
+    8,
+    16,
+  );
+  result.display.showSecondaryText = booleanValue(
+    sourceDisplay.showSecondaryText ?? fallbackDisplay("showSecondaryText"),
+    defaultSettings.display.showSecondaryText,
+  );
+  result.windowTransparency = integerInRange(
+    source.windowTransparency ?? fallback("windowTransparency"),
+    defaultSettings.windowTransparency,
+    60,
+    100,
+  );
+  result.compactMode = booleanValue(
+    source.compactMode ?? fallback("compactMode"),
+    defaultSettings.compactMode,
+  );
+  result.compactPaddingTop = integerInRange(
+    source.compactPaddingTop ?? fallback("compactPaddingTop"),
+    defaultSettings.compactPaddingTop,
+    0,
+    20,
+  );
+  result.compactPaddingBottom = integerInRange(
+    source.compactPaddingBottom ?? fallback("compactPaddingBottom"),
+    defaultSettings.compactPaddingBottom,
+    0,
+    20,
+  );
+  result.compactCardGap = integerInRange(
+    source.compactCardGap ?? fallback("compactCardGap"),
+    defaultSettings.compactCardGap,
+    0,
+    20,
+  );
+  result.compactTextHeight = integerInRange(
+    source.compactTextHeight ?? fallback("compactTextHeight"),
+    defaultSettings.compactTextHeight,
+    40,
+    90,
+  );
+  result.compactTallTextHeight = integerInRange(
+    source.compactTallTextHeight ?? fallback("compactTallTextHeight"),
+    defaultSettings.compactTallTextHeight,
+    50,
+    100,
+  );
+  result.compactImageHeight = integerInRange(
+    source.compactImageHeight ?? fallback("compactImageHeight"),
+    defaultSettings.compactImageHeight,
+    80,
+    200,
+  );
+  result.compactCustomTitleHeight = integerInRange(
+    source.compactCustomTitleHeight ?? fallback("compactCustomTitleHeight"),
+    defaultSettings.compactCustomTitleHeight,
+    40,
+    120,
+  );
+  result.compactSearchHeight = integerInRange(
+    source.compactSearchHeight ?? fallback("compactSearchHeight"),
+    defaultSettings.compactSearchHeight,
+    28,
+    56,
+  );
+  result.compactSearchFontSize = integerInRange(
+    source.compactSearchFontSize ?? fallback("compactSearchFontSize"),
+    defaultSettings.compactSearchFontSize,
+    10,
+    24,
+  );
+  result.compactCardBorderRadius = integerInRange(
+    source.compactCardBorderRadius ?? fallback("compactCardBorderRadius"),
+    defaultSettings.compactCardBorderRadius,
+    0,
+    20,
+  );
+  result.pinCopiedToTop = booleanValue(
+    source.pinCopiedToTop ?? fallback("pinCopiedToTop"),
+    defaultSettings.pinCopiedToTop,
+  );
+  result.useRecycleBin = booleanValue(
+    source.useRecycleBin ?? fallback("useRecycleBin"),
+    defaultSettings.useRecycleBin,
+  );
+  result.rememberWindowPosition = booleanValue(
+    source.rememberWindowPosition ?? fallback("rememberWindowPosition"),
+    defaultSettings.rememberWindowPosition,
+  );
+  result.alwaysOnTop = booleanValue(
+    source.alwaysOnTop ?? fallback("alwaysOnTop"),
+    defaultSettings.alwaysOnTop,
+  );
+  result.useSystemTitleBar = booleanValue(
+    source.useSystemTitleBar ?? fallback("useSystemTitleBar"),
+    defaultSettings.useSystemTitleBar,
+  );
+  result.theme = validTheme(source.theme ?? fallback("theme"), "dark");
+  result.imageFullscreenMode = validFullscreenMode(
+    source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
+    "overlay",
+  );
+  result.viewerBackdropOpacity = integerInRange(
+    source.viewerBackdropOpacity ?? fallback("viewerBackdropOpacity"),
+    defaultSettings.viewerBackdropOpacity,
+    0,
+    100,
+  );
+
+  return result;
+}
+
+function readStorage(key: string): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {};
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function removeStorage(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // localStorage may be unavailable in a restricted webview.
+  }
+}
+
+function parseStorageObject(key: string): unknown {
+  const raw = readStorage(key);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+function readLegacySettings(): { hasGeneralKey: boolean; settings: unknown; locale?: Language } {
+  const generalRaw = readStorage(STORAGE_KEY);
+  const localeRaw = readStorage(LOCALE_STORAGE_KEY);
+  const locale = localeRaw === "zh-CN" || localeRaw === "en" ? localeRaw : undefined;
+  return {
+    hasGeneralKey: generalRaw !== null,
+    settings: parseStorageObject(STORAGE_KEY),
+    locale,
+  };
+}
+
+function saveBrowserSettings(value: GeneralSettings): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // localStorage may be unavailable in a restricted browser context.
+  }
+}
+
+export async function getGeneralSettings(): Promise<GeneralSettingsInfo> {
+  if (!isTauriRuntime()) {
+    return {
+      settings: cloneDefaults(),
+      legacyMigrationRequired: false,
+    };
+  }
+  return invoke<GeneralSettingsInfo>("get_general_settings");
+}
+
+export async function setGeneralSettings(value: GeneralSettings): Promise<GeneralSettings> {
+  const settings = normalizeGeneralSettings(value);
+  if (!isTauriRuntime()) return settings;
+  return invoke<GeneralSettings>("set_general_settings", { settings });
+}
+
+export async function restoreWindowPosition(): Promise<WindowPosition | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<WindowPosition | null>("restore_window_position");
+}
+
+export async function saveWindowPosition(position: WindowPosition): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("save_window_position", { ...position });
+}
+
+function applyDirtySettings(
+  remote: GeneralSettings,
+  local: GeneralSettings,
+  dirtyKeys: Set<keyof GeneralSettings>,
+): GeneralSettings {
+  if (dirtyKeys.size === 0) return remote;
+  const merged = { ...remote } as GeneralSettings;
+  for (const key of dirtyKeys) {
+    (merged as unknown as UnknownRecord)[key] = (local as unknown as UnknownRecord)[key];
+  }
+  return normalizeGeneralSettings(merged, remote);
 }
 
 function createSettingsStore() {
-  const defaults: GeneralSettings = {
-    language: "zh-CN",
-    fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
-    display: { showSecondaryText: true },
-    windowTransparency: 95,
-    compactMode: false,
-    compactPaddingTop: 6,
-    compactPaddingBottom: 4,
-    compactCardGap: 5,
-    compactTextHeight: 58,
-    compactTallTextHeight: 70,
-    compactImageHeight: 130,
-    compactCustomTitleHeight: 80,
-    compactSearchHeight: 40,
-    compactSearchFontSize: 14,
-    compactCardBorderRadius: 10,
-    pinCopiedToTop: true,
-    useRecycleBin: true,
-    rememberWindowPosition: false,
-    alwaysOnTop: false,
-    useSystemTitleBar: false,
-    theme: "dark",
-    imageFullscreenMode: "overlay",
-    viewerBackdropOpacity: 92,
-  };
+  const desktop = isTauriRuntime();
+  const browserInitial = normalizeGeneralSettings(
+    parseStorageObject(STORAGE_KEY),
+    cloneDefaults(),
+  );
+  const store = writable<GeneralSettings>(desktop ? cloneDefaults() : browserInitial);
+  let applyingExternalValue = false;
+  let initialized = !desktop;
+  let initialization: Promise<void> | undefined;
+  const dirtyKeys = new Set<keyof GeneralSettings>();
+  let pendingValue: GeneralSettings | undefined;
+  let writeTimer: ReturnType<typeof setTimeout> | undefined;
+  let writeInFlight: Promise<void> | undefined;
+  let unlistenSettings: (() => void) | undefined;
+  let legacyMigrationPending = false;
 
-  const stored = loadFromStorage();
-  const initial = { ...defaults, ...stored };
-
-  const store = writable<GeneralSettings>(initial);
-
-  store.subscribe((value) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-    } catch {}
-  });
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("storage", (e) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue) as Partial<GeneralSettings>;
-          store.update((s) => ({ ...s, ...parsed }));
-        } catch {}
+  if (!desktop && typeof window !== "undefined") {
+    store.subscribe((value) => {
+      if (!applyingExternalValue) saveBrowserSettings(value);
+    });
+    window.addEventListener("storage", (event) => {
+      if (event.key !== STORAGE_KEY || !event.newValue) return;
+      try {
+        applyingExternalValue = true;
+        store.set(normalizeGeneralSettings(JSON.parse(event.newValue), get(store)));
+      } catch {
+        // Ignore malformed values from another browser tab.
+      } finally {
+        applyingExternalValue = false;
       }
     });
   }
 
+  function schedulePersist(): void {
+    if (!desktop || !initialized) return;
+    pendingValue = normalizeGeneralSettings(get(store), get(store));
+    if (writeTimer !== undefined) clearTimeout(writeTimer);
+    writeTimer = setTimeout(() => {
+      writeTimer = undefined;
+      void drainWrites().catch(() => {});
+    }, PERSIST_DEBOUNCE_MS);
+  }
+
+  function drainWrites(): Promise<void> {
+    if (!desktop) return Promise.resolve();
+    if (writeInFlight) return writeInFlight;
+
+    writeInFlight = (async () => {
+      while (pendingValue) {
+        const value = pendingValue;
+        pendingValue = undefined;
+        try {
+          const saved = await setGeneralSettings(value);
+          // A newer value may have arrived while this write was in flight.
+          // In that case the next loop iteration owns the store update.
+          if (!pendingValue) {
+            const normalized = normalizeGeneralSettings(saved, get(store));
+            store.set(normalized);
+            setLocale(normalized.language);
+            if (legacyMigrationPending) {
+              removeStorage(STORAGE_KEY);
+              removeStorage(LOCALE_STORAGE_KEY);
+              legacyMigrationPending = false;
+            }
+          }
+        } catch (error) {
+          // Keep the latest failed value so an explicit flush or a later edit
+          // can retry it; do not spin on a permanently failed IPC call.
+          pendingValue = value;
+          throw error;
+        }
+      }
+    })().finally(() => {
+      writeInFlight = undefined;
+    });
+    return writeInFlight;
+  }
+
+  async function initialize(): Promise<void> {
+    if (initialization) return initialization;
+    initialization = (async () => {
+      if (!desktop) {
+        initialized = true;
+        return;
+      }
+
+      try {
+        unlistenSettings = await listen<GeneralSettings>("general-settings-changed", (event) => {
+          // Ignore an event while our own command is in flight; its command
+          // response is the canonical value we apply below.
+          if (writeInFlight || pendingValue) return;
+          const normalized = normalizeGeneralSettings(event.payload, get(store));
+          store.set(normalized);
+          setLocale(normalized.language);
+        });
+      } catch {
+        // A missing event permission must not prevent settings persistence.
+      }
+
+      let response: GeneralSettingsInfo;
+      try {
+        response = await getGeneralSettings();
+      } catch {
+        initialized = true;
+        if (dirtyKeys.size > 0) schedulePersist();
+        return;
+      }
+
+      const localAtHydration = get(store);
+      const dirtyAtHydration = new Set(dirtyKeys);
+      let hydrated = normalizeGeneralSettings(response.settings, cloneDefaults());
+
+      if (response.legacyMigrationRequired) {
+        legacyMigrationPending = true;
+        const legacy = readLegacySettings();
+        hydrated = normalizeGeneralSettings(legacy.settings, hydrated);
+        const legacyRecord = isRecord(legacy.settings) ? legacy.settings : {};
+        if (
+          legacy.locale &&
+          legacyRecord.language !== "zh-CN" &&
+          legacyRecord.language !== "en"
+        ) {
+          hydrated.language = legacy.locale;
+        }
+        hydrated = applyDirtySettings(hydrated, localAtHydration, dirtyAtHydration);
+        try {
+          hydrated = normalizeGeneralSettings(await setGeneralSettings(hydrated), hydrated);
+          removeStorage(STORAGE_KEY);
+          removeStorage(LOCALE_STORAGE_KEY);
+          legacyMigrationPending = false;
+          dirtyKeys.clear();
+        } catch {
+          // Keep old keys for a retry if the first migration write fails.
+          pendingValue = hydrated;
+        }
+      } else {
+        removeStorage(STORAGE_KEY);
+        removeStorage(LOCALE_STORAGE_KEY);
+        hydrated = applyDirtySettings(hydrated, localAtHydration, dirtyAtHydration);
+      }
+
+      store.set(hydrated);
+      setLocale(hydrated.language);
+      initialized = true;
+      if (pendingValue || (dirtyAtHydration.size > 0 && !response.legacyMigrationRequired)) {
+        schedulePersist();
+      }
+    })().finally(() => {
+      // Keep the resolved promise for idempotent callers, while exposing any
+      // failed migration through the retained pending value and a later flush.
+    });
+    return initialization;
+  }
+
+  function updateSetting<K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) {
+    dirtyKeys.add(key);
+    const current = get(store);
+    const next = normalizeGeneralSettings({ ...current, [key]: value }, current);
+    store.set(next);
+    schedulePersist();
+  }
+
+  function merge(partial: Partial<GeneralSettings>) {
+    for (const key of Object.keys(partial) as Array<keyof GeneralSettings>) {
+      dirtyKeys.add(key);
+    }
+    const current = get(store);
+    const next = normalizeGeneralSettings({ ...current, ...partial }, current);
+    store.set(next);
+    schedulePersist();
+  }
+
+  async function flush(): Promise<void> {
+    if (!desktop) return;
+    if (!initialized && initialization) await initialization;
+    if (writeTimer !== undefined) {
+      clearTimeout(writeTimer);
+      writeTimer = undefined;
+    }
+    await drainWrites();
+  }
+
+  void initialize();
+
   return {
     ...store,
-    updateSetting<K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) {
-      store.update((s) => ({ ...s, [key]: value }));
-    },
-    merge(partial: Partial<GeneralSettings>) {
-      store.update((s) => ({ ...s, ...partial }));
+    updateSetting,
+    merge,
+    initialize,
+    flush,
+    /** Exposed for lifecycle cleanup in tests and future window teardown. */
+    destroy() {
+      if (writeTimer !== undefined) clearTimeout(writeTimer);
+      writeTimer = undefined;
+      unlistenSettings?.();
+      unlistenSettings = undefined;
     },
   };
 }

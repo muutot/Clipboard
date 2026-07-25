@@ -11,10 +11,13 @@ pub mod privacy;
 pub mod search;
 pub mod storage;
 
-use std::{path::PathBuf, sync::Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread::{self, JoinHandle};
 
 use cli::{CliArgs, CliCommand};
-use config::ConfigStore;
+use config::{ConfigStore, GeneralConfig};
 use content::{
     ClipboardFormatInfo, ContentMarkers, QuickAction, TextTransform, TransformOperation,
 };
@@ -33,9 +36,6 @@ use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VE
 use serde::Serialize;
 use std::io::Write;
 use std::str::FromStr;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 use storage::{ClipboardRepository, Database, OcrRepository, RepairResult, StoragePaths};
 use tauri::{Emitter, Manager};
@@ -719,6 +719,48 @@ fn check_ppocr_status(paths: tauri::State<'_, StoragePaths>) -> Result<PpOcrStat
 struct PpOcrStatus {
     available: bool,
     tesseract_available: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GeneralSettingsInfo {
+    settings: GeneralConfig,
+    legacy_migration_required: bool,
+}
+
+#[tauri::command]
+fn get_general_settings(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<GeneralSettingsInfo, String> {
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    Ok(GeneralSettingsInfo {
+        settings: config.general_settings().clone(),
+        legacy_migration_required: !config.has_general_settings(),
+    })
+}
+
+#[tauri::command]
+fn set_general_settings(
+    app: tauri::AppHandle,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    settings: GeneralConfig,
+) -> Result<GeneralConfig, String> {
+    let saved = {
+        let mut config = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        config
+            .set_general_settings(settings)
+            .map_err(|error| error.to_string())?;
+        config.general_settings().clone()
+    };
+
+    // The config write is authoritative; a failed notification should not turn
+    // a successful persistence operation into a user-visible failure.
+    let _ = app.emit("general-settings-changed", &saved);
+    Ok(saved)
 }
 
 #[derive(Debug, Serialize)]
@@ -2084,6 +2126,8 @@ pub fn run() {
             set_clipboard_ignored_apps,
             save_window_position,
             restore_window_position,
+            get_general_settings,
+            set_general_settings,
             get_window_config,
             set_window_config,
             get_export_config,

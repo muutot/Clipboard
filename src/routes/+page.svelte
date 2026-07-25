@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+  import { getCurrentWindow, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -22,7 +22,7 @@
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
-  import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
+  import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
   import type { IconName } from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { assets } from "$app/paths";
@@ -35,7 +35,11 @@
   import { parseDateQuery } from "$lib/utils/date-query";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
-  import { generalSettings } from "$lib/services/settings";
+  import {
+    generalSettings,
+    restoreWindowPosition,
+    saveWindowPosition,
+  } from "$lib/services/settings";
   import { iconsDir } from "$lib/services/paths";
   import { getStorageStatus } from "$lib/services/storage";
 
@@ -409,6 +413,140 @@
       }
     });
 
+    const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
+    let restoreAttempted = false;
+    let previousRememberWindowPosition = false;
+    let boundsTimer: number | undefined;
+    let boundsWriteInFlight: Promise<void> | undefined;
+    let pendingBounds: WindowPosition | undefined;
+
+    function readLegacyWindowPosition(): { x: number; y: number } | null {
+      try {
+        const raw = localStorage.getItem("windowPosition");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
+        if (
+          typeof parsed.x !== "number" ||
+          !Number.isFinite(parsed.x) ||
+          typeof parsed.y !== "number" ||
+          !Number.isFinite(parsed.y)
+        ) {
+          return null;
+        }
+        return { x: Math.round(parsed.x), y: Math.round(parsed.y) };
+      } catch {
+        return null;
+      }
+    }
+
+    async function captureWindowBounds(): Promise<WindowPosition> {
+      if (!appWindow) throw new Error("window bounds are only available in Tauri");
+      const [position, size] = await Promise.all([
+        appWindow.outerPosition(),
+        appWindow.outerSize(),
+      ]);
+      return {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+      };
+    }
+
+    function drainWindowBoundsWrites(): Promise<void> {
+      if (!appWindow) return Promise.resolve();
+      if (boundsWriteInFlight) return boundsWriteInFlight;
+
+      boundsWriteInFlight = (async () => {
+        while (pendingBounds) {
+          if (!$generalSettings.rememberWindowPosition) {
+            pendingBounds = undefined;
+            return;
+          }
+          const bounds = pendingBounds;
+          pendingBounds = undefined;
+          try {
+            await saveWindowPosition(bounds);
+          } catch (error) {
+            pendingBounds = bounds;
+            throw error;
+          }
+        }
+      })().finally(() => {
+        boundsWriteInFlight = undefined;
+      });
+      return boundsWriteInFlight;
+    }
+
+    function scheduleWindowBoundsSave() {
+      if (!appWindow || !$generalSettings.rememberWindowPosition) return;
+      if (boundsTimer !== undefined) window.clearTimeout(boundsTimer);
+      boundsTimer = window.setTimeout(() => {
+        boundsTimer = undefined;
+        void captureWindowBounds()
+          .then((bounds) => {
+            if (!$generalSettings.rememberWindowPosition) return;
+            pendingBounds = bounds;
+            return drainWindowBoundsWrites();
+          })
+          .catch(() => {});
+      }, 120);
+    }
+
+    async function flushWindowBounds() {
+      if (!appWindow || !$generalSettings.rememberWindowPosition) return;
+      if (boundsTimer !== undefined) {
+        window.clearTimeout(boundsTimer);
+        boundsTimer = undefined;
+        try {
+          pendingBounds = await captureWindowBounds();
+        } catch {
+          return;
+        }
+      }
+      await drainWindowBoundsWrites().catch(() => {});
+    }
+
+    async function restoreSavedWindowBounds() {
+      if (!appWindow || !$generalSettings.rememberWindowPosition || restoreAttempted) return;
+      restoreAttempted = true;
+      try {
+        const saved = await restoreWindowPosition();
+        if (!$generalSettings.rememberWindowPosition) return;
+        if (saved && saved.width > 0 && saved.height > 0) {
+          await appWindow.setSize(new PhysicalSize(saved.width, saved.height));
+          await appWindow.setPosition(new PhysicalPosition(saved.x, saved.y));
+          try {
+            localStorage.removeItem("windowPosition");
+          } catch {}
+          return;
+        }
+
+        // Migrate the old x/y-only browser storage once the backend has no
+        // bounds yet. The current native size supplies the missing dimensions.
+        const legacy = readLegacyWindowPosition();
+        if (!legacy) return;
+        const size = await appWindow.outerSize();
+        const migrated: WindowPosition = {
+          x: legacy.x,
+          y: legacy.y,
+          width: size.width,
+          height: size.height,
+        };
+        if (!$generalSettings.rememberWindowPosition) return;
+        await saveWindowPosition(migrated);
+        if (!$generalSettings.rememberWindowPosition) return;
+        await appWindow.setPosition(new PhysicalPosition(migrated.x, migrated.y));
+        try {
+          localStorage.removeItem("windowPosition");
+        } catch {}
+      } catch {
+        // Keep the legacy key if restoring or migrating failed; retry on the
+        // next transition to rememberWindowPosition=true.
+        restoreAttempted = false;
+      }
+    }
+
     function applySettings(s: typeof $generalSettings) {
       const r = document.documentElement.style;
       if (s.fontSizes) {
@@ -422,22 +560,15 @@
       if (s.display) {
         r.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
       }
-      if ("__TAURI_INTERNALS__" in window) {
-        getCurrentWindow()
-          .setAlwaysOnTop(s.alwaysOnTop)
-          .catch(() => {});
-        if (s.rememberWindowPosition) {
-          const pos = localStorage.getItem("windowPosition");
-          if (pos) {
-            try {
-              const { x, y } = JSON.parse(pos);
-              getCurrentWindow()
-                .setPosition(new PhysicalPosition(x, y))
-                .catch(() => {});
-            } catch {}
-          }
+      if (appWindow) {
+        appWindow.setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
+        if (!s.rememberWindowPosition) {
+          restoreAttempted = false;
+        } else if (!previousRememberWindowPosition) {
+          void restoreSavedWindowBounds();
         }
       }
+      previousRememberWindowPosition = s.rememberWindowPosition;
       const shell = document.querySelector(".app-shell");
       if (shell) {
         shell.classList.toggle("compact", s.compactMode);
@@ -474,21 +605,21 @@
     });
 
     let unlistenMove: (() => void) | undefined;
-    if ("__TAURI_INTERNALS__" in window) {
-      getCurrentWindow()
-        .onMoved((event) => {
-          if ($generalSettings.rememberWindowPosition) {
-            localStorage.setItem(
-              "windowPosition",
-              JSON.stringify({
-                x: event.payload.x,
-                y: event.payload.y,
-              }),
-            );
-          }
+    let unlistenResize: (() => void) | undefined;
+    if (appWindow) {
+      appWindow
+        .onMoved(() => {
+          scheduleWindowBoundsSave();
         })
         .then((fn) => {
           unlistenMove = fn;
+        });
+      appWindow
+        .onResized(() => {
+          scheduleWindowBoundsSave();
+        })
+        .then((fn) => {
+          unlistenResize = fn;
         });
     }
 
@@ -497,6 +628,8 @@
       unlisten.then((fn) => fn());
       unsubSettings();
       if (unlistenMove) unlistenMove();
+      if (unlistenResize) unlistenResize();
+      void flushWindowBounds();
     };
   });
 
