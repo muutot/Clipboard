@@ -28,7 +28,8 @@ export interface ClipboardItem {
   }[];
   mimeType?: string;
   ocrText?: string;
-  ocrStatus?: "pending" | "completed" | "none";
+  ocrStatus?: "pending" | "processing" | "completed" | "failed" | "none";
+  ocrError?: string;
   contentHash?: string;
   previewPath?: string | null;
   resourcePath?: string | null;

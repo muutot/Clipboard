@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, OptionalExtension, Row, TransactionBehavior};
 
@@ -31,6 +32,10 @@ pub trait OcrRepository {
     /// retried or completed elsewhere.
     fn mark_ocr_failed(&self, item_id: &str, error_message: &str) -> Result<bool, StorageError>;
     fn retry_ocr(&self, item_id: &str) -> Result<bool, StorageError>;
+    /// Invalidates the current OCR result and queues a fresh recognition.
+    /// All records sharing the image hash are queued after the selected item,
+    /// so they can reuse the newly generated result instead of stale text.
+    fn regenerate_ocr(&self, item_id: &str) -> Result<bool, StorageError>;
     fn requeue_interrupted_ocr(&self) -> Result<u64, StorageError>;
     fn save_ocr_result(&self, result: &OcrResult) -> Result<(), StorageError>;
     fn get_ocr_result(&self, item_id: &str) -> Result<Option<OcrResult>, StorageError>;
@@ -134,6 +139,89 @@ impl OcrRepository for Database {
                  WHERE item_id = ?1 AND status = 'failed'",
                 [item_id],
             )? > 0)
+        })
+    }
+
+    fn regenerate_ocr(&self, item_id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let image_hash = transaction
+                .query_row(
+                    "SELECT content_hash
+                     FROM clipboard_items
+                     WHERE id = ?1 AND kind = 'image' AND resource_path IS NOT NULL",
+                    [item_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+
+            let Some(image_hash) = image_hash else {
+                transaction.commit()?;
+                return Ok(false);
+            };
+
+            let processing_item = transaction
+                .query_row(
+                    "SELECT item_id
+                     FROM ocr_results
+                     WHERE image_hash = ?1 AND status = 'processing'
+                     LIMIT 1",
+                    [&image_hash],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            if let Some(processing_item) = processing_item {
+                return Err(StorageError::OcrRegenerationInProgress(processing_item));
+            }
+
+            let now = current_time_ms();
+            transaction.execute(
+                "UPDATE ocr_results
+                 SET status = 'pending',
+                     engine = '',
+                     model_version = '',
+                     language = NULL,
+                     full_text = '',
+                     blocks_json = '[]',
+                     completed_at_ms = NULL,
+                     error_message = NULL,
+                     created_at_ms = ?2
+                 WHERE image_hash = ?1",
+                params![image_hash, now.saturating_add(1)],
+            )?;
+            transaction.execute(
+                "INSERT INTO ocr_results (
+                    item_id,
+                    status,
+                    engine,
+                    model_version,
+                    language,
+                    full_text,
+                    blocks_json,
+                    image_hash,
+                    created_at_ms,
+                    completed_at_ms,
+                    error_message
+                 )
+                 SELECT id, 'pending', '', '', NULL, '', '[]', content_hash, ?2, NULL, NULL
+                 FROM clipboard_items
+                 WHERE id = ?1 AND kind = 'image' AND resource_path IS NOT NULL
+                 ON CONFLICT(item_id) DO UPDATE SET
+                    status = 'pending',
+                    engine = '',
+                    model_version = '',
+                    language = NULL,
+                    full_text = '',
+                    blocks_json = '[]',
+                    image_hash = excluded.image_hash,
+                    created_at_ms = excluded.created_at_ms,
+                    completed_at_ms = NULL,
+                    error_message = NULL",
+                params![item_id, now],
+            )?;
+            transaction.commit()?;
+            Ok(true)
         })
     }
 
@@ -324,12 +412,20 @@ fn status_from_storage(status: &str) -> Result<OcrStatus, StorageError> {
     }
 }
 
+fn current_time_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
+
 #[cfg(test)]
 mod tests {
     use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus, OcrTextBlock};
 
     use super::{Database, OcrRepository};
-    use crate::storage::ClipboardRepository;
+    use crate::storage::{ClipboardRepository, SearchRepository, StorageError};
 
     fn image_item(id: &str, image_hash: &str) -> ClipboardItem {
         ClipboardItem {
@@ -478,6 +574,73 @@ mod tests {
         let pending = database.get_ocr_result("image").unwrap().unwrap();
         assert_eq!(pending.status, OcrStatus::Pending);
         assert_eq!(pending.error_message, None);
+    }
+
+    #[test]
+    fn regenerates_an_image_and_invalidates_same_hash_results() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&image_item("first", "shared-hash"))
+            .unwrap();
+        database
+            .save_item(&image_item("second", "different-hash"))
+            .unwrap();
+
+        database
+            .save_ocr_result(&completed_result("first", "shared-hash"))
+            .unwrap();
+        database
+            .save_ocr_result(&completed_result("second", "shared-hash"))
+            .unwrap();
+        let existing_events = database.read_search_outbox(100).unwrap();
+        database
+            .acknowledge_search_outbox(existing_events.last().unwrap().sequence)
+            .unwrap();
+
+        assert!(database.regenerate_ocr("first").unwrap());
+
+        let first = database.get_ocr_result("first").unwrap().unwrap();
+        let second = database.get_ocr_result("second").unwrap().unwrap();
+        assert_eq!(first.status, OcrStatus::Pending);
+        assert_eq!(second.status, OcrStatus::Pending);
+        assert!(first.full_text.is_empty());
+        assert!(second.full_text.is_empty());
+        assert!(first.created_at_ms <= second.created_at_ms);
+
+        let regeneration_events = database.read_search_outbox(100).unwrap();
+        assert!(regeneration_events
+            .iter()
+            .any(|event| event.item_id == "first"));
+        assert!(regeneration_events
+            .iter()
+            .any(|event| event.item_id == "second"));
+        assert!(!database
+            .get_search_document("first")
+            .unwrap()
+            .unwrap()
+            .content
+            .contains("鑴哥毊鎸鸿剰"));
+        assert!(!database
+            .get_search_document("second")
+            .unwrap()
+            .unwrap()
+            .content
+            .contains("鑴哥毊鎸鸿剰"));
+    }
+
+    #[test]
+    fn regeneration_rejects_an_image_hash_that_is_processing() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&image_item("image", "image-hash"))
+            .unwrap();
+        database.enqueue_ocr("image").unwrap();
+        database.claim_next_ocr().unwrap().unwrap();
+
+        assert!(matches!(
+            database.regenerate_ocr("image"),
+            Err(StorageError::OcrRegenerationInProgress(item_id)) if item_id == "image"
+        ));
     }
 
     #[test]

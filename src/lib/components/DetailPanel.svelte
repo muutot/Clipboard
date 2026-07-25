@@ -73,6 +73,8 @@
   let panStartX = 0;
   let panStartY = 0;
   let viewerWindow: any = null;
+  let regeneratingOcr = $state(false);
+  let ocrFeedback = $state("");
 
   async function openImageFullscreen() {
     if (!item?.previewPath && !item?.resourcePath) return;
@@ -182,6 +184,37 @@
     return `${value.toFixed(precision)} ${units[unitIndex]}`;
   }
 
+  async function regenerateOcr() {
+    if (!item || item.kind !== "image" || regeneratingOcr) return;
+
+    const targetItem = item;
+    const targetId = targetItem.id;
+    regeneratingOcr = true;
+    ocrFeedback = "";
+    try {
+      const queued = await invoke<boolean>("regenerate_clipboard_item_ocr", { id: targetId });
+      if (!queued) throw new Error(_t("detail.ocrUnavailable"));
+
+      targetItem.ocrStatus = "pending";
+      targetItem.ocrText = undefined;
+      targetItem.ocrError = undefined;
+      if (item?.id === targetId) {
+        ocrFeedback = _t("detail.regenerationQueued");
+      }
+    } catch (error) {
+      if (item?.id === targetId) {
+        ocrFeedback = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      regeneratingOcr = false;
+      setTimeout(() => {
+        if (item?.id === targetId) {
+          ocrFeedback = "";
+        }
+      }, 3000);
+    }
+  }
+
   $effect(() => {
     if (item) {
       untrack(() => {
@@ -208,23 +241,46 @@
   $effect(() => {
     if (item?.kind !== "image" || !isTauriRuntime()) return;
 
+    const targetItem = item;
+    let disposed = false;
+    let requestInFlight = false;
     const poll = () => {
-      if (item.ocrStatus === "completed") return;
-      invoke<{ fullText: string; status: string }>("get_clipboard_item_ocr", { id: item.id })
+      if (disposed || requestInFlight || targetItem.ocrStatus === "completed") return;
+
+      requestInFlight = true;
+      invoke<{
+        fullText: string;
+        status: "pending" | "processing" | "completed" | "failed";
+        errorMessage: string | null;
+      } | null>("get_clipboard_item_ocr", { id: targetItem.id })
         .then((result) => {
+          if (disposed) return;
           if (result) {
-            item.ocrStatus = result.status === "completed" ? "completed" : "pending";
-            if (result.fullText) item.ocrText = result.fullText;
+            targetItem.ocrStatus = result.status;
+            targetItem.ocrError = result.errorMessage ?? undefined;
+            targetItem.ocrText = result.fullText || undefined;
+          } else {
+            targetItem.ocrStatus = "none";
+            targetItem.ocrText = undefined;
+            targetItem.ocrError = undefined;
           }
         })
         .catch(() => {
-          item.ocrStatus = "none";
+          if (disposed) return;
+          targetItem.ocrStatus = "failed";
+          targetItem.ocrError = _t("detail.ocrReadFailed");
+        })
+        .finally(() => {
+          requestInFlight = false;
         });
     };
 
     poll();
     const interval = setInterval(poll, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+    };
   });
 
   const emails = $derived(
@@ -357,6 +413,17 @@
       file: _t("filter.file"),
     };
     return map[kind] ?? kind;
+  }
+
+  function getOcrStatusLabel(status: NonNullable<ClipboardItem["ocrStatus"]>): string {
+    const map: Record<NonNullable<ClipboardItem["ocrStatus"]>, string> = {
+      pending: _t("detail.pending"),
+      processing: _t("detail.processing"),
+      completed: _t("detail.completed"),
+      failed: _t("detail.failed"),
+      none: _t("detail.noOcr"),
+    };
+    return map[status];
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -733,19 +800,17 @@
                 <dd>{item.fileName}</dd>
               </div>
             {/if}
-            {#if item.ocrStatus}
+            {#if item.ocrStatus && item.ocrStatus !== "none"}
               <div class="detail-row">
                 <dt><AppIcon name="scan" size={14} /> {_t("detail.ocrStatus")}</dt>
                 <dd
                   class="ocr-badge"
                   class:ocr-completed={item.ocrStatus === "completed"}
-                  class:ocr-pending={item.ocrStatus === "pending"}
+                  class:ocr-pending={item.ocrStatus === "pending" ||
+                    item.ocrStatus === "processing"}
+                  class:ocr-failed={item.ocrStatus === "failed"}
                 >
-                  {item.ocrStatus === "completed"
-                    ? _t("detail.completed")
-                    : item.ocrStatus === "pending"
-                      ? _t("detail.pending")
-                      : item.ocrStatus}
+                  {getOcrStatusLabel(item.ocrStatus)}
                 </dd>
               </div>
             {/if}
@@ -822,6 +887,23 @@
         </div>
       {:else if activeTab === "ocr"}
         <div class="ocr-section">
+          {#if item.kind === "image"}
+            <div class="ocr-toolbar">
+              <button
+                type="button"
+                class="ocr-regenerate-btn"
+                disabled={regeneratingOcr ||
+                  item.ocrStatus === "pending" ||
+                  item.ocrStatus === "processing"}
+                onclick={regenerateOcr}
+              >
+                {regeneratingOcr ? _t("detail.regenerating") : _t("detail.regenerate")}
+              </button>
+            </div>
+            {#if ocrFeedback}
+              <div class="ocr-feedback">{ocrFeedback}</div>
+            {/if}
+          {/if}
           {#if item.ocrStatus === "completed" && item.ocrText}
             <div class="ocr-status ocr-completed">
               <span class="ocr-dot"></span>
@@ -835,10 +917,16 @@
               </button>
             </div>
             <pre class="ocr-content">{item.ocrText}</pre>
-          {:else if item.ocrStatus === "pending"}
+          {:else if item.ocrStatus === "pending" || item.ocrStatus === "processing"}
             <div class="ocr-status ocr-pending">
               <span class="ocr-dot"></span>
               {_t("detail.pending")}
+            </div>
+          {:else if item.ocrStatus === "failed"}
+            <div class="ocr-empty ocr-failed">
+              <AppIcon name="scan" size={32} strokeWidth={1.5} />
+              <span>{_t("detail.ocrFailed")}</span>
+              {#if item.ocrError}<small>{item.ocrError}</small>{/if}
             </div>
           {:else}
             <div class="ocr-empty">
@@ -1268,6 +1356,12 @@
     background: rgba(45, 45, 27, 0.6);
   }
 
+  .ocr-badge.ocr-failed {
+    border: 1px solid #583b3b;
+    color: #c78b8b;
+    background: rgba(52, 29, 29, 0.6);
+  }
+
   .special-section {
     padding: 12px;
     border: 1px solid #2e2e2e;
@@ -1366,6 +1460,41 @@
     gap: 14px;
   }
 
+  .ocr-toolbar {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .ocr-regenerate-btn {
+    padding: 5px 10px;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    color: #b8b8b8;
+    background: #222;
+    font-size: 11px;
+    cursor: pointer;
+    transition:
+      background 100ms ease,
+      color 100ms ease,
+      border-color 100ms ease;
+  }
+
+  .ocr-regenerate-btn:hover:not(:disabled) {
+    border-color: #555;
+    color: #e0e0e0;
+    background: #2d2d2d;
+  }
+
+  .ocr-regenerate-btn:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .ocr-feedback {
+    color: #9eb9ff;
+    font-size: 11px;
+  }
+
   .ocr-status {
     display: inline-flex;
     align-items: center;
@@ -1440,6 +1569,17 @@
     min-height: 140px;
     color: #666;
     font-size: 12px;
+  }
+
+  .ocr-failed {
+    color: #c78b8b;
+  }
+
+  .ocr-failed small {
+    max-width: 100%;
+    color: #9a7777;
+    text-align: center;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 520px) {

@@ -218,9 +218,17 @@ export interface LocaleDefinition {
     ocrStatus: string;
     ocrText: string;
     copyOcrText: string;
+    regenerate: string;
+    regenerating: string;
+    regenerationQueued: string;
+    ocrFailed: string;
+    ocrUnavailable: string;
+    ocrReadFailed: string;
     noOcr: string;
     pending: string;
+    processing: string;
     completed: string;
+    failed: string;
     specialMarkers: string;
     fileInfo: string;
     back: string;

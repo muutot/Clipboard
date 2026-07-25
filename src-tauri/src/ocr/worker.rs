@@ -282,7 +282,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    use crate::domain::{ClipboardItem, ClipboardKind, OcrStatus};
+    use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
     use crate::ocr::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
     use crate::storage::{ClipboardRepository, Database, OcrRepository};
 
@@ -446,6 +446,57 @@ mod tests {
             .is_none_or(|result| result.status != OcrStatus::Completed)
         {
             assert!(Instant::now() < deadline, "OCR result was not completed");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        worker.stop();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn regenerated_same_hash_tasks_reuse_the_fresh_result() {
+        let database = Arc::new(Database::open_in_memory().unwrap());
+        let mut first = image_item("first");
+        first.content_hash = "shared-hash".to_owned();
+        database.save_item(&first).unwrap();
+        database.save_item(&image_item("second")).unwrap();
+
+        for item_id in ["first", "second"] {
+            database
+                .save_ocr_result(&OcrResult::completed(
+                    item_id,
+                    "old-engine",
+                    "old-model",
+                    Some("en"),
+                    "stale",
+                    &[],
+                    "shared-hash",
+                ))
+                .unwrap();
+        }
+        database.regenerate_ocr("first").unwrap();
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let worker = OcrWorker::start(
+            Arc::new(SuccessfulEngine {
+                calls: Arc::clone(&calls),
+            }),
+            Arc::clone(&database),
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let first = database.get_ocr_result("first").unwrap().unwrap();
+            let second = database.get_ocr_result("second").unwrap().unwrap();
+            if first.status == OcrStatus::Completed && second.status == OcrStatus::Completed {
+                assert_eq!(first.full_text, "recognized");
+                assert_eq!(second.full_text, "recognized");
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "regenerated OCR results did not complete"
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
 

@@ -819,6 +819,16 @@ fn get_clipboard_item_ocr(
 }
 
 #[tauri::command]
+fn regenerate_clipboard_item_ocr(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<bool, String> {
+    database
+        .regenerate_ocr(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn list_source_applications(database: tauri::State<'_, Database>) -> Result<Vec<String>, String> {
     database
         .list_source_applications()
@@ -3093,6 +3103,7 @@ pub fn run() {
             delete_clipboard_item,
             batch_delete_clipboard_items,
             get_clipboard_item_ocr,
+            regenerate_clipboard_item_ocr,
             list_source_applications,
             get_keyboard_config,
             configure_keyboard_shortcuts,

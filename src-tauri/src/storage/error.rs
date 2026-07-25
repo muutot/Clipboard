@@ -15,6 +15,7 @@ pub enum StorageError {
     ResourceDirectoriesMustBeDistinct,
     InvalidClipboardKind(String),
     InvalidOcrStatus(String),
+    OcrRegenerationInProgress(String),
     InvalidSearchOperation(String),
     InvalidKeyboardAction(String),
     InvalidShortcut(String),
@@ -67,6 +68,12 @@ impl fmt::Display for StorageError {
             }
             Self::InvalidOcrStatus(status) => {
                 write!(formatter, "unknown OCR status: {status}")
+            }
+            Self::OcrRegenerationInProgress(item_id) => {
+                write!(
+                    formatter,
+                    "OCR regeneration is already running for {item_id}"
+                )
             }
             Self::InvalidSearchOperation(operation) => {
                 write!(formatter, "unknown search outbox operation: {operation}")
