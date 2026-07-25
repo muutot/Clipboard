@@ -1,9 +1,42 @@
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+#[cfg(target_os = "windows")]
+use std::time::Duration;
 
 use super::windows_clipboard;
 
 const WM_HOTKEY: u32 = 0x0312;
+#[cfg(target_os = "windows")]
+const QUICK_PASTE_FOCUS_DELAY: Duration = Duration::from_millis(60);
+
+#[derive(Default)]
+struct QuickPasteTarget {
+    window_handle: Mutex<Option<isize>>,
+}
+
+impl QuickPasteTarget {
+    fn remember(&self, window_handle: isize) {
+        if window_handle == 0 {
+            return;
+        }
+        if let Ok(mut target) = self.window_handle.lock() {
+            *target = Some(window_handle);
+        }
+    }
+
+    fn take(&self) -> Option<isize> {
+        self.window_handle
+            .lock()
+            .ok()
+            .and_then(|mut target| target.take())
+    }
+
+    fn clear(&self) {
+        if let Ok(mut target) = self.window_handle.lock() {
+            *target = None;
+        }
+    }
+}
 
 pub fn spawn_hotkey_thread(
     hotkey_id: i32,
@@ -155,7 +188,6 @@ unsafe extern "system" fn hotkey_window_proc(
     DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-use std::sync::Mutex;
 static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
 static HOTKEY_HWND: Mutex<isize> = Mutex::new(0);
 
@@ -204,6 +236,7 @@ pub fn stop_hotkey_thread() {
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
+    quick_paste_target: Arc<QuickPasteTarget>,
 }
 
 impl Default for HotkeyManager {
@@ -217,6 +250,7 @@ impl HotkeyManager {
         Self {
             handle: None,
             window: None,
+            quick_paste_target: Arc::new(QuickPasteTarget::default()),
         }
     }
 
@@ -225,11 +259,17 @@ impl HotkeyManager {
         self.window = Some(window.clone());
         let (tx, rx) = mpsc::channel::<()>();
         let handle = spawn_hotkey_thread(1, modifiers, vk, tx);
+        let quick_paste_target = Arc::clone(&self.quick_paste_target);
 
         thread::spawn(move || {
             while let Ok(()) = rx.recv() {
                 let is_visible = window.is_visible().unwrap_or(false);
                 let is_focused = window.is_focused().unwrap_or(false);
+                if !is_focused {
+                    if let Some(window_handle) = foreground_window_handle() {
+                        quick_paste_target.remember(window_handle);
+                    }
+                }
                 if !is_visible {
                     let _ = window.show();
                 }
@@ -248,12 +288,141 @@ impl HotkeyManager {
         }
     }
 
+    pub fn take_quick_paste_target(&self) -> Option<isize> {
+        self.quick_paste_target.take()
+    }
+
     pub fn stop(&mut self) {
         stop_hotkey_thread();
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
+        self.quick_paste_target.clear();
     }
+}
+
+#[cfg(target_os = "windows")]
+fn foreground_window_handle() -> Option<isize> {
+    extern "system" {
+        fn GetForegroundWindow() -> isize;
+    }
+
+    let window_handle = unsafe { GetForegroundWindow() };
+    (window_handle != 0).then_some(window_handle)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn foreground_window_handle() -> Option<isize> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+pub fn restore_window_and_paste(window_handle: isize) -> Result<(), String> {
+    const SW_RESTORE: i32 = 9;
+
+    extern "system" {
+        fn IsWindow(window: isize) -> i32;
+        fn IsIconic(window: isize) -> i32;
+        fn ShowWindow(window: isize, command: i32) -> i32;
+        fn BringWindowToTop(window: isize) -> i32;
+        fn SetForegroundWindow(window: isize) -> i32;
+        fn GetForegroundWindow() -> isize;
+    }
+
+    if window_handle == 0 || unsafe { IsWindow(window_handle) } == 0 {
+        return Err("the previous foreground window is no longer available".to_owned());
+    }
+
+    unsafe {
+        if IsIconic(window_handle) != 0 {
+            ShowWindow(window_handle, SW_RESTORE);
+        }
+        BringWindowToTop(window_handle);
+        SetForegroundWindow(window_handle);
+    }
+
+    thread::sleep(QUICK_PASTE_FOCUS_DELAY);
+    if unsafe { GetForegroundWindow() } != window_handle {
+        return Err("failed to restore the previous foreground window".to_owned());
+    }
+
+    send_ctrl_v()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn restore_window_and_paste(_window_handle: isize) -> Result<(), String> {
+    Err("quick paste is only implemented on Windows".to_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn send_ctrl_v() -> Result<(), String> {
+    const INPUT_KEYBOARD: u32 = 1;
+    const KEYEVENTF_KEYUP: u32 = 0x0002;
+    const VK_CONTROL: u16 = 0x11;
+    const VK_V: u16 = 0x56;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct KeyboardInput {
+        virtual_key: u16,
+        scan_code: u16,
+        flags: u32,
+        time: u32,
+        extra_info: usize,
+    }
+
+    #[repr(C)]
+    union InputData {
+        keyboard: KeyboardInput,
+    }
+
+    #[repr(C)]
+    struct Input {
+        input_type: u32,
+        data: InputData,
+    }
+
+    fn keyboard_input(virtual_key: u16, flags: u32) -> Input {
+        Input {
+            input_type: INPUT_KEYBOARD,
+            data: InputData {
+                keyboard: KeyboardInput {
+                    virtual_key,
+                    scan_code: 0,
+                    flags,
+                    time: 0,
+                    extra_info: 0,
+                },
+            },
+        }
+    }
+
+    extern "system" {
+        fn SendInput(input_count: u32, inputs: *const Input, input_size: i32) -> u32;
+        fn GetLastError() -> u32;
+    }
+
+    let inputs = [
+        keyboard_input(VK_CONTROL, 0),
+        keyboard_input(VK_V, 0),
+        keyboard_input(VK_V, KEYEVENTF_KEYUP),
+        keyboard_input(VK_CONTROL, KEYEVENTF_KEYUP),
+    ];
+    let sent = unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<Input>() as i32,
+        )
+    };
+    if sent != inputs.len() as u32 {
+        return Err(format!(
+            "failed to send Ctrl+V input (Windows error {})",
+            unsafe { GetLastError() }
+        ));
+    }
+
+    Ok(())
 }
 
 pub fn shortcut_to_windows_hotkey(
@@ -288,5 +457,27 @@ pub fn shortcut_to_windows_hotkey(
             Some((mod_flags, vk))
         }
         crate::keyboard::ShortcutBinding::DoubleModifier { .. } => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::QuickPasteTarget;
+
+    #[test]
+    fn quick_paste_target_is_consumed_once() {
+        let target = QuickPasteTarget::default();
+        target.remember(42);
+
+        assert_eq!(target.take(), Some(42));
+        assert_eq!(target.take(), None);
+    }
+
+    #[test]
+    fn quick_paste_target_ignores_invalid_window_handle() {
+        let target = QuickPasteTarget::default();
+        target.remember(0);
+
+        assert_eq!(target.take(), None);
     }
 }

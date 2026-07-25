@@ -183,7 +183,9 @@ export interface LocaleDefinition {
     bulkFavoriteSuccess: string;
     bulkDeleteSuccess: string;
     editSaved: string;
+    plainCopySuccess: string;
     plainPasteSuccess: string;
+    plainPasteFailed: string;
     duplicateSuccess: string;
     saveFailed: string;
   };

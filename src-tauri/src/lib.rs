@@ -701,6 +701,36 @@ fn configure_keyboard_shortcuts(
 }
 
 #[tauri::command]
+fn paste_to_previous_application(
+    app: tauri::AppHandle,
+    hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
+) -> Result<bool, String> {
+    let target = hotkey_manager
+        .lock()
+        .map_err(|_| "hotkey manager lock is poisoned".to_owned())?
+        .take_quick_paste_target();
+    let Some(target) = target else {
+        return Ok(false);
+    };
+
+    let main_window = app.get_webview_window("main");
+    if let Some(window) = &main_window {
+        window.hide().map_err(|error| error.to_string())?;
+    }
+    thread::sleep(Duration::from_millis(40));
+
+    if let Err(error) = platform::windows_hotkey::restore_window_and_paste(target) {
+        if let Some(window) = &main_window {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        return Err(error);
+    }
+
+    Ok(true)
+}
+
+#[tauri::command]
 fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
@@ -2811,6 +2841,7 @@ pub fn run() {
             list_source_applications,
             get_keyboard_config,
             configure_keyboard_shortcuts,
+            paste_to_previous_application,
             search_clipboard_items,
             rebuild_search_index,
             detect_content_markers,

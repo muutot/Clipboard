@@ -1239,20 +1239,30 @@
     invoke("rename_item", { id, newName: title }).catch(() => {});
   }
 
-  function plainPaste(_id: string) {
+  async function plainPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
     if ($generalSettings.pinCopiedToTop) moveToTop(_id);
     const text = item.textContent || item.title;
-    invoke("mark_self_triggered", { text }).catch(() => {});
-    void navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        showToast(_t("toast.plainPasteSuccess"), "success");
-      })
-      .catch(() => {
-        showToast(_t("toast.copyFailed"), "error");
-      });
+    try {
+      if (isTauriRuntime()) {
+        await invoke("mark_self_triggered", { text }).catch(() => {});
+      }
+      await navigator.clipboard.writeText(text);
+      if (!isTauriRuntime()) {
+        showToast(_t("toast.plainCopySuccess"), "success");
+        return;
+      }
+
+      const pasted = await invoke<boolean>("paste_to_previous_application");
+      showToast(
+        _t(pasted ? "toast.plainPasteSuccess" : "toast.plainCopySuccess"),
+        pasted ? "success" : "info",
+      );
+    } catch (error) {
+      console.error("Unable to paste into the previous application", error);
+      showToast(_t("toast.plainPasteFailed"), "error");
+    }
   }
 
   function duplicateItem(id: string) {
