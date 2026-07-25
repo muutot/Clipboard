@@ -416,7 +416,7 @@ mod tests {
         while database
             .get_ocr_result("image")
             .unwrap()
-            .map_or(true, |result| result.status != OcrStatus::Completed)
+            .is_none_or(|result| result.status != OcrStatus::Completed)
         {
             assert!(Instant::now() < deadline, "OCR result was not completed");
             std::thread::sleep(Duration::from_millis(10));
