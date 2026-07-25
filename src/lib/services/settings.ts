@@ -292,12 +292,11 @@ function parseStorageObject(key: string): unknown {
   }
 }
 
-function readLegacySettings(): { hasGeneralKey: boolean; settings: unknown; locale?: Language } {
+function readLegacySettings(): { settings: unknown; locale?: Language } {
   const generalRaw = readStorage(STORAGE_KEY);
   const localeRaw = readStorage(LOCALE_STORAGE_KEY);
   const locale = localeRaw === "zh-CN" || localeRaw === "en" ? localeRaw : undefined;
   return {
-    hasGeneralKey: generalRaw !== null,
     settings: parseStorageObject(STORAGE_KEY),
     locale,
   };
@@ -361,6 +360,7 @@ function createSettingsStore() {
   let applyingExternalValue = false;
   let initialized = !desktop;
   let initialization: Promise<void> | undefined;
+  let localRevision = 0;
   const dirtyKeys = new Set<keyof GeneralSettings>();
   let pendingValue: GeneralSettings | undefined;
   let writeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -462,6 +462,7 @@ function createSettingsStore() {
 
       const localAtHydration = get(store);
       const dirtyAtHydration = new Set(dirtyKeys);
+      const revisionAtHydration = localRevision;
       let hydrated = normalizeGeneralSettings(response.settings, cloneDefaults());
 
       if (response.legacyMigrationRequired) {
@@ -479,13 +480,20 @@ function createSettingsStore() {
         hydrated = applyDirtySettings(hydrated, localAtHydration, dirtyAtHydration);
         try {
           hydrated = normalizeGeneralSettings(await setGeneralSettings(hydrated), hydrated);
-          removeStorage(STORAGE_KEY);
-          removeStorage(LOCALE_STORAGE_KEY);
-          legacyMigrationPending = false;
-          dirtyKeys.clear();
+          const concurrentEdits = localRevision !== revisionAtHydration;
+          if (concurrentEdits) {
+            hydrated = applyDirtySettings(hydrated, get(store), dirtyKeys);
+            pendingValue = hydrated;
+          }
+          if (!concurrentEdits) {
+            removeStorage(STORAGE_KEY);
+            removeStorage(LOCALE_STORAGE_KEY);
+            legacyMigrationPending = false;
+            dirtyKeys.clear();
+          }
         } catch {
           // Keep old keys for a retry if the first migration write fails.
-          pendingValue = hydrated;
+          pendingValue = applyDirtySettings(hydrated, get(store), dirtyKeys);
         }
       } else {
         removeStorage(STORAGE_KEY);
@@ -507,6 +515,7 @@ function createSettingsStore() {
   }
 
   function updateSetting<K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) {
+    localRevision += 1;
     dirtyKeys.add(key);
     const current = get(store);
     const next = normalizeGeneralSettings({ ...current, [key]: value }, current);
@@ -515,6 +524,7 @@ function createSettingsStore() {
   }
 
   function merge(partial: Partial<GeneralSettings>) {
+    localRevision += 1;
     for (const key of Object.keys(partial) as Array<keyof GeneralSettings>) {
       dirtyKeys.add(key);
     }
