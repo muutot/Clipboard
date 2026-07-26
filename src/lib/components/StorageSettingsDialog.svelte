@@ -3073,6 +3073,10 @@
     background: var(--input-bg);
   }
 
+  .icon-file-item input[type="checkbox"] {
+    width: auto;
+  }
+
   .icon-file-name {
     flex: 1;
     min-width: 0;
