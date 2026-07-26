@@ -342,7 +342,7 @@ const zhCN: LocaleDefinition = {
     fontSizeNormal: "中",
     fontSizeLarge: "大",
     windowTransparency: "窗口透明度",
-    windowTransparencyDescription: "需重启应用后生效",
+    windowTransparencyDescription: "调整后立即应用到窗口",
     compactMode: "紧凑模式",
     compactModeDescription: "减少卡片间距，显示更多记录",
     launchAtStartup: "开机自启动",

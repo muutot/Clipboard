@@ -667,6 +667,58 @@ impl WindowManager {
     }
 }
 
+/// Maps a transparency percentage (60-100) to the Win32 layered-window alpha
+/// byte. Values outside the settings range are clamped first.
+pub fn window_transparency_alpha(percent: u8) -> u8 {
+    let percent = percent.clamp(60, 100);
+    ((u32::from(percent) * 255) / 100) as u8
+}
+
+/// Applies the configured window transparency to a native window using the
+/// Win32 layered-window alpha channel. Full opacity removes the layered
+/// style again so the compositor fast path stays active.
+#[cfg(target_os = "windows")]
+pub fn apply_window_transparency(window_handle: isize, percent: u8) -> Result<(), String> {
+    extern "system" {
+        fn GetWindowLongW(hwnd: isize, index: i32) -> i32;
+        fn SetWindowLongW(hwnd: isize, index: i32, new_long: i32) -> i32;
+        fn SetLayeredWindowAttributes(hwnd: isize, color_key: u32, alpha: u8, flags: u32) -> i32;
+    }
+
+    const GWL_EXSTYLE: i32 = -20;
+    const WS_EX_LAYERED: i32 = 0x0008_0000;
+    const LWA_ALPHA: u32 = 0x0000_0002;
+
+    if window_handle == 0 {
+        return Err("window handle is unavailable".to_owned());
+    }
+
+    let percent = percent.clamp(60, 100);
+    unsafe {
+        let ex_style = GetWindowLongW(window_handle, GWL_EXSTYLE);
+        if percent >= 100 {
+            SetWindowLongW(window_handle, GWL_EXSTYLE, ex_style & !WS_EX_LAYERED);
+            return Ok(());
+        }
+        SetWindowLongW(window_handle, GWL_EXSTYLE, ex_style | WS_EX_LAYERED);
+        if SetLayeredWindowAttributes(
+            window_handle,
+            0,
+            window_transparency_alpha(percent),
+            LWA_ALPHA,
+        ) == 0
+        {
+            return Err("SetLayeredWindowAttributes failed".to_owned());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn apply_window_transparency(_window_handle: isize, _percent: u8) -> Result<(), String> {
+    Err("window transparency is not supported on this platform".to_owned())
+}
+
 // ---------------------------------------------------------------------------
 //  SingleInstanceGuard
 // ---------------------------------------------------------------------------
@@ -1106,6 +1158,21 @@ mod tests {
 
         assert_eq!(restored, Some((10, 20, 800, 600)));
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn window_transparency_alpha_maps_percent_to_layered_alpha() {
+        assert_eq!(window_transparency_alpha(100), 255);
+        assert_eq!(window_transparency_alpha(95), 242);
+        assert_eq!(window_transparency_alpha(60), 153);
+        // Out-of-range values clamp to the settings slider bounds.
+        assert_eq!(window_transparency_alpha(0), 153);
+        assert_eq!(window_transparency_alpha(255), 255);
+    }
+
+    #[test]
+    fn window_transparency_rejects_a_null_handle() {
+        assert!(apply_window_transparency(0, 95).is_err());
     }
 
     #[test]

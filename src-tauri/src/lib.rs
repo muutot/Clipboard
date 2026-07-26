@@ -1706,7 +1706,34 @@ fn set_general_settings(
     // The config write is authoritative; a failed notification should not turn
     // a successful persistence operation into a user-visible failure.
     let _ = app.emit("general-settings-changed", &saved);
+    apply_window_transparency_to_main(&app, saved.window_transparency);
     Ok(saved)
+}
+
+/// Best-effort application of the configured transparency to the main
+/// window; the persisted setting stays authoritative even when the native
+/// call fails (e.g. on unsupported platforms).
+fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
+    #[cfg(target_os = "windows")]
+    {
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        match window.hwnd() {
+            Ok(hwnd) => {
+                if let Err(error) = platform::apply_window_transparency(hwnd.0 as isize, percent) {
+                    eprintln!("[window] failed to apply transparency: {error}");
+                }
+            }
+            Err(error) => {
+                eprintln!("[window] failed to resolve the main window handle: {error}");
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, percent);
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -3779,6 +3806,7 @@ pub fn run() {
                 CleanupWorker::start(project_directory.clone(), cleanup_database, paths.clone())?;
 
             let launch_at_startup = config.launch_at_startup();
+            let startup_transparency = config.general_settings().window_transparency;
             app.manage(Mutex::new(config));
             app.manage(paths);
             app.manage(database);
@@ -3841,6 +3869,8 @@ pub fn run() {
             }
             app.manage(Mutex::new(keyboard));
             app.manage(Mutex::new(hotkey_manager));
+
+            apply_window_transparency_to_main(app.handle(), startup_transparency);
 
             Ok(())
         })

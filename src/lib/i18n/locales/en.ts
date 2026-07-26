@@ -353,7 +353,7 @@ const en: LocaleDefinition = {
     fontSizeNormal: "Normal",
     fontSizeLarge: "Large",
     windowTransparency: "Window Transparency",
-    windowTransparencyDescription: "Requires app restart to take effect",
+    windowTransparencyDescription: "Applied to the window immediately",
     compactMode: "Compact Mode",
     compactModeDescription: "Reduce card spacing to show more records",
     launchAtStartup: "Launch at Startup",
