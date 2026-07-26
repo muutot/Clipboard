@@ -366,6 +366,7 @@
   const maxTextLines = $derived($generalSettings.display.maxTextLines);
   const alwaysShowActions = $derived($generalSettings.cardActionsDisplay === "always");
   const quickCopyBadgeAlwaysVisible = $derived($generalSettings.quickCopyBadgeAlwaysVisible);
+  const detailDisplayMode = $derived($generalSettings.detailDisplayMode);
 
   function displayedTextLines(item: ClipboardItem): number {
     if (item.kind !== "text" && item.kind !== "link") return 1;
@@ -2227,7 +2228,10 @@
 
 <svelte:window onkeydowncapture={handleEscapePriority} onkeydown={handleGlobalKeydown} />
 
-<main class="app-shell">
+<main
+  class="app-shell"
+  class:split-detail={detailDisplayMode === 'split' && detailItem != null}
+>
   <header
     class="search-header"
     role="presentation"
@@ -2499,6 +2503,8 @@
     </div>
   </div>
 
+  <div class="main-content" class:split-detail={detailDisplayMode === 'split' && detailItem != null}>
+
   {#if regexError}
     <div class="regex-error">{regexError}</div>
   {/if}
@@ -2658,6 +2664,23 @@
     </div>
   {/if}
 
+  {#if detailDisplayMode === 'split' && detailItem}
+    <DetailPanel
+      mode="split"
+      item={detailItem}
+      onclose={closeDetail}
+      oncopy={copyItem}
+      onedit={startEdit}
+      onsaveedit={saveEdit}
+      onrenametitle={renameTitle}
+      onplainpaste={plainPaste}
+      onduplicate={duplicateItem}
+      onsaveasnew={saveAsNew}
+      oncopyfilename={copyFilename}
+    />
+  {/if}
+  </div>
+
   <footer class="status-bar" role="status" aria-live="polite">
     <span class="status-left">
       <span class="result-count">{resultSummary}</span>
@@ -2669,23 +2692,26 @@
 </main>
 
 <Toast />
-<DetailPanel
-  item={detailItem}
-  onclose={closeDetail}
-  oncopy={copyItem}
-  onedit={startEdit}
-  onsaveedit={saveEdit}
-  onrenametitle={renameTitle}
-  onplainpaste={plainPaste}
-  onduplicate={duplicateItem}
-  onsaveasnew={saveAsNew}
-  oncopyfilename={copyFilename}
-/>
+{#if detailDisplayMode !== 'split' || !detailItem}
+  <DetailPanel
+    item={detailItem}
+    onclose={closeDetail}
+    oncopy={copyItem}
+    onedit={startEdit}
+    onsaveedit={saveEdit}
+    onrenametitle={renameTitle}
+    onplainpaste={plainPaste}
+    onduplicate={duplicateItem}
+    onsaveasnew={saveAsNew}
+    oncopyfilename={copyFilename}
+  />
+{/if}
 
 <style>
   .app-shell {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
     width: 100%;
     min-width: 730px;
     height: 100vh;
@@ -2694,6 +2720,32 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     background: color-mix(in srgb, var(--bg-settings) 98.5%, transparent);
+  }
+
+  .app-shell.split-detail {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  }
+
+  .app-shell.split-detail > .search-header,
+  .app-shell.split-detail > .toolbar,
+  .app-shell.split-detail > .status-bar {
+    grid-column: 1 / -1;
+  }
+
+  .main-content {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .main-content.split-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  }
+
+  .main-content.split-detail > *:last-child {
+    grid-column: 2;
+    grid-row: 1 / -1;
   }
 
   :global(.app-shell.compact .search-header) {

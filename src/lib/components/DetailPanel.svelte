@@ -30,6 +30,7 @@
 
   interface Props {
     item: ClipboardItem | null;
+    mode?: 'overlay' | 'split';
     onclose: () => void;
     oncopy: (id: string) => void;
     onedit: (id: string) => void;
@@ -43,6 +44,7 @@
 
   let {
     item,
+    mode = 'overlay',
     onclose,
     oncopy,
     onedit,
@@ -653,17 +655,20 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if item}
-  <div
-    class="detail-backdrop"
-    class:fullscreen-backdrop={imageFullscreen}
-    onclick={imageFullscreen ? closeImageFullscreen : onclose}
-    aria-hidden="true"
-  ></div>
+  {#if mode !== 'split'}
+    <div
+      class="detail-backdrop"
+      class:fullscreen-backdrop={imageFullscreen}
+      onclick={imageFullscreen ? closeImageFullscreen : onclose}
+      aria-hidden="true"
+    ></div>
+  {/if}
   <div
     class="detail-panel"
     class:fullscreen={imageFullscreen}
+    class:inline={mode === 'split'}
     role="dialog"
-    aria-modal="true"
+    aria-modal={mode !== 'split'}
     aria-label={_t("detail.title")}
   >
     <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
@@ -1345,6 +1350,19 @@
 
   .detail-panel.fullscreen {
     display: none;
+  }
+
+  .detail-panel.inline {
+    position: relative;
+    z-index: auto;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    border-left: none;
+    box-shadow: none;
+    animation: none;
+    overflow-y: auto;
   }
 
   @keyframes slide-in {
