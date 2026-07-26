@@ -124,6 +124,23 @@ const en: LocaleDefinition = {
     savedAndRestart: "Written to conf/conf.json. Restart the app to use the new directory.",
     alreadyUsingDir: "Already using this data directory",
     rebuildComplete: "Index rebuild complete: {events} events processed, {docs} documents written",
+    deleteByKindTitle: "Permanently Delete by Type",
+    deleteByKindDesc:
+      "Remove non-favorite data for one content type. Active items and items in Trash are included.",
+    deleteByKindScope:
+      "Favorites are always protected and must be unfavorited first. Permanent deletion also cleans managed files, image OCR data, and search-index entries. Sizes are logical record sizes.",
+    deleteKindAction: "Delete Permanently",
+    deletingKind: "Deleting…",
+    deleteKindCount: "{count} items · {size}",
+    deleteKindConfirm:
+      "Permanently delete all non-favorite {kind} data: {count} items ({size})? Active items and items in Trash are included, favorites are preserved, and related managed files, OCR data, and search-index entries will also be removed. This cannot be undone.",
+    deleteKindSuccess:
+      "Permanently deleted {kind} data: {count} items ({size}) and {files} managed files",
+    deleteKindPartial:
+      "Permanently deleted {kind} data: {count} items ({size}), but some follow-up cleanup is still pending: {warning}",
+    deleteKindFailed: "Failed to delete {kind} data: {error}",
+    deleteKindNoData: "No non-favorite {kind} data remains to delete",
+    deleteKindRefreshFailed: "Statistics could not be refreshed; reopen Settings to verify",
     ocrModelInstalled: "PP-OCRv6 {variant} model installed and activated",
     ocrModelInstallFailed: "OCR model download failed: {error}",
     ocrModelAlreadyApplied: "Model already applied",

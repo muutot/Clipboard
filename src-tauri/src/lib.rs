@@ -41,18 +41,23 @@ use platform::{
 use privacy::PrivacyManager;
 use rusqlite::params;
 use search::{SearchIndex, SearchSyncSummary, SearchSynchronizer, SEARCH_INDEX_VERSION};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use storage::{
     quarantine_search_index, recover_database_if_needed, refresh_database_backup,
-    ClipboardRepository, Database, OcrRepository, RepairResult, StorageFileReferences,
-    StoragePaths, TextItemUpdate, RESOURCE_ROOT_MARKER,
+    ClipboardRepository, Database, KindDeleteResult, KindDeleteScope, KindStorageStats,
+    OcrRepository, RepairResult, StorageFileReferences, StoragePaths, TextItemUpdate,
+    RESOURCE_ROOT_MARKER,
 };
 use tauri::{Emitter, Manager};
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
+const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
+    include_favorites: false,
+    include_deleted: true,
+};
 const MAIN_WINDOW_MIN_WIDTH: u32 = 730;
 const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
 
@@ -98,6 +103,47 @@ struct StorageStatus {
     search_index_rebuild_required: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageKindStats {
+    item_count: u64,
+    size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageKindDeleteExpectation {
+    item_count: u64,
+    size_bytes: u64,
+}
+
+impl From<KindStorageStats> for StorageKindStats {
+    fn from(stats: KindStorageStats) -> Self {
+        Self {
+            item_count: stats.item_count,
+            size_bytes: stats.size_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageKindDeleteResult {
+    deleted_count: u64,
+    deleted_size_bytes: u64,
+    removed_files: u64,
+    search_sync: Option<SearchSyncSummary>,
+    warnings: Vec<String>,
+    #[serde(skip_serializing)]
+    deleted_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClipboardHistoryInvalidated {
+    deleted_ids: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StorageDirectoryUpdate {
@@ -126,6 +172,7 @@ struct CaptureState {
     max_file_copy_size_bytes: Arc<AtomicU64>,
     ignored_apps: Arc<Mutex<Vec<String>>>,
     policy: Arc<CapturePolicy>,
+    ingestion_guard: Arc<Mutex<()>>,
     worker: Arc<Mutex<Option<CaptureWorker>>>,
 }
 
@@ -259,6 +306,7 @@ impl CaptureState {
                 sensitive_patterns: Arc::new(sensitive_patterns),
                 password_manager_apps: Arc::new(privacy.password_manager_apps.clone()),
             }),
+            ingestion_guard: Arc::new(Mutex::new(())),
             worker: Arc::new(Mutex::new(None)),
         }
     }
@@ -714,6 +762,17 @@ fn get_storage_status(
         search_index_version: SEARCH_INDEX_VERSION,
         search_index_rebuild_required: search_index.requires_full_rebuild(),
     })
+}
+
+#[tauri::command]
+fn get_storage_kind_stats(
+    database: tauri::State<'_, Database>,
+    kind: ClipboardKind,
+) -> Result<StorageKindStats, String> {
+    database
+        .kind_storage_stats(kind, STORAGE_KIND_DELETE_SCOPE)
+        .map(StorageKindStats::from)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -2035,6 +2094,88 @@ fn batch_permanently_delete_clipboard_items(
 }
 
 #[tauri::command]
+fn permanently_delete_storage_kind(
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+    search_index: tauri::State<'_, SearchIndex>,
+    capture: tauri::State<'_, CaptureState>,
+    app: tauri::AppHandle,
+    kind: ClipboardKind,
+    expected: StorageKindDeleteExpectation,
+) -> Result<StorageKindDeleteResult, String> {
+    let ingestion_guard = capture
+        .ingestion_guard
+        .lock()
+        .map_err(|_| "clipboard ingestion lock is poisoned".to_owned())?;
+    let expected = KindStorageStats {
+        item_count: expected.item_count,
+        size_bytes: expected.size_bytes,
+    };
+    let mut result = permanently_delete_storage_kind_for(
+        database.inner(),
+        paths.inner(),
+        search_index.inner(),
+        kind,
+        Some(expected),
+    )?;
+    drop(ingestion_guard);
+    if result.deleted_count > 0 {
+        if let Err(error) = app.emit(
+            "clipboard-history-invalidated",
+            ClipboardHistoryInvalidated {
+                deleted_ids: result.deleted_ids.clone(),
+            },
+        ) {
+            result
+                .warnings
+                .push(format!("main window refresh is pending: {error}"));
+        }
+    }
+    Ok(result)
+}
+
+fn permanently_delete_storage_kind_for(
+    database: &Database,
+    paths: &StoragePaths,
+    search_index: &SearchIndex,
+    kind: ClipboardKind,
+    expected: Option<KindStorageStats>,
+) -> Result<StorageKindDeleteResult, String> {
+    let KindDeleteResult { stats, deleted_ids } = match expected {
+        Some(expected) => database
+            .permanently_delete_by_kind_if_stats_match(kind, STORAGE_KIND_DELETE_SCOPE, expected)
+            .map_err(|error| error.to_string())?,
+        None => database
+            .permanently_delete_by_kind(kind, STORAGE_KIND_DELETE_SCOPE)
+            .map_err(|error| error.to_string())?,
+    };
+    let mut warnings = Vec::new();
+    let search_sync = match SearchSynchronizer::default().sync_until_idle(database, search_index) {
+        Ok(summary) => Some(summary),
+        Err(error) => {
+            warnings.push(format!("search index cleanup is pending: {error}"));
+            None
+        }
+    };
+    let removed_files = match cleanup_orphan_storage_files(database, paths) {
+        Ok(cleanup) => cleanup.removed_files,
+        Err(error) => {
+            warnings.push(format!("managed resource cleanup is pending: {error}"));
+            0
+        }
+    };
+
+    Ok(StorageKindDeleteResult {
+        deleted_count: stats.item_count,
+        deleted_size_bytes: stats.size_bytes,
+        removed_files,
+        search_sync,
+        warnings,
+        deleted_ids,
+    })
+}
+
+#[tauri::command]
 fn duplicate_clipboard_item(
     database: tauri::State<'_, Database>,
     app: tauri::AppHandle,
@@ -2477,6 +2618,10 @@ fn start_clipboard_monitoring(
                 }
                 match receiver.recv_timeout(Duration::from_millis(500)) {
                     Ok(change) => {
+                        let _ingestion_guard = capture_for_thread
+                            .ingestion_guard
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
                         let clipboard_formats = change.formats;
                         if stop_flag_for_thread.load(Ordering::SeqCst)
                             || stop_signal_requested(&stop_receiver)
@@ -3275,6 +3420,10 @@ pub fn run() {
                         }
                         match receiver.recv_timeout(Duration::from_millis(500)) {
                             Ok(change) => {
+                                let _ingestion_guard = capture_for_thread
+                                    .ingestion_guard
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                                 let clipboard_formats = change.formats;
                                 if stop_flag_for_thread.load(Ordering::SeqCst)
                                     || stop_signal_requested(&stop_receiver)
@@ -3701,6 +3850,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_runtime_info,
             get_storage_status,
+            get_storage_kind_stats,
             configure_storage_directory,
             get_application_filter_settings,
             configure_ignored_applications,
@@ -3768,6 +3918,7 @@ pub fn run() {
             batch_restore_clipboard_items,
             permanently_delete_clipboard_item,
             batch_permanently_delete_clipboard_items,
+            permanently_delete_storage_kind,
             duplicate_clipboard_item,
             enforce_history_cleanup,
             clear_all_non_favorite_items,
@@ -4318,6 +4469,123 @@ mod storage_cleanup_tests {
         assert!(!resource.exists());
         assert!(!preview.exists());
         fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn category_delete_cleans_ocr_search_index_and_managed_resources() {
+        let paths = temporary_storage("category-delete");
+        let resource = paths.images.join("category.png");
+        let preview = paths.previews.join("category-preview.png");
+        let favorite_resource = paths.images.join("favorite.png");
+        let favorite_preview = paths.previews.join("favorite-preview.png");
+        let icons = paths.storage.join("icons");
+        let shared_icon = icons.join("shared.png");
+        fs::create_dir_all(&icons).unwrap();
+        fs::write(&resource, b"image-data").unwrap();
+        fs::write(&preview, b"preview-data").unwrap();
+        fs::write(&favorite_resource, b"favorite-image-data").unwrap();
+        fs::write(&favorite_preview, b"favorite-preview-data").unwrap();
+        fs::write(&shared_icon, b"shared-icon-data").unwrap();
+
+        let database = Database::open_in_memory().unwrap();
+        let mut image = stored_item(
+            "category-image",
+            ClipboardKind::Image,
+            Some(resource.to_string_lossy().into_owned()),
+            Some("shared.png".to_owned()),
+        );
+        image.preview_path = Some(preview.to_string_lossy().into_owned());
+        database.save_item(&image).unwrap();
+        let mut favorite_image = stored_item(
+            "favorite-image",
+            ClipboardKind::Image,
+            Some(favorite_resource.to_string_lossy().into_owned()),
+            Some("shared.png".to_owned()),
+        );
+        favorite_image.preview_path = Some(favorite_preview.to_string_lossy().into_owned());
+        favorite_image.is_favorite = true;
+        database.save_item(&favorite_image).unwrap();
+        database
+            .save_ocr_result(&OcrResult {
+                item_id: image.id.clone(),
+                status: domain::OcrStatus::Completed,
+                engine: "test".to_owned(),
+                model_version: "1".to_owned(),
+                language: Some("en".to_owned()),
+                full_text: "category recognized text".to_owned(),
+                blocks: Vec::new(),
+                image_hash: image.content_hash.clone(),
+                created_at_ms: 1,
+                completed_at_ms: Some(2),
+                error_message: None,
+            })
+            .unwrap();
+        database
+            .save_item(&stored_item(
+                "preserved-text",
+                ClipboardKind::Text,
+                None,
+                None,
+            ))
+            .unwrap();
+
+        let search_index = SearchIndex::in_memory().unwrap();
+        SearchSynchronizer::default()
+            .sync_until_idle(&database, &search_index)
+            .unwrap();
+        assert_eq!(search_index.search("recognized", 20).unwrap().len(), 1);
+
+        let result = permanently_delete_storage_kind_for(
+            &database,
+            &paths,
+            &search_index,
+            ClipboardKind::Image,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(result.deleted_count, 1);
+        assert_eq!(result.deleted_size_bytes, image.size_bytes);
+        assert_eq!(result.deleted_ids, vec![image.id.clone()]);
+        assert_eq!(result.removed_files, 2);
+        assert_eq!(result.search_sync.as_ref().unwrap().deleted_documents, 1);
+        assert!(result.warnings.is_empty());
+        assert!(database.get_item(&image.id).unwrap().is_none());
+        assert!(database.get_ocr_result(&image.id).unwrap().is_none());
+        assert!(database.get_item(&favorite_image.id).unwrap().is_some());
+        assert!(database.get_item("preserved-text").unwrap().is_some());
+        assert!(search_index.search("recognized", 20).unwrap().is_empty());
+        assert!(!resource.exists());
+        assert!(!preview.exists());
+        assert!(favorite_resource.exists());
+        assert!(favorite_preview.exists());
+        assert!(shared_icon.exists());
+        fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
+    fn category_delete_rejects_stale_confirmation_statistics() {
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&stored_item("first-text", ClipboardKind::Text, None, None))
+            .unwrap();
+        let confirmed = database
+            .kind_storage_stats(ClipboardKind::Text, STORAGE_KIND_DELETE_SCOPE)
+            .unwrap();
+        database
+            .save_item(&stored_item("second-text", ClipboardKind::Text, None, None))
+            .unwrap();
+
+        let error = database
+            .permanently_delete_by_kind_if_stats_match(
+                ClipboardKind::Text,
+                STORAGE_KIND_DELETE_SCOPE,
+                confirmed,
+            )
+            .unwrap_err();
+
+        assert!(error.to_string().contains("data changed"));
+        assert_eq!(database.item_count().unwrap(), 2);
     }
 
     #[test]

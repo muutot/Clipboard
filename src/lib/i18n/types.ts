@@ -117,6 +117,18 @@ export interface LocaleDefinition {
     savedAndRestart: string;
     alreadyUsingDir: string;
     rebuildComplete: string;
+    deleteByKindTitle: string;
+    deleteByKindDesc: string;
+    deleteByKindScope: string;
+    deleteKindAction: string;
+    deletingKind: string;
+    deleteKindCount: string;
+    deleteKindConfirm: string;
+    deleteKindSuccess: string;
+    deleteKindPartial: string;
+    deleteKindFailed: string;
+    deleteKindNoData: string;
+    deleteKindRefreshFailed: string;
     ocrModelInstalled: string;
     ocrModelInstallFailed: string;
     ocrModelAlreadyApplied: string;

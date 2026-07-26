@@ -78,6 +78,10 @@
     kind: "history" | "suggestion";
   };
 
+  type ClipboardHistoryInvalidation = {
+    deletedIds: string[];
+  };
+
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
   let deletedHistoryLoaded = $state(false);
   let deletedHistoryLoading = $state(false);
@@ -610,6 +614,25 @@
       }
     });
 
+    const unlistenHistoryInvalidated = listen<ClipboardHistoryInvalidation>(
+      "clipboard-history-invalidated",
+      (event) => {
+        const removedIds = new Set(event.payload.deletedIds);
+
+        for (const item of items) {
+          if (item.deleted && removedIds.has(item.id)) deletedHistorySuppressedIds.add(item.id);
+        }
+        items = items.filter((item) => !removedIds.has(item.id));
+        if (indexedItems) indexedItems = indexedItems.filter((item) => !removedIds.has(item.id));
+        searchRequestId += 1;
+        searchPending = false;
+        selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
+        if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
+        if (detailItem && removedIds.has(detailItem.id)) detailItem = null;
+        invalidateDeletedHistoryPagination();
+      },
+    );
+
     const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
     let restoreAttempted = false;
     let previousRememberWindowPosition = false;
@@ -831,6 +854,7 @@
     return () => {
       window.clearInterval(clock);
       unlisten.then((fn) => fn());
+      unlistenHistoryInvalidated.then((fn) => fn());
       unsubSettings();
       if (unlistenMove) unlistenMove();
       if (unlistenResize) unlistenResize();

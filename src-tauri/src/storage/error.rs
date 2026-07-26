@@ -56,6 +56,12 @@ pub enum StorageError {
     ValueOutOfRange {
         field: &'static str,
     },
+    KindDeleteStatsChanged {
+        expected_count: u64,
+        expected_size: u64,
+        actual_count: u64,
+        actual_size: u64,
+    },
 }
 
 impl fmt::Display for StorageError {
@@ -157,6 +163,15 @@ impl fmt::Display for StorageError {
             Self::ValueOutOfRange { field } => {
                 write!(formatter, "value is out of range for {field}")
             }
+            Self::KindDeleteStatsChanged {
+                expected_count,
+                expected_size,
+                actual_count,
+                actual_size,
+            } => write!(
+                formatter,
+                "storage data changed before deletion (confirmed {expected_count} items/{expected_size} bytes, current {actual_count} items/{actual_size} bytes)"
+            ),
         }
     }
 }

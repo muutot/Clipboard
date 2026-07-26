@@ -17,5 +17,8 @@ pub use recovery::{
     backup_path, quarantine_search_index, recover_database_if_needed, refresh_database_backup,
     DatabaseRecoveryReport,
 };
-pub use repository::{ClipboardRepository, StorageFileReferences, TextItemUpdate};
+pub use repository::{
+    ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
+    StorageFileReferences, TextItemUpdate,
+};
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};

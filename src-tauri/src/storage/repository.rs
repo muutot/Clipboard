@@ -30,6 +30,34 @@ pub struct StorageFileReferences {
     pub icon_paths: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KindDeleteScope {
+    pub include_favorites: bool,
+    pub include_deleted: bool,
+}
+
+impl KindDeleteScope {
+    /// Includes active records, favorites, and records already in the recycle bin.
+    pub const fn all() -> Self {
+        Self {
+            include_favorites: true,
+            include_deleted: true,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct KindStorageStats {
+    pub item_count: u64,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct KindDeleteResult {
+    pub stats: KindStorageStats,
+    pub deleted_ids: Vec<String>,
+}
+
 pub struct TextItemUpdate<'a> {
     pub id: &'a str,
     pub kind: ClipboardKind,
@@ -88,6 +116,37 @@ pub trait ClipboardRepository {
     fn clear_all_non_favorite_items(&self) -> Result<u64, StorageError>;
     fn count_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
     fn size_by_kind(&self, kind: &str) -> Result<u64, StorageError>;
+    /// Returns the count and logical byte size for one kind and explicit scope.
+    fn kind_storage_stats(
+        &self,
+        kind: ClipboardKind,
+        scope: KindDeleteScope,
+    ) -> Result<KindStorageStats, StorageError>;
+    /// Permanently deletes every record matching one kind and explicit scope.
+    ///
+    /// `include_favorites` controls whether favorite records may be removed and
+    /// `include_deleted` controls whether records already in the recycle bin
+    /// are included. `KindDeleteScope::all()` therefore deletes the complete
+    /// category, including favorites and recycle-bin records. The returned
+    /// statistics and sorted ids are derived from the rows actually deleted.
+    ///
+    /// SQLite's delete trigger queues a search-index delete for every removed
+    /// row, while the OCR foreign key removes associated OCR data. Filesystem
+    /// resources must subsequently be reclaimed by the ownership-aware orphan
+    /// cleanup after this transaction commits.
+    fn permanently_delete_by_kind(
+        &self,
+        kind: ClipboardKind,
+        scope: KindDeleteScope,
+    ) -> Result<KindDeleteResult, StorageError>;
+    /// Deletes a category only when its current statistics still match the
+    /// values shown in the destructive confirmation dialog.
+    fn permanently_delete_by_kind_if_stats_match(
+        &self,
+        kind: ClipboardKind,
+        scope: KindDeleteScope,
+        expected: KindStorageStats,
+    ) -> Result<KindDeleteResult, StorageError>;
     /// Returns every filesystem reference still owned by a database record.
     ///
     /// Soft-deleted records remain recoverable, so their resources must stay
@@ -694,6 +753,33 @@ impl ClipboardRepository for Database {
         })
     }
 
+    fn kind_storage_stats(
+        &self,
+        kind: ClipboardKind,
+        scope: KindDeleteScope,
+    ) -> Result<KindStorageStats, StorageError> {
+        self.with_connection(|connection| query_kind_storage_stats(connection, kind, scope))
+    }
+
+    fn permanently_delete_by_kind(
+        &self,
+        kind: ClipboardKind,
+        scope: KindDeleteScope,
+    ) -> Result<KindDeleteResult, StorageError> {
+        self.with_connection(|connection| delete_kind_records(connection, kind, scope, None))
+    }
+
+    fn permanently_delete_by_kind_if_stats_match(
+        &self,
+        kind: ClipboardKind,
+        scope: KindDeleteScope,
+        expected: KindStorageStats,
+    ) -> Result<KindDeleteResult, StorageError> {
+        self.with_connection(|connection| {
+            delete_kind_records(connection, kind, scope, Some(expected))
+        })
+    }
+
     fn list_storage_file_references(&self) -> Result<StorageFileReferences, StorageError> {
         self.with_connection(|connection| {
             let mut statement = connection.prepare(
@@ -758,6 +844,102 @@ fn unique_ids(ids: &[String]) -> Vec<String> {
         .filter(|id| seen.insert((*id).clone()))
         .cloned()
         .collect()
+}
+
+fn query_kind_storage_stats(
+    connection: &rusqlite::Connection,
+    kind: ClipboardKind,
+    scope: KindDeleteScope,
+) -> Result<KindStorageStats, StorageError> {
+    let (item_count, size_bytes): (i64, i64) = connection.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0)
+         FROM clipboard_items
+         WHERE kind = ?1
+           AND (?2 OR is_favorite = 0)
+           AND (?3 OR deleted = 0)",
+        params![
+            kind_to_storage(kind),
+            scope.include_favorites,
+            scope.include_deleted,
+        ],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+
+    Ok(KindStorageStats {
+        item_count: u64::try_from(item_count).map_err(|_| StorageError::InvalidStoredValue {
+            field: "clipboard_items.count",
+            value: item_count,
+        })?,
+        size_bytes: u64::try_from(size_bytes).map_err(|_| StorageError::InvalidStoredValue {
+            field: "clipboard_items.size",
+            value: size_bytes,
+        })?,
+    })
+}
+
+fn delete_kind_records(
+    connection: &mut rusqlite::Connection,
+    kind: ClipboardKind,
+    scope: KindDeleteScope,
+    expected: Option<KindStorageStats>,
+) -> Result<KindDeleteResult, StorageError> {
+    let transaction = connection.transaction()?;
+    if let Some(expected) = expected {
+        let current = query_kind_storage_stats(&transaction, kind, scope)?;
+        if current != expected {
+            return Err(StorageError::KindDeleteStatsChanged {
+                expected_count: expected.item_count,
+                expected_size: expected.size_bytes,
+                actual_count: current.item_count,
+                actual_size: current.size_bytes,
+            });
+        }
+    }
+
+    let mut statement = transaction.prepare(
+        "DELETE FROM clipboard_items
+         WHERE kind = ?1
+           AND (?2 OR is_favorite = 0)
+           AND (?3 OR deleted = 0)
+         RETURNING id, size_bytes",
+    )?;
+    let deleted_rows = statement.query_map(
+        params![
+            kind_to_storage(kind),
+            scope.include_favorites,
+            scope.include_deleted,
+        ],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+    )?;
+    let mut stats = KindStorageStats::default();
+    let mut deleted_ids = Vec::new();
+    for deleted_row in deleted_rows {
+        let (id, size_bytes) = deleted_row?;
+        let size_bytes =
+            u64::try_from(size_bytes).map_err(|_| StorageError::InvalidStoredValue {
+                field: "clipboard_items.size",
+                value: size_bytes,
+            })?;
+        stats.item_count =
+            stats
+                .item_count
+                .checked_add(1)
+                .ok_or(StorageError::ValueOutOfRange {
+                    field: "clipboard_items.count",
+                })?;
+        stats.size_bytes =
+            stats
+                .size_bytes
+                .checked_add(size_bytes)
+                .ok_or(StorageError::ValueOutOfRange {
+                    field: "clipboard_items.size",
+                })?;
+        deleted_ids.push(id);
+    }
+    drop(statement);
+    transaction.commit()?;
+    deleted_ids.sort_unstable();
+    Ok(KindDeleteResult { stats, deleted_ids })
 }
 
 struct StoredClipboardItem {
@@ -847,10 +1029,13 @@ fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
 
-    use super::{ClipboardRepository, Database, TextItemUpdate};
-    use crate::storage::{SearchRepository, StorageError};
+    use super::{
+        ClipboardRepository, Database, KindDeleteResult, KindDeleteScope, KindStorageStats,
+        TextItemUpdate,
+    };
+    use crate::storage::{OcrRepository, SearchOperation, SearchRepository, StorageError};
 
     fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
         ClipboardItem {
@@ -1201,6 +1386,174 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn kind_deletion_scope_controls_favorites_and_recycle_bin_records() {
+        let database = Database::open_in_memory().unwrap();
+        let mut active = text_item("active", "hash-active", 100);
+        active.size_bytes = 10;
+        let mut favorite = text_item("favorite", "hash-favorite", 200);
+        favorite.size_bytes = 20;
+        favorite.is_favorite = true;
+        let mut recycled = text_item("recycled", "hash-recycled", 300);
+        recycled.size_bytes = 30;
+        let mut link = text_item("link", "hash-link", 400);
+        link.kind = ClipboardKind::Link;
+        link.size_bytes = 40;
+        database.save_item(&active).unwrap();
+        database.save_item(&favorite).unwrap();
+        database.save_item(&recycled).unwrap();
+        database.save_item(&link).unwrap();
+        database.soft_delete("recycled").unwrap();
+
+        assert_eq!(
+            database
+                .kind_storage_stats(
+                    ClipboardKind::Text,
+                    KindDeleteScope {
+                        include_favorites: false,
+                        include_deleted: false,
+                    },
+                )
+                .unwrap(),
+            KindStorageStats {
+                item_count: 1,
+                size_bytes: 10,
+            }
+        );
+        assert_eq!(
+            database
+                .kind_storage_stats(
+                    ClipboardKind::Text,
+                    KindDeleteScope {
+                        include_favorites: true,
+                        include_deleted: false,
+                    },
+                )
+                .unwrap(),
+            KindStorageStats {
+                item_count: 2,
+                size_bytes: 30,
+            }
+        );
+        assert_eq!(
+            database
+                .kind_storage_stats(
+                    ClipboardKind::Text,
+                    KindDeleteScope {
+                        include_favorites: false,
+                        include_deleted: true,
+                    },
+                )
+                .unwrap(),
+            KindStorageStats {
+                item_count: 2,
+                size_bytes: 40,
+            }
+        );
+        assert_eq!(
+            database
+                .kind_storage_stats(ClipboardKind::Text, KindDeleteScope::all())
+                .unwrap(),
+            KindStorageStats {
+                item_count: 3,
+                size_bytes: 60,
+            }
+        );
+
+        let deleted = database
+            .permanently_delete_by_kind(
+                ClipboardKind::Text,
+                KindDeleteScope {
+                    include_favorites: false,
+                    include_deleted: true,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            deleted,
+            KindDeleteResult {
+                stats: KindStorageStats {
+                    item_count: 2,
+                    size_bytes: 40,
+                },
+                deleted_ids: vec!["active".to_owned(), "recycled".to_owned()],
+            }
+        );
+        assert!(database.get_item("active").unwrap().is_none());
+        assert!(database.get_item("recycled").unwrap().is_none());
+        assert!(database.get_item("favorite").unwrap().is_some());
+        assert!(database.get_item("link").unwrap().is_some());
+    }
+
+    #[test]
+    fn kind_deletion_cascades_ocr_queues_search_deletes_and_drops_references() {
+        let database = Database::open_in_memory().unwrap();
+        let image = ClipboardItem {
+            id: "image".to_owned(),
+            kind: ClipboardKind::Image,
+            title: "captured image".to_owned(),
+            text_content: None,
+            resource_path: Some("C:\\managed\\image.png".to_owned()),
+            preview_path: Some("C:\\managed\\preview.jpg".to_owned()),
+            content_hash: "image-hash".to_owned(),
+            source_app: Some("test-suite".to_owned()),
+            size_bytes: 25,
+            created_at_ms: 100,
+            last_used_at_ms: None,
+            is_favorite: true,
+            icon_path: None,
+            metadata_json: None,
+        };
+        database.save_item(&image).unwrap();
+        database
+            .save_ocr_result(&OcrResult {
+                item_id: image.id.clone(),
+                status: OcrStatus::Completed,
+                engine: "test".to_owned(),
+                model_version: "1".to_owned(),
+                language: Some("en".to_owned()),
+                full_text: "recognized".to_owned(),
+                blocks: Vec::new(),
+                image_hash: image.content_hash.clone(),
+                created_at_ms: 100,
+                completed_at_ms: Some(200),
+                error_message: None,
+            })
+            .unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute("DELETE FROM search_outbox", [])?;
+                Ok(())
+            })
+            .unwrap();
+
+        let deleted = database
+            .permanently_delete_by_kind(ClipboardKind::Image, KindDeleteScope::all())
+            .unwrap();
+
+        assert_eq!(
+            deleted,
+            KindDeleteResult {
+                stats: KindStorageStats {
+                    item_count: 1,
+                    size_bytes: 25,
+                },
+                deleted_ids: vec!["image".to_owned()],
+            }
+        );
+        assert!(database.get_item("image").unwrap().is_none());
+        assert!(database.get_ocr_result("image").unwrap().is_none());
+        let events = database.read_search_outbox(20).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].item_id, "image");
+        assert_eq!(events[0].operation, SearchOperation::Delete);
+        assert_eq!(
+            database.list_storage_file_references().unwrap(),
+            Default::default()
+        );
     }
 
     // ── Task 4: Pagination edge cases ──

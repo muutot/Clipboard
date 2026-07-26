@@ -82,6 +82,21 @@ export interface SearchSyncSummary {
   lastSequence: number | null;
 }
 
+export type StorageKind = "text" | "link" | "image" | "file";
+
+export interface StorageKindStats {
+  itemCount: number;
+  sizeBytes: number;
+}
+
+export interface StorageKindDeleteResult {
+  deletedCount: number;
+  deletedSizeBytes: number;
+  removedFiles: number;
+  searchSync: SearchSyncSummary | null;
+  warnings: string[];
+}
+
 export async function getPerformanceMetrics(): Promise<PerformanceMetrics | null> {
   if (!isTauriRuntime()) {
     return null;
@@ -112,6 +127,28 @@ export async function getStorageStatus(): Promise<StorageStatus | null> {
   }
 
   return invoke<StorageStatus>("get_storage_status");
+}
+
+export async function getStorageKindStats(kind: StorageKind): Promise<StorageKindStats | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  return invoke<StorageKindStats>("get_storage_kind_stats", { kind });
+}
+
+export async function permanentlyDeleteStorageKind(
+  kind: StorageKind,
+  expected: StorageKindStats,
+): Promise<StorageKindDeleteResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("Storage cleanup is only available in the desktop app");
+  }
+
+  return invoke<StorageKindDeleteResult>("permanently_delete_storage_kind", {
+    kind,
+    expected,
+  });
 }
 
 export async function configureStorageDirectory(

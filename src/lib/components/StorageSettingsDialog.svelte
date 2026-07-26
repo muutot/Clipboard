@@ -12,14 +12,18 @@
   import { listen } from "@tauri-apps/api/event";
   import {
     configureStorageDirectory,
+    getStorageKindStats,
     getStorageConfig,
     getStorageStatus,
+    permanentlyDeleteStorageKind,
     rebuildSearchIndex,
     getPerformanceMetrics,
     repairDatabase,
     setResourceStoragePaths,
     validateSearchIndex,
     type StorageDirectoryUpdate,
+    type StorageKind,
+    type StorageKindStats,
     type StorageStatus,
     type PerformanceMetrics,
     type RepairResult,
@@ -52,6 +56,24 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  const storageKinds: readonly {
+    kind: StorageKind;
+    labelKey: "filter.text" | "filter.link" | "filter.image" | "filter.file";
+    icon: "text" | "link" | "image" | "file";
+  }[] = [
+    { kind: "text", labelKey: "filter.text", icon: "text" },
+    { kind: "link", labelKey: "filter.link", icon: "link" },
+    { kind: "image", labelKey: "filter.image", icon: "image" },
+    { kind: "file", labelKey: "filter.file", icon: "file" },
+  ];
+  let storageKindStats = $state<Record<StorageKind, StorageKindStats>>({
+    text: { itemCount: 0, sizeBytes: 0 },
+    link: { itemCount: 0, sizeBytes: 0 },
+    image: { itemCount: 0, sizeBytes: 0 },
+    file: { itemCount: 0, sizeBytes: 0 },
+  });
+  let storageKindStatsAvailable = $state(false);
+  let deletingStorageKind = $state<StorageKind | null>(null);
 
   $effect(() => {
     if (feedback) {
@@ -353,6 +375,103 @@
     return bytes == null ? "—" : formatBytes(bytes);
   }
 
+  function storageKindLabel(kind: StorageKind): string {
+    return _t(storageKinds.find((entry) => entry.kind === kind)?.labelKey ?? "filter.text");
+  }
+
+  async function loadStorageKindStats(): Promise<boolean> {
+    try {
+      const entries = await Promise.all(
+        storageKinds.map(async ({ kind }) => {
+          const stats = await getStorageKindStats(kind);
+          if (!stats) throw new Error("Storage kind statistics are unavailable");
+          return [kind, stats] as const;
+        }),
+      );
+      storageKindStats = Object.fromEntries(entries) as Record<StorageKind, StorageKindStats>;
+      storageKindStatsAvailable = true;
+      return true;
+    } catch (error) {
+      console.error("Unable to load storage kind statistics", error);
+      storageKindStats = {
+        text: { itemCount: 0, sizeBytes: 0 },
+        link: { itemCount: 0, sizeBytes: 0 },
+        image: { itemCount: 0, sizeBytes: 0 },
+        file: { itemCount: 0, sizeBytes: 0 },
+      };
+      storageKindStatsAvailable = false;
+      return false;
+    }
+  }
+
+  async function deleteStorageKind(kind: StorageKind) {
+    if (deletingStorageKind) return;
+
+    const label = storageKindLabel(kind);
+    deletingStorageKind = kind;
+    feedback = "";
+    feedbackSuccess = false;
+
+    try {
+      const freshStats = await getStorageKindStats(kind);
+      if (!freshStats) throw new Error(_t("storage.storageUnavailable"));
+      storageKindStats = { ...storageKindStats, [kind]: freshStats };
+      storageKindStatsAvailable = true;
+      if (freshStats.itemCount === 0) {
+        feedback = _t("storage.deleteKindNoData", { kind: label });
+        feedbackSuccess = true;
+        return;
+      }
+
+      const confirmed = window.confirm(
+        _t("storage.deleteKindConfirm", {
+          kind: label,
+          count: freshStats.itemCount,
+          size: formatBytes(freshStats.sizeBytes),
+        }),
+      );
+      if (!confirmed) return;
+
+      const result = await permanentlyDeleteStorageKind(kind, freshStats);
+      const warnings = [...result.warnings];
+      let refreshed = true;
+      try {
+        status = await getStorageStatus();
+        refreshed = status !== null && (await loadStorageKindStats());
+        void loadPerformanceMetrics();
+      } catch (error) {
+        console.error("Unable to refresh storage statistics after deletion", error);
+        refreshed = false;
+      }
+      if (!refreshed) warnings.push(_t("storage.deleteKindRefreshFailed"));
+
+      const params = {
+        kind: label,
+        count: result.deletedCount,
+        size: formatBytes(result.deletedSizeBytes),
+        files: result.removedFiles,
+      };
+      if (warnings.length > 0) {
+        feedback = _t("storage.deleteKindPartial", {
+          ...params,
+          warning: warnings.join("; "),
+        });
+      } else {
+        feedback = _t("storage.deleteKindSuccess", params);
+        feedbackSuccess = true;
+      }
+    } catch (error) {
+      console.error(`Unable to permanently delete ${kind} storage`, error);
+      await loadStorageKindStats();
+      feedback = _t("storage.deleteKindFailed", {
+        kind: label,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      deletingStorageKind = null;
+    }
+  }
+
   let ocrEngine = $state("ppocr");
   let ocrEngineAvailable = $state(false);
   let ocrHasEngine = $state(false);
@@ -416,6 +535,7 @@
 
     try {
       status = await getStorageStatus();
+      await loadStorageKindStats();
       dataDirectory = status?.dataDirectoryPath ?? "";
       if (!status) {
         feedback = _t("storage.systemMessage");
@@ -1818,6 +1938,47 @@
             </select>
           </section>
 
+          <section class="setting-card storage-kind-delete-card">
+            <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+              <div>
+                <strong>{_t("storage.deleteByKindTitle")}</strong>
+                <p>{_t("storage.deleteByKindDesc")}</p>
+              </div>
+            </div>
+            <div class="storage-kind-delete-list">
+              {#each storageKinds as entry (entry.kind)}
+                <div class="storage-kind-delete-row">
+                  <span class="storage-kind-icon"><AppIcon name={entry.icon} size={15} /></span>
+                  <div class="storage-kind-delete-copy">
+                    <strong>{_t(entry.labelKey)}</strong>
+                    <span>
+                      {storageKindStatsAvailable
+                        ? _t("storage.deleteKindCount", {
+                            count: storageKindStats[entry.kind].itemCount,
+                            size: formatBytes(storageKindStats[entry.kind].sizeBytes),
+                          })
+                        : "—"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="danger-action"
+                    disabled={!storageKindStatsAvailable ||
+                      deletingStorageKind !== null ||
+                      storageKindStats[entry.kind].itemCount === 0}
+                    onclick={() => deleteStorageKind(entry.kind)}
+                  >
+                    {deletingStorageKind === entry.kind
+                      ? _t("storage.deletingKind")
+                      : _t("storage.deleteKindAction")}
+                  </button>
+                </div>
+              {/each}
+            </div>
+            <p class="storage-kind-delete-scope">{_t("storage.deleteByKindScope")}</p>
+          </section>
+
           <section class="setting-card setting-card-row">
             <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
             <span class="setting-label">数据库维护</span>
@@ -2841,6 +3002,82 @@
     color: #666;
     font-size: var(--settings-note-size);
     text-align: center;
+  }
+
+  .storage-kind-delete-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .storage-kind-delete-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid #303030;
+    border-radius: var(--settings-control-radius);
+    background: #1a1a1a;
+  }
+
+  .storage-kind-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 27px;
+    height: 27px;
+    flex-shrink: 0;
+    border-radius: var(--settings-icon-radius);
+    color: #999;
+    background: #242424;
+  }
+
+  .storage-kind-delete-copy {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 2px;
+  }
+
+  .storage-kind-delete-copy strong {
+    color: #dedede;
+    font-size: var(--settings-heading-size);
+    font-weight: 560;
+  }
+
+  .storage-kind-delete-copy span,
+  .storage-kind-delete-scope {
+    color: #777;
+    font-size: var(--settings-description-size);
+  }
+
+  .storage-kind-delete-scope {
+    margin: 9px 0 0;
+    line-height: 1.45;
+  }
+
+  .danger-action {
+    min-width: 68px;
+    padding: 6px 9px;
+    border: 1px solid #553434;
+    border-radius: var(--settings-control-radius);
+    color: #d59c9c;
+    background: rgba(48, 27, 27, 0.96);
+    font: inherit;
+    font-size: var(--settings-control-size);
+    white-space: nowrap;
+  }
+
+  .danger-action:hover:not(:disabled) {
+    color: #dedede;
+    background: #553434;
+  }
+
+  .danger-action:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   .setting-card-row {

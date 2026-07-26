@@ -119,6 +119,22 @@ const zhCN: LocaleDefinition = {
     savedAndRestart: "已写入 conf/conf.json，重启应用后使用新目录",
     alreadyUsingDir: "当前已经使用这个数据目录",
     rebuildComplete: "索引重建完成：处理 {events} 个事件，写入 {docs} 条记录",
+    deleteByKindTitle: "按类别永久删除",
+    deleteByKindDesc: "可独立清理某一类非收藏数据；活动记录和回收站记录都会包含。",
+    deleteByKindScope:
+      "收藏项始终受保护，必须先取消收藏；永久删除后无法恢复，托管资源、图片 OCR 数据与搜索索引会同步清理。空间为记录内容逻辑大小。",
+    deleteKindAction: "永久删除",
+    deletingKind: "删除中…",
+    deleteKindCount: "{count} 条 · {size}",
+    deleteKindConfirm:
+      "将永久删除全部非收藏{kind}数据，共 {count} 条（{size}）。范围包含活动记录和回收站记录，收藏项会保留；相关托管资源、OCR 数据和搜索索引也会同步清理。此操作无法恢复，是否继续？",
+    deleteKindSuccess:
+      "已永久删除{kind}数据：{count} 条，记录占用 {size}，清理 {files} 个托管文件",
+    deleteKindPartial:
+      "已永久删除{kind}数据：{count} 条，记录占用 {size}；但部分后续清理尚未完成：{warning}",
+    deleteKindFailed: "删除{kind}数据失败：{error}",
+    deleteKindNoData: "没有可删除的非收藏{kind}数据",
+    deleteKindRefreshFailed: "删除后的统计刷新失败，请重新打开设置页确认",
     ocrModelInstalled: "PP-OCRv6 {variant} 模型已安装并启用",
     ocrModelInstallFailed: "OCR 模型下载失败：{error}",
     ocrModelAlreadyApplied: "模型已应用",

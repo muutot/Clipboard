@@ -391,6 +391,20 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["文件大小", "copy limit"],
   ),
   entry(
+    "storage.delete-by-kind",
+    { section: "storage" },
+    i18n("storage.deleteByKindTitle"),
+    i18n("storage.deleteByKindDesc"),
+    [
+      i18n("filter.text"),
+      i18n("filter.link"),
+      i18n("filter.image"),
+      i18n("filter.file"),
+      "分类删除",
+      "permanent delete",
+    ],
+  ),
+  entry(
     "storage.database-maintenance",
     { section: "storage" },
     "数据库维护",
