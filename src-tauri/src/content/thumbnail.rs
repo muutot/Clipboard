@@ -106,6 +106,22 @@ enum ThumbnailTask {
     Shutdown,
 }
 
+/// Cloneable enqueue handle so producer threads (e.g. the capture worker)
+/// never own the worker lifecycle.
+#[derive(Clone)]
+pub struct ThumbnailQueue {
+    sender: Sender<ThumbnailTask>,
+}
+
+impl ThumbnailQueue {
+    pub fn enqueue(&self, item_id: String, image_path: PathBuf) {
+        let _ = self.sender.send(ThumbnailTask::Generate {
+            item_id,
+            image_path,
+        });
+    }
+}
+
 pub struct ThumbnailWorker {
     sender: Sender<ThumbnailTask>,
     handle: Option<JoinHandle<()>>,
@@ -115,30 +131,41 @@ impl ThumbnailWorker {
     pub fn start(preview_dir: PathBuf, database: Arc<Database>) -> Self {
         let (sender, receiver) = mpsc::channel::<ThumbnailTask>();
 
-        let handle = thread::spawn(move || {
-            let generator = ThumbnailGenerator::new();
-            while let Ok(ThumbnailTask::Generate {
-                item_id,
-                image_path,
-            }) = receiver.recv()
-            {
-                match generator.generate(&image_path, &preview_dir) {
-                    Ok(info) => {
-                        let preview_path = &info.preview_path;
-                        if let Err(e) = database.set_preview_path(&item_id, preview_path) {
-                            eprintln!("[thumbnail] failed to update preview for {item_id}: {e}");
+        let handle = thread::Builder::new()
+            .name("thumbnail".to_owned())
+            .spawn(move || {
+                let generator = ThumbnailGenerator::new();
+                while let Ok(ThumbnailTask::Generate {
+                    item_id,
+                    image_path,
+                }) = receiver.recv()
+                {
+                    match generator.generate(&image_path, &preview_dir) {
+                        Ok(info) => {
+                            let preview_path = &info.preview_path;
+                            if let Err(e) = database.set_preview_path(&item_id, preview_path) {
+                                eprintln!(
+                                    "[thumbnail] failed to update preview for {item_id}: {e}"
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[thumbnail] thumbnail generation failed for {item_id}: {e}");
                         }
                     }
-                    Err(e) => {
-                        eprintln!("[thumbnail] thumbnail generation failed for {item_id}: {e}");
-                    }
                 }
-            }
-        });
+            })
+            .expect("failed to spawn the thumbnail worker thread");
 
         Self {
             sender,
             handle: Some(handle),
+        }
+    }
+
+    pub fn queue(&self) -> ThumbnailQueue {
+        ThumbnailQueue {
+            sender: self.sender.clone(),
         }
     }
 
@@ -152,7 +179,118 @@ impl ThumbnailWorker {
     pub fn stop(&mut self) {
         let _ = self.sender.send(ThumbnailTask::Shutdown);
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            if handle.thread().id() != thread::current().id() && handle.join().is_err() {
+                eprintln!("[thumbnail] worker thread terminated with a panic");
+            }
         }
+    }
+}
+
+impl Drop for ThumbnailWorker {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant, SystemTime};
+
+    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::{ClipboardRepository, Database};
+
+    use super::{ThumbnailGenerator, ThumbnailWorker};
+
+    fn temporary_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "clipboard-thumbnail-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write_png(dir: &std::path::Path, width: u32, height: u32) -> PathBuf {
+        let path = dir.join("source.png");
+        image::RgbImage::new(width, height).save(&path).unwrap();
+        path
+    }
+
+    fn image_item(id: &str, image_path: &std::path::Path) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind: ClipboardKind::Image,
+            title: id.to_owned(),
+            text_content: None,
+            resource_path: Some(image_path.display().to_string()),
+            preview_path: Some(image_path.display().to_string()),
+            content_hash: format!("hash-{id}"),
+            source_app: None,
+            size_bytes: 1,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            icon_path: None,
+            metadata_json: None,
+        }
+    }
+
+    #[test]
+    fn generator_caps_preview_width_and_writes_the_file() {
+        let dir = temporary_dir("generator");
+        let source = write_png(&dir, 800, 40);
+
+        let info = ThumbnailGenerator::new().generate(&source, &dir).unwrap();
+
+        assert_eq!(info.width, 400);
+        assert_eq!(info.height, 20);
+        assert!(std::fs::metadata(&info.preview_path).is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn worker_updates_the_preview_path_and_stops_cleanly() {
+        let dir = temporary_dir("worker");
+        let source = write_png(&dir, 100, 60);
+        let database = Arc::new(Database::open(dir.join("db.sqlite")).unwrap());
+        database.save_item(&image_item("img", &source)).unwrap();
+
+        let mut worker = ThumbnailWorker::start(dir.join("previews"), Arc::clone(&database));
+        worker.queue().enqueue("img".to_owned(), source.clone());
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let stored = database.get_item("img").unwrap().unwrap();
+            if stored.preview_path.as_deref() != Some(source.display().to_string().as_str()) {
+                assert!(stored.preview_path.unwrap().ends_with(".jpg"));
+                break;
+            }
+            assert!(Instant::now() < deadline, "thumbnail was never generated");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        worker.stop();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stop_is_idempotent_and_enqueue_after_stop_does_not_panic() {
+        let dir = temporary_dir("stop");
+        let database = Arc::new(Database::open(dir.join("db.sqlite")).unwrap());
+
+        let mut worker = ThumbnailWorker::start(dir.join("previews"), database);
+        let queue = worker.queue();
+        worker.stop();
+        worker.stop();
+        queue.enqueue("img".to_owned(), dir.join("missing.png"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

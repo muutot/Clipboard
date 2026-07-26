@@ -22,8 +22,8 @@ use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
     accessed_at_ms, created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms,
-    ClipboardFormatInfo, ContentMarkers, FileStore, QuickAction, TextTransform, TransformOperation,
-    RESOURCE_METADATA_SCHEMA_VERSION,
+    ClipboardFormatInfo, ContentMarkers, FileStore, QuickAction, TextTransform, ThumbnailWorker,
+    TransformOperation, RESOURCE_METADATA_SCHEMA_VERSION,
 };
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{
@@ -3239,6 +3239,13 @@ fn stop_runtime_services(app: &tauri::AppHandle) {
         worker.stop();
     }
 
+    if let Some(thumbnails) = app.try_state::<Mutex<ThumbnailWorker>>() {
+        match thumbnails.lock() {
+            Ok(mut worker) => worker.stop(),
+            Err(_) => eprintln!("[shutdown] thumbnail worker lock is poisoned"),
+        }
+    }
+
     if let Some(hotkey) = app.try_state::<Mutex<HotkeyManager>>() {
         match hotkey.lock() {
             Ok(mut hotkey) => hotkey.stop(),
@@ -3385,6 +3392,11 @@ pub fn run() {
             };
             let ocr_database = Database::open(&paths.database)?;
             let ocr_worker = OcrWorkerManager::start(ocr_engine, Arc::new(ocr_database));
+
+            let thumbnail_database = Database::open(&paths.database)?;
+            let thumbnail_worker =
+                ThumbnailWorker::start(paths.previews.clone(), Arc::new(thumbnail_database));
+            let thumbnail_queue = thumbnail_worker.queue();
 
             let mut privacy_manager = PrivacyManager::new();
             privacy_manager.sync_with_config(&config);
@@ -3553,6 +3565,8 @@ pub fn run() {
                                         Ok(saved_id) => {
                                             consecutive_errors = 0;
                                             let _ = database.enqueue_ocr(&saved_id);
+                                            thumbnail_queue
+                                                .enqueue(saved_id.clone(), img_path.clone());
                                             let mut emit_item = item.clone();
                                             emit_item.id = saved_id;
                                             let _ = app_handle.emit("clipboard-item-added", &emit_item);
@@ -3821,6 +3835,7 @@ pub fn run() {
             app.manage(Mutex::new(clipboard_monitor));
             app.manage(Mutex::new(shortcut_manager));
             app.manage(ocr_worker);
+            app.manage(Mutex::new(thumbnail_worker));
             app.manage(Mutex::new(cleanup_worker));
             app.manage(Mutex::new(LocalApiServer::new(0)));
 
