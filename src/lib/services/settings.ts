@@ -281,19 +281,19 @@ function normalizeGeneralSettings(
   result.compactTextHeight = integerInRange(
     source.compactTextHeight ?? fallback("compactTextHeight"),
     defaultSettings.compactTextHeight,
-    40,
+    36,
     90,
   );
   result.compactTallTextHeight = integerInRange(
     source.compactTallTextHeight ?? fallback("compactTallTextHeight"),
     defaultSettings.compactTallTextHeight,
-    50,
+    44,
     100,
   );
   result.compactImageHeight = integerInRange(
     source.compactImageHeight ?? fallback("compactImageHeight"),
     defaultSettings.compactImageHeight,
-    80,
+    64,
     200,
   );
   result.compactCustomTitleHeight = integerInRange(

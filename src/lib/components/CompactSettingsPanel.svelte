@@ -171,12 +171,12 @@
       </div>
       <input
         type="range"
-        min="50"
+        min="44"
         max="100"
         value={s.compactTallTextHeight}
         oninput={sliderHandler("compactTallTextHeight")}
         class="transparency-slider"
-        style:--slider-pct={sliderPercentage(s.compactTallTextHeight, 50, 100)}
+        style:--slider-pct={sliderPercentage(s.compactTallTextHeight, 44, 100)}
       />
     </section>
 
@@ -193,12 +193,12 @@
       </div>
       <input
         type="range"
-        min="80"
+        min="64"
         max="200"
         value={s.compactImageHeight}
         oninput={sliderHandler("compactImageHeight")}
         class="transparency-slider"
-        style:--slider-pct={sliderPercentage(s.compactImageHeight, 80, 200)}
+        style:--slider-pct={sliderPercentage(s.compactImageHeight, 64, 200)}
       />
     </section>
 
