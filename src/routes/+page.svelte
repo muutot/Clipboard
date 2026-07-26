@@ -114,9 +114,6 @@
   let sourceAppDropdownOpen = $state(false);
   let dateDropdownOpen = $state(false);
 
-  let regexMode = $state(false);
-  let regexError = $state("");
-
   let detailItem = $state<ClipboardItem | null>(null);
   let startFullscreen = $state(false);
 
@@ -318,17 +315,6 @@
         return true;
       }
 
-      if (regexMode) {
-        try {
-          const re = new RegExp(normalizedQuery, "i");
-          regexError = "";
-          return re.test([item.title, item.preview, item.textContent, item.sourceApp].join(" "));
-        } catch {
-          regexError = _t("search.regexError");
-          return false;
-        }
-      }
-
       const searchableText = [item.title, item.preview, item.textContent, item.sourceApp]
         .join(" ")
         .toLocaleLowerCase();
@@ -494,11 +480,9 @@
       return;
     }
 
-    // Regex and natural-language date queries are intentionally evaluated
-    // against the full local snapshot. The Tantivy endpoint only implements
-    // tokenized AND search, so replacing the candidates here would silently
-    // disable those two modes in the desktop runtime.
-    if (regexMode || parseDateQuery(requestedQuery)) {
+    // Natural-language date queries are intentionally evaluated
+    // against the full local snapshot.
+    if (parseDateQuery(requestedQuery)) {
       searchPending = false;
       return;
     }
@@ -945,19 +929,6 @@
     }
 
     pendingSearchHistoryQuery = $generalSettings.searchHistoryEnabled ? term : "";
-
-    if (regexMode) {
-      try {
-        new RegExp(term, "i");
-        regexError = "";
-        if ($generalSettings.searchHistoryEnabled) rememberSearchTerm(term);
-        pendingSearchHistoryQuery = "";
-      } catch {
-        regexError = _t("search.regexError");
-        pendingSearchHistoryQuery = "";
-      }
-      return;
-    }
 
     if (
       !isTauriRuntime() ||
@@ -2154,7 +2125,6 @@
     const normalizedQuery = query.trim().toLocaleLowerCase();
     if (
       !normalizedQuery ||
-      regexMode ||
       parseDateQuery(query) ||
       $generalSettings.searchSuggestionMode === "off"
     ) {
@@ -2340,17 +2310,6 @@
         >
       {/if}
     </div>
-    <button
-      type="button"
-      tabindex="-1"
-      class="regex-toggle"
-      class:regex-active={regexMode}
-      title={_t("search.regex")}
-      aria-label={_t("search.regex")}
-      aria-pressed={regexMode}
-      onclick={() => (regexMode = !regexMode)}
-      ><AppIcon name="regex" size={15} strokeWidth={2} /></button
-    >
     <img
       class="brand-icon"
       src="{assets}/app-icon.png"
@@ -2513,10 +2472,6 @@
   </div>
 
   <div class="main-content" class:split-detail={detailDisplayMode === 'split' && detailItem != null}>
-
-  {#if regexError}
-    <div class="regex-error">{regexError}</div>
-  {/if}
 
   <section class="history-panel" aria-label={_t("app.recentRecords")}>
     <div class="section-heading">
@@ -2917,35 +2872,6 @@
     cursor: pointer;
   }
 
-  .regex-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: var(--text-faint);
-    background: transparent;
-    cursor: pointer;
-    transition:
-      color 100ms ease,
-      border-color 100ms ease,
-      background 100ms ease;
-  }
-
-  .regex-toggle:hover {
-    color: var(--text-muted);
-    background: var(--hover-bg);
-  }
-
-  .regex-toggle.regex-active {
-    color: #b57aec;
-    border-color: rgba(181, 122, 236, 0.3);
-    background: rgba(181, 122, 236, 0.08);
-  }
-
   .brand-icon {
     width: 28px;
     height: 28px;
@@ -3153,14 +3079,6 @@
   .toolbar-actions button.active {
     color: var(--text-primary);
     background: var(--hover-bg);
-  }
-
-  .regex-error {
-    padding: 4px 16px;
-    color: var(--danger-color);
-    font-size: 11.5px;
-    background: color-mix(in srgb, var(--danger-color) 6%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
 
   .history-panel {

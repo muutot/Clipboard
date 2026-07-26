@@ -23,7 +23,6 @@
     | "palette"
     | "check"
     | "calendar"
-    | "regex"
     | "x"
     | "chevron-down"
     | "chevron-left"
@@ -151,11 +150,6 @@
   {:else if name === "calendar"}
     <rect x="3" y="4" width="18" height="18" rx="2" />
     <path d="M16 2v4M8 2v4M3 10h18" />
-  {:else if name === "regex"}
-    <path d="M16 16.5 12 13l4-3.5" />
-    <path d="M8 14.5 12 12 8 9.5" />
-    <path d="M4 6l5 2-5 2" />
-    <path d="M20 6l-5 2 5 2" />
   {:else if name === "x"}
     <path d="M18 6 6 18M6 6l12 12" />
   {:else if name === "chevron-down"}
