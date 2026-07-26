@@ -73,6 +73,7 @@
     onplainpaste: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
+    onimagefullscreen?: (id: string) => void;
     onheightchange?: (id: string, height: number) => void;
     heightMeasurementKey?: string;
   }
@@ -118,6 +119,7 @@
     onplainpaste,
     onsaveasnew,
     onrestore,
+    onimagefullscreen,
     onheightchange,
     heightMeasurementKey,
   }: Props = $props();
@@ -567,6 +569,17 @@
           <div class="image-preview">
             {#if assetUrl(item.previewPath || item.resourcePath)}
               <img src={assetUrl(item.previewPath || item.resourcePath)} alt={item.preview || ""} />
+              <button
+                type="button"
+                class="image-fullscreen-btn"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  onimagefullscreen?.(item.id);
+                }}
+                aria-label={_t("general.imageFullscreenButton")}
+              >
+                <AppIcon name="maximize" size={14} strokeWidth={2} />
+              </button>
             {:else}
               <AppIcon name="image" size={28} strokeWidth={1.5} />
             {/if}
@@ -992,6 +1005,7 @@
   }
 
   .image-preview {
+    position: relative;
     width: min(100%, 380px);
     height: 90px;
     overflow: hidden;
@@ -1010,6 +1024,38 @@
     height: 100%;
     object-fit: contain;
     border-radius: 6px;
+  }
+
+  .image-fullscreen-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity 150ms ease,
+      background 150ms ease;
+  }
+
+  .image-preview:hover .image-fullscreen-btn {
+    opacity: 1;
+  }
+
+  .image-fullscreen-btn:hover {
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.75);
   }
 
   .image-placeholder {

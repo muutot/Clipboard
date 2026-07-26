@@ -31,6 +31,7 @@
   interface Props {
     item: ClipboardItem | null;
     mode?: 'overlay' | 'split';
+    startFullscreen?: boolean;
     onclose: () => void;
     oncopy: (id: string) => void;
     onedit: (id: string) => void;
@@ -45,6 +46,7 @@
   let {
     item,
     mode = 'overlay',
+    startFullscreen = $bindable(false),
     onclose,
     oncopy,
     onedit,
@@ -205,6 +207,13 @@
       } catch {}
     }
   }
+
+  $effect(() => {
+    if (item && startFullscreen) {
+      startFullscreen = false;
+      openImageFullscreen();
+    }
+  });
 
   function onWheel(e: WheelEvent) {
     e.preventDefault();
