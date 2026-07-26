@@ -61,6 +61,7 @@
     hideActions?: boolean;
     alwaysShowActions?: boolean;
     quickCopyBadgeAlwaysVisible?: boolean;
+    hideMetaRow?: boolean;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
@@ -107,6 +108,7 @@
     hideActions = false,
     alwaysShowActions = false,
     quickCopyBadgeAlwaysVisible = true,
+    hideMetaRow = false,
     onselect,
     ontoggleSelect,
     ontoggleFavorite,
@@ -611,6 +613,7 @@
       {/if}
     </div>
 
+    {#if !hideMetaRow}
     <div class="meta-row">
       <span class="source-mark">
         {#if item.iconPath}
@@ -730,7 +733,7 @@
             title="恢复"
             aria-label="恢复"
             onclick={(event) => runCardAction("restore", event)}
-            ><AppIcon name="edit" size={16} /></button
+            ><AppIcon name="restore" size={16} /></button
           >
         {/if}
         {#if !item.favorite}
@@ -749,6 +752,7 @@
         >
       {/if}
     </div>
+    {/if}
   {:else}
     <div class="edit-area">
       {#if item.customTitle}

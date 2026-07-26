@@ -2552,6 +2552,7 @@
                   checked={selectedIds.has(item.id)}
                   showCheckbox={false}
                   hideActions={selectedIds.size > 0 || (detailDisplayMode === 'split' && detailItem != null)}
+                  hideMetaRow={detailDisplayMode === 'split' && detailItem != null}
                   compact={compactMode}
                   {compactPaddingTop}
                   {compactPaddingBottom}
@@ -2588,6 +2589,7 @@
                 checked={selectedIds.has(item.id)}
                 showCheckbox={false}
                 hideActions={selectedIds.size > 0 || (detailDisplayMode === 'split' && detailItem != null)}
+                hideMetaRow={detailDisplayMode === 'split' && detailItem != null}
                 compact={compactMode}
                 {compactPaddingTop}
                 {compactPaddingBottom}
