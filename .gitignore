@@ -11,3 +11,4 @@ vite.config.ts.timestamp-*
 .idea
 .vscode
 src-tauri/target-platform-validation
+.qoder
