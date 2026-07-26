@@ -193,7 +193,6 @@ struct CaptureState {
 #[derive(Clone)]
 struct CapturePolicy {
     sensitive_patterns: Arc<Vec<regex_lite::Regex>>,
-    password_manager_apps: Arc<Vec<String>>,
 }
 
 struct CaptureWorker {
@@ -318,7 +317,6 @@ impl CaptureState {
             ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
             policy: Arc::new(CapturePolicy {
                 sensitive_patterns: Arc::new(sensitive_patterns),
-                password_manager_apps: Arc::new(privacy.password_manager_apps.clone()),
             }),
             ingestion_guard: Arc::new(Mutex::new(())),
             worker: Arc::new(Mutex::new(None)),
@@ -406,9 +404,7 @@ impl CapturePolicy {
         source_app: Option<&str>,
         text: Option<&str>,
     ) -> bool {
-        if source_app.is_some_and(|app| {
-            app_matches(app, ignored_apps) || app_matches(app, &self.password_manager_apps)
-        }) {
+        if source_app.is_some_and(|app| app_matches(app, ignored_apps)) {
             return true;
         }
 
