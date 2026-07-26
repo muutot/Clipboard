@@ -1066,11 +1066,25 @@
       return;
     }
 
-    if (event.key === "Escape" && searchSuggestionsOpen) {
-      event.preventDefault();
-      event.stopPropagation();
-      searchSuggestionsOpen = false;
-      searchSuggestionIndex = -1;
+    if (event.key === "Escape") {
+      if (searchSuggestionsOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        searchSuggestionsOpen = false;
+        searchSuggestionIndex = -1;
+        if (query) {
+          query = "";
+          pendingSearchHistoryQuery = "";
+        }
+        return;
+      }
+      if (query) {
+        event.preventDefault();
+        event.stopPropagation();
+        query = "";
+        pendingSearchHistoryQuery = "";
+        return;
+      }
     }
   }
 
@@ -1397,6 +1411,12 @@
 
   function closeDetail() {
     detailItem = null;
+    void tick().then(() => {
+      const el = document.querySelector(`[data-id="${selectedId}"]`);
+      if (el instanceof HTMLElement) {
+        el.focus();
+      }
+    });
   }
 
   let editingId = $state<string | null>(null);
@@ -1988,6 +2008,12 @@
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const next = (idx + 1) % filters.length;
       setFilter(filters[next].id);
+      void tick().then(() => {
+        const btn = document.querySelector<HTMLElement>(
+          `.filters [role="tab"][aria-selected="true"]`,
+        );
+        btn?.focus();
+      });
       return;
     }
 
@@ -1998,6 +2024,12 @@
       const idx = filters.findIndex((f) => f.id === activeFilter);
       const prev = (idx - 1 + filters.length) % filters.length;
       setFilter(filters[prev].id);
+      void tick().then(() => {
+        const btn = document.querySelector<HTMLElement>(
+          `.filters [role="tab"][aria-selected="true"]`,
+        );
+        btn?.focus();
+      });
       return;
     }
 
@@ -2327,13 +2359,18 @@
       if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
     }}
   >
-    <nav class="filters" aria-label={_t("filter.all")}>
+    <div
+      class="filters"
+      role="tablist"
+      aria-label={_t("filter.all")}
+    >
       {#each filters as filter}
         <button
           type="button"
-          tabindex="-1"
+          role="tab"
+          tabindex={activeFilter === filter.id ? 0 : -1}
+          aria-selected={activeFilter === filter.id}
           class:active={activeFilter === filter.id}
-          aria-pressed={activeFilter === filter.id}
           onclick={() => setFilter(filter.id)}
         >
           <AppIcon
@@ -2344,7 +2381,7 @@
           <span>{filter.label}</span>
         </button>
       {/each}
-    </nav>
+    </div>
 
     <div class="filter-dropdowns">
       <!-- Date filter -->
@@ -2478,7 +2515,8 @@
     {#if filteredItems.length > 0}
       <div
         class="history-list"
-        aria-label="clipboard items"
+        role="listbox"
+        aria-label={_t("app.recentRecords")}
         bind:this={historyListEl}
         onscroll={handleHistoryScroll}
       >

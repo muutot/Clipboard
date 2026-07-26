@@ -513,8 +513,8 @@
 
 <div
   bind:this={cardElement}
-  role="button"
-  aria-pressed={selected}
+  role="option"
+  aria-selected={selected}
   aria-label={item.title}
   class:selected
   class:compact
