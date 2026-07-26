@@ -70,6 +70,7 @@ export interface LocaleDefinition {
     basicTab: string;
     compactTab: string;
     fontTab: string;
+    themeTab: string;
     appearanceSettings: string;
     ocrSettings: string;
     statisticsSettings: string;
@@ -433,6 +434,29 @@ export interface LocaleDefinition {
   export: {
     dragText: string;
     dragFile: string;
+  };
+  theme: {
+    title: string;
+    themeMode: string;
+    themeModeDescription: string;
+    dark: string;
+    light: string;
+    custom: string;
+    readonlyHint: string;
+    bg: string;
+    bgDescription: string;
+    settingsBg: string;
+    settingsBgDescription: string;
+    accent: string;
+    accentDescription: string;
+    textPrimary: string;
+    textPrimaryDescription: string;
+    textMuted: string;
+    textMutedDescription: string;
+    border: string;
+    borderDescription: string;
+    cardBg: string;
+    cardBgDescription: string;
   };
 }
 
