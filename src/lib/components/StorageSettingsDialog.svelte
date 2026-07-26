@@ -1955,7 +1955,7 @@
                 <p>{_t("storage.iconCacheDesc")}</p>
               </div>
             </div>
-            <button type="button" onclick={openIconManager}>
+            <button type="button" class="icon-manage-btn" onclick={openIconManager}>
               {_t("storage.manageIconCache")}
             </button>
             {#if showIconManager}
@@ -2970,6 +2970,27 @@
     border: 1px solid var(--border-subtle);
     border-radius: 7px;
     overflow: hidden;
+  }
+
+  .icon-manage-btn {
+    height: 34px;
+    box-sizing: border-box;
+    padding: 5px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
+  }
+
+  .icon-manage-btn:hover {
+    color: var(--text-primary);
   }
 
   .icon-list-header {
