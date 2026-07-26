@@ -70,6 +70,8 @@ export interface ClipboardItem {
 
 export type ThemeMode = "dark" | "light";
 
+export type SearchSuggestionMode = "off" | "panel" | "inline";
+
 export interface FontSizeSettings {
   base: number;
   secondary: number;
@@ -110,6 +112,8 @@ export interface GeneralSettings {
   theme: ThemeMode;
   imageFullscreenMode: "overlay" | "desktop";
   viewerBackdropOpacity: number;
+  searchSuggestionMode: SearchSuggestionMode;
+  searchHistoryEnabled: boolean;
 }
 
 export interface GeneralSettingsInfo {

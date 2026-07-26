@@ -344,6 +344,13 @@ export interface LocaleDefinition {
     themeLight: string;
     rememberWindowPosition: string;
     rememberWindowPositionDescription: string;
+    searchSuggestionMode: string;
+    searchSuggestionModeDescription: string;
+    searchSuggestionOff: string;
+    searchSuggestionPanel: string;
+    searchSuggestionInline: string;
+    searchHistory: string;
+    searchHistoryDescription: string;
     on: string;
     off: string;
     autoSaveNote: string;

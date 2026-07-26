@@ -2,7 +2,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { ThemeMode, WindowConfig } from "$lib/types/clipboard";
+  import type { SearchSuggestionMode, ThemeMode, WindowConfig } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -133,6 +133,51 @@
         >English</button
       >
     </div>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+      <div>
+        <strong>{_t("general.searchSuggestionMode")}</strong>
+        <p>{_t("general.searchSuggestionModeDescription")}</p>
+      </div>
+    </div>
+    <select
+      class="theme-select"
+      value={s.searchSuggestionMode}
+      aria-label={_t("general.searchSuggestionMode")}
+      onchange={(e) =>
+        generalSettings.updateSetting(
+          "searchSuggestionMode",
+          (e.target as HTMLSelectElement).value as SearchSuggestionMode,
+        )}
+    >
+      <option value="off">{_t("general.searchSuggestionOff")}</option>
+      <option value="panel">{_t("general.searchSuggestionPanel")}</option>
+      <option value="inline">{_t("general.searchSuggestionInline")}</option>
+    </select>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+      <div>
+        <strong>{_t("general.searchHistory")}</strong>
+        <p>{_t("general.searchHistoryDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.searchHistoryEnabled}
+      onclick={() => generalSettings.updateSetting("searchHistoryEnabled", !s.searchHistoryEnabled)}
+      aria-checked={s.searchHistoryEnabled}
+      aria-label={_t("general.searchHistory")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
   </section>
 
   <section class="setting-card toggle-card">

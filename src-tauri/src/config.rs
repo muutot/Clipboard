@@ -98,6 +98,8 @@ pub struct GeneralConfig {
     pub theme: String,
     pub image_fullscreen_mode: String,
     pub viewer_backdrop_opacity: u8,
+    pub search_suggestion_mode: String,
+    pub search_history_enabled: bool,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -129,6 +131,8 @@ impl Default for GeneralConfig {
             theme: "dark".to_owned(),
             image_fullscreen_mode: "overlay".to_owned(),
             viewer_backdrop_opacity: 92,
+            search_suggestion_mode: "off".to_owned(),
+            search_history_enabled: false,
             extra: BTreeMap::new(),
         }
     }
@@ -667,6 +671,8 @@ mod tests {
         assert_eq!(saved["general"]["compactMode"], false);
         assert_eq!(saved["general"]["showToastNotifications"], true);
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
+        assert_eq!(saved["general"]["searchSuggestionMode"], "off");
+        assert_eq!(saved["general"]["searchHistoryEnabled"], false);
         fs::remove_dir_all(project).unwrap();
     }
 
@@ -684,6 +690,8 @@ mod tests {
         settings.theme = "light".to_owned();
         settings.image_fullscreen_mode = "desktop".to_owned();
         settings.viewer_backdrop_opacity = 64;
+        settings.search_suggestion_mode = "inline".to_owned();
+        settings.search_history_enabled = true;
 
         store.set_general_settings(settings.clone()).unwrap();
 
@@ -703,6 +711,30 @@ mod tests {
         assert_eq!(saved["general"]["theme"], "light");
         assert_eq!(saved["general"]["imageFullscreenMode"], "desktop");
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 64);
+        assert_eq!(saved["general"]["searchSuggestionMode"], "inline");
+        assert_eq!(saved["general"]["searchHistoryEnabled"], true);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn existing_general_settings_default_search_preferences_to_disabled() {
+        let project = temporary_test_directory("search-preferences-defaults");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("conf.json"),
+            serde_json::to_vec_pretty(&json!({
+                "general": {
+                    "language": "en"
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = ConfigStore::load(&project).unwrap();
+        assert_eq!(store.general_settings().search_suggestion_mode, "off");
+        assert!(!store.general_settings().search_history_enabled);
         fs::remove_dir_all(project).unwrap();
     }
 

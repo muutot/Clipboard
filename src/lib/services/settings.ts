@@ -40,6 +40,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   theme: "dark",
   imageFullscreenMode: "overlay",
   viewerBackdropOpacity: 92,
+  searchSuggestionMode: "off",
+  searchHistoryEnabled: false,
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -74,6 +76,13 @@ function validLanguage(value: unknown, fallback: Language): Language {
 
 function validTheme(value: unknown, fallback: GeneralSettings["theme"]): GeneralSettings["theme"] {
   return value === "dark" || value === "light" ? value : fallback;
+}
+
+function validSearchSuggestionMode(
+  value: unknown,
+  fallback: GeneralSettings["searchSuggestionMode"],
+): GeneralSettings["searchSuggestionMode"] {
+  return value === "off" || value === "panel" || value === "inline" ? value : fallback;
 }
 
 function validFullscreenMode(
@@ -271,6 +280,14 @@ function normalizeGeneralSettings(
     defaultSettings.viewerBackdropOpacity,
     0,
     100,
+  );
+  result.searchSuggestionMode = validSearchSuggestionMode(
+    source.searchSuggestionMode ?? fallback("searchSuggestionMode"),
+    defaultSettings.searchSuggestionMode,
+  );
+  result.searchHistoryEnabled = booleanValue(
+    source.searchHistoryEnabled ?? fallback("searchHistoryEnabled"),
+    defaultSettings.searchHistoryEnabled,
   );
 
   return result;

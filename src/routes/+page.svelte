@@ -233,6 +233,7 @@
   }
 
   function rememberSearchTerm(value: string) {
+    if (!$generalSettings.searchHistoryEnabled) return;
     const term = normalizeSearchTerm(value);
     if (!term) return;
 
@@ -245,11 +246,23 @@
     persistSearchHistory(next);
   }
 
-  function suggestionCandidate(value: string | null | undefined): string | null {
+  function suggestionCandidate(
+    value: string | null | undefined,
+    queryValue = "",
+    alignToQuery = false,
+  ): string | null {
     if (!value) return null;
-    const candidate = value.replace(/\s+/g, " ").trim();
-    if (candidate.length < 2 || candidate.length > SEARCH_TERM_MAX_LENGTH) return null;
-    return candidate;
+    let candidate = value.replace(/\s+/g, " ").trim();
+    const normalizedQuery = queryValue.toLocaleLowerCase();
+    const matchIndex = normalizedQuery
+      ? candidate.toLocaleLowerCase().indexOf(normalizedQuery)
+      : -1;
+    if (normalizedQuery && matchIndex < 0) return null;
+    if (matchIndex > 0 && (alignToQuery || candidate.length > SEARCH_TERM_MAX_LENGTH)) {
+      candidate = candidate.slice(matchIndex);
+    }
+    candidate = Array.from(candidate).slice(0, SEARCH_TERM_MAX_LENGTH).join("").trim();
+    return candidate.length >= 2 ? candidate : null;
   }
 
   // --- Filtering ---
@@ -489,7 +502,10 @@
           indexedItems = results;
           indexedQuery = requestedQuery;
           statusMessage = _t("app.searchHitSummary", { count: results.length });
-          if (pendingSearchHistoryQuery === requestedQuery) {
+          if (
+            $generalSettings.searchHistoryEnabled &&
+            pendingSearchHistoryQuery === requestedQuery
+          ) {
             rememberSearchTerm(requestedQuery);
             pendingSearchHistoryQuery = "";
           }
@@ -896,13 +912,13 @@
       return;
     }
 
-    pendingSearchHistoryQuery = term;
+    pendingSearchHistoryQuery = $generalSettings.searchHistoryEnabled ? term : "";
 
     if (regexMode) {
       try {
         new RegExp(term, "i");
         regexError = "";
-        rememberSearchTerm(term);
+        if ($generalSettings.searchHistoryEnabled) rememberSearchTerm(term);
         pendingSearchHistoryQuery = "";
       } catch {
         regexError = _t("search.regexError");
@@ -917,7 +933,7 @@
       parseDateQuery(term) ||
       (indexedItems !== null && indexedQuery === term)
     ) {
-      rememberSearchTerm(term);
+      if ($generalSettings.searchHistoryEnabled) rememberSearchTerm(term);
       pendingSearchHistoryQuery = "";
     }
   }
@@ -930,6 +946,41 @@
     searchSuggestionsOpen = false;
     commitSearchQuery(term);
     searchInputEl?.focus();
+  }
+
+  function clearSearchQuery() {
+    query = "";
+    pendingSearchHistoryQuery = "";
+    searchSuggestionIndex = -1;
+    searchSuggestionsOpen = true;
+    searchInputEl?.focus();
+  }
+
+  function canAcceptInlineSuggestion(): boolean {
+    const input = searchInputEl;
+    return Boolean(
+      inlineSearchSuggestion &&
+      input &&
+      input.selectionStart === input.selectionEnd &&
+      input.selectionEnd === query.length,
+    );
+  }
+
+  function acceptInlineSuggestion(): boolean {
+    const suggestion = inlineSearchSuggestion;
+    if (!suggestion || !canAcceptInlineSuggestion()) return false;
+
+    query = suggestion.value;
+    pendingSearchHistoryQuery = "";
+    searchSuggestionsOpen = false;
+    searchSuggestionIndex = -1;
+    void tick().then(() => {
+      const input = searchInputEl;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(query.length, query.length);
+    });
+    return true;
   }
 
   function handleSearchInputKeydown(event: KeyboardEvent) {
@@ -949,6 +1000,17 @@
       return;
     }
     lastBackspaceAt = 0;
+
+    if (
+      (event.key === "Tab" || event.key === "ArrowRight") &&
+      !event.shiftKey &&
+      canAcceptInlineSuggestion()
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      acceptInlineSuggestion();
+      return;
+    }
 
     if (
       (event.key === "ArrowDown" || event.key === "ArrowUp") &&
@@ -1999,7 +2061,9 @@
   );
 
   const matchingSearchHistory = $derived.by<SearchOption[]>(() => {
+    if (!$generalSettings.searchHistoryEnabled) return [];
     const normalizedQuery = query.trim().toLocaleLowerCase();
+    if ($generalSettings.searchSuggestionMode !== "panel" && normalizedQuery) return [];
     return searchHistory
       .filter((term) => !normalizedQuery || term.toLocaleLowerCase().includes(normalizedQuery))
       .map((value) => ({ value, kind: "history" as const }));
@@ -2007,21 +2071,29 @@
 
   const matchingSearchSuggestions = $derived.by<SearchOption[]>(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    if (!normalizedQuery || regexMode || parseDateQuery(query)) return [];
+    if (
+      !normalizedQuery ||
+      regexMode ||
+      parseDateQuery(query) ||
+      $generalSettings.searchSuggestionMode === "off"
+    ) {
+      return [];
+    }
 
-    const historyKeys = new Set(searchHistory.map((term) => term.toLocaleLowerCase()));
-    const seen = new Set<string>(historyKeys);
+    const seen = new Set<string>();
     const candidates: SearchOption[] = [];
-    const values = [
-      ...sourceApps,
-      ...items.filter((item) => !item.deleted).map((item) => item.title),
-    ];
+    const alignToQuery = $generalSettings.searchSuggestionMode === "inline";
+    const values: Array<string | null | undefined> = [...sourceApps];
+    for (const item of items) {
+      if (item.deleted) continue;
+      values.push(item.title, item.textContent, item.preview, item.sourceApp);
+    }
 
     for (const rawValue of values) {
-      const value = suggestionCandidate(rawValue);
+      const value = suggestionCandidate(rawValue, normalizedQuery, alignToQuery);
       if (!value) continue;
       const key = value.toLocaleLowerCase();
-      if (seen.has(key) || !key.includes(normalizedQuery)) continue;
+      if (seen.has(key) || key === normalizedQuery || !key.includes(normalizedQuery)) continue;
       seen.add(key);
       candidates.push({ value, kind: "suggestion" });
       if (candidates.length >= SEARCH_SUGGESTION_LIMIT) break;
@@ -2031,17 +2103,51 @@
 
   const visibleSearchHistory = $derived(matchingSearchHistory.slice(0, SEARCH_SUGGESTION_LIMIT));
   const visibleSearchSuggestions = $derived(
-    matchingSearchSuggestions.slice(
-      0,
-      Math.max(SEARCH_SUGGESTION_LIMIT - visibleSearchHistory.length, 0),
-    ),
+    $generalSettings.searchSuggestionMode === "panel"
+      ? matchingSearchSuggestions.slice(
+          0,
+          Math.max(SEARCH_SUGGESTION_LIMIT - visibleSearchHistory.length, 0),
+        )
+      : [],
   );
   const searchOptions = $derived([...visibleSearchHistory, ...visibleSearchSuggestions]);
+  const inlineSearchSuggestion = $derived.by<SearchOption | null>(() => {
+    if ($generalSettings.searchSuggestionMode !== "inline") return null;
+    const normalizedQuery = normalizeSearchTerm(query);
+    if (!normalizedQuery || query !== normalizedQuery) return null;
+    const normalizedLower = normalizedQuery.toLocaleLowerCase();
+    return (
+      matchingSearchSuggestions.find((option) => {
+        const valueLower = option.value.toLocaleLowerCase();
+        return (
+          valueLower.startsWith(normalizedLower) && option.value.length > normalizedQuery.length
+        );
+      }) ?? null
+    );
+  });
+  const inlineSearchSuggestionSuffix = $derived.by(() => {
+    if (!inlineSearchSuggestion) return "";
+    const queryLength = normalizeSearchTerm(query).length;
+    return inlineSearchSuggestion.value.slice(queryLength);
+  });
   const showSearchSuggestions = $derived(searchSuggestionsOpen && searchOptions.length > 0);
+  const searchAutocomplete = $derived(
+    $generalSettings.searchSuggestionMode === "inline"
+      ? showSearchSuggestions
+        ? "both"
+        : "inline"
+      : showSearchSuggestions
+        ? "list"
+        : "none",
+  );
   const activeSearchOption = $derived(searchOptions[searchSuggestionIndex] ?? null);
 
   $effect(() => {
     if (searchSuggestionIndex >= searchOptions.length) searchSuggestionIndex = -1;
+  });
+
+  $effect(() => {
+    if (!$generalSettings.searchHistoryEnabled) pendingSearchHistoryQuery = "";
   });
 </script>
 
@@ -2061,8 +2167,8 @@
         bind:this={searchInputEl}
         bind:value={query}
         aria-label={_t("app.searchPlaceholder")}
-        aria-autocomplete="list"
-        aria-controls="search-suggestions"
+        aria-autocomplete={searchAutocomplete}
+        aria-controls={showSearchSuggestions ? "search-suggestions" : undefined}
         aria-expanded={showSearchSuggestions}
         aria-activedescendant={activeSearchOption
           ? `search-option-${searchOptions.indexOf(activeSearchOption)}`
@@ -2084,6 +2190,15 @@
         onblur={handleSearchInputBlur}
         onkeydown={handleSearchInputKeydown}
       />
+      {#if inlineSearchSuggestion}
+        <span
+          class="search-inline-hint"
+          aria-hidden="true"
+          style={compactMode ? `font-size: ${compactSearchFontSize}px;` : undefined}
+        >
+          <span>{normalizeSearchTerm(query)}</span>{inlineSearchSuggestionSuffix}
+        </span>
+      {/if}
       {#if showSearchSuggestions}
         <div
           id="search-suggestions"
@@ -2137,7 +2252,7 @@
           tabindex="-1"
           type="button"
           aria-label={_t("app.clearSearch")}
-          onclick={() => (query = "")}>×</button
+          onclick={clearSearchQuery}>×</button
         >
       {/if}
     </div>
@@ -2617,6 +2732,26 @@
   .search-box input::placeholder {
     color: #6e6e6e;
     opacity: 1;
+  }
+
+  .search-inline-hint {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    z-index: 0;
+    overflow: hidden;
+    max-width: calc(100% - 42px);
+    color: #666;
+    pointer-events: none;
+    transform: translateY(-50%);
+    white-space: pre;
+    font-size: clamp(17px, 3vw, 21px);
+    font-weight: 350;
+    letter-spacing: -0.02em;
+  }
+
+  .search-inline-hint span {
+    visibility: hidden;
   }
 
   .clear-button {
