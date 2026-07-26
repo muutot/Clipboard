@@ -21,24 +21,17 @@
     return unsub;
   });
 
-  function updateSliderTrack(el: HTMLInputElement) {
-    const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
-    el.style.setProperty("--slider-pct", pct + "%");
+  function sliderPercentage(value: number, min: number, max: number): string {
+    const percentage = ((value - min) / (max - min)) * 100;
+    return `${Math.min(100, Math.max(0, percentage))}%`;
   }
 
   function sliderHandler(key: keyof typeof s) {
     return (event: Event) => {
       const val = Number((event.target as HTMLInputElement).value);
       generalSettings.updateSetting(key, val);
-      updateSliderTrack(event.target as HTMLInputElement);
     };
   }
-
-  $effect(() => {
-    document.querySelectorAll<HTMLInputElement>(".transparency-slider").forEach((el) => {
-      updateSliderTrack(el);
-    });
-  });
 </script>
 
 {#if showHeader}
@@ -95,6 +88,7 @@
         value={s.compactPaddingTop}
         oninput={sliderHandler("compactPaddingTop")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactPaddingTop, 0, 20)}
       />
     </section>
 
@@ -116,6 +110,7 @@
         value={s.compactPaddingBottom}
         oninput={sliderHandler("compactPaddingBottom")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactPaddingBottom, 0, 20)}
       />
     </section>
 
@@ -137,6 +132,7 @@
         value={s.compactCardGap}
         oninput={sliderHandler("compactCardGap")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactCardGap, 0, 20)}
       />
     </section>
 
@@ -158,6 +154,7 @@
         value={s.compactTextHeight}
         oninput={sliderHandler("compactTextHeight")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactTextHeight, 40, 90)}
       />
     </section>
 
@@ -179,6 +176,7 @@
         value={s.compactTallTextHeight}
         oninput={sliderHandler("compactTallTextHeight")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactTallTextHeight, 50, 100)}
       />
     </section>
 
@@ -200,6 +198,7 @@
         value={s.compactImageHeight}
         oninput={sliderHandler("compactImageHeight")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactImageHeight, 80, 200)}
       />
     </section>
 
@@ -221,6 +220,7 @@
         value={s.compactSearchHeight}
         oninput={sliderHandler("compactSearchHeight")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactSearchHeight, 28, 56)}
       />
     </section>
 
@@ -242,6 +242,7 @@
         value={s.compactSearchFontSize}
         oninput={sliderHandler("compactSearchFontSize")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactSearchFontSize, 10, 24)}
       />
     </section>
 
@@ -263,6 +264,7 @@
         value={s.compactCardBorderRadius}
         oninput={sliderHandler("compactCardBorderRadius")}
         class="transparency-slider"
+        style:--slider-pct={sliderPercentage(s.compactCardBorderRadius, 0, 20)}
       />
     </section>
   {/if}
