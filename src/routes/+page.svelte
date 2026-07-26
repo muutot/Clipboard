@@ -1328,8 +1328,8 @@
       .then((restored) => {
         if (restored === false) throw new Error("record not found");
         invalidateDeletedHistoryPagination();
-        const translated = _t("toast.restoreSuccess");
-        showToast(translated === "toast.restoreSuccess" ? "Restored" : translated, "success");
+        const translated = _t("toast.resumed");
+        showToast(translated === "toast.resumed" ? "已恢复" : translated, "success");
       })
       .catch((error) => {
         console.error("Unable to restore clipboard item", error);

@@ -7,6 +7,7 @@
     | "file"
     | "star"
     | "trash"
+    | "restore"
     | "settings"
     | "pin"
     | "help"
@@ -92,6 +93,10 @@
     <path d="M9 7V4h6v3" />
     <path d="m7 7 1 14h8l1-14" />
     <path d="M10 11v6M14 11v6" />
+  {:else if name === "restore"}
+    <path d="M3 7v6h6" />
+    <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 3.3L3 13" />
+    <path d="M17 17v6h-6" />
   {:else if name === "settings"}
     <circle cx="12" cy="12" r="3" />
     <path
