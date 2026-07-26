@@ -21,9 +21,7 @@
   let s = $state($generalSettings);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let themeColors = $state<ThemeColors>(
-    s.themeColors ? { ...s.themeColors } : { ...DARK_THEME_COLORS },
-  );
+  let themeColors = $state<ThemeColors>({ ...DARK_THEME_COLORS });
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
