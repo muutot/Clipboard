@@ -15,6 +15,7 @@
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
+  import { tick } from "svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -163,6 +164,63 @@
   );
   let contentActions = $state<QuickAction[]>([]);
   let contentActionRequest = 0;
+  let dateDialog = $state<HTMLDialogElement | null>(null);
+  let dateView = $state<{ isoDate: string; formattedDate: string; label: string } | null>(null);
+
+  function parseIsoDate(value: string): Date | null {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (year < 1 || month < 1 || month > 12 || day < 1) return null;
+
+    const date = new Date(0);
+    date.setUTCHours(12, 0, 0, 0);
+    date.setUTCFullYear(year, month - 1, day);
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  }
+
+  function normalizeInlineDate(year: number, month: number, day: number): string | null {
+    const isoDate = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return parseIsoDate(isoDate) ? isoDate : null;
+  }
+
+  function detectInlineDateValues(text: string): string[] {
+    const values: string[] = [];
+    const add = (value: string | null) => {
+      if (value && !values.includes(value)) values.push(value);
+    };
+
+    for (const pattern of [
+      /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g,
+      /\b(\d{4})年(\d{1,2})月(\d{1,2})日/g,
+    ]) {
+      for (const match of text.matchAll(pattern)) {
+        add(normalizeInlineDate(Number(match[1]), Number(match[2]), Number(match[3])));
+      }
+    }
+
+    for (const match of text.matchAll(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/g)) {
+      const first = Number(match[1]);
+      const second = Number(match[2]);
+      const year = Number(match[3]);
+      const dayFirst = normalizeInlineDate(year, second, first);
+      const monthFirst = normalizeInlineDate(year, first, second);
+      if (dayFirst && monthFirst && dayFirst !== monthFirst) continue;
+      add(dayFirst ?? monthFirst);
+    }
+
+    return values;
+  }
 
   function detectInlineActions(text: string): QuickAction[] {
     const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [];
@@ -170,6 +228,7 @@
     const phones =
       text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [];
     const colors = text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [];
+    const dates = detectInlineDateValues(text);
 
     return [
       ...emails.map((value) => ({
@@ -185,6 +244,11 @@
       ...urls.map((value) => ({
         label: `Open ${value}`,
         actionType: "open" as const,
+        payload: value,
+      })),
+      ...dates.map((value) => ({
+        label: `View date ${value}`,
+        actionType: "viewDate" as const,
         payload: value,
       })),
       ...colors.map((value) => ({
@@ -215,7 +279,10 @@
       });
   });
 
-  function quickActionKind(action: QuickAction): "url" | "email" | "phone" | "color" | "copy" {
+  function quickActionKind(
+    action: QuickAction,
+  ): "url" | "email" | "phone" | "date" | "color" | "copy" {
+    if (action.actionType === "viewDate") return "date";
     if (action.payload.startsWith("mailto:")) return "email";
     if (action.payload.startsWith("tel:")) return "phone";
     if (/^https?:\/\//i.test(action.payload)) return "url";
@@ -223,16 +290,72 @@
     return "copy";
   }
 
+  async function showDateDialog(action: QuickAction) {
+    const date = parseIsoDate(action.payload);
+    if (!date) {
+      console.warn("Ignored invalid date action payload", action.payload);
+      return;
+    }
+
+    dateView = {
+      isoDate: action.payload,
+      formattedDate: new Intl.DateTimeFormat(undefined, {
+        dateStyle: "full",
+        timeZone: "UTC",
+      }).format(date),
+      label: action.label,
+    };
+    await tick();
+    if (!dateDialog || dateDialog.open) return;
+    try {
+      dateDialog.showModal();
+    } catch {
+      dateDialog.setAttribute("open", "");
+    }
+  }
+
+  function closeDateDialog() {
+    if (dateDialog?.open) {
+      try {
+        dateDialog.close();
+      } catch {
+        dateDialog.removeAttribute("open");
+      }
+    }
+    dateView = null;
+  }
+
+  function handleDateDialogKeydown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeDateDialog();
+  }
+
+  function handleDateDialogClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) closeDateDialog();
+  }
+
   async function handleAction(event: MouseEvent, action: QuickAction) {
     event.stopPropagation();
-    if (action.actionType === "open") {
-      try {
-        await invoke("open_external_url", { url: action.payload });
-      } catch {
-        window.open(action.payload, "_blank");
+    switch (action.actionType) {
+      case "open":
+        try {
+          await invoke("open_external_url", { url: action.payload });
+        } catch {
+          window.open(action.payload, "_blank");
+        }
+        return;
+      case "copy":
+        void writeClipboardText(action.payload).catch(() => {});
+        return;
+      case "viewDate":
+        await showDateDialog(action);
+        return;
+      default: {
+        const unsupportedAction: never = action.actionType;
+        console.warn("Ignored unsupported quick action", unsupportedAction);
       }
-    } else {
-      void writeClipboardText(action.payload).catch(() => {});
     }
   }
 
@@ -494,6 +617,10 @@
             type="button"
             title={action.label}
             aria-label={action.label}
+            aria-haspopup={action.actionType === "viewDate" ? "dialog" : undefined}
+            aria-expanded={action.actionType === "viewDate"
+              ? dateView?.isoDate === action.payload
+              : undefined}
             onclick={(event) => handleAction(event, action)}
           >
             {#if quickActionKind(action) === "url"}
@@ -502,6 +629,8 @@
               <AppIcon name="mail" size={16} />
             {:else if quickActionKind(action) === "phone"}
               <AppIcon name="phone" size={16} />
+            {:else if quickActionKind(action) === "date"}
+              <AppIcon name="calendar" size={16} />
             {:else if quickActionKind(action) === "color"}
               <AppIcon name="palette" size={16} />
             {:else}
@@ -639,6 +768,36 @@
     </div>
   {/if}
 </div>
+
+<dialog
+  bind:this={dateDialog}
+  class="date-action-dialog"
+  aria-label={dateView?.label ?? "View date"}
+  onclose={() => {
+    dateView = null;
+  }}
+  onclick={handleDateDialogClick}
+  onkeydown={handleDateDialogKeydown}
+>
+  {#if dateView}
+    <div class="date-action-content">
+      <span class="date-action-icon"><AppIcon name="calendar" size={20} /></span>
+      <div class="date-action-text">
+        <time datetime={dateView.isoDate}>{dateView.formattedDate}</time>
+        <span>{dateView.isoDate}</span>
+      </div>
+      <button
+        type="button"
+        class="date-action-close"
+        title="Close date"
+        aria-label="Close date"
+        onclick={closeDateDialog}
+      >
+        <AppIcon name="x" size={15} />
+      </button>
+    </div>
+  {/if}
+</dialog>
 
 {#if contextMenu}
   <ContextMenu
@@ -968,6 +1127,87 @@
     pointer-events: none;
     opacity: 0;
     transition: opacity 120ms ease;
+  }
+
+  .date-action-dialog {
+    position: fixed;
+    width: min(320px, calc(100vw - 32px));
+    margin: auto;
+    padding: 0;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #d8d8d8;
+    background: #1e1e1e;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  .date-action-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.52);
+    backdrop-filter: blur(2px);
+  }
+
+  .date-action-content {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 58px;
+    padding: 12px 38px 12px 14px;
+  }
+
+  .date-action-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #f0cb42;
+    background: #1a1a1a;
+  }
+
+  .date-action-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .date-action-text time {
+    color: #dedede;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .date-action-text span {
+    color: #888;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .date-action-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    color: #888;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .date-action-close:hover {
+    color: #dedede;
+    background: #303030;
   }
 
   .edit-area {

@@ -39,6 +39,14 @@ pub fn detect_actions(markers: &ContentMarkers) -> Vec<QuickAction> {
         });
     }
 
+    for date in &markers.date_values {
+        actions.push(QuickAction {
+            label: format!("View date {}", date),
+            action_type: "viewDate".to_owned(),
+            payload: date.clone(),
+        });
+    }
+
     for color in &markers.color_values {
         actions.push(QuickAction {
             label: format!("Copy color {}", color),
@@ -113,6 +121,40 @@ mod tests {
         assert_eq!(actions.len(), 1);
         assert_eq!(actions[0].action_type, "copy");
         assert_eq!(actions[0].payload, "#ff4655");
+    }
+
+    #[test]
+    fn detects_date_action_with_normalized_payload() {
+        let markers = detect_markers("meeting on 2024/1/15");
+        let actions = detect_actions(&markers);
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].label, "View date 2024-01-15");
+        assert_eq!(actions[0].action_type, "viewDate");
+        assert_eq!(actions[0].payload, "2024-01-15");
+    }
+
+    #[test]
+    fn date_actions_stay_before_copy_actions() {
+        let markers = detect_markers("user@example.com 2024-01-15 #ff4655");
+        let actions = detect_actions(&markers);
+
+        assert_eq!(
+            actions
+                .iter()
+                .map(|action| action.action_type.as_str())
+                .collect::<Vec<_>>(),
+            vec!["open", "viewDate", "copy"]
+        );
+    }
+
+    #[test]
+    fn ambiguous_date_does_not_create_an_action() {
+        let markers = detect_markers("deadline: 03/04/2024");
+        let actions = detect_actions(&markers);
+
+        assert!(markers.has_date);
+        assert!(actions.is_empty());
     }
 
     #[test]

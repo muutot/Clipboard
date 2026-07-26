@@ -14,6 +14,8 @@ pub struct ContentMarkers {
     pub emails: Vec<String>,
     pub phone_numbers: Vec<String>,
     pub color_values: Vec<String>,
+    #[serde(default)]
+    pub date_values: Vec<String>,
     pub currency_values: Vec<String>,
     pub ip_addresses: Vec<String>,
     pub urls: Vec<String>,
@@ -45,8 +47,11 @@ pub fn detect_markers(text: &str) -> ContentMarkers {
     markers.ip_addresses = extract_ip_addresses(trimmed);
     markers.has_ip_address = !markers.ip_addresses.is_empty();
 
+    let dates = extract_dates(trimmed);
+    markers.has_date = dates.has_date;
+    markers.date_values = dates.normalized_values;
+
     markers.is_link = is_standalone_link(trimmed);
-    markers.has_date = contains_date(trimmed);
 
     markers
 }
@@ -194,20 +199,94 @@ fn is_standalone_link(text: &str) -> bool {
     false
 }
 
-fn contains_date(text: &str) -> bool {
-    let patterns = [
-        r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b",
-        r"\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b",
-        r"\b\d{4}年\d{1,2}月\d{1,2}日\b",
-    ];
-    for pattern in &patterns {
-        if let Some(re) = try_match(pattern, text) {
-            if re.is_match(text) {
-                return true;
-            }
+#[derive(Default)]
+struct DateExtraction {
+    has_date: bool,
+    normalized_values: Vec<String>,
+}
+
+fn extract_dates(text: &str) -> DateExtraction {
+    let mut dates = DateExtraction::default();
+
+    for pattern in [
+        r"\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b",
+        r"\b(\d{4})年(\d{1,2})月(\d{1,2})日",
+    ] {
+        let Some(regex) = try_match(pattern, text) else {
+            continue;
+        };
+        for captures in regex.captures_iter(text) {
+            let Some((year, month, day)) = parse_date_components(&captures) else {
+                continue;
+            };
+            dates.record_unambiguous(year, month, day);
         }
     }
-    false
+
+    if let Some(regex) = try_match(r"\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b", text) {
+        for captures in regex.captures_iter(text) {
+            let Some((first, second, year)) = parse_date_components(&captures) else {
+                continue;
+            };
+            dates.record_trailing_year(year, first, second);
+        }
+    }
+
+    dates
+}
+
+fn parse_date_components(captures: &regex_lite::Captures<'_>) -> Option<(u32, u32, u32)> {
+    Some((
+        captures.get(1)?.as_str().parse().ok()?,
+        captures.get(2)?.as_str().parse().ok()?,
+        captures.get(3)?.as_str().parse().ok()?,
+    ))
+}
+
+impl DateExtraction {
+    fn record_unambiguous(&mut self, year: u32, month: u32, day: u32) {
+        if !is_valid_date(year, month, day) {
+            return;
+        }
+
+        self.has_date = true;
+        let normalized = format!("{year:04}-{month:02}-{day:02}");
+        if !self.normalized_values.contains(&normalized) {
+            self.normalized_values.push(normalized);
+        }
+    }
+
+    fn record_trailing_year(&mut self, year: u32, first: u32, second: u32) {
+        let day_first = is_valid_date(year, second, first);
+        let month_first = is_valid_date(year, first, second);
+
+        match (day_first, month_first) {
+            (true, false) => self.record_unambiguous(year, second, first),
+            (false, true) => self.record_unambiguous(year, first, second),
+            (true, true) if first == second => self.record_unambiguous(year, first, second),
+            (true, true) => self.has_date = true,
+            (false, false) => {}
+        }
+    }
+}
+
+fn is_valid_date(year: u32, month: u32, day: u32) -> bool {
+    if year == 0 || day == 0 {
+        return false;
+    }
+
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return false,
+    };
+    day <= days_in_month
+}
+
+fn is_leap_year(year: u32) -> bool {
+    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
 #[cfg(test)]
@@ -276,6 +355,40 @@ mod tests {
     fn detects_date() {
         let markers = detect_markers("meeting on 2024-01-15");
         assert!(markers.has_date);
+        assert_eq!(markers.date_values, vec!["2024-01-15"]);
+    }
+
+    #[test]
+    fn normalizes_supported_unambiguous_date_formats() {
+        let markers = detect_markers("2024/1/5, 2024年01月05日, 31/01/2024, and 01/31/2024");
+
+        assert!(markers.has_date);
+        assert_eq!(markers.date_values, vec!["2024-01-05", "2024-01-31"]);
+    }
+
+    #[test]
+    fn preserves_ambiguous_date_detection_without_guessing_a_value() {
+        let markers = detect_markers("deadline: 03/04/2024");
+
+        assert!(markers.has_date);
+        assert!(markers.date_values.is_empty());
+    }
+
+    #[test]
+    fn validates_month_lengths_and_leap_years() {
+        let markers =
+            detect_markers("valid 2024-02-29; invalid 2023-02-29, 2024-04-31, and 2024-13-01");
+
+        assert!(markers.has_date);
+        assert_eq!(markers.date_values, vec!["2024-02-29"]);
+    }
+
+    #[test]
+    fn invalid_date_like_text_is_not_marked_as_a_date() {
+        let markers = detect_markers("2023-02-29 31/31/2024");
+
+        assert!(!markers.has_date);
+        assert!(markers.date_values.is_empty());
     }
 
     #[test]

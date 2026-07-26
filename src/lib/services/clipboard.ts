@@ -156,7 +156,7 @@ export async function listSourceApplications(): Promise<string[] | null> {
 
 export interface QuickAction {
   label: string;
-  actionType: "open" | "copy";
+  actionType: "open" | "copy" | "viewDate";
   payload: string;
 }
 
