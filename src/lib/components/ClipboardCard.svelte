@@ -967,20 +967,12 @@
 
   .text-preview {
     overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: var(--max-text-lines, 3);
-    line-clamp: var(--max-text-lines, 3);
-    font-size: var(--font-size-cardTitle, 13px);
-    line-height: 1.55;
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
-    text-overflow: ellipsis;
-  }
-
-  .text-preview.custom-title {
     display: block;
     white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 90%;
+    font-size: var(--font-size-cardTitle, 13px);
+    line-height: 1.55;
   }
 
   .content-preview {
