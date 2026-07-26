@@ -1,5 +1,4 @@
 pub mod actions;
-pub mod clipboard_format;
 pub mod detector;
 pub mod file_store;
 pub mod hash;
@@ -8,11 +7,6 @@ pub mod thumbnail;
 pub mod transform;
 
 pub use actions::{detect_actions, QuickAction};
-pub use clipboard_format::{
-    clipboard_format_info_from_metadata, detect_formats_from_mime_list,
-    merge_clipboard_format_metadata, parse_mime_types, ClipboardFormat, ClipboardFormatInfo,
-    ClipboardFormatReader,
-};
 pub use detector::{detect_markers, ContentMarkers};
 pub use file_store::{FileStorageInfo, FileStore};
 pub use hash::{

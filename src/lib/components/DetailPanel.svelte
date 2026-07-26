@@ -537,7 +537,9 @@
   function formatMetadataJson(metadataJson: string | null | undefined): string {
     if (!metadataJson) return "";
     try {
-      return JSON.stringify(JSON.parse(metadataJson), null, 2);
+      const obj = JSON.parse(metadataJson);
+      delete (obj as Record<string, unknown>)["clipboardFormats"];
+      return JSON.stringify(obj, null, 2);
     } catch {
       return metadataJson;
     }

@@ -33,17 +33,9 @@ pub fn self_trigger_marker_for_text(text: &str) -> Vec<u8> {
 }
 
 pub fn clipboard_change_is_self_write(
-    formats: &[String],
     marker: &[u8],
     observed_text: &str,
 ) -> bool {
-    if !formats
-        .iter()
-        .any(|format| format.trim().eq_ignore_ascii_case(SELF_TRIGGER_FORMAT_NAME))
-    {
-        return false;
-    }
-
     let Ok(marker_text) = std::str::from_utf8(marker) else {
         return false;
     };
@@ -81,7 +73,6 @@ pub struct WindowsClipboardMonitor {
 #[derive(Debug, Clone)]
 pub struct ClipboardChange {
     pub sequence: u32,
-    pub formats: Vec<String>,
 }
 
 impl Default for WindowsClipboardMonitor {
@@ -131,19 +122,18 @@ impl WindowsClipboardMonitor {
                     }
                     sequence = current_sequence;
 
-                    let formats = list_clipboard_formats();
-                    if has_self_trigger_format(&formats) {
+                    if has_self_trigger_format() {
                         if let (Some(marker), Some(text)) =
                             (read_self_trigger_marker(), read_clipboard_text())
                         {
-                            if clipboard_change_is_self_write(&formats, &marker, &text) {
+                            if clipboard_change_is_self_write(&marker, &text) {
                                 continue;
                             }
                         }
                     }
 
                     if sender_for_thread
-                        .send(ClipboardChange { sequence, formats })
+                        .send(ClipboardChange { sequence })
                         .is_err()
                     {
                         break;
@@ -209,48 +199,23 @@ fn read_clipboard_sequence() -> Option<u32> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn list_clipboard_formats() -> Vec<String> {
+fn clipboard_format_available(format: u32) -> bool {
     extern "system" {
-        fn OpenClipboard(hwnd: isize) -> i32;
-        fn CloseClipboard() -> i32;
-        fn EnumClipboardFormats(format: u32) -> u32;
-        fn GetClipboardFormatNameW(format: u32, name: *mut u16, max_count: i32) -> i32;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
     }
-
-    let mut formats = Vec::new();
-
-    unsafe {
-        if OpenClipboard(0) == 0 {
-            eprintln!("[clipboard] OpenClipboard failed");
-            return formats;
-        }
-
-        let mut format = 0u32;
-        loop {
-            format = EnumClipboardFormats(format);
-            if format == 0 {
-                break;
-            }
-
-            let name = format_id_to_name(format);
-            formats.push(name);
-        }
-
-        CloseClipboard();
-    }
-
-    formats
+    unsafe { IsClipboardFormatAvailable(format) != 0 }
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn list_clipboard_formats() -> Vec<String> {
-    vec![]
+fn clipboard_format_available(_format: u32) -> bool {
+    false
 }
 
-fn has_self_trigger_format(formats: &[String]) -> bool {
-    formats
-        .iter()
-        .any(|format| format.trim().eq_ignore_ascii_case(SELF_TRIGGER_FORMAT_NAME))
+fn has_self_trigger_format() -> bool {
+    if let Some(format) = self_trigger_format_id() {
+        return clipboard_format_available(format);
+    }
+    false
 }
 
 #[cfg(target_os = "windows")]
@@ -1206,31 +1171,21 @@ mod tests {
     fn self_trigger_marker_matches_only_the_marked_clipboard_text() {
         let text = "https://example.com";
         let marker = self_trigger_marker_for_text(text);
-        let formats = vec![SELF_TRIGGER_FORMAT_NAME.to_owned()];
 
-        assert!(clipboard_change_is_self_write(&formats, &marker, text));
+        assert!(clipboard_change_is_self_write(&marker, text));
         assert!(!clipboard_change_is_self_write(
-            &formats,
             &marker,
             "https://other.example.com"
-        ));
-        assert!(!clipboard_change_is_self_write(
-            &["CF_UNICODETEXT".to_owned()],
-            &marker,
-            text
         ));
     }
 
     #[test]
     fn malformed_or_unrelated_markers_are_not_suppressed() {
-        let formats = vec![SELF_TRIGGER_FORMAT_NAME.to_owned()];
         assert!(!clipboard_change_is_self_write(
-            &formats,
             &[0xff, 0xfe],
             "ordinary text"
         ));
         assert!(!clipboard_change_is_self_write(
-            &formats,
             b"not-a-content-hash",
             "ordinary text"
         ));

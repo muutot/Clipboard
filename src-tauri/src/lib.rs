@@ -22,7 +22,7 @@ use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
     accessed_at_ms, created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms,
-    ClipboardFormatInfo, ContentMarkers, FileStore, QuickAction, TextTransform, ThumbnailWorker,
+    ContentMarkers, FileStore, QuickAction, TextTransform, ThumbnailWorker,
     TransformOperation, RESOURCE_METADATA_SCHEMA_VERSION,
 };
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
@@ -1378,21 +1378,6 @@ fn rebuild_search_index(
 }
 
 #[tauri::command]
-fn get_clipboard_formats(
-    database: tauri::State<'_, Database>,
-    id: String,
-) -> Result<ClipboardFormatInfo, String> {
-    let item = database
-        .get_item(&id)
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("clipboard item not found: {id}"))?;
-
-    Ok(content::clipboard_format_info_from_metadata(
-        item.metadata_json.as_deref(),
-    ))
-}
-
-#[tauri::command]
 fn get_ocr_status(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
@@ -2705,12 +2690,11 @@ fn start_clipboard_monitoring(
                     break;
                 }
                 match receiver.recv_timeout(Duration::from_millis(500)) {
-                    Ok(change) => {
+                    Ok(_change) => {
                         let _ingestion_guard = capture_for_thread
                             .ingestion_guard
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        let clipboard_formats = change.formats;
                         if stop_flag_for_thread.load(Ordering::SeqCst)
                             || stop_signal_requested(&stop_receiver)
                         {
@@ -2782,11 +2766,7 @@ fn start_clipboard_monitoring(
                             created_at_ms: now_ms,
                             last_used_at_ms: None,
                             is_favorite: false,
-                            metadata_json: content::merge_clipboard_format_metadata(
-                                None,
-                                &clipboard_formats,
-                            )
-                            .unwrap_or(None),
+                            metadata_json: None,
                         };
 
                         if stop_flag_for_thread.load(Ordering::SeqCst)
@@ -3519,12 +3499,11 @@ pub fn run() {
                             break;
                         }
                         match receiver.recv_timeout(Duration::from_millis(500)) {
-                            Ok(change) => {
+                            Ok(_change) => {
                                 let _ingestion_guard = capture_for_thread
                                     .ingestion_guard
                                     .lock()
                                     .unwrap_or_else(|poisoned| poisoned.into_inner());
-                                let clipboard_formats = change.formats;
                                 if stop_flag_for_thread.load(Ordering::SeqCst)
                                     || stop_signal_requested(&stop_receiver)
                                 {
@@ -3610,11 +3589,7 @@ pub fn run() {
                                         created_at_ms: now_ms,
                                         last_used_at_ms: None,
                                         is_favorite: false,
-                                        metadata_json: content::merge_clipboard_format_metadata(
-                                            Some(&metadata.to_string()),
-                                            &clipboard_formats,
-                                        )
-                                        .unwrap_or_else(|_| Some(metadata.to_string())),
+                                        metadata_json: Some(metadata.to_string()),
                                     };
 
                                     if stop_flag_for_thread.load(Ordering::SeqCst) {
@@ -3679,13 +3654,7 @@ pub fn run() {
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
-                                            metadata_json: content::merge_clipboard_format_metadata(
-                                                Some(&captured_file_metadata(&stored_files)),
-                                                &clipboard_formats,
-                                            )
-                                            .unwrap_or_else(|_| {
-                                                Some(captured_file_metadata(&stored_files))
-                                            }),
+                                            metadata_json: Some(captured_file_metadata(&stored_files)),
                                         };
 
                                         if stop_flag_for_thread.load(Ordering::SeqCst) {
@@ -3742,13 +3711,7 @@ pub fn run() {
                                             created_at_ms: now_ms,
                                             last_used_at_ms: None,
                                             is_favorite: false,
-                                            metadata_json: content::merge_clipboard_format_metadata(
-                                                Some(&captured_file_metadata(&stored_files)),
-                                                &clipboard_formats,
-                                            )
-                                            .unwrap_or_else(|_| {
-                                                Some(captured_file_metadata(&stored_files))
-                                            }),
+                                            metadata_json: Some(captured_file_metadata(&stored_files)),
                                         };
 
                                         if stop_flag_for_thread.load(Ordering::SeqCst) {
@@ -3823,11 +3786,7 @@ pub fn run() {
                                     created_at_ms: now_ms,
                                     last_used_at_ms: None,
                                     is_favorite: false,
-                                    metadata_json: content::merge_clipboard_format_metadata(
-                                        None,
-                                        &clipboard_formats,
-                                    )
-                                    .unwrap_or(None),
+                                    metadata_json: None,
                                 };
 
                                 if stop_flag_for_thread.load(Ordering::SeqCst) {
@@ -4000,7 +3959,6 @@ pub fn run() {
             start_local_api,
             stop_local_api,
             get_local_api_status,
-            get_clipboard_formats,
             get_ocr_status,
             get_ocr_config,
             set_ocr_config,
