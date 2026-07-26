@@ -128,8 +128,7 @@ const zhCN: LocaleDefinition = {
     deleteKindCount: "{count} 条 · {size}",
     deleteKindConfirm:
       "将永久删除全部非收藏{kind}数据，共 {count} 条（{size}）。范围包含活动记录和回收站记录，收藏项会保留；相关托管资源、OCR 数据和搜索索引也会同步清理。此操作无法恢复，是否继续？",
-    deleteKindSuccess:
-      "已永久删除{kind}数据：{count} 条，记录占用 {size}，清理 {files} 个托管文件",
+    deleteKindSuccess: "已永久删除{kind}数据：{count} 条，记录占用 {size}，清理 {files} 个托管文件",
     deleteKindPartial:
       "已永久删除{kind}数据：{count} 条，记录占用 {size}；但部分后续清理尚未完成：{warning}",
     deleteKindFailed: "删除{kind}数据失败：{error}",
@@ -379,6 +378,10 @@ const zhCN: LocaleDefinition = {
     searchSuggestionOff: "关闭",
     searchSuggestionPanel: "下拉面板",
     searchSuggestionInline: "Inline 行内提示",
+    cardActionsDisplay: "条目操作按钮",
+    cardActionsDisplayDescription: "选择条目快捷操作按钮组与 #N 标记的显示方式",
+    cardActionsHover: "悬停或选中时显示",
+    cardActionsAlways: "始终显示",
     searchHistory: "最近搜索词",
     searchHistoryDescription: "在搜索框中显示并记录最近提交过的查询",
     on: "开",

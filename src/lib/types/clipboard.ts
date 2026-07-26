@@ -154,6 +154,8 @@ export const LIGHT_THEME_COLORS: ThemeColors = {
 
 export type SearchSuggestionMode = "off" | "panel" | "inline";
 
+export type CardActionsDisplay = "hover" | "always";
+
 export interface FontSizeSettings {
   base: number;
   secondary: number;
@@ -198,6 +200,7 @@ export interface GeneralSettings {
   viewerBackdropOpacity: number;
   searchSuggestionMode: SearchSuggestionMode;
   searchHistoryEnabled: boolean;
+  cardActionsDisplay: CardActionsDisplay;
   showSettingsCloseButton: boolean;
 }
 

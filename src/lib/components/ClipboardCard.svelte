@@ -59,6 +59,7 @@
     maxTextLines?: number;
     showSecondaryText?: boolean;
     hideActions?: boolean;
+    alwaysShowActions?: boolean;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
@@ -102,6 +103,7 @@
     maxTextLines = 3,
     showSecondaryText = true,
     hideActions = false,
+    alwaysShowActions = false,
     onselect,
     ontoggleSelect,
     ontoggleFavorite,
@@ -515,6 +517,7 @@
   class:selected
   class:compact
   class:editing
+  class:actions-always={alwaysShowActions}
   class="clip-card"
   style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
@@ -1094,7 +1097,9 @@
   .clip-card:hover .actions,
   .clip-card.selected .actions,
   .clip-card:hover .shortcut,
-  .clip-card.selected .shortcut {
+  .clip-card.selected .shortcut,
+  .clip-card.actions-always .actions,
+  .clip-card.actions-always .shortcut {
     opacity: 1;
   }
 

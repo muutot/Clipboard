@@ -47,6 +47,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
   searchHistoryEnabled: false,
+  cardActionsDisplay: "hover",
   showSettingsCloseButton: true,
 };
 
@@ -115,10 +116,7 @@ function normalizeThemeColors(source: unknown, fallback: ThemeColors): ThemeColo
   if (!source || typeof source !== "object") return result as unknown as ThemeColors;
   const src = source as Record<string, unknown>;
   for (const key of THEME_COLOR_KEYS) {
-    result[key] = validHexColor(
-      src[key],
-      (fallback as unknown as Record<string, string>)[key],
-    );
+    result[key] = validHexColor(src[key], (fallback as unknown as Record<string, string>)[key]);
   }
   return result as unknown as ThemeColors;
 }
@@ -142,6 +140,13 @@ function validSearchSuggestionMode(
   fallback: GeneralSettings["searchSuggestionMode"],
 ): GeneralSettings["searchSuggestionMode"] {
   return value === "off" || value === "panel" || value === "inline" ? value : fallback;
+}
+
+function validCardActionsDisplay(
+  value: unknown,
+  fallback: GeneralSettings["cardActionsDisplay"],
+): GeneralSettings["cardActionsDisplay"] {
+  return value === "hover" || value === "always" ? value : fallback;
 }
 
 function validFullscreenMode(
@@ -330,13 +335,10 @@ function normalizeGeneralSettings(
     defaultSettings.useSystemTitleBar,
   );
   result.theme = validTheme(source.theme ?? fallback("theme"), "dark");
-  result.themeColors = normalizeThemeColors(
-    source.themeColors ?? fallback("themeColors"),
-    { ...DARK_THEME_COLORS },
-  );
-  result.customPresets = normalizeCustomPresets(
-    source.customPresets ?? fallback("customPresets"),
-  );
+  result.themeColors = normalizeThemeColors(source.themeColors ?? fallback("themeColors"), {
+    ...DARK_THEME_COLORS,
+  });
+  result.customPresets = normalizeCustomPresets(source.customPresets ?? fallback("customPresets"));
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
     "overlay",
@@ -354,6 +356,10 @@ function normalizeGeneralSettings(
   result.searchHistoryEnabled = booleanValue(
     source.searchHistoryEnabled ?? fallback("searchHistoryEnabled"),
     defaultSettings.searchHistoryEnabled,
+  );
+  result.cardActionsDisplay = validCardActionsDisplay(
+    source.cardActionsDisplay ?? fallback("cardActionsDisplay"),
+    defaultSettings.cardActionsDisplay,
   );
   result.showSettingsCloseButton = booleanValue(
     source.showSettingsCloseButton ?? fallback("showSettingsCloseButton"),

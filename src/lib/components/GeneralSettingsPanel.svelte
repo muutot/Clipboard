@@ -2,7 +2,11 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { SearchSuggestionMode, WindowConfig } from "$lib/types/clipboard";
+  import type {
+    CardActionsDisplay,
+    SearchSuggestionMode,
+    WindowConfig,
+  } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -154,6 +158,29 @@
       <option value="off">{_t("general.searchSuggestionOff")}</option>
       <option value="panel">{_t("general.searchSuggestionPanel")}</option>
       <option value="inline">{_t("general.searchSuggestionInline")}</option>
+    </select>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+      <div>
+        <strong>{_t("general.cardActionsDisplay")}</strong>
+        <p>{_t("general.cardActionsDisplayDescription")}</p>
+      </div>
+    </div>
+    <select
+      class="theme-select"
+      value={s.cardActionsDisplay}
+      aria-label={_t("general.cardActionsDisplay")}
+      onchange={(e) =>
+        generalSettings.updateSetting(
+          "cardActionsDisplay",
+          (e.target as HTMLSelectElement).value as CardActionsDisplay,
+        )}
+    >
+      <option value="hover">{_t("general.cardActionsHover")}</option>
+      <option value="always">{_t("general.cardActionsAlways")}</option>
     </select>
   </section>
 

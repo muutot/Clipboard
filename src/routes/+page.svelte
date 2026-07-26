@@ -364,6 +364,7 @@
   const compactCardBorderRadius = $derived($generalSettings.compactCardBorderRadius);
   const showSecondaryText = $derived($generalSettings.display.showSecondaryText);
   const maxTextLines = $derived($generalSettings.display.maxTextLines);
+  const alwaysShowActions = $derived($generalSettings.cardActionsDisplay === "always");
 
   function displayedTextLines(item: ClipboardItem): number {
     if (item.kind !== "text" && item.kind !== "link") return 1;
@@ -2508,6 +2509,7 @@
                   compactCardHeight={compactCardHeightFor(item)}
                   {maxTextLines}
                   {showSecondaryText}
+                  {alwaysShowActions}
                   onheightchange={recordCardHeight}
                   heightMeasurementKey={cardLayoutSignature(item)}
                   onselect={selectItem}
@@ -2541,6 +2543,7 @@
                 compactCardHeight={compactCardHeightFor(item)}
                 {maxTextLines}
                 {showSecondaryText}
+                {alwaysShowActions}
                 onheightchange={recordCardHeight}
                 heightMeasurementKey={cardLayoutSignature(item)}
                 onselect={selectItem}

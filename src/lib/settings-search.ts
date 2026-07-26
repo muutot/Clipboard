@@ -99,6 +99,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ],
   ),
   entry(
+    "general.card-actions-display",
+    { section: "general" },
+    i18n("general.cardActionsDisplay"),
+    i18n("general.cardActionsDisplayDescription"),
+    [i18n("general.cardActionsHover"), i18n("general.cardActionsAlways"), "操作按钮", "actions"],
+  ),
+  entry(
     "general.search-history",
     { section: "general" },
     i18n("general.searchHistory"),

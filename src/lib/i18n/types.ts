@@ -374,6 +374,10 @@ export interface LocaleDefinition {
     searchSuggestionOff: string;
     searchSuggestionPanel: string;
     searchSuggestionInline: string;
+    cardActionsDisplay: string;
+    cardActionsDisplayDescription: string;
+    cardActionsHover: string;
+    cardActionsAlways: string;
     searchHistory: string;
     searchHistoryDescription: string;
     on: string;
