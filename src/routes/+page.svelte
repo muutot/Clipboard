@@ -1053,15 +1053,23 @@
     }, 0);
   }
 
+  let settingsWindowOpening = $state(false);
+
   async function openSettings() {
-    if ("__TAURI_INTERNALS__" in window) {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    if (settingsWindowOpening) return;
+    settingsWindowOpening = true;
+    try {
       const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
       const existing = await WebviewWindow.getByLabel("settings");
       if (existing) {
         existing.setFocus();
         return;
       }
-      new WebviewWindow("settings", {
+      const settingsBg =
+        getComputedStyle(document.documentElement).getPropertyValue("--bg-settings").trim() ||
+        "#1b1b1b";
+      const settingsWindow = new WebviewWindow("settings", {
         url: "/settings",
         title: "Settings",
         width: 760,
@@ -1071,7 +1079,11 @@
         center: true,
         resizable: true,
         decorations: false,
+        focus: true,
+        backgroundColor: settingsBg,
       });
+    } finally {
+      settingsWindowOpening = false;
     }
   }
 

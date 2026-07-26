@@ -1,4 +1,6 @@
 :root {
+  --bg-app: #111111;
+  --bg-settings: #1b1b1b;
   font-family:
     Inter,
     ui-sans-serif,
@@ -10,7 +12,7 @@
     sans-serif;
   font-size: var(--font-size-base, 14px);
   color: #f5f5f5;
-  background: #111111;
+  background: var(--bg-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -38,7 +40,7 @@ body {
   min-width: 320px;
   min-height: 480px;
   background:
-    radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06), transparent 38%), #111111;
+    radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06), transparent 38%), var(--bg-app);
 }
 
 button,

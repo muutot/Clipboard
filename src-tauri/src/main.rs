@@ -1,5 +1,4 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![windows_subsystem = "windows"]
 
 use std::ffi::OsString;
 
@@ -51,7 +50,10 @@ fn main() {
     };
 
     match parse_process_args(&args) {
-        Ok(ProcessAction::LaunchGui) => clipboard_desktop_lib::run(),
+        Ok(ProcessAction::LaunchGui) => {
+            attach_hidden_console();
+            clipboard_desktop_lib::run()
+        }
         action => {
             ensure_cli_console();
             match action {
@@ -72,6 +74,38 @@ fn main() {
         }
     }
 }
+
+#[cfg(target_os = "windows")]
+fn attach_hidden_console() {
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn AttachConsole(process_id: u32) -> i32;
+        fn AllocConsole() -> i32;
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetConsoleWindow() -> isize;
+        fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
+    }
+
+    const SW_HIDE: i32 = 0;
+
+    unsafe {
+        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
+            AllocConsole();
+        }
+        let hwnd = GetConsoleWindow();
+        if hwnd != 0 {
+            ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn attach_hidden_console() {}
 
 #[cfg(target_os = "windows")]
 fn ensure_cli_console() {
