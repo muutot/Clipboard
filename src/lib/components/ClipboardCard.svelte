@@ -979,7 +979,7 @@
     display: block;
     white-space: nowrap;
     text-overflow: ellipsis;
-    max-width: 90%;
+    max-width: 95%;
     color: var(--text-primary);
     font-size: var(--font-size-cardTitle, 13px);
     line-height: 1.55;
