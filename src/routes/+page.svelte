@@ -2496,8 +2496,11 @@
       <button
         type="button"
         tabindex="-1"
+        class:active={$generalSettings.alwaysOnTop}
         aria-label={_t("toolbar.pinWindow")}
-        title={_t("toolbar.pinWindow")}><AppIcon name="pin" size={17} /></button
+        title={_t("toolbar.pinWindow")}
+        onclick={() => generalSettings.updateSetting("alwaysOnTop", !$generalSettings.alwaysOnTop)}
+        ><AppIcon name="window-top" size={17} /></button
       >
       <button
         type="button"
@@ -3144,6 +3147,11 @@
 
   .toolbar-actions button:hover {
     color: var(--text-secondary);
+    background: var(--hover-bg);
+  }
+
+  .toolbar-actions button.active {
+    color: var(--text-primary);
     background: var(--hover-bg);
   }
 

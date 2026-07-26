@@ -148,13 +148,6 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["密度", "compact"],
   ),
   entry(
-    "general.always-on-top",
-    { section: "general" },
-    i18n("general.alwaysOnTop"),
-    i18n("general.alwaysOnTopDescription"),
-    ["置顶", "topmost"],
-  ),
-  entry(
     "general.pin-copied-to-top",
     { section: "general" },
     i18n("general.pinCopiedToTop"),

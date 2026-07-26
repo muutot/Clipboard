@@ -38,6 +38,7 @@
     | "clock"
     | "mime"
     | "maximize"
+    | "window-top"
     | "ruler"
     | "scan"
     | "pause";
@@ -209,6 +210,9 @@
     <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
     <path d="M3 16v3a2 2 0 0 0 2 2h3" />
     <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+  {:else if name === "window-top"}
+    <rect x="2" y="4" width="15" height="13" rx="2" opacity="0.35" />
+    <rect x="7" y="7" width="15" height="13" rx="2" />
   {:else if name === "ruler"}
     <path
       d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"

@@ -11,6 +11,7 @@
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-position",
     "core:window:allow-set-size",
+    "core:window:allow-set-always-on-top",
     "core:window:allow-outer-position",
     "core:window:allow-outer-size",
     "core:window:allow-current-monitor",
