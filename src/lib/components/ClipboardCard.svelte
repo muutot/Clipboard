@@ -853,7 +853,7 @@
 <style>
   .clip-card {
     position: relative;
-    padding: 4px 14px 4px 12px;
+    padding: 0px 14px 0px 12px;
     border: 1px solid transparent;
     border-radius: 10px;
     color: var(--text-primary);
