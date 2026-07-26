@@ -83,6 +83,7 @@
   let filePreviewText = $state("");
   let filePreviewTruncated = $state(false);
   let filePreviewRequest = 0;
+  let selectedFileIndex = $state(0);
 
   const FILE_PREVIEW_LIMIT = 512 * 1024;
   const TEXT_FILE_EXTENSIONS = new Set([
@@ -305,6 +306,7 @@
       panY = 0;
       activeTab = "preview";
       editing = false;
+      selectedFileIndex = 0;
     }
   });
 
@@ -987,6 +989,66 @@
                 <dt><AppIcon name="file" size={14} /> {_t("detail.fileCount")}</dt>
                 <dd>{resourceFiles.length}</dd>
               </div>
+              {#if resourceFiles.length > 1}
+                <div class="detail-row">
+                  <dt><AppIcon name="file" size={14} /> {_t("detail.file")}</dt>
+                  <dd>
+                    <select
+                      class="file-selector"
+                      bind:value={selectedFileIndex}
+                    >
+                      {#each resourceFiles as file, index}
+                        <option value={index}>{file.name}</option>
+                      {/each}
+                    </select>
+                  </dd>
+                </div>
+              {/if}
+              {@const file = resourceFiles[selectedFileIndex]}
+              {#if file.originalPath}
+                <div class="detail-row path-row">
+                  <dt><AppIcon name="file" size={14} /> {_t("detail.originalPath")}</dt>
+                  <dd class="path-value"><code>{file.originalPath}</code></dd>
+                </div>
+              {/if}
+              {#if file.contentHash}
+                <div class="detail-row path-row">
+                  <dt><AppIcon name="info" size={14} /> {_t("detail.contentHash")}</dt>
+                  <dd class="path-value"><code>{file.contentHash}</code></dd>
+                </div>
+              {/if}
+              <div class="detail-row">
+                <dt><AppIcon name="calendar" size={14} /> {_t("detail.createdTime")}</dt>
+                <dd>{formatMetadataTime(file.createdAtMs)}</dd>
+              </div>
+              <div class="detail-row">
+                <dt><AppIcon name="edit" size={14} /> {_t("detail.modifiedTime")}</dt>
+                <dd>{formatMetadataTime(file.modifiedAtMs)}</dd>
+              </div>
+              <div class="detail-row">
+                <dt><AppIcon name="eye" size={14} /> {_t("detail.accessedTime")}</dt>
+                <dd>{formatMetadataTime(file.accessedAtMs)}</dd>
+              </div>
+              <div class="detail-row">
+                <dt><AppIcon name="clock" size={14} /> {_t("detail.readOnly")}</dt>
+                <dd>
+                  {file.readOnly === undefined
+                    ? _t("detail.unknown")
+                    : file.readOnly
+                      ? _t("detail.yes")
+                      : _t("detail.no")}
+                </dd>
+              </div>
+              <div class="detail-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.directory")}</dt>
+                <dd>
+                  {file.isDirectory === undefined
+                    ? _t("detail.unknown")
+                    : file.isDirectory
+                      ? _t("detail.yes")
+                      : _t("detail.no")}
+                </dd>
+              </div>
             {/if}
             {#if item.kind === "image" && (item.resourcePath || resourceMetadata?.resourcePath)}
               <div class="detail-row path-row">
@@ -1019,60 +1081,6 @@
                 <dt><AppIcon name="info" size={14} /> {_t("detail.contentHash")}</dt>
                 <dd class="path-value"><code>{resourceMetadata.contentHash}</code></dd>
               </div>
-            {/if}
-            {#if item.kind === "file" && resourceFiles.length > 0}
-              {#each resourceFiles as file, index}
-                {#if resourceFiles.length > 1}
-                  <div class="detail-row file-divider">
-                    <dt><AppIcon name="file" size={14} /> {_t("detail.file")} {index + 1}</dt>
-                    <dd>{file.name}</dd>
-                  </div>
-                {/if}
-                {#if file.originalPath}
-                  <div class="detail-row path-row">
-                    <dt><AppIcon name="file" size={14} /> {_t("detail.originalPath")}</dt>
-                    <dd class="path-value"><code>{file.originalPath}</code></dd>
-                  </div>
-                {/if}
-                {#if file.contentHash}
-                  <div class="detail-row path-row">
-                    <dt><AppIcon name="info" size={14} /> {_t("detail.contentHash")}</dt>
-                    <dd class="path-value"><code>{file.contentHash}</code></dd>
-                  </div>
-                {/if}
-                <div class="detail-row">
-                  <dt><AppIcon name="calendar" size={14} /> {_t("detail.createdTime")}</dt>
-                  <dd>{formatMetadataTime(file.createdAtMs)}</dd>
-                </div>
-                <div class="detail-row">
-                  <dt><AppIcon name="edit" size={14} /> {_t("detail.modifiedTime")}</dt>
-                  <dd>{formatMetadataTime(file.modifiedAtMs)}</dd>
-                </div>
-                <div class="detail-row">
-                  <dt><AppIcon name="eye" size={14} /> {_t("detail.accessedTime")}</dt>
-                  <dd>{formatMetadataTime(file.accessedAtMs)}</dd>
-                </div>
-                <div class="detail-row">
-                  <dt><AppIcon name="clock" size={14} /> {_t("detail.readOnly")}</dt>
-                  <dd>
-                    {file.readOnly === undefined
-                      ? _t("detail.unknown")
-                      : file.readOnly
-                        ? _t("detail.yes")
-                        : _t("detail.no")}
-                  </dd>
-                </div>
-                <div class="detail-row">
-                  <dt><AppIcon name="file" size={14} /> {_t("detail.directory")}</dt>
-                  <dd>
-                    {file.isDirectory === undefined
-                      ? _t("detail.unknown")
-                      : file.isDirectory
-                        ? _t("detail.yes")
-                        : _t("detail.no")}
-                  </dd>
-                </div>
-              {/each}
             {/if}
           </dl>
 
@@ -1753,6 +1761,17 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     min-width: 0;
+  }
+
+  .file-selector {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font-size: 11px;
+    cursor: pointer;
   }
 
   .marker-item a {
