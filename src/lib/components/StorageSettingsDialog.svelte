@@ -906,9 +906,11 @@
     }
   }
 
-  async function openIconManager() {
-    showIconManager = true;
-    await loadIconList();
+  async function toggleIconManager() {
+    showIconManager = !showIconManager;
+    if (showIconManager) {
+      await loadIconList();
+    }
   }
 
   async function saveOcrEngine(engine: string) {
@@ -1955,7 +1957,7 @@
                 <p>{_t("storage.iconCacheDesc")}</p>
               </div>
             </div>
-            <button type="button" class="icon-manage-btn" onclick={openIconManager}>
+            <button type="button" class="icon-manage-btn" onclick={toggleIconManager}>
               {_t("storage.manageIconCache")}
             </button>
             {#if showIconManager}
