@@ -68,7 +68,7 @@ const zhCN: LocaleDefinition = {
     generalTab: "常规",
     appearanceTab: "外观",
     basicTab: "基础",
-    compactTab: "紧凑",
+    compactTab: "精简",
     fontTab: "字体",
     themeTab: "主题",
     appearanceSettings: "设置 / 外观",
@@ -350,7 +350,7 @@ const zhCN: LocaleDefinition = {
     fontSizeLarge: "大",
     windowTransparency: "窗口透明度",
     windowTransparencyDescription: "调整后立即应用到窗口",
-    compactMode: "紧凑模式",
+    compactMode: "精简模式",
     compactModeDescription: "减少卡片间距，显示更多记录",
     launchAtStartup: "开机自启动",
     launchAtStartupDescription: "登录系统后自动启动 Clipboard",
@@ -398,8 +398,9 @@ const zhCN: LocaleDefinition = {
     autoSaveNote: "修改即时生效，无需手动保存",
     detailDisplayMode: "详情展示模式",
     detailDisplayModeDescription: "选择详情面板的展示方式",
-    detailDisplayModeOverlay: "同画布切入",
-    detailDisplayModeSplit: "左右分栏",
+    detailDisplayModeOverlay: "左右分栏",
+    detailDisplayModeSplit: "同画布切入",
+    imageFullscreenButton: "全屏查看",
   },
   compact: {
     title: "紧凑设置",
@@ -467,6 +468,11 @@ const zhCN: LocaleDefinition = {
   export: {
     dragText: "拖拽文本内容",
     dragFile: "拖拽文件引用",
+  },
+  font: {
+    secondaryTextLines: "辅助文本行数",
+    secondaryTextLinesDescription: "条目卡片上辅助文本最多显示的行数；无自定义标题时从第二行开始，有自定义标题时从标题首行开始",
+    unitLines: "行",
   },
   theme: {
     title: "主题设置",
