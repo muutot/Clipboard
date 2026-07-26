@@ -186,7 +186,7 @@
 
   function settingsElementText(item: HTMLElement): string {
     const labels = item.querySelectorAll<HTMLElement>(
-      "strong, p, label, .setting-label, .config-path, .path-value-inline, .column-heading, code",
+      "strong, p, label, .setting-label, .config-path, .column-heading, code",
     );
     const text = Array.from(labels)
       .map((element) => element.textContent ?? "")
@@ -1957,7 +1957,7 @@
                 <p>{_t("storage.iconCacheDesc")}</p>
               </div>
             </div>
-            <button type="button" class="icon-manage-btn" onclick={toggleIconManager}>
+            <button type="button" class="settings-action-btn" onclick={toggleIconManager}>
               {_t("storage.manageIconCache")}
             </button>
             {#if showIconManager}
@@ -2022,7 +2022,7 @@
                 <p>{_t("storage.searchIndexDesc")}</p>
               </div>
             </div>
-            <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
+            <button type="button" class="settings-action-btn" disabled={rebuilding} onclick={rebuildIndex}>
               {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
             </button>
           </section>
@@ -2970,7 +2970,7 @@
     overflow: hidden;
   }
 
-  .icon-manage-btn {
+  .settings-action-btn {
     height: 34px;
     box-sizing: border-box;
     padding: 5px 12px;
@@ -2982,13 +2982,19 @@
     font-size: var(--settings-control-size);
     cursor: pointer;
     white-space: nowrap;
+    flex-shrink: 0;
     transition:
       background 100ms ease,
       color 100ms ease;
   }
 
-  .icon-manage-btn:hover {
+  .settings-action-btn:hover {
     color: var(--text-primary);
+  }
+
+  .settings-action-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   .icon-list-header {
@@ -3635,54 +3641,6 @@
   .resource-path-summary .restart-btn {
     grid-column: 2;
     grid-row: 1 / span 2;
-  }
-
-  .path-button-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .path-value-inline {
-    flex: 1;
-    min-width: 0;
-    padding: 6px 9px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-secondary);
-    background: var(--input-bg);
-    font-family: "Cascadia Code", Consolas, monospace;
-    font-size: var(--settings-note-size);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .path-button-row button {
-    padding: 6px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-    font: inherit;
-    font-size: var(--settings-control-size);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
-  }
-
-  .path-button-row button:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
-  .path-button-row button:disabled {
-    opacity: 0.55;
-    cursor: default;
   }
 
   .unit-select {
