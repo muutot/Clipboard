@@ -419,13 +419,13 @@
       // 辅助文本关闭时：显示正文首行
       return compactCustomTitle;
     }
-
+1
     // 非自定义标题
     const totalLines = estimateTextLines(item.textContent || item.title, 12);
     const secondaryVisible = showSecondaryText ? Math.min(maxTextLines, Math.max(0, totalLines - 1)) : 0;
     const visibleTotal = 1 + secondaryVisible;
     if (visibleTotal <= 1) return compactText;
-    return compactTallText + Math.max(0, visibleTotal - 2) * TEXT_LINE_HEIGHT;
+    return compactTallText + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * PREVIEW_LINE_HEIGHT;
   }
 
   function cardLayoutSignature(item: ClipboardItem): string {
