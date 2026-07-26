@@ -4,6 +4,7 @@ pub mod content;
 pub mod domain;
 pub mod export;
 pub mod keyboard;
+pub mod memory;
 pub mod ocr;
 pub mod performance;
 pub mod platform;
@@ -3736,6 +3737,7 @@ pub fn run() {
             enforce_history_cleanup,
             clear_all_non_favorite_items,
             get_performance_metrics,
+            memory::get_memory_diagnostics,
             repair_database,
             validate_search_index,
             cleanup_storage_files,
