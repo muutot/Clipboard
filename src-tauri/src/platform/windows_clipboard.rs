@@ -5,6 +5,8 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use crate::content::hash::icon_key;
+
 pub const CF_UNICODETEXT: u32 = 13;
 pub const CF_DIB: u32 = 8;
 pub const CF_DIBV5: u32 = 17;
@@ -857,13 +859,7 @@ pub fn extract_app_icon(
     const SHGFI_ICON: u32 = 0x100;
     const SHGFI_LARGEICON: u32 = 0x0;
 
-    let app_key = app_name
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
-        .collect::<String>()
-        .trim_matches('_')
-        .to_string();
+    let app_key = icon_key(app_name);
 
     if app_key.is_empty() {
         return None;
