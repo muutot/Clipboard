@@ -530,10 +530,6 @@
     return ts === undefined ? _t("detail.unknown") : formatDateTime(ts);
   }
 
-  function formatExactSize(bytes: number): string {
-    return `${formatFileSize(bytes)} (${bytes.toLocaleString()} B)`;
-  }
-
   function formatMetadataJson(metadataJson: string | null | undefined): string {
     if (!metadataJson) return "";
     try {
@@ -1024,96 +1020,61 @@
                 <dd class="path-value"><code>{resourceMetadata.contentHash}</code></dd>
               </div>
             {/if}
-          </dl>
-
-          {#if item.kind === "file" && resourceFiles.length > 0}
-            <section class="resource-file-list">
-              <strong class="resource-section-title">{_t("detail.resourceMetadata")}</strong>
+            {#if item.kind === "file" && resourceFiles.length > 0}
               {#each resourceFiles as file, index}
-                <article class="resource-file-card">
-                  <div class="resource-file-heading">
-                    <span class="resource-file-index">{index + 1}</span>
-                    <strong>{file.name}</strong>
-                    <span>{formatExactSize(file.sizeBytes)}</span>
+                {#if resourceFiles.length > 1}
+                  <div class="detail-row file-divider">
+                    <dt><AppIcon name="file" size={14} /> {_t("detail.file")} {index + 1}</dt>
+                    <dd>{file.name}</dd>
                   </div>
-                  <dl class="resource-file-details">
-                    {#if file.mimeType}
-                      <div>
-                        <dt>{_t("detail.mimeInfo")}</dt>
-                        <dd><code>{file.mimeType}</code></dd>
-                      </div>
-                    {/if}
-                    {#if file.extension}
-                      <div>
-                        <dt>{_t("detail.extension")}</dt>
-                        <dd><code>.{file.extension}</code></dd>
-                      </div>
-                    {/if}
-                    {#if file.storagePath}
-                      <div class="resource-path-detail">
-                        <dt>{_t("detail.storagePath")}</dt>
-                        <dd><code>{file.storagePath}</code></dd>
-                      </div>
-                    {/if}
-                    {#if file.originalPath}
-                      <div class="resource-path-detail">
-                        <dt>{_t("detail.originalPath")}</dt>
-                        <dd><code>{file.originalPath}</code></dd>
-                      </div>
-                    {/if}
-                    {#if file.contentHash}
-                      <div class="resource-path-detail">
-                        <dt>{_t("detail.contentHash")}</dt>
-                        <dd><code>{file.contentHash}</code></dd>
-                      </div>
-                    {/if}
-                    <div>
-                      <dt>{_t("detail.managedCopy")}</dt>
-                      <dd>
-                        {file.copied === undefined
-                          ? _t("detail.unknown")
-                          : file.copied
-                            ? _t("detail.yes")
-                            : _t("detail.no")}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{_t("detail.createdTime")}</dt>
-                      <dd>{formatMetadataTime(file.createdAtMs)}</dd>
-                    </div>
-                    <div>
-                      <dt>{_t("detail.modifiedTime")}</dt>
-                      <dd>{formatMetadataTime(file.modifiedAtMs)}</dd>
-                    </div>
-                    <div>
-                      <dt>{_t("detail.accessedTime")}</dt>
-                      <dd>{formatMetadataTime(file.accessedAtMs)}</dd>
-                    </div>
-                    <div>
-                      <dt>{_t("detail.readOnly")}</dt>
-                      <dd>
-                        {file.readOnly === undefined
-                          ? _t("detail.unknown")
-                          : file.readOnly
-                            ? _t("detail.yes")
-                            : _t("detail.no")}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{_t("detail.directory")}</dt>
-                      <dd>
-                        {file.isDirectory === undefined
-                          ? _t("detail.unknown")
-                          : file.isDirectory
-                            ? _t("detail.yes")
-                            : _t("detail.no")}
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
+                {/if}
+                {#if file.originalPath}
+                  <div class="detail-row path-row">
+                    <dt><AppIcon name="file" size={14} /> {_t("detail.originalPath")}</dt>
+                    <dd class="path-value"><code>{file.originalPath}</code></dd>
+                  </div>
+                {/if}
+                {#if file.contentHash}
+                  <div class="detail-row path-row">
+                    <dt><AppIcon name="info" size={14} /> {_t("detail.contentHash")}</dt>
+                    <dd class="path-value"><code>{file.contentHash}</code></dd>
+                  </div>
+                {/if}
+                <div class="detail-row">
+                  <dt><AppIcon name="calendar" size={14} /> {_t("detail.createdTime")}</dt>
+                  <dd>{formatMetadataTime(file.createdAtMs)}</dd>
+                </div>
+                <div class="detail-row">
+                  <dt><AppIcon name="edit" size={14} /> {_t("detail.modifiedTime")}</dt>
+                  <dd>{formatMetadataTime(file.modifiedAtMs)}</dd>
+                </div>
+                <div class="detail-row">
+                  <dt><AppIcon name="eye" size={14} /> {_t("detail.accessedTime")}</dt>
+                  <dd>{formatMetadataTime(file.accessedAtMs)}</dd>
+                </div>
+                <div class="detail-row">
+                  <dt><AppIcon name="clock" size={14} /> {_t("detail.readOnly")}</dt>
+                  <dd>
+                    {file.readOnly === undefined
+                      ? _t("detail.unknown")
+                      : file.readOnly
+                        ? _t("detail.yes")
+                        : _t("detail.no")}
+                  </dd>
+                </div>
+                <div class="detail-row">
+                  <dt><AppIcon name="file" size={14} /> {_t("detail.directory")}</dt>
+                  <dd>
+                    {file.isDirectory === undefined
+                      ? _t("detail.unknown")
+                      : file.isDirectory
+                        ? _t("detail.yes")
+                        : _t("detail.no")}
+                  </dd>
+                </div>
               {/each}
-            </section>
-          {/if}
+            {/if}
+          </dl>
 
           {#if rawMetadata}
             <details class="raw-metadata">
@@ -1692,99 +1653,6 @@
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
-  }
-
-  .resource-file-list,
-  .resource-section-title {
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 560;
-  }
-
-  .resource-file-card {
-    padding: 10px 12px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    background: var(--input-bg);
-  }
-
-  .resource-file-heading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    color: var(--text-primary);
-    font-size: 11px;
-  }
-
-  .resource-file-heading strong {
-    min-width: 0;
-    flex: 1;
-    overflow-wrap: anywhere;
-  }
-
-  .resource-file-heading > span:last-child {
-    flex-shrink: 0;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .resource-file-index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-muted);
-    background: var(--input-bg);
-    font-size: 10px;
-  }
-
-  .resource-file-details {
-    display: grid;
-    gap: 1px;
-    margin: 9px 0 0 26px;
-    padding: 0;
-  }
-
-  .resource-file-details > div {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 4px 0;
-    border-top: 1px solid var(--border-subtle);
-  }
-
-  .resource-file-details dt {
-    flex-shrink: 0;
-    color: var(--text-muted);
-    font-size: 10px;
-  }
-
-  .resource-file-details dd {
-    min-width: 0;
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 10px;
-    text-align: right;
-    overflow-wrap: anywhere;
-  }
-
-  .resource-file-details dd code {
-    color: var(--text-secondary);
-    font-family: "Cascadia Code", Consolas, monospace;
-    font-size: 9.5px;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  .resource-file-details .resource-path-detail dd {
-    max-width: 70%;
-    text-align: left;
   }
 
   .raw-metadata pre {
