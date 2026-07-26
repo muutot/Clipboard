@@ -7,9 +7,11 @@ import type {
   GeneralSettings,
   GeneralSettingsInfo,
   Language,
+  ThemeColors,
   WindowConfig,
   WindowPosition,
 } from "$lib/types/clipboard";
+import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
 
 const STORAGE_KEY = "generalSettings";
 const LOCALE_STORAGE_KEY = "clipboard-locale";
@@ -38,6 +40,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   alwaysOnTop: false,
   useSystemTitleBar: false,
   theme: "dark",
+  themeColors: { ...DARK_THEME_COLORS },
   imageFullscreenMode: "overlay",
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
@@ -76,7 +79,34 @@ function validLanguage(value: unknown, fallback: Language): Language {
 }
 
 function validTheme(value: unknown, fallback: GeneralSettings["theme"]): GeneralSettings["theme"] {
-  return value === "dark" || value === "light" ? value : fallback;
+  return value === "dark" || value === "light" || value === "custom" ? value : fallback;
+}
+
+function validHexColor(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
+  "bg",
+  "settingsBg",
+  "accent",
+  "textPrimary",
+  "textMuted",
+  "border",
+  "cardBg",
+];
+
+function normalizeThemeColors(source: unknown, fallback: ThemeColors): ThemeColors {
+  const result: Record<string, string> = { ...fallback };
+  if (!source || typeof source !== "object") return result as unknown as ThemeColors;
+  const src = source as Record<string, unknown>;
+  for (const key of THEME_COLOR_KEYS) {
+    result[key] = validHexColor(
+      src[key],
+      (fallback as unknown as Record<string, string>)[key],
+    );
+  }
+  return result as unknown as ThemeColors;
 }
 
 function validSearchSuggestionMode(
@@ -272,6 +302,10 @@ function normalizeGeneralSettings(
     defaultSettings.useSystemTitleBar,
   );
   result.theme = validTheme(source.theme ?? fallback("theme"), "dark");
+  result.themeColors = normalizeThemeColors(
+    source.themeColors ?? fallback("themeColors"),
+    { ...DARK_THEME_COLORS },
+  );
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
     "overlay",
