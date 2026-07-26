@@ -16,6 +16,11 @@ const CONFIG_DIRECTORY_NAME: &str = "conf";
 const KEYBOARD_CONFIG_FILE_NAME: &str = "keyboard.json";
 const DEFAULT_TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
 const DEFAULT_TOGGLE_WINDOW_SHORTCUT: &str = "Alt+V";
+const DEFAULT_COPY_ITEM_SHORTCUT: &str = "Ctrl+C";
+const DEFAULT_DELETE_ITEM_SHORTCUT: &str = "Ctrl+D";
+const DEFAULT_FAVORITE_ITEM_SHORTCUT: &str = "Ctrl+F";
+const DEFAULT_EDIT_ITEM_SHORTCUT: &str = "Ctrl+E";
+const DEFAULT_SELECT_ALL_SHORTCUT: &str = "Ctrl+A";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -28,10 +33,32 @@ pub struct KeyboardConfig {
 impl Default for KeyboardConfig {
     fn default() -> Self {
         Self {
-            shortcuts: BTreeMap::from([(
-                DEFAULT_TOGGLE_WINDOW_ACTION.to_owned(),
-                vec![DEFAULT_TOGGLE_WINDOW_SHORTCUT.to_owned()],
-            )]),
+            shortcuts: BTreeMap::from([
+                (
+                    DEFAULT_TOGGLE_WINDOW_ACTION.to_owned(),
+                    vec![DEFAULT_TOGGLE_WINDOW_SHORTCUT.to_owned()],
+                ),
+                (
+                    "copyItem".to_owned(),
+                    vec![DEFAULT_COPY_ITEM_SHORTCUT.to_owned()],
+                ),
+                (
+                    "deleteItem".to_owned(),
+                    vec![DEFAULT_DELETE_ITEM_SHORTCUT.to_owned()],
+                ),
+                (
+                    "favoriteItem".to_owned(),
+                    vec![DEFAULT_FAVORITE_ITEM_SHORTCUT.to_owned()],
+                ),
+                (
+                    "editItem".to_owned(),
+                    vec![DEFAULT_EDIT_ITEM_SHORTCUT.to_owned()],
+                ),
+                (
+                    "selectAll".to_owned(),
+                    vec![DEFAULT_SELECT_ALL_SHORTCUT.to_owned()],
+                ),
+            ]),
             extra: BTreeMap::new(),
         }
     }
@@ -170,6 +197,11 @@ mod tests {
 
         assert_eq!(store.path(), project.join("conf/keyboard.json"));
         assert_eq!(saved["shortcuts"]["toggleWindow"], json!(["Alt+V"]));
+        assert_eq!(saved["shortcuts"]["copyItem"], json!(["Ctrl+C"]));
+        assert_eq!(saved["shortcuts"]["deleteItem"], json!(["Ctrl+D"]));
+        assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+F"]));
+        assert_eq!(saved["shortcuts"]["editItem"], json!(["Ctrl+E"]));
+        assert_eq!(saved["shortcuts"]["selectAll"], json!(["Ctrl+A"]));
         fs::remove_dir_all(project).unwrap();
     }
 

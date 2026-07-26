@@ -156,6 +156,11 @@ export interface LocaleDefinition {
     shortcutConfigDesc: string;
     toggleWindow: string;
     quickPaste: string;
+    copyItem: string;
+    deleteItem: string;
+    favoriteItem: string;
+    editItem: string;
+    selectAll: string;
     actionCode: string;
     shortcutInput: string;
     inputPlaceholder: string;

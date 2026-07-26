@@ -54,6 +54,12 @@
   });
 
   const actionLabels: Record<string, string> = $derived({
+    toggleWindow: _t("keyboard.toggleWindow") || "唤起窗口",
+    copyItem: _t("keyboard.copyItem") || "复制条目",
+    deleteItem: _t("keyboard.deleteItem") || "删除条目",
+    favoriteItem: _t("keyboard.favoriteItem") || "收藏条目",
+    editItem: _t("keyboard.editItem") || "编辑条目",
+    selectAll: _t("keyboard.selectAll") || "全选条目",
     quickPaste: _t("keyboard.quickPaste"),
   });
 
