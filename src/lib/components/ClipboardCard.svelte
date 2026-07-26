@@ -535,7 +535,10 @@
   style:--cg={compact ? `${compactCardGap}px` : undefined}
   style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
   style:--max-text-lines={`${showSecondaryText ? maxTextLines : 1}`}
-  style:min-height={editing
+  style:--compact-image-preview-height={compact && compactCardHeight
+    ? `${Math.max(20, compactCardHeight - compactPaddingTop - compactPaddingBottom - 2 - 17)}px`
+    : undefined}
+  style:height={editing
     ? "auto"
     : compact && compactCardHeight
       ? `${compactCardHeight}px`
@@ -1029,6 +1032,10 @@
     box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
   }
 
+  .clip-card.compact .image-preview {
+    height: var(--compact-image-preview-height, 90px);
+  }
+
   .image-preview img {
     display: block;
     width: 100%;
@@ -1067,6 +1074,10 @@
   .image-fullscreen-btn:hover {
     color: var(--text-primary);
     background: rgba(0, 0, 0, 0.75);
+  }
+
+  .clip-card.compact .image-placeholder {
+    height: var(--compact-image-preview-height, 82px);
   }
 
   .image-placeholder {

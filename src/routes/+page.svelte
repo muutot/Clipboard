@@ -38,6 +38,8 @@
     editHeight,
     estimateTextLines,
     itemHeight,
+    PREVIEW_LINE_HEIGHT,
+    TEXT_LINE_HEIGHT,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
@@ -369,15 +371,36 @@
   }
 
   function estimatedCardHeight(item: ClipboardItem): number {
+    let textLines: number;
+    let effectivePreview: boolean;
+
+    if (compactMode) {
+      effectivePreview = true;
+      if (item.customTitle) {
+        textLines = showSecondaryText
+          ? estimateTextLines(item.textContent || item.preview, maxTextLines)
+          : 1;
+      } else {
+        const totalLines = estimateTextLines(item.textContent || item.title, 12);
+        const secondaryVisible = showSecondaryText
+          ? Math.min(maxTextLines, Math.max(0, totalLines - 1))
+          : 0;
+        textLines = 1 + secondaryVisible;
+      }
+    } else {
+      textLines = displayedTextLines(item);
+      effectivePreview = showSecondaryText;
+    }
+
     return itemHeight({
       kind: item.kind,
-      textLines: displayedTextLines(item),
+      textLines,
       compact: compactMode,
       compactText,
       compactTallText,
       compactImage,
       cardGap: compactCardGap,
-      showPreview: showSecondaryText,
+      showPreview: effectivePreview,
       customTitle: !!item.customTitle,
       compactCustomTitle,
     });
@@ -387,12 +410,22 @@
     if (!compactMode) return 0;
     if (item.kind === "image") return compactImage;
 
-    const visibleLines = displayedTextLines(item);
     if (item.customTitle) {
-      return showSecondaryText && visibleLines > 0 ? compactCustomTitle : compactText;
+      if (showSecondaryText) {
+        const bodyLines = estimateTextLines(item.textContent || item.preview, maxTextLines);
+        if (bodyLines <= 0) return compactText;
+        return compactCustomTitle + Math.max(0, bodyLines - 1) * PREVIEW_LINE_HEIGHT;
+      }
+      // 辅助文本关闭时：显示正文首行
+      return compactCustomTitle;
     }
 
-    return showSecondaryText && visibleLines > 1 ? compactTallText : compactText;
+    // 非自定义标题
+    const totalLines = estimateTextLines(item.textContent || item.title, 12);
+    const secondaryVisible = showSecondaryText ? Math.min(maxTextLines, Math.max(0, totalLines - 1)) : 0;
+    const visibleTotal = 1 + secondaryVisible;
+    if (visibleTotal <= 1) return compactText;
+    return compactTallText + Math.max(0, visibleTotal - 2) * TEXT_LINE_HEIGHT;
   }
 
   function cardLayoutSignature(item: ClipboardItem): string {

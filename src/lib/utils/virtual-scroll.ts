@@ -1,4 +1,4 @@
-export interface VirtualScrollConfig {
+﻿export interface VirtualScrollConfig {
   itemHeight: number;
   overscan: number;
 }
@@ -11,8 +11,8 @@ export interface VirtualListResult {
 
 const TEXT_HEIGHT = 88;
 const IMAGE_HEIGHT = 150;
-const TEXT_LINE_HEIGHT = 20;
-const PREVIEW_LINE_HEIGHT = 16;
+export const TEXT_LINE_HEIGHT = 20;
+export const PREVIEW_LINE_HEIGHT = 16;
 
 export interface ItemHeightOptions {
   kind: string;
