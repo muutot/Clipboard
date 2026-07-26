@@ -1949,17 +1949,19 @@
    └─ search-index/                ← 全文搜索索引</pre>
           </section>
 
-          <section class="setting-card toggle-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-              <div>
-                <strong>{_t("storage.iconCacheTitle")}</strong>
-                <p>{_t("storage.iconCacheDesc")}</p>
+          <section class="setting-card">
+            <div class="toggle-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.iconCacheTitle")}</strong>
+                  <p>{_t("storage.iconCacheDesc")}</p>
+                </div>
               </div>
+              <button type="button" class="settings-action-btn" onclick={toggleIconManager}>
+                {_t("storage.manageIconCache")}
+              </button>
             </div>
-            <button type="button" class="settings-action-btn" onclick={toggleIconManager}>
-              {_t("storage.manageIconCache")}
-            </button>
             {#if showIconManager}
               <div class="icon-manager-panel">
                 {#if loadingIcons}
@@ -2963,7 +2965,6 @@
   }
 
   .icon-manager-panel {
-    flex-basis: 100%;
     margin-top: 12px;
     border: 1px solid var(--border-subtle);
     border-radius: 7px;
