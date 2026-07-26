@@ -1102,7 +1102,6 @@
           </span>
         {/if}
       {/if}
-      <span>配置: <code>{activeSection === "keyboard" ? "conf/keyboard.json" : "conf/conf.json"}</code></span>
     </div>
   </aside>
 
