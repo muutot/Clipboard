@@ -3051,6 +3051,8 @@
     padding: 4px 12px;
     cursor: pointer;
     font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .icon-file-item label:hover {
@@ -3075,6 +3077,7 @@
 
   .icon-file-name {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
