@@ -366,7 +366,7 @@
 
   function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB"];
+    const units = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
     return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
   }
@@ -1063,8 +1063,46 @@
     </nav>
 
     <div class="sidebar-foot">
-      <span>配置固定位置</span>
-      <code>{activeSection === "keyboard" ? "conf/keyboard.json" : "conf/conf.json"}</code>
+      {#if status}
+        {@const localUsageBytes =
+          status.databaseSizeBytes +
+          status.imageSizeBytes +
+          status.fileSizeBytes +
+          status.searchIndexSizeBytes}
+        <div class="sidebar-usage">
+          <span>{_t("storage.sidebarUsage")}</span>
+          <strong>{formatBytes(localUsageBytes)}</strong>
+        </div>
+        {#if status.diskTotalBytes != null && status.diskAvailableBytes != null && status.diskTotalBytes > 0}
+          {@const diskUsedPercent = Math.min(
+            100,
+            Math.max(
+              0,
+              Math.round(
+                ((status.diskTotalBytes - status.diskAvailableBytes) / status.diskTotalBytes) *
+                  100,
+              ),
+            ),
+          )}
+          <div
+            class="sidebar-usage-bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={diskUsedPercent}
+            aria-label={_t("storage.sidebarUsage")}
+          >
+            <span style:width={`${diskUsedPercent}%`}></span>
+          </div>
+          <span class="sidebar-usage-caption">
+            {_t("storage.sidebarDiskFree", {
+              available: formatBytes(status.diskAvailableBytes),
+              total: formatBytes(status.diskTotalBytes),
+            })}
+          </span>
+        {/if}
+      {/if}
+      <span>配置: <code>{activeSection === "keyboard" ? "conf/keyboard.json" : "conf/conf.json"}</code></span>
     </div>
   </aside>
 
@@ -2161,6 +2199,37 @@
     font: inherit;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  .sidebar-usage {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .sidebar-usage strong {
+    color: var(--text-muted);
+    font-weight: 560;
+  }
+
+  .sidebar-usage-bar {
+    overflow: hidden;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--hover-bg);
+  }
+
+  .sidebar-usage-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent-color, #746dff);
+    transition: width 200ms ease;
+  }
+
+  .sidebar-usage-caption {
+    color: var(--text-faint);
   }
 
   .settings-content {

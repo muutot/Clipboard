@@ -720,6 +720,55 @@ pub fn apply_window_transparency(_window_handle: isize, _percent: u8) -> Result<
 }
 
 // ---------------------------------------------------------------------------
+//  Disk space
+// ---------------------------------------------------------------------------
+
+/// Capacity information for the volume that stores a given directory.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskSpace {
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+}
+
+/// Queries the total and caller-available capacity of the volume holding
+/// `path`. Returns `None` when the platform query is unavailable or fails.
+#[cfg(target_os = "windows")]
+pub fn disk_space(path: &Path) -> Option<DiskSpace> {
+    use std::os::windows::ffi::OsStrExt;
+
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            directory_name: *const u16,
+            free_bytes_available: *mut u64,
+            total_number_of_bytes: *mut u64,
+            total_number_of_free_bytes: *mut u64,
+        ) -> i32;
+    }
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide.push(0);
+
+    let mut available = 0u64;
+    let mut total = 0u64;
+    let mut free = 0u64;
+    let succeeded =
+        unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut free) };
+    if succeeded == 0 {
+        return None;
+    }
+    Some(DiskSpace {
+        total_bytes: total,
+        available_bytes: available,
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn disk_space(_path: &Path) -> Option<DiskSpace> {
+    None
+}
+
+// ---------------------------------------------------------------------------
 //  SingleInstanceGuard
 // ---------------------------------------------------------------------------
 
@@ -1173,6 +1222,19 @@ mod tests {
     #[test]
     fn window_transparency_rejects_a_null_handle() {
         assert!(apply_window_transparency(0, 95).is_err());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn disk_space_reports_the_volume_capacity() {
+        let space = disk_space(&std::env::temp_dir()).expect("temp volume should be queryable");
+        assert!(space.total_bytes > 0);
+        assert!(space.available_bytes <= space.total_bytes);
+    }
+
+    #[test]
+    fn disk_space_returns_none_for_a_missing_path() {
+        assert!(disk_space(Path::new("Z:\\definitely\\missing\\path")).is_none());
     }
 
     #[test]

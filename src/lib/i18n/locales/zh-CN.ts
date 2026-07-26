@@ -147,7 +147,7 @@ const zhCN: LocaleDefinition = {
     settingsSearchPlaceholder: "搜索全部设置项",
     clearSettingsSearch: "清除设置搜索",
     sidebarUsage: "本地存储",
-    sidebarDiskFree: "可用 {available} / 共 {total}",
+    sidebarDiskFree: "{available} / {total}",
     settingsCount: "{count} 项设置",
     settingsFilteredCount: "匹配 {matched}/{total} 项",
     settingsSearchNoResults: "没有匹配“{query}”的设置",

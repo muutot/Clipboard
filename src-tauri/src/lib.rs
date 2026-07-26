@@ -106,6 +106,8 @@ struct StorageStatus {
     search_index_size_bytes: u64,
     search_index_version: u32,
     search_index_rebuild_required: bool,
+    disk_total_bytes: Option<u64>,
+    disk_available_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -738,6 +740,8 @@ fn get_storage_status(
         .display()
         .to_string();
 
+    let disk_space = platform::disk_space(&paths.data_directory);
+
     Ok(StorageStatus {
         item_count: database.item_count().map_err(|error| error.to_string())?,
         image_count: database.count_by_kind("image").unwrap_or(0),
@@ -763,6 +767,8 @@ fn get_storage_status(
         search_index_size_bytes: dir_size(&paths.search_index),
         search_index_version: SEARCH_INDEX_VERSION,
         search_index_rebuild_required: search_index.requires_full_rebuild(),
+        disk_total_bytes: disk_space.map(|space| space.total_bytes),
+        disk_available_bytes: disk_space.map(|space| space.available_bytes),
     })
 }
 

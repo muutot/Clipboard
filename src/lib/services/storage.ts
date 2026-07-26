@@ -26,6 +26,8 @@ export interface StorageStatus {
   searchIndexSizeBytes: number;
   searchIndexVersion: number;
   searchIndexRebuildRequired: boolean;
+  diskTotalBytes: number | null;
+  diskAvailableBytes: number | null;
 }
 
 export interface StorageDirectoryUpdate {
