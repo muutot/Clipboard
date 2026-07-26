@@ -1113,13 +1113,6 @@
             </section>
           {/if}
 
-          {#if item.kind === "text" || item.kind === "link"}
-            <section class="full-text-details">
-              <strong class="resource-section-title">{_t("detail.fullContent")}</strong>
-              <pre>{detailContent}</pre>
-            </section>
-          {/if}
-
           {#if rawMetadata}
             <details class="raw-metadata">
               <summary>{_t("detail.rawMetadata")}</summary>
@@ -1694,12 +1687,6 @@
   }
 
   .resource-file-list,
-  .full-text-details {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
   .resource-section-title {
     color: var(--text-muted);
     font-size: 11px;
@@ -1792,7 +1779,6 @@
     text-align: left;
   }
 
-  .full-text-details pre,
   .raw-metadata pre {
     max-height: 360px;
     margin: 0;
