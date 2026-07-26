@@ -1997,7 +1997,10 @@
                           <img
                             class="icon-preview"
                             src={convertFileSrc(`${status.iconsDir}/${file.name}`.replace(/\\/g, "/"))}
-                            alt={file.name}
+                            alt=""
+                            onerror={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
                           />
                           <span class="icon-file-name">{file.name}</span>
                           <span class="icon-file-size">{formatBytes(file.sizeBytes)}</span>
