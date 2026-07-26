@@ -48,6 +48,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchSuggestionMode: "off",
   searchHistoryEnabled: false,
   cardActionsDisplay: "hover",
+  quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
 };
 
@@ -360,6 +361,10 @@ function normalizeGeneralSettings(
   result.cardActionsDisplay = validCardActionsDisplay(
     source.cardActionsDisplay ?? fallback("cardActionsDisplay"),
     defaultSettings.cardActionsDisplay,
+  );
+  result.quickCopyBadgeAlwaysVisible = booleanValue(
+    source.quickCopyBadgeAlwaysVisible ?? fallback("quickCopyBadgeAlwaysVisible"),
+    defaultSettings.quickCopyBadgeAlwaysVisible,
   );
   result.showSettingsCloseButton = booleanValue(
     source.showSettingsCloseButton ?? fallback("showSettingsCloseButton"),

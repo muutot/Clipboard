@@ -378,6 +378,8 @@ export interface LocaleDefinition {
     cardActionsDisplayDescription: string;
     cardActionsHover: string;
     cardActionsAlways: string;
+    quickCopyBadge: string;
+    quickCopyBadgeDescription: string;
     searchHistory: string;
     searchHistoryDescription: string;
     on: string;

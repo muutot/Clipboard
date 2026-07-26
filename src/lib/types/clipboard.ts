@@ -201,6 +201,7 @@ export interface GeneralSettings {
   searchSuggestionMode: SearchSuggestionMode;
   searchHistoryEnabled: boolean;
   cardActionsDisplay: CardActionsDisplay;
+  quickCopyBadgeAlwaysVisible: boolean;
   showSettingsCloseButton: boolean;
 }
 

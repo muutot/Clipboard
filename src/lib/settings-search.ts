@@ -106,6 +106,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     [i18n("general.cardActionsHover"), i18n("general.cardActionsAlways"), "操作按钮", "actions"],
   ),
   entry(
+    "general.quick-copy-badge",
+    { section: "general" },
+    i18n("general.quickCopyBadge"),
+    i18n("general.quickCopyBadgeDescription"),
+    ["#N", "快速复制", "quick copy", "badge"],
+  ),
+  entry(
     "general.search-history",
     { section: "general" },
     i18n("general.searchHistory"),

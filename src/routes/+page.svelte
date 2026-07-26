@@ -365,6 +365,7 @@
   const showSecondaryText = $derived($generalSettings.display.showSecondaryText);
   const maxTextLines = $derived($generalSettings.display.maxTextLines);
   const alwaysShowActions = $derived($generalSettings.cardActionsDisplay === "always");
+  const quickCopyBadgeAlwaysVisible = $derived($generalSettings.quickCopyBadgeAlwaysVisible);
 
   function displayedTextLines(item: ClipboardItem): number {
     if (item.kind !== "text" && item.kind !== "link") return 1;
@@ -2510,6 +2511,7 @@
                   {maxTextLines}
                   {showSecondaryText}
                   {alwaysShowActions}
+                  {quickCopyBadgeAlwaysVisible}
                   onheightchange={recordCardHeight}
                   heightMeasurementKey={cardLayoutSignature(item)}
                   onselect={selectItem}
@@ -2544,6 +2546,7 @@
                 {maxTextLines}
                 {showSecondaryText}
                 {alwaysShowActions}
+                {quickCopyBadgeAlwaysVisible}
                 onheightchange={recordCardHeight}
                 heightMeasurementKey={cardLayoutSignature(item)}
                 onselect={selectItem}

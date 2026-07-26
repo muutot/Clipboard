@@ -393,9 +393,12 @@ const en: LocaleDefinition = {
     searchSuggestionPanel: "Dropdown panel",
     searchSuggestionInline: "Inline hint",
     cardActionsDisplay: "Item Action Buttons",
-    cardActionsDisplayDescription: "Choose when quick action buttons and #N marks appear on items",
+    cardActionsDisplayDescription: "Choose when quick action buttons appear on items",
     cardActionsHover: "On hover or selection",
     cardActionsAlways: "Always visible",
+    quickCopyBadge: "Quick Copy #N Marks",
+    quickCopyBadgeDescription:
+      "Always show the #1-#9 quick copy marks on the first nine items without focusing them first",
     searchHistory: "Recent Search Terms",
     searchHistoryDescription: "Show and record queries that you submit from the search box",
     on: "On",

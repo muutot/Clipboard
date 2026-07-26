@@ -60,6 +60,7 @@
     showSecondaryText?: boolean;
     hideActions?: boolean;
     alwaysShowActions?: boolean;
+    quickCopyBadgeAlwaysVisible?: boolean;
     onselect: (id: string, event?: MouseEvent) => void;
     ontoggleSelect: (id: string) => void;
     ontoggleFavorite: (id: string) => void;
@@ -104,6 +105,7 @@
     showSecondaryText = true,
     hideActions = false,
     alwaysShowActions = false,
+    quickCopyBadgeAlwaysVisible = true,
     onselect,
     ontoggleSelect,
     ontoggleFavorite,
@@ -728,7 +730,11 @@
           >
         {/if}
       </div>
-      <span class="shortcut">⌘{index + 1}</span>
+      {#if index < 9}
+        <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
+          >⌘{index + 1}</span
+        >
+      {/if}
     </div>
   {:else}
     <div class="edit-area">
@@ -1099,7 +1105,8 @@
   .clip-card:hover .shortcut,
   .clip-card.selected .shortcut,
   .clip-card.actions-always .actions,
-  .clip-card.actions-always .shortcut {
+  .clip-card.actions-always .shortcut,
+  .clip-card .shortcut.shortcut-resident {
     opacity: 1;
   }
 

@@ -186,6 +186,31 @@
 
   <section class="setting-card toggle-card">
     <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
+      <div>
+        <strong>{_t("general.quickCopyBadge")}</strong>
+        <p>{_t("general.quickCopyBadgeDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.quickCopyBadgeAlwaysVisible}
+      onclick={() =>
+        generalSettings.updateSetting(
+          "quickCopyBadgeAlwaysVisible",
+          !s.quickCopyBadgeAlwaysVisible,
+        )}
+      aria-checked={s.quickCopyBadgeAlwaysVisible}
+      aria-label={_t("general.quickCopyBadge")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
       <div>
         <strong>{_t("general.searchHistory")}</strong>
