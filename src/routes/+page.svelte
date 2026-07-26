@@ -67,7 +67,7 @@
   const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 150, overscan: 5 };
   const VIRTUAL_SCROLL_THRESHOLD = 50;
   const DELETED_HISTORY_PAGE_SIZE = 100;
-  const MAIN_WINDOW_MIN_WIDTH = 730;
+  const MAIN_WINDOW_MIN_WIDTH = 710;
   const SEARCH_HISTORY_STORAGE_KEY = "clipboard.search-history.v1";
   const SEARCH_HISTORY_LIMIT = 8;
   const SEARCH_TERM_MAX_LENGTH = 120;
@@ -2683,7 +2683,7 @@
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-columns: 1fr;
     width: 100%;
-    min-width: 730px;
+    min-width: 710px;
     height: 100vh;
     min-height: 480px;
     overflow: hidden;
@@ -2750,7 +2750,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 20px 8px;
+    padding: 14px 20px 4px;
+    border-bottom: none;
   }
 
   .search-box {
@@ -2826,7 +2827,7 @@
   .search-box input {
     flex: 1;
     min-width: 0;
-    padding: 2px 0 4px;
+    padding: 2px 0 0px;
     border: 0;
     outline: 0;
     color: var(--text-primary);
@@ -2884,7 +2885,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 2px 12px 9px;
+    padding: 2px 20px 4px 4px;
   }
 
   .filters,
@@ -3093,7 +3094,6 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 0 17px 7px;
     color: var(--text-muted);
     font-size: 11.5px;
   }
