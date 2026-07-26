@@ -850,7 +850,7 @@
 <style>
   .clip-card {
     position: relative;
-    padding: 13px 14px 12px;
+    padding: 4px 14px 4px 12px;
     border: 1px solid transparent;
     border-radius: 10px;
     color: var(--text-primary);
@@ -1086,7 +1086,7 @@
     flex-wrap: nowrap;
     gap: 8px;
     min-width: 0;
-    margin-top: 10px;
+    margin-top: 5px;
     overflow: hidden;
     color: var(--text-muted);
     font-size: var(--font-size-secondary, 11.5px);
