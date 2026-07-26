@@ -88,7 +88,7 @@ function validTheme(value: unknown, fallback: GeneralSettings["theme"]): General
 }
 
 function validHexColor(value: unknown, fallback: string): string {
-  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value) ? value : fallback;
 }
 
 const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [

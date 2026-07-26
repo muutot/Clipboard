@@ -54,7 +54,7 @@
   function updateColor(key: keyof ThemeColors, value: string) {
     if (s.theme !== "custom") return;
     const cleaned = value.startsWith("#") ? value : "#" + value;
-    if (!/^#[0-9a-fA-F]{6}$/.test(cleaned)) return;
+    if (!/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(cleaned)) return;
     themeColors = { ...themeColors, [key]: cleaned };
     generalSettings.updateSetting("themeColors", { ...themeColors, [key]: cleaned });
   }
@@ -215,10 +215,10 @@
           class="color-text-input"
           value={themeColors[entry.key]}
           disabled={isReadonly}
-          maxlength={7}
+          maxlength={9}
           oninput={(e) => {
             const val = (e.target as HTMLInputElement).value;
-            if (/^#[0-9a-fA-F]{0,6}$/.test(val)) {
+            if (/^#[0-9a-fA-F]{0,8}$/.test(val)) {
               updateColor(entry.key, val);
             }
           }}
