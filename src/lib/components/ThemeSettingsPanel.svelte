@@ -115,12 +115,13 @@
 
 {#if showHeader}
   <header>
-    <h2>{_t("theme.title")}</h2>
-    <button
-      class="close-button"
-      type="button"
-      aria-label={_t("actions.close")}
-      onclick={onclose}>×</button
+    <div>
+      <span class="eyebrow">{_t("appearanceSettings")}</span>
+      <h2>{_t("theme.title")}</h2>
+      <p>{_t("theme.themeModeDescription")}</p>
+    </div>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
     >
   </header>
 {/if}
@@ -235,54 +236,6 @@
 {/if}
 
 <style>
-  .settings-scroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 14px 24px;
-  }
-
-  .setting-card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius, 9px);
-    padding: 14px 16px;
-    margin-bottom: 12px;
-  }
-
-  .toggle-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .setting-heading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex: 1;
-  }
-
-  .setting-heading strong {
-    display: block;
-    font-size: var(--settings-heading-size, 13px);
-    color: var(--text-primary);
-  }
-
-  .setting-heading p {
-    margin: 2px 0 0;
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-    color: var(--text-muted);
-  }
-
-  .setting-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
   .theme-select {
     appearance: none;
     -webkit-appearance: none;
@@ -361,59 +314,6 @@
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     color: var(--text-muted);
     margin: 0 0 12px 16px;
-  }
-
-  .auto-save-note {
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    color: var(--text-faint);
-    margin: 8px 0 0;
-  }
-
-  .settings-feedback {
-    position: fixed;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--hover-bg);
-    color: var(--text-primary);
-    padding: 8px 16px;
-    border-radius: var(--settings-feedback-radius, 7px);
-    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
-    z-index: 100;
-  }
-
-  .settings-feedback.success {
-    background: color-mix(in srgb, var(--success-color) 20%, var(--surface-bg));
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 14px;
-    flex-shrink: 0;
-  }
-
-  header h2 {
-    font-size: var(--settings-page-title-size, 18px);
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .close-button {
-    width: var(--settings-close-size, 28px);
-    height: var(--settings-close-size, 28px);
-    background: transparent;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-close-radius, 7px);
-    color: var(--text-muted);
-    font-size: var(--settings-close-font-size, 19px);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    line-height: 1;
   }
 
   .close-button:hover {
