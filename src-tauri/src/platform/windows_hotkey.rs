@@ -1,12 +1,18 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 #[cfg(target_os = "windows")]
 use std::time::Duration;
 
 use super::windows_clipboard;
+use crate::keyboard::{Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
 
 const WM_HOTKEY: u32 = 0x0312;
+const WM_KEYDOWN: u32 = 0x0100;
+const WM_KEYUP: u32 = 0x0101;
+const WM_SYSKEYDOWN: u32 = 0x0104;
+const WM_SYSKEYUP: u32 = 0x0105;
+const WH_KEYBOARD_LL: i32 = 13;
 const FIRST_HOTKEY_ID: i32 = 1;
 #[cfg(target_os = "windows")]
 const QUICK_PASTE_FOCUS_DELAY: Duration = Duration::from_millis(60);
@@ -42,6 +48,89 @@ impl QuickPasteTarget {
 
 type HotkeyRegistration = (i32, u32, u32);
 
+fn modifier_from_virtual_key(virtual_key: u32) -> Option<Modifier> {
+    match virtual_key {
+        0x10 | 0xA0 | 0xA1 => Some(Modifier::Shift),
+        0x11 | 0xA2 | 0xA3 => Some(Modifier::Control),
+        0x12 | 0xA4 | 0xA5 => Some(Modifier::Alt),
+        0x5B | 0x5C => Some(Modifier::Meta),
+        _ => None,
+    }
+}
+
+/// Detects bare modifier double taps from low-level key events.
+/// Mirrors `ShortcutMatcher::record_modifier_tap`: a tap is one clean press
+/// and release, and any other key in between cancels the pending sequence.
+struct DoubleModifierTracker {
+    registered: BTreeSet<Modifier>,
+    double_tap_interval_ms: u64,
+    active_press: Option<Modifier>,
+    press_interrupted: bool,
+    last_tap: Option<(Modifier, u64)>,
+}
+
+impl DoubleModifierTracker {
+    fn new(registered: impl IntoIterator<Item = Modifier>) -> Self {
+        Self {
+            registered: registered.into_iter().collect(),
+            double_tap_interval_ms: DEFAULT_DOUBLE_TAP_INTERVAL_MS,
+            active_press: None,
+            press_interrupted: false,
+            last_tap: None,
+        }
+    }
+
+    fn on_key_event(&mut self, virtual_key: u32, is_key_down: bool, timestamp_ms: u64) -> bool {
+        let Some(modifier) = modifier_from_virtual_key(virtual_key) else {
+            if is_key_down {
+                self.press_interrupted = self.active_press.is_some();
+                self.last_tap = None;
+            }
+            return false;
+        };
+
+        if is_key_down {
+            if self.active_press == Some(modifier) {
+                // Key auto-repeat while the modifier stays held down.
+                return false;
+            }
+            if self.active_press.is_some() {
+                // Two different modifiers held together are not a bare tap.
+                self.press_interrupted = true;
+                self.last_tap = None;
+                return false;
+            }
+            self.active_press = Some(modifier);
+            self.press_interrupted = false;
+            return false;
+        }
+
+        if self.active_press != Some(modifier) {
+            return false;
+        }
+        self.active_press = None;
+        if self.press_interrupted {
+            self.press_interrupted = false;
+            return false;
+        }
+
+        let is_double_tap = self
+            .last_tap
+            .is_some_and(|(previous_modifier, previous_timestamp)| {
+                previous_modifier == modifier
+                    && timestamp_ms >= previous_timestamp
+                    && timestamp_ms - previous_timestamp <= self.double_tap_interval_ms
+            });
+        if is_double_tap && self.registered.contains(&modifier) {
+            self.last_tap = None;
+            true
+        } else {
+            self.last_tap = Some((modifier, timestamp_ms));
+            false
+        }
+    }
+}
+
 fn deduplicate_hotkeys(bindings: &[(u32, u32)]) -> Vec<(u32, u32)> {
     let mut seen = HashSet::new();
     bindings
@@ -65,23 +154,32 @@ pub fn spawn_hotkey_thread(
     vk: u32,
     tx: mpsc::Sender<()>,
 ) -> thread::JoinHandle<()> {
-    spawn_hotkey_thread_with_registrations(vec![(hotkey_id, modifiers, vk)], tx)
+    spawn_hotkey_thread_with_registrations(vec![(hotkey_id, modifiers, vk)], Vec::new(), tx)
 }
 
 pub fn spawn_hotkey_thread_with_bindings(
     bindings: Vec<(u32, u32)>,
     tx: mpsc::Sender<()>,
 ) -> thread::JoinHandle<()> {
-    spawn_hotkey_thread_with_registrations(assign_hotkey_ids(&bindings), tx)
+    spawn_hotkey_thread_with_hotkeys(bindings, Vec::new(), tx)
+}
+
+pub fn spawn_hotkey_thread_with_hotkeys(
+    bindings: Vec<(u32, u32)>,
+    double_modifiers: Vec<Modifier>,
+    tx: mpsc::Sender<()>,
+) -> thread::JoinHandle<()> {
+    spawn_hotkey_thread_with_registrations(assign_hotkey_ids(&bindings), double_modifiers, tx)
 }
 
 fn spawn_hotkey_thread_with_registrations(
     registrations: Vec<HotkeyRegistration>,
+    double_modifiers: Vec<Modifier>,
     tx: mpsc::Sender<()>,
 ) -> thread::JoinHandle<()> {
     set_hotkey_sender(&tx);
     thread::spawn(move || {
-        let result = hotkey_message_loop(&registrations);
+        let result = hotkey_message_loop(&registrations, &double_modifiers);
         clear_hotkey_state();
         if let Err(error) = result {
             eprintln!("[hotkey] message loop exited with error: {error}");
@@ -90,8 +188,11 @@ fn spawn_hotkey_thread_with_registrations(
     })
 }
 
-fn hotkey_message_loop(registrations: &[HotkeyRegistration]) -> Result<(), String> {
-    if registrations.is_empty() {
+fn hotkey_message_loop(
+    registrations: &[HotkeyRegistration],
+    double_modifiers: &[Modifier],
+) -> Result<(), String> {
+    if registrations.is_empty() && double_modifiers.is_empty() {
         return Err("no supported hotkey bindings were provided".to_owned());
     }
 
@@ -117,6 +218,8 @@ fn hotkey_message_loop(registrations: &[HotkeyRegistration]) -> Result<(), Strin
         fn TranslateMessage(msg: *const Msg) -> i32;
         fn DispatchMessageW(msg: *const Msg) -> isize;
         fn DestroyWindow(hwnd: isize) -> i32;
+        fn SetWindowsHookExW(id: i32, hook_proc: usize, module: isize, thread_id: u32) -> isize;
+        fn UnhookWindowsHookEx(hook: isize) -> i32;
     }
     #[repr(C)]
     struct WndClassExW {
@@ -204,6 +307,29 @@ fn hotkey_message_loop(registrations: &[HotkeyRegistration]) -> Result<(), Strin
             registered_ids.push(*id);
         }
 
+        // A bare double-modifier tap cannot be expressed with RegisterHotKey,
+        // so it is detected with a low-level keyboard hook on this same
+        // message-pump thread.
+        let keyboard_hook = if double_modifiers.is_empty() {
+            0
+        } else {
+            set_double_modifier_tracker(double_modifiers);
+            let hook = SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                keyboard_hook_proc as *const () as usize,
+                0,
+                0,
+            );
+            if hook == 0 {
+                clear_double_modifier_tracker();
+                eprintln!(
+                    "[hotkey] failed to install the double-modifier keyboard hook (Windows error {})",
+                    GetLastError()
+                );
+            }
+            hook
+        };
+
         let mut msg: Msg = std::mem::zeroed();
         loop {
             let ret = GetMessageW(&mut msg, 0, 0, 0);
@@ -214,6 +340,10 @@ fn hotkey_message_loop(registrations: &[HotkeyRegistration]) -> Result<(), Strin
             DispatchMessageW(&msg);
         }
 
+        if keyboard_hook != 0 {
+            UnhookWindowsHookEx(keyboard_hook);
+        }
+        clear_double_modifier_tracker();
         for id in registered_ids {
             let _ = windows_clipboard::unregister_global_hotkey(hwnd, id);
         }
@@ -242,8 +372,61 @@ unsafe extern "system" fn hotkey_window_proc(
     DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
+unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: usize, lparam: isize) -> isize {
+    extern "system" {
+        fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
+    }
+
+    #[repr(C)]
+    struct KeyboardHookEvent {
+        virtual_key: u32,
+        scan_code: u32,
+        flags: u32,
+        time: u32,
+        extra_info: usize,
+    }
+
+    if code >= 0 && lparam != 0 {
+        let message = wparam as u32;
+        let is_key_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+        let is_key_up = message == WM_KEYUP || message == WM_SYSKEYUP;
+        if is_key_down || is_key_up {
+            let event = &*(lparam as *const KeyboardHookEvent);
+            let fired = DOUBLE_MODIFIER_TRACKER
+                .lock()
+                .ok()
+                .and_then(|mut tracker| {
+                    tracker.as_mut().map(|tracker| {
+                        tracker.on_key_event(event.virtual_key, is_key_down, u64::from(event.time))
+                    })
+                })
+                .unwrap_or(false);
+            if fired {
+                if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
+                    let _ = tx.send(());
+                }
+            }
+        }
+    }
+
+    CallNextHookEx(0, code, wparam, lparam)
+}
+
 static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
 static HOTKEY_HWND: Mutex<isize> = Mutex::new(0);
+static DOUBLE_MODIFIER_TRACKER: Mutex<Option<DoubleModifierTracker>> = Mutex::new(None);
+
+fn set_double_modifier_tracker(double_modifiers: &[Modifier]) {
+    if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock() {
+        *guard = Some(DoubleModifierTracker::new(double_modifiers.iter().copied()));
+    }
+}
+
+fn clear_double_modifier_tracker() {
+    if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock() {
+        *guard = None;
+    }
+}
 
 pub fn set_hotkey_sender(tx: &mpsc::Sender<()>) {
     if let Ok(mut guard) = HOTKEY_SENDER.lock() {
@@ -264,6 +447,7 @@ pub fn clear_hotkey_state() {
     if let Ok(mut guard) = HOTKEY_HWND.lock() {
         *guard = 0;
     }
+    clear_double_modifier_tracker();
 }
 
 pub fn stop_hotkey_thread() {
@@ -313,10 +497,19 @@ impl HotkeyManager {
     }
 
     pub fn start_with_bindings(&mut self, bindings: Vec<(u32, u32)>, window: tauri::WebviewWindow) {
+        self.start_with_hotkeys(bindings, Vec::new(), window);
+    }
+
+    pub fn start_with_hotkeys(
+        &mut self,
+        bindings: Vec<(u32, u32)>,
+        double_modifiers: Vec<Modifier>,
+        window: tauri::WebviewWindow,
+    ) {
         self.stop();
         self.window = Some(window.clone());
         let (tx, rx) = mpsc::channel::<()>();
-        let handle = spawn_hotkey_thread_with_bindings(bindings, tx);
+        let handle = spawn_hotkey_thread_with_hotkeys(bindings, double_modifiers, tx);
         let quick_paste_target = Arc::clone(&self.quick_paste_target);
 
         thread::spawn(move || {
@@ -345,8 +538,16 @@ impl HotkeyManager {
     }
 
     pub fn restart_with_bindings(&mut self, bindings: Vec<(u32, u32)>) {
+        self.restart_with_hotkeys(bindings, Vec::new());
+    }
+
+    pub fn restart_with_hotkeys(
+        &mut self,
+        bindings: Vec<(u32, u32)>,
+        double_modifiers: Vec<Modifier>,
+    ) {
         if let Some(window) = self.window.clone() {
-            self.start_with_bindings(bindings, window);
+            self.start_with_hotkeys(bindings, double_modifiers, window);
         }
     }
 
@@ -554,16 +755,36 @@ pub fn shortcut_bindings_to_windows_hotkeys(
     deduplicate_hotkeys(&converted)
 }
 
+pub fn shortcut_bindings_to_double_modifiers(
+    bindings: &[crate::keyboard::ShortcutBinding],
+) -> Vec<Modifier> {
+    let mut seen = BTreeSet::new();
+    bindings
+        .iter()
+        .filter_map(|binding| match binding {
+            crate::keyboard::ShortcutBinding::DoubleModifier { modifier } => {
+                seen.insert(*modifier).then_some(*modifier)
+            }
+            crate::keyboard::ShortcutBinding::Chord { .. } => None,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use crate::keyboard::ShortcutBinding;
+    use crate::keyboard::{Modifier, ShortcutBinding};
 
     use super::{
-        assign_hotkey_ids, shortcut_bindings_to_windows_hotkeys, shortcut_to_windows_hotkey,
+        assign_hotkey_ids, shortcut_bindings_to_double_modifiers,
+        shortcut_bindings_to_windows_hotkeys, shortcut_to_windows_hotkey, DoubleModifierTracker,
         QuickPasteTarget, FIRST_HOTKEY_ID,
     };
+
+    const VK_SHIFT: u32 = 0x10;
+    const VK_CONTROL: u32 = 0x11;
+    const VK_V: u32 = b'V' as u32;
 
     #[test]
     fn quick_paste_target_is_consumed_once() {
@@ -611,8 +832,95 @@ mod tests {
     }
 
     #[test]
-    fn double_modifier_bindings_are_left_for_the_software_matcher() {
+    fn double_modifier_bindings_are_not_registered_as_native_chords() {
         let binding = ShortcutBinding::from_str("Shift+Shift").unwrap();
         assert_eq!(shortcut_to_windows_hotkey(&binding), None);
+    }
+
+    #[test]
+    fn collects_double_modifier_bindings_for_the_keyboard_hook() {
+        let bindings = [
+            ShortcutBinding::from_str("Shift+Shift").unwrap(),
+            ShortcutBinding::from_str("Alt+V").unwrap(),
+            ShortcutBinding::from_str("Ctrl+Ctrl").unwrap(),
+            ShortcutBinding::from_str("Shift+Shift").unwrap(),
+        ];
+
+        assert_eq!(
+            shortcut_bindings_to_double_modifiers(&bindings),
+            vec![Modifier::Shift, Modifier::Control]
+        );
+    }
+
+    #[test]
+    fn tracker_fires_on_a_clean_double_tap() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        assert!(!tracker.on_key_event(VK_SHIFT, true, 1_000));
+        assert!(!tracker.on_key_event(VK_SHIFT, false, 1_050));
+        assert!(!tracker.on_key_event(VK_SHIFT, true, 1_200));
+        assert!(tracker.on_key_event(VK_SHIFT, false, 1_250));
+    }
+
+    #[test]
+    fn tracker_ignores_taps_outside_the_double_tap_interval() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        tracker.on_key_event(VK_SHIFT, true, 1_000);
+        tracker.on_key_event(VK_SHIFT, false, 1_050);
+        tracker.on_key_event(VK_SHIFT, true, 1_500);
+        assert!(!tracker.on_key_event(VK_SHIFT, false, 1_550));
+        tracker.on_key_event(VK_SHIFT, true, 1_700);
+        assert!(tracker.on_key_event(VK_SHIFT, false, 1_750));
+    }
+
+    #[test]
+    fn tracker_treats_chords_and_other_keys_as_interruptions() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        // Shift+V is a chord, not a bare tap.
+        tracker.on_key_event(VK_SHIFT, true, 1_000);
+        tracker.on_key_event(VK_V, true, 1_020);
+        tracker.on_key_event(VK_V, false, 1_040);
+        assert!(!tracker.on_key_event(VK_SHIFT, false, 1_060));
+
+        // A clean double tap afterwards still works.
+        tracker.on_key_event(VK_SHIFT, true, 1_200);
+        tracker.on_key_event(VK_SHIFT, false, 1_220);
+        tracker.on_key_event(VK_SHIFT, true, 1_320);
+        assert!(tracker.on_key_event(VK_SHIFT, false, 1_340));
+    }
+
+    #[test]
+    fn tracker_resets_when_a_different_modifier_is_tapped_in_between() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        tracker.on_key_event(VK_SHIFT, true, 1_000);
+        tracker.on_key_event(VK_SHIFT, false, 1_020);
+        tracker.on_key_event(VK_CONTROL, true, 1_060);
+        tracker.on_key_event(VK_CONTROL, false, 1_080);
+        tracker.on_key_event(VK_SHIFT, true, 1_120);
+        assert!(!tracker.on_key_event(VK_SHIFT, false, 1_140));
+    }
+
+    #[test]
+    fn tracker_only_fires_for_registered_modifiers() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        tracker.on_key_event(VK_CONTROL, true, 1_000);
+        tracker.on_key_event(VK_CONTROL, false, 1_020);
+        tracker.on_key_event(VK_CONTROL, true, 1_100);
+        assert!(!tracker.on_key_event(VK_CONTROL, false, 1_120));
+    }
+
+    #[test]
+    fn tracker_ignores_key_auto_repeat_while_a_modifier_is_held() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        tracker.on_key_event(VK_SHIFT, true, 1_000);
+        tracker.on_key_event(VK_SHIFT, true, 1_050);
+        tracker.on_key_event(VK_SHIFT, false, 1_100);
+        tracker.on_key_event(VK_SHIFT, true, 1_200);
+        assert!(tracker.on_key_event(VK_SHIFT, false, 1_250));
     }
 }
