@@ -189,25 +189,25 @@
     justify-content: space-between;
     gap: 16px;
     padding: 20px 22px 15px;
-    border-bottom: 1px solid #292929;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .eyebrow {
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
   h2 {
     margin: 5px 0 4px;
-    color: #efefef;
+    color: var(--text-primary);
     font-size: var(--settings-page-title-size, 18px);
     font-weight: 590;
   }
   header p,
   .setting-heading p {
     margin: 0;
-    color: #777;
+    color: var(--text-muted);
     line-height: 1.5;
   }
   header p {
@@ -223,10 +223,10 @@
     height: var(--settings-close-size, 28px);
     flex: 0 0 auto;
     padding: 0;
-    border: 1px solid #353535;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-close-radius, 7px);
-    color: #999;
-    background: #222;
+    color: var(--text-muted);
+    background: var(--card-bg);
     font-size: var(--settings-close-font-size, 19px);
     line-height: 1;
   }
@@ -237,7 +237,7 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
-    scrollbar-color: #9a9a9a transparent;
+    scrollbar-color: var(--scrollbar-color) transparent;
     scrollbar-width: thin;
   }
 
@@ -251,14 +251,14 @@
 
   .settings-scroll::-webkit-scrollbar-thumb {
     border-radius: 10px;
-    background: #858585;
+    background: var(--scrollbar-color);
   }
 
   .setting-card {
     padding: 10px 13px;
-    border: 1px solid #303030;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--settings-card-radius, 9px);
-    background: #1e1e1e;
+    background: var(--card-bg);
   }
   .setting-heading {
     display: flex;
@@ -275,14 +275,14 @@
     width: 29px;
     height: 29px;
     flex: 0 0 auto;
-    border: 1px solid #363636;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-icon-radius, 7px);
-    color: #d2d2d2;
-    background: #242424;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
   .setting-heading strong {
     display: block;
-    color: #dedede;
+    color: var(--text-primary);
     font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
@@ -291,37 +291,37 @@
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
   .setting-heading code {
-    color: #888;
+    color: var(--text-muted);
   }
 
   .binding-count {
     flex: 0 0 auto;
     padding: 3px 7px;
-    border: 1px solid #393939;
+    border: 1px solid var(--border-color);
     border-radius: 999px;
-    color: #999;
+    color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
   }
   label {
     display: block;
     margin: 12px 0 6px;
-    color: #8a8a8a;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
   input {
     width: 100%;
     box-sizing: border-box;
     padding: 9px 10px;
-    border: 1px solid #343434;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
     outline: none;
-    color: #d7d7d7;
-    background: #171717;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font-family: "Cascadia Code", Consolas, monospace;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
   input:focus {
-    border-color: #555;
+    border-color: var(--text-faint);
   }
 
   .setting-actions {
@@ -331,10 +331,10 @@
   }
   .setting-actions button {
     padding: 7px 10px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
-    color: #c8c8c8;
-    background: #252525;
+    color: var(--text-secondary);
+    background: var(--card-bg);
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
@@ -344,8 +344,8 @@
   }
 
   .setting-actions button:hover:not(:disabled) {
-    color: #f0f0f0;
-    background: #303030;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
   button {
     cursor: pointer;
@@ -358,7 +358,7 @@
     display: grid;
     flex: 1;
     place-items: center;
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
   .settings-feedback {
@@ -367,37 +367,37 @@
     bottom: 13px;
     left: 18px;
     padding: 8px 10px;
-    border: 1px solid #553434;
+    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
     border-radius: var(--settings-feedback-radius, 7px);
-    color: #d59c9c;
-    background: rgba(48, 27, 27, 0.96);
+    color: color-mix(in srgb, var(--danger-color) 75%, white);
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
     font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
   }
   .settings-feedback.success {
-    border-color: #35513f;
-    color: #9dc6aa;
-    background: rgba(27, 45, 33, 0.96);
+    border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+    color: color-mix(in srgb, var(--success-color) 75%, white);
+    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
-    color: #666;
+    color: var(--text-faint);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
 
   .shortcut-reference {
     padding: 10px 13px;
-    border: 1px solid #303030;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--settings-card-radius, 9px);
-    background: #1e1e1e;
+    background: var(--card-bg);
   }
 
   .shortcut-reference strong {
     display: block;
     margin-bottom: 10px;
-    color: #dedede;
+    color: var(--text-primary);
     font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
@@ -417,10 +417,10 @@
   .ref-row kbd {
     display: inline-block;
     padding: 2px 7px;
-    border: 1px solid #4a4a4a;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: #c3c3c3;
-    background: #252525;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
     font:
       10px "Cascadia Code",
       Consolas,
@@ -429,7 +429,7 @@
   }
 
   .ref-row span {
-    color: #888;
+    color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     margin-left: 6px;
   }
@@ -439,10 +439,10 @@
     align-items: center;
     gap: 5px;
     padding: 5px 10px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
-    color: #999;
-    background: #222;
+    color: var(--text-muted);
+    background: var(--card-bg);
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
@@ -454,8 +454,8 @@
   }
 
   .open-btn:hover {
-    color: #ccc;
-    background: #2e2e2e;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   .setting-card-row {

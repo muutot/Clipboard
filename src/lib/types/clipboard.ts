@@ -80,6 +80,12 @@ export interface ClipboardItem {
 
 export type ThemeMode = "dark" | "light" | "custom";
 
+export interface ThemePreset {
+  id: string;
+  name: string;
+  colors: ThemeColors;
+}
+
 export interface ThemeColors {
   bg: string;
   settingsBg: string;
@@ -88,6 +94,18 @@ export interface ThemeColors {
   textMuted: string;
   border: string;
   cardBg: string;
+  surfaceBg: string;
+  statusBarBg: string;
+  hoverBg: string;
+  inputBg: string;
+  textSecondary: string;
+  textFaint: string;
+  borderSubtle: string;
+  selectionColor: string;
+  successColor: string;
+  dangerColor: string;
+  warningColor: string;
+  scrollbarColor: string;
 }
 
 export const DARK_THEME_COLORS: ThemeColors = {
@@ -98,6 +116,18 @@ export const DARK_THEME_COLORS: ThemeColors = {
   textMuted: "#999999",
   border: "#3a3a3a",
   cardBg: "#1e1e1e",
+  surfaceBg: "#1e1e1e",
+  statusBarBg: "#181818",
+  hoverBg: "#2c2c2c",
+  inputBg: "#1a1a1a",
+  textSecondary: "#b2b2b2",
+  textFaint: "#6e6e6e",
+  borderSubtle: "#292929",
+  selectionColor: "#4aa8ff",
+  successColor: "#51b96b",
+  dangerColor: "#e85d5d",
+  warningColor: "#e2c05d",
+  scrollbarColor: "#858585",
 };
 
 export const LIGHT_THEME_COLORS: ThemeColors = {
@@ -108,6 +138,18 @@ export const LIGHT_THEME_COLORS: ThemeColors = {
   textMuted: "#666666",
   border: "#cccccc",
   cardBg: "#ffffff",
+  surfaceBg: "#ffffff",
+  statusBarBg: "#e8e8e8",
+  hoverBg: "#e0e0e0",
+  inputBg: "#f0f0f0",
+  textSecondary: "#444444",
+  textFaint: "#999999",
+  borderSubtle: "#dddddd",
+  selectionColor: "#2196f3",
+  successColor: "#388e3c",
+  dangerColor: "#d32f2f",
+  warningColor: "#f9a825",
+  scrollbarColor: "#aaaaaa",
 };
 
 export type SearchSuggestionMode = "off" | "panel" | "inline";
@@ -151,6 +193,7 @@ export interface GeneralSettings {
   useSystemTitleBar: boolean;
   theme: ThemeMode;
   themeColors?: ThemeColors;
+  customPresets: ThemePreset[];
   imageFullscreenMode: "overlay" | "desktop";
   viewerBackdropOpacity: number;
   searchSuggestionMode: SearchSuggestionMode;

@@ -8,6 +8,7 @@ import type {
   GeneralSettingsInfo,
   Language,
   ThemeColors,
+  ThemePreset,
   WindowConfig,
   WindowPosition,
 } from "$lib/types/clipboard";
@@ -41,6 +42,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   useSystemTitleBar: false,
   theme: "dark",
   themeColors: { ...DARK_THEME_COLORS },
+  customPresets: [],
   imageFullscreenMode: "overlay",
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
@@ -94,6 +96,18 @@ const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
   "textMuted",
   "border",
   "cardBg",
+  "surfaceBg",
+  "statusBarBg",
+  "hoverBg",
+  "inputBg",
+  "textSecondary",
+  "textFaint",
+  "borderSubtle",
+  "selectionColor",
+  "successColor",
+  "dangerColor",
+  "warningColor",
+  "scrollbarColor",
 ];
 
 function normalizeThemeColors(source: unknown, fallback: ThemeColors): ThemeColors {
@@ -107,6 +121,20 @@ function normalizeThemeColors(source: unknown, fallback: ThemeColors): ThemeColo
     );
   }
   return result as unknown as ThemeColors;
+}
+
+function normalizeCustomPresets(source: unknown): ThemePreset[] {
+  if (!Array.isArray(source)) return [];
+  return source
+    .filter(
+      (item): item is Record<string, unknown> =>
+        isRecord(item) && typeof item.id === "string" && typeof item.name === "string",
+    )
+    .map((item) => ({
+      id: item.id as string,
+      name: item.name as string,
+      colors: normalizeThemeColors(item.colors, { ...DARK_THEME_COLORS }),
+    }));
 }
 
 function validSearchSuggestionMode(
@@ -305,6 +333,9 @@ function normalizeGeneralSettings(
   result.themeColors = normalizeThemeColors(
     source.themeColors ?? fallback("themeColors"),
     { ...DARK_THEME_COLORS },
+  );
+  result.customPresets = normalizeCustomPresets(
+    source.customPresets ?? fallback("customPresets"),
   );
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),

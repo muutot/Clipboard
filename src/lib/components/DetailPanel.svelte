@@ -1337,8 +1337,8 @@
     width: min(520px, 100vw);
     display: flex;
     flex-direction: column;
-    border-left: 1px solid #363636;
-    background: #1b1b1b;
+    border-left: 1px solid var(--border-color);
+    background: var(--bg-settings);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
     animation: slide-in 220ms ease-out;
   }
@@ -1361,7 +1361,7 @@
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .back-btn {
@@ -1371,10 +1371,10 @@
     width: 30px;
     height: 30px;
     padding: 0;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 7px;
-    color: #999;
-    background: #222;
+    color: var(--text-muted);
+    background: var(--card-bg);
     cursor: pointer;
     transition:
       color 100ms ease,
@@ -1382,8 +1382,8 @@
   }
 
   .back-btn:hover {
-    color: #ddd;
-    background: #2e2e2e;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .header-info {
@@ -1393,7 +1393,7 @@
   }
 
   .header-kind {
-    color: #777;
+    color: var(--text-muted);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1401,7 +1401,7 @@
 
   .header-title {
     overflow: hidden;
-    color: #e4e4e4;
+    color: var(--text-primary);
     font-size: var(--font-size-base, 13px);
     font-weight: 540;
     white-space: nowrap;
@@ -1420,10 +1420,10 @@
     flex: 1;
     min-width: 0;
     padding: 2px 8px;
-    border: 1px solid #4aa8ff;
+    border: 1px solid var(--selection-color);
     border-radius: 5px;
-    color: #e4e4e4;
-    background: #141414;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font-size: 13px;
     outline: none;
   }
@@ -1434,31 +1434,31 @@
     justify-content: center;
     width: 26px;
     height: 26px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
-    color: #a3a3a3;
-    background: #252525;
+    color: var(--text-muted);
+    background: var(--card-bg);
     cursor: pointer;
     flex-shrink: 0;
   }
 
   .header-save-btn:hover {
-    color: #51b96b;
-    border-color: #51b96b;
+    color: var(--success-color);
+    border-color: var(--success-color);
   }
 
   .detail-tabs {
     display: flex;
     gap: 2px;
     padding: 6px 12px;
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .detail-tabs button {
     padding: 7px 16px;
     border: 0;
     border-radius: 6px;
-    color: #777;
+    color: var(--text-muted);
     background: transparent;
     font: inherit;
     font-size: var(--font-size-secondary, 12px);
@@ -1469,13 +1469,13 @@
   }
 
   .detail-tabs button:hover {
-    color: #bbb;
-    background: #292929;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   .detail-tabs button.active {
-    color: #e4e4e4;
-    background: #303030;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .detail-body {
@@ -1484,7 +1484,7 @@
     overflow-y: auto;
     padding: 16px;
     scrollbar-width: thin;
-    scrollbar-color: #555 transparent;
+    scrollbar-color: var(--scrollbar-color) transparent;
   }
 
   .preview-section {
@@ -1496,10 +1496,10 @@
   .content-full {
     margin: 0;
     padding: 14px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    color: #d7d7d7;
-    background: #141414;
+    color: var(--text-secondary);
+    background: var(--input-bg);
     font:
       12px/1.6 "Cascadia Code",
       Consolas,
@@ -1520,10 +1520,10 @@
     gap: 12px;
     min-height: 180px;
     padding: 16px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    color: #888;
-    background: #141414;
+    color: var(--text-muted);
+    background: var(--input-bg);
   }
 
   .image-full-preview img {
@@ -1541,29 +1541,29 @@
   }
 
   .image-meta {
-    color: #777;
+    color: var(--text-muted);
     font-size: 11px;
   }
 
   .file-full-preview strong {
-    color: #ddd;
+    color: var(--text-primary);
     font-size: 13px;
   }
 
   .file-full-preview span {
-    color: #777;
+    color: var(--text-muted);
     font-size: 11px;
   }
 
   .file-preview-state {
     max-width: 100%;
-    color: #888;
+    color: var(--text-muted);
     font-size: 11px;
     text-align: center;
   }
 
   .file-preview-error {
-    color: #c78b8b;
+    color: var(--danger-color);
   }
 
   .file-content-preview {
@@ -1572,10 +1572,10 @@
     box-sizing: border-box;
     margin: 0;
     padding: 12px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 7px;
-    color: #d7d7d7;
-    background: #141414;
+    color: var(--text-secondary);
+    background: var(--input-bg);
     font:
       11px/1.55 "Cascadia Code",
       Consolas,
@@ -1588,7 +1588,7 @@
 
   .file-preview-note {
     max-width: 100%;
-    color: #777;
+    color: var(--text-muted);
     font-size: 10px;
     text-align: center;
   }
@@ -1601,7 +1601,7 @@
     overflow-y: auto;
     width: 100%;
     padding: 8px;
-    background: #1a1a1a;
+    background: var(--input-bg);
     border-radius: 6px;
     font-family: monospace;
     font-size: 13px;
@@ -1615,19 +1615,19 @@
   }
 
   .file-tree-icon {
-    color: #555;
+    color: var(--text-faint);
     white-space: pre;
     flex-shrink: 0;
   }
 
   .file-tree-name {
-    color: #ccc;
+    color: var(--text-secondary);
     word-break: break-all;
     flex: 1;
   }
 
   .file-tree-size {
-    color: #777;
+    color: var(--text-muted);
     white-space: nowrap;
     margin-left: 8px;
     flex-shrink: 0;
@@ -1645,10 +1645,10 @@
     align-items: center;
     gap: 6px;
     padding: 8px 14px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 7px;
-    color: #bbb;
-    background: #222;
+    color: var(--text-secondary);
+    background: var(--card-bg);
     font: inherit;
     font-size: 11.5px;
     cursor: pointer;
@@ -1658,9 +1658,9 @@
   }
 
   .detail-actions button:hover {
-    background: #2e2e2e;
-    border-color: #555;
-    color: #e4e4e4;
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
+    color: var(--text-primary);
   }
 
   .details-section {
@@ -1674,10 +1674,10 @@
     gap: 1px;
     margin: 0;
     padding: 0;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     overflow: hidden;
-    background: #2e2e2e;
+    background: var(--border-subtle);
   }
 
   .detail-row {
@@ -1685,7 +1685,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 14px;
-    background: #141414;
+    background: var(--input-bg);
     gap: 12px;
   }
 
@@ -1693,7 +1693,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: #888;
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 500;
     flex-shrink: 0;
@@ -1701,7 +1701,7 @@
 
   .detail-row dd {
     margin: 0;
-    color: #ddd;
+    color: var(--text-primary);
     font-size: 11px;
     text-align: right;
     word-break: break-all;
@@ -1709,10 +1709,10 @@
 
   .detail-row dd code {
     padding: 2px 6px;
-    border: 1px solid #333;
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
-    color: #b7b7b7;
-    background: #1a1a1a;
+    color: var(--text-secondary);
+    background: var(--input-bg);
     font-family: "Cascadia Code", Consolas, monospace;
     font-size: 10px;
   }
@@ -1743,16 +1743,16 @@
   }
 
   .resource-section-title {
-    color: #aaa;
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 560;
   }
 
   .resource-file-card {
     padding: 10px 12px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    background: #141414;
+    background: var(--input-bg);
   }
 
   .resource-file-heading {
@@ -1760,7 +1760,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
-    color: #ddd;
+    color: var(--text-primary);
     font-size: 11px;
   }
 
@@ -1772,7 +1772,7 @@
 
   .resource-file-heading > span:last-child {
     flex-shrink: 0;
-    color: #888;
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
 
@@ -1783,10 +1783,10 @@
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: #999;
-    background: #1a1a1a;
+    color: var(--text-muted);
+    background: var(--input-bg);
     font-size: 10px;
   }
 
@@ -1803,26 +1803,26 @@
     justify-content: space-between;
     gap: 12px;
     padding: 4px 0;
-    border-top: 1px solid #242424;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .resource-file-details dt {
     flex-shrink: 0;
-    color: #777;
+    color: var(--text-muted);
     font-size: 10px;
   }
 
   .resource-file-details dd {
     min-width: 0;
     margin: 0;
-    color: #c8c8c8;
+    color: var(--text-secondary);
     font-size: 10px;
     text-align: right;
     overflow-wrap: anywhere;
   }
 
   .resource-file-details dd code {
-    color: #b7b7b7;
+    color: var(--text-secondary);
     font-family: "Cascadia Code", Consolas, monospace;
     font-size: 9.5px;
     overflow-wrap: anywhere;
@@ -1839,10 +1839,10 @@
     max-height: 360px;
     margin: 0;
     padding: 10px 12px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 7px;
-    color: #c8c8c8;
-    background: #141414;
+    color: var(--text-secondary);
+    background: var(--input-bg);
     font:
       11px/1.55 "Cascadia Code",
       Consolas,
@@ -1853,14 +1853,14 @@
   }
 
   .raw-metadata {
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 7px;
-    background: #141414;
+    background: var(--input-bg);
   }
 
   .raw-metadata summary {
     padding: 9px 12px;
-    color: #999;
+    color: var(--text-muted);
     font-size: 10px;
     cursor: pointer;
   }
@@ -1877,34 +1877,34 @@
   }
 
   .ocr-badge.ocr-completed {
-    border: 1px solid #35513f;
-    color: #9dc6aa;
-    background: rgba(27, 45, 33, 0.6);
+    border: 1px solid color-mix(in srgb, var(--success-color) 40%, transparent);
+    color: color-mix(in srgb, var(--success-color) 75%, white);
+    background: color-mix(in srgb, var(--success-color) 12%, transparent);
   }
 
   .ocr-badge.ocr-pending {
-    border: 1px solid #4a4a35;
-    color: #c6c69d;
-    background: rgba(45, 45, 27, 0.6);
+    border: 1px solid color-mix(in srgb, var(--warning-color) 40%, transparent);
+    color: color-mix(in srgb, var(--warning-color) 75%, white);
+    background: color-mix(in srgb, var(--warning-color) 12%, transparent);
   }
 
   .ocr-badge.ocr-failed {
-    border: 1px solid #583b3b;
-    color: #c78b8b;
-    background: rgba(52, 29, 29, 0.6);
+    border: 1px solid color-mix(in srgb, var(--danger-color) 40%, transparent);
+    color: color-mix(in srgb, var(--danger-color) 75%, white);
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
 
   .special-section {
     padding: 12px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    background: #141414;
+    background: var(--input-bg);
   }
 
   .special-title {
     display: block;
     margin-bottom: 10px;
-    color: #aaa;
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 560;
   }
@@ -1919,11 +1919,11 @@
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    border: 1px solid #303030;
+    border: 1px solid var(--border-subtle);
     border-radius: 6px;
-    color: #b2b2b2;
+    color: var(--text-secondary);
     font-size: 11px;
-    background: #1a1a1a;
+    background: var(--input-bg);
   }
 
   .marker-item span,
@@ -1936,7 +1936,7 @@
   }
 
   .marker-item a {
-    color: #66bde1;
+    color: var(--selection-color);
     text-decoration: none;
     white-space: normal;
     word-break: break-all;
@@ -1955,7 +1955,7 @@
     padding: 0;
     border: 1px solid transparent;
     border-radius: 4px;
-    color: #666;
+    color: var(--text-faint);
     background: transparent;
     cursor: pointer;
     flex-shrink: 0;
@@ -1963,23 +1963,23 @@
   }
 
   .marker-item button:hover {
-    color: #bbb;
+    color: var(--text-secondary);
   }
 
   .color-swatch {
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    border: 1px solid #444;
+    border: 1px solid var(--border-color);
     flex-shrink: 0;
   }
 
   .color-marker code {
     padding: 2px 6px;
-    border: 1px solid #333;
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
-    color: #b7b7b7;
-    background: #1a1a1a;
+    color: var(--text-secondary);
+    background: var(--input-bg);
     font:
       10px "Cascadia Code",
       Consolas,
@@ -1999,10 +1999,10 @@
 
   .ocr-regenerate-btn {
     padding: 5px 10px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
-    color: #b8b8b8;
-    background: #222;
+    color: var(--text-secondary);
+    background: var(--card-bg);
     font-size: 11px;
     cursor: pointer;
     transition:
@@ -2012,9 +2012,9 @@
   }
 
   .ocr-regenerate-btn:hover:not(:disabled) {
-    border-color: #555;
-    color: #e0e0e0;
-    background: #2d2d2d;
+    border-color: var(--text-faint);
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .ocr-regenerate-btn:disabled {
@@ -2023,7 +2023,7 @@
   }
 
   .ocr-feedback {
-    color: #9eb9ff;
+    color: var(--selection-color);
     font-size: 11px;
   }
 
@@ -2041,12 +2041,12 @@
   }
 
   .ocr-completed {
-    color: #9dc6aa;
+    color: color-mix(in srgb, var(--success-color) 75%, white);
   }
 
   .ocr-completed .ocr-dot {
-    background: #51b96b;
-    box-shadow: 0 0 6px rgba(81, 185, 107, 0.4);
+    background: var(--success-color);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--success-color) 40%, transparent);
   }
 
   .ocr-copy-btn {
@@ -2056,7 +2056,7 @@
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
-    color: #b0b0b0;
+    color: var(--text-secondary);
     cursor: pointer;
     transition:
       background 0.15s,
@@ -2065,25 +2065,25 @@
 
   .ocr-copy-btn:hover {
     background: rgba(255, 255, 255, 0.15);
-    color: #e0e0e0;
+    color: var(--text-primary);
   }
 
   .ocr-pending {
-    color: #c6b06d;
+    color: color-mix(in srgb, var(--warning-color) 75%, white);
   }
 
   .ocr-pending .ocr-dot {
-    background: #d4b14c;
-    box-shadow: 0 0 6px rgba(212, 177, 76, 0.4);
+    background: var(--warning-color);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--warning-color) 40%, transparent);
   }
 
   .ocr-content {
     margin: 0;
     padding: 14px;
-    border: 1px solid #2e2e2e;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    color: #d7d7d7;
-    background: #141414;
+    color: var(--text-secondary);
+    background: var(--input-bg);
     font:
       12px/1.6 "Cascadia Code",
       Consolas,
@@ -2099,17 +2099,17 @@
     justify-content: center;
     gap: 12px;
     min-height: 140px;
-    color: #666;
+    color: var(--text-faint);
     font-size: 12px;
   }
 
   .ocr-failed {
-    color: #c78b8b;
+    color: var(--danger-color);
   }
 
   .ocr-failed small {
     max-width: 100%;
-    color: #9a7777;
+    color: color-mix(in srgb, var(--danger-color) 65%, white);
     text-align: center;
     overflow-wrap: anywhere;
   }
@@ -2130,10 +2130,10 @@
     width: 100%;
     box-sizing: border-box;
     padding: 10px 12px;
-    border: 1px solid #4aa8ff;
+    border: 1px solid var(--selection-color);
     border-radius: 7px;
-    color: #e4e4e4;
-    background: #141414;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font:
       12px/1.55 "Cascadia Code",
       Consolas,
@@ -2154,10 +2154,10 @@
     align-items: center;
     gap: 4px;
     padding: 5px 12px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
-    color: #a3a3a3;
-    background: #252525;
+    color: var(--text-muted);
+    background: var(--card-bg);
     font: inherit;
     font-size: 11.5px;
     cursor: pointer;
@@ -2167,27 +2167,27 @@
   }
 
   .edit-actions button.edit-save {
-    color: #d8d8d8;
-    background: #2a2a2a;
-    border-color: #4a4a4a;
+    color: var(--text-primary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
   }
 
   .edit-actions button.edit-save:hover {
     color: #fff;
-    background: #383838;
-    border-color: #5a5a5a;
+    background: var(--border-color);
+    border-color: var(--text-faint);
   }
 
   .edit-actions button.edit-save-as-new {
-    color: #999;
-    background: #252525;
-    border-color: #3a3a3a;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border-color: var(--border-color);
   }
 
   .edit-actions button.edit-save-as-new:hover {
-    color: #bbb;
-    background: #303030;
-    border-color: #4a4a4a;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
   }
 
   .edit-actions button.edit-save-as-new:disabled {
@@ -2196,8 +2196,8 @@
   }
 
   .edit-actions button.edit-cancel:hover {
-    color: #ccc;
-    background: #2e2e2e;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   .image-full-preview {
@@ -2214,9 +2214,9 @@
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid #444;
+    border: 1px solid var(--border-color);
     border-radius: 6px;
-    color: #ccc;
+    color: var(--text-secondary);
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(4px);
     cursor: pointer;
@@ -2231,7 +2231,7 @@
   }
 
   .image-fullscreen-btn:hover {
-    color: #fff;
+    color: var(--text-primary);
     background: rgba(0, 0, 0, 0.75);
   }
 
@@ -2275,9 +2275,9 @@
     width: 36px;
     height: 36px;
     padding: 0;
-    border: 1px solid #555;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    color: #ddd;
+    color: var(--text-secondary);
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
     cursor: pointer;
@@ -2287,7 +2287,7 @@
   }
 
   .viewer-close-btn:hover {
-    color: #fff;
+    color: var(--text-primary);
     background: rgba(60, 60, 60, 0.8);
   }
 
@@ -2299,7 +2299,7 @@
     z-index: 101;
     padding: 4px 14px;
     border-radius: 6px;
-    color: #bbb;
+    color: var(--text-secondary);
     background: rgba(30, 30, 30, 0.7);
     backdrop-filter: blur(6px);
     font-size: 12px;

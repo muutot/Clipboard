@@ -455,6 +455,16 @@ export interface LocaleDefinition {
     light: string;
     custom: string;
     readonlyHint: string;
+    presets: string;
+    presetsDescription: string;
+    savePreset: string;
+    presetNamePlaceholder: string;
+    applyPreset: string;
+    deletePreset: string;
+    presetSaved: string;
+    presetApplied: string;
+    presetDeleted: string;
+    noPresets: string;
     bg: string;
     bgDescription: string;
     settingsBg: string;
@@ -469,6 +479,30 @@ export interface LocaleDefinition {
     borderDescription: string;
     cardBg: string;
     cardBgDescription: string;
+    surfaceBg: string;
+    surfaceBgDescription: string;
+    statusBarBg: string;
+    statusBarBgDescription: string;
+    hoverBg: string;
+    hoverBgDescription: string;
+    inputBg: string;
+    inputBgDescription: string;
+    textSecondary: string;
+    textSecondaryDescription: string;
+    textFaint: string;
+    textFaintDescription: string;
+    borderSubtle: string;
+    borderSubtleDescription: string;
+    selectionColor: string;
+    selectionColorDescription: string;
+    successColor: string;
+    successColorDescription: string;
+    dangerColor: string;
+    dangerColorDescription: string;
+    warningColor: string;
+    warningColorDescription: string;
+    scrollbarColor: string;
+    scrollbarColorDescription: string;
   };
 }
 

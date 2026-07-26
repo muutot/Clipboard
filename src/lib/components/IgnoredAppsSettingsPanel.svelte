@@ -332,24 +332,24 @@
     justify-content: space-between;
     gap: 16px;
     padding: 20px 22px 15px;
-    border-bottom: 1px solid #292929;
+    border-bottom: 1px solid var(--border-subtle);
   }
   .eyebrow {
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
   h2 {
     margin: 5px 0 4px;
-    color: #efefef;
+    color: var(--text-primary);
     font-size: var(--settings-page-title-size, 18px);
     font-weight: 590;
   }
   header p {
     max-width: 570px;
     margin: 0;
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 1.5;
   }
@@ -361,10 +361,10 @@
     height: var(--settings-close-size, 28px);
     flex: 0 0 auto;
     padding: 0;
-    border: 1px solid #353535;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-close-radius, 7px);
-    color: #999;
-    background: #222;
+    color: var(--text-muted);
+    background: var(--card-bg);
     font-size: var(--settings-close-font-size, 19px);
     line-height: 1;
   }
@@ -376,7 +376,7 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
-    scrollbar-color: #9a9a9a transparent;
+    scrollbar-color: var(--scrollbar-color) transparent;
     scrollbar-width: thin;
   }
 
@@ -390,13 +390,13 @@
 
   .settings-scroll::-webkit-scrollbar-thumb {
     border-radius: 10px;
-    background: #858585;
+    background: var(--scrollbar-color);
   }
   .setting-card {
     padding: 10px 13px;
-    border: 1px solid #303030;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--settings-card-radius, 9px);
-    background: #1e1e1e;
+    background: var(--card-bg);
   }
 
   .toggle-card {
@@ -421,22 +421,22 @@
     width: 29px;
     height: 29px;
     flex: 0 0 auto;
-    border: 1px solid #363636;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-icon-radius, 7px);
-    color: #d2d2d2;
-    background: #242424;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   .setting-heading strong {
     display: block;
-    color: #dedede;
+    color: var(--text-primary);
     font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin: 2px 0 0;
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 1.45;
   }
@@ -449,7 +449,7 @@
   }
 
   .pause-state {
-    color: #999;
+    color: var(--text-muted);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
 
@@ -458,15 +458,15 @@
     width: 40px;
     height: 22px;
     padding: 0;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    background: #252525;
+    background: var(--input-bg);
     transition: background 120ms ease;
   }
 
   .toggle-switch.active {
-    border-color: #536d98;
-    background: #3f5f92;
+    border-color: var(--selection-color);
+    background: color-mix(in srgb, var(--selection-color) 18%, transparent);
   }
 
   .toggle-switch:disabled {
@@ -480,13 +480,13 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #aaa;
+    background: var(--text-faint);
     transition: transform 120ms ease;
   }
 
   .toggle-switch.active .toggle-knob {
     transform: translateX(18px);
-    background: #fff;
+    background: var(--selection-color);
   }
 
   .filter-board {
@@ -495,9 +495,9 @@
     grid-template-rows: minmax(0, 1fr);
     min-height: 365px;
     flex: 1;
-    border: 1px solid #303030;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--settings-card-radius, 9px);
-    background: #1b1b1b;
+    background: var(--surface-bg);
     overflow: hidden;
   }
   .application-column {
@@ -509,22 +509,22 @@
 
   .application-column + .transfer-column,
   .transfer-column + .application-column {
-    border-left: 1px solid #303030;
+    border-left: 1px solid var(--border-subtle);
   }
   .column-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
     min-height: 25px;
-    color: #ddd;
+    color: var(--text-primary);
     font-size: var(--settings-heading-size, 13px);
   }
   .column-heading strong span {
     margin-left: 4px;
     padding: 2px 6px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 999px;
-    color: #898989;
+    color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     font-weight: 500;
   }
@@ -534,7 +534,7 @@
     align-items: center;
     justify-content: center;
     border: 0;
-    color: #888;
+    color: var(--text-muted);
     background: transparent;
     font-size: var(--font-size-base, 14px);
   }
@@ -544,10 +544,10 @@
     gap: 7px;
     margin: 9px 0;
     padding: 7px 9px;
-    border: 1px solid #373737;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
-    color: #676767;
-    background: #181818;
+    color: var(--text-faint);
+    background: var(--input-bg);
   }
   .search-field input,
   .manual-add input {
@@ -555,7 +555,7 @@
     flex: 1;
     border: 0;
     outline: 0;
-    color: #d7d7d7;
+    color: var(--text-primary);
     background: transparent;
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
@@ -565,16 +565,16 @@
     gap: 6px;
     margin-bottom: 8px;
     padding: 6px 7px 6px 9px;
-    border: 1px dashed #363636;
+    border: 1px dashed var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
-    background: #191919;
+    background: var(--input-bg);
   }
   .manual-add button {
     border: 0;
     border-radius: var(--settings-control-radius, 6px);
     padding: 4px 7px;
-    color: #c8c8c8;
-    background: #303030;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
@@ -583,7 +583,7 @@
     min-height: 0;
     overflow: auto;
     scrollbar-width: thin;
-    scrollbar-color: #555 transparent;
+    scrollbar-color: var(--scrollbar-color) transparent;
   }
   .application-row {
     display: flex;
@@ -594,7 +594,7 @@
     padding: 3px 5px;
     border: 0;
     border-radius: var(--settings-control-radius, 6px);
-    color: #d8d8d8;
+    color: var(--text-secondary);
     background: transparent;
     font-size: var(--settings-control-size, 11px);
     cursor: pointer;
@@ -603,17 +603,17 @@
     margin-top: 2px;
   }
   .application-row:hover {
-    background: #242424;
+    background: var(--hover-bg);
   }
   .application-row.selected {
-    background: #252f3d;
-    box-shadow: inset 0 0 0 1px #3d5a80;
+    background: color-mix(in srgb, var(--selection-color) 15%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--selection-color) 50%, transparent);
   }
   .application-row.ignored-row {
     cursor: default;
   }
   .application-row.ignored-row:hover {
-    background: #242424;
+    background: var(--hover-bg);
   }
   .application-row strong {
     overflow: hidden;
@@ -628,7 +628,7 @@
     height: 24px;
     margin-left: auto;
     border: 0;
-    color: #666;
+    color: var(--text-faint);
     background: transparent;
     font-size: var(--font-size-base, 14px);
   }
@@ -638,16 +638,16 @@
     height: 25px;
     flex: 0 0 auto;
     place-items: center;
-    border: 1px solid #424242;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-icon-radius, 7px);
-    color: #ddd;
-    background: linear-gradient(145deg, #3d4656, #252a32);
+    color: var(--text-primary);
+    background: var(--hover-bg);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     font-weight: 700;
   }
   .app-avatar.locked {
-    color: #c9d7ff;
-    background: linear-gradient(145deg, #3d4770, #242a44);
+    color: var(--selection-color);
+    background: color-mix(in srgb, var(--selection-color) 15%, var(--hover-bg));
   }
   .app-icon {
     width: 25px;
@@ -665,7 +665,7 @@
     height: 26px;
     border: 0;
     border-radius: 50%;
-    color: #999;
+    color: var(--text-muted);
     background: transparent;
     font-size: var(--font-size-base, 14px);
     transition:
@@ -674,8 +674,8 @@
   }
 
   .transfer-column button:hover:not(:disabled) {
-    color: #fff;
-    background: #333;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
   button {
     cursor: pointer;
@@ -686,7 +686,7 @@
   }
   .empty-list {
     margin: 16px 6px;
-    color: #626262;
+    color: var(--text-faint);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
@@ -694,14 +694,14 @@
     display: grid;
     flex: 1;
     place-items: center;
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
-    color: #666;
+    color: var(--text-faint);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: right;
   }
@@ -711,16 +711,16 @@
     bottom: 13px;
     left: 18px;
     padding: 8px 10px;
-    border: 1px solid #553434;
+    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
     border-radius: var(--settings-feedback-radius, 7px);
-    color: #d59c9c;
-    background: rgba(48, 27, 27, 0.96);
+    color: color-mix(in srgb, var(--danger-color) 75%, white);
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
     font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
   }
   .settings-feedback.success {
-    border-color: #35513f;
-    color: #9dc6aa;
-    background: rgba(27, 45, 33, 0.96);
+    border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+    color: color-mix(in srgb, var(--success-color) 75%, white);
+    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
   }
   @media (max-width: 700px) {
     .filter-board {
@@ -728,14 +728,14 @@
     }
     .transfer-column {
       min-height: 38px;
-      border-top: 1px solid #303030;
+      border-top: 1px solid var(--border-subtle);
       border-left: 0 !important;
     }
     .transfer-column button {
       transform: rotate(90deg);
     }
     .transfer-column + .application-column {
-      border-top: 1px solid #303030;
+      border-top: 1px solid var(--border-subtle);
       border-left: 0;
     }
   }

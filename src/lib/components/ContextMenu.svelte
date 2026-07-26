@@ -82,8 +82,8 @@
     position: fixed;
     z-index: 9999;
     min-width: 160px;
-    background: #1e1e1e;
-    border: 1px solid #3a3a3a;
+    background: var(--surface-bg);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 4px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -99,7 +99,7 @@
     border: 0;
     border-radius: 5px;
     background: transparent;
-    color: #d8d8d8;
+    color: var(--text-primary);
     font-size: 12.5px;
     cursor: pointer;
     text-align: left;
@@ -107,7 +107,7 @@
   }
 
   .menu-item:hover {
-    background: #2a2a2a;
+    background: var(--hover-bg);
   }
 
   .menu-item:disabled {
@@ -120,11 +120,11 @@
   }
 
   .menu-item.destructive {
-    color: #e85d5d;
+    color: var(--danger-color);
   }
 
   .menu-item.destructive:hover {
-    background: rgba(232, 93, 93, 0.12);
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
 
   .menu-icon {

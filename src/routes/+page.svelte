@@ -2647,9 +2647,9 @@
     height: 100vh;
     min-height: 480px;
     overflow: hidden;
-    border: 1px solid #363636;
-    color: #eeeeee;
-    background: rgba(27, 27, 27, 0.985);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-settings) 98.5%, transparent);
   }
 
   :global(.app-shell.compact .search-header) {
@@ -2693,7 +2693,7 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
-    color: #777777;
+    color: var(--text-muted);
   }
 
   .search-suggestions {
@@ -2705,15 +2705,15 @@
     max-height: min(280px, calc(100vh - 100px));
     padding: 6px 0;
     overflow-y: auto;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: #1e1e1e;
+    background: var(--surface-bg);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.48);
   }
 
   .search-suggestions-heading {
     padding: 5px 12px 3px;
-    color: #666;
+    color: var(--text-faint);
     font-size: 10px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -2727,7 +2727,7 @@
     min-height: 32px;
     padding: 6px 12px;
     border: 0;
-    color: #bdbdbd;
+    color: var(--text-secondary);
     background: transparent;
     text-align: left;
     cursor: pointer;
@@ -2736,7 +2736,7 @@
 
   .search-suggestions button :global(svg) {
     flex: 0 0 auto;
-    color: #777;
+    color: var(--text-muted);
   }
 
   .search-suggestions button span {
@@ -2748,12 +2748,12 @@
 
   .search-suggestions button:hover,
   .search-suggestions button.active {
-    color: #f1f1f1;
-    background: #2c2c2c;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .search-suggestions button.active :global(svg) {
-    color: #4aa8ff;
+    color: var(--selection-color);
   }
 
   .search-box input {
@@ -2762,7 +2762,7 @@
     padding: 2px 0 4px;
     border: 0;
     outline: 0;
-    color: #f1f1f1;
+    color: var(--text-primary);
     background: transparent;
     font-size: clamp(17px, 3vw, 21px);
     font-weight: 350;
@@ -2770,7 +2770,7 @@
   }
 
   .search-box input::placeholder {
-    color: #6e6e6e;
+    color: var(--text-faint);
     opacity: 1;
   }
 
@@ -2781,7 +2781,7 @@
     z-index: 0;
     overflow: hidden;
     max-width: calc(100% - 42px);
-    color: #666;
+    color: var(--text-faint);
     pointer-events: none;
     transform: translateY(-50%);
     white-space: pre;
@@ -2800,8 +2800,8 @@
     padding: 0;
     border: 0;
     border-radius: 50%;
-    color: #8b8b8b;
-    background: #2c2c2c;
+    color: var(--text-muted);
+    background: var(--hover-bg);
     cursor: pointer;
   }
 
@@ -2814,7 +2814,7 @@
     padding: 0;
     border: 1px solid transparent;
     border-radius: 6px;
-    color: #5a5a5a;
+    color: var(--text-faint);
     background: transparent;
     cursor: pointer;
     transition:
@@ -2824,8 +2824,8 @@
   }
 
   .regex-toggle:hover {
-    color: #999;
-    background: #2c2c2c;
+    color: var(--text-muted);
+    background: var(--hover-bg);
   }
 
   .regex-toggle.regex-active {
@@ -2847,7 +2847,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 2px 12px 9px;
-    border-bottom: 1px solid #242424;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .filters,
@@ -2875,7 +2875,7 @@
     align-items: center;
     justify-content: center;
     border: 0;
-    color: #b2b2b2;
+    color: var(--text-secondary);
     background: transparent;
     cursor: pointer;
   }
@@ -2890,16 +2890,16 @@
 
   .filters button:hover,
   .filters button.active {
-    color: #f3f3f3;
-    background: #303030;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .filters button.active:first-child {
-    color: #4aa8ff;
+    color: var(--selection-color);
   }
 
   .filters button:nth-child(2) :global(svg) {
-    color: #e2c05d;
+    color: var(--warning-color);
   }
   .filters button:nth-child(3) :global(svg) {
     color: #a8b7c9;
@@ -2930,7 +2930,7 @@
     padding: 0 8px;
     border: 1px solid transparent;
     border-radius: 6px;
-    color: #8b8b8b;
+    color: var(--text-muted);
     background: transparent;
     cursor: pointer;
     font-size: 11.5px;
@@ -2942,9 +2942,9 @@
   }
 
   .filter-dropdown-btn:hover {
-    color: #c4c4c4;
-    border-color: #3a3a3a;
-    background: #252525;
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+    background: var(--hover-bg);
   }
 
   .dropdown-label {
@@ -2959,9 +2959,9 @@
     top: calc(100% + 4px);
     left: 0;
     min-width: 150px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: #1e1e1e;
+    background: var(--surface-bg);
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
     overflow: hidden;
   }
@@ -2977,7 +2977,7 @@
     width: 100%;
     padding: 7px 12px;
     border: 0;
-    color: #b2b2b2;
+    color: var(--text-secondary);
     background: transparent;
     text-align: left;
     font-size: 12px;
@@ -2985,13 +2985,13 @@
   }
 
   .dropdown-popover button:hover {
-    color: #f3f3f3;
-    background: #2c2c2c;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .dropdown-popover button.selected {
-    color: #4aa8ff;
-    background: rgba(74, 168, 255, 0.08);
+    color: var(--selection-color);
+    background: color-mix(in srgb, var(--selection-color) 8%, transparent);
   }
 
   .dropdown-search {
@@ -2999,8 +2999,8 @@
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    border-bottom: 1px solid #2a2a2a;
-    color: #6e6e6e;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-faint);
   }
 
   .dropdown-search input {
@@ -3008,13 +3008,13 @@
     min-width: 0;
     border: 0;
     outline: 0;
-    color: #e0e0e0;
+    color: var(--text-primary);
     background: transparent;
     font-size: 12px;
   }
 
   .dropdown-search input::placeholder {
-    color: #555;
+    color: var(--text-faint);
   }
 
   .dropdown-items {
@@ -3031,20 +3031,20 @@
     height: 29px;
     padding: 0;
     border-radius: 6px;
-    color: #707070;
+    color: var(--text-faint);
   }
 
   .toolbar-actions button:hover {
-    color: #d8d8d8;
-    background: #2c2c2c;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   .regex-error {
     padding: 4px 16px;
-    color: #e85d5d;
+    color: var(--danger-color);
     font-size: 11.5px;
-    background: rgba(232, 93, 93, 0.06);
-    border-bottom: 1px solid rgba(232, 93, 93, 0.12);
+    background: color-mix(in srgb, var(--danger-color) 6%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
 
   .history-panel {
@@ -3060,16 +3060,16 @@
     justify-content: space-between;
     gap: 16px;
     padding: 0 17px 7px;
-    color: #777777;
+    color: var(--text-muted);
     font-size: 11.5px;
   }
 
   .result-count {
-    color: #6f6f6f;
+    color: var(--text-faint);
   }
 
   .multi-count {
-    color: #4aa8ff;
+    color: var(--selection-color);
     font-weight: 600;
     font-size: 11.5px;
   }
@@ -3087,8 +3087,8 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #51b96b;
-    box-shadow: 0 0 8px rgba(81, 185, 107, 0.4);
+    background: var(--success-color);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--success-color) 40%, transparent);
   }
 
   .history-list {
@@ -3096,7 +3096,7 @@
     min-height: 0;
     overflow-y: auto;
     padding: 0 7px 18px;
-    scrollbar-color: #9a9a9a transparent;
+    scrollbar-color: var(--scrollbar-color) transparent;
     scrollbar-width: thin;
   }
 
@@ -3108,7 +3108,7 @@
   }
   .history-list::-webkit-scrollbar-thumb {
     border-radius: 10px;
-    background: #858585;
+    background: var(--scrollbar-color);
   }
 
   .virtual-container {
@@ -3121,18 +3121,18 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    color: #777777;
+    color: var(--text-muted);
     text-align: center;
   }
 
   .empty-icon {
     display: inline-flex;
     margin-bottom: 12px;
-    color: #555555;
+    color: var(--text-faint);
   }
 
   .empty-state strong {
-    color: #bdbdbd;
+    color: var(--text-secondary);
     font-size: 14px;
   }
 
@@ -3146,8 +3146,8 @@
     align-items: center;
     gap: 12px;
     padding: 8px 14px;
-    border-top: 1px solid #292929;
-    background: #1a1a1a;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--input-bg);
   }
 
   .bulk-deselect {
@@ -3155,9 +3155,9 @@
     align-items: center;
     gap: 4px;
     padding: 4px 8px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 14px;
-    color: #8b8b8b;
+    color: var(--text-muted);
     background: transparent;
     cursor: pointer;
     font-size: 11.5px;
@@ -3165,7 +3165,7 @@
   }
 
   .bulk-deselect:hover {
-    color: #ccc;
+    color: var(--text-secondary);
   }
 
   .bulk-actions {
@@ -3176,10 +3176,10 @@
 
   .bulk-actions button {
     padding: 5px 12px;
-    border: 1px solid #333;
+    border: 1px solid var(--border-subtle);
     border-radius: 6px;
-    color: #b2b2b2;
-    background: #222;
+    color: var(--text-secondary);
+    background: var(--card-bg);
     cursor: pointer;
     font-size: 11.5px;
     font-weight: 500;
@@ -3189,19 +3189,19 @@
   }
 
   .bulk-actions button:hover {
-    color: #e8e8e8;
-    background: #2c2c2c;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .bulk-actions button.danger {
-    border-color: rgba(232, 93, 93, 0.3);
-    color: #d87575;
+    border-color: color-mix(in srgb, var(--danger-color) 30%, transparent);
+    color: color-mix(in srgb, var(--danger-color) 75%, white);
   }
 
   .bulk-actions button.danger:hover {
-    border-color: rgba(232, 93, 93, 0.5);
-    background: rgba(232, 93, 93, 0.1);
-    color: #e88080;
+    border-color: color-mix(in srgb, var(--danger-color) 50%, transparent);
+    background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+    color: color-mix(in srgb, var(--danger-color) 85%, white);
   }
 
   .status-bar {
@@ -3211,9 +3211,9 @@
     gap: 14px;
     min-height: 34px;
     padding: 7px 14px;
-    border-top: 1px solid #292929;
-    color: #6f6f6f;
-    background: #181818;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-faint);
+    background: var(--statusbar-bg);
     font-size: 11.5px;
     overflow: hidden;
   }
@@ -3242,11 +3242,11 @@
 
   .shortcut-hints kbd {
     padding: 1px 5px;
-    border: 1px solid #393939;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: #929292;
-    background: #232323;
-    box-shadow: 0 1px 0 #0f0f0f;
+    color: var(--text-muted);
+    background: var(--hover-bg);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
     font: inherit;
   }
 

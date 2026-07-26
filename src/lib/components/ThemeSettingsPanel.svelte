@@ -4,6 +4,7 @@
   import type {
     ThemeColors,
     ThemeMode,
+    ThemePreset,
   } from "$lib/types/clipboard";
   import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
@@ -63,12 +64,53 @@
     { key: "settingsBg", label: _t("theme.settingsBg"), desc: _t("theme.settingsBgDescription") },
     { key: "accent", label: _t("theme.accent"), desc: _t("theme.accentDescription") },
     { key: "textPrimary", label: _t("theme.textPrimary"), desc: _t("theme.textPrimaryDescription") },
+    { key: "textSecondary", label: _t("theme.textSecondary"), desc: _t("theme.textSecondaryDescription") },
     { key: "textMuted", label: _t("theme.textMuted"), desc: _t("theme.textMutedDescription") },
+    { key: "textFaint", label: _t("theme.textFaint"), desc: _t("theme.textFaintDescription") },
     { key: "border", label: _t("theme.border"), desc: _t("theme.borderDescription") },
+    { key: "borderSubtle", label: _t("theme.borderSubtle"), desc: _t("theme.borderSubtleDescription") },
     { key: "cardBg", label: _t("theme.cardBg"), desc: _t("theme.cardBgDescription") },
+    { key: "surfaceBg", label: _t("theme.surfaceBg"), desc: _t("theme.surfaceBgDescription") },
+    { key: "statusBarBg", label: _t("theme.statusBarBg"), desc: _t("theme.statusBarBgDescription") },
+    { key: "hoverBg", label: _t("theme.hoverBg"), desc: _t("theme.hoverBgDescription") },
+    { key: "inputBg", label: _t("theme.inputBg"), desc: _t("theme.inputBgDescription") },
+    { key: "selectionColor", label: _t("theme.selectionColor"), desc: _t("theme.selectionColorDescription") },
+    { key: "successColor", label: _t("theme.successColor"), desc: _t("theme.successColorDescription") },
+    { key: "dangerColor", label: _t("theme.dangerColor"), desc: _t("theme.dangerColorDescription") },
+    { key: "warningColor", label: _t("theme.warningColor"), desc: _t("theme.warningColorDescription") },
+    { key: "scrollbarColor", label: _t("theme.scrollbarColor"), desc: _t("theme.scrollbarColorDescription") },
   ];
 
   const isReadonly = $derived(s.theme !== "custom");
+
+  let presetName = $state("");
+
+  function savePreset() {
+    const name = presetName.trim();
+    if (!name) return;
+    const preset: ThemePreset = {
+      id: crypto.randomUUID(),
+      name,
+      colors: { ...themeColors },
+    };
+    const presets = [...(s.customPresets ?? []), preset];
+    generalSettings.updateSetting("customPresets", presets);
+    presetName = "";
+    showFeedback(_t("theme.presetSaved"), true);
+  }
+
+  function applyPreset(preset: ThemePreset) {
+    themeColors = { ...preset.colors };
+    generalSettings.updateSetting("theme", "custom");
+    generalSettings.updateSetting("themeColors", { ...preset.colors });
+    showFeedback(_t("theme.presetApplied"), true);
+  }
+
+  function deletePreset(id: string) {
+    const presets = (s.customPresets ?? []).filter((p) => p.id !== id);
+    generalSettings.updateSetting("customPresets", presets);
+    showFeedback(_t("theme.presetDeleted"), true);
+  }
 </script>
 
 {#if showHeader}
@@ -105,7 +147,47 @@
 
   {#if isReadonly}
     <p class="readonly-hint">{_t("theme.readonlyHint")}</p>
-  {/if}
+  {:else}
+  <section class="setting-card preset-section">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="star" size={16} /></span>
+      <div>
+        <strong>{_t("theme.presets")}</strong>
+        <p>{_t("theme.presetsDescription")}</p>
+      </div>
+    </div>
+    <div class="preset-save-row">
+      <input
+        type="text"
+        class="preset-name-input"
+        placeholder={_t("theme.presetNamePlaceholder")}
+        bind:value={presetName}
+        onkeydown={(e) => e.key === "Enter" && savePreset()}
+      />
+      <button class="preset-save-btn" type="button" disabled={!presetName.trim()} onclick={savePreset}>
+        {_t("theme.savePreset")}
+      </button>
+    </div>
+    {#if (s.customPresets ?? []).length > 0}
+      <div class="preset-list">
+        {#each s.customPresets ?? [] as preset (preset.id)}
+          <div class="preset-row">
+            <span class="preset-row-name">{preset.name}</span>
+            <span class="preset-row-actions">
+              <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
+                {_t("theme.applyPreset")}
+              </button>
+              <button class="preset-action-btn danger" type="button" onclick={() => deletePreset(preset.id)}>
+                {_t("theme.deletePreset")}
+              </button>
+            </span>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="preset-empty">{_t("theme.noPresets")}</p>
+    {/if}
+  </section>
 
   {#each colorEntries as entry}
     <section class="setting-card toggle-card">
@@ -143,6 +225,7 @@
       </div>
     </section>
   {/each}
+  {/if}
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>
@@ -159,8 +242,8 @@
   }
 
   .setting-card {
-    background: #1e1e1e;
-    border: 1px solid #303030;
+    background: var(--card-bg);
+    border: 1px solid var(--border-subtle);
     border-radius: 10px;
     padding: 14px 16px;
     margin-bottom: 12px;
@@ -184,13 +267,13 @@
   .setting-heading strong {
     display: block;
     font-size: 13px;
-    color: #d8d8d8;
+    color: var(--text-primary);
   }
 
   .setting-heading p {
     margin: 2px 0 0;
     font-size: 11px;
-    color: #777;
+    color: var(--text-muted);
   }
 
   .setting-icon {
@@ -204,9 +287,9 @@
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    background: #1a1a1a;
-    color: #d8d8d8;
-    border: 1px solid #3a3a3a;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 6px 28px 6px 10px;
     font-size: 13px;
@@ -218,7 +301,7 @@
   }
 
   .theme-select:focus {
-    border-color: #5a5a5a;
+    border-color: var(--text-faint);
     outline: none;
   }
 
@@ -226,7 +309,7 @@
     width: 20px;
     height: 20px;
     border-radius: 4px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     flex-shrink: 0;
   }
 
@@ -240,11 +323,11 @@
   .color-picker {
     width: 32px;
     height: 32px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: pointer;
     padding: 2px;
-    background: #1a1a1a;
+    background: var(--input-bg);
   }
 
   .color-picker:disabled {
@@ -255,9 +338,9 @@
   .color-text-input {
     width: 80px;
     padding: 5px 8px;
-    background: #1a1a1a;
-    color: #d8d8d8;
-    border: 1px solid #3a3a3a;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     font-size: 12px;
     font-family: monospace;
@@ -265,7 +348,7 @@
   }
 
   .color-text-input:focus {
-    border-color: #5a5a5a;
+    border-color: var(--text-faint);
     outline: none;
   }
 
@@ -276,13 +359,13 @@
 
   .readonly-hint {
     font-size: 11px;
-    color: #777;
+    color: var(--text-muted);
     margin: 0 0 12px 16px;
   }
 
   .auto-save-note {
     font-size: 11px;
-    color: #555;
+    color: var(--text-faint);
     margin: 8px 0 0;
   }
 
@@ -291,8 +374,8 @@
     bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
-    background: #333;
-    color: #f5f5f5;
+    background: var(--hover-bg);
+    color: var(--text-primary);
     padding: 8px 16px;
     border-radius: 8px;
     font-size: 12px;
@@ -300,7 +383,7 @@
   }
 
   .settings-feedback.success {
-    background: #2d4a2d;
+    background: color-mix(in srgb, var(--success-color) 20%, var(--surface-bg));
   }
 
   header {
@@ -313,7 +396,7 @@
 
   header h2 {
     font-size: 15px;
-    color: #d8d8d8;
+    color: var(--text-primary);
     margin: 0;
   }
 
@@ -321,9 +404,9 @@
     width: 28px;
     height: 28px;
     background: transparent;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 7px;
-    color: #999;
+    color: var(--text-muted);
     font-size: 19px;
     cursor: pointer;
     display: flex;
@@ -334,6 +417,125 @@
   }
 
   .close-button:hover {
-    background: #242424;
+    background: var(--hover-bg);
+  }
+
+  .preset-section {
+    display: block;
+  }
+
+  .preset-save-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .preset-name-input {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+
+  .preset-name-input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .preset-save-btn {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--hover-bg);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
+  }
+
+  .preset-save-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
+  }
+
+  .preset-save-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .preset-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .preset-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    background: var(--surface-bg);
+  }
+
+  .preset-row-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 520;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .preset-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .preset-action-btn {
+    padding: 4px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background: var(--card-bg);
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
+  }
+
+  .preset-action-btn:hover {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+  }
+
+  .preset-action-btn.danger:hover {
+    color: color-mix(in srgb, var(--danger-color) 80%, white);
+    border-color: color-mix(in srgb, var(--danger-color) 40%, transparent);
+    background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+  }
+
+  .preset-empty {
+    margin: 10px 0 0;
+    color: var(--text-faint);
+    font-size: 11px;
+    text-align: center;
   }
 </style>

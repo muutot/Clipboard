@@ -817,7 +817,7 @@
     padding: 13px 14px 12px;
     border: 1px solid transparent;
     border-radius: 10px;
-    color: #ececec;
+    color: var(--text-primary);
     background: transparent;
     cursor: default;
     overflow: hidden;
@@ -898,7 +898,7 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    border: 1.5px solid #5a5a5a;
+    border: 1.5px solid var(--text-faint);
     border-radius: 5px;
     color: transparent;
     background: transparent;
@@ -909,8 +909,8 @@
   }
 
   .card-checkbox input:checked + .check-mark {
-    border-color: #4aa8ff;
-    background: #4aa8ff;
+    border-color: var(--selection-color);
+    background: var(--selection-color);
     color: #fff;
   }
 
@@ -918,7 +918,7 @@
   .clip-card.selected,
   .clip-card:focus-within {
     border-color: rgba(255, 255, 255, 0.035);
-    background: #242424;
+    background: var(--hover-bg);
   }
 
   .content {
@@ -959,7 +959,7 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: var(--max-text-lines, 3);
     line-clamp: var(--max-text-lines, 3);
-    color: #8e8e8e;
+    color: var(--text-muted);
     font-size: var(--font-size-cardPreview, 11px);
     line-height: 1.45;
     overflow-wrap: anywhere;
@@ -979,7 +979,7 @@
 
   .file-icon {
     display: inline-flex;
-    color: #d7d7d7;
+    color: var(--text-secondary);
   }
 
   .image-preview {
@@ -989,9 +989,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #303237;
+    border: 1px solid var(--border-subtle);
     border-radius: 6px;
-    background: #17191d;
+    background: var(--input-bg);
     box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
   }
 
@@ -1008,7 +1008,7 @@
     align-items: center;
     justify-content: center;
     height: 82px;
-    color: #555;
+    color: var(--text-faint);
   }
 
   .meta-row {
@@ -1022,7 +1022,7 @@
     min-width: 0;
     margin-top: 10px;
     overflow: hidden;
-    color: #8c8c8c;
+    color: var(--text-muted);
     font-size: var(--font-size-secondary, 11.5px);
     white-space: nowrap;
     pointer-events: none;
@@ -1042,7 +1042,7 @@
     width: 16px;
     height: 16px;
     overflow: visible;
-    color: #d7c47b;
+    color: var(--warning-color);
   }
 
   .source-icon {
@@ -1069,7 +1069,7 @@
     color: #746dff;
   }
   .source-name {
-    color: #aaaaaa;
+    color: var(--text-muted);
   }
   .file-count {
     overflow: hidden;
@@ -1107,22 +1107,22 @@
     padding: 0;
     border: 0;
     border-radius: 6px;
-    color: #777777;
+    color: var(--text-muted);
     background: transparent;
     cursor: pointer;
   }
 
   .actions button:hover,
   .actions button.active {
-    color: #f0cb42;
-    background: #303030;
+    color: var(--warning-color);
+    background: var(--hover-bg);
   }
 
   .shortcut {
     flex: 0 0 auto;
     margin-left: 8px;
     overflow: visible;
-    color: #747474;
+    color: var(--text-faint);
     font-size: 11.5px;
     pointer-events: none;
     opacity: 0;
@@ -1134,10 +1134,10 @@
     width: min(320px, calc(100vw - 32px));
     margin: auto;
     padding: 0;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    color: #d8d8d8;
-    background: #1e1e1e;
+    color: var(--text-primary);
+    background: var(--card-bg);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 
@@ -1162,10 +1162,10 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 6px;
-    color: #f0cb42;
-    background: #1a1a1a;
+    color: var(--warning-color);
+    background: var(--input-bg);
   }
 
   .date-action-text {
@@ -1176,13 +1176,13 @@
   }
 
   .date-action-text time {
-    color: #dedede;
+    color: var(--text-primary);
     font-size: 13px;
     line-height: 1.35;
   }
 
   .date-action-text span {
-    color: #888;
+    color: var(--text-muted);
     font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 11px;
     line-height: 1.3;
@@ -1200,14 +1200,14 @@
     padding: 0;
     border: 0;
     border-radius: 5px;
-    color: #888;
+    color: var(--text-muted);
     background: transparent;
     cursor: pointer;
   }
 
   .date-action-close:hover {
-    color: #dedede;
-    background: #303030;
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .edit-area {
@@ -1220,10 +1220,10 @@
     width: 100%;
     padding: 6px 8px;
     margin-bottom: 6px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 6px;
-    color: #d8d8d8;
-    background: #1a1a1a;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font: inherit;
     font-size: 12px;
     outline: none;
@@ -1231,17 +1231,17 @@
   }
 
   .edit-title-input:focus {
-    border-color: #5a5a5a;
+    border-color: var(--text-faint);
   }
 
   .edit-area textarea {
     width: 100%;
     box-sizing: border-box;
     padding: 10px 12px;
-    border: 1px solid #4aa8ff;
+    border: 1px solid var(--selection-color);
     border-radius: 7px;
-    color: #e4e4e4;
-    background: #141414;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font:
       12px/1.55 "Cascadia Code",
       Consolas,
@@ -1264,7 +1264,7 @@
     align-items: center;
     gap: 4px;
     padding: 5px 12px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     font: inherit;
     font-size: 11.5px;
@@ -1275,27 +1275,27 @@
   }
 
   .edit-save {
-    color: #d8d8d8;
-    background: #2a2a2a;
-    border-color: #4a4a4a;
+    color: var(--text-primary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
   }
 
   .edit-save:hover {
     color: #fff;
-    background: #383838;
-    border-color: #5a5a5a;
+    background: var(--border-color);
+    border-color: var(--text-faint);
   }
 
   .edit-save-as-new {
-    color: #999;
-    background: #252525;
-    border-color: #3a3a3a;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border-color: var(--border-color);
   }
 
   .edit-save-as-new:hover {
-    color: #bbb;
-    background: #303030;
-    border-color: #4a4a4a;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    border-color: var(--text-faint);
   }
 
   .edit-save-as-new:disabled {
@@ -1304,13 +1304,13 @@
   }
 
   .edit-cancel {
-    color: #999;
-    background: #222;
+    color: var(--text-muted);
+    background: var(--card-bg);
   }
 
   .edit-cancel:hover {
-    color: #ccc;
-    background: #2e2e2e;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   @media (max-width: 620px) {

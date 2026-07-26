@@ -79,7 +79,7 @@
     gap: 8px;
     padding: 9px 18px;
     border-radius: 10px;
-    color: #f1f1f1;
+    color: var(--text-primary);
     font-size: 13px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
     pointer-events: auto;
@@ -91,18 +91,18 @@
   }
 
   .toast-success {
-    background: #1c3a28;
-    border: 1px solid #2d5a3d;
+    background: color-mix(in srgb, var(--success-color) 15%, var(--surface-bg));
+    border: 1px solid color-mix(in srgb, var(--success-color) 35%, transparent);
   }
 
   .toast-error {
-    background: #3a1c1c;
-    border: 1px solid #5a2d2d;
+    background: color-mix(in srgb, var(--danger-color) 15%, var(--surface-bg));
+    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
   }
 
   .toast-info {
-    background: #1c2a3a;
-    border: 1px solid #2d3d5a;
+    background: color-mix(in srgb, var(--selection-color) 15%, var(--surface-bg));
+    border: 1px solid color-mix(in srgb, var(--selection-color) 35%, transparent);
   }
 
   .toast-icon {
@@ -112,13 +112,13 @@
   }
 
   .toast-success .toast-icon {
-    color: #4ec96a;
+    color: var(--success-color);
   }
   .toast-error .toast-icon {
-    color: #e85d5d;
+    color: var(--danger-color);
   }
   .toast-info .toast-icon {
-    color: #5d9ee8;
+    color: var(--selection-color);
   }
 
   .toast-message {

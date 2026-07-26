@@ -11,4 +11,16 @@ export function applyThemeColors(colors?: ThemeColors) {
   r.setProperty("--text-muted", c.textMuted);
   r.setProperty("--border-color", c.border);
   r.setProperty("--card-bg", c.cardBg);
+  r.setProperty("--surface-bg", c.surfaceBg);
+  r.setProperty("--statusbar-bg", c.statusBarBg);
+  r.setProperty("--hover-bg", c.hoverBg);
+  r.setProperty("--input-bg", c.inputBg);
+  r.setProperty("--text-secondary", c.textSecondary);
+  r.setProperty("--text-faint", c.textFaint);
+  r.setProperty("--border-subtle", c.borderSubtle);
+  r.setProperty("--selection-color", c.selectionColor);
+  r.setProperty("--success-color", c.successColor);
+  r.setProperty("--danger-color", c.dangerColor);
+  r.setProperty("--warning-color", c.warningColor);
+  r.setProperty("--scrollbar-color", c.scrollbarColor);
 }

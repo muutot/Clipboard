@@ -345,11 +345,11 @@
     justify-content: space-between;
     gap: 16px;
     padding: 20px 22px 15px;
-    border-bottom: 1px solid #292929;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .eyebrow {
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -357,7 +357,7 @@
 
   h2 {
     margin: 5px 0 4px;
-    color: #efefef;
+    color: var(--text-primary);
     font-size: var(--settings-page-title-size, 18px);
     font-weight: 590;
   }
@@ -365,7 +365,7 @@
   header p {
     max-width: 430px;
     margin: 0;
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 1.5;
   }
@@ -378,10 +378,10 @@
     height: var(--settings-close-size, 28px);
     flex: 0 0 auto;
     padding: 0;
-    border: 1px solid #353535;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-close-radius, 7px);
-    color: #999;
-    background: #222;
+    color: var(--text-muted);
+    background: var(--card-bg);
     font-size: var(--settings-close-font-size, 19px);
     line-height: 1;
     cursor: pointer;
@@ -393,7 +393,7 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
-    scrollbar-color: #9a9a9a transparent;
+    scrollbar-color: var(--scrollbar-color) transparent;
     scrollbar-width: thin;
   }
 
@@ -405,14 +405,14 @@
   }
   .settings-scroll::-webkit-scrollbar-thumb {
     border-radius: 10px;
-    background: #858585;
+    background: var(--scrollbar-color);
   }
 
   .setting-card {
     padding: 10px 13px;
-    border: 1px solid #303030;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--settings-card-radius, 9px);
-    background: #1e1e1e;
+    background: var(--card-bg);
   }
 
   .setting-heading {
@@ -429,10 +429,10 @@
     width: 29px;
     height: 29px;
     flex: 0 0 auto;
-    border: 1px solid #363636;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-icon-radius, 7px);
-    color: #d2d2d2;
-    background: #242424;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 
   .heading-inline {
@@ -445,14 +445,14 @@
   }
 
   .setting-heading strong {
-    color: #dedede;
+    color: var(--text-primary);
     font-size: var(--settings-heading-size, 13px);
     font-weight: 560;
   }
 
   .setting-heading p {
     margin: 2px 0 0;
-    color: #777;
+    color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
 
@@ -461,7 +461,7 @@
   }
 
   .value-label {
-    color: #aaa;
+    color: var(--text-muted);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
@@ -473,7 +473,7 @@
     gap: 4px;
     flex: 0 0 auto;
     margin: 0;
-    color: #888;
+    color: var(--text-muted);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
 
@@ -481,11 +481,11 @@
     width: 46px;
     box-sizing: border-box;
     padding: 5px 6px;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
     outline: none;
-    color: #d7d7d7;
-    background: #1a1a1a;
+    color: var(--text-primary);
+    background: var(--input-bg);
     font: inherit;
     font-variant-numeric: tabular-nums;
     text-align: right;
@@ -493,7 +493,7 @@
   }
 
   .font-size-input:focus {
-    border-color: #5a5a5a;
+    border-color: var(--text-faint);
   }
 
   .font-size-input[type="number"] {
@@ -514,7 +514,7 @@
     appearance: none;
     height: 4px;
     border-radius: 2px;
-    background: #2a2a2a;
+    background: var(--hover-bg);
     outline: none;
     cursor: pointer;
   }
@@ -524,10 +524,10 @@
     border-radius: 2px;
     background: linear-gradient(
       to right,
-      #4aa8ff 0%,
-      #4aa8ff var(--slider-pct, 50%),
-      #2a2a2a var(--slider-pct, 50%),
-      #2a2a2a 100%
+      var(--selection-color) 0%,
+      var(--selection-color) var(--slider-pct, 50%),
+      var(--hover-bg) var(--slider-pct, 50%),
+      var(--hover-bg) 100%
     );
   }
 
@@ -537,8 +537,8 @@
     height: 16px;
     margin-top: -6px;
     border-radius: 50%;
-    border: 2px solid #4aa8ff;
-    background: #1a1a1a;
+    border: 2px solid var(--selection-color);
+    background: var(--input-bg);
     cursor: pointer;
     transition:
       box-shadow 100ms ease,
@@ -546,40 +546,40 @@
   }
 
   .transparency-slider::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--selection-color) 40%, transparent);
     transform: scale(1.15);
   }
 
   .transparency-slider::-moz-range-track {
     height: 4px;
     border-radius: 2px;
-    background: #2a2a2a;
+    background: var(--hover-bg);
   }
   .transparency-slider::-moz-range-progress {
     height: 4px;
     border-radius: 2px;
-    background: #4aa8ff;
+    background: var(--selection-color);
   }
   .transparency-slider::-moz-range-thumb {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid #4aa8ff;
-    background: #1a1a1a;
+    border: 2px solid var(--selection-color);
+    background: var(--input-bg);
     cursor: pointer;
     transition:
       box-shadow 100ms ease,
       transform 100ms ease;
   }
   .transparency-slider::-moz-range-thumb:hover {
-    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--selection-color) 40%, transparent);
     transform: scale(1.15);
   }
 
   .auto-save-note {
     margin: 0;
     padding: 8px 0 0;
-    color: #666;
+    color: var(--text-faint);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
@@ -595,9 +595,9 @@
     width: 40px;
     height: 22px;
     padding: 0;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    background: #1a1a1a;
+    background: var(--input-bg);
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
@@ -607,8 +607,8 @@
   }
 
   .toggle-switch.active {
-    border-color: #4aa8ff;
-    background: rgba(74, 168, 255, 0.18);
+    border-color: var(--selection-color);
+    background: color-mix(in srgb, var(--selection-color) 18%, transparent);
   }
 
   .toggle-knob {
@@ -618,7 +618,7 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #666;
+    background: var(--text-faint);
     transition:
       transform 120ms ease,
       background 100ms ease;
@@ -626,7 +626,7 @@
 
   .toggle-switch.active .toggle-knob {
     transform: translateX(18px);
-    background: #4aa8ff;
+    background: var(--selection-color);
   }
 
   button {
