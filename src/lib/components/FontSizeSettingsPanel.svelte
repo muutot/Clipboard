@@ -294,10 +294,10 @@
       <span class="setting-icon"><AppIcon name="text" size={17} /></span>
       <div class="heading-inline">
         <div>
-          <strong>主界面文本行数</strong>
-          <p>文本和链接条目最多显示的正文行数</p>
+          <strong>{_t("font.secondaryTextLines")}</strong>
+          <p>{_t("font.secondaryTextLinesDescription")}</p>
         </div>
-        <span class="value-label">{s.display.maxTextLines} 行</span>
+        <span class="value-label">{s.display.maxTextLines} {_t("font.unitLines")}</span>
       </div>
     </div>
     <input

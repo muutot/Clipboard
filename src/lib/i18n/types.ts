@@ -396,6 +396,7 @@ export interface LocaleDefinition {
     detailDisplayModeDescription: string;
     detailDisplayModeOverlay: string;
     detailDisplayModeSplit: string;
+    imageFullscreenButton: string;
   };
   compact: {
     title: string;
@@ -463,6 +464,11 @@ export interface LocaleDefinition {
   export: {
     dragText: string;
     dragFile: string;
+  };
+  font: {
+    secondaryTextLines: string;
+    secondaryTextLinesDescription: string;
+    unitLines: string;
   };
   theme: {
     title: string;
