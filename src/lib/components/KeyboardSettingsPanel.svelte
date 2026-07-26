@@ -25,6 +25,33 @@
   let savingAction = $state("");
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let categoryTab = $state("item");
+
+  type Category = "window" | "item" | "navigation" | "search" | "other";
+
+  const categoryTabs: { id: Category; label: string }[] = [
+    { id: "item", label: "条目操作" },
+    { id: "navigation", label: "列表导航" },
+    { id: "window", label: "窗口控制" },
+    { id: "search", label: "搜索" },
+    { id: "other", label: "其他" },
+  ];
+
+  function classifyAction(action: string): Category {
+    const lower = action.toLowerCase();
+    if (/window|toggle|show|hide/.test(lower)) return "window";
+    if (/copy|paste|delete|favorite|edit|detail|download|save|pin/.test(lower)) return "item";
+    if (/select|next|prev|up|down|left|right|tab|focus|navigate|number|quick/.test(lower)) return "navigation";
+    if (/search|find|clear/.test(lower)) return "search";
+    return "other";
+  }
+
+  const shortcutsByCategory = $derived.by(() => {
+    if (!config) return [];
+    return Object.entries(config.shortcuts)
+      .filter(([a]) => a !== "toggleWindow")
+      .filter(([a]) => classifyAction(a) === categoryTab);
+  });
 
   const actionLabels: Record<string, string> = $derived({
     quickPaste: _t("keyboard.quickPaste"),
@@ -121,7 +148,20 @@
       </button>
     </section>
 
-    {#each Object.entries(config.shortcuts).filter(([a]) => a !== "toggleWindow") as [action]}
+    <nav class="settings-subnav" aria-label="快捷键分类">
+      {#each categoryTabs as tab}
+        <button
+          type="button"
+          class:active={categoryTab === tab.id}
+          aria-current={categoryTab === tab.id ? "page" : undefined}
+          onclick={() => (categoryTab = tab.id)}
+        >
+          {tab.label}
+        </button>
+      {/each}
+    </nav>
+
+    {#each shortcutsByCategory as [action]}
       <section class="setting-card">
         <div class="setting-heading split-heading">
           <div>
@@ -183,113 +223,10 @@
 {/if}
 
 <style>
-  header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 20px 22px 15px;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  .eyebrow {
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  h2 {
-    margin: 5px 0 4px;
-    color: var(--text-primary);
-    font-size: var(--settings-page-title-size, 18px);
-    font-weight: 590;
-  }
-  header p,
-  .setting-heading p {
-    margin: 0;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-  header p {
-    max-width: 430px;
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  .close-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--settings-close-size, 28px);
-    height: var(--settings-close-size, 28px);
-    flex: 0 0 auto;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-close-radius, 7px);
-    color: var(--text-muted);
-    background: var(--card-bg);
-    font-size: var(--settings-close-font-size, 19px);
-    line-height: 1;
-  }
-
-  .settings-scroll {
-    display: grid;
-    gap: 10px;
-    min-height: 0;
-    padding: 14px 18px 48px;
-    overflow: auto;
-    scrollbar-color: var(--scrollbar-color) transparent;
-    scrollbar-width: thin;
-  }
-
-  .settings-scroll::-webkit-scrollbar {
-    width: 7px;
-  }
-
-  .settings-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .settings-scroll::-webkit-scrollbar-thumb {
-    border-radius: 10px;
-    background: var(--scrollbar-color);
-  }
-
-  .setting-card {
-    padding: 10px 13px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius, 9px);
-    background: var(--card-bg);
-  }
-  .setting-heading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
   .split-heading {
     justify-content: space-between;
   }
-  .setting-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 29px;
-    height: 29px;
-    flex: 0 0 auto;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-icon-radius, 7px);
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-  }
-  .setting-heading strong {
-    display: block;
-    color: var(--text-primary);
-    font-size: var(--settings-heading-size, 13px);
-    font-weight: 560;
-  }
-  .setting-heading p {
-    margin-top: 2px;
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
+
   .setting-heading code {
     color: var(--text-muted);
   }
@@ -302,12 +239,14 @@
     color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
   }
+
   label {
     display: block;
     margin: 12px 0 6px;
     color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
   }
+
   input {
     width: 100%;
     box-sizing: border-box;
@@ -320,6 +259,7 @@
     font-family: "Cascadia Code", Consolas, monospace;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
+
   input:focus {
     border-color: var(--text-faint);
   }
@@ -329,6 +269,7 @@
     justify-content: flex-end;
     margin-top: 9px;
   }
+
   .setting-actions button {
     padding: 7px 10px;
     border: 1px solid var(--border-color);
@@ -347,44 +288,18 @@
     color: var(--text-primary);
     background: var(--hover-bg);
   }
-  button {
-    cursor: pointer;
-  }
+
   button:disabled {
     cursor: wait;
     opacity: 0.55;
   }
+
   .settings-state {
     display: grid;
     flex: 1;
     place-items: center;
     color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-  .settings-feedback {
-    position: absolute;
-    right: 18px;
-    bottom: 13px;
-    left: 18px;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
-    border-radius: var(--settings-feedback-radius, 7px);
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
-    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
-  }
-  .settings-feedback.success {
-    border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
-    color: color-mix(in srgb, var(--success-color) 75%, white);
-    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
-  }
-
-  .auto-save-note {
-    margin: 0;
-    padding: 8px 0 0;
-    color: var(--text-faint);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    text-align: center;
   }
 
   .shortcut-reference {
@@ -463,5 +378,40 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .settings-subnav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .settings-subnav button {
+    min-height: 28px;
+    padding: 5px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-muted);
+    background: transparent;
+    font: inherit;
+    font-size: var(--settings-heading-size, 13px);
+    font-weight: 560;
+    cursor: pointer;
+    transition:
+      color 100ms ease,
+      background 100ms ease,
+      border-color 100ms ease;
+  }
+
+  .settings-subnav button:hover {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+  }
+
+  .settings-subnav button.active {
+    border-color: var(--selection-color);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--selection-color) 15%, transparent);
   }
 </style>
