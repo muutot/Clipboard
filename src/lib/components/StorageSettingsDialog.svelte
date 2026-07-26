@@ -2014,7 +2014,7 @@
             {/if}
           </section>
 
-          <section class="setting-card">
+          <section class="setting-card toggle-card">
             <div class="setting-heading">
               <span class="setting-icon"><AppIcon name="search" size={17} /></span>
               <div>
@@ -2022,14 +2022,9 @@
                 <p>{_t("storage.searchIndexDesc")}</p>
               </div>
             </div>
-            <div class="path-button-row">
-              <code class="path-value-inline" title={status.searchIndexPath}
-                >{relativePath(status.searchIndexPath)}</code
-              >
-              <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
-                {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
-              </button>
-            </div>
+            <button type="button" disabled={rebuilding} onclick={rebuildIndex}>
+              {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
+            </button>
           </section>
           <section class="setting-card setting-card-row">
             <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
