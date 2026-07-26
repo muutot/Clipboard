@@ -1947,7 +1947,7 @@
    └─ search-index/                ← 全文搜索索引</pre>
           </section>
 
-          <section class="setting-card">
+          <section class="setting-card toggle-card">
             <div class="setting-heading">
               <span class="setting-icon"><AppIcon name="image" size={17} /></span>
               <div>
@@ -2966,6 +2966,7 @@
   }
 
   .icon-manager-panel {
+    flex-basis: 100%;
     margin-top: 12px;
     border: 1px solid var(--border-subtle);
     border-radius: 7px;
