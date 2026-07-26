@@ -8,7 +8,7 @@
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
   import ThemeSettingsPanel from "$lib/components/ThemeSettingsPanel.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import {
     configureStorageDirectory,
@@ -1993,6 +1993,11 @@
                             type="checkbox"
                             checked={selectedIconFiles.has(file.name)}
                             onchange={() => toggleIconFile(file.name)}
+                          />
+                          <img
+                            class="icon-preview"
+                            src={convertFileSrc(`${status.iconsDir}/${file.name}`.replace(/\\/g, "/"))}
+                            alt={file.name}
                           />
                           <span class="icon-file-name">{file.name}</span>
                           <span class="icon-file-size">{formatBytes(file.sizeBytes)}</span>
