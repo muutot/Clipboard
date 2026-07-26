@@ -78,7 +78,37 @@ export interface ClipboardItem {
   clipboardFormats?: ClipboardFormatInfo;
 }
 
-export type ThemeMode = "dark" | "light";
+export type ThemeMode = "dark" | "light" | "custom";
+
+export interface ThemeColors {
+  bg: string;
+  settingsBg: string;
+  accent: string;
+  textPrimary: string;
+  textMuted: string;
+  border: string;
+  cardBg: string;
+}
+
+export const DARK_THEME_COLORS: ThemeColors = {
+  bg: "#111111",
+  settingsBg: "#1b1b1b",
+  accent: "#ff5050",
+  textPrimary: "#f5f5f5",
+  textMuted: "#999999",
+  border: "#3a3a3a",
+  cardBg: "#1e1e1e",
+};
+
+export const LIGHT_THEME_COLORS: ThemeColors = {
+  bg: "#f5f5f5",
+  settingsBg: "#ebebeb",
+  accent: "#e04040",
+  textPrimary: "#1a1a1a",
+  textMuted: "#666666",
+  border: "#cccccc",
+  cardBg: "#ffffff",
+};
 
 export type SearchSuggestionMode = "off" | "panel" | "inline";
 
@@ -120,6 +150,7 @@ export interface GeneralSettings {
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;
+  themeColors?: ThemeColors;
   imageFullscreenMode: "overlay" | "desktop";
   viewerBackdropOpacity: number;
   searchSuggestionMode: SearchSuggestionMode;
