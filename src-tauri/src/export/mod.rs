@@ -107,8 +107,9 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
     let mut skipped = 0u64;
     let mut errors = Vec::new();
 
-    for item in &items {
-        match crate::storage::ClipboardRepository::save_item(database, item) {
+    for mut item in items {
+        item.icon_path = normalize_imported_icon_key(item.icon_path.as_deref());
+        match crate::storage::ClipboardRepository::save_item(database, &item) {
             Ok(_) => imported += 1,
             Err(e) => {
                 skipped += 1;
@@ -122,6 +123,29 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
         skipped_count: skipped,
         errors,
     })
+}
+
+fn normalize_imported_icon_key(icon_path: Option<&str>) -> Option<String> {
+    let icon_path = icon_path?.trim();
+    if icon_path.is_empty() {
+        return None;
+    }
+
+    let file_name = icon_path
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if file_name.is_empty()
+        || !file_name.chars().any(char::is_alphanumeric)
+        || !file_name
+            .chars()
+            .all(|character| character.is_alphanumeric() || matches!(character, '.' | '_' | '-'))
+    {
+        return None;
+    }
+
+    Some(file_name.to_owned())
 }
 
 /// Imports a plain-text backup. Records are separated by a line containing
@@ -302,6 +326,50 @@ mod tests {
         assert_eq!(summary.imported_count, 2);
         assert_eq!(summary.skipped_count, 0);
         assert!(summary.errors.is_empty());
+    }
+
+    #[test]
+    fn json_import_stores_only_normalized_icon_file_keys() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let mut items = sample_items();
+        items[0].icon_path =
+            Some(r"C:\Users\admin\AppData\Local\Clipboard\icons\Notepad.png".to_owned());
+        items[1].icon_path = Some("../../foreign/icons/Chrome.png".to_owned());
+        let json = serde_json::to_string(&items).unwrap();
+
+        let summary = import_from_json(&json, &database).unwrap();
+
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(
+            database.get_item("item-1").unwrap().unwrap().icon_path,
+            Some("Notepad.png".to_owned())
+        );
+        assert_eq!(
+            database.get_item("item-2").unwrap().unwrap().icon_path,
+            Some("Chrome.png".to_owned())
+        );
+    }
+
+    #[test]
+    fn imported_icon_key_normalization_preserves_legacy_keys_and_rejects_unsafe_names() {
+        assert_eq!(normalize_imported_icon_key(None), None);
+        assert_eq!(normalize_imported_icon_key(Some("   ")), None);
+        assert_eq!(
+            normalize_imported_icon_key(Some("Notepad.png")),
+            Some("Notepad.png".to_owned())
+        );
+        assert_eq!(
+            normalize_imported_icon_key(Some("/home/user/.local/share/icons/firefox.png")),
+            Some("firefox.png".to_owned())
+        );
+        assert_eq!(
+            normalize_imported_icon_key(Some(r"..\..\icons\微信.png")),
+            Some("微信.png".to_owned())
+        );
+        assert_eq!(normalize_imported_icon_key(Some("../../icons/")), None);
+        assert_eq!(normalize_imported_icon_key(Some("..")), None);
+        assert_eq!(normalize_imported_icon_key(Some("unsafe?.png")), None);
+        assert_eq!(normalize_imported_icon_key(Some("..%2fsecret.png")), None);
     }
 
     #[test]
