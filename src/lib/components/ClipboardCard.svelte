@@ -614,12 +614,12 @@
       {:else}
         {#if item.customTitle}
           <div class="text-preview custom-title">{item.title}</div>
-          {#if showSecondaryText && secondaryPreviewText}
+          {#if secondaryPreviewText}
             <div class="content-preview">{secondaryPreviewText}</div>
           {/if}
         {:else}
           <div class="text-preview">{primaryFirstLine}</div>
-          {#if primaryRestLines}
+          {#if showSecondaryText && primaryRestLines}
             <div class="content-preview">{primaryRestLines}</div>
           {/if}
         {/if}
