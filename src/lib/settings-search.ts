@@ -211,6 +211,18 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["窗口位置", "window bounds"],
   ),
   entry(
+    "general.detail-display-mode",
+    { section: "general" },
+    i18n("general.detailDisplayMode"),
+    i18n("general.detailDisplayModeDescription"),
+    [
+      i18n("general.detailDisplayModeOverlay"),
+      i18n("general.detailDisplayModeSplit"),
+      "详情面板",
+      "detail panel",
+    ],
+  ),
+  entry(
     "general.theme",
     { section: "theme" },
     i18n("general.theme"),

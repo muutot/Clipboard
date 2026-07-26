@@ -141,6 +141,8 @@ export interface LocaleDefinition {
     settingsSearchLabel: string;
     settingsSearchPlaceholder: string;
     clearSettingsSearch: string;
+    sidebarUsage: string;
+    sidebarDiskFree: string;
     settingsCount: string;
     settingsFilteredCount: string;
     settingsSearchNoResults: string;
@@ -385,6 +387,10 @@ export interface LocaleDefinition {
     on: string;
     off: string;
     autoSaveNote: string;
+    detailDisplayMode: string;
+    detailDisplayModeDescription: string;
+    detailDisplayModeOverlay: string;
+    detailDisplayModeSplit: string;
   };
   compact: {
     title: string;

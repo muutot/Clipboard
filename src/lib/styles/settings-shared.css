@@ -1,0 +1,290 @@
+/* ── Shared Settings Panel Styles ── */
+/* Used by: General, Compact, Keyboard, FontSize, Theme settings panels */
+
+/* ── header ── */
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 15px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.eyebrow {
+  color: var(--text-muted);
+  font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h2 {
+  margin: 5px 0 4px;
+  color: var(--text-primary);
+  font-size: var(--settings-page-title-size, 18px);
+  font-weight: 590;
+}
+
+header p {
+  max-width: 430px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  line-height: 1.5;
+}
+
+.close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--settings-close-size, 28px);
+  height: var(--settings-close-size, 28px);
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--settings-close-radius, 7px);
+  color: var(--text-muted);
+  background: var(--card-bg);
+  font-size: var(--settings-close-font-size, 19px);
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ── scroll container ── */
+.settings-scroll {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  padding: 14px 18px 48px;
+  overflow: auto;
+  scrollbar-color: var(--scrollbar-color) transparent;
+  scrollbar-width: thin;
+}
+
+.settings-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+
+.settings-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: var(--scrollbar-color);
+}
+
+/* ── cards ── */
+.setting-card {
+  padding: 10px 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--settings-card-radius, 9px);
+  background: var(--card-bg);
+}
+
+.toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.setting-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--settings-icon-radius, 7px);
+  color: var(--text-secondary);
+  background: var(--hover-bg);
+}
+
+.setting-heading strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--settings-heading-size, 13px);
+  font-weight: 560;
+}
+
+.setting-heading p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+}
+
+.heading-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+
+.value-label {
+  color: var(--text-muted);
+  font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ── toggle switch ── */
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--input-bg);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition:
+    border-color 100ms ease,
+    background 100ms ease;
+}
+
+.toggle-switch.active {
+  border-color: var(--selection-color);
+  background: color-mix(in srgb, var(--selection-color) 18%, transparent);
+}
+
+.toggle-switch:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition:
+    transform 120ms ease,
+    background 100ms ease;
+}
+
+.toggle-switch.active .toggle-knob {
+  transform: translateX(18px);
+  background: var(--selection-color);
+}
+
+/* ── transparency / range slider ── */
+.transparency-slider {
+  width: 100%;
+  margin-top: 12px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover-bg);
+  outline: none;
+  cursor: pointer;
+}
+
+.transparency-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--selection-color) 0%,
+    var(--selection-color) var(--slider-pct, 50%),
+    var(--hover-bg) var(--slider-pct, 50%),
+    var(--hover-bg) 100%
+  );
+}
+
+.transparency-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--selection-color);
+  background: var(--input-bg);
+  cursor: pointer;
+  transition:
+    box-shadow 100ms ease,
+    transform 100ms ease;
+}
+
+.transparency-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--selection-color) 40%, transparent);
+  transform: scale(1.15);
+}
+
+.transparency-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover-bg);
+}
+
+.transparency-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--selection-color);
+}
+
+.transparency-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--selection-color);
+  background: var(--input-bg);
+  cursor: pointer;
+  transition:
+    box-shadow 100ms ease,
+    transform 100ms ease;
+}
+
+.transparency-slider::-moz-range-thumb:hover {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--selection-color) 40%, transparent);
+  transform: scale(1.15);
+}
+
+/* ── feedback ── */
+.settings-feedback {
+  position: absolute;
+  right: 18px;
+  bottom: 13px;
+  left: 18px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
+  border-radius: var(--settings-feedback-radius, 7px);
+  color: color-mix(in srgb, var(--danger-color) 75%, white);
+  background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
+  font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
+}
+
+.settings-feedback.success {
+  border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+  color: color-mix(in srgb, var(--success-color) 75%, white);
+  background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
+}
+
+/* ── misc ── */
+.auto-save-note {
+  margin: 0;
+  padding: 8px 0 0;
+  color: var(--text-faint);
+  font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+  text-align: center;
+}
+
+button {
+  cursor: pointer;
+}

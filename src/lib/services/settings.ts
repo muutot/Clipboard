@@ -50,6 +50,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   cardActionsDisplay: "hover",
   quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
+  detailDisplayMode: 'overlay',
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -155,6 +156,13 @@ function validFullscreenMode(
   fallback: GeneralSettings["imageFullscreenMode"],
 ): GeneralSettings["imageFullscreenMode"] {
   return value === "overlay" || value === "desktop" ? value : fallback;
+}
+
+function validDetailDisplayMode(
+  value: unknown,
+  fallback: GeneralSettings["detailDisplayMode"],
+): GeneralSettings["detailDisplayMode"] {
+  return value === "overlay" || value === "split" ? value : fallback;
 }
 
 /**
@@ -369,6 +377,10 @@ function normalizeGeneralSettings(
   result.showSettingsCloseButton = booleanValue(
     source.showSettingsCloseButton ?? fallback("showSettingsCloseButton"),
     defaultSettings.showSettingsCloseButton,
+  );
+  result.detailDisplayMode = validDetailDisplayMode(
+    source.detailDisplayMode ?? fallback("detailDisplayMode"),
+    defaultSettings.detailDisplayMode,
   );
 
   return result;
