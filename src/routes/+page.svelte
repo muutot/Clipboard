@@ -118,6 +118,7 @@
   let regexError = $state("");
 
   let detailItem = $state<ClipboardItem | null>(null);
+  let startFullscreen = $state(false);
 
   let selectedIds = $state<Set<string>>(new Set());
   let lastClickedIndex = $state(-1);
@@ -1410,6 +1411,11 @@
     if (item) detailItem = item;
   }
 
+  function handleImageFullscreen(id: string) {
+    openDetail(id);
+    startFullscreen = true;
+  }
+
   function closeDetail() {
     detailItem = null;
     void tick().then(() => {
@@ -2564,6 +2570,7 @@
                   ondelete={deleteItem}
                   oncopy={copyItem}
                   ondetail={openDetail}
+                  onimagefullscreen={handleImageFullscreen}
                   onedit={startEdit}
                   onsaveedit={saveEdit}
                   onsaveasnew={saveAsNew}
@@ -2599,6 +2606,7 @@
                 ondelete={deleteItem}
                 oncopy={copyItem}
                 ondetail={openDetail}
+                onimagefullscreen={handleImageFullscreen}
                 onedit={startEdit}
                 onsaveedit={saveEdit}
                 onsaveasnew={saveAsNew}
@@ -2667,6 +2675,7 @@
   {#if detailDisplayMode === 'split' && detailItem}
     <DetailPanel
       mode="split"
+      bind:startFullscreen
       item={detailItem}
       onclose={closeDetail}
       oncopy={copyItem}
@@ -2694,6 +2703,7 @@
 <Toast />
 {#if detailDisplayMode !== 'split' || !detailItem}
   <DetailPanel
+    bind:startFullscreen
     item={detailItem}
     onclose={closeDetail}
     oncopy={copyItem}
@@ -2728,6 +2738,7 @@
 
   .app-shell.split-detail > .search-header,
   .app-shell.split-detail > .toolbar,
+  .app-shell.split-detail > .main-content,
   .app-shell.split-detail > .status-bar {
     grid-column: 1 / -1;
   }
@@ -2943,7 +2954,6 @@
     justify-content: space-between;
     gap: 8px;
     padding: 2px 12px 9px;
-    border-bottom: 1px solid var(--border-subtle);
   }
 
   .filters,
