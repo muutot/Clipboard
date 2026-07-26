@@ -2551,7 +2551,7 @@
                   selected={selectedIds.has(item.id) || item.id === selectedId}
                   checked={selectedIds.has(item.id)}
                   showCheckbox={false}
-                  hideActions={selectedIds.size > 0}
+                  hideActions={selectedIds.size > 0 || (detailDisplayMode === 'split' && detailItem != null)}
                   compact={compactMode}
                   {compactPaddingTop}
                   {compactPaddingBottom}
@@ -2561,7 +2561,7 @@
                   {maxTextLines}
                   {showSecondaryText}
                   {alwaysShowActions}
-                  {quickCopyBadgeAlwaysVisible}
+                  quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible && !(detailDisplayMode === 'split' && detailItem != null)}
                   onheightchange={recordCardHeight}
                   heightMeasurementKey={cardLayoutSignature(item)}
                   onselect={selectItem}
@@ -2587,7 +2587,7 @@
                 selected={selectedIds.has(item.id) || item.id === selectedId}
                 checked={selectedIds.has(item.id)}
                 showCheckbox={false}
-                hideActions={selectedIds.size > 0}
+                hideActions={selectedIds.size > 0 || (detailDisplayMode === 'split' && detailItem != null)}
                 compact={compactMode}
                 {compactPaddingTop}
                 {compactPaddingBottom}
@@ -2597,7 +2597,7 @@
                 {maxTextLines}
                 {showSecondaryText}
                 {alwaysShowActions}
-                {quickCopyBadgeAlwaysVisible}
+                quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible && !(detailDisplayMode === 'split' && detailItem != null)}
                 onheightchange={recordCardHeight}
                 heightMeasurementKey={cardLayoutSignature(item)}
                 onselect={selectItem}
