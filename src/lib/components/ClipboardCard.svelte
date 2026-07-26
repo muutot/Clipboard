@@ -880,7 +880,7 @@
   }
 
   .clip-card.compact .meta-row span {
-    font-size: 9.5px;
+    font-size: 12px;
   }
 
   .clip-card.compact .content {
