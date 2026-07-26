@@ -7,6 +7,7 @@
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
+  import ThemeSettingsPanel from "$lib/components/ThemeSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import {
@@ -62,7 +63,7 @@
   });
   let restartNeeded = $state(false);
   let activeSection = $state<
-    "general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
+    "general" | "compact" | "font" | "theme" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
   >("storage");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
 
@@ -72,6 +73,7 @@
         return _t("general.eyebrow");
       case "compact":
       case "font":
+      case "theme":
         return _t("storage.appearanceSettings");
       case "capture":
         return _t("capture.settings");
@@ -189,6 +191,8 @@
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.compactTab")}`;
       case "font":
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.fontTab")}`;
+      case "theme":
+        return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.themeTab")}`;
       case "capture":
         return `${settingsLabel} / ${_t("capture.title")}`;
       case "storage":
@@ -889,7 +893,7 @@
         <span>{_t("storage.generalTab")}</span>
       </button>
       <button
-        class:active={activeSection === "compact" || activeSection === "font"}
+        class:active={activeSection === "compact" || activeSection === "font" || activeSection === "theme"}
         type="button"
         onclick={() => (activeSection = "compact")}
       >
@@ -969,7 +973,7 @@
           {/if}
         </div>
       </div>
-      {#if activeSection === "compact" || activeSection === "font"}
+      {#if activeSection === "compact" || activeSection === "font" || activeSection === "theme"}
         <nav class="settings-subnav" aria-label={_t("storage.appearanceTab")}>
           <button
             type="button"
@@ -986,6 +990,14 @@
             onclick={() => (activeSection = "font")}
           >
             {_t("storage.fontTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "theme"}
+            aria-current={activeSection === "theme" ? "page" : undefined}
+            onclick={() => (activeSection = "theme")}
+          >
+            {_t("storage.themeTab")}
           </button>
         </nav>
       {:else if activeSection === "statistics"}
@@ -1052,6 +1064,8 @@
       <CompactSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "font"}
       <FontSizeSettingsPanel {onclose} showHeader={false} />
+    {:else if activeSection === "theme"}
+      <ThemeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
     {:else if activeSection === "keyboard"}

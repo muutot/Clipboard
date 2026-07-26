@@ -42,6 +42,7 @@
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
+  import { applyThemeColors } from "$lib/utils/theme";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
   import {
@@ -759,6 +760,9 @@
       }
       if (s.display) {
         r.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
+      }
+      if (s.themeColors) {
+        applyThemeColors(s.themeColors);
       }
       if (appWindow) {
         appWindow.setAlwaysOnTop(s.alwaysOnTop).catch(() => {});

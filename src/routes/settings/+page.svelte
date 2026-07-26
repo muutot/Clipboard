@@ -2,11 +2,15 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
   import { generalSettings } from "$lib/services/settings";
+  import { applyThemeColors } from "$lib/utils/theme";
 
   let s = $state($generalSettings);
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
       s = v;
+      if (v.themeColors) {
+        applyThemeColors(v.themeColors);
+      }
     });
     return unsub;
   });

@@ -2,7 +2,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { SearchSuggestionMode, ThemeMode, WindowConfig } from "$lib/types/clipboard";
+  import type { SearchSuggestionMode, WindowConfig } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -56,10 +56,6 @@
     generalSettings.updateSetting("language", lang);
     locale.set(lang);
     showFeedback(_t(lang === "zh-CN" ? "已切换至中文" : "Switched to English"), true);
-  }
-
-  function changeTheme(value: ThemeMode) {
-    generalSettings.updateSetting("theme", value);
   }
 
   function handleTransparency(event: Event) {
@@ -465,24 +461,6 @@
     >
       <span class="toggle-knob"></span>
     </button>
-  </section>
-
-  <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
-      <div>
-        <strong>{_t("general.theme")}</strong>
-        <p>{_t("general.themeDescription")}</p>
-      </div>
-    </div>
-    <select
-      class="theme-select"
-      value={s.theme}
-      onchange={(e) => changeTheme((e.target as HTMLSelectElement).value as ThemeMode)}
-    >
-      <option value="dark">{_t("general.themeDark")}</option>
-      <option value="light">{_t("general.themeLight")}</option>
-    </select>
   </section>
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
