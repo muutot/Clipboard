@@ -42,6 +42,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
   searchHistoryEnabled: false,
+  showSettingsCloseButton: true,
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -288,6 +289,10 @@ function normalizeGeneralSettings(
   result.searchHistoryEnabled = booleanValue(
     source.searchHistoryEnabled ?? fallback("searchHistoryEnabled"),
     defaultSettings.searchHistoryEnabled,
+  );
+  result.showSettingsCloseButton = booleanValue(
+    source.showSettingsCloseButton ?? fallback("showSettingsCloseButton"),
+    defaultSettings.showSettingsCloseButton,
   );
 
   return result;

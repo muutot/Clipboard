@@ -108,9 +108,11 @@
       <h2>{_t("general.title")}</h2>
       <p>{_t("general.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    {#if s.showSettingsCloseButton}
+      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+        >×</button
+      >
+    {/if}
   </header>
 {/if}
 
@@ -365,6 +367,28 @@
       onclick={() => generalSettings.updateSetting("useSystemTitleBar", !s.useSystemTitleBar)}
       aria-checked={s.useSystemTitleBar}
       aria-label={_t("general.useSystemTitleBar")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="x" size={17} /></span>
+      <div>
+        <strong>{_t("general.showSettingsCloseButton")}</strong>
+        <p>{_t("general.showSettingsCloseButtonDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.showSettingsCloseButton}
+      onclick={() =>
+        generalSettings.updateSetting("showSettingsCloseButton", !s.showSettingsCloseButton)}
+      aria-checked={s.showSettingsCloseButton}
+      aria-label={_t("general.showSettingsCloseButton")}
       role="switch"
     >
       <span class="toggle-knob"></span>

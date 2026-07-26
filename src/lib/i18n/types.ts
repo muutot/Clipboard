@@ -334,6 +334,8 @@ export interface LocaleDefinition {
     toastNotificationsDescription: string;
     useSystemTitleBar: string;
     useSystemTitleBarDescription: string;
+    showSettingsCloseButton: string;
+    showSettingsCloseButtonDescription: string;
     desktopFullscreen: string;
     desktopFullscreenDescription: string;
     viewerBackdropOpacity: string;

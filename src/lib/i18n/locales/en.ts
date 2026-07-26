@@ -345,6 +345,8 @@ const en: LocaleDefinition = {
       "Show Toast feedback after copy, favorite, delete, and other actions",
     useSystemTitleBar: "Use System Title Bar",
     useSystemTitleBarDescription: "Use the operating system's native title bar",
+    showSettingsCloseButton: "Show Settings Close Button",
+    showSettingsCloseButtonDescription: "When disabled, close Settings with the Esc key only",
     desktopFullscreen: "Desktop Fullscreen Preview",
     desktopFullscreenDescription:
       "When enabled, images fullscreen over desktop. When disabled, fullscreen within app only.",

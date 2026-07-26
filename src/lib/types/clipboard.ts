@@ -114,6 +114,7 @@ export interface GeneralSettings {
   viewerBackdropOpacity: number;
   searchSuggestionMode: SearchSuggestionMode;
   searchHistoryEnabled: boolean;
+  showSettingsCloseButton: boolean;
 }
 
 export interface GeneralSettingsInfo {

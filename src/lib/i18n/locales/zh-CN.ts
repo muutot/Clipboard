@@ -335,6 +335,8 @@ const zhCN: LocaleDefinition = {
     toastNotificationsDescription: "复制、收藏、删除等操作完成后显示 Toast 提示",
     useSystemTitleBar: "使用系统标题栏",
     useSystemTitleBarDescription: "使用操作系统原生标题栏",
+    showSettingsCloseButton: "显示设置关闭按钮",
+    showSettingsCloseButtonDescription: "关闭后仅通过 Esc 键关闭设置界面",
     desktopFullscreen: "桌面全屏预览",
     desktopFullscreenDescription: "开启时图片全屏覆盖桌面，关闭时仅在应用内全屏",
     viewerBackdropOpacity: "全屏蒙版透明度",

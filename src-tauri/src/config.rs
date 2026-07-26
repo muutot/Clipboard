@@ -100,6 +100,7 @@ pub struct GeneralConfig {
     pub viewer_backdrop_opacity: u8,
     pub search_suggestion_mode: String,
     pub search_history_enabled: bool,
+    pub show_settings_close_button: bool,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -133,6 +134,7 @@ impl Default for GeneralConfig {
             viewer_backdrop_opacity: 92,
             search_suggestion_mode: "off".to_owned(),
             search_history_enabled: false,
+            show_settings_close_button: true,
             extra: BTreeMap::new(),
         }
     }
@@ -673,6 +675,7 @@ mod tests {
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
         assert_eq!(saved["general"]["searchSuggestionMode"], "off");
         assert_eq!(saved["general"]["searchHistoryEnabled"], false);
+        assert_eq!(saved["general"]["showSettingsCloseButton"], true);
         fs::remove_dir_all(project).unwrap();
     }
 
@@ -692,6 +695,7 @@ mod tests {
         settings.viewer_backdrop_opacity = 64;
         settings.search_suggestion_mode = "inline".to_owned();
         settings.search_history_enabled = true;
+        settings.show_settings_close_button = false;
 
         store.set_general_settings(settings.clone()).unwrap();
 
@@ -713,6 +717,7 @@ mod tests {
         assert_eq!(saved["general"]["viewerBackdropOpacity"], 64);
         assert_eq!(saved["general"]["searchSuggestionMode"], "inline");
         assert_eq!(saved["general"]["searchHistoryEnabled"], true);
+        assert_eq!(saved["general"]["showSettingsCloseButton"], false);
         fs::remove_dir_all(project).unwrap();
     }
 
@@ -735,6 +740,27 @@ mod tests {
         let store = ConfigStore::load(&project).unwrap();
         assert_eq!(store.general_settings().search_suggestion_mode, "off");
         assert!(!store.general_settings().search_history_enabled);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn existing_general_settings_default_to_visible_settings_close_button() {
+        let project = temporary_test_directory("settings-close-button-default");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("conf.json"),
+            serde_json::to_vec_pretty(&json!({
+                "general": {
+                    "language": "en"
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = ConfigStore::load(&project).unwrap();
+        assert!(store.general_settings().show_settings_close_button);
         fs::remove_dir_all(project).unwrap();
     }
 

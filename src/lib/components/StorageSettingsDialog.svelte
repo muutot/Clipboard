@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
   import { tick } from "svelte";
+  import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
@@ -774,12 +775,14 @@
     <section class="settings-section-header" aria-labelledby="settings-title">
       <div class="settings-section-heading-row">
         <div id="settings-title" class="settings-breadcrumb">{settingsBreadcrumb}</div>
-        <button
-          class="close-button"
-          type="button"
-          aria-label={_t("actions.close")}
-          onclick={onclose}>×</button
-        >
+        {#if $generalSettings.showSettingsCloseButton}
+          <button
+            class="close-button"
+            type="button"
+            aria-label={_t("actions.close")}
+            onclick={onclose}>×</button
+          >
+        {/if}
       </div>
       {#if activeSection === "general" || activeSection === "compact" || activeSection === "font"}
         <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
