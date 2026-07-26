@@ -23,7 +23,15 @@
     type PerformanceMetrics,
     type RepairResult,
   } from "$lib/services/storage";
+  import { getMemoryDiagnostics } from "$lib/services/memory";
+  import type { MemoryDiagnostics } from "$lib/types/memory";
   import { messages, resolvePath } from "$lib/i18n";
+  import {
+    filterSettingsSearchItems,
+    normalizeSettingsSearch,
+    resolveSettingsSearchItems,
+    type SettingsSearchItem,
+  } from "$lib/settings-search";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -56,14 +64,15 @@
   let activeSection = $state<
     "general" | "compact" | "font" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
   >("storage");
-  let activeStatisticsTab = $state<"storage" | "performance">("storage");
+  let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
 
   const settingsBreadcrumb = $derived.by(() => {
     switch (activeSection) {
       case "general":
+        return _t("general.eyebrow");
       case "compact":
       case "font":
-        return _t("general.eyebrow");
+        return _t("storage.appearanceSettings");
       case "capture":
         return _t("capture.settings");
       case "storage":
@@ -96,7 +105,9 @@
       case "statistics":
         return activeStatisticsTab === "storage"
           ? _t("statistics.storageTab")
-          : _t("statistics.performanceTab");
+          : activeStatisticsTab === "performance"
+            ? _t("statistics.performanceTab")
+            : _t("statistics.memoryTab");
     }
   });
 
@@ -119,21 +130,30 @@
       case "statistics":
         return activeStatisticsTab === "storage"
           ? _t("statistics.storageDescription")
-          : _t("statistics.performanceDescription");
+          : activeStatisticsTab === "performance"
+            ? _t("statistics.performanceDescription")
+            : _t("statistics.memoryDescription");
     }
   });
 
   let settingsSearch = $state("");
   let settingsContent = $state<HTMLElement | null>(null);
   let settingsItemCount = $state(0);
-  let settingsMatchCount = $state(0);
-  let settingsSearchReady = $state(false);
+  let highlightedSettingsItem: HTMLElement | null = null;
+  let settingsHighlightTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function normalizeSettingsSearch(value: string): string {
-    return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  }
+  const resolvedSettingsSearchItems = $derived.by(() =>
+    resolveSettingsSearchItems((key) => _t(key)),
+  );
+  const normalizedSettingsQuery = $derived(normalizeSettingsSearch(settingsSearch));
+  const settingsSearchActive = $derived(Boolean(normalizedSettingsQuery));
+  const settingsSearchResults = $derived.by(() =>
+    normalizedSettingsQuery
+      ? filterSettingsSearchItems(resolvedSettingsSearchItems, normalizedSettingsQuery)
+      : [],
+  );
 
-  function searchableSettingsText(item: HTMLElement): string {
+  function settingsElementText(item: HTMLElement): string {
     const labels = item.querySelectorAll<HTMLElement>(
       "strong, p, label, .setting-label, .config-path, .path-value-inline, .column-heading, code",
     );
@@ -143,50 +163,113 @@
     return normalizeSettingsSearch(text || item.textContent || "");
   }
 
-  function applySettingsSearch(): void {
-    if (!settingsContent) return;
-
-    const items = Array.from(
-      settingsContent.querySelectorAll<HTMLElement>(".setting-card, .filter-board"),
+  function currentSettingsElements(): HTMLElement[] {
+    if (!settingsContent) return [];
+    return Array.from(
+      settingsContent.querySelectorAll<HTMLElement>(
+        ".settings-scroll .setting-card, .settings-scroll .filter-board",
+      ),
     );
-    const query = normalizeSettingsSearch(settingsSearch);
-    let matches = 0;
-
-    for (const item of items) {
-      const matchesQuery = !query || searchableSettingsText(item).includes(query);
-      item.hidden = !matchesQuery;
-      if (matchesQuery) matches += 1;
-    }
-
-    settingsItemCount = items.length;
-    settingsMatchCount = matches;
-    settingsSearchReady = true;
   }
 
-  async function refreshSettingsSearch(): Promise<void> {
-    await tick();
-    applySettingsSearch();
+  function updateSettingsItemCount(): void {
+    settingsItemCount = currentSettingsElements().length;
   }
 
   function clearSettingsSearch(): void {
     settingsSearch = "";
   }
 
+  function settingsSearchResultPath(item: SettingsSearchItem): string {
+    const settingsLabel = _t("toolbar.settings");
+    switch (item.section) {
+      case "general":
+        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.basicTab")}`;
+      case "compact":
+        return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.compactTab")}`;
+      case "font":
+        return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.fontTab")}`;
+      case "capture":
+        return `${settingsLabel} / ${_t("capture.title")}`;
+      case "storage":
+        return `${settingsLabel} / ${_t("storage.storageTab")}`;
+      case "keyboard":
+        return `${settingsLabel} / ${_t("storage.keyboardTab")}`;
+      case "ocr":
+        return `${settingsLabel} / ${_t("storage.ocrTitle")}`;
+      case "statistics": {
+        const tab = item.statisticsTab ?? "storage";
+        const tabLabel =
+          tab === "storage"
+            ? _t("statistics.storageTab")
+            : tab === "performance"
+              ? _t("statistics.performanceTab")
+              : _t("statistics.memoryTab");
+        return `${settingsLabel} / ${_t("statistics.title")} / ${tabLabel}`;
+      }
+    }
+  }
+
+  function findSettingsElement(item: SettingsSearchItem): HTMLElement | null {
+    const title = normalizeSettingsSearch(item.title);
+    const elements = currentSettingsElements();
+    return (
+      elements.find((element) => {
+        const heading = element.querySelector<HTMLElement>(
+          "strong, .setting-label, .column-heading",
+        );
+        return normalizeSettingsSearch(heading?.textContent ?? "") === title;
+      }) ??
+      elements.find((element) => settingsElementText(element).includes(title)) ??
+      null
+    );
+  }
+
+  function highlightSettingsElement(element: HTMLElement): void {
+    if (settingsHighlightTimer !== undefined) clearTimeout(settingsHighlightTimer);
+    highlightedSettingsItem?.classList.remove("settings-search-target-highlight");
+    highlightedSettingsItem = element;
+    element.classList.add("settings-search-target-highlight");
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    settingsHighlightTimer = setTimeout(() => {
+      element.classList.remove("settings-search-target-highlight");
+      if (highlightedSettingsItem === element) highlightedSettingsItem = null;
+      settingsHighlightTimer = undefined;
+    }, 1800);
+  }
+
+  async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void> {
+    activeSection = item.section;
+    if (item.statisticsTab) activeStatisticsTab = item.statisticsTab;
+    settingsSearch = "";
+    await tick();
+    await tick();
+    updateSettingsItemCount();
+    const element = findSettingsElement(item);
+    if (element) highlightSettingsElement(element);
+  }
+
   $effect(() => {
     const root = settingsContent;
     if (!root || typeof MutationObserver === "undefined") return;
 
-    applySettingsSearch();
-    const observer = new MutationObserver(() => applySettingsSearch());
-    observer.observe(root, { childList: true, characterData: true, subtree: true });
+    updateSettingsItemCount();
+    const observer = new MutationObserver(() => updateSettingsItemCount());
+    observer.observe(root, { childList: true, subtree: true });
     return () => observer.disconnect();
   });
 
   $effect(() => {
-    settingsSearch;
     activeSection;
     activeStatisticsTab;
-    void refreshSettingsSearch();
+    void tick().then(() => updateSettingsItemCount());
+  });
+
+  $effect(() => {
+    return () => {
+      if (settingsHighlightTimer !== undefined) clearTimeout(settingsHighlightTimer);
+      highlightedSettingsItem?.classList.remove("settings-search-target-highlight");
+    };
   });
 
   let retentionPeriodDays = $state(90);
@@ -242,6 +325,16 @@
   }
 
   let perfMetrics = $state<PerformanceMetrics | null>(null);
+  let memoryDiagnostics = $state<MemoryDiagnostics | null>(null);
+  let memoryLoading = $state(false);
+  let memoryError = $state("");
+
+  type BrowserMemorySnapshot = {
+    usedBytes: number;
+    totalBytes: number;
+    limitBytes: number;
+  };
+  let browserMemory = $state<BrowserMemorySnapshot | null>(null);
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
 
@@ -250,6 +343,10 @@
     const units = ["B", "KB", "MB", "GB"];
     const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
     return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
+  function formatMaybeBytes(bytes: number | null | undefined): string {
+    return bytes == null ? "—" : formatBytes(bytes);
   }
 
   let ocrEngine = $state("ppocr");
@@ -485,6 +582,46 @@
     }
   }
 
+  function readBrowserMemory(): BrowserMemorySnapshot | null {
+    if (typeof performance === "undefined") return null;
+    const candidate = performance as Performance & {
+      memory?: {
+        usedJSHeapSize?: number;
+        totalJSHeapSize?: number;
+        jsHeapSizeLimit?: number;
+      };
+    };
+    const memory = candidate.memory;
+    if (!memory || typeof memory.usedJSHeapSize !== "number") return null;
+    return {
+      usedBytes: memory.usedJSHeapSize,
+      totalBytes: memory.totalJSHeapSize ?? 0,
+      limitBytes: memory.jsHeapSizeLimit ?? 0,
+    };
+  }
+
+  async function loadMemoryDiagnostics() {
+    if (memoryLoading) return;
+    memoryLoading = true;
+    memoryError = "";
+    browserMemory = readBrowserMemory();
+    try {
+      memoryDiagnostics = await getMemoryDiagnostics();
+    } catch (error) {
+      memoryDiagnostics = null;
+      memoryError = error instanceof Error ? error.message : String(error);
+    } finally {
+      memoryLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (!open || activeSection !== "statistics" || activeStatisticsTab !== "memory") return;
+    void loadMemoryDiagnostics();
+    const interval = setInterval(() => void loadMemoryDiagnostics(), 3000);
+    return () => clearInterval(interval);
+  });
+
   async function doRepair() {
     repairLoading = true;
     repairResult = null;
@@ -712,16 +849,52 @@
       </div>
     </div>
 
+    <div
+      class="settings-sidebar-search"
+      role="search"
+      aria-label={_t("storage.settingsSearchLabel")}
+    >
+      <div class="settings-search-field">
+        <AppIcon name="search" size={14} />
+        <label class="visually-hidden" for="settings-search-input"
+          >{_t("storage.settingsSearchLabel")}</label
+        >
+        <input
+          id="settings-search-input"
+          type="search"
+          bind:value={settingsSearch}
+          aria-label={_t("storage.settingsSearchLabel")}
+          placeholder={_t("storage.settingsSearchPlaceholder")}
+          autocomplete="off"
+          spellcheck="false"
+        />
+        {#if settingsSearch}
+          <button
+            type="button"
+            class="settings-search-clear"
+            aria-label={_t("storage.clearSettingsSearch")}
+            onclick={clearSettingsSearch}>×</button
+          >
+        {/if}
+      </div>
+    </div>
+
     <nav class="settings-primary-nav" aria-label="设置分类">
       <button
-        class:active={activeSection === "general" ||
-          activeSection === "compact" ||
-          activeSection === "font"}
+        class:active={activeSection === "general"}
         type="button"
         onclick={() => (activeSection = "general")}
       >
         <AppIcon name="sliders" size={16} />
         <span>{_t("storage.generalTab")}</span>
+      </button>
+      <button
+        class:active={activeSection === "compact" || activeSection === "font"}
+        type="button"
+        onclick={() => (activeSection = "compact")}
+      >
+        <AppIcon name="palette" size={16} />
+        <span>{_t("storage.appearanceTab")}</span>
       </button>
       <button
         class:active={activeSection === "capture"}
@@ -775,25 +948,29 @@
     <section class="settings-section-header" aria-labelledby="settings-title">
       <div class="settings-section-heading-row">
         <div id="settings-title" class="settings-breadcrumb">{settingsBreadcrumb}</div>
-        {#if $generalSettings.showSettingsCloseButton}
-          <button
-            class="close-button"
-            type="button"
-            aria-label={_t("actions.close")}
-            onclick={onclose}>×</button
-          >
-        {/if}
+        <div class="settings-section-actions">
+          <span class="settings-count" aria-live="polite">
+            {#if settingsSearchActive}
+              {_t("storage.settingsFilteredCount", {
+                matched: settingsSearchResults.length,
+                total: resolvedSettingsSearchItems.length,
+              })}
+            {:else}
+              {_t("storage.settingsCount", { count: settingsItemCount })}
+            {/if}
+          </span>
+          {#if $generalSettings.showSettingsCloseButton}
+            <button
+              class="close-button"
+              type="button"
+              aria-label={_t("actions.close")}
+              onclick={onclose}>×</button
+            >
+          {/if}
+        </div>
       </div>
-      {#if activeSection === "general" || activeSection === "compact" || activeSection === "font"}
-        <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "general"}
-            aria-current={activeSection === "general" ? "page" : undefined}
-            onclick={() => (activeSection = "general")}
-          >
-            {_t("storage.basicTab")}
-          </button>
+      {#if activeSection === "compact" || activeSection === "font"}
+        <nav class="settings-subnav" aria-label={_t("storage.appearanceTab")}>
           <button
             type="button"
             class:active={activeSection === "compact"}
@@ -829,6 +1006,14 @@
           >
             {_t("statistics.performanceTab")}
           </button>
+          <button
+            type="button"
+            class:active={activeStatisticsTab === "memory"}
+            aria-current={activeStatisticsTab === "memory" ? "page" : undefined}
+            onclick={() => (activeStatisticsTab = "memory")}
+          >
+            {_t("statistics.memoryTab")}
+          </button>
         </nav>
       {:else}
         <div class="settings-subnav settings-subnav--single" aria-label={settingsSectionTitle}>
@@ -838,52 +1023,30 @@
       <p class="settings-section-description">{settingsSectionDescription}</p>
     </section>
 
-    <div
-      class="settings-search-toolbar"
-      role="search"
-      aria-label={_t("storage.settingsSearchLabel")}
-    >
-      <div class="settings-search-field">
-        <AppIcon name="search" size={15} />
-        <label class="visually-hidden" for="settings-search-input"
-          >{_t("storage.settingsSearchLabel")}</label
-        >
-        <input
-          id="settings-search-input"
-          type="search"
-          bind:value={settingsSearch}
-          aria-label={_t("storage.settingsSearchLabel")}
-          placeholder={_t("storage.settingsSearchPlaceholder")}
-          autocomplete="off"
-          spellcheck="false"
-        />
-        {#if settingsSearch}
-          <button
-            type="button"
-            class="settings-search-clear"
-            aria-label={_t("storage.clearSettingsSearch")}
-            onclick={clearSettingsSearch}>×</button
-          >
-        {/if}
-      </div>
-      <span class="settings-count" aria-live="polite">
-        {#if settingsSearch.trim() && settingsItemCount !== settingsMatchCount}
-          {_t("storage.settingsFilteredCount", {
-            matched: settingsMatchCount,
-            total: settingsItemCount,
-          })}
+    {#if settingsSearchActive}
+      <div class="settings-scroll settings-search-results" aria-live="polite">
+        {#if settingsSearchResults.length > 0}
+          {#each settingsSearchResults as result (result.id)}
+            <button
+              type="button"
+              class="settings-search-result"
+              data-settings-search-id={result.id}
+              onclick={() => void openSettingsSearchResult(result)}
+            >
+              <span class="settings-search-result-path">{settingsSearchResultPath(result)}</span>
+              <strong>{result.title}</strong>
+              {#if result.description}
+                <p>{result.description}</p>
+              {/if}
+            </button>
+          {/each}
         {:else}
-          {_t("storage.settingsCount", { count: settingsItemCount })}
+          <div class="settings-search-empty" role="status">
+            {_t("storage.settingsSearchNoResults", { query: settingsSearch.trim() })}
+          </div>
         {/if}
-      </span>
-    </div>
-    {#if settingsSearchReady && settingsSearch.trim() && settingsItemCount > 0 && settingsMatchCount === 0}
-      <div class="settings-search-empty" role="status">
-        {_t("storage.settingsSearchNoResults", { query: settingsSearch.trim() })}
       </div>
-    {/if}
-
-    {#if activeSection === "general"}
+    {:else if activeSection === "general"}
       <GeneralSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "compact"}
       <CompactSettingsPanel {onclose} showHeader={false} />
@@ -1154,7 +1317,7 @@
             </div>
           {/if}
           <p class="auto-save-note">统计数据来自当前项目存储</p>
-        {:else}
+        {:else if activeStatisticsTab === "performance"}
           {#if perfMetrics}
             <section class="setting-card stats-metric-card">
               <div class="setting-heading stats-metric-heading">
@@ -1275,6 +1438,141 @@
             <div class="settings-state stats-empty-state">性能统计暂不可用</div>
           {/if}
           <p class="auto-save-note">启动性能为应用初始化耗时，搜索延迟需触发搜索后统计</p>
+        {:else}
+          {#if memoryDiagnostics}
+            <div class="memory-toolbar">
+              <span class="memory-sampled-at"
+                >采样时间：{new Date(memoryDiagnostics.sampledAtMs).toLocaleTimeString()}</span
+              >
+              <button
+                type="button"
+                class="memory-refresh"
+                onclick={() => void loadMemoryDiagnostics()}
+              >
+                {memoryLoading ? "读取中…" : "立即刷新"}
+              </button>
+            </div>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>应用进程工作集</strong>
+                  <p>Rust 主进程当前驻留内存，任务管理器中的 Clipboard 主项</p>
+                </div>
+              </div>
+              <span class="stats-metric-value"
+                >{formatMaybeBytes(memoryDiagnostics.currentProcess.workingSetBytes)}</span
+              >
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>应用进程私有内存</strong>
+                  <p>不与其他进程共享的提交内存，更适合判断实际增长</p>
+                </div>
+              </div>
+              <span class="stats-metric-value"
+                >{formatMaybeBytes(memoryDiagnostics.currentProcess.privateBytes)}</span
+              >
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>应用进程组工作集</strong>
+                  <p>主进程与 Settings/WebView 子进程合计</p>
+                </div>
+              </div>
+              <span class="stats-metric-value"
+                >{formatBytes(memoryDiagnostics.processGroup.workingSetBytes)}</span
+              >
+            </section>
+
+            <section class="setting-card stats-metric-card">
+              <div class="setting-heading stats-metric-heading">
+                <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+                <div class="stats-metric-copy">
+                  <strong>系统可用内存</strong>
+                  <p>当前机器可供应用继续使用的物理内存</p>
+                </div>
+              </div>
+              <span class="stats-metric-value"
+                >{formatMaybeBytes(memoryDiagnostics.system.availableBytes)} / {formatMaybeBytes(
+                  memoryDiagnostics.system.totalBytes,
+                )}</span
+              >
+            </section>
+
+            {#if browserMemory}
+              <section class="setting-card stats-metric-card">
+                <div class="setting-heading stats-metric-heading">
+                  <span class="setting-icon"><AppIcon name="code" size={17} /></span>
+                  <div class="stats-metric-copy">
+                    <strong>当前设置窗口 JS 堆</strong>
+                    <p>仅代表这个设置 WebView，不等于整个应用进程</p>
+                  </div>
+                </div>
+                <span class="stats-metric-value"
+                  >{formatBytes(browserMemory.usedBytes)}{browserMemory.limitBytes
+                    ? ` / ${formatBytes(browserMemory.limitBytes)}`
+                    : ""}</span
+                >
+              </section>
+            {/if}
+
+            <section class="setting-card memory-process-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+                <div>
+                  <strong>进程明细</strong>
+                  <p>用于判断内存主要落在主进程还是 WebView 子进程</p>
+                </div>
+              </div>
+              <div class="memory-process-list">
+                {#each memoryDiagnostics.processGroup.processes as process (process.pid)}
+                  <div class="memory-process-row">
+                    <span class="memory-process-name">{process.role || process.name}</span>
+                    <span class="memory-process-pid">PID {process.pid}</span>
+                    <span class="memory-process-size"
+                      >{formatMaybeBytes(process.workingSetBytes)}</span
+                    >
+                  </div>
+                {/each}
+              </div>
+            </section>
+
+            {#if memoryDiagnostics.ocr}
+              <section class="setting-card stats-metric-card">
+                <div class="setting-heading stats-metric-heading">
+                  <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+                  <div class="stats-metric-copy">
+                    <strong>OCR 模型</strong>
+                    <p>
+                      {memoryDiagnostics.ocr.engine} / {memoryDiagnostics.ocr.modelVariant}
+                      {memoryDiagnostics.ocr.loaded ? " · 模型文件已安装" : " · 模型文件未安装"}
+                    </p>
+                  </div>
+                </div>
+                <span class="stats-metric-value"
+                  >{formatBytes(memoryDiagnostics.ocr.modelBytes)} · {memoryDiagnostics.ocr
+                    .modelFileCount} 个文件</span
+                >
+              </section>
+            {/if}
+          {:else}
+            <div class="settings-state stats-empty-state">
+              {#if memoryError}
+                内存诊断不可用：{memoryError}
+              {:else}
+                {memoryLoading ? "正在读取内存诊断…" : "内存诊断暂不可用"}
+              {/if}
+            </div>
+          {/if}
+          <p class="auto-save-note">数据每 3 秒自动刷新；工作集与私有内存的统计口径不同</p>
         {/if}
       </div>
     {:else}
@@ -1714,9 +2012,16 @@
 
   .settings-section-heading-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
+  }
+
+  .settings-section-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 10px;
   }
 
   .settings-section-description {
@@ -1780,11 +2085,9 @@
     line-height: 1.35;
   }
 
-  .settings-search-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 18px 0;
+  .settings-sidebar-search {
+    display: block;
+    margin: 0 0 12px;
   }
 
   .settings-search-field {
@@ -1850,15 +2153,16 @@
   }
 
   .settings-count {
-    flex: 0 0 auto;
+    min-width: 0;
     color: #888;
     font-size: var(--settings-note-size);
     font-variant-numeric: tabular-nums;
+    text-align: right;
     white-space: nowrap;
   }
 
   .settings-search-empty {
-    margin: 10px 18px 0;
+    margin: 0;
     padding: 9px 10px;
     border: 1px dashed #3a3a3a;
     border-radius: var(--settings-control-radius);
@@ -1866,6 +2170,65 @@
     background: rgba(30, 30, 30, 0.72);
     font-size: var(--settings-description-size);
     text-align: center;
+  }
+
+  .settings-search-results {
+    align-content: start;
+  }
+
+  .settings-search-result {
+    display: grid;
+    gap: 3px;
+    width: 100%;
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid #303030;
+    border-radius: var(--settings-card-radius);
+    color: #dedede;
+    background: #1e1e1e;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 100ms ease,
+      background 100ms ease;
+  }
+
+  .settings-search-result:hover,
+  .settings-search-result:focus-visible {
+    border-color: #3d5a80;
+    outline: none;
+    background: #252f3d;
+  }
+
+  .settings-search-result-path {
+    overflow: hidden;
+    color: #777;
+    font-size: var(--settings-note-size);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .settings-search-result strong {
+    overflow: hidden;
+    font-size: var(--settings-heading-size);
+    font-weight: 560;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .settings-search-result p {
+    margin: 0;
+    color: #777;
+    font-size: var(--settings-description-size);
+    line-height: 1.45;
+  }
+
+  :global(.settings-search-target-highlight) {
+    border-color: #4aa8ff !important;
+    box-shadow:
+      0 0 0 1px rgba(74, 168, 255, 0.55),
+      0 0 0 4px rgba(74, 168, 255, 0.12) !important;
   }
 
   .visually-hidden,
@@ -1886,7 +2249,6 @@
     color: #777;
     line-height: 1.5;
   }
-
 
   .close-button {
     display: inline-flex;
@@ -2288,6 +2650,83 @@
     overflow-wrap: anywhere;
   }
 
+  .memory-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 28px;
+    color: #777;
+    font-size: var(--settings-note-size);
+  }
+
+  .memory-sampled-at {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .memory-refresh {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+    border: 1px solid #3b3b3b;
+    border-radius: var(--settings-control-radius);
+    color: #cfcfcf;
+    background: #232323;
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+  }
+
+  .memory-refresh:hover {
+    border-color: #547fae;
+    background: #28384a;
+  }
+
+  .memory-process-card {
+    min-width: 0;
+  }
+
+  .memory-process-list {
+    display: grid;
+    gap: 5px;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid #2d2d2d;
+  }
+
+  .memory-process-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #aaa;
+    font-size: var(--settings-description-size);
+  }
+
+  .memory-process-name {
+    min-width: 0;
+    overflow: hidden;
+    color: #d0d0d0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .memory-process-pid {
+    color: #777;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .memory-process-size {
+    color: #d8d8d8;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+
   .stat-item {
     min-width: 0;
     padding: 10px;
@@ -2355,14 +2794,6 @@
     }
     .settings-sidebar {
       display: none;
-    }
-    .settings-search-toolbar {
-      align-items: stretch;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .settings-count {
-      align-self: flex-end;
     }
   }
 

@@ -66,9 +66,11 @@ export interface LocaleDefinition {
     storageTab: string;
     keyboardTab: string;
     generalTab: string;
+    appearanceTab: string;
     basicTab: string;
     compactTab: string;
     fontTab: string;
+    appearanceSettings: string;
     ocrSettings: string;
     statisticsSettings: string;
     ocrTitle: string;
@@ -394,8 +396,10 @@ export interface LocaleDefinition {
     title: string;
     storageTab: string;
     performanceTab: string;
+    memoryTab: string;
     storageDescription: string;
     performanceDescription: string;
+    memoryDescription: string;
     totalRecords: string;
     byType: string;
     dbSize: string;
