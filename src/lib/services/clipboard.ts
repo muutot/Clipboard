@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type {
+  ClipboardFormat,
+  ClipboardFormatInfo,
   ClipboardItem,
   PersistedClipboardItem,
   ResourceFileMetadata,
@@ -81,6 +83,12 @@ export async function searchClipboardHistory(
   });
 
   return records.map(toClipboardItem);
+}
+
+export async function loadClipboardFormats(id: string): Promise<ClipboardFormatInfo | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<ClipboardFormatInfo>("get_clipboard_formats", { id });
 }
 
 export async function persistFavorite(id: string, isFavorite: boolean): Promise<boolean | null> {
@@ -187,6 +195,7 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const imageLabel = locale === "zh-CN" ? "图片记录" : "Image record";
 
   const resourceMetadata = parseResourceMetadata(record);
+  const clipboardFormats = parseClipboardFormatInfo(record.metadataJson);
   const imageMeta =
     record.kind === "image" &&
     resourceMetadata?.width !== undefined &&
@@ -228,7 +237,44 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     textContent: record.textContent,
     iconPath: record.iconPath,
     metadataJson: record.metadataJson,
+    clipboardFormats,
   };
+}
+
+export function parseClipboardFormatInfo(
+  metadataJson: string | null | undefined,
+): ClipboardFormatInfo | undefined {
+  const value = parseMetadataObject(metadataJson).clipboardFormats;
+  if (!isObject(value)) return undefined;
+
+  const rawFormats = Array.isArray(value.rawFormats)
+    ? value.rawFormats.filter((format): format is string => typeof format === "string")
+    : [];
+  const mimeTypes = Array.isArray(value.mimeTypes)
+    ? value.mimeTypes.filter((mime): mime is string => typeof mime === "string")
+    : [];
+  const availableFormats = Array.isArray(value.availableFormats)
+    ? value.availableFormats.filter(isClipboardFormat)
+    : [];
+
+  if (rawFormats.length === 0 && mimeTypes.length === 0 && availableFormats.length === 0) {
+    return undefined;
+  }
+
+  return { rawFormats, mimeTypes, availableFormats };
+}
+
+function isClipboardFormat(value: unknown): value is ClipboardFormat {
+  if (
+    value === "plainText" ||
+    value === "richText" ||
+    value === "html" ||
+    value === "image" ||
+    value === "fileList"
+  ) {
+    return true;
+  }
+  return isObject(value) && typeof value.unknown === "string";
 }
 
 export function parseResourceMetadata(
@@ -361,7 +407,7 @@ function createFallbackFileMetadata(record: PersistedClipboardItem): ResourceFil
   };
 }
 
-function parseMetadataObject(metadataJson: string | null): Record<string, unknown> {
+function parseMetadataObject(metadataJson: string | null | undefined): Record<string, unknown> {
   if (!metadataJson) return {};
   try {
     const parsed: unknown = JSON.parse(metadataJson);

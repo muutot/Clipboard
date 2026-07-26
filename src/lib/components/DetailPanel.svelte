@@ -3,7 +3,7 @@
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
+  import type { ClipboardFormat, ClipboardFormatInfo, ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
@@ -12,7 +12,7 @@
   import { untrack } from "svelte";
   import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { writeClipboardText } from "$lib/services/clipboard";
+  import { loadClipboardFormats, writeClipboardText } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -79,6 +79,7 @@
   let filePreviewText = $state("");
   let filePreviewTruncated = $state(false);
   let filePreviewRequest = 0;
+  let clipboardFormats = $state<ClipboardFormatInfo | undefined>(undefined);
 
   const FILE_PREVIEW_LIMIT = 512 * 1024;
   const TEXT_FILE_EXTENSIONS = new Set([
@@ -294,7 +295,30 @@
       panY = 0;
       activeTab = "preview";
       editing = false;
+      clipboardFormats = item.clipboardFormats;
     }
+  });
+
+  $effect(() => {
+    const target = item;
+    if (!target) {
+      clipboardFormats = undefined;
+      return;
+    }
+
+    clipboardFormats = target.clipboardFormats;
+    if (!isTauriRuntime()) return;
+
+    let disposed = false;
+    void loadClipboardFormats(target.id)
+      .then((formats) => {
+        if (!disposed && formats) clipboardFormats = formats;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+    };
   });
 
   $effect(() => {
@@ -551,6 +575,27 @@
       none: _t("detail.noOcr"),
     };
     return map[status];
+  }
+
+  function getClipboardFormatLabel(format: ClipboardFormat): string {
+    if (typeof format === "object" && format !== null && "unknown" in format) {
+      return format.unknown;
+    }
+
+    switch (format) {
+      case "plainText":
+        return _t("detail.formatPlainText");
+      case "richText":
+        return _t("detail.formatRichText");
+      case "html":
+        return _t("detail.formatHtml");
+      case "image":
+        return _t("detail.formatImage");
+      case "fileList":
+        return _t("detail.formatFileList");
+      default:
+        return String(format);
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -936,6 +981,30 @@
               <div class="detail-row">
                 <dt><AppIcon name="mime" size={14} /> {_t("detail.mimeInfo")}</dt>
                 <dd><code>{item.mimeType}</code></dd>
+              </div>
+            {/if}
+            {#if clipboardFormats && clipboardFormats.rawFormats.length > 0}
+              <div class="detail-row format-list-row">
+                <dt><AppIcon name="mime" size={14} /> {_t("detail.clipboardFormats")}</dt>
+                <dd>
+                  <code>{clipboardFormats.rawFormats.join(", ")}</code>
+                </dd>
+              </div>
+            {/if}
+            {#if clipboardFormats && clipboardFormats.mimeTypes.length > 0}
+              <div class="detail-row format-list-row">
+                <dt><AppIcon name="mime" size={14} /> {_t("detail.mimeTypes")}</dt>
+                <dd>
+                  <code>{clipboardFormats.mimeTypes.join(", ")}</code>
+                </dd>
+              </div>
+            {/if}
+            {#if clipboardFormats && clipboardFormats.availableFormats.length > 0}
+              <div class="detail-row format-list-row">
+                <dt><AppIcon name="file" size={14} /> {_t("detail.detectedFormats")}</dt>
+                <dd>
+                  {clipboardFormats.availableFormats.map(getClipboardFormatLabel).join(", ")}
+                </dd>
               </div>
             {/if}
             {#if resourceMetadata?.extension}

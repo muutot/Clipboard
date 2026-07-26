@@ -241,6 +241,14 @@ export interface LocaleDefinition {
     size: string;
     dimensions: string;
     mimeInfo: string;
+    clipboardFormats: string;
+    mimeTypes: string;
+    detectedFormats: string;
+    formatPlainText: string;
+    formatRichText: string;
+    formatHtml: string;
+    formatImage: string;
+    formatFileList: string;
     extension: string;
     fileName: string;
     fileCount: string;

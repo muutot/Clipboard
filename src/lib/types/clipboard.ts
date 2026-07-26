@@ -35,6 +35,15 @@ export interface ResourceMetadata {
   files?: ResourceFileMetadata[];
 }
 
+export type ClipboardFormat =
+  "plainText" | "richText" | "html" | "image" | "fileList" | { unknown: string };
+
+export interface ClipboardFormatInfo {
+  rawFormats: string[];
+  mimeTypes: string[];
+  availableFormats: ClipboardFormat[];
+}
+
 export interface ClipboardItem {
   id: string;
   kind: ClipboardKind;
@@ -66,6 +75,7 @@ export interface ClipboardItem {
   textContent?: string | null;
   iconPath?: string | null;
   metadataJson?: string | null;
+  clipboardFormats?: ClipboardFormatInfo;
 }
 
 export type ThemeMode = "dark" | "light";

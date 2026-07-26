@@ -9,7 +9,8 @@ pub mod transform;
 
 pub use actions::{detect_actions, QuickAction};
 pub use clipboard_format::{
-    detect_formats_from_mime_list, parse_mime_types, ClipboardFormat, ClipboardFormatInfo,
+    clipboard_format_info_from_metadata, detect_formats_from_mime_list,
+    merge_clipboard_format_metadata, parse_mime_types, ClipboardFormat, ClipboardFormatInfo,
     ClipboardFormatReader,
 };
 pub use detector::{detect_markers, ContentMarkers};
