@@ -3065,14 +3065,6 @@
     object-fit: contain;
   }
 
-  .icon-preview-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    background: var(--input-bg);
-  }
-
   .icon-file-item input[type="checkbox"] {
     width: auto;
   }
