@@ -598,15 +598,8 @@
       if (status) {
         iconsDir.set(status.iconsDir);
       }
-    });
-
-    void getRuntimeInfo().then((runtime) => {
-      if (runtime) {
-        runtimeLabel = `${runtime.operatingSystem} / ${runtime.architecture} \u00b7 ${_t("app.coreConnected")}`;
-      }
-    });
-
-    void loadClipboardHistory()
+      return loadClipboardHistory();
+    })
       .then((storedItems) => {
         if (storedItems === null) return;
 
@@ -622,6 +615,12 @@
         console.error("Unable to load clipboard history", error);
         statusMessage = _t("app.databaseLoadFailed");
       });
+
+    void getRuntimeInfo().then((runtime) => {
+      if (runtime) {
+        runtimeLabel = `${runtime.operatingSystem} / ${runtime.architecture} \u00b7 ${_t("app.coreConnected")}`;
+      }
+    });
 
     // Load one recycle-bin page during startup so the filter reflects the
     // persisted desktop state even before the user opens the deleted view.

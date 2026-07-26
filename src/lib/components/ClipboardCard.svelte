@@ -17,6 +17,8 @@
   import { iconsDir } from "$lib/services/paths";
   import { tick } from "svelte";
 
+  let iconsBase = $derived($iconsDir);
+
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
@@ -32,14 +34,8 @@
   }
 
   function appIconUrl(iconFileName: string | null | undefined): string | undefined {
-    if (!iconFileName || !isTauriRuntime()) return undefined;
-    let dir = "";
-    const unsub = iconsDir.subscribe((v) => {
-      dir = v;
-    });
-    unsub();
-    if (!dir) return undefined;
-    const fullPath = `${dir}/${iconFileName}`.replace(/\\/g, "/");
+    if (!iconFileName || !isTauriRuntime() || !iconsBase) return undefined;
+    const fullPath = `${iconsBase}/${iconFileName}`.replace(/\\/g, "/");
     return convertFileSrc(fullPath);
   }
 

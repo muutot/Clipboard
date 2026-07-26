@@ -117,6 +117,13 @@ struct StorageKindStats {
     size_bytes: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IconFileInfo {
+    name: String,
+    size_bytes: u64,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StorageKindDeleteExpectation {
@@ -770,6 +777,46 @@ fn get_storage_status(
         disk_total_bytes: disk_space.map(|space| space.total_bytes),
         disk_available_bytes: disk_space.map(|space| space.available_bytes),
     })
+}
+
+#[tauri::command]
+fn list_icon_files(
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<Vec<IconFileInfo>, String> {
+    let icons_dir = paths.storage.join("icons");
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&icons_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "png") {
+                if let Ok(meta) = entry.metadata() {
+                    files.push(IconFileInfo {
+                        name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        size_bytes: meta.len(),
+                    });
+                }
+            }
+        }
+    }
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(files)
+}
+
+#[tauri::command]
+fn delete_icon_files(
+    paths: tauri::State<'_, StoragePaths>,
+    names: Vec<String>,
+) -> Result<u64, String> {
+    let icons_dir = paths.storage.join("icons");
+    let mut deleted = 0u64;
+    for name in &names {
+        let path = icons_dir.join(name);
+        if path.extension().is_some_and(|e| e == "png") && path.exists() {
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            deleted += 1;
+        }
+    }
+    Ok(deleted)
 }
 
 #[tauri::command]
@@ -3910,6 +3957,8 @@ pub fn run() {
             get_runtime_info,
             get_storage_status,
             get_storage_kind_stats,
+            list_icon_files,
+            delete_icon_files,
             configure_storage_directory,
             get_application_filter_settings,
             configure_ignored_applications,

@@ -102,6 +102,16 @@ export interface LocaleDefinition {
     restoreDefault: string;
     directoryTreeTitle: string;
     directoryTreeDesc: string;
+    iconCacheTitle: string;
+    iconCacheDesc: string;
+    manageIconCache: string;
+    loadingIcons: string;
+    noIconFiles: string;
+    selectAll: string;
+    selected: string;
+    deleteSelectedIcons: string;
+    deletingIcons: string;
+    iconsDeleted: string;
     searchIndexTitle: string;
     searchIndexDesc: string;
     rebuildRequired: string;

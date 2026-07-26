@@ -21,6 +21,8 @@
     repairDatabase,
     setResourceStoragePaths,
     validateSearchIndex,
+    listIconFiles,
+    deleteIconFiles,
     type StorageDirectoryUpdate,
     type StorageKind,
     type StorageKindStats,
@@ -74,6 +76,11 @@
   });
   let storageKindStatsAvailable = $state(false);
   let deletingStorageKind = $state<StorageKind | null>(null);
+  let iconFiles = $state<import("$lib/services/storage").IconFileInfo[]>([]);
+  let loadingIcons = $state(false);
+  let selectedIconFiles = $state<Set<string>>(new Set());
+  let deletingIcons = $state(false);
+  let showIconManager = $state(false);
 
   $effect(() => {
     if (feedback) {
@@ -859,6 +866,49 @@
     } finally {
       rebuilding = false;
     }
+  }
+
+  async function loadIconList() {
+    loadingIcons = true;
+    try {
+      iconFiles = await listIconFiles();
+      selectedIconFiles = new Set();
+    } catch (error) {
+      console.error("Unable to list icon files", error);
+    } finally {
+      loadingIcons = false;
+    }
+  }
+
+  function toggleIconFile(name: string) {
+    const next = new Set(selectedIconFiles);
+    if (next.has(name)) {
+      next.delete(name);
+    } else {
+      next.add(name);
+    }
+    selectedIconFiles = next;
+  }
+
+  async function deleteSelectedIcons() {
+    if (selectedIconFiles.size === 0) return;
+    deletingIcons = true;
+    try {
+      const deleted = await deleteIconFiles([...selectedIconFiles]);
+      feedback = _t("storage.iconsDeleted", { count: deleted });
+      feedbackSuccess = true;
+      await loadIconList();
+    } catch (error) {
+      console.error("Unable to delete icon files", error);
+      feedback = error instanceof Error ? error.message : String(error);
+    } finally {
+      deletingIcons = false;
+    }
+  }
+
+  async function openIconManager() {
+    showIconManager = true;
+    await loadIconList();
   }
 
   async function saveOcrEngine(engine: string) {
@@ -1899,6 +1949,71 @@
 
           <section class="setting-card">
             <div class="setting-heading">
+              <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+              <div>
+                <strong>{_t("storage.iconCacheTitle")}</strong>
+                <p>{_t("storage.iconCacheDesc")}</p>
+              </div>
+            </div>
+            <button type="button" onclick={openIconManager}>
+              {_t("storage.manageIconCache")}
+            </button>
+            {#if showIconManager}
+              <div class="icon-manager-panel">
+                {#if loadingIcons}
+                  <p class="settings-state">{_t("storage.loadingIcons")}</p>
+                {:else if iconFiles.length === 0}
+                  <p class="settings-state">{_t("storage.noIconFiles")}</p>
+                {:else}
+                  <div class="icon-list-header">
+                    <label class="icon-select-all">
+                      <input
+                        type="checkbox"
+                        checked={selectedIconFiles.size === iconFiles.length}
+                        onchange={(e) => {
+                          const checked = (e.target as HTMLInputElement).checked;
+                          selectedIconFiles = checked ? new Set(iconFiles.map(f => f.name)) : new Set();
+                        }}
+                      />
+                      <span>{_t("storage.selectAll")}</span>
+                    </label>
+                    <span class="icon-file-count">
+                      {selectedIconFiles.size} / {iconFiles.length} {_t("storage.selected")}
+                    </span>
+                  </div>
+                  <ul class="icon-file-list">
+                    {#each iconFiles as file}
+                      <li class="icon-file-item">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={selectedIconFiles.has(file.name)}
+                            onchange={() => toggleIconFile(file.name)}
+                          />
+                          <span class="icon-file-name">{file.name}</span>
+                          <span class="icon-file-size">{formatBytes(file.sizeBytes)}</span>
+                        </label>
+                      </li>
+                    {/each}
+                  </ul>
+                  <div class="icon-actions">
+                    <button
+                      type="button"
+                      disabled={selectedIconFiles.size === 0 || deletingIcons}
+                      onclick={deleteSelectedIcons}
+                    >
+                      {deletingIcons
+                        ? _t("storage.deletingIcons")
+                        : _t("storage.deleteSelectedIcons", { count: selectedIconFiles.size })}
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </section>
+
+          <section class="setting-card">
+            <div class="setting-heading">
               <span class="setting-icon"><AppIcon name="search" size={17} /></span>
               <div>
                 <strong>{_t("storage.searchIndexTitle")}</strong>
@@ -2848,6 +2963,127 @@
       "SFMono-Regular",
       Consolas,
       monospace;
+  }
+
+  .icon-manager-panel {
+    margin-top: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+
+  .icon-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--input-bg);
+  }
+
+  .icon-select-all {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .icon-file-count {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .icon-file-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .icon-file-item {
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .icon-file-item:last-child {
+    border-bottom: none;
+  }
+
+  .icon-file-item label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .icon-file-item label:hover {
+    background: var(--row-hover);
+  }
+
+  .icon-preview {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    object-fit: contain;
+  }
+
+  .icon-preview-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background: var(--input-bg);
+  }
+
+  .icon-file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .icon-file-size {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .icon-actions {
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .icon-actions button {
+    height: 34px;
+    box-sizing: border-box;
+    padding: 5px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
+  }
+
+  .icon-actions button:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+  }
+
+  .icon-actions button:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   .stats-scroll {

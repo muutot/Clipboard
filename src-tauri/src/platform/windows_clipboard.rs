@@ -869,19 +869,6 @@ pub fn extract_app_icon(
 
     std::fs::create_dir_all(icon_dir).ok();
 
-    let version_marker = icon_dir.join(".icon-v2");
-    if !version_marker.exists() {
-        if let Ok(entries) = std::fs::read_dir(icon_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|e| e == "png") {
-                    let _ = std::fs::remove_file(&path);
-                }
-            }
-        }
-        let _ = std::fs::write(&version_marker, b"32");
-    }
-
     if icon_path.exists() && is_normalized_app_icon(&icon_path) {
         return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
     }
@@ -1039,7 +1026,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
         let mut bi = BITMAPINFOHEADER {
             biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
             biWidth: bmp.bmWidth,
-            biHeight: bmp.bmHeight,
+            biHeight: -bmp.bmHeight,
             biPlanes: 1,
             biBitCount: 32,
             biCompression: BI_RGB,

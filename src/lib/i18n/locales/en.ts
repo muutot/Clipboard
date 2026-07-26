@@ -108,6 +108,16 @@ const en: LocaleDefinition = {
     directoryTreeTitle: "Directory Structure",
     directoryTreeDesc:
       "The search index is placed in the same directory as the database as derived data.",
+    iconCacheTitle: "App Icon Cache",
+    iconCacheDesc: "Extracted icon files from source applications. Select and delete as needed.",
+    manageIconCache: "Manage Icon Cache",
+    loadingIcons: "Loading icon list…",
+    noIconFiles: "No cached icon files",
+    selectAll: "Select All",
+    selected: "selected",
+    deleteSelectedIcons: "Delete Selected ({count})",
+    deletingIcons: "Deleting…",
+    iconsDeleted: "Deleted {count} icon file(s)",
     searchIndexTitle: "Full-Text Search Index",
     searchIndexDesc:
       "The Chinese N-gram index is derived from SQLite data and can be safely rebuilt at any time.",

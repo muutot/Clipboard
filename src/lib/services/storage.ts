@@ -194,3 +194,24 @@ export async function rebuildSearchIndex(): Promise<SearchSyncSummary> {
 
   return invoke<SearchSyncSummary>("rebuild_search_index");
 }
+
+export interface IconFileInfo {
+  name: string;
+  sizeBytes: number;
+}
+
+export async function listIconFiles(): Promise<IconFileInfo[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<IconFileInfo[]>("list_icon_files");
+}
+
+export async function deleteIconFiles(names: string[]): Promise<number> {
+  if (!isTauriRuntime()) {
+    return 0;
+  }
+
+  return invoke<number>("delete_icon_files", { names });
+}
