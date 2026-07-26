@@ -2367,7 +2367,7 @@
   }
 
   .settings-search-field input::placeholder {
-    color: var(--text-faint);
+    color: var(--placeholder-color);
   }
 
   .settings-search-field input::-webkit-search-cancel-button {

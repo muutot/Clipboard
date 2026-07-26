@@ -2837,7 +2837,7 @@
   }
 
   .search-box input::placeholder {
-    color: var(--text-faint);
+    color: var(--placeholder-color);
     opacity: 1;
   }
 
@@ -3051,7 +3051,7 @@
   }
 
   .dropdown-search input::placeholder {
-    color: var(--text-faint);
+    color: var(--placeholder-color);
   }
 
   .dropdown-items {

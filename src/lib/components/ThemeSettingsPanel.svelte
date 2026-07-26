@@ -67,6 +67,7 @@
     { key: "textSecondary", label: _t("theme.textSecondary"), desc: _t("theme.textSecondaryDescription") },
     { key: "textMuted", label: _t("theme.textMuted"), desc: _t("theme.textMutedDescription") },
     { key: "textFaint", label: _t("theme.textFaint"), desc: _t("theme.textFaintDescription") },
+    { key: "placeholderColor", label: _t("theme.placeholderColor"), desc: _t("theme.placeholderColorDescription") },
     { key: "border", label: _t("theme.border"), desc: _t("theme.borderDescription") },
     { key: "borderSubtle", label: _t("theme.borderSubtle"), desc: _t("theme.borderSubtleDescription") },
     { key: "cardBg", label: _t("theme.cardBg"), desc: _t("theme.cardBgDescription") },

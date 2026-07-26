@@ -17,6 +17,7 @@ export function applyThemeColors(colors?: ThemeColors) {
   r.setProperty("--input-bg", c.inputBg);
   r.setProperty("--text-secondary", c.textSecondary);
   r.setProperty("--text-faint", c.textFaint);
+  r.setProperty("--placeholder-color", c.placeholderColor);
   r.setProperty("--border-subtle", c.borderSubtle);
   r.setProperty("--selection-color", c.selectionColor);
   r.setProperty("--success-color", c.successColor);

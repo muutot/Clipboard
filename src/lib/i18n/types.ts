@@ -514,6 +514,8 @@ export interface LocaleDefinition {
     textSecondaryDescription: string;
     textFaint: string;
     textFaintDescription: string;
+    placeholderColor: string;
+    placeholderColorDescription: string;
     borderSubtle: string;
     borderSubtleDescription: string;
     selectionColor: string;

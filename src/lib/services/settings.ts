@@ -105,6 +105,7 @@ const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
   "inputBg",
   "textSecondary",
   "textFaint",
+  "placeholderColor",
   "borderSubtle",
   "selectionColor",
   "successColor",

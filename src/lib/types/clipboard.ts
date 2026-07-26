@@ -100,6 +100,7 @@ export interface ThemeColors {
   inputBg: string;
   textSecondary: string;
   textFaint: string;
+  placeholderColor: string;
   borderSubtle: string;
   selectionColor: string;
   successColor: string;
@@ -122,6 +123,7 @@ export const DARK_THEME_COLORS: ThemeColors = {
   inputBg: "#1a1a1a",
   textSecondary: "#b2b2b2",
   textFaint: "#6e6e6e",
+  placeholderColor: "#6e6e6e",
   borderSubtle: "#292929",
   selectionColor: "#4aa8ff",
   successColor: "#51b96b",
@@ -144,6 +146,7 @@ export const LIGHT_THEME_COLORS: ThemeColors = {
   inputBg: "#f0f0f0",
   textSecondary: "#444444",
   textFaint: "#999999",
+  placeholderColor: "#aaaaaa",
   borderSubtle: "#dddddd",
   selectionColor: "#2196f3",
   successColor: "#388e3c",
