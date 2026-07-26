@@ -788,6 +788,7 @@ fn configure_storage_directory(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     active_paths: tauri::State<'_, StoragePaths>,
     database: tauri::State<'_, Database>,
+    capture: tauri::State<'_, CaptureState>,
     data_directory: Option<String>,
 ) -> Result<StorageDirectoryUpdate, String> {
     let requested_directory = data_directory.map(PathBuf::from);
@@ -809,6 +810,9 @@ fn configure_storage_directory(
     .map_err(|error| error.to_string())?;
 
     if target_paths.data_directory != active_paths.data_directory {
+        // Pause clipboard capture so no new items are written to the
+        // old storage directory during migration.
+        capture.set_paused(true);
         migrate_storage_data(&active_paths, &target_paths, &database)?;
     }
 
@@ -837,11 +841,6 @@ fn migrate_storage_data(
     let dirs_to_migrate: &[(PathBuf, PathBuf, &str)] = &[
         (old.images.clone(), new.images.clone(), "images"),
         (old.files.clone(), new.files.clone(), "files"),
-        (
-            old.search_index.clone(),
-            new.search_index.clone(),
-            "search-index",
-        ),
     ];
 
     for (old_dir, new_dir, label) in dirs_to_migrate {
@@ -852,6 +851,13 @@ fn migrate_storage_data(
             copy_dir_contents(old_dir, new_dir)
                 .map_err(|e| format!("failed to migrate {}: {}", label, e))?;
         }
+    }
+
+    // Search index is not migrated — it will be rebuilt from the migrated
+    // database on the next startup. We only ensure the directory exists.
+    if old.search_index != new.search_index {
+        std::fs::create_dir_all(&new.search_index)
+            .map_err(|e| format!("failed to create search index directory: {}", e))?;
     }
 
     let icons_old = old.storage.join("icons");
@@ -4904,7 +4910,14 @@ mod storage_cleanup_tests {
         assert!(new_paths.images.join("image.png").exists());
         assert!(new_paths.files.join("document.txt").exists());
         assert!(new_paths.storage.join("icons").join("notepad.png").exists());
-        assert!(new_paths.search_index.join("migration-marker").exists());
+        assert!(
+            new_paths.search_index.exists(),
+            "search index directory must exist at the target"
+        );
+        assert!(
+            !new_paths.search_index.join("migration-marker").exists(),
+            "search index is not copied — it will be rebuilt on restart"
+        );
 
         let original = database.get_item("image").unwrap().unwrap();
         assert_eq!(original.resource_path, image_item.resource_path);
