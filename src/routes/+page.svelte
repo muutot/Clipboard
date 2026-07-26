@@ -371,6 +371,11 @@
   }
 
   function estimatedCardHeight(item: ClipboardItem): number {
+    if (compactMode && item.kind === "image") {
+      const metaHidden = detailDisplayMode === 'split' && detailItem?.id === item.id;
+      return compactImage + compactPaddingTop + compactPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10 + compactCardGap;
+    }
+
     let textLines: number;
     let effectivePreview: boolean;
 
@@ -408,7 +413,10 @@
 
   function compactCardHeightFor(item: ClipboardItem): number {
     if (!compactMode) return 0;
-    if (item.kind === "image") return compactImage;
+    if (item.kind === "image") {
+      const metaHidden = detailDisplayMode === 'split' && detailItem?.id === item.id;
+      return compactImage + compactPaddingTop + compactPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10;
+    }
 
     if (item.customTitle) {
       if (showSecondaryText) {
@@ -419,7 +427,6 @@
       // 辅助文本关闭时：显示正文首行
       return compactCustomTitle;
     }
-1
     // 非自定义标题
     const totalLines = estimateTextLines(item.textContent || item.title, 12);
     const secondaryVisible = showSecondaryText ? Math.min(maxTextLines, Math.max(0, totalLines - 1)) : 0;
@@ -443,6 +450,8 @@
       compactPaddingBottom,
       showSecondaryText,
       maxTextLines,
+      detailDisplayMode,
+      detailItem?.id ?? '',
       $generalSettings.fontSizes.cardTitle,
       $generalSettings.fontSizes.cardPreview,
       $generalSettings.fontSizes.secondary,

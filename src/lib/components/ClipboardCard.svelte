@@ -536,7 +536,7 @@
   style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
   style:--max-text-lines={`${showSecondaryText ? maxTextLines : 1}`}
   style:--compact-image-preview-height={compact && compactCardHeight
-    ? `${Math.max(20, compactCardHeight - compactPaddingTop - compactPaddingBottom - 2 - 17)}px`
+    ? `${Math.max(24, compactCardHeight - compactPaddingTop - compactPaddingBottom - 14 - (hideMetaRow ? 0 : 14))}px`
     : undefined}
   style:height={editing
     ? "auto"
