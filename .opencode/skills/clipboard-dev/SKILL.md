@@ -46,6 +46,8 @@ clipboard/
 │   │   │   ├── CodePreview.svelte        # Syntax highlighting (highlight.js)
 │   │   │   ├── MarkdownPreview.svelte    # Markdown rendering
 │   │   │   └── Toast.svelte              # Toast notification system
+│   │   ├── styles/
+│   │   │   └── settings-shared.css         # Shared base styles for all settings panels
 │   │   ├── services/
 │   │   │   ├── settings.ts           # GeneralSettings store (localStorage, cross-window sync)
 │   │   │   ├── clipboard.ts          # Data fetching, mapping PersistedClipboardItem → ClipboardItem
@@ -311,6 +313,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - Preserve the main-page visual language unless the task explicitly targets it.
 - Before editing settings styles, compare every settings panel and reuse the existing card, heading, description, control, feedback, spacing, and typography patterns.
 - Prefer shared CSS variables for settings typography and spacing. Do not introduce a one-off font size when an existing semantic variable fits.
+- Do not duplicate shared CSS rules in settings panels. If a rule exists in `src/lib/styles/settings-shared.css`, it does not belong in a panel's `<style>` block. Add panel-specific overrides only when the shared base does not cover the use case.
 - Keep setting titles, descriptions, values, controls, and feedback text on one consistent semantic scale across panels.
 - Keep primary settings categories in the left navigation. Every category must render a secondary-group row at the top of the right content pane before the setting cards: use compact horizontal tabs when there are multiple secondary sections, and show one current-section item even when there is only one.
 - Use one parent settings-shell hierarchy in this order: breadcrumb beginning with `设置 / 一级分组`, then an always-present secondary-group row (multiple items as tabs, a single item as the current section), then one small description line, then the setting cards. The breadcrumb must use the same semantic font size as the description (`--settings-description-size` or its shared equivalent), never the page-title or eyebrow size.
@@ -470,6 +473,18 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 
   Never introduce a raw `font-size` or one-off radius in a settings panel when one of these variables fits.
 
+### Settings Panel Shared Styles
+
+All settings panels (General, Compact, Keyboard, FontSize, Theme, IgnoredApps) must import shared base styles via `src/lib/styles/settings-shared.css`. This file is already imported by `src/app.css`.
+
+When creating a new settings panel:
+1. Copy the template structure from `GeneralSettingsPanel.svelte` (header + `.settings-scroll` + `.settings-feedback` + `.auto-save-note`)
+2. Do NOT redefine shared CSS rules in the panel's `<style>` block — they are already provided by `settings-shared.css`
+3. Only add panel-specific styles (e.g., `.lang-toggle` for General, `.font-size-control` for FontSize, `.color-swatch` for Theme)
+4. Reference `GeneralSettingsPanel.svelte` as the canonical example
+
+The shared CSS file provides: header, eyebrow, h2, close-button, settings-scroll, setting-card, toggle-card, setting-heading, setting-icon, heading-inline, value-label, toggle-switch, transparency-slider, settings-feedback, auto-save-note, and button cursor.
+
 ## Z-Index Layering (Fixed)
 
 | z-index | Element                                  | Context                 |
@@ -489,3 +504,4 @@ See `docs/PITFALLS.md` for detailed bug patterns with code examples. Key categor
 4. **Fullscreen state management** — all close paths must go through one function
 5. **CSS z-index** — fixed hierarchy, never break the layering
 6. **Event delegation** — `setTimeout(0)` for deferred state in click handlers
+7. **Settings panel CSS duplication** — Before this refactor, ~200 lines of CSS were duplicated across 5 settings panels. Any style change had to be applied in 4-5 places. After extracting to `src/lib/styles/settings-shared.css`, shared styles are defined once. New panels must NOT copy CSS from existing panels; they must rely on the shared file and only add panel-specific overrides.
