@@ -1170,35 +1170,39 @@
         <div class="ocr-section">
           {#if item.kind === "image"}
             <div class="ocr-toolbar">
-              <button
-                type="button"
-                class="ocr-regenerate-btn"
-                disabled={regeneratingOcr ||
-                  item.ocrStatus === "pending" ||
-                  item.ocrStatus === "processing"}
-                onclick={regenerateOcr}
-              >
-                {regeneratingOcr ? _t("detail.regenerating") : _t("detail.regenerate")}
-              </button>
               {#if item.ocrStatus === "completed" && item.ocrText}
+                <div class="ocr-status ocr-completed">
+                  <span class="ocr-dot"></span>
+                  {_t("detail.completed")}
+                </div>
+              {/if}
+              <div class="ocr-actions">
                 <button
                   type="button"
-                  class="ocr-copy-btn"
-                  onclick={() => copyText(item.ocrText ?? "")}
+                  class="ocr-regenerate-btn"
+                  disabled={regeneratingOcr ||
+                    item.ocrStatus === "pending" ||
+                    item.ocrStatus === "processing"}
+                  onclick={regenerateOcr}
                 >
-                  {_t("detail.copyOcrText")}
+                  {regeneratingOcr ? _t("detail.regenerating") : _t("detail.regenerate")}
                 </button>
-              {/if}
+                {#if item.ocrStatus === "completed" && item.ocrText}
+                  <button
+                    type="button"
+                    class="ocr-copy-btn"
+                    onclick={() => copyText(item.ocrText ?? "")}
+                  >
+                    {_t("detail.copyOcrText")}
+                  </button>
+                {/if}
+              </div>
             </div>
             {#if ocrFeedback}
               <div class="ocr-feedback">{ocrFeedback}</div>
             {/if}
           {/if}
           {#if item.ocrStatus === "completed" && item.ocrText}
-            <div class="ocr-status ocr-completed">
-              <span class="ocr-dot"></span>
-              {_t("detail.completed")}
-            </div>
             <pre class="ocr-content">{item.ocrText}</pre>
           {:else if item.ocrStatus === "pending" || item.ocrStatus === "processing"}
             <div class="ocr-status ocr-pending">
@@ -1942,7 +1946,14 @@
 
   .ocr-toolbar {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .ocr-actions {
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
 
