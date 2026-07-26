@@ -167,6 +167,10 @@
   const primaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title),
   );
+  const primaryFirstLine = $derived(primaryPreviewText.split('\n')[0] || '');
+  const primaryRestLines = $derived(
+    primaryPreviewText.includes('\n') ? primaryPreviewText.slice(primaryPreviewText.indexOf('\n') + 1) : '',
+  );
   const secondaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
   );
@@ -605,11 +609,16 @@
           {/if}
         </div>
       {:else}
-        <div class="text-preview" class:custom-title={item.customTitle}>
-          {item.customTitle ? item.title : primaryPreviewText}
-        </div>
-        {#if item.customTitle && showSecondaryText && secondaryPreviewText}
-          <div class="content-preview">{secondaryPreviewText}</div>
+        {#if item.customTitle}
+          <div class="text-preview custom-title">{item.title}</div>
+          {#if showSecondaryText && secondaryPreviewText}
+            <div class="content-preview">{secondaryPreviewText}</div>
+          {/if}
+        {:else}
+          <div class="text-preview">{primaryFirstLine}</div>
+          {#if primaryRestLines}
+            <div class="content-preview">{primaryRestLines}</div>
+          {/if}
         {/if}
       {/if}
     </div>
@@ -971,6 +980,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     max-width: 90%;
+    color: var(--text-primary);
     font-size: var(--font-size-cardTitle, 13px);
     line-height: 1.55;
   }
