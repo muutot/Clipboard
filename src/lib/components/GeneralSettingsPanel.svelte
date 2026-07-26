@@ -296,27 +296,6 @@
 
   <section class="setting-card toggle-card">
     <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-      <div>
-        <strong>{_t("general.compactMode")}</strong>
-        <p>{_t("general.compactModeDescription")}</p>
-      </div>
-    </div>
-    <button
-      type="button"
-      class="toggle-switch"
-      class:active={s.compactMode}
-      onclick={() => generalSettings.updateSetting("compactMode", !s.compactMode)}
-      aria-checked={s.compactMode}
-      aria-label={_t("general.compactMode")}
-      role="switch"
-    >
-      <span class="toggle-knob"></span>
-    </button>
-  </section>
-
-  <section class="setting-card toggle-card">
-    <div class="setting-heading">
       <span class="setting-icon"><AppIcon name="pin" size={17} /></span>
       <div>
         <strong>{_t("general.alwaysOnTop")}</strong>

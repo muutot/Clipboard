@@ -149,12 +149,12 @@
       </div>
       <input
         type="range"
-        min="40"
+        min="36"
         max="90"
         value={s.compactTextHeight}
         oninput={sliderHandler("compactTextHeight")}
         class="transparency-slider"
-        style:--slider-pct={sliderPercentage(s.compactTextHeight, 40, 90)}
+        style:--slider-pct={sliderPercentage(s.compactTextHeight, 36, 90)}
       />
     </section>
 
