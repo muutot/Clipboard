@@ -1180,6 +1180,15 @@
               >
                 {regeneratingOcr ? _t("detail.regenerating") : _t("detail.regenerate")}
               </button>
+              {#if item.ocrStatus === "completed" && item.ocrText}
+                <button
+                  type="button"
+                  class="ocr-copy-btn"
+                  onclick={() => copyText(item.ocrText ?? "")}
+                >
+                  {_t("detail.copyOcrText")}
+                </button>
+              {/if}
             </div>
             {#if ocrFeedback}
               <div class="ocr-feedback">{ocrFeedback}</div>
@@ -1189,13 +1198,6 @@
             <div class="ocr-status ocr-completed">
               <span class="ocr-dot"></span>
               {_t("detail.completed")}
-              <button
-                type="button"
-                class="ocr-copy-btn"
-                onclick={() => copyText(item.ocrText ?? "")}
-              >
-                {_t("detail.copyOcrText")}
-              </button>
             </div>
             <pre class="ocr-content">{item.ocrText}</pre>
           {:else if item.ocrStatus === "pending" || item.ocrStatus === "processing"}
@@ -1941,6 +1943,7 @@
   .ocr-toolbar {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
   }
 
   .ocr-regenerate-btn {
@@ -1996,7 +1999,6 @@
   }
 
   .ocr-copy-btn {
-    margin-left: auto;
     padding: 2px 8px;
     font-size: 11px;
     background: rgba(255, 255, 255, 0.08);
