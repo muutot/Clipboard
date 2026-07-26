@@ -524,6 +524,7 @@
   class:compact
   class:editing
   class:actions-always={alwaysShowActions}
+  class:no-meta={hideMetaRow}
   class="clip-card"
   style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
@@ -958,6 +959,10 @@
 
   .clip-card:has(.card-checkbox) .content {
     padding-left: 28px;
+  }
+
+  .clip-card.no-meta .content {
+    padding-right: 0;
   }
 
   .text-preview {
