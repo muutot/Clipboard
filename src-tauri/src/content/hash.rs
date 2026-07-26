@@ -87,6 +87,19 @@ pub fn compute_clipboard_write_hashes(text: &str) -> Vec<String> {
     hashes
 }
 
+/// Canonical hash for a CF_HDROP file capture: a single path hashes as
+/// "file", a multi-path group hashes as the sorted "files" join. Text
+/// write-backs register the same hashes via `compute_clipboard_write_hashes`,
+/// so capture and write-back share one rule.
+pub fn compute_file_capture_hash(paths: &[String]) -> String {
+    if let [single] = paths {
+        return compute_content_hash("file", single, None);
+    }
+    let mut sorted = paths.to_vec();
+    sorted.sort();
+    compute_content_hash("files", &sorted.join("\n"), None)
+}
+
 fn newline_variants(text: &str) -> Vec<String> {
     let normalized_lf = text.replace("\r\n", "\n").replace('\r', "\n");
     let normalized_crlf = normalized_lf.replace('\n', "\r\n");
@@ -152,6 +165,27 @@ impl SelfTriggerGuard {
     pub fn is_self_triggered(&mut self, content_hash: &str) -> bool {
         self.cleanup_expired();
         self.entries.iter().any(|entry| entry.hash == content_hash)
+    }
+
+    /// Capture-side counterpart of `mark_clipboard_write` for observed text
+    /// of the given capture kind ("text" or "link").
+    pub fn is_text_write_self_triggered(&mut self, kind_name: &str, text: &str) -> bool {
+        self.is_self_triggered(&compute_content_hash(kind_name, text, None))
+    }
+
+    /// Capture-side counterpart of `mark_clipboard_write` for CF_HDROP
+    /// captures; applies the shared single-path/"files" group rule.
+    pub fn is_file_write_self_triggered(&mut self, paths: &[String]) -> bool {
+        let content_hash = compute_file_capture_hash(paths);
+        self.is_self_triggered(&content_hash)
+    }
+
+    /// Capture-side counterpart of `mark_media_write`; checks both the raw
+    /// and normalized media hashes.
+    pub fn is_media_write_self_triggered(&mut self, kind: &str, data: &[u8]) -> bool {
+        compute_media_write_hashes(kind, data)
+            .into_iter()
+            .any(|content_hash| self.is_self_triggered(&content_hash))
     }
 
     fn cleanup_expired(&mut self) {
@@ -279,6 +313,46 @@ mod tests {
         assert!(hashes.contains(&compute_content_hash("text", text, None)));
         assert!(hashes.contains(&compute_content_hash("link", text, None)));
         assert!(hashes.contains(&compute_content_hash("file", text, None)));
+    }
+
+    #[test]
+    fn file_capture_hash_matches_clipboard_write_hashes() {
+        let single = vec![r"C:\Users\admin\Documents\report.txt".to_owned()];
+        assert!(compute_clipboard_write_hashes(&single[0])
+            .contains(&compute_file_capture_hash(&single)));
+
+        let paths = vec![
+            r"C:\Users\admin\Documents\zeta.txt".to_owned(),
+            r"C:\Users\admin\Documents\alpha.txt".to_owned(),
+        ];
+        assert!(compute_clipboard_write_hashes(&paths.join("\n"))
+            .contains(&compute_file_capture_hash(&paths)));
+    }
+
+    #[test]
+    fn guard_capture_checks_match_registered_text_write() {
+        let mut guard = SelfTriggerGuard::new();
+        guard.mark_clipboard_write("https://example.com");
+
+        assert!(guard.is_text_write_self_triggered("text", "https://example.com"));
+        assert!(guard.is_text_write_self_triggered("link", "https://example.com"));
+        assert!(!guard.is_text_write_self_triggered("text", "other text"));
+    }
+
+    #[test]
+    fn guard_capture_checks_match_registered_file_writes() {
+        let single_path = r"C:\Users\admin\Documents\report.txt".to_owned();
+        let mut single_guard = SelfTriggerGuard::new();
+        single_guard.mark_clipboard_write(&single_path);
+        assert!(single_guard.is_file_write_self_triggered(std::slice::from_ref(&single_path)));
+
+        let paths = vec![
+            r"C:\Users\admin\Documents\zeta.txt".to_owned(),
+            r"C:\Users\admin\Documents\alpha.txt".to_owned(),
+        ];
+        let mut group_guard = SelfTriggerGuard::new();
+        group_guard.mark_clipboard_write(&paths.join("\n"));
+        assert!(group_guard.is_file_write_self_triggered(&paths));
     }
 
     #[test]

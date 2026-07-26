@@ -501,8 +501,7 @@ fn should_skip_self_triggered_text(
         ClipboardKind::Link => "link",
         ClipboardKind::Image | ClipboardKind::File => return false,
     };
-    let content_hash = content::hash::compute_content_hash(kind_name, text, None);
-    should_skip_self_triggered_hash(guard, &content_hash)
+    guard.is_text_write_self_triggered(kind_name, text)
 }
 
 fn should_skip_self_triggered_media(
@@ -510,9 +509,7 @@ fn should_skip_self_triggered_media(
     kind: &str,
     data: &[u8],
 ) -> bool {
-    content::hash::compute_media_write_hashes(kind, data)
-        .into_iter()
-        .any(|content_hash| should_skip_self_triggered_hash(guard, &content_hash))
+    guard.is_media_write_self_triggered(kind, data)
 }
 
 fn register_image_self_trigger(
@@ -3547,7 +3544,9 @@ pub fn run() {
 
                                     if file_paths.len() == 1 {
                                         let file_path = &file_paths[0];
-                                        let file_hash = content::hash::compute_content_hash("file", file_path, None);
+                                        let file_hash = content::hash::compute_file_capture_hash(
+                                            std::slice::from_ref(file_path),
+                                        );
                                         if should_skip_self_triggered_hash(
                                             &mut self_trigger_guard.lock().unwrap(),
                                             &file_hash,
@@ -3599,10 +3598,8 @@ pub fn run() {
                                             }
                                         }
                                     } else {
-                                        let mut sorted_paths = file_paths.clone();
-                                        sorted_paths.sort();
-                                        let joined = sorted_paths.join("\n");
-                                        let group_hash = content::hash::compute_content_hash("files", &joined, None);
+                                        let group_hash =
+                                            content::hash::compute_file_capture_hash(&file_paths);
                                         if should_skip_self_triggered_hash(
                                             &mut self_trigger_guard.lock().unwrap(),
                                             &group_hash,
