@@ -66,7 +66,13 @@ export interface LocaleDefinition {
     storageTab: string;
     keyboardTab: string;
     generalTab: string;
+    basicTab: string;
     compactTab: string;
+    fontTab: string;
+    ocrSettings: string;
+    statisticsSettings: string;
+    ocrTitle: string;
+    ocrDescription: string;
     configPath: string;
     readingConfig: string;
     systemMessage: string;
@@ -127,6 +133,7 @@ export interface LocaleDefinition {
   keyboard: {
     settings: string;
     title: string;
+    description: string;
     readingConfig: string;
     shortcutConfigTitle: string;
     shortcutConfigDesc: string;
@@ -368,6 +375,10 @@ export interface LocaleDefinition {
   };
   statistics: {
     title: string;
+    storageTab: string;
+    performanceTab: string;
+    storageDescription: string;
+    performanceDescription: string;
     totalRecords: string;
     byType: string;
     dbSize: string;

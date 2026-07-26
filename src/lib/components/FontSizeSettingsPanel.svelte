@@ -9,9 +9,10 @@
 
   interface Props {
     onclose: () => void;
+    showHeader?: boolean;
   }
 
-  let { onclose }: Props = $props();
+  let { onclose, showHeader = true }: Props = $props();
 
   let s = $state($generalSettings);
   $effect(() => {
@@ -106,14 +107,16 @@
   });
 </script>
 
-<header>
-  <div>
-    <span class="eyebrow">设置 / 显示</span>
-    <h2>字体大小</h2>
-    <p>为不同 UI 区域单独调整字体大小</p>
-  </div>
-  <button class="close-button" type="button" aria-label="关闭" onclick={onclose}>×</button>
-</header>
+{#if showHeader}
+  <header>
+    <div>
+      <span class="eyebrow">设置 / 显示</span>
+      <h2>字体大小</h2>
+      <p>为不同 UI 区域单独调整字体大小</p>
+    </div>
+    <button class="close-button" type="button" aria-label="关闭" onclick={onclose}>×</button>
+  </header>
+{/if}
 
 <div class="settings-scroll">
   <section class="setting-card">

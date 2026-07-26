@@ -57,6 +57,71 @@
   >("storage");
   let activeStatisticsTab = $state<"storage" | "performance">("storage");
 
+  const settingsBreadcrumb = $derived.by(() => {
+    switch (activeSection) {
+      case "general":
+      case "compact":
+      case "font":
+        return _t("general.eyebrow");
+      case "capture":
+        return _t("capture.settings");
+      case "storage":
+        return _t("storage.settings");
+      case "keyboard":
+        return _t("keyboard.settings");
+      case "ocr":
+        return _t("storage.ocrSettings");
+      case "statistics":
+        return _t("storage.statisticsSettings");
+    }
+  });
+
+  const settingsSectionTitle = $derived.by(() => {
+    switch (activeSection) {
+      case "general":
+        return _t("storage.basicTab");
+      case "compact":
+        return _t("storage.compactTab");
+      case "font":
+        return _t("storage.fontTab");
+      case "capture":
+        return _t("capture.title");
+      case "storage":
+        return _t("storage.dataStorage");
+      case "keyboard":
+        return _t("keyboard.title");
+      case "ocr":
+        return _t("storage.ocrTitle");
+      case "statistics":
+        return activeStatisticsTab === "storage"
+          ? _t("statistics.storageTab")
+          : _t("statistics.performanceTab");
+    }
+  });
+
+  const settingsSectionDescription = $derived.by(() => {
+    switch (activeSection) {
+      case "general":
+        return _t("general.description");
+      case "compact":
+        return _t("compact.description");
+      case "font":
+        return _t("general.fontSizeDescription");
+      case "capture":
+        return _t("capture.description");
+      case "storage":
+        return _t("storage.configPath");
+      case "keyboard":
+        return _t("keyboard.description");
+      case "ocr":
+        return _t("storage.ocrDescription");
+      case "statistics":
+        return activeStatisticsTab === "storage"
+          ? _t("statistics.storageDescription")
+          : _t("statistics.performanceDescription");
+    }
+  });
+
   let settingsSearch = $state("");
   let settingsContent = $state<HTMLElement | null>(null);
   let settingsItemCount = $state(0);
@@ -706,53 +771,69 @@
   </aside>
 
   <div id="settings-content" class="settings-content" bind:this={settingsContent}>
-    {#if activeSection === "general" || activeSection === "compact" || activeSection === "font"}
-      <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
+    <section class="settings-section-header" aria-labelledby="settings-title">
+      <div class="settings-section-heading-row">
+        <div id="settings-title" class="settings-breadcrumb">{settingsBreadcrumb}</div>
         <button
+          class="close-button"
           type="button"
-          class:active={activeSection === "general"}
-          aria-current={activeSection === "general" ? "page" : undefined}
-          onclick={() => (activeSection = "general")}
+          aria-label={_t("actions.close")}
+          onclick={onclose}>×</button
         >
-          {_t("storage.generalTab")}
-        </button>
-        <button
-          type="button"
-          class:active={activeSection === "compact"}
-          aria-current={activeSection === "compact" ? "page" : undefined}
-          onclick={() => (activeSection = "compact")}
-        >
-          {_t("storage.compactTab")}
-        </button>
-        <button
-          type="button"
-          class:active={activeSection === "font"}
-          aria-current={activeSection === "font" ? "page" : undefined}
-          onclick={() => (activeSection = "font")}
-        >
-          {_t("general.fontSize")}
-        </button>
-      </nav>
-    {:else if activeSection === "statistics"}
-      <nav class="settings-subnav" aria-label="统计分类">
-        <button
-          type="button"
-          class:active={activeStatisticsTab === "storage"}
-          aria-current={activeStatisticsTab === "storage" ? "page" : undefined}
-          onclick={() => (activeStatisticsTab = "storage")}
-        >
-          存储分布
-        </button>
-        <button
-          type="button"
-          class:active={activeStatisticsTab === "performance"}
-          aria-current={activeStatisticsTab === "performance" ? "page" : undefined}
-          onclick={() => (activeStatisticsTab = "performance")}
-        >
-          性能
-        </button>
-      </nav>
-    {/if}
+      </div>
+      {#if activeSection === "general" || activeSection === "compact" || activeSection === "font"}
+        <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "general"}
+            aria-current={activeSection === "general" ? "page" : undefined}
+            onclick={() => (activeSection = "general")}
+          >
+            {_t("storage.basicTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "compact"}
+            aria-current={activeSection === "compact" ? "page" : undefined}
+            onclick={() => (activeSection = "compact")}
+          >
+            {_t("storage.compactTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "font"}
+            aria-current={activeSection === "font" ? "page" : undefined}
+            onclick={() => (activeSection = "font")}
+          >
+            {_t("storage.fontTab")}
+          </button>
+        </nav>
+      {:else if activeSection === "statistics"}
+        <nav class="settings-subnav" aria-label={_t("statistics.title")}>
+          <button
+            type="button"
+            class:active={activeStatisticsTab === "storage"}
+            aria-current={activeStatisticsTab === "storage" ? "page" : undefined}
+            onclick={() => (activeStatisticsTab = "storage")}
+          >
+            {_t("statistics.storageTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeStatisticsTab === "performance"}
+            aria-current={activeStatisticsTab === "performance" ? "page" : undefined}
+            onclick={() => (activeStatisticsTab = "performance")}
+          >
+            {_t("statistics.performanceTab")}
+          </button>
+        </nav>
+      {:else}
+        <div class="settings-subnav settings-subnav--single" aria-label={settingsSectionTitle}>
+          <span class="settings-section-title">{settingsSectionTitle}</span>
+        </div>
+      {/if}
+      <p class="settings-section-description">{settingsSectionDescription}</p>
+    </section>
 
     <div
       class="settings-search-toolbar"
@@ -800,25 +881,16 @@
     {/if}
 
     {#if activeSection === "general"}
-      <GeneralSettingsPanel {onclose} />
+      <GeneralSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "compact"}
-      <CompactSettingsPanel {onclose} />
+      <CompactSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "font"}
-      <FontSizeSettingsPanel {onclose} />
+      <FontSizeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
-      <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} />
+      <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
     {:else if activeSection === "keyboard"}
-      <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} />
+      <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} showHeader={false} />
     {:else if activeSection === "ocr"}
-      <header>
-        <div>
-          <span class="eyebrow">设置 / OCR</span>
-          <h2>文字识别</h2>
-          <p>OCR 引擎选择与状态</p>
-        </div>
-        <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button
-        >
-      </header>
       <div class="settings-scroll">
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
@@ -990,19 +1062,6 @@
         <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
       {/if}
     {:else if activeSection === "statistics"}
-      <header>
-        <div>
-          <span class="eyebrow">设置 / 统计</span>
-          <h2>{activeStatisticsTab === "storage" ? "存储统计" : "性能统计"}</h2>
-          <p>
-            {activeStatisticsTab === "storage"
-              ? "记录数量与各项数据占用空间"
-              : "应用启动、搜索延迟与运行资源"}
-          </p>
-        </div>
-        <button class="close-button" type="button" aria-label="关闭设置" onclick={onclose}>×</button
-        >
-      </header>
       <div class="settings-scroll stats-scroll">
         {#if activeStatisticsTab === "storage"}
           {#if status}
@@ -1216,22 +1275,6 @@
         {/if}
       </div>
     {:else}
-      <header>
-        <div>
-          <span class="eyebrow">{_t("storage.settings")}</span>
-          <h2 id="settings-title">{_t("storage.dataStorage")}</h2>
-          <p>{_t("storage.configPath")}</p>
-        </div>
-        {#if !standalone}
-          <button
-            class="close-button"
-            type="button"
-            aria-label={_t("actions.close")}
-            onclick={onclose}>×</button
-          >
-        {/if}
-      </header>
-
       {#if loading}
         <div class="settings-state">{_t("storage.readingConfig")}</div>
       {:else if status}
@@ -1652,12 +1695,45 @@
     flex-direction: column;
   }
 
+  .settings-breadcrumb {
+    flex: 0 0 auto;
+    color: #777;
+    font-size: var(--settings-description-size);
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  .settings-section-header {
+    flex: 0 0 auto;
+    padding: 13px 18px 12px;
+    border-bottom: 1px solid #292929;
+  }
+
+  .settings-section-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .settings-section-description {
+    max-width: 430px;
+    margin: 7px 0 0;
+    color: #777;
+    font-size: var(--settings-description-size);
+    line-height: 1.5;
+  }
+
   .settings-subnav {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 10px 18px 0;
+    padding: 7px 18px 0;
     background: #191919;
+  }
+
+  .settings-section-header .settings-subnav {
+    padding: 7px 0 0;
   }
 
   .settings-subnav button {
@@ -1668,7 +1744,8 @@
     color: #888;
     background: transparent;
     font: inherit;
-    font-size: var(--settings-control-size);
+    font-size: var(--settings-heading-size);
+    font-weight: 560;
     cursor: pointer;
     transition:
       color 100ms ease,
@@ -1686,6 +1763,18 @@
     border-color: #3d5a80;
     color: #e8e8e8;
     background: #252f3d;
+  }
+
+  .settings-subnav--single {
+    min-height: 28px;
+    padding-top: 7px;
+  }
+
+  .settings-section-title {
+    color: #dedede;
+    font-size: var(--settings-heading-size);
+    font-weight: 560;
+    line-height: 1.35;
   }
 
   .settings-search-toolbar {
@@ -1789,40 +1878,12 @@
     border: 0;
   }
 
-  .settings-content > header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 20px 22px 15px;
-    border-bottom: 1px solid #292929;
-  }
-
-  .eyebrow {
-    color: #777;
-    font-size: var(--settings-note-size);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h2 {
-    margin: 5px 0 4px;
-    color: #efefef;
-    font-size: var(--settings-page-title-size);
-    font-weight: 590;
-  }
-
-  header p,
   .setting-heading p {
     margin: 0;
     color: #777;
     line-height: 1.5;
   }
 
-  header p {
-    max-width: 430px;
-    font-size: var(--settings-description-size);
-  }
 
   .close-button {
     display: inline-flex;

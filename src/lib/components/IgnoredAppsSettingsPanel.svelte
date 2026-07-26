@@ -24,9 +24,10 @@
   interface Props {
     iconsDir?: string;
     onclose: () => void;
+    showHeader?: boolean;
   }
 
-  let { iconsDir = "", onclose }: Props = $props();
+  let { iconsDir = "", onclose, showHeader = true }: Props = $props();
   let settings = $state<ApplicationFilterSettings | null>(null);
   let availableSearch = $state("");
   let ignoredSearch = $state("");
@@ -170,16 +171,18 @@
   }
 </script>
 
-<header>
-  <div>
-    <span class="eyebrow">{_t("capture.settings")}</span>
-    <h2>{_t("capture.title")}</h2>
-    <p>{_t("capture.description")}</p>
-  </div>
-  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-    >×</button
-  >
-</header>
+{#if showHeader}
+  <header>
+    <div>
+      <span class="eyebrow">{_t("capture.settings")}</span>
+      <h2>{_t("capture.title")}</h2>
+      <p>{_t("capture.description")}</p>
+    </div>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
+    >
+  </header>
+{/if}
 
 {#if loading}
   <div class="settings-state">{_t("capture.readingApps")}</div>

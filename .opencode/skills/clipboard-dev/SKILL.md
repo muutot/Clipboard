@@ -312,7 +312,9 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - Before editing settings styles, compare every settings panel and reuse the existing card, heading, description, control, feedback, spacing, and typography patterns.
 - Prefer shared CSS variables for settings typography and spacing. Do not introduce a one-off font size when an existing semantic variable fits.
 - Keep setting titles, descriptions, values, controls, and feedback text on one consistent semantic scale across panels.
-- Keep primary settings categories in the left navigation. When a category has multiple secondary sections, render them as one compact horizontal tab row at the top of the right content pane, before the setting cards.
+- Keep primary settings categories in the left navigation. Every category must render a secondary-group row at the top of the right content pane before the setting cards: use compact horizontal tabs when there are multiple secondary sections, and show one current-section item even when there is only one.
+- Use one parent settings-shell hierarchy in this order: breadcrumb beginning with `设置 / 一级分组`, then an always-present secondary-group row (multiple items as tabs, a single item as the current section), then one small description line, then the setting cards. The breadcrumb must use the same semantic font size as the description (`--settings-description-size` or its shared equivalent), never the page-title or eyebrow size.
+- When the parent shell owns this header, every child settings panel must expose a `showHeader?: boolean` prop and be rendered with `showHeader={false}`. Remove the child header from the DOM; never depend on a parent scoped CSS selector to hide a child component's `.eyebrow` or `h2`, because Svelte component style scoping does not cross component boundaries.
 
 **Form control styling rules (must follow strictly):**
 

@@ -66,7 +66,13 @@ const en: LocaleDefinition = {
     storageTab: "Storage",
     keyboardTab: "Shortcuts",
     generalTab: "General",
+    basicTab: "Basic",
     compactTab: "Compact",
+    fontTab: "Font",
+    ocrSettings: "Settings / OCR",
+    statisticsSettings: "Settings / Statistics",
+    ocrTitle: "Text Recognition",
+    ocrDescription: "Choose the OCR engine and inspect its status",
     configPath:
       "Config files are fixed in the project directory. Images, files, and databases can use a custom data directory.",
     readingConfig: "Reading local configuration...",
@@ -134,6 +140,8 @@ const en: LocaleDefinition = {
   keyboard: {
     settings: "Settings / Shortcuts",
     title: "Keyboard & Activation",
+    description:
+      "Bind multiple combinations to each action; double-tap modifiers use Shift+Shift or Ctrl+Ctrl",
     readingConfig: "Reading shortcut configuration...",
     shortcutConfigTitle: "Independent Shortcut Configuration",
     shortcutConfigDesc:
@@ -155,7 +163,7 @@ const en: LocaleDefinition = {
     bindingsCount: "{count} binding(s)",
   },
   capture: {
-    settings: "Settings / Capture / App Filter",
+    settings: "Settings / Capture",
     title: "Ignored Applications",
     description:
       "Clipboard content from ignored applications will not enter history, file storage, OCR queue, or search index.",
@@ -380,6 +388,10 @@ const en: LocaleDefinition = {
   },
   statistics: {
     title: "Statistics",
+    storageTab: "Storage",
+    performanceTab: "Performance",
+    storageDescription: "Record counts and storage used by each data area",
+    performanceDescription: "Startup, search latency, and runtime resources",
     totalRecords: "Total Records",
     byType: "By Content Type",
     dbSize: "Database Size",

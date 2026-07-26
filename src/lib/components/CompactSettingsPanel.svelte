@@ -8,9 +8,10 @@
 
   interface Props {
     onclose: () => void;
+    showHeader?: boolean;
   }
 
-  let { onclose }: Props = $props();
+  let { onclose, showHeader = true }: Props = $props();
 
   let s = $state($generalSettings);
   $effect(() => {
@@ -40,16 +41,18 @@
   });
 </script>
 
-<header>
-  <div>
-    <span class="eyebrow">{_t("compact.eyebrow")}</span>
-    <h2>{_t("compact.title")}</h2>
-    <p>{_t("compact.description")}</p>
-  </div>
-  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-    >×</button
-  >
-</header>
+{#if showHeader}
+  <header>
+    <div>
+      <span class="eyebrow">{_t("compact.eyebrow")}</span>
+      <h2>{_t("compact.title")}</h2>
+      <p>{_t("compact.description")}</p>
+    </div>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
+    >
+  </header>
+{/if}
 
 <div class="settings-scroll">
   <section class="setting-card toggle-card">

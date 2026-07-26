@@ -15,9 +15,10 @@
   interface Props {
     configPath?: string;
     onclose: () => void;
+    showHeader?: boolean;
   }
 
-  let { configPath = "conf/keyboard.json", onclose }: Props = $props();
+  let { configPath = "conf/keyboard.json", onclose, showHeader = true }: Props = $props();
   let config = $state<KeyboardConfig | null>(null);
   let drafts = $state<Record<string, string>>({});
   let loading = $state(true);
@@ -86,16 +87,18 @@
   }
 </script>
 
-<header>
-  <div>
-    <span class="eyebrow">{_t("keyboard.settings")}</span>
-    <h2>{_t("keyboard.title")}</h2>
-    <p>每个操作可绑定多个组合；双击修饰键写法: Shift+Shift、Ctrl+Ctrl</p>
-  </div>
-  <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-    >×</button
-  >
-</header>
+{#if showHeader}
+  <header>
+    <div>
+      <span class="eyebrow">{_t("keyboard.settings")}</span>
+      <h2>{_t("keyboard.title")}</h2>
+      <p>{_t("keyboard.description")}</p>
+    </div>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
+    >
+  </header>
+{/if}
 
 {#if loading}
   <div class="settings-state">{_t("keyboard.readingConfig")}</div>
