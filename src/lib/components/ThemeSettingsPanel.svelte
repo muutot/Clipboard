@@ -244,7 +244,7 @@
   .setting-card {
     background: var(--card-bg);
     border: 1px solid var(--border-subtle);
-    border-radius: 10px;
+    border-radius: var(--settings-card-radius, 9px);
     padding: 14px 16px;
     margin-bottom: 12px;
   }
@@ -266,13 +266,13 @@
 
   .setting-heading strong {
     display: block;
-    font-size: 13px;
+    font-size: var(--settings-heading-size, 13px);
     color: var(--text-primary);
   }
 
   .setting-heading p {
     margin: 2px 0 0;
-    font-size: 11px;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     color: var(--text-muted);
   }
 
@@ -290,9 +290,9 @@
     background: var(--input-bg);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius, 6px);
     padding: 6px 28px 6px 10px;
-    font-size: 13px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     flex-shrink: 0;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23777'/%3E%3C/svg%3E");
@@ -324,7 +324,7 @@
     width: 32px;
     height: 32px;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius, 6px);
     cursor: pointer;
     padding: 2px;
     background: var(--input-bg);
@@ -341,8 +341,8 @@
     background: var(--input-bg);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    font-size: 12px;
+    border-radius: var(--settings-control-radius, 6px);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-family: monospace;
     text-transform: uppercase;
   }
@@ -358,13 +358,13 @@
   }
 
   .readonly-hint {
-    font-size: 11px;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     color: var(--text-muted);
     margin: 0 0 12px 16px;
   }
 
   .auto-save-note {
-    font-size: 11px;
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     color: var(--text-faint);
     margin: 8px 0 0;
   }
@@ -377,8 +377,8 @@
     background: var(--hover-bg);
     color: var(--text-primary);
     padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 12px;
+    border-radius: var(--settings-feedback-radius, 7px);
+    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
     z-index: 100;
   }
 
@@ -395,19 +395,19 @@
   }
 
   header h2 {
-    font-size: 15px;
+    font-size: var(--settings-page-title-size, 18px);
     color: var(--text-primary);
     margin: 0;
   }
 
   .close-button {
-    width: 28px;
-    height: 28px;
+    width: var(--settings-close-size, 28px);
+    height: var(--settings-close-size, 28px);
     background: transparent;
     border: 1px solid var(--border-color);
-    border-radius: 7px;
+    border-radius: var(--settings-close-radius, 7px);
     color: var(--text-muted);
-    font-size: 19px;
+    font-size: var(--settings-close-font-size, 19px);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -436,10 +436,10 @@
     min-width: 0;
     padding: 7px 10px;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius, 6px);
     background: var(--input-bg);
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     outline: none;
     transition: border-color 120ms ease;
   }
@@ -452,10 +452,10 @@
     flex-shrink: 0;
     padding: 7px 12px;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--settings-control-radius, 6px);
     background: var(--hover-bg);
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     white-space: nowrap;
     transition:
@@ -495,7 +495,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-weight: 520;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -511,10 +511,10 @@
   .preset-action-btn {
     padding: 4px 9px;
     border: 1px solid var(--border-color);
-    border-radius: 5px;
+    border-radius: var(--settings-control-radius, 6px);
     background: var(--card-bg);
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     transition:
       background 100ms ease,
@@ -535,7 +535,7 @@
   .preset-empty {
     margin: 10px 0 0;
     color: var(--text-faint);
-    font-size: 11px;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     text-align: center;
   }
 </style>
