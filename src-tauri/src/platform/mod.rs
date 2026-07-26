@@ -3,27 +3,29 @@ use std::{
     fmt, fs,
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 #[cfg(target_os = "windows")]
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
     },
     thread::{self, JoinHandle},
 };
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime,
+    AppHandle, Emitter, Manager, Runtime,
 };
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::config::ConfigStore;
 use crate::keyboard::ShortcutBinding;
+use crate::privacy::PrivacyManager;
+use crate::CaptureState;
 
 // ---------------------------------------------------------------------------
 //  Platform-specific adapter modules
@@ -579,24 +581,57 @@ pub struct SystemTray;
 
 impl SystemTray {
     const SHOW_MENU_ID: &'static str = "tray-show";
+    const SETTINGS_MENU_ID: &'static str = "tray-settings";
+    const PAUSE_MENU_ID: &'static str = "tray-pause";
     const QUIT_MENU_ID: &'static str = "tray-quit";
 
     pub fn create<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
         let show_item =
             MenuItem::with_id(app, Self::SHOW_MENU_ID, "显示主窗口", true, None::<&str>)
                 .map_err(|error| format!("failed to create the tray show item: {error}"))?;
+        let settings_item =
+            MenuItem::with_id(app, Self::SETTINGS_MENU_ID, "打开设置", true, None::<&str>)
+                .map_err(|error| format!("failed to create the tray settings item: {error}"))?;
+        let is_paused = app
+            .try_state::<CaptureState>()
+            .is_some_and(|c| c.is_paused());
+        let recording_enabled = !is_paused;
+        let pause_item =
+            CheckMenuItem::with_id(app, Self::PAUSE_MENU_ID, "剪切板记录", true, recording_enabled, None::<&str>)
+                .map_err(|error| format!("failed to create the tray pause item: {error}"))?;
+        let pause_item = Arc::new(pause_item);
+        let pause_item_for_menu = Arc::clone(&pause_item);
         let quit_item = MenuItem::with_id(app, Self::QUIT_MENU_ID, "退出", true, None::<&str>)
             .map_err(|error| format!("failed to create the tray quit item: {error}"))?;
-        let menu = Menu::with_items(app, &[&show_item, &quit_item])
+        let menu = Menu::with_items(app, &[&show_item, &settings_item, pause_item.as_ref(), &quit_item])
             .map_err(|error| format!("failed to create the tray menu: {error}"))?;
 
         let mut builder = TrayIconBuilder::with_id("main-tray")
             .menu(&menu)
             .tooltip("Clipboard")
             .show_menu_on_left_click(false)
-            .on_menu_event(|app, event| {
+            .on_menu_event(move |app, event| {
                 if event.id() == Self::SHOW_MENU_ID {
                     show_main_window(app);
+                } else if event.id() == Self::SETTINGS_MENU_ID {
+                    show_main_window(app);
+                    let _ = app.emit("tray-open-settings", ());
+                } else if event.id() == Self::PAUSE_MENU_ID {
+                    let paused = app
+                        .try_state::<CaptureState>()
+                        .map(|c| {
+                            let new_paused = !c.is_paused();
+                            c.set_paused(new_paused);
+                            new_paused
+                        })
+                        .unwrap_or(false);
+                    let _ = pause_item_for_menu.set_checked(!paused);
+                    if let Ok(mut config) = app.state::<Mutex<ConfigStore>>().lock() {
+                        let _ = config.set_privacy_paused(paused);
+                    }
+                    if let Ok(mut privacy) = app.state::<Mutex<PrivacyManager>>().lock() {
+                        privacy.toggle_pause();
+                    }
                 } else if event.id() == Self::QUIT_MENU_ID {
                     app.exit(0);
                 }

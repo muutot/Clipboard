@@ -221,7 +221,7 @@ const en: LocaleDefinition = {
     saved: "Saved {count} ignored application(s)",
     configNote: "The left list will auto-populate once app source identification is connected.",
     captureUnavailable: "Desktop application filter service unavailable",
-    pauseTitle: "Pause clipboard recording",
+    pauseTitle: "Clipboard Recording",
     pauseDescription:
       "No new clipboard content is captured while paused; existing history is unchanged.",
     pauseAction: "Pause recording",

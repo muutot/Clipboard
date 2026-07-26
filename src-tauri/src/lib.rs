@@ -181,7 +181,7 @@ struct ResourceStorageUpdate {
 /// reference directly.  Instead they hold this small, thread-safe snapshot so
 /// pause/ignore changes take effect without restarting a monitor thread.
 #[derive(Clone)]
-struct CaptureState {
+pub(crate) struct CaptureState {
     paused: Arc<AtomicBool>,
     max_file_copy_size_bytes: Arc<AtomicU64>,
     ignored_apps: Arc<Mutex<Vec<String>>>,
@@ -323,11 +323,11 @@ impl CaptureState {
         }
     }
 
-    fn set_paused(&self, paused: bool) {
+    pub(crate) fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::SeqCst);
     }
 
-    fn is_paused(&self) -> bool {
+    pub(crate) fn is_paused(&self) -> bool {
         self.paused.load(Ordering::SeqCst)
     }
 

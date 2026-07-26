@@ -201,9 +201,9 @@
         <button
           type="button"
           class="toggle-switch"
-          class:active={privacyPaused}
+          class:active={!privacyPaused}
           role="switch"
-          aria-checked={privacyPaused}
+          aria-checked={!privacyPaused}
           aria-label={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
           title={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
           disabled={privacyLoading || !isTauriRuntime()}

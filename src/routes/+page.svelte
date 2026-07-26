@@ -662,6 +662,10 @@
       },
     );
 
+    const unlistenTrayOpenSettings = listen("tray-open-settings", () => {
+      openSettings();
+    });
+
     const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
     let restoreAttempted = false;
     let previousRememberWindowPosition = false;
@@ -884,6 +888,7 @@
       window.clearInterval(clock);
       unlisten.then((fn) => fn());
       unlistenHistoryInvalidated.then((fn) => fn());
+      unlistenTrayOpenSettings.then((fn) => fn());
       unsubSettings();
       if (unlistenMove) unlistenMove();
       if (unlistenResize) unlistenResize();

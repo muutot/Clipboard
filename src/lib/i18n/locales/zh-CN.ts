@@ -211,7 +211,7 @@ const zhCN: LocaleDefinition = {
     saved: "已保存 {count} 个忽略应用",
     configNote: "应用来源识别接入后会自动补充左侧列表",
     captureUnavailable: "桌面端应用过滤服务不可用",
-    pauseTitle: "暂停剪贴板记录",
+    pauseTitle: "剪切板记录",
     pauseDescription: "暂停期间不会采集新的剪贴板内容，已有历史记录不受影响。",
     pauseAction: "暂停记录",
     resumeAction: "恢复记录",
