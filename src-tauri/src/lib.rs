@@ -1372,7 +1372,7 @@ fn search_clipboard_items(
 ) -> Result<Vec<ClipboardItem>, String> {
     let started = Instant::now();
     SearchSynchronizer::default()
-        .sync_until_idle(database.inner(), search_index.inner())
+        .sync_bounded(database.inner(), search_index.inner(), 2)
         .map_err(|error| error.to_string())?;
     let hits = search_index
         .search(&query, limit.unwrap_or(100).clamp(1, 500))

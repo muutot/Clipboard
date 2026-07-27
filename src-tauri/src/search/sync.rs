@@ -73,6 +73,31 @@ impl SearchSynchronizer {
         })
     }
 
+    pub fn sync_bounded(
+        &self,
+        repository: &impl SearchRepository,
+        index: &impl SearchIndexSink,
+        max_batches: usize,
+    ) -> Result<SearchSyncSummary, SearchError> {
+        let mut total = SearchSyncSummary::default();
+
+        for _ in 0..max_batches {
+            let batch = self.sync_batch(repository, index)?;
+            total.processed_events += batch.processed_events;
+            total.upserted_documents += batch.upserted_documents;
+            total.deleted_documents += batch.deleted_documents;
+            if batch.last_sequence.is_some() {
+                total.last_sequence = batch.last_sequence;
+            }
+
+            if batch.processed_events < u64::from(self.batch_size) {
+                return Ok(total);
+            }
+        }
+
+        Ok(total)
+    }
+
     pub fn sync_until_idle(
         &self,
         repository: &impl SearchRepository,
