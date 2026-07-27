@@ -168,7 +168,7 @@ impl SearchIndex {
         let searcher = self.reader.searcher();
         let top_documents = searcher.search(
             &query,
-            &TopDocs::with_limit(limit.min(500)).order_by_score(),
+            &TopDocs::with_limit(limit).order_by_score(),
         )?;
 
         top_documents

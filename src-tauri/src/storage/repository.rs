@@ -315,7 +315,7 @@ impl ClipboardRepository for Database {
             let mut statement = connection.prepare_cached(&sql)?;
             let stored_items = statement
                 .query_map(
-                    params![i64::from(limit.clamp(1, 500)), i64::from(offset)],
+                    params![i64::from(limit), i64::from(offset)],
                     StoredClipboardItem::from_row,
                 )?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -336,7 +336,7 @@ impl ClipboardRepository for Database {
             let mut statement = connection.prepare_cached(&sql)?;
             let stored_items = statement
                 .query_map(
-                    params![i64::from(limit.clamp(1, 500)), i64::from(offset)],
+                    params![i64::from(limit), i64::from(offset)],
                     StoredClipboardItem::from_row,
                 )?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -1609,7 +1609,7 @@ mod tests {
     }
 
     #[test]
-    fn pagination_limit_is_clamped() {
+    fn pagination_limit_is_respected() {
         let database = Database::open_in_memory().unwrap();
         for i in 0..600 {
             database
@@ -1621,8 +1621,8 @@ mod tests {
                 .unwrap();
         }
 
-        let items = database.list_recent(10000, 0).unwrap();
-        assert!(items.len() <= 500);
+        let items = database.list_recent(100, 0).unwrap();
+        assert_eq!(items.len(), 100);
     }
 
     // ── Task 4: Item count with soft-deleted items ──
