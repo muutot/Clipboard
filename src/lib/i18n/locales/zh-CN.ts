@@ -470,6 +470,12 @@ const zhCN: LocaleDefinition = {
     maxVisibleItems: "最大可见条目",
     maxVisibleItemsDescription: "列表中同时保留的条目上限，超出后自动丢弃最早的未收藏非删除条目",
     maxVisibleItemsUnit: "条",
+    pageSizeLimit: "每次加载最大限制",
+    pageSizeLimitDescription: "单次查询允许的最大条目数，【每页加载条目数】不能超过此值",
+    pageSizeLimitUnit: "条",
+    searchPageSizeLimit: "搜索结果上限",
+    searchPageSizeLimitDescription: "单次搜索允许返回的最大结果数",
+    searchPageSizeLimitUnit: "条",
   },
   compact: {
     title: "紧凑设置",

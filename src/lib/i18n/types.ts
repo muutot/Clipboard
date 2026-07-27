@@ -466,6 +466,12 @@ export interface LocaleDefinition {
     maxVisibleItems: string;
     maxVisibleItemsDescription: string;
     maxVisibleItemsUnit: string;
+    pageSizeLimit: string;
+    pageSizeLimitDescription: string;
+    pageSizeLimitUnit: string;
+    searchPageSizeLimit: string;
+    searchPageSizeLimitDescription: string;
+    searchPageSizeLimitUnit: string;
   };
   compact: {
     title: string;

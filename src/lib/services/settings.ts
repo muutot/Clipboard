@@ -54,6 +54,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   showSettingsCloseButton: true,
   detailDisplayMode: "overlay",
   searchSortRules: [{ field: "createdAt", direction: "desc" }],
+  pageSizeLimit: 500,
+  searchPageSizeLimit: 500,
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -419,6 +421,18 @@ function normalizeGeneralSettings(
   result.searchSortRules = validSortRules(
     source.searchSortRules ?? fallback("searchSortRules"),
     defaultSettings.searchSortRules,
+  );
+  result.pageSizeLimit = integerInRange(
+    source.pageSizeLimit ?? fallback("pageSizeLimit"),
+    defaultSettings.pageSizeLimit,
+    50,
+    1000,
+  );
+  result.searchPageSizeLimit = integerInRange(
+    source.searchPageSizeLimit ?? fallback("searchPageSizeLimit"),
+    defaultSettings.searchPageSizeLimit,
+    50,
+    1000,
   );
 
   return result;

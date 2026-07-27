@@ -490,6 +490,13 @@ const en: LocaleDefinition = {
     maxVisibleItemsDescription:
       "Maximum items kept in the list; oldest unfavorited non-deleted items are discarded when exceeded",
     maxVisibleItemsUnit: "items",
+    pageSizeLimit: "Max Items Per Load",
+    pageSizeLimitDescription:
+      'Upper bound for single-query item count; "Items Per Page" cannot exceed this value',
+    pageSizeLimitUnit: "items",
+    searchPageSizeLimit: "Search Result Limit",
+    searchPageSizeLimitDescription: "Maximum number of results returned per search query",
+    searchPageSizeLimitUnit: "results",
   },
   compact: {
     title: "Compact Settings",

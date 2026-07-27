@@ -202,6 +202,8 @@ export interface GeneralSettings {
   /** 详情展示模式：'overlay' 同画布切入 | 'split' 左右分栏 */
   detailDisplayMode: "overlay" | "split";
   searchSortRules: SortRule[];
+  pageSizeLimit: number;
+  searchPageSizeLimit: number;
 }
 
 export type SortField = "createdAt" | "lastUsedAt" | "title" | "size" | "kind" | "favorite";
