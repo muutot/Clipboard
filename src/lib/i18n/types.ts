@@ -463,9 +463,6 @@ export interface LocaleDefinition {
     pageSize: string;
     pageSizeDescription: string;
     pageSizeUnit: string;
-    maxVisibleItems: string;
-    maxVisibleItemsDescription: string;
-    maxVisibleItemsUnit: string;
     pageSizeLimit: string;
     pageSizeLimitDescription: string;
     pageSizeLimitUnit: string;

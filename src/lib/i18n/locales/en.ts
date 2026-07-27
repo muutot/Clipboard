@@ -486,10 +486,6 @@ const en: LocaleDefinition = {
     pageSize: "Page Load Count",
     pageSizeDescription: "Number of items loaded each time you scroll to the bottom",
     pageSizeUnit: "items",
-    maxVisibleItems: "Cache Size",
-    maxVisibleItemsDescription:
-      "Maximum records kept in the list; oldest non-favorite items are discarded when exceeded",
-    maxVisibleItemsUnit: "items",
     pageSizeLimit: "Max Load Items",
     pageSizeLimitDescription:
       'Upper bound for "Page Load Count"; prevents loading too many items at once',

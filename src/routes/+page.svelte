@@ -1020,19 +1020,6 @@
     void loadDeletedHistoryPage();
   }
 
-  function trimActiveHistory() {
-    const max = $generalSettings.display.maxVisibleItems;
-    if (items.length <= max) return;
-    const keep: ClipboardItem[] = [];
-    const regular: ClipboardItem[] = [];
-    for (const item of items) {
-      if (item.deleted || item.favorite) keep.push(item);
-      else regular.push(item);
-    }
-    const limit = Math.max(0, max - keep.length);
-    items = [...keep, ...regular.slice(0, limit)];
-  }
-
   async function loadActiveHistoryPage(): Promise<void> {
     if (activeHistoryLoading || !activeHistoryHasMore) return;
 
@@ -1059,7 +1046,6 @@
       } else {
         items = [...items, ...page];
       }
-      trimActiveHistory();
       activeHistoryOffset += page.length;
       activeHistoryHasMore = page.length === $generalSettings.display.pageSize;
     } catch (error) {

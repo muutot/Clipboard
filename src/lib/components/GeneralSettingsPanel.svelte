@@ -172,7 +172,6 @@
   let viewerOpacityEl = $state<HTMLInputElement | null>(null);
   let maxTextLinesEl = $state<HTMLInputElement | null>(null);
   let pageSizeEl = $state<HTMLInputElement | null>(null);
-  let maxVisibleItemsEl = $state<HTMLInputElement | null>(null);
   let pageSizeLimitEl = $state<HTMLInputElement | null>(null);
   let searchPageSizeLimitEl = $state<HTMLInputElement | null>(null);
 
@@ -184,7 +183,6 @@
     updateSliderTrack(viewerOpacityEl);
     updateSliderTrack(maxTextLinesEl);
     updateSliderTrack(pageSizeEl);
-    updateSliderTrack(maxVisibleItemsEl);
     updateSliderTrack(pageSizeLimitEl);
     updateSliderTrack(searchPageSizeLimitEl);
   });
@@ -782,38 +780,6 @@
         }}
         class="transparency-slider"
         bind:this={pageSizeLimitEl}
-      />
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.maxVisibleItems")}</strong>
-            <p>{_t("general.maxVisibleItemsDescription")}</p>
-          </div>
-          <span class="value-label"
-            >{s.display.maxVisibleItems} {_t("general.maxVisibleItemsUnit")}</span
-          >
-        </div>
-      </div>
-      <input
-        type="range"
-        min="200"
-        max="2000"
-        step="50"
-        value={s.display.maxVisibleItems}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("display", {
-            ...s.display,
-            maxVisibleItems: Number(input.value),
-          });
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={maxVisibleItemsEl}
       />
     </section>
 
