@@ -104,7 +104,7 @@
       const first = deletedHistorySuppressedIds.values().next().value;
       if (first !== undefined) deletedHistorySuppressedIds.delete(first);
     }
-    addSuppressedId(id);
+    deletedHistorySuppressedIds.add(id);
   }
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
@@ -295,7 +295,7 @@
     if (matchIndex > 0 && (alignToQuery || candidate.length > SEARCH_TERM_MAX_LENGTH)) {
       candidate = candidate.slice(matchIndex);
     }
-    candidate = Array.from(candidate).slice(0, SEARCH_TERM_MAX_LENGTH).join("").trim();
+    candidate = candidate.slice(0, SEARCH_TERM_MAX_LENGTH).trim();
     return candidate.length >= 2 ? candidate : null;
   }
 
