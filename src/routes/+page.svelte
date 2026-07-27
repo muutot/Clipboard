@@ -502,7 +502,7 @@
 
   function virtualHeightFor(item: ClipboardItem): number {
     const measured = measuredCardHeights[item.id];
-    if (measured?.signature === cardLayoutSignature(item)) return measured.height;
+    if (measured) return measured.height;
     if (editingId === item.id) {
       return editHeight(
         (item.textContent || "").split("\n").length,
