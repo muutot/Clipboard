@@ -210,12 +210,13 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
       : undefined;
   const fileMeta = record.kind === "file" ? resourceMetadata?.files : undefined;
   const primaryFile = fileMeta?.[0];
+  const preview = buildPreview(record, fileLabel, imageLabel);
 
   return {
     id: record.id,
     kind: record.kind,
     title: record.title,
-    preview: buildPreview(record, fileLabel, imageLabel),
+    preview,
     sourceApp,
     sourceTone: sourceTone(sourceApp, locale),
     sizeLabel: formatSizeSimple(record),
@@ -227,7 +228,7 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
       record.kind === "image" || record.kind === "file"
         ? primaryFile?.name || fileNameFromPath(record.resourcePath) || record.title
         : undefined,
-    searchableText: [record.title, record.textContent, record.sourceApp]
+    searchableText: [record.title, preview, record.textContent, record.sourceApp]
       .filter(Boolean)
       .join(" ")
       .toLocaleLowerCase(),
