@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Clipboard content categories shared by storage, platform adapters and the UI.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ClipboardKind {
     Text,

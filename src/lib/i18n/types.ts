@@ -434,6 +434,18 @@ export interface LocaleDefinition {
     quickCopyBadgeDescription: string;
     searchHistory: string;
     searchHistoryDescription: string;
+    searchSortRules: string;
+    searchSortRulesDescription: string;
+    sortFieldCreatedAt: string;
+    sortFieldLastUsedAt: string;
+    sortFieldTitle: string;
+    sortFieldSize: string;
+    sortFieldKind: string;
+    sortFieldFavorite: string;
+    sortAsc: string;
+    sortDesc: string;
+    sortAddRule: string;
+    sortRemoveRule: string;
     on: string;
     off: string;
     autoSaveNote: string;

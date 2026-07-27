@@ -7,6 +7,7 @@ import type {
   GeneralSettings,
   GeneralSettingsInfo,
   Language,
+  SortRule,
   ThemeColors,
   ThemePreset,
   WindowConfig,
@@ -52,6 +53,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
   detailDisplayMode: 'overlay',
+  searchSortRules: [{ field: "createdAt", direction: "desc" }],
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -165,6 +167,20 @@ function validDetailDisplayMode(
   fallback: GeneralSettings["detailDisplayMode"],
 ): GeneralSettings["detailDisplayMode"] {
   return value === "overlay" || value === "split" ? value : fallback;
+}
+
+const SORT_FIELDS = ["createdAt", "lastUsedAt", "title", "size", "kind", "favorite"] as const;
+
+function validSortRules(value: unknown, fallback: SortRule[]): SortRule[] {
+  if (!Array.isArray(value)) return fallback;
+  const rules: SortRule[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    if (!SORT_FIELDS.includes(item.field as (typeof SORT_FIELDS)[number])) continue;
+    if (item.direction !== "asc" && item.direction !== "desc") continue;
+    rules.push({ field: item.field as SortRule["field"], direction: item.direction });
+  }
+  return rules.length > 0 ? rules : fallback;
 }
 
 /**
@@ -396,6 +412,10 @@ function normalizeGeneralSettings(
   result.detailDisplayMode = validDetailDisplayMode(
     source.detailDisplayMode ?? fallback("detailDisplayMode"),
     defaultSettings.detailDisplayMode,
+  );
+  result.searchSortRules = validSortRules(
+    source.searchSortRules ?? fallback("searchSortRules"),
+    defaultSettings.searchSortRules,
   );
 
   return result;

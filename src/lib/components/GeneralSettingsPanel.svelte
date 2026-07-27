@@ -5,6 +5,7 @@
   import type {
     CardActionsDisplay,
     SearchSuggestionMode,
+    SortRule,
     WindowConfig,
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
@@ -258,6 +259,76 @@
       >
         <span class="toggle-knob"></span>
       </button>
+    </section>
+
+    <section class="setting-card sort-rules-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
+        <div>
+          <strong>{_t("general.searchSortRules")}</strong>
+          <p>{_t("general.searchSortRulesDescription")}</p>
+        </div>
+      </div>
+      <div class="sort-rules-list">
+        {#each s.searchSortRules as rule, idx (idx)}
+          <div class="sort-rule-row">
+            <select
+              class="theme-select sort-field-select"
+              value={rule.field}
+              aria-label={_t("general.searchSortRules")}
+              onchange={(e) => {
+                const newRules = [...s.searchSortRules];
+                newRules[idx] = { ...rule, field: (e.target as HTMLSelectElement).value as SortRule["field"] };
+                generalSettings.updateSetting("searchSortRules", newRules);
+              }}
+            >
+              <option value="createdAt">{_t("general.sortFieldCreatedAt")}</option>
+              <option value="lastUsedAt">{_t("general.sortFieldLastUsedAt")}</option>
+              <option value="title">{_t("general.sortFieldTitle")}</option>
+              <option value="size">{_t("general.sortFieldSize")}</option>
+              <option value="kind">{_t("general.sortFieldKind")}</option>
+              <option value="favorite">{_t("general.sortFieldFavorite")}</option>
+            </select>
+            <button
+              type="button"
+              class="sort-direction-btn"
+              title={rule.direction === "asc" ? _t("general.sortAsc") : _t("general.sortDesc")}
+              aria-label={rule.direction === "asc" ? _t("general.sortAsc") : _t("general.sortDesc")}
+              onclick={() => {
+                const newRules = [...s.searchSortRules];
+                newRules[idx] = { ...rule, direction: rule.direction === "asc" ? "desc" : "asc" as const };
+                generalSettings.updateSetting("searchSortRules", newRules);
+              }}
+            >
+              {rule.direction === "asc" ? "↑" : "↓"}
+            </button>
+            {#if s.searchSortRules.length > 1}
+              <button
+                type="button"
+                class="sort-remove-btn"
+                title={_t("general.sortRemoveRule")}
+                aria-label={_t("general.sortRemoveRule")}
+                onclick={() => {
+                  const newRules = s.searchSortRules.filter((_, i) => i !== idx);
+                  generalSettings.updateSetting("searchSortRules", newRules);
+                }}
+              >×</button>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      {#if s.searchSortRules.length < 3}
+        <button
+          type="button"
+          class="sort-add-btn"
+          onclick={() => {
+            const rule: SortRule = { field: "createdAt", direction: "desc" };
+            generalSettings.updateSetting("searchSortRules", [...s.searchSortRules, rule]);
+          }}
+        >
+          + {_t("general.sortAddRule")}
+        </button>
+      {/if}
     </section>
   {:else if section === "display"}
     <section class="setting-card toggle-card">
@@ -669,5 +740,78 @@
 
   .theme-select:focus {
     border-color: var(--text-faint);
+  }
+
+  .sort-rules-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sort-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 8px 0;
+  }
+
+  .sort-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sort-field-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sort-direction-btn {
+    width: 32px;
+    height: 28px;
+    border-radius: var(--settings-control-radius, 6px);
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .sort-direction-btn:hover {
+    background: var(--hover-bg);
+  }
+
+  .sort-remove-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--settings-control-radius, 6px);
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .sort-remove-btn:hover {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+  }
+
+  .sort-add-btn {
+    margin-top: 4px;
+    padding: 6px 12px;
+    border-radius: var(--settings-control-radius, 6px);
+    border: 1px dashed var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--settings-control-size, 11px);
+    cursor: pointer;
+    align-self: flex-start;
+  }
+
+  .sort-add-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
   }
 </style>

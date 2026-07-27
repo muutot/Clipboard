@@ -5,6 +5,7 @@ import type {
   PersistedClipboardItem,
   ResourceFileMetadata,
   ResourceMetadata,
+  SortRule,
 } from "$lib/types/clipboard";
 import { getLocale, resolvePath } from "$lib/i18n";
 import zhCN from "$lib/i18n/locales/zh-CN";
@@ -72,12 +73,14 @@ export async function loadDeletedClipboardHistory(
 export async function searchClipboardHistory(
   query: string,
   limit = 100,
+  sortRules?: SortRule[],
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
 
   const records = await invoke<PersistedClipboardItem[]>("search_clipboard_items", {
     query,
     limit,
+    sortRules,
   });
 
   return records.map(toClipboardItem);

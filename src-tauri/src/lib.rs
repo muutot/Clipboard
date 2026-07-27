@@ -1362,6 +1362,69 @@ fn paste_to_previous_application(
     Ok(true)
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchSortRule {
+    field: SearchSortField,
+    direction: SearchSortDirection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum SearchSortField {
+    #[serde(rename = "createdAt")]
+    CreatedAt,
+    #[serde(rename = "lastUsedAt")]
+    LastUsedAt,
+    #[serde(rename = "title")]
+    Title,
+    #[serde(rename = "size")]
+    Size,
+    #[serde(rename = "kind")]
+    Kind,
+    #[serde(rename = "favorite")]
+    Favorite,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum SearchSortDirection {
+    #[serde(rename = "asc")]
+    Asc,
+    #[serde(rename = "desc")]
+    Desc,
+}
+
+fn cmp_by_field(a: &ClipboardItem, b: &ClipboardItem, field: SearchSortField) -> std::cmp::Ordering {
+    match field {
+        SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
+        SearchSortField::LastUsedAt => b.last_used_at_ms.cmp(&a.last_used_at_ms),
+        SearchSortField::Title => a.title.cmp(&b.title),
+        SearchSortField::Size => b.size_bytes.cmp(&a.size_bytes),
+        SearchSortField::Kind => a.kind.cmp(&b.kind),
+        SearchSortField::Favorite => b.is_favorite.cmp(&a.is_favorite),
+    }
+}
+
+fn apply_sort_rules(items: &mut [ClipboardItem], rules: &[SearchSortRule]) {
+    if rules.is_empty() {
+        return;
+    }
+    items.sort_unstable_by(|a, b| {
+        let mut ord = std::cmp::Ordering::Equal;
+        for rule in rules {
+            ord = cmp_by_field(a, b, rule.field);
+            if rule.direction == SearchSortDirection::Asc {
+                ord = ord.reverse();
+            }
+            if ord != std::cmp::Ordering::Equal {
+                return ord;
+            }
+        }
+        ord
+    });
+}
+
 #[tauri::command]
 fn search_clipboard_items(
     database: tauri::State<'_, Database>,
@@ -1369,6 +1432,7 @@ fn search_clipboard_items(
     performance_tracker: tauri::State<'_, PerformanceTracker>,
     query: String,
     limit: Option<usize>,
+    sort_rules: Option<Vec<SearchSortRule>>,
 ) -> Result<Vec<ClipboardItem>, String> {
     let started = Instant::now();
     let hits = search_index
@@ -1380,7 +1444,13 @@ fn search_clipboard_items(
         .get_items_by_ids(&item_ids)
         .map_err(|error| error.to_string())?;
 
-    items.sort_unstable_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+    let rules = sort_rules.unwrap_or_else(|| {
+        vec![SearchSortRule {
+            field: SearchSortField::CreatedAt,
+            direction: SearchSortDirection::Desc,
+        }]
+    });
+    apply_sort_rules(&mut items, &rules);
 
     performance_tracker.record_search(
         &query,

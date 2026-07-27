@@ -201,6 +201,14 @@ export interface GeneralSettings {
   showSettingsCloseButton: boolean;
   /** 详情展示模式：'overlay' 同画布切入 | 'split' 左右分栏 */
   detailDisplayMode: 'overlay' | 'split';
+  searchSortRules: SortRule[];
+}
+
+export type SortField = "createdAt" | "lastUsedAt" | "title" | "size" | "kind" | "favorite";
+
+export interface SortRule {
+  field: SortField;
+  direction: "asc" | "desc";
 }
 
 export interface GeneralSettingsInfo {
