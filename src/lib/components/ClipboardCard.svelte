@@ -259,6 +259,7 @@
     const colors = text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [];
     const dates = detectInlineDateValues(text);
 
+    const seen = new Set<string>();
     return [
       ...emails.map((value) => ({
         label: `Send email to ${value}`,
@@ -290,7 +291,12 @@
         payload: value,
         kind: "color" as const,
       })),
-    ];
+    ].filter((action) => {
+      const key = `${action.actionType}:${action.payload}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   let contentActionsLoaded = $state(false);
@@ -307,7 +313,14 @@
     void detectContentActions(text)
       .then((actions) => {
         if (request === contentActionRequest) {
-          contentActions = actions ?? detectInlineActions(text);
+          const raw = actions ?? detectInlineActions(text);
+          const seen = new Set<string>();
+          contentActions = raw.filter((a) => {
+            const key = `${a.actionType}:${a.payload}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
         }
       })
       .catch(() => {

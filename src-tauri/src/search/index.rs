@@ -21,7 +21,7 @@ use super::{
     SearchQuery,
 };
 
-const INDEX_WRITER_MEMORY_BYTES: usize = 15_000_000;
+const INDEX_WRITER_MEMORY_BYTES: usize = 60_000_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchHit {
@@ -123,8 +123,11 @@ impl SearchIndex {
         }
 
         drop(writer);
-        self.reader.reload()?;
         Ok(())
+    }
+
+    pub fn reload_reader(&self) -> Result<(), SearchError> {
+        self.reader.reload().map_err(Into::into)
     }
 
     pub fn search(&self, input: &str, limit: usize) -> Result<Vec<SearchHit>, SearchError> {
@@ -186,7 +189,7 @@ impl SearchIndex {
             .reload_policy(ReloadPolicy::Manual)
             .try_into()?;
         let writer =
-            index.writer_with_num_threads::<TantivyDocument>(1, INDEX_WRITER_MEMORY_BYTES)?;
+            index.writer_with_num_threads::<TantivyDocument>(4, INDEX_WRITER_MEMORY_BYTES)?;
 
         Ok(Self {
             fields,
@@ -255,6 +258,7 @@ mod tests {
                 SearchIndexChange::Upsert(document("dirty", "脸皮挺脏")),
             ])
             .unwrap();
+        index.reload_reader().unwrap();
 
         let forward = index.search("脸 脏", 20).unwrap();
         let reversed = index.search("脏 脸", 20).unwrap();
@@ -270,9 +274,11 @@ mod tests {
         index
             .apply_changes(&[SearchIndexChange::Upsert(document("item", "旧内容"))])
             .unwrap();
+        index.reload_reader().unwrap();
         index
             .apply_changes(&[SearchIndexChange::Upsert(document("item", "新内容"))])
             .unwrap();
+        index.reload_reader().unwrap();
 
         assert!(index.search("旧", 20).unwrap().is_empty());
         assert_eq!(index.search("新", 20).unwrap().len(), 1);
@@ -290,6 +296,7 @@ mod tests {
                 SearchIndexChange::Delete("item".to_owned()),
             ])
             .unwrap();
+        index.reload_reader().unwrap();
 
         assert!(index.search("删除", 20).unwrap().is_empty());
     }
@@ -300,6 +307,7 @@ mod tests {
         index
             .apply_changes(&[SearchIndexChange::Upsert(document("item", "旧索引"))])
             .unwrap();
+        index.reload_reader().unwrap();
 
         index.begin_full_rebuild().unwrap();
 
@@ -318,6 +326,7 @@ mod tests {
                 "Tauri Clipboard",
             ))])
             .unwrap();
+        index.reload_reader().unwrap();
 
         assert_eq!(index.search("TAURI", 20).unwrap().len(), 1);
         assert_eq!(index.search("clipboard", 20).unwrap().len(), 1);
@@ -332,6 +341,7 @@ mod tests {
                 SearchIndexChange::Upsert(document("sparse", "脸皮特别特别特别厚但是有点脏")),
             ])
             .unwrap();
+        index.reload_reader().unwrap();
 
         let hits = index.search("脸 脏", 20).unwrap();
 

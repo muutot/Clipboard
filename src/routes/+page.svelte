@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
@@ -147,14 +147,15 @@
 
   $effect(() => {
     const activeIds = new Set(items.map((i) => i.id));
+    const current = untrack(() => measuredCardHeights);
     let changed = false;
-    for (const key of Object.keys(measuredCardHeights)) {
+    for (const key of Object.keys(current)) {
       if (!activeIds.has(key)) {
-        delete measuredCardHeights[key];
+        delete current[key];
         changed = true;
       }
     }
-    if (changed) measuredCardHeights = { ...measuredCardHeights };
+    if (changed) measuredCardHeights = { ...current };
   });
 
   const hasDeletedItems = $derived(
@@ -545,6 +546,13 @@
       return;
     }
 
+    if (requestedQuery.length < 2) {
+      indexedItems = null;
+      indexedQuery = "";
+      searchPending = false;
+      return;
+    }
+
     if (parseDateQuery(requestedQuery)) {
       searchPending = false;
       return;
@@ -574,7 +582,7 @@
         .finally(() => {
           if (requestId === searchRequestId) searchPending = false;
         });
-    }, 120);
+    }, 300);
 
     return () => window.clearTimeout(timer);
   });

@@ -27,6 +27,10 @@ pub struct SearchDocument {
 pub trait SearchRepository {
     fn read_search_outbox(&self, limit: u32) -> Result<Vec<SearchOutboxEvent>, StorageError>;
     fn get_search_document(&self, item_id: &str) -> Result<Option<SearchDocument>, StorageError>;
+    fn get_search_documents(
+        &self,
+        item_ids: &[impl AsRef<str>],
+    ) -> Result<Vec<SearchDocument>, StorageError>;
     fn acknowledge_search_outbox(&self, through_sequence: i64) -> Result<u64, StorageError>;
     fn enqueue_full_search_rebuild(&self) -> Result<u64, StorageError>;
 }
@@ -89,6 +93,54 @@ impl SearchRepository for Database {
                 )
                 .optional()
                 .map_err(Into::into)
+        })
+    }
+
+    fn get_search_documents(
+        &self,
+        item_ids: &[impl AsRef<str>],
+    ) -> Result<Vec<SearchDocument>, StorageError> {
+        if item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.with_connection(|connection| {
+            let placeholders = item_ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let sql = format!(
+                "SELECT
+                    clipboard_items.id,
+                    clipboard_items.kind,
+                    clipboard_items.title,
+                    clipboard_items.text_content,
+                    clipboard_items.source_app,
+                    CASE
+                        WHEN ocr_results.status = 'completed' THEN ocr_results.full_text
+                        ELSE NULL
+                    END,
+                    clipboard_items.created_at_ms,
+                    clipboard_items.is_favorite
+                 FROM clipboard_items
+                 LEFT JOIN ocr_results
+                    ON ocr_results.item_id = clipboard_items.id
+                 WHERE clipboard_items.id IN ({placeholders})
+                   AND clipboard_items.deleted = 0"
+            );
+
+            let mut statement = connection.prepare(&sql)?;
+            let rows = statement
+                .query_map(
+                    rusqlite::params_from_iter(item_ids.iter().map(|id| id.as_ref())),
+                    SearchDocument::from_row,
+                )?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(rows)
         })
     }
 

@@ -34,7 +34,35 @@ impl SearchSynchronizer {
         }
     }
 
-    pub fn sync_batch(
+    fn resolve_changes(
+        &self,
+        repository: &impl SearchRepository,
+        item_ids: &[String],
+    ) -> Result<(Vec<SearchIndexChange>, u64, u64), SearchError> {
+        let documents = repository.get_search_documents(item_ids)?;
+        let mut document_map = std::collections::HashMap::new();
+        for doc in documents {
+            document_map.insert(doc.item_id.clone(), doc);
+        }
+
+        let mut changes = Vec::with_capacity(item_ids.len());
+        let mut upserted = 0u64;
+        let mut deleted = 0u64;
+
+        for item_id in item_ids {
+            if let Some(document) = document_map.remove(item_id) {
+                changes.push(SearchIndexChange::Upsert(document));
+                upserted += 1;
+            } else {
+                changes.push(SearchIndexChange::Delete(item_id.clone()));
+                deleted += 1;
+            }
+        }
+
+        Ok((changes, upserted, deleted))
+    }
+
+    fn process_single_batch(
         &self,
         repository: &impl SearchRepository,
         index: &impl SearchIndexSink,
@@ -48,19 +76,10 @@ impl SearchSynchronizer {
             .iter()
             .map(|event| event.item_id.clone())
             .collect::<std::collections::HashSet<_>>();
-        let mut changes = Vec::with_capacity(item_ids.len());
-        let mut upserted_documents = 0;
-        let mut deleted_documents = 0;
+        let item_ids_vec: Vec<String> = item_ids.into_iter().collect();
 
-        for item_id in item_ids {
-            if let Some(document) = repository.get_search_document(&item_id)? {
-                changes.push(SearchIndexChange::Upsert(document));
-                upserted_documents += 1;
-            } else {
-                changes.push(SearchIndexChange::Delete(item_id));
-                deleted_documents += 1;
-            }
-        }
+        let (changes, upserted_documents, deleted_documents) =
+            self.resolve_changes(repository, &item_ids_vec)?;
 
         index.apply_search_changes(&changes)?;
         repository.acknowledge_search_outbox(last_sequence)?;
@@ -71,6 +90,14 @@ impl SearchSynchronizer {
             deleted_documents,
             last_sequence: Some(last_sequence),
         })
+    }
+
+    pub fn sync_batch(
+        &self,
+        repository: &impl SearchRepository,
+        index: &impl SearchIndexSink,
+    ) -> Result<SearchSyncSummary, SearchError> {
+        self.process_single_batch(repository, index)
     }
 
     pub fn sync_bounded(
@@ -101,23 +128,40 @@ impl SearchSynchronizer {
     pub fn sync_until_idle(
         &self,
         repository: &impl SearchRepository,
-        index: &impl SearchIndexSink,
+        index: &SearchIndex,
     ) -> Result<SearchSyncSummary, SearchError> {
         let mut total = SearchSyncSummary::default();
 
         loop {
-            let batch = self.sync_batch(repository, index)?;
-            total.processed_events += batch.processed_events;
-            total.upserted_documents += batch.upserted_documents;
-            total.deleted_documents += batch.deleted_documents;
-            if batch.last_sequence.is_some() {
-                total.last_sequence = batch.last_sequence;
-            }
-
-            if batch.processed_events < u64::from(self.batch_size) {
+            let events = repository.read_search_outbox(self.batch_size)?;
+            let Some(last_sequence) = events.last().map(|event| event.sequence) else {
                 return Ok(total);
+            };
+
+            let item_ids = events
+                .iter()
+                .map(|event| event.item_id.clone())
+                .collect::<std::collections::HashSet<_>>();
+            let item_ids_vec: Vec<String> = item_ids.into_iter().collect();
+            let event_count = events.len() as u64;
+
+            let (changes, upserted, deleted) =
+                self.resolve_changes(repository, &item_ids_vec)?;
+            index.apply_changes(&changes)?;
+            repository.acknowledge_search_outbox(last_sequence)?;
+
+            total.processed_events += event_count;
+            total.upserted_documents += upserted;
+            total.deleted_documents += deleted;
+            total.last_sequence = Some(last_sequence);
+
+            if event_count < u64::from(self.batch_size) {
+                break;
             }
         }
+
+        index.reload_reader()?;
+        Ok(total)
     }
 
     pub fn initialize(
