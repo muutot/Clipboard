@@ -636,7 +636,7 @@
 
     searchPending = true;
     const timer = window.setTimeout(() => {
-      void searchClipboardHistory(requestedQuery, 200, $generalSettings.searchSortRules)
+      void searchClipboardHistory(requestedQuery, $generalSettings.display.pageSize, $generalSettings.searchSortRules)
         .then((results) => {
           if (requestId !== searchRequestId || results === null) return;
           indexedItems = results;
