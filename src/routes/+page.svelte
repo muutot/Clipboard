@@ -545,16 +545,14 @@
   $effect(() => {
     const requestedQuery = query.trim();
     const requestId = ++searchRequestId;
-    indexedItems = null;
-    indexedQuery = "";
 
     if (!requestedQuery || activeFilter === "deleted") {
+      indexedItems = null;
+      indexedQuery = "";
       searchPending = false;
       return;
     }
 
-    // Natural-language date queries are intentionally evaluated
-    // against the full local snapshot.
     if (parseDateQuery(requestedQuery)) {
       searchPending = false;
       return;
@@ -562,7 +560,7 @@
 
     searchPending = true;
     const timer = window.setTimeout(() => {
-      void searchClipboardHistory(requestedQuery, 500)
+      void searchClipboardHistory(requestedQuery, 200)
         .then((results) => {
           if (requestId !== searchRequestId || results === null) return;
           indexedItems = results;
