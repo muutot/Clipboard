@@ -1,4 +1,5 @@
 ﻿<script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
@@ -27,6 +28,7 @@
   let windowConfig = $state<WindowConfig | null>(null);
   let windowConfigLoading = $state(true);
   let windowConfigSaving = $state(false);
+  let toggleTransitionReady = $state(false);
   let sortDragIdx = $state<number | null>(null);
   let sortDragOverIdx = $state<number | null>(null);
   let sortListEl = $state<HTMLDivElement | null>(null);
@@ -106,6 +108,7 @@
 
   $effect(() => {
     let cancelled = false;
+    toggleTransitionReady = false;
     void getWindowConfig()
       .then((config) => {
         if (!cancelled) windowConfig = config;
@@ -115,6 +118,9 @@
       })
       .finally(() => {
         if (!cancelled) windowConfigLoading = false;
+        tick().then(() => {
+          if (!cancelled) toggleTransitionReady = true;
+        });
       });
     return () => {
       cancelled = true;
@@ -602,6 +608,7 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.launchAtStartup ?? false}
+        class:no-toggle-transition={!toggleTransitionReady}
         onclick={() =>
           void changeWindowSetting("launchAtStartup", !(windowConfig?.launchAtStartup ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
@@ -625,6 +632,7 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.closeToTray ?? false}
+        class:no-toggle-transition={!toggleTransitionReady}
         onclick={() =>
           void changeWindowSetting("closeToTray", !(windowConfig?.closeToTray ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
@@ -791,6 +799,11 @@
 {/if}
 
 <style>
+  .toggle-switch.no-toggle-transition,
+  .toggle-switch.no-toggle-transition .toggle-knob {
+    transition: none;
+  }
+
   .lang-toggle {
     display: flex;
     gap: 6px;
