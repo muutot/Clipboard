@@ -228,6 +228,8 @@ const en: LocaleDefinition = {
     refNumberKey: "number",
     noActions: "No shortcuts in this category",
     openFile: "Open File",
+    openDetail: "View Detail",
+    downloadItem: "Save to Local",
     addAction: "Custom Shortcut",
     addActionName: "Action Identifier",
     addActionNamePlaceholder: "e.g. copyItem",

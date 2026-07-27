@@ -214,6 +214,8 @@ export interface LocaleDefinition {
     refNumberKey: string;
     noActions: string;
     openFile: string;
+    openDetail: string;
+    downloadItem: string;
     addAction: string;
     addActionName: string;
     addActionNamePlaceholder: string;
