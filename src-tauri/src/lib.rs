@@ -1306,6 +1306,45 @@ fn configure_keyboard_shortcuts(
 }
 
 #[tauri::command]
+fn delete_keyboard_action(
+    keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
+    action: String,
+) -> Result<(), String> {
+    keyboard
+        .lock()
+        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+        .delete_action(action)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn reset_keyboard_config(
+    keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
+    hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
+) -> Result<KeyboardConfig, String> {
+    {
+        let mut km = keyboard
+            .lock()
+            .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?;
+        km.reset_to_defaults().map_err(|error| error.to_string())?;
+    }
+    let config = keyboard
+        .lock()
+        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+        .config();
+    let (bindings, double_modifiers) = resolve_toggle_hotkeys(&config);
+    let mut hm = hotkey_manager
+        .lock()
+        .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
+    if bindings.is_empty() && double_modifiers.is_empty() {
+        hm.stop();
+    } else {
+        hm.restart_with_hotkeys(bindings, double_modifiers);
+    }
+    Ok(config)
+}
+
+#[tauri::command]
 fn paste_to_previous_application(
     app: tauri::AppHandle,
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
@@ -3927,6 +3966,8 @@ pub fn run() {
             list_source_applications,
             get_keyboard_config,
             configure_keyboard_shortcuts,
+            delete_keyboard_action,
+            reset_keyboard_config,
             paste_to_previous_application,
             search_clipboard_items,
             rebuild_search_index,

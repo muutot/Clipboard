@@ -122,6 +122,21 @@ impl KeyboardConfigStore {
         Ok(normalized)
     }
 
+    pub fn delete_action(&mut self, action: &str) -> Result<(), StorageError> {
+        let mut updated = self.config.clone();
+        updated.shortcuts.remove(action);
+        normalize_and_validate(&mut updated)?;
+        self.config = updated;
+        self.save()?;
+        Ok(())
+    }
+
+    pub fn reset_to_defaults(&mut self) -> Result<(), StorageError> {
+        self.config = KeyboardConfig::default();
+        self.save()?;
+        Ok(())
+    }
+
     fn save(&self) -> Result<(), StorageError> {
         fs::write(&self.path, serde_json::to_vec_pretty(&self.config)?)?;
         Ok(())

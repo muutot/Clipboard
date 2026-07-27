@@ -1,7 +1,7 @@
 ﻿<script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import type { IconName } from "$lib/components/AppIcon.svelte";
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,
@@ -13,111 +13,170 @@
     resolvePath($messages, path, params);
 
   interface Props {
-    configPath?: string;
     onclose: () => void;
     showHeader?: boolean;
+    category?: "item" | "navigation" | "window" | "search" | "other";
+    resetToken?: number;
   }
 
-  let { configPath = "conf/keyboard.json", onclose, showHeader = true }: Props = $props();
+  let { onclose, showHeader = true, category = "item", resetToken = 0 }: Props = $props();
   let config = $state<KeyboardConfig | null>(null);
-  let drafts = $state<Record<string, string>>({});
   let loading = $state(true);
-  let savingAction = $state("");
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let categoryTab = $state("item");
+  let recordingAction = $state("");
 
-  type Category = "window" | "item" | "navigation" | "search" | "other";
+  interface SystemAction {
+    id: string;
+    labelKey?: string;
+    description: string;
+    icon: IconName;
+    defaults: string[];
+    system?: boolean;
+  }
 
-  const categoryTabs: { id: Category; label: string }[] = [
-    { id: "item", label: "条目操作" },
-    { id: "navigation", label: "列表导航" },
-    { id: "window", label: "窗口控制" },
-    { id: "search", label: "搜索" },
-    { id: "other", label: "其他" },
+  const SYSTEM_ACTIONS: SystemAction[] = [
+    { id: "copyItem", labelKey: "keyboard.copyItem", description: "复制当前选中的条目到剪贴板", icon: "copy", defaults: ["Ctrl+C"] },
+    { id: "deleteItem", labelKey: "keyboard.deleteItem", description: "删除当前选中的条目", icon: "trash", defaults: ["Ctrl+D"] },
+    { id: "favoriteItem", labelKey: "keyboard.favoriteItem", description: "收藏或取消收藏当前条目", icon: "star", defaults: ["Ctrl+F"] },
+    { id: "editItem", labelKey: "keyboard.editItem", description: "编辑当前条目的标题", icon: "edit", defaults: ["Ctrl+E"] },
+    { id: "selectAll", labelKey: "keyboard.selectAll", description: "全选列表中的所有条目", icon: "check", defaults: ["Ctrl+A"] },
+    { id: "quickPaste", labelKey: "keyboard.quickPaste", description: "将当前条目快速粘贴到上一个活跃窗口", icon: "clipboard", defaults: [] },
+    { id: "toggleWindow", labelKey: "keyboard.toggleWindow", description: "唤起或隐藏主窗口（系统全局热键）", icon: "eye", defaults: ["Alt+V"], system: true },
+    { id: "quickCopy1", description: "快速复制列表第 1 条", icon: "clipboard", defaults: ["Ctrl+1"] },
+    { id: "quickCopy2", description: "快速复制列表第 2 条", icon: "clipboard", defaults: ["Ctrl+2"] },
+    { id: "quickCopy3", description: "快速复制列表第 3 条", icon: "clipboard", defaults: ["Ctrl+3"] },
+    { id: "quickCopy4", description: "快速复制列表第 4 条", icon: "clipboard", defaults: ["Ctrl+4"] },
+    { id: "quickCopy5", description: "快速复制列表第 5 条", icon: "clipboard", defaults: ["Ctrl+5"] },
+    { id: "quickCopy6", description: "快速复制列表第 6 条", icon: "clipboard", defaults: ["Ctrl+6"] },
+    { id: "quickCopy7", description: "快速复制列表第 7 条", icon: "clipboard", defaults: ["Ctrl+7"] },
+    { id: "quickCopy8", description: "快速复制列表第 8 条", icon: "clipboard", defaults: ["Ctrl+8"] },
+    { id: "quickCopy9", description: "快速复制列表第 9 条", icon: "clipboard", defaults: ["Ctrl+9"] },
   ];
 
-  function classifyAction(action: string): Category {
+  function classifyAction(action: string): typeof category {
     const lower = action.toLowerCase();
     if (/window|toggle|show|hide/.test(lower)) return "window";
     if (/copy|paste|delete|favorite|edit|detail|download|save|pin/.test(lower)) return "item";
-    if (/select|next|prev|up|down|left|right|tab|focus|navigate|number|quick/.test(lower)) return "navigation";
+    if (/select|next|prev|up|down|left|right|tab|focus|navigate|number|quick/.test(lower))
+      return "navigation";
     if (/search|find|clear/.test(lower)) return "search";
     return "other";
   }
 
-  const shortcutsByCategory = $derived.by(() => {
-    if (!config) return [];
-    return Object.entries(config.shortcuts)
-      .filter(([a]) => a !== "toggleWindow")
-      .filter(([a]) => classifyAction(a) === categoryTab);
+  function actionLabel(action: SystemAction): string {
+    if (action.labelKey) {
+      const label = _t(action.labelKey as keyof typeof $messages);
+      if (label) return label;
+    }
+    const m = action.id.match(/^quickCopy(\d+)$/);
+    if (m) return `快速复制 #${m[1]}`;
+    return action.id;
+  }
+
+  const categoryActions = $derived.by(() => {
+    return SYSTEM_ACTIONS.filter((a) => classifyAction(a.id) === category);
   });
 
-  const actionLabels: Record<string, string> = $derived({
-    toggleWindow: _t("keyboard.toggleWindow") || "唤起窗口",
-    copyItem: _t("keyboard.copyItem") || "复制条目",
-    deleteItem: _t("keyboard.deleteItem") || "删除条目",
-    favoriteItem: _t("keyboard.favoriteItem") || "收藏条目",
-    editItem: _t("keyboard.editItem") || "编辑条目",
-    selectAll: _t("keyboard.selectAll") || "全选条目",
-    quickPaste: _t("keyboard.quickPaste"),
-  });
+  function bindingsFor(action: string): string[] {
+    if (!config) return [];
+    return config.shortcuts[action] ?? [];
+  }
 
   onMount(() => {
     void loadConfig();
   });
 
+  $effect(() => {
+    resetToken;
+    if (resetToken > 0) void loadConfig();
+  });
+
   async function loadConfig() {
     loading = true;
     feedback = "";
-    feedbackSuccess = false;
 
     try {
       config = await getKeyboardConfig();
-      if (!config) {
-        feedback = _t("keyboard.browserUnavailable");
-        return;
-      }
-      drafts = Object.fromEntries(
-        Object.entries(config.shortcuts).map(([action, shortcuts]) => [
-          action,
-          shortcuts.join(", "),
-        ]),
-      );
+      if (!config) feedback = _t("keyboard.browserUnavailable");
     } catch (error) {
-      console.error("Unable to load keyboard configuration", error);
       feedback = error instanceof Error ? error.message : String(error);
     } finally {
       loading = false;
     }
   }
 
-  async function saveAction(action: string) {
-    savingAction = action;
-    feedback = "";
-    feedbackSuccess = false;
+  function showFeedback(msg: string, success: boolean) {
+    feedback = msg;
+    feedbackSuccess = success;
+    setTimeout(() => (feedback = ""), 2000);
+  }
 
+  async function addBinding(action: string, shortcut: string) {
+    if (!config) return;
+    const current = config.shortcuts[action] ?? [];
     try {
-      const shortcuts = (drafts[action] ?? "")
-        .split(/[,;\n]+/)
-        .map((shortcut) => shortcut.trim())
-        .filter(Boolean);
-      const normalized = await configureKeyboardShortcuts(action, shortcuts);
-      drafts[action] = normalized.join(", ");
-      if (config) config.shortcuts[action] = normalized;
-      feedback = _t("keyboard.saved", { count: normalized.length });
-      feedbackSuccess = true;
+      const normalized = await configureKeyboardShortcuts(action, [...current, shortcut]);
+      config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
-      console.error("Unable to save keyboard shortcuts", error);
-      feedback = error instanceof Error ? error.message : String(error);
-    } finally {
-      savingAction = "";
+      showFeedback(error instanceof Error ? error.message : String(error), false);
     }
   }
 
-  function actionLabel(action: string): string {
-    return actionLabels[action] ?? action;
+  async function removeBinding(action: string, shortcut: string) {
+    if (!config) return;
+    const current = config.shortcuts[action] ?? [];
+    try {
+      const normalized = await configureKeyboardShortcuts(
+        action,
+        current.filter((s) => s !== shortcut),
+      );
+      config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : String(error), false);
+    }
   }
+
+  function startRecording(action: string) {
+    recordingAction = action;
+    window.addEventListener("keydown", onRecordingKey);
+    setTimeout(() => stopRecording(), 3000);
+  }
+
+  function stopRecording() {
+    recordingAction = "";
+    window.removeEventListener("keydown", onRecordingKey);
+  }
+
+  function onRecordingKey(event: KeyboardEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.key === "Escape") { stopRecording(); return; }
+
+    const modKeys = ["Control", "Alt", "Shift", "Meta"];
+    if (modKeys.includes(event.key)) return;
+
+    const pressed: string[] = [];
+    if (event.ctrlKey) pressed.push("Ctrl");
+    if (event.altKey) pressed.push("Alt");
+    if (event.shiftKey) pressed.push("Shift");
+    if (event.metaKey) pressed.push("Meta");
+
+    const ignored = ["AltGraph", "NumLock", "ScrollLock", "PrintScreen"];
+    if (!ignored.includes(event.key)) {
+      pressed.push(event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key);
+    }
+
+    if (pressed.length === 0) return;
+    const action = recordingAction;
+    stopRecording();
+    if (action) void addBinding(action, pressed.join("+"));
+  }
+
+  onDestroy(() => {
+    window.removeEventListener("keydown", onRecordingKey);
+  });
 </script>
 
 {#if showHeader}
@@ -127,9 +186,7 @@
       <h2>{_t("keyboard.title")}</h2>
       <p>{_t("keyboard.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>×</button>
   </header>
 {/if}
 
@@ -137,88 +194,52 @@
   <div class="settings-state">{_t("keyboard.readingConfig")}</div>
 {:else if config}
   <div class="settings-scroll">
-    <section class="setting-card setting-card-row">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
-        <div>
-          <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
-          <p>{_t("keyboard.shortcutConfigDesc")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="open-btn"
-        onclick={() => invoke("open_external_url", { url: configPath })}
-      >
-        <AppIcon name="file" size={14} /> 打开文件
-      </button>
-    </section>
-
-    <nav class="settings-subnav" aria-label="快捷键分类">
-      {#each categoryTabs as tab}
-        <button
-          type="button"
-          class:active={categoryTab === tab.id}
-          aria-current={categoryTab === tab.id ? "page" : undefined}
-          onclick={() => (categoryTab = tab.id)}
-        >
-          {tab.label}
-        </button>
-      {/each}
-    </nav>
-
-    {#each shortcutsByCategory as [action]}
-      <section class="setting-card">
-        <div class="setting-heading split-heading">
+    {#each categoryActions as action}
+      <section class="setting-card toggle-card">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name={action.icon} size={17} /></span>
           <div>
-            <strong>{actionLabel(action)}</strong>
-            <p><code>{action}</code> · {_t("keyboard.actionCode")}</p>
+            <strong>
+              {actionLabel(action)}
+              {#if action.system}
+                <span class="system-badge">系统</span>
+              {/if}
+            </strong>
+            <p>{action.description}</p>
           </div>
-          <span class="binding-count"
-            >{_t("keyboard.bindingsCount", { count: config.shortcuts[action].length })}</span
-          >
         </div>
-        <label for={`shortcut-${action}`}>{_t("keyboard.shortcutInput")}</label>
-        <input
-          id={`shortcut-${action}`}
-          value={drafts[action] ?? ""}
-          oninput={(event) => (drafts[action] = event.currentTarget.value)}
-          autocomplete="off"
-          spellcheck="false"
-          placeholder={_t("keyboard.inputPlaceholder")}
-        />
-        <div class="setting-actions">
-          <button
-            class="primary"
-            type="button"
-            disabled={savingAction !== ""}
-            onclick={() => saveAction(action)}
-          >
-            {savingAction === action ? _t("keyboard.saving") : _t("keyboard.saveBinding")}
-          </button>
+        <div class="shortcut-bindings">
+          {#if bindingsFor(action.id).length > 0}
+            {#each bindingsFor(action.id) as shortcut}
+              <div class="binding-chip">
+                <kbd>{shortcut}</kbd>
+                <button type="button" class="binding-chip-close" onclick={() => removeBinding(action.id, shortcut)}>&minus;</button>
+              </div>
+            {/each}
+          {:else if config && !(action.id in config.shortcuts) && action.defaults.length > 0}
+            {#each action.defaults as shortcut}
+              <div class="binding-chip default">
+                <kbd>{shortcut}</kbd>
+                <button type="button" class="binding-chip-close" onclick={() => removeBinding(action.id, shortcut)}>&minus;</button>
+              </div>
+            {/each}
+          {:else}
+            <span class="binding-disabled">未绑定</span>
+          {/if}
+
+          {#if recordingAction === action.id}
+            <div class="binding-chip recording">
+              <kbd>按下快捷键…</kbd>
+              <button type="button" class="binding-chip-close" onclick={stopRecording}>&times;</button>
+            </div>
+          {:else}
+            <button type="button" class="binding-add" onclick={() => startRecording(action.id)}>+</button>
+          {/if}
         </div>
       </section>
     {/each}
 
-    <section class="shortcut-reference">
-      <strong>当前快捷键参考</strong>
-      <div class="ref-grid">
-        <div class="ref-row"><kbd>↑</kbd><kbd>↓</kbd><span>选择条目</span></div>
-        <div class="ref-row"><kbd>←</kbd><kbd>→</kbd><kbd>Tab</kbd><span>切换分类</span></div>
-        <div class="ref-row"><kbd>Enter</kbd><span>激活</span></div>
-        <div class="ref-row"><kbd>ESC</kbd><span>隐藏窗口</span></div>
-        <div class="ref-row">
-          <kbd>Ctrl</kbd>+<kbd>C</kbd><kbd>D</kbd><kbd>F</kbd><kbd>E</kbd><span
-            >复制 / 删除 / 收藏 / 编辑</span
-          >
-        </div>
-        <div class="ref-row"><kbd>Ctrl</kbd>+<kbd>数字</kbd><span>快速复制第 N 条</span></div>
-        <div class="ref-row"><kbd>Alt</kbd>+<kbd>V</kbd><span>唤起窗口</span></div>
-        <div class="ref-row"><kbd>Backspace</kbd>×2<span>清空搜索</span></div>
-      </div>
-    </section>
-
-    <p class="auto-save-note">修改即时生效，无需手动保存</p>
+    <p class="auto-save-note">{_t("keyboard.autoSaveNote")}</p>
   </div>
 {:else}
   <div class="settings-state">{feedback || _t("keyboard.keyboardUnavailable")}</div>
@@ -229,75 +250,110 @@
 {/if}
 
 <style>
-  .split-heading {
-    justify-content: space-between;
+  .system-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid var(--selection-color);
+    border-radius: 4px;
+    color: var(--selection-color);
+    font-size: 9px;
+    font-weight: 500;
+    vertical-align: middle;
+    margin-left: 4px;
   }
 
-  .setting-heading code {
-    color: var(--text-muted);
-  }
-
-  .binding-count {
-    flex: 0 0 auto;
-    padding: 3px 7px;
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-  }
-
-  label {
-    display: block;
-    margin: 12px 0 6px;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 9px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    outline: none;
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font-family: "Cascadia Code", Consolas, monospace;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-  }
-
-  input:focus {
-    border-color: var(--text-faint);
-  }
-
-  .setting-actions {
+  .shortcut-bindings {
     display: flex;
-    justify-content: flex-end;
-    margin-top: 9px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
-  .setting-actions button {
-    padding: 7px 10px;
+  .binding-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 10px;
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-secondary);
-    background: var(--card-bg);
-    font: inherit;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
+    background: var(--input-bg);
+    box-sizing: border-box;
   }
 
-  .setting-actions button:hover:not(:disabled) {
+  .binding-chip kbd {
+    font: 11px "Cascadia Code", Consolas, monospace;
     color: var(--text-primary);
-    background: var(--hover-bg);
   }
 
-  button:disabled {
-    cursor: wait;
-    opacity: 0.55;
+  .binding-chip.recording {
+    border-color: var(--selection-color);
+    animation: pulse-recording 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-recording {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .binding-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 17px;
+    cursor: pointer;
+    transition: color 100ms ease, border-color 100ms ease;
+  }
+
+  .binding-add:hover {
+    color: var(--text-secondary);
+    border-color: var(--text-muted);
+  }
+
+  .binding-disabled {
+    color: var(--text-faint);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+    font-style: italic;
+  }
+
+  .binding-chip-close {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 100ms ease;
+  }
+
+  .binding-chip:hover .binding-chip-close {
+    opacity: 1;
+  }
+
+  .binding-chip-close:hover {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
 
   .settings-state {
@@ -306,118 +362,5 @@
     place-items: center;
     color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  .shortcut-reference {
-    padding: 10px 13px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius, 9px);
-    background: var(--card-bg);
-  }
-
-  .shortcut-reference strong {
-    display: block;
-    margin-bottom: 10px;
-    color: var(--text-primary);
-    font-size: var(--settings-heading-size, 13px);
-    font-weight: 560;
-  }
-
-  .ref-grid {
-    display: grid;
-    gap: 6px;
-  }
-
-  .ref-row {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    flex-wrap: wrap;
-  }
-
-  .ref-row kbd {
-    display: inline-block;
-    padding: 2px 7px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-    font:
-      10px "Cascadia Code",
-      Consolas,
-      monospace;
-    line-height: 1.5;
-  }
-
-  .ref-row span {
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    margin-left: 6px;
-  }
-
-  .open-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-muted);
-    background: var(--card-bg);
-    font: inherit;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
-  }
-
-  .open-btn:hover {
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-  }
-
-  .setting-card-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .settings-subnav {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .settings-subnav button {
-    min-height: 28px;
-    padding: 5px 12px;
-    border: 1px solid transparent;
-    border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-muted);
-    background: transparent;
-    font: inherit;
-    font-size: var(--settings-heading-size, 13px);
-    font-weight: 560;
-    cursor: pointer;
-    transition:
-      color 100ms ease,
-      background 100ms ease,
-      border-color 100ms ease;
-  }
-
-  .settings-subnav button:hover {
-    border-color: var(--border-color);
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-  }
-
-  .settings-subnav button.active {
-    border-color: var(--selection-color);
-    color: var(--text-primary);
-    background: color-mix(in srgb, var(--selection-color) 15%, transparent);
   }
 </style>

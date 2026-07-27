@@ -9,6 +9,7 @@
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
   import ThemeSettingsPanel from "$lib/components/ThemeSettingsPanel.svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { resetKeyboardConfig } from "$lib/services/keyboard";
   import { listen } from "@tauri-apps/api/event";
   import {
     configureStorageDirectory,
@@ -92,9 +93,19 @@
   });
   let restartNeeded = $state(false);
   let activeSection = $state<
-    "general_search" | "general_display" | "general_window" | "compact" | "font" | "theme" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
+    "general_search" | "general_display" | "general_window" | "compact" | "font" | "theme" | "capture" | "storage" | "keyboard_item" | "keyboard_navigation" | "keyboard_window" | "keyboard_search" | "keyboard_other" | "ocr" | "statistics"
   >("storage");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
+  let keyboardResetToken = $state(0);
+
+  async function handleResetKeyboard() {
+    try {
+      await resetKeyboardConfig();
+      keyboardResetToken++;
+    } catch {
+      /* ignore */
+    }
+  }
 
   const settingsBreadcrumb = $derived.by(() => {
     switch (activeSection) {
@@ -110,7 +121,11 @@
         return _t("capture.settings");
       case "storage":
         return _t("storage.settings");
-      case "keyboard":
+      case "keyboard_item":
+      case "keyboard_navigation":
+      case "keyboard_window":
+      case "keyboard_search":
+      case "keyboard_other":
         return _t("keyboard.settings");
       case "ocr":
         return _t("storage.ocrSettings");
@@ -133,7 +148,11 @@
         return _t("capture.title");
       case "storage":
         return _t("storage.dataStorage");
-      case "keyboard":
+      case "keyboard_item":
+      case "keyboard_navigation":
+      case "keyboard_window":
+      case "keyboard_search":
+      case "keyboard_other":
         return _t("keyboard.title");
       case "ocr":
         return _t("storage.ocrTitle");
@@ -162,8 +181,16 @@
         return _t("capture.description");
       case "storage":
         return _t("storage.configPath");
-      case "keyboard":
-        return _t("keyboard.description");
+      case "keyboard_item":
+        return _t("storage.keyboardItemDescription");
+      case "keyboard_navigation":
+        return _t("storage.keyboardNavigationDescription");
+      case "keyboard_window":
+        return _t("storage.keyboardWindowDescription");
+      case "keyboard_search":
+        return _t("storage.keyboardSearchDescription");
+      case "keyboard_other":
+        return _t("storage.keyboardOtherDescription");
       case "ocr":
         return _t("storage.ocrDescription");
       case "statistics":
@@ -236,7 +263,11 @@
         return `${settingsLabel} / ${_t("capture.title")}`;
       case "storage":
         return `${settingsLabel} / ${_t("storage.storageTab")}`;
-      case "keyboard":
+      case "keyboard_item":
+      case "keyboard_navigation":
+      case "keyboard_window":
+      case "keyboard_search":
+      case "keyboard_other":
         return `${settingsLabel} / ${_t("storage.keyboardTab")}`;
       case "ocr":
         return `${settingsLabel} / ${_t("storage.ocrTitle")}`;
@@ -1103,9 +1134,15 @@
         <span>{_t("storage.storageTab")}</span>
       </button>
       <button
-        class:active={activeSection === "keyboard"}
+        class:active={
+          activeSection === "keyboard_item" ||
+          activeSection === "keyboard_navigation" ||
+          activeSection === "keyboard_window" ||
+          activeSection === "keyboard_search" ||
+          activeSection === "keyboard_other"
+        }
         type="button"
-        onclick={() => (activeSection = "keyboard")}
+        onclick={() => (activeSection = "keyboard_item")}
       >
         <AppIcon name="keyboard" size={16} />
         <span>{_t("storage.keyboardTab")}</span>
@@ -1196,6 +1233,33 @@
           {/if}
         </div>
       </div>
+      {#if activeSection === "keyboard_item" || activeSection === "keyboard_navigation" || activeSection === "keyboard_window" || activeSection === "keyboard_search" || activeSection === "keyboard_other"}
+        <section class="setting-card toggle-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
+            <div>
+              <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
+              <p>快捷键配置独立于常规设置保存</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button
+              type="button"
+              style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border-color);border-radius:var(--settings-control-radius,6px);color:var(--text-muted);background:var(--card-bg);font:inherit;font-size:var(--settings-control-size,var(--font-size-secondary,11px));cursor:pointer;white-space:nowrap"
+              onclick={() => invoke("open_external_url", { url: status?.keyboardConfigPath ?? "conf/keyboard.json" })}
+            >
+              <AppIcon name="file" size={13} /> {_t("keyboard.openFile") || "打开文件"}
+            </button>
+            <button
+              type="button"
+              style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border-color);border-radius:var(--settings-control-radius,6px);color:var(--text-muted);background:var(--card-bg);font:inherit;font-size:var(--settings-control-size,var(--font-size-secondary,11px));cursor:pointer;white-space:nowrap"
+              onclick={() => handleResetKeyboard()}
+            >
+              <AppIcon name="restore" size={13} /> 重置所有
+            </button>
+          </div>
+        </section>
+      {/if}
       {#if activeSection === "compact" || activeSection === "font" || activeSection === "theme"}
         <nav class="settings-subnav" aria-label={_t("storage.appearanceTab")}>
           <button
@@ -1277,6 +1341,49 @@
             {_t("storage.generalWindowTab")}
           </button>
         </nav>
+      {:else if activeSection === "keyboard_item" || activeSection === "keyboard_navigation" || activeSection === "keyboard_window" || activeSection === "keyboard_search" || activeSection === "keyboard_other"}
+        <nav class="settings-subnav" aria-label={_t("storage.keyboardTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "keyboard_item"}
+            aria-current={activeSection === "keyboard_item" ? "page" : undefined}
+            onclick={() => (activeSection = "keyboard_item")}
+          >
+            {_t("storage.keyboardItemTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "keyboard_navigation"}
+            aria-current={activeSection === "keyboard_navigation" ? "page" : undefined}
+            onclick={() => (activeSection = "keyboard_navigation")}
+          >
+            {_t("storage.keyboardNavigationTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "keyboard_window"}
+            aria-current={activeSection === "keyboard_window" ? "page" : undefined}
+            onclick={() => (activeSection = "keyboard_window")}
+          >
+            {_t("storage.keyboardWindowTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "keyboard_search"}
+            aria-current={activeSection === "keyboard_search" ? "page" : undefined}
+            onclick={() => (activeSection = "keyboard_search")}
+          >
+            {_t("storage.keyboardSearchTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "keyboard_other"}
+            aria-current={activeSection === "keyboard_other" ? "page" : undefined}
+            onclick={() => (activeSection = "keyboard_other")}
+          >
+            {_t("storage.keyboardOtherTab")}
+          </button>
+        </nav>
       {:else}
         <div class="settings-subnav settings-subnav--single" aria-label={settingsSectionTitle}>
           <span class="settings-section-title">{settingsSectionTitle}</span>
@@ -1322,8 +1429,16 @@
       <ThemeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
-    {:else if activeSection === "keyboard"}
-      <KeyboardSettingsPanel configPath={status?.keyboardConfigPath} {onclose} showHeader={false} />
+    {:else if activeSection === "keyboard_item"}
+      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="item" showHeader={false} />
+    {:else if activeSection === "keyboard_navigation"}
+      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="navigation" showHeader={false} />
+    {:else if activeSection === "keyboard_window"}
+      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="window" showHeader={false} />
+    {:else if activeSection === "keyboard_search"}
+      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="search" showHeader={false} />
+    {:else if activeSection === "keyboard_other"}
+      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="other" showHeader={false} />
     {:else if activeSection === "ocr"}
       <div class="settings-scroll">
         <section class="setting-card setting-card-row">

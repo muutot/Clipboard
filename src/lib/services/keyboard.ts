@@ -22,3 +22,19 @@ export async function configureKeyboardShortcuts(
 
   return invoke<string[]>("configure_keyboard_shortcuts", { action, shortcuts });
 }
+
+export async function deleteKeyboardAction(action: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Keyboard configuration is only available in the desktop app");
+  }
+
+  return invoke<void>("delete_keyboard_action", { action });
+}
+
+export async function resetKeyboardConfig(): Promise<KeyboardConfig> {
+  if (!isTauriRuntime()) {
+    throw new Error("Keyboard configuration is only available in the desktop app");
+  }
+
+  return invoke<KeyboardConfig>("reset_keyboard_config");
+}

@@ -34,6 +34,18 @@ impl KeyboardManager {
         Ok(normalized)
     }
 
+    pub fn delete_action(&mut self, action: String) -> Result<(), StorageError> {
+        self.store.delete_action(&action)?;
+        self.matcher = ShortcutMatcher::from_config(self.store.config())?;
+        Ok(())
+    }
+
+    pub fn reset_to_defaults(&mut self) -> Result<(), StorageError> {
+        self.store.reset_to_defaults()?;
+        self.matcher = ShortcutMatcher::from_config(self.store.config())?;
+        Ok(())
+    }
+
     pub fn match_chord(
         &self,
         modifiers: impl IntoIterator<Item = Modifier>,
