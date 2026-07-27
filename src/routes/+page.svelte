@@ -144,6 +144,8 @@
 
   type MeasuredCardHeight = { height: number; signature: string };
   let measuredCardHeights = $state<Record<string, MeasuredCardHeight>>({});
+  let heightRafId = 0;
+  let pendingHeights = new Map<string, MeasuredCardHeight>();
 
   $effect(() => {
     const activeIds = new Set(items.map((i) => i.id));
@@ -495,10 +497,24 @@
     const signature = cardLayoutSignature(item);
     const previous = measuredCardHeights[id];
     if (previous?.signature === signature && previous.height === height) return;
-    measuredCardHeights = {
-      ...measuredCardHeights,
-      [id]: { height, signature },
-    };
+    pendingHeights.set(id, { height, signature });
+    if (heightRafId === 0) {
+      heightRafId = requestAnimationFrame(() => {
+        heightRafId = 0;
+        const updates = pendingHeights;
+        pendingHeights = new Map();
+        let changed = false;
+        for (const [updateId, { height: h, signature: s }] of updates) {
+          const prev = measuredCardHeights[updateId];
+          if (prev?.signature === s && prev.height === h) continue;
+          measuredCardHeights[updateId] = { height: h, signature: s };
+          changed = true;
+        }
+        if (changed) {
+          measuredCardHeights = { ...measuredCardHeights };
+        }
+      });
+    }
   }
 
   function virtualHeightFor(item: ClipboardItem): number {
