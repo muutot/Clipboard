@@ -1345,8 +1345,7 @@
       .then((restored) => {
         if (restored === false) throw new Error("record not found");
         invalidateDeletedHistoryPagination();
-        const translated = _t("toast.resumed");
-        showToast(translated === "toast.resumed" ? "已恢复" : translated, "success");
+        showToast(_t("toast.resumed"), "success");
       })
       .catch((error) => {
         console.error("Unable to restore clipboard item", error);
@@ -1692,8 +1691,7 @@
       .then((restored) => {
         if (restored === false) throw new Error("batch restore failed");
         invalidateDeletedHistoryPagination();
-        const translated = _t("toast.restoreSuccess");
-        showToast(translated === "toast.restoreSuccess" ? "Restored" : translated, "success");
+        showToast(_t("toast.restoreSuccess", { count: ids.length }), "success");
       })
       .catch((error) => {
         console.error("Bulk restore failed", error);
@@ -1746,12 +1744,12 @@
 
     const useRecycleBin = $generalSettings.useRecycleBin;
     const softIds = useRecycleBin
-      ? selectedItems.filter((item) => !item.deleted).map((item) => item.id)
+      ? selectedItems.filter((item) => !item.deleted && !item.favorite).map((item) => item.id)
       : [];
     const permanentIds = selectedItems.filter((item) => item.deleted).map((item) => item.id);
     const hardIds = useRecycleBin
       ? []
-      : selectedItems.filter((item) => !item.deleted).map((item) => item.id);
+      : selectedItems.filter((item) => !item.deleted && !item.favorite).map((item) => item.id);
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
