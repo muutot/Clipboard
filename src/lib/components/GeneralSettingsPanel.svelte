@@ -296,7 +296,8 @@
             ondragleave={() => {
               if (sortDragOverIdx === idx) sortDragOverIdx = null;
             }}
-            ondrop={() => {
+            ondrop={(e) => {
+              e.preventDefault();
               if (sortDragIdx !== null && sortDragIdx !== idx) {
                 moveSortRule(sortDragIdx, idx);
               }
