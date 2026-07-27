@@ -403,6 +403,11 @@ export interface LocaleDefinition {
     detailDisplayModeOverlay: string;
     detailDisplayModeSplit: string;
     imageFullscreenButton: string;
+    showSecondaryText: string;
+    showSecondaryTextDescription: string;
+    maxTextLines: string;
+    maxTextLinesDescription: string;
+    maxTextLinesUnit: string;
   };
   compact: {
     title: string;
@@ -470,11 +475,6 @@ export interface LocaleDefinition {
   export: {
     dragText: string;
     dragFile: string;
-  };
-  font: {
-    secondaryTextLines: string;
-    secondaryTextLinesDescription: string;
-    unitLines: string;
   };
   theme: {
     title: string;

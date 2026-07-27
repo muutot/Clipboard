@@ -422,6 +422,11 @@ const en: LocaleDefinition = {
     detailDisplayModeOverlay: "Side Panel",
     detailDisplayModeSplit: "Inline View",
     imageFullscreenButton: "Fullscreen Preview",
+    showSecondaryText: "Show Secondary Text",
+    showSecondaryTextDescription: "Show smaller preview text below list items",
+    maxTextLines: "Secondary Text Lines",
+    maxTextLinesDescription: "Maximum lines of secondary text on card",
+    maxTextLinesUnit: "lines",
   },
   compact: {
     title: "Compact Settings",
@@ -490,11 +495,6 @@ const en: LocaleDefinition = {
   export: {
     dragText: "Drag text content",
     dragFile: "Drag file reference",
-  },
-  font: {
-    secondaryTextLines: "Secondary Text Lines",
-    secondaryTextLinesDescription: "Maximum lines of secondary text on card; starts from line 2 without custom title, or from the title line with custom title",
-    unitLines: "lines",
   },
   theme: {
     title: "Theme Settings",

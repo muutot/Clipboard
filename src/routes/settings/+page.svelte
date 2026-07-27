@@ -23,6 +23,10 @@
     r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
     r.setProperty("--font-size-cardTitle", `${s.fontSizes.cardTitle}px`);
     r.setProperty("--font-size-cardPreview", `${s.fontSizes.cardPreview}px`);
+    r.setProperty(
+      "--show-secondary",
+      s.display.showSecondaryText ? "block" : "none",
+    );
   });
 
   function handleClose() {

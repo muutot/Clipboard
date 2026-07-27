@@ -91,6 +91,7 @@
 
   let transparencyEl = $state<HTMLInputElement | null>(null);
   let viewerOpacityEl = $state<HTMLInputElement | null>(null);
+  let maxTextLinesEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -98,6 +99,10 @@
 
   $effect(() => {
     updateSliderTrack(viewerOpacityEl);
+  });
+
+  $effect(() => {
+    updateSliderTrack(maxTextLinesEl);
   });
 </script>
 
@@ -494,6 +499,58 @@
     >
       <span class="toggle-knob"></span>
     </button>
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+      <div>
+        <strong>{_t("general.showSecondaryText")}</strong>
+        <p>{_t("general.showSecondaryTextDescription")}</p>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="toggle-switch"
+      class:active={s.display.showSecondaryText}
+      onclick={() =>
+        generalSettings.updateSetting("display", {
+          ...s.display,
+          showSecondaryText: !s.display.showSecondaryText,
+        })}
+      aria-checked={s.display.showSecondaryText}
+      aria-label={_t("general.showSecondaryText")}
+      role="switch"
+    >
+      <span class="toggle-knob"></span>
+    </button>
+  </section>
+
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+      <div class="heading-inline">
+        <div>
+          <strong>{_t("general.maxTextLines")}</strong>
+          <p>{_t("general.maxTextLinesDescription")}</p>
+        </div>
+        <span class="value-label">{s.display.maxTextLines} {_t("general.maxTextLinesUnit")}</span>
+      </div>
+    </div>
+    <input
+      type="range"
+      min="1"
+      max="12"
+      value={s.display.maxTextLines}
+      oninput={(event) => {
+        const input = event.target as HTMLInputElement;
+        const val = Number(input.value);
+        generalSettings.updateSetting("display", { ...s.display, maxTextLines: val });
+        updateSliderTrack(maxTextLinesEl);
+      }}
+      class="transparency-slider"
+      bind:this={maxTextLinesEl}
+    />
   </section>
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>

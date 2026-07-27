@@ -407,6 +407,11 @@ const zhCN: LocaleDefinition = {
     detailDisplayModeOverlay: "左右分栏",
     detailDisplayModeSplit: "同画布切入",
     imageFullscreenButton: "全屏查看",
+    showSecondaryText: "显示辅助文字",
+    showSecondaryTextDescription: "列表条目下方的小字预览文本",
+    maxTextLines: "辅助文本行数",
+    maxTextLinesDescription: "条目卡片上辅助文本最多显示的行数",
+    maxTextLinesUnit: "行",
   },
   compact: {
     title: "紧凑设置",
@@ -474,11 +479,6 @@ const zhCN: LocaleDefinition = {
   export: {
     dragText: "拖拽文本内容",
     dragFile: "拖拽文件引用",
-  },
-  font: {
-    secondaryTextLines: "辅助文本行数",
-    secondaryTextLinesDescription: "条目卡片上辅助文本最多显示的行数；无自定义标题时从第二行开始，有自定义标题时从标题首行开始",
-    unitLines: "行",
   },
   theme: {
     title: "主题设置",
