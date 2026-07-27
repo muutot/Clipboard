@@ -37,7 +37,12 @@ If any answer is yes, update this skill file in the same commit. A stale skill c
 
 ## Project Structure
 
-See [references/project-structure.md](references/project-structure.md) for the full file listing (components, services, utils, routes, backend modules).
+See [references/project-structure.md](references/project-structure.md) for the full file listing (components, services, utils, routes, backend modules). See also:
+- [references/components.md](references/components.md) — component props, state, patterns
+- [references/services.md](references/services.md) — service exports, signatures, patterns
+- [references/css-theming.md](references/css-theming.md) — CSS variables, theme system, shared classes
+- [references/backend-architecture.md](references/backend-architecture.md) — database pool, recovery, search, content modules
+- [references/settings-panels.md](references/settings-panels.md) — panel conventions, state management, feedback pattern
 
 ```
 clipboard/
