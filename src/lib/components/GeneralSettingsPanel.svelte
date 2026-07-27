@@ -1,5 +1,4 @@
 ﻿<script lang="ts">
-  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
@@ -118,9 +117,9 @@
       })
       .finally(() => {
         if (!cancelled) windowConfigLoading = false;
-        tick().then(() => {
+        setTimeout(() => {
           if (!cancelled) toggleTransitionReady = true;
-        });
+        }, 0);
       });
     return () => {
       cancelled = true;
@@ -608,7 +607,7 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.launchAtStartup ?? false}
-        class:no-toggle-transition={!toggleTransitionReady}
+        style:transition={!toggleTransitionReady ? "none" : undefined}
         onclick={() =>
           void changeWindowSetting("launchAtStartup", !(windowConfig?.launchAtStartup ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
@@ -616,7 +615,7 @@
         aria-label={_t("general.launchAtStartup")}
         role="switch"
       >
-        <span class="toggle-knob"></span>
+        <span class="toggle-knob" style:transition={!toggleTransitionReady ? "none" : undefined}></span>
       </button>
     </section>
 
@@ -632,7 +631,7 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.closeToTray ?? false}
-        class:no-toggle-transition={!toggleTransitionReady}
+        style:transition={!toggleTransitionReady ? "none" : undefined}
         onclick={() =>
           void changeWindowSetting("closeToTray", !(windowConfig?.closeToTray ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
@@ -640,7 +639,7 @@
         aria-label={_t("general.closeToTray")}
         role="switch"
       >
-        <span class="toggle-knob"></span>
+        <span class="toggle-knob" style:transition={!toggleTransitionReady ? "none" : undefined}></span>
       </button>
     </section>
 
@@ -799,11 +798,6 @@
 {/if}
 
 <style>
-  .toggle-switch.no-toggle-transition,
-  .toggle-switch.no-toggle-transition .toggle-knob {
-    transition: none;
-  }
-
   .lang-toggle {
     display: flex;
     gap: 6px;
