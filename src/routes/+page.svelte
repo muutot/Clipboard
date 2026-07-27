@@ -1187,6 +1187,7 @@
     const next = new Set(selectedIds);
     if (next.has(id)) {
       next.delete(id);
+      if (selectedId === id) selectedId = "";
     } else {
       next.add(id);
     }
