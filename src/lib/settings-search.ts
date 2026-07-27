@@ -1,5 +1,6 @@
 export const SETTINGS_SECTIONS = [
   "general_search",
+  "general_items",
   "general_display",
   "general_window",
   "compact",
@@ -66,7 +67,16 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     i18n("storage.generalTab"),
     i18n("storage.basicTab"),
     i18n("storage.generalSearchTab"),
-    "基础设置",
+    "搜索",
+  ],
+  general_items: [
+    i18n("storage.generalTab"),
+    i18n("storage.basicTab"),
+    i18n("storage.generalItemsTab"),
+    "条目",
+    "加载",
+    "回收站",
+    "置顶",
   ],
   general_display: [
     i18n("storage.generalTab"),

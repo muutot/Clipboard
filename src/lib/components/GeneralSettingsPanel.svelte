@@ -18,7 +18,7 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
-    section?: "search" | "display" | "window";
+    section?: "search" | "items" | "display" | "window";
   }
 
   let { onclose, showHeader = true, section = "search" }: Props = $props();
@@ -245,96 +245,6 @@
           generalSettings.updateSetting("searchHistoryEnabled", !s.searchHistoryEnabled)}
         aria-checked={s.searchHistoryEnabled}
         aria-label={_t("general.searchHistory")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-        <div>
-          <strong>{_t("general.cardActionsDisplay")}</strong>
-          <p>{_t("general.cardActionsDisplayDescription")}</p>
-        </div>
-      </div>
-      <select
-        class="theme-select"
-        value={s.cardActionsDisplay}
-        aria-label={_t("general.cardActionsDisplay")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "cardActionsDisplay",
-            (e.target as HTMLSelectElement).value as CardActionsDisplay,
-          )}
-      >
-        <option value="hover">{_t("general.cardActionsHover")}</option>
-        <option value="always">{_t("general.cardActionsAlways")}</option>
-      </select>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
-        <div>
-          <strong>{_t("general.quickCopyBadge")}</strong>
-          <p>{_t("general.quickCopyBadgeDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.quickCopyBadgeAlwaysVisible}
-        onclick={() =>
-          generalSettings.updateSetting(
-            "quickCopyBadgeAlwaysVisible",
-            !s.quickCopyBadgeAlwaysVisible,
-          )}
-        aria-checked={s.quickCopyBadgeAlwaysVisible}
-        aria-label={_t("general.quickCopyBadge")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-        <div>
-          <strong>{_t("general.pinCopiedToTop")}</strong>
-          <p>{_t("general.pinCopiedToTopDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.pinCopiedToTop}
-        onclick={() => generalSettings.updateSetting("pinCopiedToTop", !s.pinCopiedToTop)}
-        aria-checked={s.pinCopiedToTop}
-        aria-label={_t("general.pinCopiedToTop")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-        <div>
-          <strong>{_t("general.useRecycleBin")}</strong>
-          <p>{_t("general.useRecycleBinDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.useRecycleBin}
-        onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
-        aria-checked={s.useRecycleBin}
-        aria-label={_t("general.useRecycleBin")}
         role="switch"
       >
         <span class="toggle-knob"></span>
@@ -587,6 +497,161 @@
         bind:this={viewerOpacityEl}
       />
     </section>
+  {:else if section === "items"}
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+        <div>
+          <strong>{_t("general.cardActionsDisplay")}</strong>
+          <p>{_t("general.cardActionsDisplayDescription")}</p>
+        </div>
+      </div>
+      <select
+        class="theme-select"
+        value={s.cardActionsDisplay}
+        aria-label={_t("general.cardActionsDisplay")}
+        onchange={(e) =>
+          generalSettings.updateSetting(
+            "cardActionsDisplay",
+            (e.target as HTMLSelectElement).value as CardActionsDisplay,
+          )}
+      >
+        <option value="hover">{_t("general.cardActionsHover")}</option>
+        <option value="always">{_t("general.cardActionsAlways")}</option>
+      </select>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
+        <div>
+          <strong>{_t("general.quickCopyBadge")}</strong>
+          <p>{_t("general.quickCopyBadgeDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.quickCopyBadgeAlwaysVisible}
+        onclick={() =>
+          generalSettings.updateSetting(
+            "quickCopyBadgeAlwaysVisible",
+            !s.quickCopyBadgeAlwaysVisible,
+          )}
+        aria-checked={s.quickCopyBadgeAlwaysVisible}
+        aria-label={_t("general.quickCopyBadge")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+        <div>
+          <strong>{_t("general.pinCopiedToTop")}</strong>
+          <p>{_t("general.pinCopiedToTopDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.pinCopiedToTop}
+        onclick={() => generalSettings.updateSetting("pinCopiedToTop", !s.pinCopiedToTop)}
+        aria-checked={s.pinCopiedToTop}
+        aria-label={_t("general.pinCopiedToTop")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+        <div>
+          <strong>{_t("general.useRecycleBin")}</strong>
+          <p>{_t("general.useRecycleBinDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.useRecycleBin}
+        onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
+        aria-checked={s.useRecycleBin}
+        aria-label={_t("general.useRecycleBin")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.pageSize")}</strong>
+            <p>{_t("general.pageSizeDescription")}</p>
+          </div>
+          <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max={Math.min(s.pageSizeLimit, 300)}
+        step="50"
+        value={Math.min(s.display.pageSize, s.pageSizeLimit)}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Math.min(Number(input.value), s.pageSizeLimit);
+          generalSettings.updateSetting("display", {
+            ...s.display,
+            pageSize: val,
+          });
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={pageSizeEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.pageSizeLimit")}</strong>
+            <p>{_t("general.pageSizeLimitDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span
+          >
+        </div>
+      </div>
+      <input
+        type="range"
+        min="500"
+        max="6000"
+        step="100"
+        value={s.pageSizeLimit}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Number(input.value);
+          generalSettings.updateSetting("pageSizeLimit", val);
+          if (s.display.pageSize > val) {
+            generalSettings.updateSetting("display", { ...s.display, pageSize: val });
+          }
+          updateSliderTrack(input);
+          requestAnimationFrame(() => updateSliderTrack(pageSizeEl));
+        }}
+        class="transparency-slider"
+        bind:this={pageSizeLimitEl}
+      />
+    </section>
   {:else}
     <section class="setting-card toggle-card">
       <div class="setting-heading">
@@ -716,71 +781,6 @@
       >
         <span class="toggle-knob"></span>
       </button>
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.pageSize")}</strong>
-            <p>{_t("general.pageSizeDescription")}</p>
-          </div>
-          <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="50"
-        max={Math.min(s.pageSizeLimit, 300)}
-        step="50"
-        value={Math.min(s.display.pageSize, s.pageSizeLimit)}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          const val = Math.min(Number(input.value), s.pageSizeLimit);
-          generalSettings.updateSetting("display", {
-            ...s.display,
-            pageSize: val,
-          });
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={pageSizeEl}
-      />
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.pageSizeLimit")}</strong>
-            <p>{_t("general.pageSizeLimitDescription")}</p>
-          </div>
-          <span class="value-label"
-            >{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span
-          >
-        </div>
-      </div>
-      <input
-        type="range"
-        min="500"
-        max="6000"
-        step="100"
-        value={s.pageSizeLimit}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          const val = Number(input.value);
-          generalSettings.updateSetting("pageSizeLimit", val);
-          if (s.display.pageSize > val) {
-            generalSettings.updateSetting("display", { ...s.display, pageSize: val });
-          }
-          updateSliderTrack(input);
-          requestAnimationFrame(() => updateSliderTrack(pageSizeEl));
-        }}
-        class="transparency-slider"
-        bind:this={pageSizeLimitEl}
-      />
     </section>
 
     <section class="setting-card toggle-card">

@@ -94,6 +94,7 @@
   let restartNeeded = $state(false);
   let activeSection = $state<
     | "general_search"
+    | "general_items"
     | "general_display"
     | "general_window"
     | "compact"
@@ -129,6 +130,12 @@
           breadcrumb: _t("general.eyebrow"),
           title: _t("storage.basicTab"),
           desc: _t("storage.generalSearchDescription"),
+        };
+      case "general_items":
+        return {
+          breadcrumb: _t("general.eyebrow"),
+          title: _t("storage.basicTab"),
+          desc: _t("storage.generalItemsDescription"),
         };
       case "general_display":
         return {
@@ -279,6 +286,7 @@
     const settingsLabel = _t("toolbar.settings");
     switch (item.section) {
       case "general_search":
+      case "general_items":
       case "general_display":
       case "general_window":
         return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.basicTab")}`;
@@ -1128,6 +1136,7 @@
     <nav class="settings-primary-nav" aria-label="设置分类">
       <button
         class:active={activeSection === "general_search" ||
+          activeSection === "general_items" ||
           activeSection === "general_display" ||
           activeSection === "general_window"}
         type="button"
@@ -1340,7 +1349,7 @@
             {_t("statistics.memoryTab")}
           </button>
         </nav>
-      {:else if activeSection === "general_search" || activeSection === "general_display" || activeSection === "general_window"}
+      {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window"}
         <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
           <button
             type="button"
@@ -1357,6 +1366,14 @@
             onclick={() => (activeSection = "general_search")}
           >
             {_t("storage.generalSearchTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "general_items"}
+            aria-current={activeSection === "general_items" ? "page" : undefined}
+            onclick={() => (activeSection = "general_items")}
+          >
+            {_t("storage.generalItemsTab")}
           </button>
           <button
             type="button"
@@ -1452,14 +1469,16 @@
           </div>
         {/if}
       </div>
-    {:else if activeSection === "general_search" || activeSection === "general_display" || activeSection === "general_window"}
+    {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window"}
       <GeneralSettingsPanel
         {onclose}
         section={activeSection === "general_search"
           ? "search"
-          : activeSection === "general_display"
-            ? "display"
-            : "window"}
+          : activeSection === "general_items"
+            ? "items"
+            : activeSection === "general_display"
+              ? "display"
+              : "window"}
         showHeader={false}
       />
     {:else if activeSection === "compact"}
