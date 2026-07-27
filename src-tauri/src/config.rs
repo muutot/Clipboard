@@ -101,6 +101,8 @@ pub struct GeneralConfig {
     pub search_suggestion_mode: String,
     pub search_history_enabled: bool,
     pub show_settings_close_button: bool,
+    pub page_size_limit: u32,
+    pub search_page_size_limit: u32,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -135,6 +137,8 @@ impl Default for GeneralConfig {
             search_suggestion_mode: "off".to_owned(),
             search_history_enabled: false,
             show_settings_close_button: true,
+            page_size_limit: 500,
+            search_page_size_limit: 500,
             extra: BTreeMap::new(),
         }
     }
@@ -554,6 +558,24 @@ impl ConfigStore {
         Ok(())
     }
 
+    pub fn page_size_limit(&self) -> u32 {
+        self.config.general.page_size_limit.clamp(50, 1_000)
+    }
+
+    pub fn search_page_size_limit(&self) -> u32 {
+        self.config.general.search_page_size_limit.clamp(50, 1_000)
+    }
+
+    pub fn set_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.general.page_size_limit = value.clamp(50, 1_000);
+        self.save()
+    }
+
+    pub fn set_search_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.general.search_page_size_limit = value.clamp(50, 1_000);
+        self.save()
+    }
+
     pub fn det_box_threshold(&self) -> f32 {
         self.config.ocr.det_box_threshold
     }
@@ -676,6 +698,8 @@ mod tests {
         assert_eq!(saved["general"]["searchSuggestionMode"], "off");
         assert_eq!(saved["general"]["searchHistoryEnabled"], false);
         assert_eq!(saved["general"]["showSettingsCloseButton"], true);
+        assert_eq!(saved["general"]["pageSizeLimit"], 500);
+        assert_eq!(saved["general"]["searchPageSizeLimit"], 500);
         fs::remove_dir_all(project).unwrap();
     }
 
