@@ -31,6 +31,24 @@
   let sortDragOverIdx = $state<number | null>(null);
   let sortListEl = $state<HTMLDivElement | null>(null);
 
+  const ALL_SORT_FIELDS: SortRule["field"][] = [
+    "createdAt",
+    "lastUsedAt",
+    "title",
+    "size",
+    "kind",
+    "favorite",
+  ];
+
+  const SORT_FIELD_LABELS: Record<SortRule["field"], string> = {
+    createdAt: "general.sortFieldCreatedAt",
+    lastUsedAt: "general.sortFieldLastUsedAt",
+    title: "general.sortFieldTitle",
+    size: "general.sortFieldSize",
+    kind: "general.sortFieldKind",
+    favorite: "general.sortFieldFavorite",
+  };
+
   function pointerDragStart(idx: number, _e: PointerEvent) {
     sortDragIdx = idx;
     sortDragOverIdx = null;
@@ -346,12 +364,10 @@
                 generalSettings.updateSetting("searchSortRules", newRules);
               }}
             >
-              <option value="createdAt">{_t("general.sortFieldCreatedAt")}</option>
-              <option value="lastUsedAt">{_t("general.sortFieldLastUsedAt")}</option>
-              <option value="title">{_t("general.sortFieldTitle")}</option>
-              <option value="size">{_t("general.sortFieldSize")}</option>
-              <option value="kind">{_t("general.sortFieldKind")}</option>
-              <option value="favorite">{_t("general.sortFieldFavorite")}</option>
+              {#each ALL_SORT_FIELDS as f}
+                {@const usedByOthers = s.searchSortRules.some((r: SortRule, i: number) => i !== idx && r.field === f)}
+                <option value={f} disabled={usedByOthers}>{_t(SORT_FIELD_LABELS[f])}</option>
+              {/each}
             </select>
             <button
               type="button"
@@ -382,16 +398,20 @@
         {/each}
       </div>
       {#if s.searchSortRules.length < 3}
-        <button
-          type="button"
-          class="sort-add-btn"
-          onclick={() => {
-            const rule: SortRule = { field: "createdAt", direction: "desc" };
-            generalSettings.updateSetting("searchSortRules", [...s.searchSortRules, rule]);
-          }}
-        >
-          + {_t("general.sortAddRule")}
-        </button>
+        {#if s.searchSortRules.length < ALL_SORT_FIELDS.length}
+          <button
+            type="button"
+            class="sort-add-btn"
+            onclick={() => {
+              const used = new Set(s.searchSortRules.map((r: SortRule) => r.field));
+              const field = (ALL_SORT_FIELDS.find((f) => !used.has(f)) ?? "createdAt") as SortRule["field"];
+              const rule: SortRule = { field, direction: "desc" };
+              generalSettings.updateSetting("searchSortRules", [...s.searchSortRules, rule]);
+            }}
+          >
+            + {_t("general.sortAddRule")}
+          </button>
+        {/if}
       {/if}
     </section>
   {:else if section === "display"}
