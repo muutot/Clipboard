@@ -2774,7 +2774,7 @@
   }
 
   :global(.app-shell.compact .toolbar) {
-    padding: 2px 8px 4px;
+    padding: 2px 8px 8px;
   }
 
   :global(.app-shell.compact .toolbar-actions button) {

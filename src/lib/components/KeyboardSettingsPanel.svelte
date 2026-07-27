@@ -15,7 +15,7 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
-    category?: "item" | "navigation" | "window" | "search" | "other";
+    category?: "item" | "quick" | "system";
     resetToken?: number;
   }
 
@@ -32,37 +32,32 @@
     description: string;
     icon: IconName;
     defaults: string[];
+    cat: typeof category;
     system?: boolean;
   }
 
   const SYSTEM_ACTIONS: SystemAction[] = [
-    { id: "copyItem", labelKey: "keyboard.copyItem", description: "复制当前选中的条目到剪贴板", icon: "copy", defaults: ["Ctrl+C"] },
-    { id: "deleteItem", labelKey: "keyboard.deleteItem", description: "删除当前选中的条目", icon: "trash", defaults: ["Ctrl+D"] },
-    { id: "favoriteItem", labelKey: "keyboard.favoriteItem", description: "收藏或取消收藏当前条目", icon: "star", defaults: ["Ctrl+F"] },
-    { id: "editItem", labelKey: "keyboard.editItem", description: "编辑当前条目的标题", icon: "edit", defaults: ["Ctrl+E"] },
-    { id: "selectAll", labelKey: "keyboard.selectAll", description: "全选列表中的所有条目", icon: "check", defaults: ["Ctrl+A"] },
-    { id: "quickPaste", labelKey: "keyboard.quickPaste", description: "将当前条目快速粘贴到上一个活跃窗口", icon: "clipboard", defaults: [] },
-    { id: "toggleWindow", labelKey: "keyboard.toggleWindow", description: "唤起或隐藏主窗口（系统全局热键）", icon: "eye", defaults: ["Alt+V"], system: true },
-    { id: "quickCopy1", description: "快速复制列表第 1 条", icon: "clipboard", defaults: ["Ctrl+1"] },
-    { id: "quickCopy2", description: "快速复制列表第 2 条", icon: "clipboard", defaults: ["Ctrl+2"] },
-    { id: "quickCopy3", description: "快速复制列表第 3 条", icon: "clipboard", defaults: ["Ctrl+3"] },
-    { id: "quickCopy4", description: "快速复制列表第 4 条", icon: "clipboard", defaults: ["Ctrl+4"] },
-    { id: "quickCopy5", description: "快速复制列表第 5 条", icon: "clipboard", defaults: ["Ctrl+5"] },
-    { id: "quickCopy6", description: "快速复制列表第 6 条", icon: "clipboard", defaults: ["Ctrl+6"] },
-    { id: "quickCopy7", description: "快速复制列表第 7 条", icon: "clipboard", defaults: ["Ctrl+7"] },
-    { id: "quickCopy8", description: "快速复制列表第 8 条", icon: "clipboard", defaults: ["Ctrl+8"] },
-    { id: "quickCopy9", description: "快速复制列表第 9 条", icon: "clipboard", defaults: ["Ctrl+9"] },
+    { id: "copyItem", labelKey: "keyboard.copyItem", description: "复制当前选中的条目到剪贴板", icon: "copy", defaults: ["Ctrl+C"], cat: "item" },
+    { id: "deleteItem", labelKey: "keyboard.deleteItem", description: "删除当前选中的条目", icon: "trash", defaults: ["Ctrl+D"], cat: "item" },
+    { id: "favoriteItem", labelKey: "keyboard.favoriteItem", description: "收藏或取消收藏当前条目", icon: "star", defaults: ["Ctrl+F"], cat: "item" },
+    { id: "editItem", labelKey: "keyboard.editItem", description: "编辑当前条目的标题", icon: "edit", defaults: ["Ctrl+E"], cat: "item" },
+    { id: "selectAll", labelKey: "keyboard.selectAll", description: "全选列表中的所有条目", icon: "check", defaults: ["Ctrl+A"], cat: "item" },
+    { id: "quickPaste", labelKey: "keyboard.quickPaste", description: "将当前条目快速粘贴到上一个活跃窗口", icon: "clipboard", defaults: [], cat: "item" },
+    { id: "quickCopy1", description: "快速复制列表第 1 条", icon: "clipboard", defaults: ["Ctrl+1"], cat: "quick" },
+    { id: "quickCopy2", description: "快速复制列表第 2 条", icon: "clipboard", defaults: ["Ctrl+2"], cat: "quick" },
+    { id: "quickCopy3", description: "快速复制列表第 3 条", icon: "clipboard", defaults: ["Ctrl+3"], cat: "quick" },
+    { id: "quickCopy4", description: "快速复制列表第 4 条", icon: "clipboard", defaults: ["Ctrl+4"], cat: "quick" },
+    { id: "quickCopy5", description: "快速复制列表第 5 条", icon: "clipboard", defaults: ["Ctrl+5"], cat: "quick" },
+    { id: "quickCopy6", description: "快速复制列表第 6 条", icon: "clipboard", defaults: ["Ctrl+6"], cat: "quick" },
+    { id: "quickCopy7", description: "快速复制列表第 7 条", icon: "clipboard", defaults: ["Ctrl+7"], cat: "quick" },
+    { id: "quickCopy8", description: "快速复制列表第 8 条", icon: "clipboard", defaults: ["Ctrl+8"], cat: "quick" },
+    { id: "quickCopy9", description: "快速复制列表第 9 条", icon: "clipboard", defaults: ["Ctrl+9"], cat: "quick" },
+    { id: "toggleWindow", labelKey: "keyboard.toggleWindow", description: "唤起或隐藏主窗口（系统全局热键）", icon: "eye", defaults: ["Alt+V"], cat: "system", system: true },
   ];
 
-  function classifyAction(action: string): typeof category {
-    const lower = action.toLowerCase();
-    if (/window|toggle|show|hide/.test(lower)) return "window";
-    if (/copy|paste|delete|favorite|edit|detail|download|save|pin/.test(lower)) return "item";
-    if (/select|next|prev|up|down|left|right|tab|focus|navigate|number|quick/.test(lower))
-      return "navigation";
-    if (/search|find|clear/.test(lower)) return "search";
-    return "other";
-  }
+  const categoryActions = $derived.by(() => {
+    return SYSTEM_ACTIONS.filter((a) => a.cat === category);
+  });
 
   function actionLabel(action: SystemAction): string {
     if (action.labelKey) {
@@ -73,10 +68,6 @@
     if (m) return `快速复制 #${m[1]}`;
     return action.id;
   }
-
-  const categoryActions = $derived.by(() => {
-    return SYSTEM_ACTIONS.filter((a) => classifyAction(a.id) === category);
-  });
 
   function bindingsFor(action: string): string[] {
     if (!config) return [];
