@@ -16,6 +16,26 @@
 
   let s = $state($generalSettings);
   let fontSection = $state<"interface" | "card">("interface");
+
+  interface FontSliderDef {
+    key: keyof typeof s.fontSizes;
+    icon: string;
+    label: string;
+    desc: string;
+    min: number;
+    max: number;
+  }
+
+  const interfaceSliders: FontSliderDef[] = [
+    { key: "base", icon: "type", label: "主文字", desc: "设置界面标题、详情面板等正文的字体大小", min: 11, max: 20 },
+    { key: "secondary", icon: "info", label: "副文字", desc: "时间戳、来源名称等辅助信息的字体大小", min: 9, max: 16 },
+    { key: "tiny", icon: "ruler", label: "小文字", desc: "面包屑、保存提示等最小号文字的字体大小", min: 8, max: 13 },
+  ];
+
+  const cardSliders: FontSliderDef[] = [
+    { key: "cardTitle", icon: "text", label: "标题", desc: "列表卡片上条目标题的字体大小", min: 10, max: 20 },
+    { key: "cardPreview", icon: "info", label: "预览", desc: "列表卡片上条目预览正文的字体大小", min: 8, max: 16 },
+  ];
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
       s = v;
@@ -121,25 +141,26 @@
   </nav>
 
   {#if fontSection === "interface"}
+    {#each interfaceSliders as slider}
     <section class="setting-card">
       <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="type" size={17} /></span>
+        <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
         <div class="heading-inline">
           <div>
-            <strong>主文字</strong>
-            <p>设置界面标题、详情面板等正文的字体大小</p>
+            <strong>{slider.label}</strong>
+            <p>{slider.desc}</p>
           </div>
           <label class="font-size-control">
             <input
               class="font-size-input"
               type="number"
-              min="11"
-              max="20"
+              min={slider.min}
+              max={slider.max}
               step="1"
-              value={s.fontSizes.base}
-              oninput={numberInputHandler("base", 11, 20)}
-              onblur={numberBlurHandler("base", 11, 20)}
-              aria-label="主文字字号"
+              value={s.fontSizes[slider.key]}
+              oninput={numberInputHandler(slider.key, slider.min, slider.max)}
+              onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
+              aria-label={`${slider.label}字号`}
             />
             <span>px</span>
           </label>
@@ -147,101 +168,35 @@
       </div>
       <input
         type="range"
-        min="11"
-        max="20"
-        value={s.fontSizes.base}
-        oninput={sliderHandler("base")}
+        min={slider.min}
+        max={slider.max}
+        value={s.fontSizes[slider.key]}
+        oninput={sliderHandler(slider.key)}
         class="transparency-slider"
       />
     </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="info" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>副文字</strong>
-            <p>时间戳、来源名称等辅助信息的字体大小</p>
-          </div>
-          <label class="font-size-control">
-            <input
-              class="font-size-input"
-              type="number"
-              min="9"
-              max="16"
-              step="1"
-              value={s.fontSizes.secondary}
-              oninput={numberInputHandler("secondary", 9, 16)}
-              onblur={numberBlurHandler("secondary", 9, 16)}
-              aria-label="副文字字号"
-            />
-            <span>px</span>
-          </label>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="9"
-        max="16"
-        value={s.fontSizes.secondary}
-        oninput={sliderHandler("secondary")}
-        class="transparency-slider"
-      />
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="ruler" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>小文字</strong>
-            <p>面包屑、保存提示等最小号文字的字体大小</p>
-          </div>
-          <label class="font-size-control">
-            <input
-              class="font-size-input"
-              type="number"
-              min="8"
-              max="13"
-              step="1"
-              value={s.fontSizes.tiny}
-              oninput={numberInputHandler("tiny", 8, 13)}
-              onblur={numberBlurHandler("tiny", 8, 13)}
-              aria-label="小文字字号"
-            />
-            <span>px</span>
-          </label>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="8"
-        max="13"
-        value={s.fontSizes.tiny}
-        oninput={sliderHandler("tiny")}
-        class="transparency-slider"
-      />
-    </section>
+    {/each}
   {:else}
+    {#each cardSliders as slider}
     <section class="setting-card">
       <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+        <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
         <div class="heading-inline">
           <div>
-            <strong>标题</strong>
-            <p>列表卡片上条目标题的字体大小</p>
+            <strong>{slider.label}</strong>
+            <p>{slider.desc}</p>
           </div>
           <label class="font-size-control">
             <input
               class="font-size-input"
               type="number"
-              min="10"
-              max="20"
+              min={slider.min}
+              max={slider.max}
               step="1"
-              value={s.fontSizes.cardTitle}
-              oninput={numberInputHandler("cardTitle", 10, 20)}
-              onblur={numberBlurHandler("cardTitle", 10, 20)}
-              aria-label="条目标题字号"
+              value={s.fontSizes[slider.key]}
+              oninput={numberInputHandler(slider.key, slider.min, slider.max)}
+              onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
+              aria-label={`${slider.label}字号`}
             />
             <span>px</span>
           </label>
@@ -249,47 +204,14 @@
       </div>
       <input
         type="range"
-        min="10"
-        max="20"
-        value={s.fontSizes.cardTitle}
-        oninput={sliderHandler("cardTitle")}
+        min={slider.min}
+        max={slider.max}
+        value={s.fontSizes[slider.key]}
+        oninput={sliderHandler(slider.key)}
         class="transparency-slider"
       />
     </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="info" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>预览</strong>
-            <p>列表卡片上条目预览正文的字体大小</p>
-          </div>
-          <label class="font-size-control">
-            <input
-              class="font-size-input"
-              type="number"
-              min="8"
-              max="16"
-              step="1"
-              value={s.fontSizes.cardPreview}
-              oninput={numberInputHandler("cardPreview", 8, 16)}
-              onblur={numberBlurHandler("cardPreview", 8, 16)}
-              aria-label="预览文字字号"
-            />
-            <span>px</span>
-          </label>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="8"
-        max="16"
-        value={s.fontSizes.cardPreview}
-        oninput={sliderHandler("cardPreview")}
-        class="transparency-slider"
-      />
-    </section>
+    {/each}
   {/if}
 
   <p class="auto-save-note">修改即时生效，无需手动保存</p>

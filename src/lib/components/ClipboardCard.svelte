@@ -293,7 +293,11 @@
     ];
   }
 
-  $effect(() => {
+  let contentActionsLoaded = $state(false);
+
+  function loadContentActions() {
+    if (contentActionsLoaded) return;
+    contentActionsLoaded = true;
     const text = item.textContent || [item.title, item.preview].filter(Boolean).join("\n");
     const request = ++contentActionRequest;
     if (!isTauriRuntime()) {
@@ -311,6 +315,12 @@
           contentActions = detectInlineActions(text);
         }
       });
+  }
+
+  $effect(() => {
+    contentActionsLoaded = false;
+    contentActions = [];
+    contentActionRequest = 0;
   });
 
   function quickActionKind(
@@ -548,6 +558,8 @@
   class:actions-always={alwaysShowActions}
   class:no-meta={hideMetaRow}
   class="clip-card"
+  onmouseenter={() => loadContentActions()}
+  onfocus={() => { loadContentActions(); onselect(item.id); }}
   style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
   style:--cg={compact ? `${compactCardGap}px` : undefined}
@@ -566,7 +578,6 @@
   draggable="true"
   ondragstart={handleDragStart}
   oncontextmenu={handleContextMenu}
-  onfocus={() => onselect(item.id)}
   onkeydown={handleKeydown}
 >
   <button

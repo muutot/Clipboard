@@ -145,6 +145,18 @@
   type MeasuredCardHeight = { height: number; signature: string };
   let measuredCardHeights = $state<Record<string, MeasuredCardHeight>>({});
 
+  $effect(() => {
+    const activeIds = new Set(items.map((i) => i.id));
+    let changed = false;
+    for (const key of Object.keys(measuredCardHeights)) {
+      if (!activeIds.has(key)) {
+        delete measuredCardHeights[key];
+        changed = true;
+      }
+    }
+    if (changed) measuredCardHeights = { ...measuredCardHeights };
+  });
+
   const hasDeletedItems = $derived(
     items.some((item) => !!item.deleted) ||
       (activeFilter === "deleted" && deletedHistoryLoaded && deletedHistoryHasMore),
@@ -2287,7 +2299,9 @@
     const candidates: SearchOption[] = [];
     const alignToQuery = $generalSettings.searchSuggestionMode === "inline";
     const values: Array<string | null | undefined> = [...sourceApps];
-    for (const item of items) {
+    const scanLimit = Math.min(items.length, 200);
+    for (let i = 0; i < scanLimit; i++) {
+      const item = items[i];
       if (item.deleted) continue;
       values.push(item.title, item.textContent, item.preview, item.sourceApp);
     }
