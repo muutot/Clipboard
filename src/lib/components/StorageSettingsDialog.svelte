@@ -1247,14 +1247,14 @@
           <div style="display:flex;gap:6px;flex-shrink:0">
             <button
               type="button"
-              style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border-color);border-radius:var(--settings-control-radius,6px);color:var(--text-muted);background:var(--card-bg);font:inherit;font-size:var(--settings-control-size,var(--font-size-secondary,11px));cursor:pointer;white-space:nowrap"
+              class="config-bar-btn"
               onclick={() => invoke("open_external_url", { url: status?.keyboardConfigPath ?? "conf/keyboard.json" })}
             >
               <AppIcon name="file" size={13} /> {_t("keyboard.openFile") || "打开文件"}
             </button>
             <button
               type="button"
-              style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border-color);border-radius:var(--settings-control-radius,6px);color:var(--text-muted);background:var(--card-bg);font:inherit;font-size:var(--settings-control-size,var(--font-size-secondary,11px));cursor:pointer;white-space:nowrap"
+              class="config-bar-btn"
               onclick={() => handleResetKeyboard()}
             >
               <AppIcon name="restore" size={13} /> 重置所有
@@ -1266,11 +1266,11 @@
         <nav class="settings-subnav" aria-label={_t("storage.appearanceTab")}>
           <button
             type="button"
-            class:active={activeSection === "compact"}
-            aria-current={activeSection === "compact" ? "page" : undefined}
-            onclick={() => (activeSection = "compact")}
+            class:active={activeSection === "theme"}
+            aria-current={activeSection === "theme" ? "page" : undefined}
+            onclick={() => (activeSection = "theme")}
           >
-            {_t("storage.compactTab")}
+            {_t("storage.themeTab")}
           </button>
           <button
             type="button"
@@ -1282,11 +1282,11 @@
           </button>
           <button
             type="button"
-            class:active={activeSection === "theme"}
-            aria-current={activeSection === "theme" ? "page" : undefined}
-            onclick={() => (activeSection = "theme")}
+            class:active={activeSection === "compact"}
+            aria-current={activeSection === "compact" ? "page" : undefined}
+            onclick={() => (activeSection = "compact")}
           >
-            {_t("storage.themeTab")}
+            {_t("storage.compactTab")}
           </button>
         </nav>
       {:else if activeSection === "statistics"}
@@ -1320,6 +1320,14 @@
         <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
           <button
             type="button"
+            class:active={activeSection === "general_window"}
+            aria-current={activeSection === "general_window" ? "page" : undefined}
+            onclick={() => (activeSection = "general_window")}
+          >
+            {_t("storage.generalWindowTab")}
+          </button>
+          <button
+            type="button"
             class:active={activeSection === "general_search"}
             aria-current={activeSection === "general_search" ? "page" : undefined}
             onclick={() => (activeSection = "general_search")}
@@ -1333,14 +1341,6 @@
             onclick={() => (activeSection = "general_display")}
           >
             {_t("storage.generalDisplayTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "general_window"}
-            aria-current={activeSection === "general_window" ? "page" : undefined}
-            onclick={() => (activeSection = "general_window")}
-          >
-            {_t("storage.generalWindowTab")}
           </button>
         </nav>
       {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
@@ -3860,5 +3860,25 @@
     color: var(--text-primary);
     background: var(--hover-bg);
     border-color: var(--text-faint);
+  }
+
+  .config-bar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-muted);
+    background: var(--card-bg);
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .config-bar-btn:hover {
+    color: var(--text-secondary);
+    background: var(--hover-bg);
   }
 </style>

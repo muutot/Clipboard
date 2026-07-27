@@ -102,17 +102,8 @@
 
   $effect(() => {
     updateSliderTrack(viewerOpacityEl);
-  });
-
-  $effect(() => {
     updateSliderTrack(maxTextLinesEl);
-  });
-
-  $effect(() => {
     updateSliderTrack(pageSizeEl);
-  });
-
-  $effect(() => {
     updateSliderTrack(maxVisibleItemsEl);
   });
 </script>
