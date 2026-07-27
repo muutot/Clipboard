@@ -531,9 +531,9 @@
   }
 
   .lang-toggle button.active {
-    border-color: var(--text-faint);
+    border-color: var(--selection-color);
     color: var(--text-primary);
-    background: var(--hover-bg);
+    background: color-mix(in srgb, var(--selection-color) 15%, transparent);
   }
 
   .theme-select {

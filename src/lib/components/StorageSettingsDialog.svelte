@@ -1958,7 +1958,7 @@
                   <p>{_t("storage.iconCacheDesc")}</p>
                 </div>
               </div>
-              <button type="button" class="settings-action-btn" onclick={toggleIconManager}>
+              <button type="button" class="settings-action-btn" class:active={showIconManager} onclick={toggleIconManager}>
                 {_t("storage.manageIconCache")}
               </button>
             </div>
@@ -2999,6 +2999,12 @@
 
   .settings-action-btn:hover {
     color: var(--text-primary);
+  }
+
+  .settings-action-btn.active {
+    border-color: var(--selection-color);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--selection-color) 15%, transparent);
   }
 
   .settings-action-btn:disabled {
