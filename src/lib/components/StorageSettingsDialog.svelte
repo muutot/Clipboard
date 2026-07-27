@@ -93,8 +93,8 @@
   });
   let restartNeeded = $state(false);
   let activeSection = $state<
-    "general_search" | "general_display" | "general_window" | "compact" | "font" | "theme" | "capture" | "storage" | "keyboard_item" | "keyboard_quick" | "keyboard_system" | "ocr" | "statistics"
-  >("storage");
+    "general_search" | "general_display" | "general_window" | "compact" | "font" | "theme" | "capture" | "storage_paths" | "storage_limits" | "storage_tools" | "keyboard_item" | "keyboard_quick" | "keyboard_system" | "ocr" | "statistics"
+  >("storage_paths");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
   let keyboardResetToken = $state(0);
 
@@ -119,7 +119,9 @@
         return _t("storage.appearanceSettings");
       case "capture":
         return _t("capture.settings");
-      case "storage":
+      case "storage_paths":
+      case "storage_limits":
+      case "storage_tools":
         return _t("storage.settings");
       case "keyboard_item":
       case "keyboard_quick":
@@ -144,7 +146,9 @@
         return _t("storage.fontTab");
       case "capture":
         return _t("capture.title");
-      case "storage":
+      case "storage_paths":
+      case "storage_limits":
+      case "storage_tools":
         return _t("storage.dataStorage");
       case "keyboard_item":
       case "keyboard_quick":
@@ -175,8 +179,12 @@
         return _t("general.fontSizeDescription");
       case "capture":
         return _t("capture.description");
-      case "storage":
-        return _t("storage.configPath");
+      case "storage_paths":
+        return _t("storage.storagePathsDescription");
+      case "storage_limits":
+        return _t("storage.storageLimitsDescription");
+      case "storage_tools":
+        return _t("storage.storageToolsDescription");
       case "keyboard_item":
         return _t("storage.keyboardItemDescription");
       case "keyboard_quick":
@@ -253,7 +261,9 @@
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.themeTab")}`;
       case "capture":
         return `${settingsLabel} / ${_t("capture.title")}`;
-      case "storage":
+      case "storage_paths":
+      case "storage_limits":
+      case "storage_tools":
         return `${settingsLabel} / ${_t("storage.storageTab")}`;
       case "keyboard_item":
       case "keyboard_quick":
@@ -1116,9 +1126,13 @@
         <span>采集</span>
       </button>
       <button
-        class:active={activeSection === "storage"}
+        class:active={
+          activeSection === "storage_paths" ||
+          activeSection === "storage_limits" ||
+          activeSection === "storage_tools"
+        }
         type="button"
-        onclick={() => (activeSection = "storage")}
+        onclick={() => (activeSection = "storage_paths")}
       >
         <AppIcon name="file" size={16} />
         <span>{_t("storage.storageTab")}</span>
@@ -1354,6 +1368,33 @@
             onclick={() => (activeSection = "keyboard_system")}
           >
             {_t("storage.keyboardSystemTab")}
+          </button>
+        </nav>
+      {:else if activeSection === "storage_paths" || activeSection === "storage_limits" || activeSection === "storage_tools"}
+        <nav class="settings-subnav" aria-label={_t("storage.storageTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "storage_paths"}
+            aria-current={activeSection === "storage_paths" ? "page" : undefined}
+            onclick={() => (activeSection = "storage_paths")}
+          >
+            {_t("storage.storagePathsTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "storage_limits"}
+            aria-current={activeSection === "storage_limits" ? "page" : undefined}
+            onclick={() => (activeSection = "storage_limits")}
+          >
+            {_t("storage.storageLimitsTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "storage_tools"}
+            aria-current={activeSection === "storage_tools" ? "page" : undefined}
+            onclick={() => (activeSection = "storage_tools")}
+          >
+            {_t("storage.storageToolsTab")}
           </button>
         </nav>
       {:else}
@@ -1931,6 +1972,7 @@
         <div class="settings-state">{_t("storage.readingConfig")}</div>
       {:else if status}
         <div class="settings-scroll">
+          {#if activeSection === "storage_paths"}
           <section class="setting-card setting-card-row">
             <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
             <span class="setting-label">常规配置文件</span>
@@ -2074,9 +2116,10 @@
 └─ database/
    ├─ clipboard.sqlite3            ← 剪贴板数据库
    ├─ clipboard.sqlite3-wal        ← 预写日志
-   └─ search-index/                ← 全文搜索索引</pre>
+    └─ search-index/                ← 全文搜索索引</pre>
           </section>
-
+          {/if}
+          {#if activeSection === "storage_tools"}
           <section class="setting-card">
             <div class="toggle-card">
               <div class="setting-heading">
@@ -2164,6 +2207,8 @@
               {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
             </button>
           </section>
+          {/if}
+          {#if activeSection === "storage_limits"}
           <section class="setting-card setting-card-row">
             <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
             <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
@@ -2265,7 +2310,8 @@
             </div>
             <p class="storage-kind-delete-scope">{_t("storage.deleteByKindScope")}</p>
           </section>
-
+          {/if}
+          {#if activeSection === "storage_tools"}
           <section class="setting-card setting-card-row">
             <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
             <span class="setting-label">数据库维护</span>
@@ -2280,6 +2326,7 @@
               </span>
               <code>{repairResult.integrityMessage}</code>
             </div>
+          {/if}
           {/if}
 
           <p class="auto-save-note">修改即时生效，无需手动保存</p>

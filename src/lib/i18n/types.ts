@@ -83,6 +83,12 @@ export interface LocaleDefinition {
     keyboardItemDescription: string;
     keyboardQuickDescription: string;
     keyboardSystemDescription: string;
+    storagePathsTab: string;
+    storageLimitsTab: string;
+    storageToolsTab: string;
+    storagePathsDescription: string;
+    storageLimitsDescription: string;
+    storageToolsDescription: string;
     appearanceSettings: string;
     ocrSettings: string;
     statisticsSettings: string;
