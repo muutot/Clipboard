@@ -220,6 +220,7 @@ fn has_self_trigger_format() -> bool {
 
 #[cfg(target_os = "windows")]
 fn self_trigger_format_id() -> Option<u32> {
+    use std::sync::OnceLock;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
@@ -227,12 +228,15 @@ fn self_trigger_format_id() -> Option<u32> {
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
     }
 
-    let name = OsStr::new(SELF_TRIGGER_FORMAT_NAME)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
-    (format != 0).then_some(format)
+    static FORMAT_ID: OnceLock<Option<u32>> = OnceLock::new();
+    *FORMAT_ID.get_or_init(|| {
+        let name = OsStr::new(SELF_TRIGGER_FORMAT_NAME)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
+        (format != 0).then_some(format)
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -400,35 +404,25 @@ pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String>
 
 #[cfg(target_os = "windows")]
 fn format_id_to_name(format_id: u32) -> String {
+    use std::collections::BTreeMap;
+    use std::sync::LazyLock;
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    let predefined: &[(u32, &str)] = &[
-        (1, "CF_TEXT"),
-        (2, "CF_BITMAP"),
-        (3, "CF_METAFILEPICT"),
-        (4, "CF_SYLK"),
-        (5, "CF_DIF"),
-        (6, "CF_TIFF"),
-        (7, "CF_OEMTEXT"),
-        (8, "CF_DIB"),
-        (9, "CF_PALETTE"),
-        (10, "CF_PENDATA"),
-        (11, "CF_RIFF"),
-        (12, "CF_WAVE"),
-        (13, "CF_UNICODETEXT"),
-        (14, "CF_ENHMETAFILE"),
-        (15, "CF_HDROP"),
-        (16, "CF_LOCALE"),
-        (17, "CF_DIBV5"),
-        (128, "CF_OWNERDISPLAY"),
-        (129, "CF_DSPTEXT"),
-        (130, "CF_DSPBITMAP"),
-        (131, "CF_DSPMETAFILEPICT"),
-        (132, "CF_DSPENHMETAFILE"),
-    ];
+    static PREDEFINED: LazyLock<BTreeMap<u32, &'static str>> = LazyLock::new(|| {
+        BTreeMap::from([
+            (1, "CF_TEXT"), (2, "CF_BITMAP"), (3, "CF_METAFILEPICT"),
+            (4, "CF_SYLK"), (5, "CF_DIF"), (6, "CF_TIFF"),
+            (7, "CF_OEMTEXT"), (8, "CF_DIB"), (9, "CF_PALETTE"),
+            (10, "CF_PENDATA"), (11, "CF_RIFF"), (12, "CF_WAVE"),
+            (13, "CF_UNICODETEXT"), (14, "CF_ENHMETAFILE"), (15, "CF_HDROP"),
+            (16, "CF_LOCALE"), (17, "CF_DIBV5"),
+            (128, "CF_OWNERDISPLAY"), (129, "CF_DSPTEXT"),
+            (130, "CF_DSPBITMAP"), (131, "CF_DSPMETAFILEPICT"), (132, "CF_DSPENHMETAFILE"),
+        ])
+    });
 
-    if let Some(&(_, name)) = predefined.iter().find(|&&(id, _)| id == format_id) {
+    if let Some(&name) = PREDEFINED.get(&format_id) {
         return name.to_string();
     }
 
@@ -455,9 +449,6 @@ fn format_id_to_name(_format_id: u32) -> String {
 
 #[cfg(target_os = "windows")]
 pub fn read_clipboard_text() -> Option<String> {
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-
     extern "system" {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
@@ -493,7 +484,7 @@ pub fn read_clipboard_text() -> Option<String> {
         GlobalUnlock(handle);
         CloseClipboard();
 
-        Some(OsString::from_wide(&wide).to_string_lossy().to_string())
+        Some(String::from_utf16_lossy(&wide))
     }
 }
 

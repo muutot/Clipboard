@@ -25,6 +25,7 @@
     resolvePath($messages, path, params);
 
   const assetUrlCache = new Map<string, string | undefined>();
+  const MAX_CACHE_SIZE = 500;
 
   function assetUrl(filePath: string | null | undefined): string | undefined {
     if (!filePath) return undefined;
@@ -34,6 +35,10 @@
     try {
       const normalized = filePath.replace(/\\/g, "/");
       const url = convertFileSrc(normalized);
+      if (assetUrlCache.size >= MAX_CACHE_SIZE) {
+        const first = assetUrlCache.keys().next().value;
+        if (first !== undefined) assetUrlCache.delete(first);
+      }
       assetUrlCache.set(filePath, url);
       return url;
     } catch {
@@ -49,6 +54,10 @@
     if (cached !== undefined) return cached;
     const fullPath = `${iconsBase}/${iconFileName}`.replace(/\\/g, "/");
     const url = convertFileSrc(fullPath);
+    if (appIconUrlCache.size >= MAX_CACHE_SIZE) {
+      const first = appIconUrlCache.keys().next().value;
+      if (first !== undefined) appIconUrlCache.delete(first);
+    }
     appIconUrlCache.set(iconFileName, url);
     return url;
   }

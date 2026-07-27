@@ -98,6 +98,14 @@
   // Keep stale in-flight recycle-bin pages from resurrecting rows that were
   // already restored or permanently removed locally.
   const deletedHistorySuppressedIds = new Set<string>();
+  const SUPPRESSED_IDS_MAX = 500;
+  function addSuppressedId(id: string) {
+    if (deletedHistorySuppressedIds.size >= SUPPRESSED_IDS_MAX) {
+      const first = deletedHistorySuppressedIds.values().next().value;
+      if (first !== undefined) deletedHistorySuppressedIds.delete(first);
+    }
+    addSuppressedId(id);
+  }
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
   let selectedId = $state(demoClipboardItems[0]?.id ?? "");
@@ -643,7 +651,7 @@
         const removedIds = new Set(event.payload.deletedIds);
 
         for (const item of items) {
-          if (item.deleted && removedIds.has(item.id)) deletedHistorySuppressedIds.add(item.id);
+          if (item.deleted && removedIds.has(item.id)) addSuppressedId(item.id);
         }
         items = items.filter((item) => !removedIds.has(item.id));
         if (indexedItems) indexedItems = indexedItems.filter((item) => !removedIds.has(item.id));
@@ -1323,7 +1331,7 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
 
-    deletedHistorySuppressedIds.add(id);
+    addSuppressedId(id);
     items = items.filter((item) => item.id !== id);
     if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
@@ -1380,7 +1388,7 @@
     const previousItems = items.map((entry) => ({ ...entry }));
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
 
-    deletedHistorySuppressedIds.add(id);
+    addSuppressedId(id);
     items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
@@ -1676,6 +1684,25 @@
       });
   }
 
+  async function saveItem(id: string) {
+    const item = items.find((i) => i.id === id);
+    if (!item || !item.resourcePath) return;
+    if (!isTauriRuntime()) return;
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || "file";
+      const ext = defaultName.includes(".") ? defaultName.split(".").pop() : "";
+      const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
+      const filePath = await save({ defaultPath: defaultName, filters });
+      if (filePath) {
+        await invoke("copy_file_to", { src: item.resourcePath, dst: filePath });
+        showToast(_t("card.saveAs"), "success");
+      }
+    } catch {
+      invoke("open_external_url", { url: item.resourcePath }).catch(() => {});
+    }
+  }
+
   // --- Bulk operations ---
 
   function bulkCopy() {
@@ -1724,7 +1751,7 @@
     const previousItems = items.map((entry) => ({ ...entry }));
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
-    for (const id of ids) deletedHistorySuppressedIds.add(id);
+    for (const id of ids) addSuppressedId(id);
     items = items.map((item) => (ids.includes(item.id) ? { ...item, deleted: false } : item));
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
@@ -1760,7 +1787,7 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
     const previousSelectedIds = new Set(selectedIds);
     const previousDetailItem = detailItem;
-    for (const id of ids) deletedHistorySuppressedIds.add(id);
+    for (const id of ids) addSuppressedId(id);
     items = items.filter((item) => !ids.includes(item.id));
     if (indexedItems) indexedItems = indexedItems.filter((item) => !ids.includes(item.id));
     selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
@@ -1805,7 +1832,7 @@
     const previousDetailItem = detailItem;
 
     for (const id of softIds) deletedHistorySuppressedIds.delete(id);
-    for (const id of permanentIds) deletedHistorySuppressedIds.add(id);
+    for (const id of permanentIds) addSuppressedId(id);
 
     items = items
       .filter((item) => !permanentIds.includes(item.id) && !hardIds.includes(item.id))
@@ -1872,7 +1899,7 @@
       const removedIds = new Set([...successfulPermanent, ...successfulHard]);
       const succeededIds = new Set([...successfulSoft, ...removedIds]);
 
-      for (const id of successfulPermanent) deletedHistorySuppressedIds.add(id);
+      for (const id of successfulPermanent) addSuppressedId(id);
       for (const id of permanentIds) {
         if (!successfulPermanent.has(id)) deletedHistorySuppressedIds.delete(id);
       }
@@ -2154,8 +2181,13 @@
       }
       if (event.key === "e") {
         event.preventDefault();
-        if (item.kind === "text" || item.kind === "link") {
-          openDetail(selectedId);
+        openDetail(selectedId);
+        return;
+      }
+      if (event.key === "s") {
+        if ((item.kind === "image" || item.kind === "file") && item.resourcePath) {
+          event.preventDefault();
+          saveItem(selectedId);
         }
         return;
       }

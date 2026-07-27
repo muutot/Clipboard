@@ -619,32 +619,53 @@ fn store_captured_file_references(
 
 fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
     let first = files.first();
-    serde_json::json!({
-        "schemaVersion": RESOURCE_METADATA_SCHEMA_VERSION,
-        "sizeBytes": files.iter().map(|file| file.size_bytes).sum::<u64>(),
-        "resourcePath": first.map(|file| file.storage_path.as_str()),
-        "originalPath": if files.len() == 1 {
-            first.map(|file| file.original_path.as_str())
+    serde_json::to_string(&FileMetadata {
+        schema_version: RESOURCE_METADATA_SCHEMA_VERSION,
+        size_bytes: files.iter().map(|file| file.size_bytes).sum::<u64>(),
+        resource_path: first.map(|file| file.storage_path.clone()),
+        original_path: if files.len() == 1 {
+            first.map(|file| file.original_path.clone())
         } else {
             None
         },
-        "files": files
-            .iter()
-            .map(|file| serde_json::json!({
-                "name": file.original_name,
-                "extension": file.extension,
-                "mimeType": file.mime_type,
-                "sizeBytes": file.size_bytes,
-                "storagePath": file.storage_path,
-                "originalPath": file.original_path,
-                "contentHash": file.content_hash,
-                "copied": file.copied,
-                "createdAtMs": file.created_at_ms,
-                "modifiedAtMs": file.modified_at_ms,
-            }))
-            .collect::<Vec<_>>(),
-    })
-    .to_string()
+        files: files.iter().map(|file| FileEntry {
+            name: file.original_name.clone(),
+            extension: file.extension.clone(),
+            mime_type: file.mime_type.clone(),
+            size_bytes: file.size_bytes,
+            storage_path: file.storage_path.clone(),
+            original_path: file.original_path.clone(),
+            content_hash: file.content_hash.clone(),
+            copied: file.copied,
+            created_at_ms: file.created_at_ms,
+            modified_at_ms: file.modified_at_ms,
+        }).collect(),
+    }).unwrap_or_default()
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileMetadata {
+    schema_version: u8,
+    size_bytes: u64,
+    resource_path: Option<String>,
+    original_path: Option<String>,
+    files: Vec<FileEntry>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileEntry {
+    name: String,
+    extension: Option<String>,
+    mime_type: String,
+    size_bytes: u64,
+    storage_path: String,
+    original_path: String,
+    content_hash: Option<String>,
+    copied: bool,
+    created_at_ms: Option<i64>,
+    modified_at_ms: Option<i64>,
 }
 
 fn stop_signal_requested(receiver: &mpsc::Receiver<()>) -> bool {

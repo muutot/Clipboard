@@ -65,11 +65,17 @@ impl ShortcutMatcher {
         modifiers: impl IntoIterator<Item = Modifier>,
         key: &str,
     ) -> &[String] {
-        let mut modifiers = modifiers.into_iter().collect::<Vec<_>>();
-        modifiers.sort_unstable();
-        modifiers.dedup();
+        let mut mods = [Modifier::Alt, Modifier::Alt, Modifier::Alt, Modifier::Alt];
+        let mut count = 0;
+        for m in modifiers {
+            if count < 4 && !mods[..count].contains(&m) {
+                mods[count] = m;
+                count += 1;
+            }
+        }
+        mods[..count].sort_unstable();
         let chord = ChordKey {
-            modifiers,
+            modifiers: mods[..count].to_vec(),
             key: normalize_key(key),
         };
 
