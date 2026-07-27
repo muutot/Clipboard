@@ -15,6 +15,20 @@
   import { writeClipboardText, getDisplayTitle } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
 
+  const MARKDOWN_RE = /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m;
+  const CODE_PATTERNS: [RegExp, string][] = [
+    [new RegExp("^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|:\\s*(string|number|boolean|unknown|any)\\b|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function","ms"), "TypeScript"],
+    [new RegExp("^<\\w+[^>]*>|<\\/\\w+>|className=|useState|useEffect|props\\.","m"), "JSX"],
+    [new RegExp("^use\\s|^fn\\s|let\\s+mut|struct\\s|impl\\s|^\\s*pub\\s|^\\s*mod\\s","m"), "Rust"],
+    [new RegExp("^def\\s|^import\\s\\w|^\\s*class\\s|^\\s*from\\s|print\\(|lambda\\s","m"), "Python"],
+    [new RegExp('^\\s*[{\\[]\\s*$|"[^"]*"\\s*:|^\\s*"|function\\s*\\(|require\\(|module\\.exports',"m"), "JSON"],
+    [new RegExp("^<!DOCTYPE|<html|<head|<body|<div|<span|\\.class\\s*\\{|#id\\s*\\{","m"), "HTML"],
+    [new RegExp("^SELECT\\s|^INSERT\\s|^UPDATE\\s|^DELETE\\s|^CREATE\\s|^\\s*FROM\\s|^\\s*WHERE\\s","mi"), "SQL"],
+    [new RegExp("^#!/|^\\s*(echo|export|cd|ls|grep|mkdir|sudo|apt|npm|yarn|git)\\s","m"), "Shell"],
+    [new RegExp("^\\.\\w+\\s*\\{|^\\s*color:|^\\s*margin:|^\\s*padding:|@media|@keyframes","m"), "CSS"],
+    [new RegExp("^(function|var|const|let)\\s|^\\s*console\\.|document\\.|window\\.|require\\(","m"), "JavaScript"],
+  ];
+
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
@@ -401,55 +415,20 @@
       });
   });
 
-  const emails = $derived(
-    item
-      ? [
-          ...new Set(
-            [item.title, item.preview]
-              .filter(Boolean)
-              .join(" ")
-              .match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [],
-          ),
-        ]
-      : [],
-  );
-  const urls = $derived(
-    item
-      ? [
-          ...new Set(
-            [item.title, item.preview]
-              .filter(Boolean)
-              .join(" ")
-              .match(/https?:\/\/[^\s)]+/g) ?? [],
-          ),
-        ]
-      : [],
-  );
-  const phones = $derived(
-    item
-      ? [
-          ...new Set(
-            [item.title, item.preview]
-              .filter(Boolean)
-              .join(" ")
-              .match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [],
-          ),
-        ]
-      : [],
-  );
-  const colors = $derived(
-    item
-      ? [
-          ...new Set(
-            [item.title, item.preview]
-              .filter(Boolean)
-              .join(" ")
-              .match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [],
-          ),
-        ]
-      : [],
-  );
-
+  const specialMarkers = $derived.by(() => {
+    if (!item) return { emails: [] as string[], urls: [] as string[], phones: [] as string[], colors: [] as string[] };
+    const text = [item.title, item.preview].filter(Boolean).join(" ");
+    return {
+      emails: [...new Set(text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [])],
+      urls: [...new Set(text.match(/https?:\/\/[^\s)]+/g) ?? [])],
+      phones: [...new Set(text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [])],
+      colors: [...new Set(text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [])],
+    };
+  });
+  const emails = $derived(specialMarkers.emails);
+  const urls = $derived(specialMarkers.urls);
+  const phones = $derived(specialMarkers.phones);
+  const colors = $derived(specialMarkers.colors);
   const hasSpecialMarkers = $derived(
     emails.length > 0 || urls.length > 0 || phones.length > 0 || colors.length > 0,
   );
@@ -460,63 +439,11 @@
   const rawMetadata = $derived(formatMetadataJson(item?.metadataJson));
   const isCode = $derived(item ? detectCodeLanguage(detailContent) !== null : false);
   const isMarkdown = $derived(
-    item ? /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m.test(detailContent) : false,
+    item ? MARKDOWN_RE.test(detailContent) : false,
   );
 
   function detectCodeLanguage(text: string): string | null {
-    const patterns: [RegExp, string][] = [
-      [
-        new RegExp(
-          "^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|:\\s*(string|number|boolean|unknown|any)\\b|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function",
-          "ms",
-        ),
-        "TypeScript",
-      ],
-      [new RegExp("^<\\w+[^>]*>|<\\/\\w+>|className=|useState|useEffect|props\\.", "m"), "JSX"],
-      [
-        new RegExp("^use\\s|^fn\\s|let\\s+mut|struct\\s|impl\\s|^\\s*pub\\s|^\\s*mod\\s", "m"),
-        "Rust",
-      ],
-      [
-        new RegExp("^def\\s|^import\\s\\w|^\\s*class\\s|^\\s*from\\s|print\\(|lambda\\s", "m"),
-        "Python",
-      ],
-      [
-        new RegExp(
-          '^\\s*[{\\[]\\s*$|"[^"]*"\\s*:|^\\s*"|function\\s*\\(|require\\(|module\\.exports',
-          "m",
-        ),
-        "JSON",
-      ],
-      [
-        new RegExp("^<!DOCTYPE|<html|<head|<body|<div|<span|\\.class\\s*\\{|#id\\s*\\{", "m"),
-        "HTML",
-      ],
-      [
-        new RegExp(
-          "^SELECT\\s|^INSERT\\s|^UPDATE\\s|^DELETE\\s|^CREATE\\s|^\\s*FROM\\s|^\\s*WHERE\\s",
-          "mi",
-        ),
-        "SQL",
-      ],
-      [
-        new RegExp("^#!/|^\\s*(echo|export|cd|ls|grep|mkdir|sudo|apt|npm|yarn|git)\\s", "m"),
-        "Shell",
-      ],
-      [
-        new RegExp("^\\.\\w+\\s*\\{|^\\s*color:|^\\s*margin:|^\\s*padding:|@media|@keyframes", "m"),
-        "CSS",
-      ],
-      [
-        new RegExp(
-          "^(function|var|const|let)\\s|^\\s*console\\.|document\\.|window\\.|require\\(",
-          "m",
-        ),
-        "JavaScript",
-      ],
-    ];
-
-    for (const [regex, lang] of patterns) {
+    for (const [regex, lang] of CODE_PATTERNS) {
       if (regex.test(text)) return lang;
     }
     return null;

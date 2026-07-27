@@ -150,6 +150,7 @@ export interface QuickAction {
   label: string;
   actionType: "open" | "copy" | "viewDate";
   payload: string;
+  kind?: "url" | "email" | "phone" | "date" | "color" | "copy";
 }
 
 export async function detectContentActions(text: string): Promise<QuickAction[] | null> {
@@ -226,7 +227,7 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
       record.kind === "image" || record.kind === "file"
         ? primaryFile?.name || fileNameFromPath(record.resourcePath) || record.title
         : undefined,
-    searchableText: [record.title, record.preview, record.textContent, record.sourceApp]
+    searchableText: [record.title, record.textContent, record.sourceApp]
       .filter(Boolean)
       .join(" ")
       .toLocaleLowerCase(),

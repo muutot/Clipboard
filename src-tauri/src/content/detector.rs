@@ -60,85 +60,71 @@ fn try_match(regex_str: &str, _text: &str) -> Option<regex_lite::Regex> {
     regex_lite::Regex::new(regex_str).ok()
 }
 
+use std::sync::LazyLock;
+
+static RE_URL: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"https?://[^\s<>{}|\^`\[\]]+").unwrap());
+static RE_EMAIL: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap());
+static RE_PHONE_CN: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\b1[3-9]\d(?:[- ]?\d{4}){2}\b").unwrap());
+static RE_PHONE_LANDLINE: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\b0\d{2}[\-]?\d{7,8}\b|\b0\d{3}[\-]?\d{7,8}\b").unwrap());
+static RE_PHONE_INTL: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\+\d{1,3}[\s\-]?(?:\d{1,4}[\s\-]?){2,4}\d{2,4}").unwrap());
+static RE_COLOR_HEX: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"#[0-9a-fA-F]{3,8}\b").unwrap());
+static RE_COLOR_RGB: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"rgba?\([^)]+\)").unwrap());
+static RE_COLOR_HSL: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"hsla?\([^)]+\)").unwrap());
+
 fn extract_urls(text: &str) -> Vec<String> {
-    let re = try_match(r"https?://[^\s<>{}|\^`\[\]]+", text);
-    re.map_or(Vec::new(), |re| {
-        re.find_iter(text)
-            .map(|m| m.as_str().trim_end_matches('.').to_string())
-            .collect()
-    })
+    RE_URL.find_iter(text).map(|m| m.as_str().trim_end_matches('.').to_string()).collect()
 }
 
 fn extract_emails(text: &str) -> Vec<String> {
-    let re = try_match(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text);
-    re.map_or(Vec::new(), |re| {
-        re.find_iter(text).map(|m| m.as_str().to_string()).collect()
-    })
+    RE_EMAIL.find_iter(text).map(|m| m.as_str().to_string()).collect()
 }
 
 fn extract_phone_numbers(text: &str) -> Vec<String> {
     let mut results = Vec::new();
-
-    // Chinese mobile: 1[3-9]xxxxxxxxx (11 digits), allowing common grouping
-    // separators such as `138-1234-5678` or `138 1234 5678`.
-    if let Some(re) = try_match(r"\b1[3-9]\d(?:[- ]?\d{4}){2}\b", text) {
-        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-    }
-
-    // Chinese landline: 0xx-xxxxxxxx or 0xxx-xxxxxxx
-    if let Some(re) = try_match(r"\b0\d{2}[\-]?\d{7,8}\b|\b0\d{3}[\-]?\d{7,8}\b", text) {
-        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-    }
-
-    // International format: +xx xxx xxx xxx or +x (xxx) xxx-xxxx
-    if let Some(re) = try_match(r"\+\d{1,3}[\s\-]?(?:\d{1,4}[\s\-]?){2,4}\d{2,4}", text) {
-        results.extend(
-            re.find_iter(text)
-                .filter(|m| {
-                    let digit_count = m.as_str().chars().filter(|c| c.is_ascii_digit()).count();
-                    (8..=15).contains(&digit_count)
-                })
-                .map(|m| m.as_str().to_string()),
-        );
-    }
-
+    results.extend(RE_PHONE_CN.find_iter(text).map(|m| m.as_str().to_string()));
+    results.extend(RE_PHONE_LANDLINE.find_iter(text).map(|m| m.as_str().to_string()));
+    results.extend(
+        RE_PHONE_INTL.find_iter(text)
+            .filter(|m| {
+                let digit_count = m.as_str().chars().filter(|c| c.is_ascii_digit()).count();
+                (8..=15).contains(&digit_count)
+            })
+            .map(|m| m.as_str().to_string()),
+    );
     results
 }
 
 fn extract_colors(text: &str) -> Vec<String> {
     let mut results = Vec::new();
-
-    if let Some(re) = try_match(r"#[0-9a-fA-F]{3,8}\b", text) {
-        results.extend(
-            re.find_iter(text)
-                .filter(|m| {
-                    let len = m.as_str().len();
-                    len == 4 || len == 7 || len == 9
-                })
-                .map(|m| m.as_str().to_string()),
-        );
-    }
-
-    if let Some(re) = try_match(r"rgba?\([^)]+\)", text) {
-        results.extend(
-            re.find_iter(text)
-                .filter(|m| {
-                    let s = m.as_str();
-                    let digit_count = s.chars().filter(|c| c.is_ascii_digit()).count();
-                    digit_count >= 3
-                })
-                .map(|m| m.as_str().to_string()),
-        );
-    }
-
-    if let Some(re) = try_match(r"hsla?\([^)]+\)", text) {
-        results.extend(
-            re.find_iter(text)
-                .filter(|m| m.as_str().contains('%'))
-                .map(|m| m.as_str().to_string()),
-        );
-    }
-
+    results.extend(
+        RE_COLOR_HEX.find_iter(text)
+            .filter(|m| {
+                let len = m.as_str().len();
+                len == 4 || len == 7 || len == 9
+            })
+            .map(|m| m.as_str().to_string()),
+    );
+    results.extend(
+        RE_COLOR_RGB.find_iter(text)
+            .filter(|m| {
+                let s = m.as_str();
+                s.chars().filter(|c| c.is_ascii_digit()).count() >= 3
+            })
+            .map(|m| m.as_str().to_string()),
+    );
+    results.extend(
+        RE_COLOR_HSL.find_iter(text)
+            .filter(|m| m.as_str().contains('%'))
+            .map(|m| m.as_str().to_string()),
+    );
     results
 }
 

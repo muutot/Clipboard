@@ -24,21 +24,33 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
+  const assetUrlCache = new Map<string, string | undefined>();
+
   function assetUrl(filePath: string | null | undefined): string | undefined {
     if (!filePath) return undefined;
     if (!isTauriRuntime()) return undefined;
+    const cached = assetUrlCache.get(filePath);
+    if (cached !== undefined) return cached;
     try {
       const normalized = filePath.replace(/\\/g, "/");
-      return convertFileSrc(normalized);
-    } catch (e) {
+      const url = convertFileSrc(normalized);
+      assetUrlCache.set(filePath, url);
+      return url;
+    } catch {
       return undefined;
     }
   }
 
+  const appIconUrlCache = new Map<string, string | undefined>();
+
   function appIconUrl(iconFileName: string | null | undefined): string | undefined {
     if (!iconFileName || !isTauriRuntime() || !iconsBase) return undefined;
+    const cached = appIconUrlCache.get(iconFileName);
+    if (cached !== undefined) return cached;
     const fullPath = `${iconsBase}/${iconFileName}`.replace(/\\/g, "/");
-    return convertFileSrc(fullPath);
+    const url = convertFileSrc(fullPath);
+    appIconUrlCache.set(iconFileName, url);
+    return url;
   }
 
   interface Props {
@@ -243,26 +255,31 @@
         label: `Send email to ${value}`,
         actionType: "open" as const,
         payload: `mailto:${value}`,
+        kind: "email" as const,
       })),
       ...phones.map((value) => ({
         label: `Call ${value}`,
         actionType: "open" as const,
         payload: `tel:${value.replace(/[^+\d]/g, "")}`,
+        kind: "phone" as const,
       })),
       ...urls.map((value) => ({
         label: `Open ${value}`,
         actionType: "open" as const,
         payload: value,
+        kind: "url" as const,
       })),
       ...dates.map((value) => ({
         label: `View date ${value}`,
         actionType: "viewDate" as const,
         payload: value,
+        kind: "date" as const,
       })),
       ...colors.map((value) => ({
         label: `Copy color ${value}`,
         actionType: "copy" as const,
         payload: value,
+        kind: "color" as const,
       })),
     ];
   }
@@ -290,12 +307,7 @@
   function quickActionKind(
     action: QuickAction,
   ): "url" | "email" | "phone" | "date" | "color" | "copy" {
-    if (action.actionType === "viewDate") return "date";
-    if (action.payload.startsWith("mailto:")) return "email";
-    if (action.payload.startsWith("tel:")) return "phone";
-    if (/^https?:\/\//i.test(action.payload)) return "url";
-    if (/^(?:#[0-9a-f]{3,8}|rgba?\(|hsla?\()/i.test(action.payload)) return "color";
-    return "copy";
+    return action.kind ?? "copy";
   }
 
   async function showDateDialog(action: QuickAction) {
