@@ -285,16 +285,7 @@
             class="sort-rule-row"
             class:sort-dragging={sortDragIdx === idx}
             class:sort-drag-over={sortDragOverIdx === idx && sortDragIdx !== idx}
-            draggable="true"
             role="listitem"
-            ondragstart={(e) => {
-              sortDragIdx = idx;
-              e.dataTransfer!.effectAllowed = "move";
-            }}
-            ondragend={() => {
-              sortDragIdx = null;
-              sortDragOverIdx = null;
-            }}
             ondragover={(e) => {
               e.preventDefault();
               e.dataTransfer!.dropEffect = "move";
@@ -313,6 +304,26 @@
               sortDragOverIdx = null;
             }}
           >
+            <span
+              class="sort-grip"
+              draggable="true"
+              role="button"
+              tabindex="0"
+              aria-label={_t("general.sortDragHandle")}
+              ondragstart={(e) => {
+                sortDragIdx = idx;
+                e.dataTransfer!.effectAllowed = "move";
+              }}
+              ondragend={() => {
+                sortDragIdx = null;
+                sortDragOverIdx = null;
+              }}
+            >
+              <span class="grip-dot"></span>
+              <span class="grip-dot"></span>
+              <span class="grip-dot"></span>
+              <span class="grip-dot"></span>
+            </span>
             <select
               class="theme-select sort-field-select"
               value={rule.field}
@@ -799,10 +810,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    cursor: grab;
     padding: 2px 0;
     border-radius: var(--settings-control-radius, 6px);
-    transition: opacity 120ms ease;
   }
 
   .sort-rule-row.sort-dragging {
@@ -811,6 +820,34 @@
 
   .sort-rule-row.sort-drag-over {
     border-top: 2px solid var(--accent);
+  }
+
+  .sort-grip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 4px;
+    cursor: grab;
+    flex-shrink: 0;
+    border-radius: 4px;
+    align-self: stretch;
+    align-content: center;
+  }
+
+  .sort-grip:hover {
+    background: var(--hover-bg);
+  }
+
+  .sort-grip:active {
+    cursor: grabbing;
+  }
+
+  .grip-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    display: block;
   }
 
   .sort-field-select {

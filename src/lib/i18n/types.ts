@@ -446,6 +446,7 @@ export interface LocaleDefinition {
     sortDesc: string;
     sortAddRule: string;
     sortRemoveRule: string;
+    sortDragHandle: string;
     on: string;
     off: string;
     autoSaveNote: string;

@@ -450,6 +450,7 @@ const zhCN: LocaleDefinition = {
     sortDesc: "降序",
     sortAddRule: "添加排序条件",
     sortRemoveRule: "移除",
+    sortDragHandle: "拖动排序",
     on: "开",
     off: "关",
     autoSaveNote: "修改即时生效，无需手动保存",

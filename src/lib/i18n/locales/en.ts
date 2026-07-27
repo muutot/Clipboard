@@ -465,6 +465,7 @@ const en: LocaleDefinition = {
     sortDesc: "Descending",
     sortAddRule: "Add sort rule",
     sortRemoveRule: "Remove",
+    sortDragHandle: "Drag to reorder",
     on: "On",
     off: "Off",
     autoSaveNote: "Changes take effect immediately, no manual save needed",
