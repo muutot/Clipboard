@@ -765,7 +765,7 @@
             return drainWindowBoundsWrites();
           })
           .catch(() => {});
-      }, 120);
+    }, 50);
     }
 
     async function flushWindowBounds() {
