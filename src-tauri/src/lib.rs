@@ -300,17 +300,7 @@ impl CaptureState {
         ignored_apps: Vec<String>,
         max_file_copy_size_bytes: u64,
     ) -> Self {
-        let sensitive_patterns = privacy
-            .sensitive_patterns
-            .iter()
-            .filter_map(|pattern| match regex_lite::Regex::new(pattern) {
-                Ok(regex) => Some(regex),
-                Err(error) => {
-                    eprintln!("[privacy] ignoring invalid sensitive pattern {pattern:?}: {error}");
-                    None
-                }
-            })
-            .collect();
+        let sensitive_patterns = privacy.sensitive_patterns.clone();
         Self {
             paused: Arc::new(AtomicBool::new(privacy.is_paused())),
             max_file_copy_size_bytes: Arc::new(AtomicU64::new(max_file_copy_size_bytes)),
@@ -4326,7 +4316,9 @@ mod capture_tests {
     #[test]
     fn invalid_sensitive_patterns_are_excluded_during_initialization() {
         let mut privacy = PrivacyManager::new();
-        privacy.sensitive_patterns = vec!["[invalid".to_owned(), "secret".to_owned()];
+        privacy.sensitive_patterns = vec![
+            regex_lite::Regex::new("secret").unwrap(),
+        ];
         let state = CaptureState::new(&privacy, Vec::new(), 100 * 1024 * 1024);
 
         assert_eq!(state.policy.sensitive_patterns.len(), 1);

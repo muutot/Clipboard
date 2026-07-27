@@ -2,7 +2,7 @@ use crate::config::ConfigStore;
 
 pub struct PrivacyManager {
     pub paused: bool,
-    pub sensitive_patterns: Vec<String>,
+    pub sensitive_patterns: Vec<regex_lite::Regex>,
     pub password_manager_apps: Vec<String>,
 }
 
@@ -14,17 +14,22 @@ impl Default for PrivacyManager {
 
 impl PrivacyManager {
     pub fn new() -> Self {
+        let string_patterns: Vec<String> = vec![
+            r"\b\d{3}-\d{2}-\d{4}\b".to_owned(),
+            r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b".to_owned(),
+            r"\bpassword\s*[=:]\s*\S+".to_owned(),
+            r"\bsecret\s*[=:]\s*\S+".to_owned(),
+            r"\bapi[_-]?key\s*[=:]\s*\S+".to_owned(),
+            r"\btoken\s*[=:]\s*\S+".to_owned(),
+            r"-----BEGIN\s+(RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----".to_owned(),
+        ];
+        let sensitive_patterns = string_patterns
+            .iter()
+            .filter_map(|p| regex_lite::Regex::new(p).ok())
+            .collect();
         Self {
             paused: false,
-            sensitive_patterns: vec![
-                r"\b\d{3}-\d{2}-\d{4}\b".to_owned(),
-                r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b".to_owned(),
-                r"\bpassword\s*[=:]\s*\S+".to_owned(),
-                r"\bsecret\s*[=:]\s*\S+".to_owned(),
-                r"\bapi[_-]?key\s*[=:]\s*\S+".to_owned(),
-                r"\btoken\s*[=:]\s*\S+".to_owned(),
-                r"-----BEGIN\s+(RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----".to_owned(),
-            ],
+            sensitive_patterns,
             password_manager_apps: vec![
                 "1Password".to_owned(),
                 "Bitwarden".to_owned(),
@@ -47,14 +52,7 @@ impl PrivacyManager {
     }
 
     pub fn is_sensitive_content(&self, text: &str) -> bool {
-        for pattern in &self.sensitive_patterns {
-            if let Ok(re) = regex_lite::Regex::new(pattern) {
-                if re.is_match(text) {
-                    return true;
-                }
-            }
-        }
-        false
+        self.sensitive_patterns.iter().any(|re| re.is_match(text))
     }
 
     pub fn is_password_manager(&self, app_name: &str) -> bool {
