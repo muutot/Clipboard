@@ -425,7 +425,7 @@ function normalizeGeneralSettings(
   result.pageSizeLimit = integerInRange(
     source.pageSizeLimit ?? fallback("pageSizeLimit"),
     defaultSettings.pageSizeLimit,
-    50,
+    500,
     6000,
   );
   result.searchPageSizeLimit = integerInRange(

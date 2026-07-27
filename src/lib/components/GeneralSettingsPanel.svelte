@@ -731,28 +731,24 @@
           <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
         </div>
       </div>
-      {#if s.pageSizeLimit > 50}
-        <input
-          type="range"
-          min="50"
-          max={s.pageSizeLimit}
-          step="50"
-          value={Math.min(s.display.pageSize, s.pageSizeLimit)}
-          oninput={(event) => {
-            const input = event.target as HTMLInputElement;
-            const val = Math.min(Number(input.value), s.pageSizeLimit);
-            generalSettings.updateSetting("display", {
-              ...s.display,
-              pageSize: val,
-            });
-            updateSliderTrack(input);
-          }}
-          class="transparency-slider"
-          bind:this={pageSizeEl}
-        />
-      {:else}
-        <div class="transparency-slider pinned-slider" style="--slider-pct:100%"></div>
-      {/if}
+      <input
+        type="range"
+        min="50"
+        max={Math.min(s.pageSizeLimit, 300)}
+        step="50"
+        value={Math.min(s.display.pageSize, s.pageSizeLimit)}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Math.min(Number(input.value), s.pageSizeLimit);
+          generalSettings.updateSetting("display", {
+            ...s.display,
+            pageSize: val,
+          });
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={pageSizeEl}
+      />
     </section>
 
     <section class="setting-card">
@@ -770,9 +766,9 @@
       </div>
       <input
         type="range"
-        min="50"
+        min="500"
         max="6000"
-        step="50"
+        step="100"
         value={s.pageSizeLimit}
         oninput={(event) => {
           const input = event.target as HTMLInputElement;
@@ -1040,20 +1036,5 @@
   .sort-add-btn:hover {
     border-color: var(--text-muted);
     color: var(--text-primary);
-  }
-
-  .pinned-slider {
-    width: 100%;
-    margin-top: 12px;
-    height: 4px;
-    border-radius: 2px;
-    background: linear-gradient(
-      to right,
-      var(--selection-color, #4aa8ff) 0%,
-      var(--selection-color, #4aa8ff) var(--slider-pct, 100%),
-      #2a2a2a var(--slider-pct, 100%),
-      #2a2a2a 100%
-    );
-    opacity: 0.5;
   }
 </style>
