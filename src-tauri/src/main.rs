@@ -363,7 +363,16 @@ fn run_cli_process(args: &CliArgs) -> Result<(), String> {
         .join("database")
         .join("clipboard.sqlite3");
     let database = Database::open(&database_path).map_err(|error| error.to_string())?;
-    let output = clipboard_desktop_lib::cli::run_cli_command(args, &database)?;
+    let config = clipboard_desktop_lib::config::ConfigStore::load(project_directory)
+        .map_err(|error| error.to_string())?;
+    let page_size_limit = config.page_size_limit();
+    let search_page_size_limit = config.search_page_size_limit();
+    let output = clipboard_desktop_lib::cli::run_cli_command(
+        args,
+        &database,
+        page_size_limit,
+        search_page_size_limit,
+    )?;
     if !output.is_empty() {
         print!("{output}");
         if !output.ends_with('\n') {

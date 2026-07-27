@@ -1183,11 +1183,16 @@ fn apply_ignored_applications(
 #[tauri::command]
 fn list_clipboard_items(
     database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<Vec<ClipboardItem>, String> {
+    let max_limit = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .page_size_limit();
     database
-        .list_recent(limit.unwrap_or(100), offset.unwrap_or(0))
+        .list_recent(limit.unwrap_or(100).clamp(1, max_limit), offset.unwrap_or(0))
         .map_err(|error| error.to_string())
 }
 
@@ -1442,14 +1447,19 @@ fn apply_sort_rules(items: &mut [ClipboardItem], rules: &[SearchSortRule]) {
 fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     performance_tracker: tauri::State<'_, PerformanceTracker>,
     query: String,
     limit: Option<usize>,
     sort_rules: Option<Vec<SearchSortRule>>,
 ) -> Result<Vec<ClipboardItem>, String> {
     let started = Instant::now();
+    let max_limit = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .search_page_size_limit() as usize;
     let hits = search_index
-        .search(&query, limit.unwrap_or(100).clamp(1, 500))
+        .search(&query, limit.unwrap_or(100).clamp(1, max_limit))
         .map_err(|error| error.to_string())?;
     let item_ids = hits.into_iter().map(|hit| hit.item_id).collect::<Vec<_>>();
 
@@ -2239,11 +2249,16 @@ fn restore_clipboard_item(
 #[tauri::command]
 fn list_deleted_clipboard_items(
     database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<Vec<ClipboardItem>, String> {
+    let max_limit = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .page_size_limit();
     database
-        .list_deleted(limit.unwrap_or(100), offset.unwrap_or(0))
+        .list_deleted(limit.unwrap_or(100).clamp(1, max_limit), offset.unwrap_or(0))
         .map_err(|error| error.to_string())
 }
 
@@ -3258,6 +3273,7 @@ fn restart_app(app: tauri::AppHandle) {
 #[tauri::command]
 fn run_cli_command(
     database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     command: String,
     query: Option<String>,
     limit: Option<usize>,
@@ -3283,7 +3299,16 @@ fn run_cli_command(
         output_path,
     };
 
-    cli::run_cli_command(&args, database.inner())
+    let page_size_limit = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .page_size_limit();
+    let search_page_size_limit = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .search_page_size_limit();
+
+    cli::run_cli_command(&args, database.inner(), page_size_limit, search_page_size_limit)
 }
 
 #[derive(Debug, Serialize)]
@@ -3297,6 +3322,7 @@ struct LocalApiStatus {
 fn start_local_api(
     api: tauri::State<'_, Mutex<LocalApiServer>>,
     paths: tauri::State<'_, StoragePaths>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     port: Option<u16>,
 ) -> Result<LocalApiStatus, String> {
     let database = Arc::new(Database::open(&paths.database).map_err(|error| error.to_string())?);
@@ -3305,6 +3331,12 @@ fn start_local_api(
         .map_err(|_| "local API server lock is poisoned".to_owned())?;
     if let Some(port) = port {
         api.set_port(port)?;
+    }
+    {
+        let config = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        api.set_limits(config.page_size_limit(), config.search_page_size_limit());
     }
     let bound_port = api.start_with_database(database)?;
     Ok(LocalApiStatus {

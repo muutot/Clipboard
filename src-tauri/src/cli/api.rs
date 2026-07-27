@@ -23,6 +23,8 @@ pub struct LocalApiServer {
     database: Option<Arc<Database>>,
     stop_sender: Option<mpsc::Sender<()>>,
     handle: Option<JoinHandle<()>>,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
 }
 
 impl LocalApiServer {
@@ -32,7 +34,15 @@ impl LocalApiServer {
             database: None,
             stop_sender: None,
             handle: None,
+            page_size_limit: 500,
+            search_page_size_limit: 500,
         }
+    }
+
+    pub fn with_limits(mut self, page_size_limit: u32, search_page_size_limit: u32) -> Self {
+        self.page_size_limit = page_size_limit;
+        self.search_page_size_limit = search_page_size_limit;
+        self
     }
 
     pub fn with_database(port: u16, database: Arc<Database>) -> Self {
@@ -66,9 +76,19 @@ impl LocalApiServer {
         self.database = Some(database.clone());
 
         let (stop_sender, stop_receiver) = mpsc::channel();
+        let page_size_limit = self.page_size_limit;
+        let search_page_size_limit = self.search_page_size_limit;
         let handle = thread::Builder::new()
             .name("clipboard-local-api".to_owned())
-            .spawn(move || serve(listener, stop_receiver, database))
+            .spawn(move || {
+                serve(
+                    listener,
+                    stop_receiver,
+                    database,
+                    page_size_limit,
+                    search_page_size_limit,
+                )
+            })
             .map_err(|error| format!("failed to start local API: {error}"))?;
         self.stop_sender = Some(stop_sender);
         self.handle = Some(handle);
@@ -85,6 +105,11 @@ impl LocalApiServer {
         }
         self.port = port;
         Ok(())
+    }
+
+    pub fn set_limits(&mut self, page_size_limit: u32, search_page_size_limit: u32) {
+        self.page_size_limit = page_size_limit;
+        self.search_page_size_limit = search_page_size_limit;
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
@@ -108,7 +133,13 @@ impl Drop for LocalApiServer {
     }
 }
 
-fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, database: Arc<Database>) {
+fn serve(
+    listener: TcpListener,
+    stop_receiver: mpsc::Receiver<()>,
+    database: Arc<Database>,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
+) {
     loop {
         if matches!(
             stop_receiver.try_recv(),
@@ -119,7 +150,12 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, database: Arc
 
         match listener.accept() {
             Ok((stream, _peer)) => {
-                if let Err(error) = handle_connection(stream, &database) {
+                if let Err(error) = handle_connection(
+                    stream,
+                    &database,
+                    page_size_limit,
+                    search_page_size_limit,
+                ) {
                     eprintln!("[local-api] request failed: {error}");
                 }
             }
@@ -134,12 +170,17 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, database: Arc
     }
 }
 
-fn handle_connection(mut stream: TcpStream, database: &Database) -> Result<(), String> {
+fn handle_connection(
+    mut stream: TcpStream,
+    database: &Database,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
+) -> Result<(), String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|error| error.to_string())?;
     let request = read_request(&mut stream)?;
-    let response = dispatch(&request, database);
+    let response = dispatch(&request, database, page_size_limit, search_page_size_limit);
     write_response(&mut stream, &response)
 }
 
@@ -244,7 +285,12 @@ fn write_response(stream: &mut TcpStream, response: &HttpResponse) -> Result<(),
         .map_err(|error| format!("write response: {error}"))
 }
 
-fn dispatch(request: &HttpRequest, database: &Database) -> HttpResponse {
+fn dispatch(
+    request: &HttpRequest,
+    database: &Database,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
+) -> HttpResponse {
     if request.method == "OPTIONS" {
         return response(204, "", Vec::new());
     }
@@ -268,7 +314,7 @@ fn dispatch(request: &HttpRequest, database: &Database) -> HttpResponse {
             json_response(200, &HealthResponse { status: "ok" })
         }
         ("GET", [segment]) if segment == "items" => {
-            let limit = query_limit(&query);
+            let limit = query_limit(&query, page_size_limit);
             let offset = query
                 .get("offset")
                 .and_then(|value| value.parse::<u32>().ok())
@@ -279,7 +325,7 @@ fn dispatch(request: &HttpRequest, database: &Database) -> HttpResponse {
             }
         }
         ("GET", [segment, deleted]) if segment == "items" && deleted == "deleted" => {
-            let limit = query_limit(&query);
+            let limit = query_limit(&query, page_size_limit);
             let offset = query
                 .get("offset")
                 .and_then(|value| value.parse::<u32>().ok())
@@ -291,7 +337,12 @@ fn dispatch(request: &HttpRequest, database: &Database) -> HttpResponse {
         }
         ("GET", [segment]) if segment == "search" => {
             let search = query.get("q").map(String::as_str).unwrap_or("");
-            match search_items(database, search, query_limit(&query) as usize) {
+            match search_items(
+                database,
+                search,
+                query_limit(&query, search_page_size_limit) as usize,
+                page_size_limit as usize,
+            ) {
                 Ok(items) => json_response(200, &items),
                 Err(error) => error_response(500, &error),
             }
@@ -426,26 +477,27 @@ fn decode_component(value: &str) -> Result<String, String> {
         .map_err(|error| format!("invalid URL component: {error}"))
 }
 
-fn query_limit(query: &std::collections::HashMap<String, String>) -> u32 {
+fn query_limit(query: &std::collections::HashMap<String, String>, max_limit: u32) -> u32 {
     query
         .get("limit")
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(100)
-        .clamp(1, 500)
+        .clamp(1, max_limit)
 }
 
 fn search_items(
     database: &Database,
     query: &str,
     limit: usize,
+    scan_page_size: usize,
 ) -> Result<Vec<ClipboardItem>, String> {
     let normalized = query.to_lowercase();
-    let wanted = limit.clamp(1, 500);
+    let wanted = limit;
     let mut offset = 0u32;
     let mut matches = Vec::new();
     loop {
         let page = database
-            .list_recent(500, offset)
+            .list_recent(scan_page_size as u32, offset)
             .map_err(|error| error.to_string())?;
         let page_len = page.len();
         matches.extend(page.into_iter().filter(|item| {
@@ -463,10 +515,10 @@ fn search_items(
                     .to_lowercase()
                     .contains(&normalized)
         }));
-        if matches.len() >= wanted || page_len < 500 {
+        if matches.len() >= wanted || page_len < scan_page_size {
             break;
         }
-        offset = offset.saturating_add(500);
+        offset = offset.saturating_add(scan_page_size as u32);
     }
     matches.truncate(wanted);
     Ok(matches)
@@ -539,7 +591,7 @@ mod tests {
             target: "/health".to_owned(),
             body: Vec::new(),
         };
-        let response = dispatch(&request, &database);
+        let response = dispatch(&request, &database, 500, 500);
         assert_eq!(response.status, 200);
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&response.body).unwrap()["status"],
@@ -555,7 +607,7 @@ mod tests {
             target: "/paste".to_owned(),
             body: br#"{"text":"api note"}"#.to_vec(),
         };
-        let response = dispatch(&paste, &database);
+        let response = dispatch(&paste, &database, 500, 500);
         assert_eq!(response.status, 201);
         let item: ClipboardItem = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(item.kind, ClipboardKind::Text);
@@ -565,7 +617,7 @@ mod tests {
             target: "/search?q=api%20note".to_owned(),
             body: Vec::new(),
         };
-        let response = dispatch(&search, &database);
+        let response = dispatch(&search, &database, 500, 500);
         assert_eq!(response.status, 200);
         let results: Vec<ClipboardItem> = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(results.len(), 1);
@@ -575,7 +627,7 @@ mod tests {
             target: format!("/items/{}", item.id),
             body: Vec::new(),
         };
-        assert_eq!(dispatch(&delete, &database).status, 200);
+        assert_eq!(dispatch(&delete, &database, 500, 500).status, 200);
         assert!(database.list_recent(10, 0).unwrap().is_empty());
     }
 

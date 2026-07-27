@@ -33,10 +33,17 @@ pub struct CliArgs {
     pub output_path: Option<String>,
 }
 
-pub fn run_cli_command(args: &CliArgs, database: &Database) -> Result<String, String> {
+pub fn run_cli_command(
+    args: &CliArgs,
+    database: &Database,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
+) -> Result<String, String> {
     run_cli_command_with_clipboard(
         args,
         database,
+        page_size_limit,
+        search_page_size_limit,
         read_system_clipboard_text,
         write_system_clipboard_text,
     )
@@ -45,6 +52,8 @@ pub fn run_cli_command(args: &CliArgs, database: &Database) -> Result<String, St
 fn run_cli_command_with_clipboard<Read, Write>(
     args: &CliArgs,
     database: &Database,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
     mut read_clipboard: Read,
     mut write_clipboard: Write,
 ) -> Result<String, String>
@@ -55,7 +64,12 @@ where
     match args.command {
         CliCommand::List => {
             let items = database
-                .list_recent(args.limit.unwrap_or(20).clamp(1, 500) as u32, 0)
+                .list_recent(
+                    args.limit
+                        .unwrap_or(20)
+                        .clamp(1, page_size_limit as usize) as u32,
+                    0,
+                )
                 .map_err(|e| e.to_string())?;
             format_items(&items)
         }
@@ -65,12 +79,16 @@ where
                 .as_deref()
                 .ok_or_else(|| "search requires a query".to_owned())?;
             let normalized = query.to_lowercase();
-            let wanted = args.limit.unwrap_or(50).clamp(1, 500);
+            let wanted = args
+                .limit
+                .unwrap_or(50)
+                .clamp(1, search_page_size_limit as usize);
+            let scan_page = page_size_limit as usize;
             let mut offset = 0u32;
             let mut filtered = Vec::new();
             loop {
                 let page = database
-                    .list_recent(500, offset)
+                    .list_recent(scan_page as u32, offset)
                     .map_err(|e| e.to_string())?;
                 let page_len = page.len();
                 filtered.extend(page.into_iter().filter(|item| {
@@ -88,10 +106,10 @@ where
                             .to_lowercase()
                             .contains(&normalized)
                 }));
-                if filtered.len() >= wanted || page_len < 500 {
+                if filtered.len() >= wanted || page_len < scan_page {
                     break;
                 }
-                offset = offset.saturating_add(500);
+                offset = offset.saturating_add(scan_page as u32);
             }
             filtered.truncate(wanted);
             format_items(&filtered)
@@ -422,7 +440,7 @@ mod tests {
         ClipboardRepository::save_item(&database, &item).unwrap();
 
         let args = args(CliCommand::Stats);
-        let result = run_cli_command(&args, &database).unwrap();
+        let result = run_cli_command(&args, &database, 500, 500).unwrap();
         assert_eq!(result, "total clipboard items: 1");
     }
 
@@ -449,7 +467,7 @@ mod tests {
 
         let mut args = args(CliCommand::Delete);
         args.query = Some("to-delete".to_owned());
-        let result = run_cli_command(&args, &database).unwrap();
+        let result = run_cli_command(&args, &database, 500, 500).unwrap();
         assert!(result.contains("deleted item"));
         assert_eq!(database.item_count().unwrap(), 0);
         assert_eq!(database.list_deleted(10, 0).unwrap().len(), 1);
@@ -459,8 +477,14 @@ mod tests {
     fn cli_copy_requires_an_item_id() {
         let database = Database::open_in_memory().unwrap();
         let args = args(CliCommand::Copy);
-        let result =
-            run_cli_command_with_clipboard(&args, &database, || Ok(String::new()), |_| Ok(()));
+        let result = run_cli_command_with_clipboard(
+            &args,
+            &database,
+            500,
+            500,
+            || Ok(String::new()),
+            |_| Ok(()),
+        );
         assert_eq!(result.unwrap_err(), "copy requires an item id");
     }
 
@@ -475,6 +499,8 @@ mod tests {
         let result = run_cli_command_with_clipboard(
             &args,
             &database,
+            500,
+            500,
             || Ok(String::new()),
             |text| {
                 copied = text.to_owned();
@@ -495,6 +521,8 @@ mod tests {
         let result = run_cli_command_with_clipboard(
             &args,
             &database,
+            500,
+            500,
             || Ok("https://example.com".to_owned()),
             |_| Ok(()),
         )
@@ -524,7 +552,7 @@ mod tests {
         let mut args = args(CliCommand::Search);
         args.query = Some("needle app".to_owned());
 
-        let result = run_cli_command(&args, &database).unwrap();
+        let result = run_cli_command(&args, &database, 500, 500).unwrap();
 
         assert!(result.contains("[item-0]"));
     }
@@ -539,7 +567,7 @@ mod tests {
         }
         let args = args(CliCommand::Export);
 
-        let result = run_cli_command(&args, &database).unwrap();
+        let result = run_cli_command(&args, &database, 500, 500).unwrap();
         let exported: Vec<ClipboardItem> = serde_json::from_str(&result).unwrap();
 
         assert_eq!(exported.len(), 501);
