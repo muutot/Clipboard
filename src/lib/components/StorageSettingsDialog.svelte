@@ -108,7 +108,7 @@
     | "keyboard_system"
     | "ocr"
     | "statistics"
-  >("storage_paths");
+  >("general_window");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
   let keyboardResetToken = $state(0);
 

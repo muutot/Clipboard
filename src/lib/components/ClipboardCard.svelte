@@ -168,11 +168,7 @@
     };
     const observer = new ResizeObserver(report);
     observer.observe(element);
-    const immediate = Math.ceil(element.offsetHeight + (compact ? compactCardGap : 0));
-    if (immediate > 0) {
-      lastHeight = immediate;
-      reportHeight(item.id, immediate, true);
-    }
+    report();
     return () => observer.disconnect();
   });
 
