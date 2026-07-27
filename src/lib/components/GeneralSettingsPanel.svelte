@@ -841,7 +841,19 @@
   }
 
   .sort-rule-row.sort-drag-over {
-    border-top: 2px solid var(--accent);
+    position: relative;
+  }
+
+  .sort-rule-row.sort-drag-over::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    pointer-events: none;
   }
 
   .sort-grip {
