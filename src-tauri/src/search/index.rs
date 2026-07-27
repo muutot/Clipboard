@@ -48,11 +48,29 @@ pub struct SearchIndex {
 
 impl SearchIndex {
     pub fn open(path: &Path) -> Result<Self, SearchError> {
-        let layout = SearchIndexLayout::prepare(path.to_path_buf())?;
+        let mut layout = SearchIndexLayout::prepare(path.to_path_buf())?;
         let (schema, fields) = build_schema();
         let directory =
             MmapDirectory::open(&layout.index_directory).map_err(tantivy::TantivyError::from)?;
-        let index = Index::open_or_create(directory, schema)?;
+        let index = match Index::open_or_create(directory, schema) {
+            Ok(index) => index,
+            Err(error) => {
+                let msg = error.to_string();
+                if msg.contains("schema does not match") {
+                    std::fs::remove_dir_all(&layout.index_directory)
+                        .map_err(tantivy::TantivyError::from)?;
+                    std::fs::create_dir_all(&layout.index_directory)
+                        .map_err(tantivy::TantivyError::from)?;
+                    layout.rebuild_required = true;
+                    let directory = MmapDirectory::open(&layout.index_directory)
+                        .map_err(tantivy::TantivyError::from)?;
+                    let (schema2, _) = build_schema();
+                    Index::open_or_create(directory, schema2)?
+                } else {
+                    return Err(error.into());
+                }
+            }
+        };
 
         Self::from_index(index, fields, Some(layout))
     }
