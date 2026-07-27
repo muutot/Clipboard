@@ -29,6 +29,40 @@
   let windowConfigSaving = $state(false);
   let sortDragIdx = $state<number | null>(null);
   let sortDragOverIdx = $state<number | null>(null);
+  let sortListEl = $state<HTMLDivElement | null>(null);
+
+  function pointerDragStart(idx: number, e: PointerEvent) {
+    const grip = (e.currentTarget as HTMLElement).closest('.sort-grip') as HTMLElement | null;
+    if (grip) grip.setPointerCapture(e.pointerId);
+    sortDragIdx = idx;
+    sortDragOverIdx = null;
+  }
+
+  function pointerDragMove(e: PointerEvent) {
+    if (sortDragIdx === null || !sortListEl) return;
+    const rows = sortListEl.querySelectorAll<HTMLElement>('.sort-rule-row');
+    let targetIdx: number | null = null;
+    for (let i = 0; i < rows.length; i++) {
+      const rect = rows[i].getBoundingClientRect();
+      if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        targetIdx = i;
+        break;
+      }
+    }
+    if (targetIdx !== null && targetIdx !== sortDragIdx) {
+      sortDragOverIdx = targetIdx;
+    } else {
+      sortDragOverIdx = null;
+    }
+  }
+
+  function pointerDragEnd() {
+    if (sortDragIdx !== null && sortDragOverIdx !== null && sortDragIdx !== sortDragOverIdx) {
+      moveSortRule(sortDragIdx, sortDragOverIdx);
+    }
+    sortDragIdx = null;
+    sortDragOverIdx = null;
+  }
 
   function moveSortRule(fromIdx: number, toIdx: number) {
     if (fromIdx === toIdx) return;
@@ -37,6 +71,19 @@
     newRules.splice(toIdx, 0, removed);
     generalSettings.updateSetting("searchSortRules", newRules);
   }
+
+  $effect(() => {
+    if (sortDragIdx !== null) {
+      const onMove = (e: PointerEvent) => pointerDragMove(e);
+      const onUp = () => pointerDragEnd();
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      return () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+    }
+  });
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -279,46 +326,20 @@
           <p>{_t("general.searchSortRulesDescription")}</p>
         </div>
       </div>
-      <div class="sort-rules-list" role="list">
+      <div class="sort-rules-list" role="list" bind:this={sortListEl}>
         {#each s.searchSortRules as rule, idx (idx)}
           <div
             class="sort-rule-row"
             class:sort-dragging={sortDragIdx === idx}
             class:sort-drag-over={sortDragOverIdx === idx && sortDragIdx !== idx}
             role="listitem"
-            ondragover={(e) => {
-              e.preventDefault();
-              e.dataTransfer!.dropEffect = "move";
-              if (sortDragIdx !== null && sortDragIdx !== idx) {
-                sortDragOverIdx = idx;
-              }
-            }}
-            ondragleave={() => {
-              if (sortDragOverIdx === idx) sortDragOverIdx = null;
-            }}
-            ondrop={(e) => {
-              e.preventDefault();
-              if (sortDragIdx !== null && sortDragIdx !== idx) {
-                moveSortRule(sortDragIdx, idx);
-              }
-              sortDragIdx = null;
-              sortDragOverIdx = null;
-            }}
           >
             <span
               class="sort-grip"
-              draggable="true"
               role="button"
               tabindex="0"
               aria-label={_t("general.sortDragHandle")}
-              ondragstart={(e) => {
-                sortDragIdx = idx;
-                e.dataTransfer!.effectAllowed = "move";
-              }}
-              ondragend={() => {
-                sortDragIdx = null;
-                sortDragOverIdx = null;
-              }}
+              onpointerdown={(e) => pointerDragStart(idx, e)}
             >
               <span class="grip-dot"></span>
               <span class="grip-dot"></span>
@@ -833,6 +854,8 @@
     border-radius: 4px;
     align-self: stretch;
     align-content: center;
+    user-select: none;
+    touch-action: none;
   }
 
   .sort-grip:hover {
