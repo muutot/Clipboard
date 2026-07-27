@@ -322,11 +322,7 @@
         return true;
       }
 
-      const searchableText = [item.title, item.preview, item.textContent, item.sourceApp]
-        .join(" ")
-        .toLocaleLowerCase();
-
-      return keywords.every((keyword) => searchableText.includes(keyword));
+      return keywords.every((keyword) => (item.searchableText ?? "").includes(keyword));
     });
   });
 
@@ -927,8 +923,12 @@
   function trimActiveHistory() {
     const max = $generalSettings.display.maxVisibleItems;
     if (items.length <= max) return;
-    const keep = items.filter((item) => item.deleted || item.favorite);
-    const regular = items.filter((item) => !item.deleted && !item.favorite);
+    const keep: ClipboardItem[] = [];
+    const regular: ClipboardItem[] = [];
+    for (const item of items) {
+      if (item.deleted || item.favorite) keep.push(item);
+      else regular.push(item);
+    }
     const limit = Math.max(0, max - keep.length);
     items = [...keep, ...regular.slice(0, limit)];
   }
@@ -1789,13 +1789,13 @@
     if (selectedItems.length === 0) return;
 
     const useRecycleBin = $generalSettings.useRecycleBin;
-    const softIds = useRecycleBin
-      ? selectedItems.filter((item) => !item.deleted && !item.favorite).map((item) => item.id)
-      : [];
-    const permanentIds = selectedItems.filter((item) => item.deleted).map((item) => item.id);
-    const hardIds = useRecycleBin
-      ? []
-      : selectedItems.filter((item) => !item.deleted && !item.favorite).map((item) => item.id);
+    const softIds: string[] = [];
+    const permanentIds: string[] = [];
+    const hardIds: string[] = [];
+    for (const item of selectedItems) {
+      if (item.deleted) { permanentIds.push(item.id); }
+      else if (!item.favorite) { (useRecycleBin ? softIds : hardIds).push(item.id); }
+    }
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
@@ -2162,8 +2162,14 @@
     }
   }
 
+  let scrollRaf = 0;
+
   function handleHistoryScroll() {
-    if (historyListEl) {
+    if (!historyListEl) return;
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = 0;
+      if (!historyListEl) return;
       scrollTop = historyListEl.scrollTop;
       const nearBottom =
         historyListEl.scrollTop + historyListEl.clientHeight >= historyListEl.scrollHeight - 180;
@@ -2183,7 +2189,7 @@
       ) {
         void loadActiveHistoryPage();
       }
-    }
+    });
   }
 
   async function measureContainer() {

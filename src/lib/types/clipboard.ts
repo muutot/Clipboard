@@ -49,6 +49,7 @@ export interface ClipboardItem {
   deleted?: boolean;
   customTitle?: boolean;
   fileName?: string;
+  searchableText?: string;
   imageMeta?: {
     width: number;
     height: number;

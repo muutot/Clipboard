@@ -107,100 +107,49 @@
     }
   }
 
-  const settingsBreadcrumb = $derived.by(() => {
+  const settingsSectionMeta = $derived.by(() => {
+    const tab = activeStatisticsTab;
     switch (activeSection) {
       case "general_search":
+        return { breadcrumb: _t("general.eyebrow"), title: _t("storage.basicTab"), desc: _t("storage.generalSearchDescription") };
       case "general_display":
+        return { breadcrumb: _t("general.eyebrow"), title: _t("storage.basicTab"), desc: _t("storage.generalDisplayDescription") };
       case "general_window":
-        return _t("general.eyebrow");
+        return { breadcrumb: _t("general.eyebrow"), title: _t("storage.basicTab"), desc: _t("storage.generalWindowDescription") };
       case "compact":
+        return { breadcrumb: _t("storage.appearanceSettings"), title: _t("storage.compactTab"), desc: _t("compact.description") };
       case "font":
+        return { breadcrumb: _t("storage.appearanceSettings"), title: _t("storage.fontTab"), desc: _t("general.fontSizeDescription") };
       case "theme":
-        return _t("storage.appearanceSettings");
+        return { breadcrumb: _t("storage.appearanceSettings"), title: _t("storage.themeTab"), desc: _t("general.fontSizeDescription") };
       case "capture":
-        return _t("capture.settings");
+        return { breadcrumb: _t("capture.settings"), title: _t("capture.title"), desc: _t("capture.description") };
       case "storage_paths":
+        return { breadcrumb: _t("storage.settings"), title: _t("storage.dataStorage"), desc: _t("storage.storagePathsDescription") };
       case "storage_limits":
+        return { breadcrumb: _t("storage.settings"), title: _t("storage.dataStorage"), desc: _t("storage.storageLimitsDescription") };
       case "storage_tools":
-        return _t("storage.settings");
+        return { breadcrumb: _t("storage.settings"), title: _t("storage.dataStorage"), desc: _t("storage.storageToolsDescription") };
       case "keyboard_item":
+        return { breadcrumb: _t("keyboard.settings"), title: _t("keyboard.title"), desc: _t("storage.keyboardItemDescription") };
       case "keyboard_quick":
+        return { breadcrumb: _t("keyboard.settings"), title: _t("keyboard.title"), desc: _t("storage.keyboardQuickDescription") };
       case "keyboard_system":
-        return _t("keyboard.settings");
+        return { breadcrumb: _t("keyboard.settings"), title: _t("keyboard.title"), desc: _t("storage.keyboardSystemDescription") };
       case "ocr":
-        return _t("storage.ocrSettings");
+        return { breadcrumb: _t("storage.ocrSettings"), title: _t("storage.ocrTitle"), desc: _t("storage.ocrDescription") };
       case "statistics":
-        return _t("storage.statisticsSettings");
+        return {
+          breadcrumb: _t("storage.statisticsSettings"),
+          title: tab === "storage" ? _t("statistics.storageTab") : tab === "performance" ? _t("statistics.performanceTab") : _t("statistics.memoryTab"),
+          desc: tab === "storage" ? _t("statistics.storageDescription") : tab === "performance" ? _t("statistics.performanceDescription") : _t("statistics.memoryDescription"),
+        };
     }
   });
 
-  const settingsSectionTitle = $derived.by(() => {
-    switch (activeSection) {
-      case "general_search":
-      case "general_display":
-      case "general_window":
-        return _t("storage.basicTab");
-      case "compact":
-        return _t("storage.compactTab");
-      case "font":
-        return _t("storage.fontTab");
-      case "capture":
-        return _t("capture.title");
-      case "storage_paths":
-      case "storage_limits":
-      case "storage_tools":
-        return _t("storage.dataStorage");
-      case "keyboard_item":
-      case "keyboard_quick":
-      case "keyboard_system":
-        return _t("keyboard.title");
-      case "ocr":
-        return _t("storage.ocrTitle");
-      case "statistics":
-        return activeStatisticsTab === "storage"
-          ? _t("statistics.storageTab")
-          : activeStatisticsTab === "performance"
-            ? _t("statistics.performanceTab")
-            : _t("statistics.memoryTab");
-    }
-  });
-
-  const settingsSectionDescription = $derived.by(() => {
-    switch (activeSection) {
-      case "general_search":
-        return _t("storage.generalSearchDescription");
-      case "general_display":
-        return _t("storage.generalDisplayDescription");
-      case "general_window":
-        return _t("storage.generalWindowDescription");
-      case "compact":
-        return _t("compact.description");
-      case "font":
-        return _t("general.fontSizeDescription");
-      case "capture":
-        return _t("capture.description");
-      case "storage_paths":
-        return _t("storage.storagePathsDescription");
-      case "storage_limits":
-        return _t("storage.storageLimitsDescription");
-      case "storage_tools":
-        return _t("storage.storageToolsDescription");
-      case "keyboard_item":
-        return _t("storage.keyboardItemDescription");
-      case "keyboard_quick":
-        return _t("storage.keyboardQuickDescription");
-      case "keyboard_system":
-        return _t("storage.keyboardSystemDescription");
-      case "ocr":
-        return _t("storage.ocrDescription");
-      case "statistics":
-        return activeStatisticsTab === "storage"
-          ? _t("statistics.storageDescription")
-          : activeStatisticsTab === "performance"
-            ? _t("statistics.performanceDescription")
-            : _t("statistics.memoryDescription");
-    }
-  });
+  const settingsBreadcrumb = $derived(settingsSectionMeta?.breadcrumb);
+  const settingsSectionTitle = $derived(settingsSectionMeta?.title);
+  const settingsSectionDescription = $derived(settingsSectionMeta?.desc);
 
   let settingsSearch = $state("");
   let settingsContent = $state<HTMLElement | null>(null);

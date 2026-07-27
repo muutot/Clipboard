@@ -14,9 +14,20 @@ const justNowLabels: Record<string, string> = {
   en: "just now",
 };
 
+const rtfCache = new Map<string, Intl.RelativeTimeFormat>();
+
+function getRtf(locale: string): Intl.RelativeTimeFormat {
+  let rtf = rtfCache.get(locale);
+  if (!rtf) {
+    rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+    rtfCache.set(locale, rtf);
+  }
+  return rtf;
+}
+
 export function formatRelativeTime(timestamp: number, currentTime = Date.now()): string {
   const locale = getLocale();
-  const relativeTime = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const relativeTime = getRtf(locale);
   const difference = timestamp - currentTime;
 
   if (Math.abs(difference) < 45_000) {
