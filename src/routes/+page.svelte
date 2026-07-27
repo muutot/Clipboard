@@ -137,6 +137,7 @@
 
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let historyListEl = $state<HTMLElement | null>(null);
+  let appShellEl = $state<HTMLElement | null>(null);
   let scrollTop = $state(0);
   let containerHeight = $state(0);
   let containerWidth = $state(0);
@@ -832,7 +833,7 @@
         }
       }
       previousRememberWindowPosition = s.rememberWindowPosition;
-      const shell = document.querySelector(".app-shell");
+      const shell = appShellEl;
       if (shell) {
         shell.classList.toggle("compact", s.compactMode);
       }
@@ -2137,6 +2138,12 @@
       return;
     }
 
+    if (event.key === " " && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
+      event.preventDefault();
+      if (selectedId) openDetail(selectedId);
+      return;
+    }
+
     if (event.key === "Backspace") {
       if (selectedIds.size > 0) {
         selectedIds = new Set();
@@ -2346,6 +2353,7 @@
 <main
   class="app-shell"
   class:split-detail={detailDisplayMode === 'split' && detailItem != null}
+  bind:this={appShellEl}
 >
   <header
     class="search-header"

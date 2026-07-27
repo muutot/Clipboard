@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use serde::Serialize;
 
 use crate::storage::SearchRepository;
@@ -49,7 +47,7 @@ impl SearchSynchronizer {
         let item_ids = events
             .iter()
             .map(|event| event.item_id.clone())
-            .collect::<BTreeSet<_>>();
+            .collect::<std::collections::HashSet<_>>();
         let mut changes = Vec::with_capacity(item_ids.len());
         let mut upserted_documents = 0;
         let mut deleted_documents = 0;

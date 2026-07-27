@@ -56,11 +56,23 @@ pub fn detect_markers(text: &str) -> ContentMarkers {
     markers
 }
 
-fn try_match(regex_str: &str, _text: &str) -> Option<regex_lite::Regex> {
-    regex_lite::Regex::new(regex_str).ok()
-}
-
 use std::sync::LazyLock;
+
+static RE_IPV4: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b").unwrap()
+});
+static RE_IPV6: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b").unwrap()
+});
+static RE_DATE_NUMERIC: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b").unwrap()
+});
+static RE_DATE_ISO: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b").unwrap()
+});
+static RE_DATE_CN: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\b(\d{4})年(\d{1,2})月(\d{1,2})日").unwrap()
+});
 
 static RE_URL: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"https?://[^\s<>{}|\^`\[\]]+").unwrap());
@@ -128,53 +140,33 @@ fn extract_colors(text: &str) -> Vec<String> {
     results
 }
 
-fn extract_currency(text: &str) -> Vec<String> {
-    let mut results = Vec::new();
-
+static RE_CURRENCY: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
     let symbols = ["¥", "$", "€", "£", "USD", "CNY", "EUR", "GBP", "JPY"];
-    for symbol in symbols.iter() {
-        if let Some(re) = try_match(
-            &format!(
-                r"{}\s*\d{{1,3}}(?:[,.]\d{{3}})*(?:\.\d{{2}})?",
-                regex_lite::escape(symbol)
-            ),
-            text,
-        ) {
-            results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-        }
+    let suffix_labels = ["元", "美元", "欧元", "英镑", "日元", "円"];
+    let mut pattern = String::from("(");
+    // Prefix symbols: e.g. ¥100, $99.99
+    for (i, s) in symbols.iter().enumerate() {
+        if i > 0 { pattern.push('|'); }
+        pattern.push_str(&regex_lite::escape(s));
+        pattern.push_str(r"\s*\d{1,3}(?:[,.]\d{3})*(?:\.\d{2})?");
     }
-
-    let suffix_labels = ["元", "美元", "欧元", "英镑", "日元"];
+    // Suffix labels: e.g. 100元, 99.99美元
     for label in suffix_labels.iter() {
-        if let Some(re) = try_match(
-            &format!(r"\b\d{{1,3}}(?:[,.]\d{{3}})*(?:\.\d{{2}})?\s*{}", label),
-            text,
-        ) {
-            results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-        }
+        pattern.push('|');
+        pattern.push_str(r"\d{1,3}(?:[,.]\d{3})*(?:\.\d{2})?\s*");
+        pattern.push_str(label);
     }
+    pattern.push(')');
+    regex_lite::Regex::new(&pattern).unwrap()
+});
 
-    if let Some(re) = try_match(r"\b\d{1,3}(?:[,.]\d{3})*(?:\.\d{2})?\s*円", text) {
-        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-    }
-
-    results
+fn extract_currency(text: &str) -> Vec<String> {
+    RE_CURRENCY.find_iter(text).map(|m| m.as_str().to_string()).collect()
 }
 
 fn extract_ip_addresses(text: &str) -> Vec<String> {
-    let mut results = Vec::new();
-
-    if let Some(re) = try_match(
-        r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b",
-        text,
-    ) {
-        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-    }
-
-    if let Some(re) = try_match(r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b", text) {
-        results.extend(re.find_iter(text).map(|m| m.as_str().to_string()));
-    }
-
+    let mut results: Vec<String> = RE_IPV4.find_iter(text).map(|m| m.as_str().to_string()).collect();
+    results.extend(RE_IPV6.find_iter(text).map(|m| m.as_str().to_string()));
     results
 }
 
@@ -194,28 +186,14 @@ struct DateExtraction {
 fn extract_dates(text: &str) -> DateExtraction {
     let mut dates = DateExtraction::default();
 
-    for pattern in [
-        r"\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b",
-        r"\b(\d{4})年(\d{1,2})月(\d{1,2})日",
-    ] {
-        let Some(regex) = try_match(pattern, text) else {
-            continue;
-        };
-        for captures in regex.captures_iter(text) {
-            let Some((year, month, day)) = parse_date_components(&captures) else {
-                continue;
-            };
-            dates.record_unambiguous(year, month, day);
-        }
+    for captures in RE_DATE_ISO.captures_iter(text).chain(RE_DATE_CN.captures_iter(text)) {
+        let Some((year, month, day)) = parse_date_components(&captures) else { continue };
+        dates.record_unambiguous(year, month, day);
     }
 
-    if let Some(regex) = try_match(r"\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b", text) {
-        for captures in regex.captures_iter(text) {
-            let Some((first, second, year)) = parse_date_components(&captures) else {
-                continue;
-            };
-            dates.record_trailing_year(year, first, second);
-        }
+    for captures in RE_DATE_NUMERIC.captures_iter(text) {
+        let Some((first, second, year)) = parse_date_components(&captures) else { continue };
+        dates.record_trailing_year(year, first, second);
     }
 
     dates

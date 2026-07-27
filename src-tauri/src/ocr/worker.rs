@@ -172,15 +172,15 @@ impl OcrWorker {
                         continue;
                     }
 
-                    let engine_name = engine.name().to_owned();
-                    let model_version = engine.model_version().to_owned();
+                    let engine_name = engine.name();
+                    let model_version = engine.model_version();
 
                     match engine.recognize(&input) {
                         Ok(output) => {
                             let result = OcrResult::completed(
                                 &input.item_id,
-                                &engine_name,
-                                &model_version,
+                                engine_name,
+                                model_version,
                                 output.language.as_deref(),
                                 &output.full_text,
                                 &output.blocks,
