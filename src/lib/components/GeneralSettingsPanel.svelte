@@ -52,12 +52,10 @@
   function pointerDragStart(idx: number, _e: PointerEvent) {
     sortDragIdx = idx;
     sortDragOverIdx = null;
-    console.log("[SORT-DRAG] start idx=", idx);
+    const rows = sortListEl?.querySelectorAll<HTMLElement>('.sort-rule-row');
 
     function onMove(ev: PointerEvent) {
-      if (!sortListEl) { console.log("[SORT-DRAG] no listEl"); return; }
-      const rows = sortListEl.querySelectorAll<HTMLElement>('.sort-rule-row');
-      if (rows.length === 0) { console.log("[SORT-DRAG] no rows"); return; }
+      if (!rows || rows.length === 0) return;
       let target: number | null = null;
       for (let i = 0; i < rows.length; i++) {
         const rect = rows[i].getBoundingClientRect();
@@ -66,18 +64,21 @@
           break;
         }
       }
-      console.log("[SORT-DRAG] move clientY=", ev.clientY, " target=", target, " sortDragIdx=", sortDragIdx);
-      if (target !== null && target !== sortDragIdx) {
-        sortDragOverIdx = target;
-      } else {
-        sortDragOverIdx = null;
+      for (let i = 0; i < rows.length; i++) {
+        if (target !== null && i === target && i !== sortDragIdx) {
+          rows[i].classList.add('sort-drag-over');
+        } else {
+          rows[i].classList.remove('sort-drag-over');
+        }
       }
     }
 
     function onUp() {
-      if (sortDragIdx !== null && sortDragOverIdx !== null && sortDragIdx !== sortDragOverIdx) {
-        moveSortRule(sortDragIdx, sortDragOverIdx);
+      const target = [...(rows ?? [])].findIndex((r) => r.classList.contains('sort-drag-over'));
+      if (target !== -1 && target !== sortDragIdx) {
+        moveSortRule(sortDragIdx!, target);
       }
+      rows?.forEach((r) => r.classList.remove('sort-drag-over'));
       sortDragIdx = null;
       sortDragOverIdx = null;
       document.removeEventListener("pointermove", onMove);
@@ -342,7 +343,6 @@
           <div
             class="sort-rule-row"
             class:sort-dragging={sortDragIdx === idx}
-            class:sort-drag-over={sortDragOverIdx === idx && sortDragIdx !== idx}
             role="listitem"
           >
             <span
@@ -853,11 +853,11 @@
     opacity: 0.4;
   }
 
-  .sort-rule-row.sort-drag-over {
-    outline: 2px solid var(--accent);
+  :global(.sort-drag-over) {
+    outline: 2px solid var(--accent) !important;
     outline-offset: 2px;
-    border-radius: var(--settings-control-radius, 6px);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-radius: 6px;
+    background: rgba(74, 168, 255, 0.08);
   }
 
   .sort-grip {
