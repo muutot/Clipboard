@@ -2519,11 +2519,6 @@
 
   <section class="history-panel" aria-label={_t("app.recentRecords")}>
     <div class="section-heading">
-      {#if selectedIds.size > 0}
-        <span class="multi-count"
-          >{selectedIds.size} {_t("status.recordCount", { count: 0 }).replace("0 ", "")}</span
-        >
-      {/if}
     </div>
 
     {#if filteredItems.length > 0}
@@ -2645,32 +2640,36 @@
         <span>{selectedIds.size}</span>
       </button>
       <div class="bulk-actions">
-        <button type="button" onclick={bulkCopy}
-          >&#47;&#47; {_t("bulk.copyN", { count: selectedIds.size })}</button
-        >
-        <button type="button" onclick={bulkFavorite}
-          >&#42; {_t("bulk.favoriteN", { count: selectedIds.size })}</button
-        >
+        <button type="button" onclick={bulkCopy}>
+          <AppIcon name="copy" size={14} />
+          <span>{_t("bulk.copyN", { count: selectedIds.size })}</span>
+        </button>
+        <button type="button" onclick={bulkFavorite}>
+          <AppIcon name="star" size={14} />
+          <span>{_t("bulk.favoriteN", { count: selectedIds.size })}</span>
+        </button>
         {#if selectedActiveCount > 0}
-          <button type="button" class="danger" onclick={bulkDelete}
-            >&#47;&#47; {_t("bulk.deleteN", { count: selectedActiveCount })}</button
-          >
+          <button type="button" class="danger" onclick={bulkDelete}>
+            <AppIcon name="trash" size={14} />
+            <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
+          </button>
         {/if}
         {#if selectedDeletedCount > 0}
           <button
             type="button"
             onclick={bulkRestore}
-            title="Restore selected records"
-            aria-label="Restore selected records">&#8634; {selectedDeletedCount}</button
           >
+            <AppIcon name="restore" size={14} />
+            <span>{_t("bulk.restoreN", { count: selectedDeletedCount })}</span>
+          </button>
           <button
             type="button"
             class="danger"
             onclick={bulkPermanentDelete}
-            title="Permanently delete selected records"
-            aria-label="Permanently delete selected records"
-            >&#47;&#47; {_t("bulk.deleteN", { count: selectedDeletedCount })}</button
           >
+            <AppIcon name="trash" size={14} />
+            <span>{_t("bulk.permanentDeleteN", { count: selectedDeletedCount })}</span>
+          </button>
         {/if}
       </div>
     </div>
@@ -3146,12 +3145,6 @@
     color: var(--text-faint);
   }
 
-  .multi-count {
-    color: var(--selection-color);
-    font-weight: 600;
-    font-size: 11.5px;
-  }
-
   .runtime-status {
     display: inline-flex;
     align-items: center;
@@ -3253,6 +3246,9 @@
   }
 
   .bulk-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding: 5px 12px;
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
