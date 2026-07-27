@@ -1376,9 +1376,12 @@ fn search_clipboard_items(
         .map_err(|error| error.to_string())?;
     let item_ids = hits.into_iter().map(|hit| hit.item_id).collect::<Vec<_>>();
 
-    let items = database
+    let mut items = database
         .get_items_by_ids(&item_ids)
         .map_err(|error| error.to_string())?;
+
+    items.sort_unstable_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+
     performance_tracker.record_search(
         &query,
         started.elapsed().as_millis().min(u64::MAX as u128) as u64,
