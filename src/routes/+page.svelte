@@ -536,12 +536,17 @@
     return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}`;
   }
 
-  function recordCardHeight(id: string, height: number) {
+  function recordCardHeight(id: string, height: number, immediate = false) {
     const item = filteredItems.find((candidate) => candidate.id === id);
     if (!item || !Number.isFinite(height) || height <= 0) return;
     const signature = cardLayoutSignature(item);
     const previous = measuredCardHeights[id];
     if (previous?.signature === signature && previous.height === height) return;
+    if (immediate) {
+      measuredCardHeights[id] = { height, signature };
+      measuredCardHeights = { ...measuredCardHeights };
+      return;
+    }
     pendingHeights.set(id, { height, signature });
     if (heightRafId === 0) {
       heightRafId = requestAnimationFrame(() => {

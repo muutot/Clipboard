@@ -94,7 +94,7 @@
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
-    onheightchange?: (id: string, height: number) => void;
+    onheightchange?: (id: string, height: number, immediate?: boolean) => void;
     heightMeasurementKey?: string;
   }
 
@@ -156,7 +156,7 @@
   $effect(() => {
     const element = cardElement;
     const reportHeight = onheightchange;
-    void heightMeasurementKey;
+    const key = heightMeasurementKey;
     if (!element || !reportHeight || typeof ResizeObserver === "undefined") return;
 
     let lastHeight = -1;
@@ -168,7 +168,11 @@
     };
     const observer = new ResizeObserver(report);
     observer.observe(element);
-    report();
+    const immediate = Math.ceil(element.offsetHeight + (compact ? compactCardGap : 0));
+    if (immediate > 0) {
+      lastHeight = immediate;
+      reportHeight(item.id, immediate, true);
+    }
     return () => observer.disconnect();
   });
 
