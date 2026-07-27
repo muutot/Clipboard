@@ -1428,12 +1428,8 @@
           </div>
         {/if}
       </div>
-    {:else if activeSection === "general_search"}
-      <GeneralSettingsPanel {onclose} section="search" showHeader={false} />
-    {:else if activeSection === "general_display"}
-      <GeneralSettingsPanel {onclose} section="display" showHeader={false} />
-    {:else if activeSection === "general_window"}
-      <GeneralSettingsPanel {onclose} section="window" showHeader={false} />
+    {:else if activeSection === "general_search" || activeSection === "general_display" || activeSection === "general_window"}
+      <GeneralSettingsPanel {onclose} section={activeSection === "general_search" ? "search" : activeSection === "general_display" ? "display" : "window"} showHeader={false} />
     {:else if activeSection === "compact"}
       <CompactSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "font"}
