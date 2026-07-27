@@ -163,7 +163,8 @@
 
   function updateSliderTrack(el: HTMLInputElement | null) {
     if (!el) return;
-    const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
+    const range = Number(el.max) - Number(el.min);
+    const pct = range > 0 ? ((Number(el.value) - Number(el.min)) / range) * 100 : 100;
     el.style.setProperty("--slider-pct", pct + "%");
   }
 
@@ -172,6 +173,8 @@
   let maxTextLinesEl = $state<HTMLInputElement | null>(null);
   let pageSizeEl = $state<HTMLInputElement | null>(null);
   let maxVisibleItemsEl = $state<HTMLInputElement | null>(null);
+  let pageSizeLimitEl = $state<HTMLInputElement | null>(null);
+  let searchPageSizeLimitEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -182,6 +185,8 @@
     updateSliderTrack(maxTextLinesEl);
     updateSliderTrack(pageSizeEl);
     updateSliderTrack(maxVisibleItemsEl);
+    updateSliderTrack(pageSizeLimitEl);
+    updateSliderTrack(searchPageSizeLimitEl);
   });
 </script>
 
@@ -429,6 +434,35 @@
           </button>
         {/if}
       {/if}
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.searchPageSizeLimit")}</strong>
+            <p>{_t("general.searchPageSizeLimitDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.searchPageSizeLimit} {_t("general.searchPageSizeLimitUnit")}</span
+          >
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="1000"
+        step="50"
+        value={s.searchPageSizeLimit}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("searchPageSizeLimit", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={searchPageSizeLimitEl}
+      />
     </section>
   {:else if section === "display"}
     <section class="setting-card toggle-card">
@@ -697,19 +731,61 @@
           <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
         </div>
       </div>
+      {#if s.pageSizeLimit > 50}
+        <input
+          type="range"
+          min="50"
+          max={s.pageSizeLimit}
+          step="50"
+          value={Math.min(s.display.pageSize, s.pageSizeLimit)}
+          oninput={(event) => {
+            const input = event.target as HTMLInputElement;
+            const val = Math.min(Number(input.value), s.pageSizeLimit);
+            generalSettings.updateSetting("display", {
+              ...s.display,
+              pageSize: val,
+            });
+            updateSliderTrack(input);
+          }}
+          class="transparency-slider"
+          bind:this={pageSizeEl}
+        />
+      {:else}
+        <div class="transparency-slider pinned-slider" style="--slider-pct:100%"></div>
+      {/if}
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.pageSizeLimit")}</strong>
+            <p>{_t("general.pageSizeLimitDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span
+          >
+        </div>
+      </div>
       <input
         type="range"
         min="50"
-        max="500"
+        max="1000"
         step="50"
-        value={s.display.pageSize}
+        value={s.pageSizeLimit}
         oninput={(event) => {
           const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("display", { ...s.display, pageSize: Number(input.value) });
+          const val = Number(input.value);
+          generalSettings.updateSetting("pageSizeLimit", val);
+          if (s.display.pageSize > val) {
+            generalSettings.updateSetting("display", { ...s.display, pageSize: val });
+          }
           updateSliderTrack(input);
+          requestAnimationFrame(() => updateSliderTrack(pageSizeEl));
         }}
         class="transparency-slider"
-        bind:this={pageSizeEl}
+        bind:this={pageSizeLimitEl}
       />
     </section>
 
@@ -964,5 +1040,20 @@
   .sort-add-btn:hover {
     border-color: var(--text-muted);
     color: var(--text-primary);
+  }
+
+  .pinned-slider {
+    width: 100%;
+    margin-top: 12px;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      var(--selection-color, #4aa8ff) 0%,
+      var(--selection-color, #4aa8ff) var(--slider-pct, 100%),
+      #2a2a2a var(--slider-pct, 100%),
+      #2a2a2a 100%
+    );
+    opacity: 0.5;
   }
 </style>
