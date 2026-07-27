@@ -31,37 +31,40 @@
   let sortDragOverIdx = $state<number | null>(null);
   let sortListEl = $state<HTMLDivElement | null>(null);
 
-  function pointerDragStart(idx: number, e: PointerEvent) {
-    const grip = (e.currentTarget as HTMLElement).closest('.sort-grip') as HTMLElement | null;
-    if (grip) grip.setPointerCapture(e.pointerId);
+  function pointerDragStart(idx: number, _e: PointerEvent) {
     sortDragIdx = idx;
     sortDragOverIdx = null;
-  }
 
-  function pointerDragMove(e: PointerEvent) {
-    if (sortDragIdx === null || !sortListEl) return;
-    const rows = sortListEl.querySelectorAll<HTMLElement>('.sort-rule-row');
-    let targetIdx: number | null = null;
-    for (let i = 0; i < rows.length; i++) {
-      const rect = rows[i].getBoundingClientRect();
-      if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        targetIdx = i;
-        break;
+    function onMove(ev: PointerEvent) {
+      if (!sortListEl) return;
+      const rows = sortListEl.querySelectorAll<HTMLElement>('.sort-rule-row');
+      let target: number | null = null;
+      for (let i = 0; i < rows.length; i++) {
+        const rect = rows[i].getBoundingClientRect();
+        if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
+          target = i;
+          break;
+        }
+      }
+      if (target !== null && target !== sortDragIdx) {
+        sortDragOverIdx = target;
+      } else {
+        sortDragOverIdx = null;
       }
     }
-    if (targetIdx !== null && targetIdx !== sortDragIdx) {
-      sortDragOverIdx = targetIdx;
-    } else {
-      sortDragOverIdx = null;
-    }
-  }
 
-  function pointerDragEnd() {
-    if (sortDragIdx !== null && sortDragOverIdx !== null && sortDragIdx !== sortDragOverIdx) {
-      moveSortRule(sortDragIdx, sortDragOverIdx);
+    function onUp() {
+      if (sortDragIdx !== null && sortDragOverIdx !== null && sortDragIdx !== sortDragOverIdx) {
+        moveSortRule(sortDragIdx, sortDragOverIdx);
+      }
+      sortDragIdx = null;
+      sortDragOverIdx = null;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
     }
-    sortDragIdx = null;
-    sortDragOverIdx = null;
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
   }
 
   function moveSortRule(fromIdx: number, toIdx: number) {
@@ -71,19 +74,6 @@
     newRules.splice(toIdx, 0, removed);
     generalSettings.updateSetting("searchSortRules", newRules);
   }
-
-  $effect(() => {
-    if (sortDragIdx !== null) {
-      const onMove = (e: PointerEvent) => pointerDragMove(e);
-      const onUp = () => pointerDragEnd();
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      return () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-      };
-    }
-  });
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
