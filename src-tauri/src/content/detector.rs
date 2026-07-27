@@ -59,31 +59,34 @@ pub fn detect_markers(text: &str) -> ContentMarkers {
 use std::sync::LazyLock;
 
 static RE_IPV4: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
-    regex_lite::Regex::new(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b").unwrap()
+    regex_lite::Regex::new(
+        r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b",
+    )
+    .unwrap()
 });
 static RE_IPV6: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
     regex_lite::Regex::new(r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b").unwrap()
 });
-static RE_DATE_NUMERIC: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
-    regex_lite::Regex::new(r"\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b").unwrap()
-});
-static RE_DATE_ISO: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
-    regex_lite::Regex::new(r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b").unwrap()
-});
-static RE_DATE_CN: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
-    regex_lite::Regex::new(r"\b(\d{4})年(\d{1,2})月(\d{1,2})日").unwrap()
-});
+static RE_DATE_NUMERIC: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b").unwrap());
+static RE_DATE_ISO: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b").unwrap());
+static RE_DATE_CN: LazyLock<regex_lite::Regex> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\b(\d{4})年(\d{1,2})月(\d{1,2})日").unwrap());
 
 static RE_URL: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"https?://[^\s<>{}|\^`\[\]]+").unwrap());
-static RE_EMAIL: LazyLock<regex_lite::Regex> =
-    LazyLock::new(|| regex_lite::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap());
+static RE_EMAIL: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap()
+});
 static RE_PHONE_CN: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"\b1[3-9]\d(?:[- ]?\d{4}){2}\b").unwrap());
-static RE_PHONE_LANDLINE: LazyLock<regex_lite::Regex> =
-    LazyLock::new(|| regex_lite::Regex::new(r"\b0\d{2}[\-]?\d{7,8}\b|\b0\d{3}[\-]?\d{7,8}\b").unwrap());
-static RE_PHONE_INTL: LazyLock<regex_lite::Regex> =
-    LazyLock::new(|| regex_lite::Regex::new(r"\+\d{1,3}[\s\-]?(?:\d{1,4}[\s\-]?){2,4}\d{2,4}").unwrap());
+static RE_PHONE_LANDLINE: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\b0\d{2}[\-]?\d{7,8}\b|\b0\d{3}[\-]?\d{7,8}\b").unwrap()
+});
+static RE_PHONE_INTL: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
+    regex_lite::Regex::new(r"\+\d{1,3}[\s\-]?(?:\d{1,4}[\s\-]?){2,4}\d{2,4}").unwrap()
+});
 static RE_COLOR_HEX: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"#[0-9a-fA-F]{3,8}\b").unwrap());
 static RE_COLOR_RGB: LazyLock<regex_lite::Regex> =
@@ -92,19 +95,30 @@ static RE_COLOR_HSL: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"hsla?\([^)]+\)").unwrap());
 
 fn extract_urls(text: &str) -> Vec<String> {
-    RE_URL.find_iter(text).map(|m| m.as_str().trim_end_matches('.').to_string()).collect()
+    RE_URL
+        .find_iter(text)
+        .map(|m| m.as_str().trim_end_matches('.').to_string())
+        .collect()
 }
 
 fn extract_emails(text: &str) -> Vec<String> {
-    RE_EMAIL.find_iter(text).map(|m| m.as_str().to_string()).collect()
+    RE_EMAIL
+        .find_iter(text)
+        .map(|m| m.as_str().to_string())
+        .collect()
 }
 
 fn extract_phone_numbers(text: &str) -> Vec<String> {
     let mut results = Vec::new();
     results.extend(RE_PHONE_CN.find_iter(text).map(|m| m.as_str().to_string()));
-    results.extend(RE_PHONE_LANDLINE.find_iter(text).map(|m| m.as_str().to_string()));
     results.extend(
-        RE_PHONE_INTL.find_iter(text)
+        RE_PHONE_LANDLINE
+            .find_iter(text)
+            .map(|m| m.as_str().to_string()),
+    );
+    results.extend(
+        RE_PHONE_INTL
+            .find_iter(text)
             .filter(|m| {
                 let digit_count = m.as_str().chars().filter(|c| c.is_ascii_digit()).count();
                 (8..=15).contains(&digit_count)
@@ -117,7 +131,8 @@ fn extract_phone_numbers(text: &str) -> Vec<String> {
 fn extract_colors(text: &str) -> Vec<String> {
     let mut results = Vec::new();
     results.extend(
-        RE_COLOR_HEX.find_iter(text)
+        RE_COLOR_HEX
+            .find_iter(text)
             .filter(|m| {
                 let len = m.as_str().len();
                 len == 4 || len == 7 || len == 9
@@ -125,7 +140,8 @@ fn extract_colors(text: &str) -> Vec<String> {
             .map(|m| m.as_str().to_string()),
     );
     results.extend(
-        RE_COLOR_RGB.find_iter(text)
+        RE_COLOR_RGB
+            .find_iter(text)
             .filter(|m| {
                 let s = m.as_str();
                 s.chars().filter(|c| c.is_ascii_digit()).count() >= 3
@@ -133,7 +149,8 @@ fn extract_colors(text: &str) -> Vec<String> {
             .map(|m| m.as_str().to_string()),
     );
     results.extend(
-        RE_COLOR_HSL.find_iter(text)
+        RE_COLOR_HSL
+            .find_iter(text)
             .filter(|m| m.as_str().contains('%'))
             .map(|m| m.as_str().to_string()),
     );
@@ -146,7 +163,9 @@ static RE_CURRENCY: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
     let mut pattern = String::from("(");
     // Prefix symbols: e.g. ¥100, $99.99
     for (i, s) in symbols.iter().enumerate() {
-        if i > 0 { pattern.push('|'); }
+        if i > 0 {
+            pattern.push('|');
+        }
         pattern.push_str(&regex_lite::escape(s));
         pattern.push_str(r"\s*\d{1,3}(?:[,.]\d{3})*(?:\.\d{2})?");
     }
@@ -161,11 +180,17 @@ static RE_CURRENCY: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
 });
 
 fn extract_currency(text: &str) -> Vec<String> {
-    RE_CURRENCY.find_iter(text).map(|m| m.as_str().to_string()).collect()
+    RE_CURRENCY
+        .find_iter(text)
+        .map(|m| m.as_str().to_string())
+        .collect()
 }
 
 fn extract_ip_addresses(text: &str) -> Vec<String> {
-    let mut results: Vec<String> = RE_IPV4.find_iter(text).map(|m| m.as_str().to_string()).collect();
+    let mut results: Vec<String> = RE_IPV4
+        .find_iter(text)
+        .map(|m| m.as_str().to_string())
+        .collect();
     results.extend(RE_IPV6.find_iter(text).map(|m| m.as_str().to_string()));
     results
 }
@@ -186,13 +211,20 @@ struct DateExtraction {
 fn extract_dates(text: &str) -> DateExtraction {
     let mut dates = DateExtraction::default();
 
-    for captures in RE_DATE_ISO.captures_iter(text).chain(RE_DATE_CN.captures_iter(text)) {
-        let Some((year, month, day)) = parse_date_components(&captures) else { continue };
+    for captures in RE_DATE_ISO
+        .captures_iter(text)
+        .chain(RE_DATE_CN.captures_iter(text))
+    {
+        let Some((year, month, day)) = parse_date_components(&captures) else {
+            continue;
+        };
         dates.record_unambiguous(year, month, day);
     }
 
     for captures in RE_DATE_NUMERIC.captures_iter(text) {
-        let Some((first, second, year)) = parse_date_components(&captures) else { continue };
+        let Some((first, second, year)) = parse_date_components(&captures) else {
+            continue;
+        };
         dates.record_trailing_year(year, first, second);
     }
 
