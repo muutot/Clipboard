@@ -39,7 +39,7 @@ export async function writeClipboardImage(
 }
 
 export async function loadClipboardHistory(
-  limit = 1000,
+  limit = 100,
   offset = 0,
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;

@@ -1167,7 +1167,7 @@ fn list_clipboard_items(
     offset: Option<u32>,
 ) -> Result<Vec<ClipboardItem>, String> {
     database
-        .list_recent(limit.unwrap_or(1000), offset.unwrap_or(0))
+        .list_recent(limit.unwrap_or(100), offset.unwrap_or(0))
         .map_err(|error| error.to_string())
 }
 

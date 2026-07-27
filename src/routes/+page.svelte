@@ -91,6 +91,10 @@
   let deletedHistoryOffset = $state(0);
   let deletedHistoryHasMore = $state(true);
   let deletedHistoryRequestId = 0;
+  let activeHistoryLoading = $state(false);
+  let activeHistoryOffset = $state(0);
+  let activeHistoryHasMore = $state(true);
+  let activeHistoryRequestId = 0;
   // Keep stale in-flight recycle-bin pages from resurrecting rows that were
   // already restored or permanently removed locally.
   const deletedHistorySuppressedIds = new Set<string>();
@@ -599,18 +603,11 @@
       if (status) {
         iconsDir.set(status.iconsDir);
       }
-      return loadClipboardHistory();
+      return loadActiveHistoryPage();
     })
-      .then((storedItems) => {
-        if (storedItems === null) return;
-
-        // The recycle-bin page can be opened while the active-history query
-        // is still in flight. Preserve any deleted rows that were loaded or
-        // locally mutated during that window instead of replacing them.
-        const deletedItems = items.filter((item) => item.deleted);
-        const storedIds = new Set(storedItems.map((item) => item.id));
-        items = [...storedItems, ...deletedItems.filter((item) => !storedIds.has(item.id))];
-        selectedId = storedItems[0]?.id ?? "";
+      .then(() => {
+        if (items.length === 0) return;
+        selectedId = items[0]?.id ?? "";
       })
       .catch((error) => {
         console.error("Unable to load clipboard history", error);
@@ -925,6 +922,53 @@
     deletedHistoryOffset = 0;
     deletedHistoryHasMore = true;
     void loadDeletedHistoryPage();
+  }
+
+  function trimActiveHistory() {
+    const max = $generalSettings.display.maxVisibleItems;
+    if (items.length <= max) return;
+    const keep = items.filter((item) => item.deleted || item.favorite);
+    const regular = items.filter((item) => !item.deleted && !item.favorite);
+    const limit = Math.max(0, max - keep.length);
+    items = [...keep, ...regular.slice(0, limit)];
+  }
+
+  async function loadActiveHistoryPage(): Promise<void> {
+    if (activeHistoryLoading || !activeHistoryHasMore) return;
+
+    if (!isTauriRuntime()) {
+      activeHistoryHasMore = false;
+      return;
+    }
+
+    activeHistoryLoading = true;
+    const requestId = ++activeHistoryRequestId;
+    const offset = activeHistoryOffset;
+    try {
+      const page = await loadClipboardHistory($generalSettings.display.pageSize, offset);
+      if (requestId !== activeHistoryRequestId) return;
+      if (page === null) {
+        activeHistoryHasMore = false;
+        return;
+      }
+
+      if (offset === 0) {
+        const deletedItems = items.filter((item) => item.deleted);
+        const storedIds = new Set(page.map((item) => item.id));
+        items = [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))];
+      } else {
+        items = [...items, ...page];
+      }
+      trimActiveHistory();
+      activeHistoryOffset += page.length;
+      activeHistoryHasMore = page.length === $generalSettings.display.pageSize;
+    } catch (error) {
+      if (requestId !== activeHistoryRequestId) return;
+      console.error("Unable to load clipboard history", error);
+      statusMessage = _t("app.databaseLoadFailed");
+    } finally {
+      if (requestId === activeHistoryRequestId) activeHistoryLoading = false;
+    }
   }
 
   async function loadDeletedHistoryPage(): Promise<void> {
@@ -2120,13 +2164,23 @@
   function handleHistoryScroll() {
     if (historyListEl) {
       scrollTop = historyListEl.scrollTop;
+      const nearBottom =
+        historyListEl.scrollTop + historyListEl.clientHeight >= historyListEl.scrollHeight - 180;
       if (
         activeFilter === "deleted" &&
         deletedHistoryHasMore &&
         !deletedHistoryLoading &&
-        historyListEl.scrollTop + historyListEl.clientHeight >= historyListEl.scrollHeight - 180
+        nearBottom
       ) {
         void loadDeletedHistoryPage();
+      }
+      if (
+        activeFilter !== "deleted" &&
+        activeHistoryHasMore &&
+        !activeHistoryLoading &&
+        nearBottom
+      ) {
+        void loadActiveHistoryPage();
       }
     }
   }
