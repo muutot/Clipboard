@@ -27,6 +27,16 @@
   let windowConfig = $state<WindowConfig | null>(null);
   let windowConfigLoading = $state(true);
   let windowConfigSaving = $state(false);
+  let sortDragIdx = $state<number | null>(null);
+  let sortDragOverIdx = $state<number | null>(null);
+
+  function moveSortRule(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return;
+    const newRules = [...s.searchSortRules];
+    const [removed] = newRules.splice(fromIdx, 1);
+    newRules.splice(toIdx, 0, removed);
+    generalSettings.updateSetting("searchSortRules", newRules);
+  }
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -269,9 +279,40 @@
           <p>{_t("general.searchSortRulesDescription")}</p>
         </div>
       </div>
-      <div class="sort-rules-list">
+      <div class="sort-rules-list" role="list">
         {#each s.searchSortRules as rule, idx (idx)}
-          <div class="sort-rule-row">
+          <div
+            class="sort-rule-row"
+            class:sort-dragging={sortDragIdx === idx}
+            class:sort-drag-over={sortDragOverIdx === idx && sortDragIdx !== idx}
+            draggable="true"
+            role="listitem"
+            ondragstart={(e) => {
+              sortDragIdx = idx;
+              e.dataTransfer!.effectAllowed = "move";
+            }}
+            ondragend={() => {
+              sortDragIdx = null;
+              sortDragOverIdx = null;
+            }}
+            ondragover={(e) => {
+              e.preventDefault();
+              e.dataTransfer!.dropEffect = "move";
+              if (sortDragIdx !== null && sortDragIdx !== idx) {
+                sortDragOverIdx = idx;
+              }
+            }}
+            ondragleave={() => {
+              if (sortDragOverIdx === idx) sortDragOverIdx = null;
+            }}
+            ondrop={() => {
+              if (sortDragIdx !== null && sortDragIdx !== idx) {
+                moveSortRule(sortDragIdx, idx);
+              }
+              sortDragIdx = null;
+              sortDragOverIdx = null;
+            }}
+          >
             <select
               class="theme-select sort-field-select"
               value={rule.field}
@@ -758,6 +799,18 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: grab;
+    padding: 2px 0;
+    border-radius: var(--settings-control-radius, 6px);
+    transition: opacity 120ms ease;
+  }
+
+  .sort-rule-row.sort-dragging {
+    opacity: 0.4;
+  }
+
+  .sort-rule-row.sort-drag-over {
+    border-top: 2px solid var(--accent);
   }
 
   .sort-field-select {
