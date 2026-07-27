@@ -9,6 +9,18 @@ description: Use when working on the clipboard-desktop project, including TODO a
 
 Before auditing TODOs, changing settings styles, assigning parallel agents, or committing a feature, read [references/maintenance-workflow.md](references/maintenance-workflow.md) and follow it. Treat `TODO.md`, the current worktree, tests, and rendered/runtime behavior as evidence; never infer completion from intent or from the existence of similarly named code.
 
+## Skill Update Check (Every Commit)
+
+**Before every commit**, evaluate whether this skill file needs updating:
+
+1. Did I add/remove/rename a component, service, util, route, or backend module? → update the project structure tree
+2. Did I change a public API (Tauri command signature, frontend service function, TypeScript interface)? → update the relevant section
+3. Did I introduce a new pattern or convention? → add it to the appropriate section (Code Conventions, Architecture Patterns, etc.)
+4. Did I change CSS variables, theming, or settings styles? → update the CSS section
+5. Did I add/modify a settings field? → update the GeneralSettings reference
+
+If any answer is yes, update this skill file in the same commit. A stale skill causes repeated mistakes.
+
 ## Tech Stack
 
 | Layer            | Technology                           | Notes                                  |
@@ -25,111 +37,43 @@ Before auditing TODOs, changing settings styles, assigning parallel agents, or c
 
 ## Project Structure
 
+See [references/project-structure.md](references/project-structure.md) for the full file listing (components, services, utils, routes, backend modules).
+
 ```
 clipboard/
 ├── src/                              # Frontend (Svelte + TypeScript)
-│   ├── routes/
-│   │   ├── +page.svelte              # Main page: clipboard list, selection, virtual scroll
-│   │   ├── +layout.svelte            # Root layout, global state init
-│   │   ├── +layout.ts                # SPA config (prerender disabled)
-│   │   └── settings/
-│   │       └── +page.svelte          # Settings window (separate Tauri WebviewWindow)
+│   ├── routes/                       # +page.svelte (main), settings/, viewer/
 │   ├── lib/
-│   │   ├── components/
-│   │   │   ├── DetailPanel.svelte        # Side panel + fullscreen image viewer
-│   │   │   ├── ClipboardCard.svelte      # Item card in list
-│   │   │   ├── StorageSettingsDialog.svelte  # Settings dialog (tabs: General/Storage/Keyboard/IgnoredApps)
-│   │   │   ├── GeneralSettingsPanel.svelte   # UI prefs (theme, language, fullscreen mode)
-│   │   │   ├── KeyboardSettingsPanel.svelte  # Shortcut config UI
-│   │   │   ├── IgnoredAppsSettingsPanel.svelte
-│   │   │   ├── AppIcon.svelte            # Source app icon display
-│   │   │   ├── CodePreview.svelte        # Syntax highlighting (highlight.js)
-│   │   │   ├── MarkdownPreview.svelte    # Markdown rendering
-│   │   │   └── Toast.svelte              # Toast notification system
-│   │   ├── styles/
-│   │   │   └── settings-shared.css         # Shared base styles for all settings panels
-│   │   ├── services/
-│   │   │   ├── settings.ts           # GeneralSettings store (localStorage, cross-window sync)
-│   │   │   ├── clipboard.ts          # Data fetching, mapping PersistedClipboardItem → ClipboardItem
-│   │   │   ├── toast.ts              # Toast notification store
-│   │   │   ├── runtime.ts            # isTauriRuntime() detection
-│   │   │   ├── capture.ts            # Clipboard capture service
-│   │   │   ├── keyboard.ts           # Frontend keyboard shortcut handling
-│   │   │   ├── paths.ts              # Path utilities
-│   │   │   └── storage.ts            # Storage-related service
-│   │   ├── types/
-│   │   │   └── clipboard.ts          # All TypeScript interfaces
-│   │   ├── i18n/
-│   │   │   ├── index.ts              # Locale detection, resolvePath(), t()
-│   │   │   ├── types.ts              # Translation key types
-│   │   │   └── locales/
-│   │   │       ├── en.ts
-│   │   │       └── zh-CN.ts
-│   │   ├── utils/
-│   │   │   ├── virtual-scroll.ts     # Custom virtual scrolling
-│   │   │   ├── time.ts               # formatRelativeTime()
-│   │   │   └── date-query.ts         # Natural language date parsing
-│   │   └── data/                     # Static data
+│   │   ├── components/               # 15 Svelte components
+│   │   ├── services/                 # 10 service modules
+│   │   ├── utils/                    # 5 utility modules
+│   │   ├── types/                    # clipboard.ts, memory.ts
+│   │   ├── i18n/                     # locales/ (zh-CN, en)
+│   │   ├── styles/                   # settings-shared.css
+│   │   └── data/                     # demo-items.ts
 │   ├── app.css                       # Global styles, CSS variables, theme
 │   └── app.html                      # HTML shell
 │
 ├── src-tauri/                        # Backend (Rust)
-│   ├── tauri.conf.json               # Tauri v2 config (windows, security, bundle)
-│   ├── Cargo.toml                    # Rust dependencies
+│   ├── tauri.conf.json               # Tauri v2 config
+│   ├── Cargo.toml
 │   ├── capabilities/                 # Tauri v2 permissions
 │   └── src/
-│       ├── main.rs                   # Entry point
-│       ├── lib.rs                    # Tauri builder, 40+ #[tauri::command], clipboard monitor thread
-│       ├── config.rs                 # AppConfig, StorageConfig, OcrConfig, etc.
-│       ├── domain/
-│       │   ├── clipboard_item.rs     # ClipboardItem, ClipboardKind enums
-│       │   └── ocr_result.rs         # OcrResult, OcrStatus
-│       ├── storage/
-│       │   ├── migrations.rs         # SQLite schema (clipboard_items, ocr_results, search_outbox)
-│       │   ├── repository.rs         # ClipboardRepository (CRUD)
-│       │   ├── ocr_repository.rs     # OcrRepository
-│       │   ├── search_repository.rs  # Search-specific queries
-│       │   ├── database.rs           # Database init, connection pool
-│       │   ├── paths.rs              # StoragePaths (data dir, icons, files, images)
-│       │   └── error.rs              # StorageError enum
-│       ├── search/
-│       │   ├── index.rs              # SearchIndex (Tantivy writer/reader)
-│       │   ├── sync.rs               # SearchSynchronizer (outbox pattern)
-│       │   ├── query.rs              # Query building, CJK support
-│       │   ├── schema.rs             # Tantivy field definitions
-│       │   └── manifest.rs           # Field boosting config
-│       ├── ocr/
-│       │   ├── engine.rs             # OcrEngine trait
-│       │   ├── worker.rs             # Background OCR worker thread
-│       │   ├── ppocr.rs              # PaddleOCR ONNX implementation
-│       │   ├── tesseract.rs          # Tesseract CLI wrapper
-│       │   └── noop.rs               # No-op fallback
-│       ├── keyboard/
-│       │   ├── binding.rs            # ShortcutBinding parser (chords, double-modifier)
-│       │   ├── config.rs             # KeyboardConfig (JSON file on disk)
-│       │   ├── manager.rs            # HotkeyManager (Windows global hotkeys)
-│       │   └── matcher.rs            # ShortcutMatcher
-│       ├── content/
-│       │   ├── detector.rs           # Content type detection (text/link/image/file)
-│       │   └── thumbnail.rs          # Image thumbnail generation (JPEG, max 400px)
-│       ├── platform/
-│       │   ├── windows_clipboard.rs  # Windows clipboard monitoring
-│       │   ├── windows_hotkey.rs     # Windows global hotkey registration
-│       │   └── ...                   # Platform abstractions
-│       ├── export/                   # JSON/CSV/plain text export & import
-│       ├── privacy/                  # Privacy manager (pause/resume, app ignore)
-│       ├── performance/              # Performance tracking, startup metrics
-│       └── cli/                      # CLI argument parsing
+│       ├── main.rs / lib.rs / config.rs / memory.rs
+│       ├── domain/                   # ClipboardItem, OcrResult
+│       ├── storage/                  # repository, pool, recovery, migrations
+│       ├── search/                   # Tantivy index, sync, query, schema
+│       ├── ocr/                      # engine, worker, ppocr, tesseract, models
+│       ├── keyboard/                 # binding, config, manager, matcher
+│       ├── content/                  # detector, thumbnail, hash, file_store, actions, transform
+│       ├── platform/                 # windows, macos, linux_x11, linux_wayland
+│       ├── export/                   # JSON/CSV/plain-text export & import
+│       ├── privacy/                  # Privacy manager
+│       ├── performance/              # Performance tracking, memory monitor
+│       └── cli/                      # CLI + loopback HTTP API server
 │
-├── docs/
-│   ├── PITFALLS.md                   # Known bugs and gotchas
-│   ├── OCR.md
-│   ├── SEARCH.md
-│   └── DEFAULTS_AND_PRIVACY.md
-│
-└── .opencode/
-    └── skills/clipboard-dev/
-        └── SKILL.md                  # This file
+├── docs/                             # PITFALLS.md, OCR.md, SEARCH.md, DEFAULTS_AND_PRIVACY.md
+└── .opencode/skills/clipboard-dev/   # This skill
 ```
 
 ## Build & Verify
@@ -137,12 +81,15 @@ clipboard/
 ```bash
 # Development
 npm run dev                    # Vite dev server (port 1420)
+npm run tauri dev              # Full Tauri dev (backend + frontend)
 
 # Type checking (run after every change)
 npm run check                  # svelte-kit sync + svelte-check
+npm run check:watch            # Continuous type checking
 
 # Production build
 npm run build                  # Vite build → ../build
+npm run preview                # Preview production build locally
 
 # Full verification (CI-grade)
 npm run verify                 # format:check + check + build + test:rust + lint:rust
@@ -202,11 +149,11 @@ search_outbox (
 
 ### Frontend Types
 
-Key interfaces in `src/lib/types/clipboard.ts`:
+Key interfaces in `src/lib/types/clipboard.ts`. See [references/settings-reference.md](references/settings-reference.md) for the full `GeneralSettings` field listing with defaults.
 
 - `ClipboardItem` — displayed item with kind, title, preview, sourceApp, etc.
 - `PersistedClipboardItem` — raw from backend via Tauri invoke
-- `GeneralSettings` — frontend settings (language, fontSize, theme, imageFullscreenMode, etc.)
+- `GeneralSettings` — 36+ fields: language, theme, display, fontSizes, compact mode, search settings, etc.
 - `CaptureSettings` — backend storage settings
 
 ### Rust Domain Types
@@ -240,6 +187,18 @@ Backend emits events via `app.emit("event-name", payload)`. Frontend listens:
 listen<PersistedClipboardItem>("clipboard-item-added", (event) => { ... });
 ```
 
+### Dual-Window Architecture
+
+The app uses two Tauri WebviewWindows:
+- **Main window** — clipboard list, settings, detail panel
+- **Viewer window** (`viewer/+page.svelte`) — fullscreen image viewing (desktop mode). Listens for `viewer:open` events.
+
+### Settings Bootstrap
+
+`settings-bootstrap.ts` applies `GeneralSettings` to the document root on startup:
+- `applyGeneralSettingsToDocument()` — sets CSS custom properties for font sizes, display, theme
+- `syncCompactShellClass()` — toggles `.compact` class on `.app-shell`
+
 ### State Management
 
 - **Component state**: Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`)
@@ -253,6 +212,8 @@ listen<PersistedClipboardItem>("clipboard-item-added", (event) => { ... });
 | Frontend (`GeneralSettings`) | Backend config; localStorage is browser/legacy fallback | `settings.ts` store       |
 | Backend (`AppConfig`)        | JSON file on disk                                       | Rust `ConfigStore`        |
 | Keyboard (`KeyboardConfig`)  | Separate JSON file                                      | Rust `keyboard/config.rs` |
+
+Settings panels follow a `showHeader?: boolean` prop convention — when rendered inside `StorageSettingsDialog`, child panels pass `showHeader={false}` to hide their own header. See [references/settings-reference.md](references/settings-reference.md) for all fields.
 
 ### Search (Outbox Pattern)
 
@@ -391,7 +352,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
   CSS for value-label: `color: #aaa; font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0;`
   CSS for setting-desc: `margin: 2px 0 0; color: #777; font-size: 9.8px;`
 
-- **All range sliders** use class `transparency-slider` — no other slider classes. Do NOT wrap `<input type="range">` in any div.
+- **All range sliders** use class `transparency-slider` — no other slider classes. Do NOT wrap `<input type="range">` in any div. The actual themed CSS lives in `src/lib/styles/settings-shared.css`; use CSS variables, never hardcoded hex:
 
   ```css
   .transparency-slider {
@@ -401,7 +362,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
     appearance: none;
     height: 4px;
     border-radius: 2px;
-    background: #2a2a2a;
+    background: var(--hover-bg);
     outline: none;
     cursor: pointer;
   }
@@ -410,10 +371,10 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
     border-radius: 2px;
     background: linear-gradient(
       to right,
-      #4aa8ff 0%,
-      #4aa8ff var(--slider-pct, 50%),
-      #2a2a2a var(--slider-pct, 50%),
-      #2a2a2a 100%
+      var(--selection-color) 0%,
+      var(--selection-color) var(--slider-pct, 50%),
+      var(--hover-bg) var(--slider-pct, 50%),
+      var(--hover-bg) 100%
     );
   }
   .transparency-slider::-webkit-slider-thumb {
@@ -422,42 +383,16 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
     height: 16px;
     margin-top: -6px;
     border-radius: 50%;
-    border: 2px solid #4aa8ff;
-    background: #1a1a1a;
+    border: 2px solid var(--selection-color);
+    background: var(--input-bg);
     cursor: pointer;
-    transition:
-      box-shadow 100ms ease,
-      transform 100ms ease;
+    transition: box-shadow 100ms ease, transform 100ms ease;
   }
   .transparency-slider::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--selection-color) 40%, transparent);
     transform: scale(1.15);
   }
-  .transparency-slider::-moz-range-track {
-    height: 4px;
-    border-radius: 2px;
-    background: #2a2a2a;
-  }
-  .transparency-slider::-moz-range-progress {
-    height: 4px;
-    border-radius: 2px;
-    background: #4aa8ff;
-  }
-  .transparency-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 2px solid #4aa8ff;
-    background: #1a1a1a;
-    cursor: pointer;
-    transition:
-      box-shadow 100ms ease,
-      transform 100ms ease;
-  }
-  .transparency-slider::-moz-range-thumb:hover {
-    box-shadow: 0 0 6px rgba(74, 168, 255, 0.4);
-    transform: scale(1.15);
-  }
+  /* Firefox track, progress, thumb follow the same variable pattern */
   ```
 
 - **Theme colors (must follow strictly):** every color in a component must use a theme CSS variable (`var(--bg-app)`, `var(--bg-settings)`, `var(--accent)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-muted)`, `var(--text-faint)`, `var(--border-color)`, `var(--border-subtle)`, `var(--card-bg)`, `var(--surface-bg)`, `var(--statusbar-bg)`, `var(--hover-bg)`, `var(--input-bg)`, `var(--selection-color)`, `var(--success-color)`, `var(--danger-color)`, `var(--warning-color)`, `var(--scrollbar-color)`). Never hardcode hex/rgba values in components — light/custom themes break otherwise. The authoritative variable list lives in `src/lib/utils/theme.ts`; dark defaults live in `DARK_THEME_COLORS` in `src/lib/types/clipboard.ts`. Any raw hex in older snippets in this skill illustrates structure only — always substitute theme variables.
@@ -475,6 +410,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
   | `--settings-card-radius`                                                           | `9px`                              | `.setting-card`                     |
   | `--settings-control-radius`                                                        | `6px`                              | inputs, selects, small buttons      |
   | `--settings-close-size` / `--settings-close-radius` / `--settings-close-font-size` | `28px` / `7px` / `19px`            | close button                        |
+  | `--settings-icon-radius`                                                           | `7px`                              | `.setting-icon` border-radius       |
 
   Never introduce a raw `font-size` or one-off radius in a settings panel when one of these variables fits.
 
