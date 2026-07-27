@@ -498,6 +498,14 @@ const en: LocaleDefinition = {
     searchCacheSize: "Search Cache Size",
     searchCacheSizeDescription: "Maximum cached search result items not currently in the loaded list",
     searchCacheSizeUnit: "items",
+    searchCacheEviction: "Cache Eviction Policy",
+    searchCacheEvictionDescription: "Strategy for removing items when the cache is full",
+    searchCacheEvictionFifo: "First-In-First-Out (FIFO)",
+    searchCacheEvictionLru: "Least Recently Used (LRU)",
+    loadTolerance: "Load Tolerance",
+    loadToleranceDescription:
+      "When loaded items exceed \"Max Load Items\" plus this value, the oldest batch is evicted",
+    loadToleranceUnit: "items",
   },
   compact: {
     title: "Compact Settings",

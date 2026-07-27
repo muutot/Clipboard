@@ -204,6 +204,8 @@ export interface GeneralSettings {
   pageSizeLimit: number;
   searchPageSizeLimit: number;
   searchCacheSize: number;
+  searchCacheEviction: "fifo" | "lru";
+  loadTolerance: number;
 }
 
 export type SortField = "createdAt" | "lastUsedAt" | "title" | "size" | "kind" | "favorite";

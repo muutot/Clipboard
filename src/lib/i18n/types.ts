@@ -474,6 +474,13 @@ export interface LocaleDefinition {
     searchCacheSize: string;
     searchCacheSizeDescription: string;
     searchCacheSizeUnit: string;
+    searchCacheEviction: string;
+    searchCacheEvictionDescription: string;
+    searchCacheEvictionFifo: string;
+    searchCacheEvictionLru: string;
+    loadTolerance: string;
+    loadToleranceDescription: string;
+    loadToleranceUnit: string;
   };
   compact: {
     title: string;

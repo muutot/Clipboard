@@ -57,6 +57,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   pageSizeLimit: 500,
   searchPageSizeLimit: 500,
   searchCacheSize: 500,
+  searchCacheEviction: "fifo",
+  loadTolerance: 100,
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -186,6 +188,13 @@ function validSortRules(value: unknown, fallback: SortRule[]): SortRule[] {
     rules.push({ field: item.field as SortRule["field"], direction: item.direction });
   }
   return rules.length > 0 ? rules : fallback;
+}
+
+function validCacheEviction(
+  value: unknown,
+  fallback: "fifo" | "lru",
+): "fifo" | "lru" {
+  return value === "fifo" || value === "lru" ? value : fallback;
 }
 
 /**
@@ -434,6 +443,16 @@ function normalizeGeneralSettings(
     defaultSettings.searchCacheSize,
     200,
     2000,
+  );
+  result.searchCacheEviction = validCacheEviction(
+    source.searchCacheEviction ?? fallback("searchCacheEviction"),
+    defaultSettings.searchCacheEviction,
+  );
+  result.loadTolerance = integerInRange(
+    source.loadTolerance ?? fallback("loadTolerance"),
+    defaultSettings.loadTolerance,
+    50,
+    500,
   );
 
   return result;

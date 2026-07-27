@@ -175,6 +175,7 @@
   let pageSizeLimitEl = $state<HTMLInputElement | null>(null);
   let searchPageSizeLimitEl = $state<HTMLInputElement | null>(null);
   let searchCacheSizeEl = $state<HTMLInputElement | null>(null);
+  let loadToleranceEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -187,6 +188,7 @@
     updateSliderTrack(pageSizeLimitEl);
     updateSliderTrack(searchPageSizeLimitEl);
     updateSliderTrack(searchCacheSizeEl);
+    updateSliderTrack(loadToleranceEl);
   });
 </script>
 
@@ -401,6 +403,58 @@
         }}
         class="transparency-slider"
         bind:this={searchCacheSizeEl}
+      />
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
+        <div>
+          <strong>{_t("general.searchCacheEviction")}</strong>
+          <p>{_t("general.searchCacheEvictionDescription")}</p>
+        </div>
+      </div>
+      <select
+        class="theme-select"
+        value={s.searchCacheEviction}
+        aria-label={_t("general.searchCacheEviction")}
+        onchange={(e) =>
+          generalSettings.updateSetting(
+            "searchCacheEviction",
+            (e.target as HTMLSelectElement).value as "fifo" | "lru",
+          )}
+      >
+        <option value="fifo">{_t("general.searchCacheEvictionFifo")}</option>
+        <option value="lru">{_t("general.searchCacheEvictionLru")}</option>
+      </select>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.loadTolerance")}</strong>
+            <p>{_t("general.loadToleranceDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.loadTolerance} {_t("general.loadToleranceUnit")}</span
+          >
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="500"
+        step="50"
+        value={s.loadTolerance}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("loadTolerance", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={loadToleranceEl}
       />
     </section>
   {:else if section === "display"}

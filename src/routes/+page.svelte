@@ -148,10 +148,16 @@
   let indexedQuery = $state("");
   let searchPending = $state(false);
   let searchRequestId = 0;
+  let searchHasMore = $state(false);
+  let searchLoading = $state(false);
+  let searchOffset = $state(0);
+  let searchLoadRequestId = 0;
   let searchHistory = $state<string[]>([]);
   let searchSuggestionsOpen = $state(false);
   let searchSuggestionIndex = $state(-1);
   let pendingSearchHistoryQuery = "";
+  let searchCache = $state<ClipboardItem[]>([]);
+  let searchCacheAccessOrder = $state<string[]>([]);
 
   let dateFilter = $state<string>("all");
   let sourceAppFilter = $state("");
@@ -614,6 +620,8 @@
       indexedItems = null;
       indexedQuery = "";
       searchPending = false;
+      searchHasMore = false;
+      searchOffset = 0;
       return;
     }
 
@@ -621,6 +629,8 @@
       indexedItems = null;
       indexedQuery = "";
       searchPending = false;
+      searchHasMore = false;
+      searchOffset = 0;
       return;
     }
 
@@ -630,12 +640,16 @@
     }
 
     searchPending = true;
+    searchOffset = 0;
     const timer = window.setTimeout(() => {
-      void searchClipboardHistory(requestedQuery, $generalSettings.display.pageSize, $generalSettings.searchSortRules)
+      void searchClipboardHistory(requestedQuery, $generalSettings.display.pageSize, 0, $generalSettings.searchSortRules)
         .then((results) => {
           if (requestId !== searchRequestId || results === null) return;
           indexedItems = results;
           indexedQuery = requestedQuery;
+          searchOffset = results.length;
+          searchHasMore = results.length === $generalSettings.display.pageSize;
+          updateSearchCache(results);
           statusMessage = _t("app.searchHitSummary", { count: results.length });
           if (
             $generalSettings.searchHistoryEnabled &&
@@ -1020,6 +1034,58 @@
     void loadDeletedHistoryPage();
   }
 
+  function updateSearchCache(results: ClipboardItem[]) {
+    const loadedIds = new Set(items.map((i) => i.id));
+    const cacheIds = new Set(searchCache.map((c) => c.id));
+    const existing = new Set(searchCacheAccessOrder);
+
+    for (const item of results) {
+      if (loadedIds.has(item.id) || cacheIds.has(item.id)) continue;
+      searchCache = [...searchCache, item];
+      searchCacheAccessOrder = [...searchCacheAccessOrder, item.id];
+    }
+
+    const max = $generalSettings.searchCacheSize;
+    const policy = $generalSettings.searchCacheEviction;
+    while (searchCache.length > max) {
+      if (policy === "fifo") {
+        const id = searchCacheAccessOrder[0];
+        searchCacheAccessOrder = searchCacheAccessOrder.slice(1);
+        searchCache = searchCache.filter((c) => c.id !== id);
+      } else {
+        const id = searchCacheAccessOrder[0];
+        searchCacheAccessOrder = searchCacheAccessOrder.slice(1);
+        searchCache = searchCache.filter((c) => c.id !== id);
+      }
+    }
+  }
+
+  function promoteFromCache(loadedIds: Set<string>) {
+    if (!loadedIds.size) return;
+    const promoted = new Set<string>();
+    for (const id of loadedIds) {
+      if (searchCache.some((c) => c.id === id)) promoted.add(id);
+    }
+    if (!promoted.size) return;
+    searchCache = searchCache.filter((c) => !promoted.has(c.id));
+    searchCacheAccessOrder = searchCacheAccessOrder.filter((id) => !promoted.has(id));
+  }
+
+  function trimLoadedItems() {
+    const limit = $generalSettings.pageSizeLimit;
+    const tolerance = $generalSettings.loadTolerance;
+    const max = limit + tolerance;
+    if (items.length <= max) return;
+
+    const evictable = items
+      .filter((i) => !i.deleted && !i.favorite)
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    const toEvict = evictable.slice(0, tolerance);
+    const evictIds = new Set(toEvict.map((i) => i.id));
+    items = items.filter((i) => !evictIds.has(i.id));
+  }
+
   async function loadActiveHistoryPage(): Promise<void> {
     if (activeHistoryLoading || !activeHistoryHasMore) return;
 
@@ -1048,12 +1114,51 @@
       }
       activeHistoryOffset += page.length;
       activeHistoryHasMore = page.length === $generalSettings.display.pageSize;
+      const loadedIds = new Set(page.map((item) => item.id));
+      promoteFromCache(loadedIds);
+      trimLoadedItems();
     } catch (error) {
       if (requestId !== activeHistoryRequestId) return;
       console.error("Unable to load clipboard history", error);
       statusMessage = _t("app.databaseLoadFailed");
     } finally {
       if (requestId === activeHistoryRequestId) activeHistoryLoading = false;
+    }
+  }
+
+  async function loadSearchPage(): Promise<void> {
+    if (searchLoading || !searchHasMore || !indexedQuery) return;
+
+    if (!isTauriRuntime()) {
+      searchHasMore = false;
+      return;
+    }
+
+    searchLoading = true;
+    const requestId = ++searchLoadRequestId;
+    const offset = searchOffset;
+    try {
+      const results = await searchClipboardHistory(
+        indexedQuery,
+        $generalSettings.display.pageSize,
+        offset,
+        $generalSettings.searchSortRules,
+      );
+      if (requestId !== searchLoadRequestId) return;
+      if (results === null || results.length === 0) {
+        searchHasMore = false;
+        return;
+      }
+
+      indexedItems = [...(indexedItems ?? []), ...results];
+      searchOffset += results.length;
+      searchHasMore = results.length === $generalSettings.display.pageSize;
+    } catch (error) {
+      if (requestId !== searchLoadRequestId) return;
+      console.error("Unable to load more search results", error);
+      statusMessage = _t("app.searchFailed");
+    } finally {
+      if (requestId === searchLoadRequestId) searchLoading = false;
     }
   }
 
@@ -2290,7 +2395,11 @@
       ) {
         void loadDeletedHistoryPage();
       }
-      if (
+      if (indexedItems !== null) {
+        if (searchHasMore && !searchLoading && nearBottom) {
+          void loadSearchPage();
+        }
+      } else if (
         activeFilter !== "deleted" &&
         activeHistoryHasMore &&
         !activeHistoryLoading &&
