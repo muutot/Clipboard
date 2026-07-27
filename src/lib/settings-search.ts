@@ -62,9 +62,24 @@ const entry = (
 ): SettingsSearchItemTemplate => ({ id, ...target, title, description, aliases });
 
 const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]> = {
-  general_search: [i18n("storage.generalTab"), i18n("storage.basicTab"), i18n("storage.generalSearchTab"), "基础设置"],
-  general_display: [i18n("storage.generalTab"), i18n("storage.basicTab"), i18n("storage.generalDisplayTab"), "显示"],
-  general_window: [i18n("storage.generalTab"), i18n("storage.basicTab"), i18n("storage.generalWindowTab"), "窗口"],
+  general_search: [
+    i18n("storage.generalTab"),
+    i18n("storage.basicTab"),
+    i18n("storage.generalSearchTab"),
+    "基础设置",
+  ],
+  general_display: [
+    i18n("storage.generalTab"),
+    i18n("storage.basicTab"),
+    i18n("storage.generalDisplayTab"),
+    "显示",
+  ],
+  general_window: [
+    i18n("storage.generalTab"),
+    i18n("storage.basicTab"),
+    i18n("storage.generalWindowTab"),
+    "窗口",
+  ],
   compact: [
     i18n("storage.appearanceTab"),
     i18n("storage.compactTab"),
@@ -75,11 +90,33 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   theme: [i18n("storage.appearanceTab"), i18n("storage.themeTab"), i18n("theme.title"), "配色"],
   capture: [i18n("capture.title"), i18n("capture.settings"), "采集"],
   storage_paths: [i18n("storage.storageTab"), i18n("storage.storagePathsTab"), "存储", "路径"],
-  storage_limits: [i18n("storage.storageTab"), i18n("storage.storageLimitsTab"), "存储", "容量", "清理"],
-  storage_tools: [i18n("storage.storageTab"), i18n("storage.storageToolsTab"), "存储", "维护", "工具"],
+  storage_limits: [
+    i18n("storage.storageTab"),
+    i18n("storage.storageLimitsTab"),
+    "存储",
+    "容量",
+    "清理",
+  ],
+  storage_tools: [
+    i18n("storage.storageTab"),
+    i18n("storage.storageToolsTab"),
+    "存储",
+    "维护",
+    "工具",
+  ],
   keyboard_item: [i18n("storage.keyboardTab"), i18n("storage.keyboardItemTab"), "快捷键", "條目"],
-  keyboard_quick: [i18n("storage.keyboardTab"), i18n("storage.keyboardQuickTab"), "快捷键", "快速复制"],
-  keyboard_system: [i18n("storage.keyboardTab"), i18n("storage.keyboardSystemTab"), "快捷键", "系统"],
+  keyboard_quick: [
+    i18n("storage.keyboardTab"),
+    i18n("storage.keyboardQuickTab"),
+    "快捷键",
+    "快速复制",
+  ],
+  keyboard_system: [
+    i18n("storage.keyboardTab"),
+    i18n("storage.keyboardSystemTab"),
+    "快捷键",
+    "系统",
+  ],
   ocr: [i18n("storage.ocrTitle"), "OCR", "文字识别"],
   statistics: [i18n("statistics.title"), "统计", "诊断"],
 };

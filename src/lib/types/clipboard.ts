@@ -200,7 +200,7 @@ export interface GeneralSettings {
   quickCopyBadgeAlwaysVisible: boolean;
   showSettingsCloseButton: boolean;
   /** 详情展示模式：'overlay' 同画布切入 | 'split' 左右分栏 */
-  detailDisplayMode: 'overlay' | 'split';
+  detailDisplayMode: "overlay" | "split";
   searchSortRules: SortRule[];
 }
 

@@ -459,17 +459,18 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 - **Theme colors (must follow strictly):** every color in a component must use a theme CSS variable (`var(--bg-app)`, `var(--bg-settings)`, `var(--accent)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-muted)`, `var(--text-faint)`, `var(--border-color)`, `var(--border-subtle)`, `var(--card-bg)`, `var(--surface-bg)`, `var(--statusbar-bg)`, `var(--hover-bg)`, `var(--input-bg)`, `var(--selection-color)`, `var(--success-color)`, `var(--danger-color)`, `var(--warning-color)`, `var(--scrollbar-color)`). Never hardcode hex/rgba values in components — light/custom themes break otherwise. The authoritative variable list lives in `src/lib/utils/theme.ts`; dark defaults live in `DARK_THEME_COLORS` in `src/lib/types/clipboard.ts`. Any raw hex in older snippets in this skill illustrates structure only — always substitute theme variables.
 
 - **Settings typography & metrics (must follow strictly):** settings panels must reference the `--settings-*` semantic variables defined on the settings shell in `StorageSettingsDialog.svelte`, each with its standard fallback:
-  | Variable | Fallback | Usage |
-  | --- | --- | --- |
-  | `--settings-page-title-size` | `18px` | panel `h2` |
-  | `--settings-heading-size` | `13px` | `.setting-heading strong` |
-  | `--settings-description-size` | `var(--font-size-secondary, 11px)` | descriptions, hints, breadcrumb |
-  | `--settings-note-size` | `var(--font-size-tiny, 10px)` | auto-save notes, footnotes |
-  | `--settings-control-size` | `var(--font-size-secondary, 11px)` | inputs, selects, buttons, list rows |
-  | `--settings-feedback-size` / `--settings-feedback-radius` | description size / `7px` | feedback toast |
-  | `--settings-card-radius` | `9px` | `.setting-card` |
-  | `--settings-control-radius` | `6px` | inputs, selects, small buttons |
-  | `--settings-close-size` / `--settings-close-radius` / `--settings-close-font-size` | `28px` / `7px` / `19px` | close button |
+
+  | Variable                                                                           | Fallback                           | Usage                               |
+  | ---------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------- |
+  | `--settings-page-title-size`                                                       | `18px`                             | panel `h2`                          |
+  | `--settings-heading-size`                                                          | `13px`                             | `.setting-heading strong`           |
+  | `--settings-description-size`                                                      | `var(--font-size-secondary, 11px)` | descriptions, hints, breadcrumb     |
+  | `--settings-note-size`                                                             | `var(--font-size-tiny, 10px)`      | auto-save notes, footnotes          |
+  | `--settings-control-size`                                                          | `var(--font-size-secondary, 11px)` | inputs, selects, buttons, list rows |
+  | `--settings-feedback-size` / `--settings-feedback-radius`                          | description size / `7px`           | feedback toast                      |
+  | `--settings-card-radius`                                                           | `9px`                              | `.setting-card`                     |
+  | `--settings-control-radius`                                                        | `6px`                              | inputs, selects, small buttons      |
+  | `--settings-close-size` / `--settings-close-radius` / `--settings-close-font-size` | `28px` / `7px` / `19px`            | close button                        |
 
   Never introduce a raw `font-size` or one-off radius in a settings panel when one of these variables fits.
 
@@ -478,6 +479,7 @@ Custom implementation in `virtual-scroll.ts` handles large clipboard lists. Item
 All settings panels (General, Compact, Keyboard, FontSize, Theme, IgnoredApps) must import shared base styles via `src/lib/styles/settings-shared.css`. This file is already imported by `src/app.css`.
 
 When creating a new settings panel:
+
 1. Copy the template structure from `GeneralSettingsPanel.svelte` (header + `.settings-scroll` + `.settings-feedback` + `.auto-save-note`)
 2. Do NOT redefine shared CSS rules in the panel's `<style>` block — they are already provided by `settings-shared.css`
 3. Only add panel-specific styles (e.g., `.lang-toggle` for General, `.font-size-control` for FontSize, `.color-swatch` for Theme)

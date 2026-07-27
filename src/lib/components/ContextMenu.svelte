@@ -69,7 +69,10 @@
       class:destructive={item.destructive}
       role="menuitem"
       disabled={item.disabled}
-      onclick={() => { onaction(item.id); onclose(); }}
+      onclick={() => {
+        onaction(item.id);
+        onclose();
+      }}
     >
       <span class="menu-icon"><AppIcon name={item.icon} size={15} /></span>
       <span class="menu-label">{item.label}</span>

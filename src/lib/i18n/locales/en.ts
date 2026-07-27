@@ -76,18 +76,22 @@ const en: LocaleDefinition = {
     generalWindowTab: "Window & General",
     generalSearchDescription: "Search behavior, item interaction and list operation preferences",
     generalDisplayDescription: "Card text display, image preview and list loading settings",
-    generalWindowDescription: "Window appearance, startup behavior, system integration and feedback settings",
+    generalWindowDescription:
+      "Window appearance, startup behavior, system integration and feedback settings",
     keyboardItemTab: "Item Actions",
     keyboardQuickTab: "Quick Copy",
     keyboardSystemTab: "System",
-    keyboardItemDescription: "Shortcuts for copy, delete, favorite, edit, paste, select all and other item actions",
+    keyboardItemDescription:
+      "Shortcuts for copy, delete, favorite, edit, paste, select all and other item actions",
     keyboardQuickDescription: "Quick copy shortcuts for the first 9 list items, defaults Ctrl+1~9",
     keyboardSystemDescription: "System-wide global shortcut for showing or hiding the main window",
     storagePathsTab: "Storage Paths",
     storageLimitsTab: "Limits & Cleanup",
     storageToolsTab: "Maintenance",
-    storagePathsDescription: "Configuration file, data directory and resource storage location settings",
-    storageLimitsDescription: "Retention period, maximum item count, file size limits and per-type cleanup",
+    storagePathsDescription:
+      "Configuration file, data directory and resource storage location settings",
+    storageLimitsDescription:
+      "Retention period, maximum item count, file size limits and per-type cleanup",
     storageToolsDescription: "Icon cache management, search index rebuild and database maintenance",
     appearanceSettings: "Settings / Appearance",
     ocrSettings: "Settings / OCR",
@@ -426,7 +430,7 @@ const en: LocaleDefinition = {
     useSystemTitleBar: "Use System Title Bar",
     useSystemTitleBarDescription: "Use the operating system's native title bar",
     showSettingsCloseButton: "Show Settings Close Button",
-    showSettingsCloseButtonDescription:       "Show a close button in the settings title bar",
+    showSettingsCloseButtonDescription: "Show a close button in the settings title bar",
     desktopFullscreen: "Desktop Fullscreen Preview",
     desktopFullscreenDescription:
       "When enabled, images fullscreen over desktop. When disabled, fullscreen within app only.",
@@ -483,7 +487,8 @@ const en: LocaleDefinition = {
     pageSizeDescription: "Number of items loaded each time when scrolling the list",
     pageSizeUnit: "items",
     maxVisibleItems: "Max Visible Items",
-    maxVisibleItemsDescription: "Maximum items kept in the list; oldest unfavorited non-deleted items are discarded when exceeded",
+    maxVisibleItemsDescription:
+      "Maximum items kept in the list; oldest unfavorited non-deleted items are discarded when exceeded",
     maxVisibleItemsUnit: "items",
   },
   compact: {

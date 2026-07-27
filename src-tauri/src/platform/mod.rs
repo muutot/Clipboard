@@ -8,9 +8,7 @@ use std::{
 
 #[cfg(target_os = "windows")]
 use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
     thread::{self, JoinHandle},
 };
 
@@ -597,9 +595,15 @@ impl SystemTray {
             .try_state::<CaptureState>()
             .is_some_and(|c| c.is_paused());
         let recording_enabled = !is_paused;
-        let pause_item =
-            CheckMenuItem::with_id(app, Self::PAUSE_MENU_ID, "剪切板记录", true, recording_enabled, None::<&str>)
-                .map_err(|error| format!("failed to create the tray pause item: {error}"))?;
+        let pause_item = CheckMenuItem::with_id(
+            app,
+            Self::PAUSE_MENU_ID,
+            "剪切板记录",
+            true,
+            recording_enabled,
+            None::<&str>,
+        )
+        .map_err(|error| format!("failed to create the tray pause item: {error}"))?;
         let pause_item = Arc::new(pause_item);
         let pause_item_for_menu = Arc::clone(&pause_item);
         let restart_item =
@@ -607,8 +611,17 @@ impl SystemTray {
                 .map_err(|error| format!("failed to create the tray restart item: {error}"))?;
         let quit_item = MenuItem::with_id(app, Self::QUIT_MENU_ID, "退出", true, None::<&str>)
             .map_err(|error| format!("failed to create the tray quit item: {error}"))?;
-        let menu = Menu::with_items(app, &[&show_item, &settings_item, pause_item.as_ref(), &restart_item, &quit_item])
-            .map_err(|error| format!("failed to create the tray menu: {error}"))?;
+        let menu = Menu::with_items(
+            app,
+            &[
+                &show_item,
+                &settings_item,
+                pause_item.as_ref(),
+                &restart_item,
+                &quit_item,
+            ],
+        )
+        .map_err(|error| format!("failed to create the tray menu: {error}"))?;
 
         let mut builder = TrayIconBuilder::with_id("main-tray")
             .menu(&menu)

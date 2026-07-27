@@ -5,8 +5,7 @@ use sha2::{Digest, Sha256};
 use crate::storage::StorageError;
 
 use super::resource_metadata::{
-    created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes,
-    modified_at_ms,
+    created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes, modified_at_ms,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

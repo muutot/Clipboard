@@ -52,7 +52,7 @@
   function pointerDragStart(idx: number, _e: PointerEvent) {
     sortDragIdx = idx;
     sortDragOverIdx = null;
-    const rows = sortListEl?.querySelectorAll<HTMLElement>('.sort-rule-row');
+    const rows = sortListEl?.querySelectorAll<HTMLElement>(".sort-rule-row");
 
     function onMove(ev: PointerEvent) {
       if (!rows || rows.length === 0) return;
@@ -66,19 +66,19 @@
       }
       for (let i = 0; i < rows.length; i++) {
         if (target !== null && i === target && i !== sortDragIdx) {
-          rows[i].classList.add('sort-drag-over');
+          rows[i].classList.add("sort-drag-over");
         } else {
-          rows[i].classList.remove('sort-drag-over');
+          rows[i].classList.remove("sort-drag-over");
         }
       }
     }
 
     function onUp() {
-      const target = [...(rows ?? [])].findIndex((r) => r.classList.contains('sort-drag-over'));
+      const target = [...(rows ?? [])].findIndex((r) => r.classList.contains("sort-drag-over"));
       if (target !== -1 && target !== sortDragIdx) {
         moveSortRule(sortDragIdx!, target);
       }
-      rows?.forEach((r) => r.classList.remove('sort-drag-over'));
+      rows?.forEach((r) => r.classList.remove("sort-drag-over"));
       sortDragIdx = null;
       sortDragOverIdx = null;
       document.removeEventListener("pointermove", onMove);
@@ -231,7 +231,8 @@
         type="button"
         class="toggle-switch"
         class:active={s.searchHistoryEnabled}
-        onclick={() => generalSettings.updateSetting("searchHistoryEnabled", !s.searchHistoryEnabled)}
+        onclick={() =>
+          generalSettings.updateSetting("searchHistoryEnabled", !s.searchHistoryEnabled)}
         aria-checked={s.searchHistoryEnabled}
         aria-label={_t("general.searchHistory")}
         role="switch"
@@ -340,11 +341,7 @@
       </div>
       <div class="sort-rules-list" role="list" bind:this={sortListEl}>
         {#each s.searchSortRules as rule, idx (idx)}
-          <div
-            class="sort-rule-row"
-            class:sort-dragging={sortDragIdx === idx}
-            role="listitem"
-          >
+          <div class="sort-rule-row" class:sort-dragging={sortDragIdx === idx} role="listitem">
             <span
               class="sort-grip"
               role="button"
@@ -363,12 +360,17 @@
               aria-label={_t("general.searchSortRules")}
               onchange={(e) => {
                 const newRules = [...s.searchSortRules];
-                newRules[idx] = { ...rule, field: (e.target as HTMLSelectElement).value as SortRule["field"] };
+                newRules[idx] = {
+                  ...rule,
+                  field: (e.target as HTMLSelectElement).value as SortRule["field"],
+                };
                 generalSettings.updateSetting("searchSortRules", newRules);
               }}
             >
               {#each ALL_SORT_FIELDS as f}
-                {@const usedByOthers = s.searchSortRules.some((r: SortRule, i: number) => i !== idx && r.field === f)}
+                {@const usedByOthers = s.searchSortRules.some(
+                  (r: SortRule, i: number) => i !== idx && r.field === f,
+                )}
                 <option value={f} disabled={usedByOthers}>{_t(SORT_FIELD_LABELS[f])}</option>
               {/each}
             </select>
@@ -379,7 +381,10 @@
               aria-label={rule.direction === "asc" ? _t("general.sortAsc") : _t("general.sortDesc")}
               onclick={() => {
                 const newRules = [...s.searchSortRules];
-                newRules[idx] = { ...rule, direction: rule.direction === "asc" ? "desc" : "asc" as const };
+                newRules[idx] = {
+                  ...rule,
+                  direction: rule.direction === "asc" ? "desc" : ("asc" as const),
+                };
                 generalSettings.updateSetting("searchSortRules", newRules);
               }}
             >
@@ -394,8 +399,8 @@
                 onclick={() => {
                   const newRules = s.searchSortRules.filter((_, i) => i !== idx);
                   generalSettings.updateSetting("searchSortRules", newRules);
-                }}
-              >×</button>
+                }}>×</button
+              >
             {/if}
           </div>
         {/each}
@@ -407,7 +412,8 @@
             class="sort-add-btn"
             onclick={() => {
               const used = new Set(s.searchSortRules.map((r: SortRule) => r.field));
-              const field = (ALL_SORT_FIELDS.find((f) => !used.has(f)) ?? "createdAt") as SortRule["field"];
+              const field = (ALL_SORT_FIELDS.find((f) => !used.has(f)) ??
+                "createdAt") as SortRule["field"];
               const rule: SortRule = { field, direction: "desc" };
               generalSettings.updateSetting("searchSortRules", [...s.searchSortRules, rule]);
             }}
@@ -485,7 +491,7 @@
         onchange={(e) =>
           generalSettings.updateSetting(
             "detailDisplayMode",
-            (e.target as HTMLSelectElement).value as 'overlay' | 'split',
+            (e.target as HTMLSelectElement).value as "overlay" | "split",
           )}
       >
         <option value="overlay">{_t("general.detailDisplayModeOverlay")}</option>
@@ -557,8 +563,10 @@
           class:active={s.language === "zh-CN"}
           onclick={() => changeLanguage("zh-CN")}>中文</button
         >
-        <button type="button" class:active={s.language === "en"} onclick={() => changeLanguage("en")}
-          >English</button
+        <button
+          type="button"
+          class:active={s.language === "en"}
+          onclick={() => changeLanguage("en")}>English</button
         >
       </div>
     </section>
@@ -617,7 +625,8 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.closeToTray ?? false}
-        onclick={() => void changeWindowSetting("closeToTray", !(windowConfig?.closeToTray ?? false))}
+        onclick={() =>
+          void changeWindowSetting("closeToTray", !(windowConfig?.closeToTray ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
         aria-checked={windowConfig?.closeToTray ?? false}
         aria-label={_t("general.closeToTray")}
@@ -705,7 +714,9 @@
             <strong>{_t("general.maxVisibleItems")}</strong>
             <p>{_t("general.maxVisibleItemsDescription")}</p>
           </div>
-          <span class="value-label">{s.display.maxVisibleItems} {_t("general.maxVisibleItemsUnit")}</span>
+          <span class="value-label"
+            >{s.display.maxVisibleItems} {_t("general.maxVisibleItemsUnit")}</span
+          >
         </div>
       </div>
       <input
@@ -716,7 +727,10 @@
         value={s.display.maxVisibleItems}
         oninput={(event) => {
           const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("display", { ...s.display, maxVisibleItems: Number(input.value) });
+          generalSettings.updateSetting("display", {
+            ...s.display,
+            maxVisibleItems: Number(input.value),
+          });
           updateSliderTrack(input);
         }}
         class="transparency-slider"

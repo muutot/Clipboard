@@ -14,8 +14,8 @@ pub use hash::{
     compute_normalized_media_hash, icon_key, AppIconStore, DedupResult, SelfTriggerGuard,
 };
 pub use resource_metadata::{
-    created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes,
-    modified_at_ms, RESOURCE_METADATA_SCHEMA_VERSION,
+    created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes, modified_at_ms,
+    RESOURCE_METADATA_SCHEMA_VERSION,
 };
 pub use thumbnail::{ThumbnailGenerator, ThumbnailInfo, ThumbnailQueue, ThumbnailWorker};
 pub use transform::{TextTransform, TransformOperation};

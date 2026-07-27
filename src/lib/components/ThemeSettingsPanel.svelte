@@ -1,11 +1,7 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import type {
-    ThemeColors,
-    ThemeMode,
-    ThemePreset,
-  } from "$lib/types/clipboard";
+  import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
   import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
   import { generalSettings } from "$lib/services/settings";
 
@@ -64,23 +60,63 @@
     { key: "bg", label: _t("theme.bg"), desc: _t("theme.bgDescription") },
     { key: "settingsBg", label: _t("theme.settingsBg"), desc: _t("theme.settingsBgDescription") },
     { key: "accent", label: _t("theme.accent"), desc: _t("theme.accentDescription") },
-    { key: "textPrimary", label: _t("theme.textPrimary"), desc: _t("theme.textPrimaryDescription") },
-    { key: "textSecondary", label: _t("theme.textSecondary"), desc: _t("theme.textSecondaryDescription") },
+    {
+      key: "textPrimary",
+      label: _t("theme.textPrimary"),
+      desc: _t("theme.textPrimaryDescription"),
+    },
+    {
+      key: "textSecondary",
+      label: _t("theme.textSecondary"),
+      desc: _t("theme.textSecondaryDescription"),
+    },
     { key: "textMuted", label: _t("theme.textMuted"), desc: _t("theme.textMutedDescription") },
     { key: "textFaint", label: _t("theme.textFaint"), desc: _t("theme.textFaintDescription") },
-    { key: "placeholderColor", label: _t("theme.placeholderColor"), desc: _t("theme.placeholderColorDescription") },
+    {
+      key: "placeholderColor",
+      label: _t("theme.placeholderColor"),
+      desc: _t("theme.placeholderColorDescription"),
+    },
     { key: "border", label: _t("theme.border"), desc: _t("theme.borderDescription") },
-    { key: "borderSubtle", label: _t("theme.borderSubtle"), desc: _t("theme.borderSubtleDescription") },
+    {
+      key: "borderSubtle",
+      label: _t("theme.borderSubtle"),
+      desc: _t("theme.borderSubtleDescription"),
+    },
     { key: "cardBg", label: _t("theme.cardBg"), desc: _t("theme.cardBgDescription") },
     { key: "surfaceBg", label: _t("theme.surfaceBg"), desc: _t("theme.surfaceBgDescription") },
-    { key: "statusBarBg", label: _t("theme.statusBarBg"), desc: _t("theme.statusBarBgDescription") },
+    {
+      key: "statusBarBg",
+      label: _t("theme.statusBarBg"),
+      desc: _t("theme.statusBarBgDescription"),
+    },
     { key: "hoverBg", label: _t("theme.hoverBg"), desc: _t("theme.hoverBgDescription") },
     { key: "inputBg", label: _t("theme.inputBg"), desc: _t("theme.inputBgDescription") },
-    { key: "selectionColor", label: _t("theme.selectionColor"), desc: _t("theme.selectionColorDescription") },
-    { key: "successColor", label: _t("theme.successColor"), desc: _t("theme.successColorDescription") },
-    { key: "dangerColor", label: _t("theme.dangerColor"), desc: _t("theme.dangerColorDescription") },
-    { key: "warningColor", label: _t("theme.warningColor"), desc: _t("theme.warningColorDescription") },
-    { key: "scrollbarColor", label: _t("theme.scrollbarColor"), desc: _t("theme.scrollbarColorDescription") },
+    {
+      key: "selectionColor",
+      label: _t("theme.selectionColor"),
+      desc: _t("theme.selectionColorDescription"),
+    },
+    {
+      key: "successColor",
+      label: _t("theme.successColor"),
+      desc: _t("theme.successColorDescription"),
+    },
+    {
+      key: "dangerColor",
+      label: _t("theme.dangerColor"),
+      desc: _t("theme.dangerColorDescription"),
+    },
+    {
+      key: "warningColor",
+      label: _t("theme.warningColor"),
+      desc: _t("theme.warningColorDescription"),
+    },
+    {
+      key: "scrollbarColor",
+      label: _t("theme.scrollbarColor"),
+      desc: _t("theme.scrollbarColorDescription"),
+    },
   ];
 
   const isReadonly = $derived(s.theme !== "custom");
@@ -92,7 +128,8 @@
   const presetColorsDiffer = $derived(
     activePreset
       ? Object.keys(activePreset.colors).some(
-          (k) => themeColors[k as keyof ThemeColors] !== activePreset.colors[k as keyof ThemeColors],
+          (k) =>
+            themeColors[k as keyof ThemeColors] !== activePreset.colors[k as keyof ThemeColors],
         )
       : false,
   );
@@ -204,96 +241,106 @@
   {#if isReadonly}
     <p class="readonly-hint">{_t("theme.readonlyHint")}</p>
   {:else}
-  <section class="setting-card preset-section">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="star" size={16} /></span>
-      <div>
-        <strong>{_t("theme.presets")}</strong>
-        <p>{_t("theme.presetsDescription")}</p>
-      </div>
-    </div>
-    <div class="preset-save-row">
-      {#if activePreset && presetColorsDiffer}
-        <button class="preset-save-btn update-btn" type="button" onclick={updatePreset}>
-          更新 "{activePreset.name}"
-        </button>
-      {/if}
-      <input
-        type="text"
-        class="preset-name-input"
-        placeholder={_t("theme.presetNamePlaceholder")}
-        bind:value={presetName}
-        onkeydown={(e) => e.key === "Enter" && savePreset()}
-      />
-      <button class="preset-save-btn" type="button" disabled={!presetName.trim()} onclick={savePreset}>
-        {_t("theme.savePreset")}
-      </button>
-    </div>
-    {#if (s.customPresets ?? []).length > 0}
-      <div class="preset-list">
-        {#each s.customPresets ?? [] as preset (preset.id)}
-          <div class="preset-row" class:active={s.activePresetId === preset.id}>
-            <span class="preset-row-name">
-              {#if s.activePresetId === preset.id}
-                <span class="preset-check">&#10003;</span>
-              {/if}
-              {preset.name}
-            </span>
-            <span class="preset-row-actions">
-              <button class="preset-action-btn" type="button" onclick={() => overwritePreset(preset)}>
-                {_t("theme.overwritePreset")}
-              </button>
-              <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
-                {_t("theme.applyPreset")}
-              </button>
-              <button class="preset-action-btn danger" type="button" onclick={() => deletePreset(preset.id)}>
-                {_t("theme.deletePreset")}
-              </button>
-            </span>
-          </div>
-        {/each}
-      </div>
-    {:else}
-      <p class="preset-empty">{_t("theme.noPresets")}</p>
-    {/if}
-  </section>
-
-  {#each colorEntries as entry}
-    <section class="setting-card toggle-card">
+    <section class="setting-card preset-section">
       <div class="setting-heading">
-        <span
-          class="color-swatch"
-          style="background-color: {themeColors[entry.key]}"
-        ></span>
+        <span class="setting-icon"><AppIcon name="star" size={16} /></span>
         <div>
-          <strong>{entry.label}</strong>
-          <p>{entry.desc}</p>
+          <strong>{_t("theme.presets")}</strong>
+          <p>{_t("theme.presetsDescription")}</p>
         </div>
       </div>
-      <div class="color-input-group">
-        <input
-          type="color"
-          class="color-picker"
-          value={themeColors[entry.key]}
-          disabled={isReadonly}
-          oninput={(e) => updateColor(entry.key, (e.target as HTMLInputElement).value)}
-        />
+      <div class="preset-save-row">
+        {#if activePreset && presetColorsDiffer}
+          <button class="preset-save-btn update-btn" type="button" onclick={updatePreset}>
+            更新 "{activePreset.name}"
+          </button>
+        {/if}
         <input
           type="text"
-          class="color-text-input"
-          value={themeColors[entry.key]}
-          disabled={isReadonly}
-          maxlength={9}
-          oninput={(e) => {
-            const val = (e.target as HTMLInputElement).value;
-            if (/^#[0-9a-fA-F]{0,8}$/.test(val)) {
-              updateColor(entry.key, val);
-            }
-          }}
+          class="preset-name-input"
+          placeholder={_t("theme.presetNamePlaceholder")}
+          bind:value={presetName}
+          onkeydown={(e) => e.key === "Enter" && savePreset()}
         />
+        <button
+          class="preset-save-btn"
+          type="button"
+          disabled={!presetName.trim()}
+          onclick={savePreset}
+        >
+          {_t("theme.savePreset")}
+        </button>
       </div>
+      {#if (s.customPresets ?? []).length > 0}
+        <div class="preset-list">
+          {#each s.customPresets ?? [] as preset (preset.id)}
+            <div class="preset-row" class:active={s.activePresetId === preset.id}>
+              <span class="preset-row-name">
+                {#if s.activePresetId === preset.id}
+                  <span class="preset-check">&#10003;</span>
+                {/if}
+                {preset.name}
+              </span>
+              <span class="preset-row-actions">
+                <button
+                  class="preset-action-btn"
+                  type="button"
+                  onclick={() => overwritePreset(preset)}
+                >
+                  {_t("theme.overwritePreset")}
+                </button>
+                <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
+                  {_t("theme.applyPreset")}
+                </button>
+                <button
+                  class="preset-action-btn danger"
+                  type="button"
+                  onclick={() => deletePreset(preset.id)}
+                >
+                  {_t("theme.deletePreset")}
+                </button>
+              </span>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="preset-empty">{_t("theme.noPresets")}</p>
+      {/if}
     </section>
-  {/each}
+
+    {#each colorEntries as entry}
+      <section class="setting-card toggle-card">
+        <div class="setting-heading">
+          <span class="color-swatch" style="background-color: {themeColors[entry.key]}"></span>
+          <div>
+            <strong>{entry.label}</strong>
+            <p>{entry.desc}</p>
+          </div>
+        </div>
+        <div class="color-input-group">
+          <input
+            type="color"
+            class="color-picker"
+            value={themeColors[entry.key]}
+            disabled={isReadonly}
+            oninput={(e) => updateColor(entry.key, (e.target as HTMLInputElement).value)}
+          />
+          <input
+            type="text"
+            class="color-text-input"
+            value={themeColors[entry.key]}
+            disabled={isReadonly}
+            maxlength={9}
+            oninput={(e) => {
+              const val = (e.target as HTMLInputElement).value;
+              if (/^#[0-9a-fA-F]{0,8}$/.test(val)) {
+                updateColor(entry.key, val);
+              }
+            }}
+          />
+        </div>
+      </section>
+    {/each}
   {/if}
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>

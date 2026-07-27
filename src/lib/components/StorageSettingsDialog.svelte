@@ -93,7 +93,21 @@
   });
   let restartNeeded = $state(false);
   let activeSection = $state<
-    "general_search" | "general_display" | "general_window" | "compact" | "font" | "theme" | "capture" | "storage_paths" | "storage_limits" | "storage_tools" | "keyboard_item" | "keyboard_quick" | "keyboard_system" | "ocr" | "statistics"
+    | "general_search"
+    | "general_display"
+    | "general_window"
+    | "compact"
+    | "font"
+    | "theme"
+    | "capture"
+    | "storage_paths"
+    | "storage_limits"
+    | "storage_tools"
+    | "keyboard_item"
+    | "keyboard_quick"
+    | "keyboard_system"
+    | "ocr"
+    | "statistics"
   >("storage_paths");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
   let keyboardResetToken = $state(0);
@@ -111,38 +125,104 @@
     const tab = activeStatisticsTab;
     switch (activeSection) {
       case "general_search":
-        return { breadcrumb: _t("general.eyebrow"), title: _t("storage.basicTab"), desc: _t("storage.generalSearchDescription") };
+        return {
+          breadcrumb: _t("general.eyebrow"),
+          title: _t("storage.basicTab"),
+          desc: _t("storage.generalSearchDescription"),
+        };
       case "general_display":
-        return { breadcrumb: _t("general.eyebrow"), title: _t("storage.basicTab"), desc: _t("storage.generalDisplayDescription") };
+        return {
+          breadcrumb: _t("general.eyebrow"),
+          title: _t("storage.basicTab"),
+          desc: _t("storage.generalDisplayDescription"),
+        };
       case "general_window":
-        return { breadcrumb: _t("general.eyebrow"), title: _t("storage.basicTab"), desc: _t("storage.generalWindowDescription") };
+        return {
+          breadcrumb: _t("general.eyebrow"),
+          title: _t("storage.basicTab"),
+          desc: _t("storage.generalWindowDescription"),
+        };
       case "compact":
-        return { breadcrumb: _t("storage.appearanceSettings"), title: _t("storage.compactTab"), desc: _t("compact.description") };
+        return {
+          breadcrumb: _t("storage.appearanceSettings"),
+          title: _t("storage.compactTab"),
+          desc: _t("compact.description"),
+        };
       case "font":
-        return { breadcrumb: _t("storage.appearanceSettings"), title: _t("storage.fontTab"), desc: _t("general.fontSizeDescription") };
+        return {
+          breadcrumb: _t("storage.appearanceSettings"),
+          title: _t("storage.fontTab"),
+          desc: _t("general.fontSizeDescription"),
+        };
       case "theme":
-        return { breadcrumb: _t("storage.appearanceSettings"), title: _t("storage.themeTab"), desc: _t("general.fontSizeDescription") };
+        return {
+          breadcrumb: _t("storage.appearanceSettings"),
+          title: _t("storage.themeTab"),
+          desc: _t("general.fontSizeDescription"),
+        };
       case "capture":
-        return { breadcrumb: _t("capture.settings"), title: _t("capture.title"), desc: _t("capture.description") };
+        return {
+          breadcrumb: _t("capture.settings"),
+          title: _t("capture.title"),
+          desc: _t("capture.description"),
+        };
       case "storage_paths":
-        return { breadcrumb: _t("storage.settings"), title: _t("storage.dataStorage"), desc: _t("storage.storagePathsDescription") };
+        return {
+          breadcrumb: _t("storage.settings"),
+          title: _t("storage.dataStorage"),
+          desc: _t("storage.storagePathsDescription"),
+        };
       case "storage_limits":
-        return { breadcrumb: _t("storage.settings"), title: _t("storage.dataStorage"), desc: _t("storage.storageLimitsDescription") };
+        return {
+          breadcrumb: _t("storage.settings"),
+          title: _t("storage.dataStorage"),
+          desc: _t("storage.storageLimitsDescription"),
+        };
       case "storage_tools":
-        return { breadcrumb: _t("storage.settings"), title: _t("storage.dataStorage"), desc: _t("storage.storageToolsDescription") };
+        return {
+          breadcrumb: _t("storage.settings"),
+          title: _t("storage.dataStorage"),
+          desc: _t("storage.storageToolsDescription"),
+        };
       case "keyboard_item":
-        return { breadcrumb: _t("keyboard.settings"), title: _t("keyboard.title"), desc: _t("storage.keyboardItemDescription") };
+        return {
+          breadcrumb: _t("keyboard.settings"),
+          title: _t("keyboard.title"),
+          desc: _t("storage.keyboardItemDescription"),
+        };
       case "keyboard_quick":
-        return { breadcrumb: _t("keyboard.settings"), title: _t("keyboard.title"), desc: _t("storage.keyboardQuickDescription") };
+        return {
+          breadcrumb: _t("keyboard.settings"),
+          title: _t("keyboard.title"),
+          desc: _t("storage.keyboardQuickDescription"),
+        };
       case "keyboard_system":
-        return { breadcrumb: _t("keyboard.settings"), title: _t("keyboard.title"), desc: _t("storage.keyboardSystemDescription") };
+        return {
+          breadcrumb: _t("keyboard.settings"),
+          title: _t("keyboard.title"),
+          desc: _t("storage.keyboardSystemDescription"),
+        };
       case "ocr":
-        return { breadcrumb: _t("storage.ocrSettings"), title: _t("storage.ocrTitle"), desc: _t("storage.ocrDescription") };
+        return {
+          breadcrumb: _t("storage.ocrSettings"),
+          title: _t("storage.ocrTitle"),
+          desc: _t("storage.ocrDescription"),
+        };
       case "statistics":
         return {
           breadcrumb: _t("storage.statisticsSettings"),
-          title: tab === "storage" ? _t("statistics.storageTab") : tab === "performance" ? _t("statistics.performanceTab") : _t("statistics.memoryTab"),
-          desc: tab === "storage" ? _t("statistics.storageDescription") : tab === "performance" ? _t("statistics.performanceDescription") : _t("statistics.memoryDescription"),
+          title:
+            tab === "storage"
+              ? _t("statistics.storageTab")
+              : tab === "performance"
+                ? _t("statistics.performanceTab")
+                : _t("statistics.memoryTab"),
+          desc:
+            tab === "storage"
+              ? _t("statistics.storageDescription")
+              : tab === "performance"
+                ? _t("statistics.performanceDescription")
+                : _t("statistics.memoryDescription"),
         };
     }
   });
@@ -1047,11 +1127,9 @@
 
     <nav class="settings-primary-nav" aria-label="设置分类">
       <button
-        class:active={
-          activeSection === "general_search" ||
+        class:active={activeSection === "general_search" ||
           activeSection === "general_display" ||
-          activeSection === "general_window"
-        }
+          activeSection === "general_window"}
         type="button"
         onclick={() => (activeSection = "general_window")}
       >
@@ -1059,7 +1137,9 @@
         <span>{_t("storage.generalTab")}</span>
       </button>
       <button
-        class:active={activeSection === "compact" || activeSection === "font" || activeSection === "theme"}
+        class:active={activeSection === "compact" ||
+          activeSection === "font" ||
+          activeSection === "theme"}
         type="button"
         onclick={() => (activeSection = "theme")}
       >
@@ -1075,11 +1155,9 @@
         <span>采集</span>
       </button>
       <button
-        class:active={
-          activeSection === "storage_paths" ||
+        class:active={activeSection === "storage_paths" ||
           activeSection === "storage_limits" ||
-          activeSection === "storage_tools"
-        }
+          activeSection === "storage_tools"}
         type="button"
         onclick={() => (activeSection = "storage_paths")}
       >
@@ -1087,11 +1165,9 @@
         <span>{_t("storage.storageTab")}</span>
       </button>
       <button
-        class:active={
-          activeSection === "keyboard_item" ||
+        class:active={activeSection === "keyboard_item" ||
           activeSection === "keyboard_quick" ||
-          activeSection === "keyboard_system"
-        }
+          activeSection === "keyboard_system"}
         type="button"
         onclick={() => (activeSection = "keyboard_item")}
       >
@@ -1133,8 +1209,7 @@
             Math.max(
               0,
               Math.round(
-                ((status.diskTotalBytes - status.diskAvailableBytes) / status.diskTotalBytes) *
-                  100,
+                ((status.diskTotalBytes - status.diskAvailableBytes) / status.diskTotalBytes) * 100,
               ),
             ),
           )}
@@ -1197,15 +1272,15 @@
             <button
               type="button"
               class="config-bar-btn"
-              onclick={() => invoke("open_external_url", { url: status?.keyboardConfigPath ?? "conf/keyboard.json" })}
+              onclick={() =>
+                invoke("open_external_url", {
+                  url: status?.keyboardConfigPath ?? "conf/keyboard.json",
+                })}
             >
-              <AppIcon name="file" size={13} /> {_t("keyboard.openFile") || "打开文件"}
+              <AppIcon name="file" size={13} />
+              {_t("keyboard.openFile") || "打开文件"}
             </button>
-            <button
-              type="button"
-              class="config-bar-btn"
-              onclick={() => handleResetKeyboard()}
-            >
+            <button type="button" class="config-bar-btn" onclick={() => handleResetKeyboard()}>
               <AppIcon name="restore" size={13} /> 重置所有
             </button>
           </div>
@@ -1378,7 +1453,15 @@
         {/if}
       </div>
     {:else if activeSection === "general_search" || activeSection === "general_display" || activeSection === "general_window"}
-      <GeneralSettingsPanel {onclose} section={activeSection === "general_search" ? "search" : activeSection === "general_display" ? "display" : "window"} showHeader={false} />
+      <GeneralSettingsPanel
+        {onclose}
+        section={activeSection === "general_search"
+          ? "search"
+          : activeSection === "general_display"
+            ? "display"
+            : "window"}
+        showHeader={false}
+      />
     {:else if activeSection === "compact"}
       <CompactSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "font"}
@@ -1388,11 +1471,26 @@
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
     {:else if activeSection === "keyboard_item"}
-      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="item" showHeader={false} />
+      <KeyboardSettingsPanel
+        {onclose}
+        resetToken={keyboardResetToken}
+        category="item"
+        showHeader={false}
+      />
     {:else if activeSection === "keyboard_quick"}
-      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="quick" showHeader={false} />
+      <KeyboardSettingsPanel
+        {onclose}
+        resetToken={keyboardResetToken}
+        category="quick"
+        showHeader={false}
+      />
     {:else if activeSection === "keyboard_system"}
-      <KeyboardSettingsPanel {onclose} resetToken={keyboardResetToken} category="system" showHeader={false} />
+      <KeyboardSettingsPanel
+        {onclose}
+        resetToken={keyboardResetToken}
+        category="system"
+        showHeader={false}
+      />
     {:else if activeSection === "ocr"}
       <div class="settings-scroll">
         <section class="setting-card setting-card-row">
@@ -1918,137 +2016,140 @@
       {:else if status}
         <div class="settings-scroll">
           {#if activeSection === "storage_paths"}
-          <section class="setting-card setting-card-row">
-            <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-            <span class="setting-label">常规配置文件</span>
-            <span class="config-path">{relativePath(status!.configPath)}</span>
-            <button
-              type="button"
-              class="open-btn"
-              onclick={() => invoke("open_external_url", { url: status!.configPath })}
-            >
-              <AppIcon name="file" size={14} /> 打开
-            </button>
-          </section>
-
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <div>
-                <strong>
-                  {_t("storage.dataDirectoryTitle")}
-                  <span class:custom={status.usesCustomDataDirectory} class="inline-badge">
-                    {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
-                  </span>
-                </strong>
-                <p>{_t("storage.dataDirectoryDesc")}</p>
-              </div>
-            </div>
-            <div class="dir-input-row">
-              <input
-                id="data-directory"
-                bind:value={dataDirectory}
-                autocomplete="off"
-                spellcheck="false"
-                placeholder={_t("storage.placeholderPath")}
-              />
-              <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
-                >{_t("storage.restoreDefault")}</button
-              >
-              <button type="button" disabled={saving} onclick={saveCustomDirectory}
-                >{saving ? _t("storage.saving") : _t("storage.saveDirectory")}</button
-              >
-            </div>
-
-            {#if pending}
-              <div class="pending-path">
-                <span>下次启动</span>
-                <code title={pending.storagePath}>{pending.storagePath}</code>
-                {#if restartNeeded}
-                  <button class="restart-btn" type="button" onclick={restartApp}>立即重启</button>
-                {/if}
-              </div>
-            {/if}
-          </section>
-
-          <section class="setting-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <div>
-                <strong>{_t("storage.resourcePathsTitle")}</strong>
-                <p>{_t("storage.resourcePathsDesc")}</p>
-              </div>
-            </div>
-            <div class="resource-path-grid">
-              <label for="image-storage-path">
-                <span>{_t("storage.imageStoragePath")}</span>
-                <input
-                  id="image-storage-path"
-                  bind:value={imageStoragePath}
-                  autocomplete="off"
-                  spellcheck="false"
-                  placeholder={status.imagePath}
-                />
-              </label>
-              <label for="file-storage-path">
-                <span>{_t("storage.fileStoragePath")}</span>
-                <input
-                  id="file-storage-path"
-                  bind:value={fileStoragePath}
-                  autocomplete="off"
-                  spellcheck="false"
-                  placeholder={status.filesPath}
-                />
-              </label>
-            </div>
-            <div class="dir-input-row resource-path-actions">
-              <span>{_t("storage.resourcePathsRestartHint")}</span>
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+              <span class="setting-label">常规配置文件</span>
+              <span class="config-path">{relativePath(status!.configPath)}</span>
               <button
                 type="button"
-                disabled={savingResourceStorage}
-                onclick={restoreDefaultResourceStoragePaths}>{_t("storage.restoreDefault")}</button
+                class="open-btn"
+                onclick={() => invoke("open_external_url", { url: status!.configPath })}
               >
-              <button
-                type="button"
-                disabled={savingResourceStorage}
-                onclick={saveResourceStoragePaths}
-                >{savingResourceStorage
-                  ? _t("storage.saving")
-                  : _t("storage.saveDirectory")}</button
-              >
-            </div>
-            {#if status && (!status.imageCleanupEnabled || !status.fileCleanupEnabled)}
-              <div class="resource-path-warning">
-                <AppIcon name="info" size={14} />
-                <span>{_t("storage.resourcePathsCleanupDisabled")}</span>
-              </div>
-            {/if}
-            {#if pendingResourceStorage}
-              <div class="resource-path-summary">
-                <code title={pendingResourceStorage.imageStoragePath}
-                  >{_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}</code
-                >
-                <code title={pendingResourceStorage.fileStoragePath}
-                  >{_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}</code
-                >
-                {#if resourceStorageRestartNeeded}
-                  <button class="restart-btn" type="button" onclick={restartApp}>
-                    {_t("storage.restartNow")}
-                  </button>
-                {/if}
-              </div>
-            {/if}
-          </section>
+                <AppIcon name="file" size={14} /> 打开
+              </button>
+            </section>
 
-          <section class="setting-card directory-tree-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-              <div>
-                <strong>{_t("storage.directoryTreeTitle")}</strong>
-                <p>{_t("storage.directoryTreeDesc")}</p>
+            <section class="setting-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                <div>
+                  <strong>
+                    {_t("storage.dataDirectoryTitle")}
+                    <span class:custom={status.usesCustomDataDirectory} class="inline-badge">
+                      {status.usesCustomDataDirectory
+                        ? _t("storage.custom")
+                        : _t("storage.default")}
+                    </span>
+                  </strong>
+                  <p>{_t("storage.dataDirectoryDesc")}</p>
+                </div>
               </div>
-            </div>
-            <pre>data/
+              <div class="dir-input-row">
+                <input
+                  id="data-directory"
+                  bind:value={dataDirectory}
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder={_t("storage.placeholderPath")}
+                />
+                <button type="button" disabled={saving} onclick={restoreDefaultDirectory}
+                  >{_t("storage.restoreDefault")}</button
+                >
+                <button type="button" disabled={saving} onclick={saveCustomDirectory}
+                  >{saving ? _t("storage.saving") : _t("storage.saveDirectory")}</button
+                >
+              </div>
+
+              {#if pending}
+                <div class="pending-path">
+                  <span>下次启动</span>
+                  <code title={pending.storagePath}>{pending.storagePath}</code>
+                  {#if restartNeeded}
+                    <button class="restart-btn" type="button" onclick={restartApp}>立即重启</button>
+                  {/if}
+                </div>
+              {/if}
+            </section>
+
+            <section class="setting-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.resourcePathsTitle")}</strong>
+                  <p>{_t("storage.resourcePathsDesc")}</p>
+                </div>
+              </div>
+              <div class="resource-path-grid">
+                <label for="image-storage-path">
+                  <span>{_t("storage.imageStoragePath")}</span>
+                  <input
+                    id="image-storage-path"
+                    bind:value={imageStoragePath}
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder={status.imagePath}
+                  />
+                </label>
+                <label for="file-storage-path">
+                  <span>{_t("storage.fileStoragePath")}</span>
+                  <input
+                    id="file-storage-path"
+                    bind:value={fileStoragePath}
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder={status.filesPath}
+                  />
+                </label>
+              </div>
+              <div class="dir-input-row resource-path-actions">
+                <span>{_t("storage.resourcePathsRestartHint")}</span>
+                <button
+                  type="button"
+                  disabled={savingResourceStorage}
+                  onclick={restoreDefaultResourceStoragePaths}
+                  >{_t("storage.restoreDefault")}</button
+                >
+                <button
+                  type="button"
+                  disabled={savingResourceStorage}
+                  onclick={saveResourceStoragePaths}
+                  >{savingResourceStorage
+                    ? _t("storage.saving")
+                    : _t("storage.saveDirectory")}</button
+                >
+              </div>
+              {#if status && (!status.imageCleanupEnabled || !status.fileCleanupEnabled)}
+                <div class="resource-path-warning">
+                  <AppIcon name="info" size={14} />
+                  <span>{_t("storage.resourcePathsCleanupDisabled")}</span>
+                </div>
+              {/if}
+              {#if pendingResourceStorage}
+                <div class="resource-path-summary">
+                  <code title={pendingResourceStorage.imageStoragePath}
+                    >{_t("storage.imageStoragePath")}: {pendingResourceStorage.imageStoragePath}</code
+                  >
+                  <code title={pendingResourceStorage.fileStoragePath}
+                    >{_t("storage.fileStoragePath")}: {pendingResourceStorage.fileStoragePath}</code
+                  >
+                  {#if resourceStorageRestartNeeded}
+                    <button class="restart-btn" type="button" onclick={restartApp}>
+                      {_t("storage.restartNow")}
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </section>
+
+            <section class="setting-card directory-tree-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.directoryTreeTitle")}</strong>
+                  <p>{_t("storage.directoryTreeDesc")}</p>
+                </div>
+              </div>
+              <pre>data/
 ├─ conf/                           ← 配置文件
 │  ├─ conf.json                    ← 常规设置
 │  └─ keyboard.json                ← 快捷键
@@ -2062,216 +2163,231 @@
    ├─ clipboard.sqlite3            ← 剪贴板数据库
    ├─ clipboard.sqlite3-wal        ← 预写日志
     └─ search-index/                ← 全文搜索索引</pre>
-          </section>
+            </section>
           {/if}
           {#if activeSection === "storage_tools"}
-          <section class="setting-card">
-            <div class="toggle-card">
+            <section class="setting-card">
+              <div class="toggle-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+                  <div>
+                    <strong>{_t("storage.iconCacheTitle")}</strong>
+                    <p>{_t("storage.iconCacheDesc")}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="settings-action-btn"
+                  class:active={showIconManager}
+                  onclick={toggleIconManager}
+                >
+                  {_t("storage.manageIconCache")}
+                </button>
+              </div>
+              {#if showIconManager}
+                <div class="icon-manager-panel">
+                  {#if loadingIcons}
+                    <p class="settings-state">{_t("storage.loadingIcons")}</p>
+                  {:else if iconFiles.length === 0}
+                    <p class="settings-state">{_t("storage.noIconFiles")}</p>
+                  {:else}
+                    <div class="icon-list-header">
+                      <label class="icon-select-all">
+                        <input
+                          type="checkbox"
+                          checked={selectedIconFiles.size === iconFiles.length}
+                          onchange={(e) => {
+                            const checked = (e.target as HTMLInputElement).checked;
+                            selectedIconFiles = checked
+                              ? new Set(iconFiles.map((f) => f.name))
+                              : new Set();
+                          }}
+                        />
+                        <span>{_t("storage.selectAll")}</span>
+                      </label>
+                      <span class="icon-file-count">
+                        {selectedIconFiles.size} / {iconFiles.length}
+                        {_t("storage.selected")}
+                      </span>
+                    </div>
+                    <ul class="icon-file-list">
+                      {#each iconFiles as file}
+                        <li class="icon-file-item">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={selectedIconFiles.has(file.name)}
+                              onchange={() => toggleIconFile(file.name)}
+                            />
+                            <img
+                              class="icon-preview"
+                              src={convertFileSrc(
+                                `${status.iconsDir}/${file.name}`.replace(/\\/g, "/"),
+                              )}
+                              alt=""
+                              onerror={(e) => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                            <span class="icon-file-name">{file.name}</span>
+                            <span class="icon-file-size">{formatBytes(file.sizeBytes)}</span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                    <div class="icon-actions">
+                      <button
+                        type="button"
+                        disabled={selectedIconFiles.size === 0 || deletingIcons}
+                        onclick={deleteSelectedIcons}
+                      >
+                        {deletingIcons
+                          ? _t("storage.deletingIcons")
+                          : _t("storage.deleteSelectedIcons", { count: selectedIconFiles.size })}
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </section>
+
+            <section class="setting-card toggle-card">
               <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
                 <div>
-                  <strong>{_t("storage.iconCacheTitle")}</strong>
-                  <p>{_t("storage.iconCacheDesc")}</p>
+                  <strong>{_t("storage.searchIndexTitle")}</strong>
+                  <p>{_t("storage.searchIndexDesc")}</p>
                 </div>
               </div>
-              <button type="button" class="settings-action-btn" class:active={showIconManager} onclick={toggleIconManager}>
-                {_t("storage.manageIconCache")}
+              <button
+                type="button"
+                class="settings-action-btn"
+                disabled={rebuilding}
+                onclick={rebuildIndex}
+              >
+                {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
               </button>
-            </div>
-            {#if showIconManager}
-              <div class="icon-manager-panel">
-                {#if loadingIcons}
-                  <p class="settings-state">{_t("storage.loadingIcons")}</p>
-                {:else if iconFiles.length === 0}
-                  <p class="settings-state">{_t("storage.noIconFiles")}</p>
-                {:else}
-                  <div class="icon-list-header">
-                    <label class="icon-select-all">
-                      <input
-                        type="checkbox"
-                        checked={selectedIconFiles.size === iconFiles.length}
-                        onchange={(e) => {
-                          const checked = (e.target as HTMLInputElement).checked;
-                          selectedIconFiles = checked ? new Set(iconFiles.map(f => f.name)) : new Set();
-                        }}
-                      />
-                      <span>{_t("storage.selectAll")}</span>
-                    </label>
-                    <span class="icon-file-count">
-                      {selectedIconFiles.size} / {iconFiles.length} {_t("storage.selected")}
-                    </span>
-                  </div>
-                  <ul class="icon-file-list">
-                    {#each iconFiles as file}
-                      <li class="icon-file-item">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={selectedIconFiles.has(file.name)}
-                            onchange={() => toggleIconFile(file.name)}
-                          />
-                          <img
-                            class="icon-preview"
-                            src={convertFileSrc(`${status.iconsDir}/${file.name}`.replace(/\\/g, "/"))}
-                            alt=""
-                            onerror={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                          <span class="icon-file-name">{file.name}</span>
-                          <span class="icon-file-size">{formatBytes(file.sizeBytes)}</span>
-                        </label>
-                      </li>
-                    {/each}
-                  </ul>
-                  <div class="icon-actions">
-                    <button
-                      type="button"
-                      disabled={selectedIconFiles.size === 0 || deletingIcons}
-                      onclick={deleteSelectedIcons}
-                    >
-                      {deletingIcons
-                        ? _t("storage.deletingIcons")
-                        : _t("storage.deleteSelectedIcons", { count: selectedIconFiles.size })}
-                    </button>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </section>
-
-          <section class="setting-card toggle-card">
-            <div class="setting-heading">
-              <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-              <div>
-                <strong>{_t("storage.searchIndexTitle")}</strong>
-                <p>{_t("storage.searchIndexDesc")}</p>
-              </div>
-            </div>
-            <button type="button" class="settings-action-btn" disabled={rebuilding} onclick={rebuildIndex}>
-              {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
-            </button>
-          </section>
+            </section>
           {/if}
           {#if activeSection === "storage_limits"}
-          <section class="setting-card setting-card-row">
-            <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
-            <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
-            <input
-              type="number"
-              bind:value={retentionPeriodDays}
-              min="1"
-              max="365"
-              onchange={saveHistoryConfig}
-            />
-            <span class="number-suffix">{_t("captureSettings.days")}</span>
-          </section>
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
+              <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
+              <input
+                type="number"
+                bind:value={retentionPeriodDays}
+                min="1"
+                max="365"
+                onchange={saveHistoryConfig}
+              />
+              <span class="number-suffix">{_t("captureSettings.days")}</span>
+            </section>
 
-          <section class="setting-card setting-card-row">
-            <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-            <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
-            <input
-              type="number"
-              bind:value={maxItemCount}
-              min="100"
-              step="100"
-              onchange={saveHistoryConfig}
-            />
-            <span class="number-suffix">条</span>
-          </section>
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
+              <input
+                type="number"
+                bind:value={maxItemCount}
+                min="100"
+                step="100"
+                onchange={saveHistoryConfig}
+              />
+              <span class="number-suffix">条</span>
+            </section>
 
-          <section class="setting-card setting-card-row">
-            <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-            <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
-            <input
-              type="number"
-              bind:value={recycleBinDays}
-              min="0"
-              max="365"
-              onchange={saveHistoryConfig}
-            />
-            <span class="number-suffix">{_t("captureSettings.days")}</span>
-          </section>
-
-          <section class="setting-card setting-card-row">
-            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-            <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
-            <input
-              type="number"
-              bind:value={maxFileCopyDisplay}
-              min="1"
-              oninput={updateMaxFileSizeFromDisplay}
-              onchange={saveMaxFileCopySize}
-            />
-            <select
-              class="unit-select"
-              bind:value={maxFileCopySizeUnit}
-              onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}
-            >
-              <option value="byte">B</option>
-              <option value="KB">KB</option>
-              <option value="MB">MB</option>
-              <option value="GB">GB</option>
-            </select>
-          </section>
-
-          <section class="setting-card storage-kind-delete-card">
-            <div class="setting-heading">
+            <section class="setting-card setting-card-row">
               <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-              <div>
-                <strong>{_t("storage.deleteByKindTitle")}</strong>
-                <p>{_t("storage.deleteByKindDesc")}</p>
-              </div>
-            </div>
-            <div class="storage-kind-delete-list">
-              {#each storageKinds as entry (entry.kind)}
-                <div class="storage-kind-delete-row">
-                  <span class="storage-kind-icon"><AppIcon name={entry.icon} size={15} /></span>
-                  <div class="storage-kind-delete-copy">
-                    <strong>{_t(entry.labelKey)}</strong>
-                    <span>
-                      {storageKindStatsAvailable
-                        ? _t("storage.deleteKindCount", {
-                            count: storageKindStats[entry.kind].itemCount,
-                            size: formatBytes(storageKindStats[entry.kind].sizeBytes),
-                          })
-                        : "—"}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    class="danger-action"
-                    disabled={!storageKindStatsAvailable ||
-                      deletingStorageKind !== null ||
-                      storageKindStats[entry.kind].itemCount === 0}
-                    onclick={() => deleteStorageKind(entry.kind)}
-                  >
-                    {deletingStorageKind === entry.kind
-                      ? _t("storage.deletingKind")
-                      : _t("storage.deleteKindAction")}
-                  </button>
+              <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
+              <input
+                type="number"
+                bind:value={recycleBinDays}
+                min="0"
+                max="365"
+                onchange={saveHistoryConfig}
+              />
+              <span class="number-suffix">{_t("captureSettings.days")}</span>
+            </section>
+
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+              <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
+              <input
+                type="number"
+                bind:value={maxFileCopyDisplay}
+                min="1"
+                oninput={updateMaxFileSizeFromDisplay}
+                onchange={saveMaxFileCopySize}
+              />
+              <select
+                class="unit-select"
+                bind:value={maxFileCopySizeUnit}
+                onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}
+              >
+                <option value="byte">B</option>
+                <option value="KB">KB</option>
+                <option value="MB">MB</option>
+                <option value="GB">GB</option>
+              </select>
+            </section>
+
+            <section class="setting-card storage-kind-delete-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.deleteByKindTitle")}</strong>
+                  <p>{_t("storage.deleteByKindDesc")}</p>
                 </div>
-              {/each}
-            </div>
-            <p class="storage-kind-delete-scope">{_t("storage.deleteByKindScope")}</p>
-          </section>
+              </div>
+              <div class="storage-kind-delete-list">
+                {#each storageKinds as entry (entry.kind)}
+                  <div class="storage-kind-delete-row">
+                    <span class="storage-kind-icon"><AppIcon name={entry.icon} size={15} /></span>
+                    <div class="storage-kind-delete-copy">
+                      <strong>{_t(entry.labelKey)}</strong>
+                      <span>
+                        {storageKindStatsAvailable
+                          ? _t("storage.deleteKindCount", {
+                              count: storageKindStats[entry.kind].itemCount,
+                              size: formatBytes(storageKindStats[entry.kind].sizeBytes),
+                            })
+                          : "—"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      class="danger-action"
+                      disabled={!storageKindStatsAvailable ||
+                        deletingStorageKind !== null ||
+                        storageKindStats[entry.kind].itemCount === 0}
+                      onclick={() => deleteStorageKind(entry.kind)}
+                    >
+                      {deletingStorageKind === entry.kind
+                        ? _t("storage.deletingKind")
+                        : _t("storage.deleteKindAction")}
+                    </button>
+                  </div>
+                {/each}
+              </div>
+              <p class="storage-kind-delete-scope">{_t("storage.deleteByKindScope")}</p>
+            </section>
           {/if}
           {#if activeSection === "storage_tools"}
-          <section class="setting-card setting-card-row">
-            <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-            <span class="setting-label">数据库维护</span>
-            <button type="button" disabled={repairLoading} onclick={doRepair}>
-              {repairLoading ? "检查中..." : "修复数据库"}
-            </button>
-          </section>
-          {#if repairResult}
-            <div class="repair-result">
-              <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
-                {repairResult.integrityOk ? "完整性正常" : "发现问题"}
-              </span>
-              <code>{repairResult.integrityMessage}</code>
-            </div>
-          {/if}
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+              <span class="setting-label">数据库维护</span>
+              <button type="button" disabled={repairLoading} onclick={doRepair}>
+                {repairLoading ? "检查中..." : "修复数据库"}
+              </button>
+            </section>
+            {#if repairResult}
+              <div class="repair-result">
+                <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
+                  {repairResult.integrityOk ? "完整性正常" : "发现问题"}
+                </span>
+                <code>{repairResult.integrityMessage}</code>
+              </div>
+            {/if}
           {/if}
 
           <p class="auto-save-note">修改即时生效，无需手动保存</p>

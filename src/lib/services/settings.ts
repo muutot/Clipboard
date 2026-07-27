@@ -52,7 +52,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   cardActionsDisplay: "hover",
   quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
-  detailDisplayMode: 'overlay',
+  detailDisplayMode: "overlay",
   searchSortRules: [{ field: "createdAt", direction: "desc" }],
 };
 
@@ -91,7 +91,9 @@ function validTheme(value: unknown, fallback: GeneralSettings["theme"]): General
 }
 
 function validHexColor(value: unknown, fallback: string): string {
-  return typeof value === "string" && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value) ? value : fallback;
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value)
+    ? value
+    : fallback;
 }
 
 const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
@@ -378,7 +380,8 @@ function normalizeGeneralSettings(
     ...DARK_THEME_COLORS,
   });
   result.customPresets = normalizeCustomPresets(source.customPresets ?? fallback("customPresets"));
-  result.activePresetId = typeof source.activePresetId === "string" ? source.activePresetId : undefined;
+  result.activePresetId =
+    typeof source.activePresetId === "string" ? source.activePresetId : undefined;
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
     "overlay",

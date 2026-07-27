@@ -134,9 +134,7 @@ impl SearchLatencyTracker {
             if entries.len() >= SEARCH_LATENCY_HISTORY_SIZE {
                 entries.pop_front();
             }
-            entries.push_back(LatencyEntry {
-                duration_ms,
-            });
+            entries.push_back(LatencyEntry { duration_ms });
         }
     }
 

@@ -37,25 +37,150 @@
   }
 
   const SYSTEM_ACTIONS: SystemAction[] = [
-    { id: "copyItem", labelKey: "keyboard.copyItem", description: "复制当前选中的条目到剪贴板", icon: "copy", defaults: ["Ctrl+C"], cat: "item" },
-    { id: "deleteItem", labelKey: "keyboard.deleteItem", description: "删除当前选中的条目", icon: "trash", defaults: ["Ctrl+D"], cat: "item" },
-    { id: "favoriteItem", labelKey: "keyboard.favoriteItem", description: "收藏或取消收藏当前条目", icon: "star", defaults: ["Ctrl+F"], cat: "item" },
-    { id: "editItem", labelKey: "keyboard.editItem", description: "编辑当前条目的标题", icon: "edit", defaults: ["Ctrl+E"], cat: "item" },
-    { id: "openDetail", labelKey: "keyboard.openDetail", description: "预览当前条目的详情", icon: "eye", defaults: ["Space"], cat: "item" },
-    { id: "downloadItem", labelKey: "keyboard.downloadItem", description: "保存图片或文件到本地", icon: "download", defaults: ["Ctrl+S"], cat: "item" },
-    { id: "selectAll", labelKey: "keyboard.selectAll", description: "全选列表中的所有条目", icon: "check", defaults: ["Ctrl+A"], cat: "item" },
-    { id: "quickPaste", labelKey: "keyboard.quickPaste", description: "将当前条目快速粘贴到上一个活跃窗口", icon: "clipboard", defaults: [], cat: "item" },
-    { id: "quickCopy1", description: "快速复制列表第 1 条", icon: "clipboard", defaults: ["Ctrl+1"], cat: "quick" },
-    { id: "quickCopy2", description: "快速复制列表第 2 条", icon: "clipboard", defaults: ["Ctrl+2"], cat: "quick" },
-    { id: "quickCopy3", description: "快速复制列表第 3 条", icon: "clipboard", defaults: ["Ctrl+3"], cat: "quick" },
-    { id: "quickCopy4", description: "快速复制列表第 4 条", icon: "clipboard", defaults: ["Ctrl+4"], cat: "quick" },
-    { id: "quickCopy5", description: "快速复制列表第 5 条", icon: "clipboard", defaults: ["Ctrl+5"], cat: "quick" },
-    { id: "quickCopy6", description: "快速复制列表第 6 条", icon: "clipboard", defaults: ["Ctrl+6"], cat: "quick" },
-    { id: "quickCopy7", description: "快速复制列表第 7 条", icon: "clipboard", defaults: ["Ctrl+7"], cat: "quick" },
-    { id: "quickCopy8", description: "快速复制列表第 8 条", icon: "clipboard", defaults: ["Ctrl+8"], cat: "quick" },
-    { id: "quickCopy9", description: "快速复制列表第 9 条", icon: "clipboard", defaults: ["Ctrl+9"], cat: "quick" },
-    { id: "toggleWindow", labelKey: "keyboard.toggleWindow", description: "唤起或隐藏主窗口（系统全局热键）", icon: "eye", defaults: ["Alt+V"], cat: "system", system: true },
-    { id: "focusSearch", labelKey: "keyboard.focusSearch", description: "聚焦搜索输入框", icon: "search", defaults: ["/", "Ctrl+K"], cat: "system" },
+    {
+      id: "copyItem",
+      labelKey: "keyboard.copyItem",
+      description: "复制当前选中的条目到剪贴板",
+      icon: "copy",
+      defaults: ["Ctrl+C"],
+      cat: "item",
+    },
+    {
+      id: "deleteItem",
+      labelKey: "keyboard.deleteItem",
+      description: "删除当前选中的条目",
+      icon: "trash",
+      defaults: ["Ctrl+D"],
+      cat: "item",
+    },
+    {
+      id: "favoriteItem",
+      labelKey: "keyboard.favoriteItem",
+      description: "收藏或取消收藏当前条目",
+      icon: "star",
+      defaults: ["Ctrl+F"],
+      cat: "item",
+    },
+    {
+      id: "editItem",
+      labelKey: "keyboard.editItem",
+      description: "编辑当前条目的标题",
+      icon: "edit",
+      defaults: ["Ctrl+E"],
+      cat: "item",
+    },
+    {
+      id: "openDetail",
+      labelKey: "keyboard.openDetail",
+      description: "预览当前条目的详情",
+      icon: "eye",
+      defaults: ["Space"],
+      cat: "item",
+    },
+    {
+      id: "downloadItem",
+      labelKey: "keyboard.downloadItem",
+      description: "保存图片或文件到本地",
+      icon: "download",
+      defaults: ["Ctrl+S"],
+      cat: "item",
+    },
+    {
+      id: "selectAll",
+      labelKey: "keyboard.selectAll",
+      description: "全选列表中的所有条目",
+      icon: "check",
+      defaults: ["Ctrl+A"],
+      cat: "item",
+    },
+    {
+      id: "quickPaste",
+      labelKey: "keyboard.quickPaste",
+      description: "将当前条目快速粘贴到上一个活跃窗口",
+      icon: "clipboard",
+      defaults: [],
+      cat: "item",
+    },
+    {
+      id: "quickCopy1",
+      description: "快速复制列表第 1 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+1"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy2",
+      description: "快速复制列表第 2 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+2"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy3",
+      description: "快速复制列表第 3 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+3"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy4",
+      description: "快速复制列表第 4 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+4"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy5",
+      description: "快速复制列表第 5 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+5"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy6",
+      description: "快速复制列表第 6 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+6"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy7",
+      description: "快速复制列表第 7 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+7"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy8",
+      description: "快速复制列表第 8 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+8"],
+      cat: "quick",
+    },
+    {
+      id: "quickCopy9",
+      description: "快速复制列表第 9 条",
+      icon: "clipboard",
+      defaults: ["Ctrl+9"],
+      cat: "quick",
+    },
+    {
+      id: "toggleWindow",
+      labelKey: "keyboard.toggleWindow",
+      description: "唤起或隐藏主窗口（系统全局热键）",
+      icon: "eye",
+      defaults: ["Alt+V"],
+      cat: "system",
+      system: true,
+    },
+    {
+      id: "focusSearch",
+      labelKey: "keyboard.focusSearch",
+      description: "聚焦搜索输入框",
+      icon: "search",
+      defaults: ["/", "Ctrl+K"],
+      cat: "system",
+    },
   ];
 
   const categoryActions = $derived.by(() => {
@@ -146,7 +271,10 @@
     event.preventDefault();
     event.stopPropagation();
 
-    if (event.key === "Escape") { stopRecording(); return; }
+    if (event.key === "Escape") {
+      stopRecording();
+      return;
+    }
 
     const modKeys = ["Control", "Alt", "Shift", "Meta"];
     if (modKeys.includes(event.key)) return;
@@ -159,7 +287,9 @@
 
     const ignored = ["AltGraph", "NumLock", "ScrollLock", "PrintScreen"];
     if (!ignored.includes(event.key)) {
-      pressed.push(event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key);
+      pressed.push(
+        event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key,
+      );
     }
 
     if (pressed.length === 0) return;
@@ -180,7 +310,9 @@
       <h2>{_t("keyboard.title")}</h2>
       <p>{_t("keyboard.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>×</button>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
+    >
   </header>
 {/if}
 
@@ -207,14 +339,22 @@
             {#each bindingsFor(action.id) as shortcut}
               <div class="binding-chip">
                 <kbd>{shortcut}</kbd>
-                <button type="button" class="binding-chip-close" onclick={() => removeBinding(action.id, shortcut)}>&minus;</button>
+                <button
+                  type="button"
+                  class="binding-chip-close"
+                  onclick={() => removeBinding(action.id, shortcut)}>&minus;</button
+                >
               </div>
             {/each}
           {:else if config && !(action.id in config.shortcuts) && action.defaults.length > 0}
             {#each action.defaults as shortcut}
               <div class="binding-chip default">
                 <kbd>{shortcut}</kbd>
-                <button type="button" class="binding-chip-close" onclick={() => removeBinding(action.id, shortcut)}>&minus;</button>
+                <button
+                  type="button"
+                  class="binding-chip-close"
+                  onclick={() => removeBinding(action.id, shortcut)}>&minus;</button
+                >
               </div>
             {/each}
           {:else}
@@ -224,10 +364,14 @@
           {#if recordingAction === action.id}
             <div class="binding-chip recording">
               <kbd>按下快捷键…</kbd>
-              <button type="button" class="binding-chip-close" onclick={stopRecording}>&times;</button>
+              <button type="button" class="binding-chip-close" onclick={stopRecording}
+                >&times;</button
+              >
             </div>
           {:else}
-            <button type="button" class="binding-add" onclick={() => startRecording(action.id)}>+</button>
+            <button type="button" class="binding-add" onclick={() => startRecording(action.id)}
+              >+</button
+            >
           {/if}
         </div>
       </section>
@@ -278,7 +422,10 @@
   }
 
   .binding-chip kbd {
-    font: 11px "Cascadia Code", Consolas, monospace;
+    font:
+      11px "Cascadia Code",
+      Consolas,
+      monospace;
     color: var(--text-primary);
   }
 
@@ -288,8 +435,13 @@
   }
 
   @keyframes pulse-recording {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 
   .binding-add {
@@ -305,7 +457,9 @@
     background: transparent;
     font-size: 17px;
     cursor: pointer;
-    transition: color 100ms ease, border-color 100ms ease;
+    transition:
+      color 100ms ease,
+      border-color 100ms ease;
   }
 
   .binding-add:hover {

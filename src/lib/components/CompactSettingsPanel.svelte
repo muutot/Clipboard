@@ -34,15 +34,63 @@
   }
 
   const compactSliders = [
-    { key: "compactPaddingTop" as const,     icon: "sliders" as const, label: "compact.paddingTop", min: 0, max: 20 },
-    { key: "compactPaddingBottom" as const,     icon: "sliders" as const, label: "compact.paddingBottom", min: 0, max: 20 },
+    {
+      key: "compactPaddingTop" as const,
+      icon: "sliders" as const,
+      label: "compact.paddingTop",
+      min: 0,
+      max: 20,
+    },
+    {
+      key: "compactPaddingBottom" as const,
+      icon: "sliders" as const,
+      label: "compact.paddingBottom",
+      min: 0,
+      max: 20,
+    },
     { key: "compactCardGap" as const, icon: "ruler", label: "compact.cardGap", min: 0, max: 20 },
-    { key: "compactTextHeight" as const, icon: "text", label: "compact.shortTextHeight", min: 36, max: 90 },
-    { key: "compactTallTextHeight" as const, icon: "text", label: "compact.tallTextHeight", min: 44, max: 100 },
-    { key: "compactImageHeight" as const, icon: "image", label: "compact.imageHeight", min: 64, max: 200 },
-    { key: "compactSearchHeight" as const, icon: "search", label: "compact.searchHeight", min: 28, max: 56 },
-    { key: "compactSearchFontSize" as const, icon: "type", label: "compact.searchFontSize", min: 10, max: 24 },
-    { key: "compactCardBorderRadius" as const, icon: "grid", label: "compact.cardBorderRadius", min: 0, max: 20 },
+    {
+      key: "compactTextHeight" as const,
+      icon: "text",
+      label: "compact.shortTextHeight",
+      min: 36,
+      max: 90,
+    },
+    {
+      key: "compactTallTextHeight" as const,
+      icon: "text",
+      label: "compact.tallTextHeight",
+      min: 44,
+      max: 100,
+    },
+    {
+      key: "compactImageHeight" as const,
+      icon: "image",
+      label: "compact.imageHeight",
+      min: 64,
+      max: 200,
+    },
+    {
+      key: "compactSearchHeight" as const,
+      icon: "search",
+      label: "compact.searchHeight",
+      min: 28,
+      max: 56,
+    },
+    {
+      key: "compactSearchFontSize" as const,
+      icon: "type",
+      label: "compact.searchFontSize",
+      min: 10,
+      max: 24,
+    },
+    {
+      key: "compactCardBorderRadius" as const,
+      icon: "grid",
+      label: "compact.cardBorderRadius",
+      min: 0,
+      max: 20,
+    },
   ];
 </script>
 
@@ -83,31 +131,29 @@
 
   {#if s.compactMode}
     {#each compactSliders as slider}
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t(slider.label)}</strong>
-            <p>{_t(`${slider.label}Description`)}</p>
+      <section class="setting-card">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
+          <div class="heading-inline">
+            <div>
+              <strong>{_t(slider.label)}</strong>
+              <p>{_t(`${slider.label}Description`)}</p>
+            </div>
+            <span class="value-label">{s[slider.key]}px</span>
           </div>
-          <span class="value-label">{s[slider.key]}px</span>
         </div>
-      </div>
-      <input
-        type="range"
-        min={slider.min}
-        max={slider.max}
-        value={s[slider.key] as number}
-        oninput={sliderHandler(slider.key)}
-        class="transparency-slider"
-        style:--slider-pct={sliderPercentage(s[slider.key] as number, slider.min, slider.max)}
-      />
-    </section>
+        <input
+          type="range"
+          min={slider.min}
+          max={slider.max}
+          value={s[slider.key] as number}
+          oninput={sliderHandler(slider.key)}
+          class="transparency-slider"
+          style:--slider-pct={sliderPercentage(s[slider.key] as number, slider.min, slider.max)}
+        />
+      </section>
     {/each}
   {/if}
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>
-
-

@@ -27,14 +27,49 @@
   }
 
   const interfaceSliders: FontSliderDef[] = [
-    { key: "base", icon: "type", label: "主文字", desc: "设置界面标题、详情面板等正文的字体大小", min: 11, max: 20 },
-    { key: "secondary", icon: "info", label: "副文字", desc: "时间戳、来源名称等辅助信息的字体大小", min: 9, max: 16 },
-    { key: "tiny", icon: "ruler", label: "小文字", desc: "面包屑、保存提示等最小号文字的字体大小", min: 8, max: 13 },
+    {
+      key: "base",
+      icon: "type",
+      label: "主文字",
+      desc: "设置界面标题、详情面板等正文的字体大小",
+      min: 11,
+      max: 20,
+    },
+    {
+      key: "secondary",
+      icon: "info",
+      label: "副文字",
+      desc: "时间戳、来源名称等辅助信息的字体大小",
+      min: 9,
+      max: 16,
+    },
+    {
+      key: "tiny",
+      icon: "ruler",
+      label: "小文字",
+      desc: "面包屑、保存提示等最小号文字的字体大小",
+      min: 8,
+      max: 13,
+    },
   ];
 
   const cardSliders: FontSliderDef[] = [
-    { key: "cardTitle", icon: "text", label: "标题", desc: "列表卡片上条目标题的字体大小", min: 10, max: 20 },
-    { key: "cardPreview", icon: "info", label: "预览", desc: "列表卡片上条目预览正文的字体大小", min: 8, max: 16 },
+    {
+      key: "cardTitle",
+      icon: "text",
+      label: "标题",
+      desc: "列表卡片上条目标题的字体大小",
+      min: 10,
+      max: 20,
+    },
+    {
+      key: "cardPreview",
+      icon: "info",
+      label: "预览",
+      desc: "列表卡片上条目预览正文的字体大小",
+      min: 8,
+      max: 16,
+    },
   ];
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -142,75 +177,75 @@
 
   {#if fontSection === "interface"}
     {#each interfaceSliders as slider}
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{slider.label}</strong>
-            <p>{slider.desc}</p>
+      <section class="setting-card">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
+          <div class="heading-inline">
+            <div>
+              <strong>{slider.label}</strong>
+              <p>{slider.desc}</p>
+            </div>
+            <label class="font-size-control">
+              <input
+                class="font-size-input"
+                type="number"
+                min={slider.min}
+                max={slider.max}
+                step="1"
+                value={s.fontSizes[slider.key]}
+                oninput={numberInputHandler(slider.key, slider.min, slider.max)}
+                onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
+                aria-label={`${slider.label}字号`}
+              />
+              <span>px</span>
+            </label>
           </div>
-          <label class="font-size-control">
-            <input
-              class="font-size-input"
-              type="number"
-              min={slider.min}
-              max={slider.max}
-              step="1"
-              value={s.fontSizes[slider.key]}
-              oninput={numberInputHandler(slider.key, slider.min, slider.max)}
-              onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
-              aria-label={`${slider.label}字号`}
-            />
-            <span>px</span>
-          </label>
         </div>
-      </div>
-      <input
-        type="range"
-        min={slider.min}
-        max={slider.max}
-        value={s.fontSizes[slider.key]}
-        oninput={sliderHandler(slider.key)}
-        class="transparency-slider"
-      />
-    </section>
+        <input
+          type="range"
+          min={slider.min}
+          max={slider.max}
+          value={s.fontSizes[slider.key]}
+          oninput={sliderHandler(slider.key)}
+          class="transparency-slider"
+        />
+      </section>
     {/each}
   {:else}
     {#each cardSliders as slider}
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{slider.label}</strong>
-            <p>{slider.desc}</p>
+      <section class="setting-card">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
+          <div class="heading-inline">
+            <div>
+              <strong>{slider.label}</strong>
+              <p>{slider.desc}</p>
+            </div>
+            <label class="font-size-control">
+              <input
+                class="font-size-input"
+                type="number"
+                min={slider.min}
+                max={slider.max}
+                step="1"
+                value={s.fontSizes[slider.key]}
+                oninput={numberInputHandler(slider.key, slider.min, slider.max)}
+                onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
+                aria-label={`${slider.label}字号`}
+              />
+              <span>px</span>
+            </label>
           </div>
-          <label class="font-size-control">
-            <input
-              class="font-size-input"
-              type="number"
-              min={slider.min}
-              max={slider.max}
-              step="1"
-              value={s.fontSizes[slider.key]}
-              oninput={numberInputHandler(slider.key, slider.min, slider.max)}
-              onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
-              aria-label={`${slider.label}字号`}
-            />
-            <span>px</span>
-          </label>
         </div>
-      </div>
-      <input
-        type="range"
-        min={slider.min}
-        max={slider.max}
-        value={s.fontSizes[slider.key]}
-        oninput={sliderHandler(slider.key)}
-        class="transparency-slider"
-      />
-    </section>
+        <input
+          type="range"
+          min={slider.min}
+          max={slider.max}
+          value={s.fontSizes[slider.key]}
+          oninput={sliderHandler(slider.key)}
+          class="transparency-slider"
+        />
+      </section>
     {/each}
   {/if}
 

@@ -32,10 +32,7 @@ pub fn self_trigger_marker_for_text(text: &str) -> Vec<u8> {
         .into_bytes()
 }
 
-pub fn clipboard_change_is_self_write(
-    marker: &[u8],
-    observed_text: &str,
-) -> bool {
+pub fn clipboard_change_is_self_write(marker: &[u8], observed_text: &str) -> bool {
     let Ok(marker_text) = std::str::from_utf8(marker) else {
         return false;
     };
@@ -220,9 +217,9 @@ fn has_self_trigger_format() -> bool {
 
 #[cfg(target_os = "windows")]
 fn self_trigger_format_id() -> Option<u32> {
-    use std::sync::OnceLock;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
+    use std::sync::OnceLock;
 
     extern "system" {
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
@@ -405,20 +402,34 @@ pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String>
 #[cfg(target_os = "windows")]
 fn format_id_to_name(format_id: u32) -> String {
     use std::collections::BTreeMap;
-    use std::sync::LazyLock;
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
+    use std::sync::LazyLock;
 
     static PREDEFINED: LazyLock<BTreeMap<u32, &'static str>> = LazyLock::new(|| {
         BTreeMap::from([
-            (1, "CF_TEXT"), (2, "CF_BITMAP"), (3, "CF_METAFILEPICT"),
-            (4, "CF_SYLK"), (5, "CF_DIF"), (6, "CF_TIFF"),
-            (7, "CF_OEMTEXT"), (8, "CF_DIB"), (9, "CF_PALETTE"),
-            (10, "CF_PENDATA"), (11, "CF_RIFF"), (12, "CF_WAVE"),
-            (13, "CF_UNICODETEXT"), (14, "CF_ENHMETAFILE"), (15, "CF_HDROP"),
-            (16, "CF_LOCALE"), (17, "CF_DIBV5"),
-            (128, "CF_OWNERDISPLAY"), (129, "CF_DSPTEXT"),
-            (130, "CF_DSPBITMAP"), (131, "CF_DSPMETAFILEPICT"), (132, "CF_DSPENHMETAFILE"),
+            (1, "CF_TEXT"),
+            (2, "CF_BITMAP"),
+            (3, "CF_METAFILEPICT"),
+            (4, "CF_SYLK"),
+            (5, "CF_DIF"),
+            (6, "CF_TIFF"),
+            (7, "CF_OEMTEXT"),
+            (8, "CF_DIB"),
+            (9, "CF_PALETTE"),
+            (10, "CF_PENDATA"),
+            (11, "CF_RIFF"),
+            (12, "CF_WAVE"),
+            (13, "CF_UNICODETEXT"),
+            (14, "CF_ENHMETAFILE"),
+            (15, "CF_HDROP"),
+            (16, "CF_LOCALE"),
+            (17, "CF_DIBV5"),
+            (128, "CF_OWNERDISPLAY"),
+            (129, "CF_DSPTEXT"),
+            (130, "CF_DSPBITMAP"),
+            (131, "CF_DSPMETAFILEPICT"),
+            (132, "CF_DSPENHMETAFILE"),
         ])
     });
 

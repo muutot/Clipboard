@@ -17,16 +17,49 @@
 
   const MARKDOWN_RE = /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m;
   const CODE_PATTERNS: [RegExp, string][] = [
-    [new RegExp("^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|:\\s*(string|number|boolean|unknown|any)\\b|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function","ms"), "TypeScript"],
-    [new RegExp("^<\\w+[^>]*>|<\\/\\w+>|className=|useState|useEffect|props\\.","m"), "JSX"],
-    [new RegExp("^use\\s|^fn\\s|let\\s+mut|struct\\s|impl\\s|^\\s*pub\\s|^\\s*mod\\s","m"), "Rust"],
-    [new RegExp("^def\\s|^import\\s\\w|^\\s*class\\s|^\\s*from\\s|print\\(|lambda\\s","m"), "Python"],
-    [new RegExp('^\\s*[{\\[]\\s*$|"[^"]*"\\s*:|^\\s*"|function\\s*\\(|require\\(|module\\.exports',"m"), "JSON"],
-    [new RegExp("^<!DOCTYPE|<html|<head|<body|<div|<span|\\.class\\s*\\{|#id\\s*\\{","m"), "HTML"],
-    [new RegExp("^SELECT\\s|^INSERT\\s|^UPDATE\\s|^DELETE\\s|^CREATE\\s|^\\s*FROM\\s|^\\s*WHERE\\s","mi"), "SQL"],
-    [new RegExp("^#!/|^\\s*(echo|export|cd|ls|grep|mkdir|sudo|apt|npm|yarn|git)\\s","m"), "Shell"],
-    [new RegExp("^\\.\\w+\\s*\\{|^\\s*color:|^\\s*margin:|^\\s*padding:|@media|@keyframes","m"), "CSS"],
-    [new RegExp("^(function|var|const|let)\\s|^\\s*console\\.|document\\.|window\\.|require\\(","m"), "JavaScript"],
+    [
+      new RegExp(
+        "^(import|export)\\s|interface\\s|type\\s\\w+\\s*=\\s*\\{|const\\s\\w+:\\s*\\w+|:\\s*(string|number|boolean|unknown|any)\\b|function\\s\\w+\\(|\\.\\.\\.\\w+|useState|useEffect|async\\s+function",
+        "ms",
+      ),
+      "TypeScript",
+    ],
+    [new RegExp("^<\\w+[^>]*>|<\\/\\w+>|className=|useState|useEffect|props\\.", "m"), "JSX"],
+    [
+      new RegExp("^use\\s|^fn\\s|let\\s+mut|struct\\s|impl\\s|^\\s*pub\\s|^\\s*mod\\s", "m"),
+      "Rust",
+    ],
+    [
+      new RegExp("^def\\s|^import\\s\\w|^\\s*class\\s|^\\s*from\\s|print\\(|lambda\\s", "m"),
+      "Python",
+    ],
+    [
+      new RegExp(
+        '^\\s*[{\\[]\\s*$|"[^"]*"\\s*:|^\\s*"|function\\s*\\(|require\\(|module\\.exports',
+        "m",
+      ),
+      "JSON",
+    ],
+    [new RegExp("^<!DOCTYPE|<html|<head|<body|<div|<span|\\.class\\s*\\{|#id\\s*\\{", "m"), "HTML"],
+    [
+      new RegExp(
+        "^SELECT\\s|^INSERT\\s|^UPDATE\\s|^DELETE\\s|^CREATE\\s|^\\s*FROM\\s|^\\s*WHERE\\s",
+        "mi",
+      ),
+      "SQL",
+    ],
+    [new RegExp("^#!/|^\\s*(echo|export|cd|ls|grep|mkdir|sudo|apt|npm|yarn|git)\\s", "m"), "Shell"],
+    [
+      new RegExp("^\\.\\w+\\s*\\{|^\\s*color:|^\\s*margin:|^\\s*padding:|@media|@keyframes", "m"),
+      "CSS",
+    ],
+    [
+      new RegExp(
+        "^(function|var|const|let)\\s|^\\s*console\\.|document\\.|window\\.|require\\(",
+        "m",
+      ),
+      "JavaScript",
+    ],
   ];
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -44,7 +77,7 @@
 
   interface Props {
     item: ClipboardItem | null;
-    mode?: 'overlay' | 'split';
+    mode?: "overlay" | "split";
     startFullscreen?: boolean;
     onclose: () => void;
     oncopy: (id: string) => void;
@@ -59,7 +92,7 @@
 
   let {
     item,
-    mode = 'overlay',
+    mode = "overlay",
     startFullscreen = $bindable(false),
     onclose,
     oncopy,
@@ -336,7 +369,14 @@
     let disposed = false;
     let requestInFlight = false;
     const poll = () => {
-      if (disposed || requestInFlight || targetItem.ocrStatus === "completed" || targetItem.ocrStatus === "failed" || targetItem.ocrStatus === "none") return;
+      if (
+        disposed ||
+        requestInFlight ||
+        targetItem.ocrStatus === "completed" ||
+        targetItem.ocrStatus === "failed" ||
+        targetItem.ocrStatus === "none"
+      )
+        return;
 
       requestInFlight = true;
       invoke<{
@@ -416,12 +456,22 @@
   });
 
   const specialMarkers = $derived.by(() => {
-    if (!item) return { emails: [] as string[], urls: [] as string[], phones: [] as string[], colors: [] as string[] };
+    if (!item)
+      return {
+        emails: [] as string[],
+        urls: [] as string[],
+        phones: [] as string[],
+        colors: [] as string[],
+      };
     const text = [item.title, item.preview].filter(Boolean).join(" ");
     return {
       emails: [...new Set(text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [])],
       urls: [...new Set(text.match(/https?:\/\/[^\s)]+/g) ?? [])],
-      phones: [...new Set(text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [])],
+      phones: [
+        ...new Set(
+          text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [],
+        ),
+      ],
       colors: [...new Set(text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [])],
     };
   });
@@ -438,9 +488,7 @@
   const resourceFiles = $derived(item?.fileMeta ?? []);
   const rawMetadata = $derived(formatMetadataJson(item?.metadataJson));
   const isCode = $derived(item ? detectCodeLanguage(detailContent) !== null : false);
-  const isMarkdown = $derived(
-    item ? MARKDOWN_RE.test(detailContent) : false,
-  );
+  const isMarkdown = $derived(item ? MARKDOWN_RE.test(detailContent) : false);
 
   function detectCodeLanguage(text: string): string | null {
     for (const [regex, lang] of CODE_PATTERNS) {
@@ -544,7 +592,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if item}
-  {#if mode !== 'split'}
+  {#if mode !== "split"}
     <div
       class="detail-backdrop"
       class:fullscreen-backdrop={imageFullscreen}
@@ -555,9 +603,9 @@
   <div
     class="detail-panel"
     class:fullscreen={imageFullscreen}
-    class:inline={mode === 'split'}
+    class:inline={mode === "split"}
     role="dialog"
-    aria-modal={mode !== 'split'}
+    aria-modal={mode !== "split"}
     aria-label={_t("detail.title")}
   >
     <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
@@ -912,10 +960,7 @@
                 <div class="detail-row">
                   <dt><AppIcon name="file" size={14} /> {_t("detail.file")}</dt>
                   <dd>
-                    <select
-                      class="file-selector"
-                      bind:value={selectedFileIndex}
-                    >
+                    <select class="file-selector" bind:value={selectedFileIndex}>
                       {#each resourceFiles as file, index}
                         <option value={index}>{file.name}</option>
                       {/each}
