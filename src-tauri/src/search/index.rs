@@ -38,12 +38,15 @@ pub enum SearchIndexChange {
     Delete(String),
 }
 
+const SEARCH_RESULT_IDS_CAP: usize = 10_000;
+
 pub struct SearchIndex {
     fields: SearchFields,
     writer: Mutex<IndexWriter<TantivyDocument>>,
     reader: IndexReader,
     layout: Option<SearchIndexLayout>,
     rebuild_required: AtomicBool,
+    cached_ids: Mutex<Option<(String, Vec<String>)>>,
 }
 
 impl SearchIndex {
@@ -88,6 +91,8 @@ impl SearchIndex {
         if let Some(layout) = &self.layout {
             layout.mark_building()?;
         }
+
+        self.clear_cached_ids();
 
         let mut writer = self
             .writer
@@ -193,6 +198,77 @@ impl SearchIndex {
             .collect()
     }
 
+    pub fn search_all_ids(&self, input: &str) -> Result<(Vec<String>, usize), SearchError> {
+        let normalized = input.trim().to_owned();
+        {
+            let cache = self
+                .cached_ids
+                .lock()
+                .map_err(|_| SearchError::WriterPoisoned)?;
+            if let Some((ref cached_query, ref ids)) = *cache {
+                if cached_query.as_str() == normalized.as_str() {
+                    let total = ids.len();
+                    return Ok((ids.clone(), total));
+                }
+            }
+        }
+
+        let query = SearchQuery::parse(input);
+        let ngrams = query.required_ngrams();
+        if ngrams.is_empty() {
+            let mut cache = self
+                .cached_ids
+                .lock()
+                .map_err(|_| SearchError::WriterPoisoned)?;
+            *cache = Some((normalized, Vec::new()));
+            return Ok((Vec::new(), 0));
+        }
+
+        let required_queries = ngrams
+            .into_iter()
+            .map(|ngram| {
+                Box::new(TermQuery::new(
+                    Term::from_field_text(self.fields.content, &ngram),
+                    IndexRecordOption::WithFreqs,
+                )) as Box<dyn Query>
+            })
+            .collect();
+        let boolean_query = BooleanQuery::intersection(required_queries);
+        let searcher = self.reader.searcher();
+        let top_documents = searcher.search(
+            &boolean_query,
+            &TopDocs::with_limit(SEARCH_RESULT_IDS_CAP).order_by_score(),
+        )?;
+
+        let mut ids = Vec::with_capacity(top_documents.len());
+        for (_score, address) in top_documents {
+            let document = searcher.doc::<TantivyDocument>(address)?;
+            if let Some(id) = document
+                .get_first(self.fields.item_id)
+                .and_then(|v| v.as_str())
+            {
+                ids.push(id.to_owned());
+            }
+        }
+        let total = ids.len();
+
+        {
+            let mut cache = self
+                .cached_ids
+                .lock()
+                .map_err(|_| SearchError::WriterPoisoned)?;
+            *cache = Some((normalized, ids.clone()));
+        }
+
+        Ok((ids, total))
+    }
+
+    pub fn clear_cached_ids(&self) {
+        if let Ok(mut cache) = self.cached_ids.lock() {
+            *cache = None;
+        }
+    }
+
     fn from_index(
         index: Index,
         fields: SearchFields,
@@ -215,6 +291,7 @@ impl SearchIndex {
             reader,
             layout,
             rebuild_required: AtomicBool::new(rebuild_required),
+            cached_ids: Mutex::new(None),
         })
     }
 
