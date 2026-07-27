@@ -74,9 +74,9 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     i18n("storage.basicTab"),
     i18n("storage.generalItemsTab"),
     "条目",
-    "加载",
     "回收站",
     "置顶",
+    "操作按钮",
   ],
   general_display: [
     i18n("storage.generalTab"),

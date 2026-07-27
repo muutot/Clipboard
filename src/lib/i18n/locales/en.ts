@@ -495,6 +495,9 @@ const en: LocaleDefinition = {
     searchPageSizeLimit: "Search Result Limit",
     searchPageSizeLimitDescription: "Maximum number of results returned per search query",
     searchPageSizeLimitUnit: "results",
+    searchCacheSize: "Search Cache Size",
+    searchCacheSizeDescription: "Maximum cached search result items not currently in the loaded list",
+    searchCacheSizeUnit: "items",
   },
   compact: {
     title: "Compact Settings",

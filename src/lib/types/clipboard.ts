@@ -203,6 +203,7 @@ export interface GeneralSettings {
   searchSortRules: SortRule[];
   pageSizeLimit: number;
   searchPageSizeLimit: number;
+  searchCacheSize: number;
 }
 
 export type SortField = "createdAt" | "lastUsedAt" | "title" | "size" | "kind" | "favorite";

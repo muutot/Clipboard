@@ -471,6 +471,9 @@ export interface LocaleDefinition {
     searchPageSizeLimit: string;
     searchPageSizeLimitDescription: string;
     searchPageSizeLimitUnit: string;
+    searchCacheSize: string;
+    searchCacheSizeDescription: string;
+    searchCacheSizeUnit: string;
   };
   compact: {
     title: string;

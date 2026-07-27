@@ -56,6 +56,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchSortRules: [{ field: "createdAt", direction: "desc" }],
   pageSizeLimit: 500,
   searchPageSizeLimit: 500,
+  searchCacheSize: 500,
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -427,6 +428,12 @@ function normalizeGeneralSettings(
     defaultSettings.searchPageSizeLimit,
     50,
     1000,
+  );
+  result.searchCacheSize = integerInRange(
+    source.searchCacheSize ?? fallback("searchCacheSize"),
+    defaultSettings.searchCacheSize,
+    200,
+    2000,
   );
 
   return result;

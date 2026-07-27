@@ -174,6 +174,7 @@
   let pageSizeEl = $state<HTMLInputElement | null>(null);
   let pageSizeLimitEl = $state<HTMLInputElement | null>(null);
   let searchPageSizeLimitEl = $state<HTMLInputElement | null>(null);
+  let searchCacheSizeEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -185,6 +186,7 @@
     updateSliderTrack(pageSizeEl);
     updateSliderTrack(pageSizeLimitEl);
     updateSliderTrack(searchPageSizeLimitEl);
+    updateSliderTrack(searchCacheSizeEl);
   });
 </script>
 
@@ -370,6 +372,35 @@
         }}
         class="transparency-slider"
         bind:this={searchPageSizeLimitEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.searchCacheSize")}</strong>
+            <p>{_t("general.searchCacheSizeDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.searchCacheSize} {_t("general.searchCacheSizeUnit")}</span
+          >
+        </div>
+      </div>
+      <input
+        type="range"
+        min="200"
+        max="2000"
+        step="50"
+        value={s.searchCacheSize}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("searchCacheSize", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={searchCacheSizeEl}
       />
     </section>
   {:else if section === "display"}

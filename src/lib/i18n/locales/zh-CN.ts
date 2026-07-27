@@ -475,6 +475,9 @@ const zhCN: LocaleDefinition = {
     searchPageSizeLimit: "搜索结果上限",
     searchPageSizeLimitDescription: "单次搜索允许返回的最大结果数",
     searchPageSizeLimitUnit: "条",
+    searchCacheSize: "搜索缓存数量",
+    searchCacheSizeDescription: "搜索结果中不在当前列表中的条目缓存上限",
+    searchCacheSizeUnit: "条",
   },
   compact: {
     title: "紧凑设置",
