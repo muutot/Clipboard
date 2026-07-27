@@ -127,6 +127,14 @@
     showFeedback(_t("theme.presetUpdated"), true);
   }
 
+  function overwritePreset(preset: ThemePreset) {
+    const presets = (s.customPresets ?? []).map((p) =>
+      p.id === preset.id ? { ...p, colors: { ...themeColors } } : p,
+    );
+    generalSettings.updateSetting("customPresets", presets);
+    showFeedback(_t("theme.presetUpdated"), true);
+  }
+
   function applyPreset(preset: ThemePreset) {
     themeColors = { ...preset.colors };
     generalSettings.updateSetting("theme", "custom");
@@ -219,12 +227,15 @@
         {#each s.customPresets ?? [] as preset (preset.id)}
           <div class="preset-row" class:active={s.activePresetId === preset.id}>
             <span class="preset-row-name">
-              {preset.name}
               {#if s.activePresetId === preset.id}
-                <span class="preset-active-badge">使用中</span>
+                <span class="preset-check">&#10003;</span>
               {/if}
+              {preset.name}
             </span>
             <span class="preset-row-actions">
+              <button class="preset-action-btn" type="button" onclick={() => overwritePreset(preset)}>
+                {_t("theme.overwritePreset")}
+              </button>
               <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
                 {_t("theme.applyPreset")}
               </button>
@@ -494,15 +505,10 @@
     background: color-mix(in srgb, var(--selection-color) 8%, var(--surface-bg));
   }
 
-  .preset-active-badge {
-    display: inline-block;
-    margin-left: 6px;
-    padding: 1px 6px;
-    border-radius: 3px;
+  .preset-check {
     color: var(--selection-color);
-    font-size: var(--settings-note-size, 10px);
-    font-weight: 560;
-    vertical-align: middle;
+    font-weight: 700;
+    margin-right: 4px;
   }
 
   .update-btn {

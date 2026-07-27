@@ -552,6 +552,7 @@ const en: LocaleDefinition = {
     presetNamePlaceholder: "Enter preset name",
     applyPreset: "Apply",
     deletePreset: "Delete",
+    overwritePreset: "Overwrite",
     presetSaved: "Preset saved",
     presetApplied: "Preset applied",
     presetUpdated: "Preset updated",

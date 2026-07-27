@@ -536,6 +536,7 @@ const zhCN: LocaleDefinition = {
     presetNamePlaceholder: "输入方案名称",
     applyPreset: "应用",
     deletePreset: "删除",
+    overwritePreset: "覆盖",
     presetSaved: "方案已保存",
     presetApplied: "方案已应用",
     presetUpdated: "方案已更新",

@@ -532,6 +532,7 @@ export interface LocaleDefinition {
     presetNamePlaceholder: string;
     applyPreset: string;
     deletePreset: string;
+    overwritePreset: string;
     presetSaved: string;
     presetApplied: string;
     presetUpdated: string;
