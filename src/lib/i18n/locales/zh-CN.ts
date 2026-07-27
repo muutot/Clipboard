@@ -76,7 +76,7 @@ const zhCN: LocaleDefinition = {
     generalDisplayTab: "显示与预览",
     generalWindowTab: "窗口与通用",
     generalSearchDescription: "搜索建议、搜索历史和结果排序的偏好设置",
-    generalItemsDescription: "条目操作按钮、快捷复制、复制后置顶、回收站和加载数量的设置",
+    generalItemsDescription: "条目操作按钮、快捷复制、复制后置顶、回收站和加载相关的设置",
     generalDisplayDescription: "卡片显示、图片预览和列表加载的设置",
     generalWindowDescription: "窗口外观、启动行为、系统集成和操作反馈设置",
     keyboardItemTab: "条目操作",

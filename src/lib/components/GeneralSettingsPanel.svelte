@@ -428,35 +428,6 @@
         <option value="lru">{_t("general.searchCacheEvictionLru")}</option>
       </select>
     </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.loadTolerance")}</strong>
-            <p>{_t("general.loadToleranceDescription")}</p>
-          </div>
-          <span class="value-label"
-            >{s.loadTolerance} {_t("general.loadToleranceUnit")}</span
-          >
-        </div>
-      </div>
-      <input
-        type="range"
-        min="50"
-        max="500"
-        step="50"
-        value={s.loadTolerance}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("loadTolerance", Number(input.value));
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={loadToleranceEl}
-      />
-    </section>
   {:else if section === "display"}
     <section class="setting-card toggle-card">
       <div class="setting-heading">
@@ -735,6 +706,35 @@
         }}
         class="transparency-slider"
         bind:this={pageSizeLimitEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.loadTolerance")}</strong>
+            <p>{_t("general.loadToleranceDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.loadTolerance} {_t("general.loadToleranceUnit")}</span
+          >
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="500"
+        step="50"
+        value={s.loadTolerance}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("loadTolerance", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={loadToleranceEl}
       />
     </section>
   {:else}
