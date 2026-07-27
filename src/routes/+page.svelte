@@ -500,17 +500,9 @@
     };
   }
 
-  const cachedSignatures = $derived.by(() => {
-    const map = new Map<string, string>();
-    for (const item of items) {
-      map.set(item.id, cardLayoutSignature(item));
-    }
-    return map;
-  });
-
   function virtualHeightFor(item: ClipboardItem): number {
     const measured = measuredCardHeights[item.id];
-    if (measured?.signature === cachedSignatures.get(item.id)) return measured.height;
+    if (measured?.signature === cardLayoutSignature(item)) return measured.height;
     if (editingId === item.id) {
       return editHeight(
         (item.textContent || "").split("\n").length,
