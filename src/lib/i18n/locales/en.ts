@@ -230,6 +230,7 @@ const en: LocaleDefinition = {
     openFile: "Open File",
     openDetail: "View Detail",
     downloadItem: "Save to Local",
+    focusSearch: "Focus Search",
     addAction: "Custom Shortcut",
     addActionName: "Action Identifier",
     addActionNamePlaceholder: "e.g. copyItem",

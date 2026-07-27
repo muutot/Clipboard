@@ -216,6 +216,7 @@ export interface LocaleDefinition {
     openFile: string;
     openDetail: string;
     downloadItem: string;
+    focusSearch: string;
     addAction: string;
     addActionName: string;
     addActionNamePlaceholder: string;

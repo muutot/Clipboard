@@ -583,6 +583,7 @@ impl SystemTray {
     const SHOW_MENU_ID: &'static str = "tray-show";
     const SETTINGS_MENU_ID: &'static str = "tray-settings";
     const PAUSE_MENU_ID: &'static str = "tray-pause";
+    const RESTART_MENU_ID: &'static str = "tray-restart";
     const QUIT_MENU_ID: &'static str = "tray-quit";
 
     pub fn create<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
@@ -601,9 +602,12 @@ impl SystemTray {
                 .map_err(|error| format!("failed to create the tray pause item: {error}"))?;
         let pause_item = Arc::new(pause_item);
         let pause_item_for_menu = Arc::clone(&pause_item);
+        let restart_item =
+            MenuItem::with_id(app, Self::RESTART_MENU_ID, "重启应用", true, None::<&str>)
+                .map_err(|error| format!("failed to create the tray restart item: {error}"))?;
         let quit_item = MenuItem::with_id(app, Self::QUIT_MENU_ID, "退出", true, None::<&str>)
             .map_err(|error| format!("failed to create the tray quit item: {error}"))?;
-        let menu = Menu::with_items(app, &[&show_item, &settings_item, pause_item.as_ref(), &quit_item])
+        let menu = Menu::with_items(app, &[&show_item, &settings_item, pause_item.as_ref(), &restart_item, &quit_item])
             .map_err(|error| format!("failed to create the tray menu: {error}"))?;
 
         let mut builder = TrayIconBuilder::with_id("main-tray")
@@ -634,6 +638,8 @@ impl SystemTray {
                     }
                 } else if event.id() == Self::QUIT_MENU_ID {
                     app.exit(0);
+                } else if event.id() == Self::RESTART_MENU_ID {
+                    app.restart();
                 }
             })
             .on_tray_icon_event(|tray, event| {

@@ -2074,6 +2074,12 @@
       return;
     }
 
+    if ((event.key === "/" && !editableTarget) || ((event.ctrlKey || event.metaKey) && event.key === "k")) {
+      event.preventDefault();
+      searchInputEl?.focus();
+      return;
+    }
+
     if (quickCopyIndex !== null && (!editableTarget || event.target === searchInputEl)) {
       event.preventDefault();
       const item = filteredItems[quickCopyIndex];
@@ -2083,8 +2089,6 @@
       }
       return;
     }
-
-    if (editableTarget) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -2097,6 +2101,8 @@
       moveSelection(-1);
       return;
     }
+
+    if (editableTarget) return;
 
     if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)

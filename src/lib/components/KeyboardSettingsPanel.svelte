@@ -41,7 +41,7 @@
     { id: "deleteItem", labelKey: "keyboard.deleteItem", description: "删除当前选中的条目", icon: "trash", defaults: ["Ctrl+D"], cat: "item" },
     { id: "favoriteItem", labelKey: "keyboard.favoriteItem", description: "收藏或取消收藏当前条目", icon: "star", defaults: ["Ctrl+F"], cat: "item" },
     { id: "editItem", labelKey: "keyboard.editItem", description: "编辑当前条目的标题", icon: "edit", defaults: ["Ctrl+E"], cat: "item" },
-    { id: "openDetail", labelKey: "keyboard.openDetail", description: "预览当前条目的详情", icon: "eye", defaults: ["Ctrl+E"], cat: "item" },
+    { id: "openDetail", labelKey: "keyboard.openDetail", description: "预览当前条目的详情", icon: "eye", defaults: ["Space"], cat: "item" },
     { id: "downloadItem", labelKey: "keyboard.downloadItem", description: "保存图片或文件到本地", icon: "download", defaults: ["Ctrl+S"], cat: "item" },
     { id: "selectAll", labelKey: "keyboard.selectAll", description: "全选列表中的所有条目", icon: "check", defaults: ["Ctrl+A"], cat: "item" },
     { id: "quickPaste", labelKey: "keyboard.quickPaste", description: "将当前条目快速粘贴到上一个活跃窗口", icon: "clipboard", defaults: [], cat: "item" },
@@ -55,6 +55,7 @@
     { id: "quickCopy8", description: "快速复制列表第 8 条", icon: "clipboard", defaults: ["Ctrl+8"], cat: "quick" },
     { id: "quickCopy9", description: "快速复制列表第 9 条", icon: "clipboard", defaults: ["Ctrl+9"], cat: "quick" },
     { id: "toggleWindow", labelKey: "keyboard.toggleWindow", description: "唤起或隐藏主窗口（系统全局热键）", icon: "eye", defaults: ["Alt+V"], cat: "system", system: true },
+    { id: "focusSearch", labelKey: "keyboard.focusSearch", description: "聚焦搜索输入框", icon: "search", defaults: ["/", "Ctrl+K"], cat: "system" },
   ];
 
   const categoryActions = $derived.by(() => {

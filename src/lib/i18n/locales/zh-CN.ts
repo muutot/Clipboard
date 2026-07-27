@@ -221,6 +221,7 @@ const zhCN: LocaleDefinition = {
     openFile: "打开文件",
     openDetail: "查看详情",
     downloadItem: "保存到本地",
+    focusSearch: "聚焦搜索",
     addAction: "自定义快捷键",
     addActionName: "操作标识符",
     addActionNamePlaceholder: "例如 copyItem",

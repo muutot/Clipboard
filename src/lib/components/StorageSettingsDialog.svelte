@@ -1053,7 +1053,7 @@
           activeSection === "general_window"
         }
         type="button"
-        onclick={() => (activeSection = "general_search")}
+        onclick={() => (activeSection = "general_window")}
       >
         <AppIcon name="sliders" size={16} />
         <span>{_t("storage.generalTab")}</span>
@@ -1061,7 +1061,7 @@
       <button
         class:active={activeSection === "compact" || activeSection === "font" || activeSection === "theme"}
         type="button"
-        onclick={() => (activeSection = "compact")}
+        onclick={() => (activeSection = "theme")}
       >
         <AppIcon name="palette" size={16} />
         <span>{_t("storage.appearanceTab")}</span>

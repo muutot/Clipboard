@@ -182,6 +182,13 @@
         const val = (e.target as HTMLSelectElement).value;
         if (val === "dark" || val === "light") {
           changeTheme(val);
+        } else if (val === "custom") {
+          changeTheme("custom");
+        } else if (activePreset && val === activePreset.id) {
+          return;
+        } else {
+          const preset = (s.customPresets ?? []).find((p) => p.id === val);
+          if (preset) applyPreset(preset);
         }
       }}
     >
