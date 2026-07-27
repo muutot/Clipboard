@@ -2489,14 +2489,6 @@
     font-size: var(--settings-description-size);
   }
 
-  .sidebar-foot code {
-    overflow: hidden;
-    color: var(--text-muted);
-    font: inherit;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
   .sidebar-usage {
     display: flex;
     align-items: baseline;

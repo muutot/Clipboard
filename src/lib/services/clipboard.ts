@@ -219,12 +219,6 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     sourceTone: sourceTone(sourceApp, locale),
     sizeLabel: formatSizeSimple(record),
     sizeBytes: record.sizeBytes,
-    detailLabel:
-      record.kind === "image" && imageMeta
-        ? `${imageMeta.width} × ${imageMeta.height}`
-        : record.kind === "file" && fileMeta?.length === 1 && primaryFile?.extension
-          ? primaryFile.extension.toLocaleUpperCase()
-          : undefined,
     createdAt: record.createdAtMs,
     favorite: record.isFavorite,
     customTitle: isCustomClipboardTitle(record),

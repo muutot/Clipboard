@@ -44,7 +44,6 @@ export interface ClipboardItem {
   sourceTone: "red" | "blue" | "violet" | "neutral";
   sizeLabel: string;
   sizeBytes?: number;
-  detailLabel?: string;
   createdAt: number;
   favorite: boolean;
   deleted?: boolean;

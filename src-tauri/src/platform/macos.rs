@@ -153,53 +153,8 @@ extern "C" {
 }
 
 // ---------------------------------------------------------------------------
-// CGEvent / Carbon constants (available on all platforms for compilation)
+// Clipboard helpers
 // ---------------------------------------------------------------------------
-
-#[allow(dead_code)]
-mod carbon_constants {
-    // CGEvent tap location
-    pub const K_CG_HID_EVENT_TAP: i32 = 0;
-    pub const K_CG_SESSION_EVENT_TAP: i32 = 1;
-    pub const K_CG_ANNOTATED_SESSION_EVENT_TAP: i32 = 2;
-
-    // CGEvent tap placement
-    pub const K_CG_HEAD_INSERT_EVENT_TAP: i32 = 0;
-    pub const K_CG_TAIL_APPEND_EVENT_TAP: i32 = 1;
-
-    // CGEvent tap options
-    pub const K_CG_EVENT_TAP_LISTEN_ONLY: i32 = 0;
-    pub const K_CG_EVENT_TAP_ACTIVE_LISTENER: i32 = 1;
-
-    // CGEvent types
-    pub const K_CG_EVENT_KEY_DOWN: u32 = 10;
-    pub const K_CG_EVENT_KEY_UP: u32 = 11;
-    pub const K_CG_EVENT_FLAGS_CHANGED: u32 = 12;
-
-    // CGEvent fields
-    pub const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
-    pub const K_CG_KEYBOARD_EVENT_AUTOREPEAT: u32 = 8;
-
-    // CGEvent flags (modifier masks)
-    pub const K_CG_EVENT_FLAG_COMMAND: u64 = 1 << 20;
-    pub const K_CG_EVENT_FLAG_SHIFT: u64 = 1 << 17;
-    pub const K_CG_EVENT_FLAG_ALPHA_SHIFT: u64 = 1 << 16;
-    pub const K_CG_EVENT_FLAG_OPTION: u64 = 1 << 18;
-    pub const K_CG_EVENT_FLAG_ALTERNATE: u64 = 1 << 19;
-    pub const K_CG_EVENT_FLAG_CONTROL: u64 = 1 << 18;
-
-    // Carbon hotkey modifier masks
-    pub const CMD_KEY: u32 = 1 << 8;
-    pub const SHIFT_KEY: u32 = 1 << 9;
-    pub const OPTION_KEY: u32 = 1 << 11;
-    pub const CONTROL_KEY: u32 = 1 << 12;
-
-    // EventHotKey options
-    pub const K_EVENT_HOTKEY_EXCLUSIVE: u32 = 1 << 0;
-
-    // kCFRunLoopDefaultMode / kCFRunLoopCommonModes identifiers are
-    // resolved at runtime via CFStringRef; we document the convention here.
-}
 
 /// Maps our `Modifier` + key to a macOS-specific modifier mask.
 ///

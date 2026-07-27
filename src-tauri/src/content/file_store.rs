@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use crate::storage::StorageError;
 
 use super::resource_metadata::{
-    accessed_at_ms, created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes,
+    created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes,
     modified_at_ms,
 };
 
@@ -20,9 +20,6 @@ pub struct FileStorageInfo {
     pub mime_type: String,
     pub created_at_ms: Option<i64>,
     pub modified_at_ms: Option<i64>,
-    pub accessed_at_ms: Option<i64>,
-    pub read_only: bool,
-    pub is_directory: bool,
 }
 
 pub struct FileStore;
@@ -40,9 +37,6 @@ impl FileStore {
         let mime_type = mime_type_for_path(source_path);
         let created_at_ms = created_at_ms(&metadata);
         let modified_at_ms = modified_at_ms(&metadata);
-        let accessed_at_ms = accessed_at_ms(&metadata);
-        let read_only = metadata.permissions().readonly();
-        let is_directory = metadata.is_dir();
 
         let original_name = source_path
             .file_name()
@@ -65,9 +59,6 @@ impl FileStore {
                 mime_type,
                 created_at_ms,
                 modified_at_ms,
-                accessed_at_ms,
-                read_only,
-                is_directory,
             });
         }
 
@@ -84,9 +75,6 @@ impl FileStore {
             mime_type,
             created_at_ms,
             modified_at_ms,
-            accessed_at_ms,
-            read_only,
-            is_directory,
         })
     }
 
@@ -121,9 +109,6 @@ impl FileStore {
                 mime_type: mime_type.to_owned(),
                 created_at_ms: None,
                 modified_at_ms: None,
-                accessed_at_ms: None,
-                read_only: false,
-                is_directory: false,
             });
         }
 
@@ -143,9 +128,6 @@ impl FileStore {
             mime_type: mime_type.to_owned(),
             created_at_ms: None,
             modified_at_ms: None,
-            accessed_at_ms: None,
-            read_only: false,
-            is_directory: false,
         })
     }
 
@@ -217,7 +199,6 @@ mod tests {
         assert_eq!(info.size_bytes, 15);
         assert_eq!(info.extension.as_deref(), Some("txt"));
         assert_eq!(info.mime_type, "text/plain");
-        assert!(!info.is_directory);
         assert_eq!(
             Path::new(&info.storage_path).extension(),
             Some(OsStr::new("txt"))

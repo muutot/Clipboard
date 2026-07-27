@@ -21,7 +21,7 @@ use std::thread::{self, JoinHandle};
 use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
-    accessed_at_ms, created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms,
+    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms,
     ContentMarkers, FileStore, QuickAction, TextTransform, ThumbnailWorker,
     TransformOperation, RESOURCE_METADATA_SCHEMA_VERSION,
 };
@@ -565,9 +565,6 @@ struct CapturedFileReference {
     mime_type: String,
     created_at_ms: Option<i64>,
     modified_at_ms: Option<i64>,
-    accessed_at_ms: Option<i64>,
-    read_only: bool,
-    is_directory: bool,
     copied: bool,
 }
 
@@ -592,9 +589,6 @@ fn store_captured_file_references(
                     mime_type: info.mime_type,
                     created_at_ms: info.created_at_ms,
                     modified_at_ms: info.modified_at_ms,
-                    accessed_at_ms: info.accessed_at_ms,
-                    read_only: info.read_only,
-                    is_directory: info.is_directory,
                 },
                 Err(error) => {
                     eprintln!(
@@ -615,11 +609,6 @@ fn store_captured_file_references(
                         mime_type: mime_type_for_path(source_path),
                         created_at_ms: metadata.as_ref().and_then(created_at_ms),
                         modified_at_ms: metadata.as_ref().and_then(modified_at_ms),
-                        accessed_at_ms: metadata.as_ref().and_then(accessed_at_ms),
-                        read_only: metadata
-                            .as_ref()
-                            .is_some_and(|metadata| metadata.permissions().readonly()),
-                        is_directory: metadata.as_ref().is_some_and(std::fs::Metadata::is_dir),
                         copied: false,
                     }
                 }
@@ -632,15 +621,8 @@ fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
     let first = files.first();
     serde_json::json!({
         "schemaVersion": RESOURCE_METADATA_SCHEMA_VERSION,
-        "mimeType": first.map(|file| file.mime_type.as_str()),
-        "extension": if files.len() == 1 {
-            first.and_then(|file| file.extension.as_deref())
-        } else {
-            None
-        },
         "sizeBytes": files.iter().map(|file| file.size_bytes).sum::<u64>(),
         "resourcePath": first.map(|file| file.storage_path.as_str()),
-        "storagePath": first.map(|file| file.storage_path.as_str()),
         "originalPath": if files.len() == 1 {
             first.map(|file| file.original_path.as_str())
         } else {
@@ -652,18 +634,13 @@ fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
                 "name": file.original_name,
                 "extension": file.extension,
                 "mimeType": file.mime_type,
-                "size": file.size_bytes,
                 "sizeBytes": file.size_bytes,
-                "path": file.storage_path,
                 "storagePath": file.storage_path,
                 "originalPath": file.original_path,
                 "contentHash": file.content_hash,
                 "copied": file.copied,
                 "createdAtMs": file.created_at_ms,
                 "modifiedAtMs": file.modified_at_ms,
-                "accessedAtMs": file.accessed_at_ms,
-                "readOnly": file.read_only,
-                "isDirectory": file.is_directory,
             }))
             .collect::<Vec<_>>(),
     })

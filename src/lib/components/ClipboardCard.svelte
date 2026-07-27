@@ -639,7 +639,6 @@
       </span>
       <span class="source-name">{item.sourceApp}</span>
       <span>{item.sizeLabel}</span>
-      {#if item.detailLabel}<span>{item.detailLabel}</span>{/if}
       <span>{formatRelativeTime(item.createdAt, now)}</span>
       {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
       <div class="actions" aria-label={_t("card.itemActions")} class:actions-hidden={hideActions}>

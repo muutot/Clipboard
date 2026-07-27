@@ -116,8 +116,6 @@ impl StartupTimer {
 #[derive(Debug, Clone)]
 struct LatencyEntry {
     duration_ms: u64,
-    #[allow(dead_code)]
-    result_count: usize,
 }
 
 pub struct SearchLatencyTracker {
@@ -131,14 +129,13 @@ impl SearchLatencyTracker {
         }
     }
 
-    pub fn record_search(&self, _query: &str, duration_ms: u64, result_count: usize) {
+    pub fn record_search(&self, _query: &str, duration_ms: u64, _result_count: usize) {
         if let Ok(mut entries) = self.entries.lock() {
             if entries.len() >= SEARCH_LATENCY_HISTORY_SIZE {
                 entries.pop_front();
             }
             entries.push_back(LatencyEntry {
                 duration_ms,
-                result_count,
             });
         }
     }

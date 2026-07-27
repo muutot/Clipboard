@@ -789,11 +789,3 @@ export function filterSettingsSearchItems(
   const terms = normalizedQuery.split(" ");
   return items.filter((item) => terms.every((term) => item.searchableText.includes(term)));
 }
-
-export function searchSettings(
-  query: string,
-  translate: SettingsSearchTranslate,
-  templates: readonly SettingsSearchItemTemplate[] = SETTINGS_SEARCH_ITEM_TEMPLATES,
-): SettingsSearchItem[] {
-  return filterSettingsSearchItems(resolveSettingsSearchItems(translate, templates), query);
-}

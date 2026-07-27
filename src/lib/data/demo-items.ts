@@ -34,7 +34,6 @@ export const demoClipboardItems: ClipboardItem[] = [
     sourceApp: "SiYuan",
     sourceTone: "red",
     sizeLabel: "38 KB",
-    detailLabel: "2136 × 437",
     createdAt: now - 4 * minute,
     favorite: false,
     imageMeta: { width: 2136, height: 437 },

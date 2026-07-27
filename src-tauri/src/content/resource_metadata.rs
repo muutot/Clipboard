@@ -142,10 +142,6 @@ pub fn modified_at_ms(metadata: &fs::Metadata) -> Option<i64> {
     metadata.modified().ok().and_then(system_time_ms)
 }
 
-pub fn accessed_at_ms(metadata: &fs::Metadata) -> Option<i64> {
-    metadata.accessed().ok().and_then(system_time_ms)
-}
-
 fn system_time_ms(value: SystemTime) -> Option<i64> {
     value
         .duration_since(SystemTime::UNIX_EPOCH)

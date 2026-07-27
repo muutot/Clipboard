@@ -312,8 +312,6 @@
 
   $effect(() => {
     if (imageFullscreen) {
-      const url = assetUrl(item?.previewPath || item?.resourcePath);
-      console.log("[fullscreen] active", { url, hasItem: !!item });
     }
   });
 
@@ -940,12 +938,6 @@
               <dt><AppIcon name="ruler" size={14} /> {_t("detail.size")}</dt>
               <dd>{item.sizeLabel}</dd>
             </div>
-            {#if item.detailLabel}
-              <div class="detail-row">
-                <dt><AppIcon name="image" size={14} /> {_t("detail.fileInfo")}</dt>
-                <dd>{item.detailLabel}</dd>
-              </div>
-            {/if}
             {#if item.mimeType}
               <div class="detail-row">
                 <dt><AppIcon name="mime" size={14} /> {_t("detail.mimeInfo")}</dt>
@@ -1223,7 +1215,6 @@
         alt={item.preview || item.title}
         draggable="false"
         style="transform: translate({panX}px, {panY}px) scale({zoom})"
-        onload={() => console.log("[fullscreen] image loaded")}
         onerror={(e) => console.error("[fullscreen] image load error", e)}
       />
     </div>
