@@ -1444,6 +1444,7 @@ fn apply_sort_rules(items: &mut [ClipboardItem], rules: &[SearchSortRule]) {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
@@ -1451,20 +1452,29 @@ fn search_clipboard_items(
     performance_tracker: tauri::State<'_, PerformanceTracker>,
     query: String,
     limit: Option<usize>,
+    offset: Option<usize>,
     sort_rules: Option<Vec<SearchSortRule>>,
 ) -> Result<Vec<ClipboardItem>, String> {
     let started = Instant::now();
-    let max_limit = config
+    let page_size = limit.unwrap_or(100).clamp(1, 500);
+    let page_offset = offset.unwrap_or(0);
+    let max_results = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .search_page_size_limit() as usize;
-    let hits = search_index
-        .search(&query, limit.unwrap_or(100).clamp(1, max_limit))
+
+    let (_all_ids, _total) = search_index
+        .search_all_ids(&query, max_results)
         .map_err(|error| error.to_string())?;
-    let item_ids = hits.into_iter().map(|hit| hit.item_id).collect::<Vec<_>>();
+
+    let slice: Vec<String> = _all_ids
+        .into_iter()
+        .skip(page_offset)
+        .take(page_size)
+        .collect();
 
     let mut items = database
-        .get_items_by_ids(&item_ids)
+        .get_items_by_ids(&slice)
         .map_err(|error| error.to_string())?;
 
     let rules = sort_rules.unwrap_or_else(|| {

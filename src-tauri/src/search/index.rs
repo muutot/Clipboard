@@ -38,15 +38,13 @@ pub enum SearchIndexChange {
     Delete(String),
 }
 
-const SEARCH_RESULT_IDS_CAP: usize = 10_000;
-
 pub struct SearchIndex {
     fields: SearchFields,
     writer: Mutex<IndexWriter<TantivyDocument>>,
     reader: IndexReader,
     layout: Option<SearchIndexLayout>,
     rebuild_required: AtomicBool,
-    cached_ids: Mutex<Option<(String, Vec<String>)>>,
+    cached_ids: Mutex<Option<(String, usize, Vec<String>)>>,
 }
 
 impl SearchIndex {
@@ -118,6 +116,8 @@ impl SearchIndex {
         if changes.is_empty() {
             return Ok(());
         }
+
+        self.clear_cached_ids();
 
         let mut writer = self
             .writer
@@ -198,15 +198,15 @@ impl SearchIndex {
             .collect()
     }
 
-    pub fn search_all_ids(&self, input: &str) -> Result<(Vec<String>, usize), SearchError> {
+    pub fn search_all_ids(&self, input: &str, max_results: usize) -> Result<(Vec<String>, usize), SearchError> {
         let normalized = input.trim().to_owned();
         {
             let cache = self
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            if let Some((ref cached_query, ref ids)) = *cache {
-                if cached_query.as_str() == normalized.as_str() {
+            if let Some((ref cached_query, cached_max, ref ids)) = *cache {
+                if cached_query.as_str() == normalized.as_str() && cached_max >= max_results {
                     let total = ids.len();
                     return Ok((ids.clone(), total));
                 }
@@ -220,7 +220,7 @@ impl SearchIndex {
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            *cache = Some((normalized, Vec::new()));
+            *cache = Some((normalized, max_results, Vec::new()));
             return Ok((Vec::new(), 0));
         }
 
@@ -237,7 +237,7 @@ impl SearchIndex {
         let searcher = self.reader.searcher();
         let top_documents = searcher.search(
             &boolean_query,
-            &TopDocs::with_limit(SEARCH_RESULT_IDS_CAP).order_by_score(),
+            &TopDocs::with_limit(max_results).order_by_score(),
         )?;
 
         let mut ids = Vec::with_capacity(top_documents.len());
@@ -257,7 +257,7 @@ impl SearchIndex {
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            *cache = Some((normalized, ids.clone()));
+            *cache = Some((normalized, max_results, ids.clone()));
         }
 
         Ok((ids, total))

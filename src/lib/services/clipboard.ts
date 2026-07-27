@@ -73,6 +73,7 @@ export async function loadDeletedClipboardHistory(
 export async function searchClipboardHistory(
   query: string,
   limit = 100,
+  offset = 0,
   sortRules?: SortRule[],
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
@@ -80,6 +81,7 @@ export async function searchClipboardHistory(
   const records = await invoke<PersistedClipboardItem[]>("search_clipboard_items", {
     query,
     limit,
+    offset,
     sortRules,
   });
 
