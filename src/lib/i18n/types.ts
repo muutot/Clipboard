@@ -71,6 +71,12 @@ export interface LocaleDefinition {
     compactTab: string;
     fontTab: string;
     themeTab: string;
+    generalSearchTab: string;
+    generalDisplayTab: string;
+    generalWindowTab: string;
+    generalSearchDescription: string;
+    generalDisplayDescription: string;
+    generalWindowDescription: string;
     appearanceSettings: string;
     ocrSettings: string;
     statisticsSettings: string;

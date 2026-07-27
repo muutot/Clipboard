@@ -92,13 +92,15 @@
   });
   let restartNeeded = $state(false);
   let activeSection = $state<
-    "general" | "compact" | "font" | "theme" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
+    "general_search" | "general_display" | "general_window" | "compact" | "font" | "theme" | "capture" | "storage" | "keyboard" | "ocr" | "statistics"
   >("storage");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
 
   const settingsBreadcrumb = $derived.by(() => {
     switch (activeSection) {
-      case "general":
+      case "general_search":
+      case "general_display":
+      case "general_window":
         return _t("general.eyebrow");
       case "compact":
       case "font":
@@ -119,7 +121,9 @@
 
   const settingsSectionTitle = $derived.by(() => {
     switch (activeSection) {
-      case "general":
+      case "general_search":
+      case "general_display":
+      case "general_window":
         return _t("storage.basicTab");
       case "compact":
         return _t("storage.compactTab");
@@ -144,8 +148,12 @@
 
   const settingsSectionDescription = $derived.by(() => {
     switch (activeSection) {
-      case "general":
-        return _t("general.description");
+      case "general_search":
+        return _t("storage.generalSearchDescription");
+      case "general_display":
+        return _t("storage.generalDisplayDescription");
+      case "general_window":
+        return _t("storage.generalWindowDescription");
       case "compact":
         return _t("compact.description");
       case "font":
@@ -214,7 +222,9 @@
   function settingsSearchResultPath(item: SettingsSearchItem): string {
     const settingsLabel = _t("toolbar.settings");
     switch (item.section) {
-      case "general":
+      case "general_search":
+      case "general_display":
+      case "general_window":
         return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.basicTab")}`;
       case "compact":
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.compactTab")}`;
@@ -1057,9 +1067,13 @@
 
     <nav class="settings-primary-nav" aria-label="设置分类">
       <button
-        class:active={activeSection === "general"}
+        class:active={
+          activeSection === "general_search" ||
+          activeSection === "general_display" ||
+          activeSection === "general_window"
+        }
         type="button"
-        onclick={() => (activeSection = "general")}
+        onclick={() => (activeSection = "general_search")}
       >
         <AppIcon name="sliders" size={16} />
         <span>{_t("storage.generalTab")}</span>
@@ -1236,6 +1250,33 @@
             {_t("statistics.memoryTab")}
           </button>
         </nav>
+      {:else if activeSection === "general_search" || activeSection === "general_display" || activeSection === "general_window"}
+        <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "general_search"}
+            aria-current={activeSection === "general_search" ? "page" : undefined}
+            onclick={() => (activeSection = "general_search")}
+          >
+            {_t("storage.generalSearchTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "general_display"}
+            aria-current={activeSection === "general_display" ? "page" : undefined}
+            onclick={() => (activeSection = "general_display")}
+          >
+            {_t("storage.generalDisplayTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "general_window"}
+            aria-current={activeSection === "general_window" ? "page" : undefined}
+            onclick={() => (activeSection = "general_window")}
+          >
+            {_t("storage.generalWindowTab")}
+          </button>
+        </nav>
       {:else}
         <div class="settings-subnav settings-subnav--single" aria-label={settingsSectionTitle}>
           <span class="settings-section-title">{settingsSectionTitle}</span>
@@ -1267,8 +1308,12 @@
           </div>
         {/if}
       </div>
-    {:else if activeSection === "general"}
-      <GeneralSettingsPanel {onclose} showHeader={false} />
+    {:else if activeSection === "general_search"}
+      <GeneralSettingsPanel {onclose} section="search" showHeader={false} />
+    {:else if activeSection === "general_display"}
+      <GeneralSettingsPanel {onclose} section="display" showHeader={false} />
+    {:else if activeSection === "general_window"}
+      <GeneralSettingsPanel {onclose} section="window" showHeader={false} />
     {:else if activeSection === "compact"}
       <CompactSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "font"}
