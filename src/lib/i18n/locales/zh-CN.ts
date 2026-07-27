@@ -249,6 +249,8 @@ const zhCN: LocaleDefinition = {
     copyN: "复制 {count} 项",
     favoriteN: "收藏 {count} 项",
     deleteN: "删除 {count} 项",
+    restoreN: "还原 {count} 项",
+    permanentDeleteN: "永久删除 {count} 项",
     deselectAll: "取消全选",
   },
   toast: {
@@ -266,6 +268,8 @@ const zhCN: LocaleDefinition = {
     plainPasteFailed: "恢复原应用并粘贴失败",
     duplicateSuccess: "已另存为新条目",
     saveFailed: "保存失败",
+    restoreSuccess: "已还原 {count} 项",
+    resumed: "已还原",
   },
   detail: {
     title: "内容详情",
@@ -492,6 +496,7 @@ const zhCN: LocaleDefinition = {
     deletePreset: "删除",
     presetSaved: "方案已保存",
     presetApplied: "方案已应用",
+    presetUpdated: "方案已更新",
     presetDeleted: "方案已删除",
     noPresets: "暂无自定义方案",
     bg: "主背景色",

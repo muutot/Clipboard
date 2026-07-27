@@ -43,6 +43,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   theme: "dark",
   themeColors: { ...DARK_THEME_COLORS },
   customPresets: [],
+  activePresetId: undefined,
   imageFullscreenMode: "overlay",
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
@@ -349,6 +350,7 @@ function normalizeGeneralSettings(
     ...DARK_THEME_COLORS,
   });
   result.customPresets = normalizeCustomPresets(source.customPresets ?? fallback("customPresets"));
+  result.activePresetId = typeof source.activePresetId === "string" ? source.activePresetId : undefined;
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
     "overlay",

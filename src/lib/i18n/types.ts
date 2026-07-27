@@ -244,6 +244,8 @@ export interface LocaleDefinition {
     copyN: string;
     favoriteN: string;
     deleteN: string;
+    restoreN: string;
+    permanentDeleteN: string;
     deselectAll: string;
   };
   toast: {
@@ -261,6 +263,8 @@ export interface LocaleDefinition {
     plainPasteFailed: string;
     duplicateSuccess: string;
     saveFailed: string;
+    restoreSuccess: string;
+    resumed: string;
   };
   detail: {
     title: string;
@@ -488,6 +492,7 @@ export interface LocaleDefinition {
     deletePreset: string;
     presetSaved: string;
     presetApplied: string;
+    presetUpdated: string;
     presetDeleted: string;
     noPresets: string;
     bg: string;

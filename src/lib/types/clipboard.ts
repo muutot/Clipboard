@@ -189,6 +189,7 @@ export interface GeneralSettings {
   theme: ThemeMode;
   themeColors?: ThemeColors;
   customPresets: ThemePreset[];
+  activePresetId?: string;
   imageFullscreenMode: "overlay" | "desktop";
   viewerBackdropOpacity: number;
   searchSuggestionMode: SearchSuggestionMode;

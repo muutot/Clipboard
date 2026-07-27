@@ -260,6 +260,8 @@ const en: LocaleDefinition = {
     copyN: "Copy {count} items",
     favoriteN: "Favorite {count} items",
     deleteN: "Delete {count} items",
+    restoreN: "Restore {count} items",
+    permanentDeleteN: "Permanently delete {count} items",
     deselectAll: "Deselect all",
   },
   toast: {
@@ -277,6 +279,8 @@ const en: LocaleDefinition = {
     plainPasteFailed: "Failed to restore the previous application and paste",
     duplicateSuccess: "Duplicated as new entry",
     saveFailed: "Save failed",
+    restoreSuccess: "Restored {count} items",
+    resumed: "Restored",
   },
   detail: {
     title: "Content Details",
@@ -508,6 +512,7 @@ const en: LocaleDefinition = {
     deletePreset: "Delete",
     presetSaved: "Preset saved",
     presetApplied: "Preset applied",
+    presetUpdated: "Preset updated",
     presetDeleted: "Preset deleted",
     noPresets: "No custom presets yet",
     bg: "Background",

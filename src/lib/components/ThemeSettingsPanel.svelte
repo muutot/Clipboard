@@ -44,6 +44,7 @@
 
   function changeTheme(value: ThemeMode) {
     generalSettings.updateSetting("theme", value);
+    generalSettings.updateSetting("activePresetId", undefined);
     if (value === "dark") {
       generalSettings.updateSetting("themeColors", { ...DARK_THEME_COLORS });
     } else if (value === "light") {
@@ -84,6 +85,22 @@
 
   const isReadonly = $derived(s.theme !== "custom");
 
+  const activePreset = $derived(
+    s.activePresetId ? (s.customPresets ?? []).find((p) => p.id === s.activePresetId) : undefined,
+  );
+
+  const presetColorsDiffer = $derived(
+    activePreset
+      ? Object.keys(activePreset.colors).some(
+          (k) => themeColors[k as keyof ThemeColors] !== activePreset.colors[k as keyof ThemeColors],
+        )
+      : false,
+  );
+
+  const themeDropdownValue = $derived(
+    s.activePresetId && s.theme === "custom" ? s.activePresetId : s.theme,
+  );
+
   let presetName = $state("");
 
   function savePreset() {
@@ -96,18 +113,32 @@
     };
     const presets = [...(s.customPresets ?? []), preset];
     generalSettings.updateSetting("customPresets", presets);
+    generalSettings.updateSetting("activePresetId", preset.id);
     presetName = "";
     showFeedback(_t("theme.presetSaved"), true);
+  }
+
+  function updatePreset() {
+    if (!activePreset) return;
+    const presets = (s.customPresets ?? []).map((p) =>
+      p.id === activePreset.id ? { ...p, colors: { ...themeColors } } : p,
+    );
+    generalSettings.updateSetting("customPresets", presets);
+    showFeedback(_t("theme.presetUpdated"), true);
   }
 
   function applyPreset(preset: ThemePreset) {
     themeColors = { ...preset.colors };
     generalSettings.updateSetting("theme", "custom");
     generalSettings.updateSetting("themeColors", { ...preset.colors });
+    generalSettings.updateSetting("activePresetId", preset.id);
     showFeedback(_t("theme.presetApplied"), true);
   }
 
   function deletePreset(id: string) {
+    if (s.activePresetId === id) {
+      generalSettings.updateSetting("activePresetId", undefined);
+    }
     const presets = (s.customPresets ?? []).filter((p) => p.id !== id);
     generalSettings.updateSetting("customPresets", presets);
     showFeedback(_t("theme.presetDeleted"), true);
@@ -138,11 +169,19 @@
     </div>
     <select
       class="theme-select"
-      value={s.theme}
-      onchange={(e) => changeTheme((e.target as HTMLSelectElement).value as ThemeMode)}
+      value={themeDropdownValue}
+      onchange={(e) => {
+        const val = (e.target as HTMLSelectElement).value;
+        if (val === "dark" || val === "light") {
+          changeTheme(val);
+        }
+      }}
     >
       <option value="dark">{_t("theme.dark")}</option>
       <option value="light">{_t("theme.light")}</option>
+      {#if activePreset}
+        <option value={activePreset.id}>{activePreset.name}</option>
+      {/if}
       <option value="custom">{_t("theme.custom")}</option>
     </select>
   </section>
@@ -159,6 +198,11 @@
       </div>
     </div>
     <div class="preset-save-row">
+      {#if activePreset && presetColorsDiffer}
+        <button class="preset-save-btn update-btn" type="button" onclick={updatePreset}>
+          更新 "{activePreset.name}"
+        </button>
+      {/if}
       <input
         type="text"
         class="preset-name-input"
@@ -173,8 +217,13 @@
     {#if (s.customPresets ?? []).length > 0}
       <div class="preset-list">
         {#each s.customPresets ?? [] as preset (preset.id)}
-          <div class="preset-row">
-            <span class="preset-row-name">{preset.name}</span>
+          <div class="preset-row" class:active={s.activePresetId === preset.id}>
+            <span class="preset-row-name">
+              {preset.name}
+              {#if s.activePresetId === preset.id}
+                <span class="preset-active-badge">使用中</span>
+              {/if}
+            </span>
             <span class="preset-row-actions">
               <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
                 {_t("theme.applyPreset")}
@@ -438,5 +487,25 @@
     color: var(--text-faint);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     text-align: center;
+  }
+
+  .preset-row.active {
+    border-color: color-mix(in srgb, var(--selection-color) 36%, transparent);
+    background: color-mix(in srgb, var(--selection-color) 8%, var(--surface-bg));
+  }
+
+  .preset-active-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--selection-color);
+    font-size: var(--settings-note-size, 10px);
+    font-weight: 560;
+    vertical-align: middle;
+  }
+
+  .update-btn {
+    flex-shrink: 0;
   }
 </style>
