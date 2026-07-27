@@ -52,10 +52,12 @@
   function pointerDragStart(idx: number, _e: PointerEvent) {
     sortDragIdx = idx;
     sortDragOverIdx = null;
+    console.log("[SORT-DRAG] start idx=", idx);
 
     function onMove(ev: PointerEvent) {
-      if (!sortListEl) return;
+      if (!sortListEl) { console.log("[SORT-DRAG] no listEl"); return; }
       const rows = sortListEl.querySelectorAll<HTMLElement>('.sort-rule-row');
+      if (rows.length === 0) { console.log("[SORT-DRAG] no rows"); return; }
       let target: number | null = null;
       for (let i = 0; i < rows.length; i++) {
         const rect = rows[i].getBoundingClientRect();
@@ -64,6 +66,7 @@
           break;
         }
       }
+      console.log("[SORT-DRAG] move clientY=", ev.clientY, " target=", target, " sortDragIdx=", sortDragIdx);
       if (target !== null && target !== sortDragIdx) {
         sortDragOverIdx = target;
       } else {
@@ -851,19 +854,10 @@
   }
 
   .sort-rule-row.sort-drag-over {
-    position: relative;
-  }
-
-  .sort-rule-row.sort-drag-over::before {
-    content: "";
-    position: absolute;
-    top: -3px;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: var(--accent);
-    border-radius: 2px;
-    pointer-events: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--settings-control-radius, 6px);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .sort-grip {
