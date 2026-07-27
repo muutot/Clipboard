@@ -138,15 +138,18 @@ impl SearchSynchronizer {
                 return Ok(total);
             };
 
-            let item_ids = events
-                .iter()
-                .map(|event| event.item_id.clone())
-                .collect::<std::collections::HashSet<_>>();
-            let item_ids_vec: Vec<String> = item_ids.into_iter().collect();
+            let mut item_ids_vec: Vec<String> = Vec::with_capacity(events.len());
+            {
+                let mut seen = std::collections::HashSet::with_capacity(events.len());
+                for event in &events {
+                    if seen.insert(event.item_id.as_str()) {
+                        item_ids_vec.push(event.item_id.clone());
+                    }
+                }
+            }
             let event_count = events.len() as u64;
 
-            let (changes, upserted, deleted) =
-                self.resolve_changes(repository, &item_ids_vec)?;
+            let (changes, upserted, deleted) = self.resolve_changes(repository, &item_ids_vec)?;
             index.apply_changes(&changes)?;
             repository.acknowledge_search_outbox(last_sequence)?;
 

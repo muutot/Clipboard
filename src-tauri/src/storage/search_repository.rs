@@ -180,13 +180,24 @@ impl SearchDocument {
         let text_content = row.get::<_, Option<String>>(3)?;
         let source_app = row.get::<_, Option<String>>(4)?;
         let ocr_text = row.get::<_, Option<String>>(5)?;
-        let content = [Some(title), text_content, ocr_text, source_app]
-            .into_iter()
-            .flatten()
-            .map(|part| part.trim().to_owned())
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
+
+        let parts: [&str; 4] = [
+            title.as_str(),
+            text_content.as_deref().unwrap_or(""),
+            ocr_text.as_deref().unwrap_or(""),
+            source_app.as_deref().unwrap_or(""),
+        ];
+
+        let mut content = String::new();
+        for part in parts {
+            let trimmed = part.trim();
+            if !trimmed.is_empty() {
+                if !content.is_empty() {
+                    content.push('\n');
+                }
+                content.push_str(trimmed);
+            }
+        }
 
         Ok(Self {
             item_id: row.get(0)?,

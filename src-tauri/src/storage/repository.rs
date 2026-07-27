@@ -413,26 +413,32 @@ impl ClipboardRepository for Database {
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
 
-            // Validate the complete request before changing anything. This
-            // keeps the boolean contract deterministic and avoids partially
-            // applying a stale selection from the UI.
-            for id in &ids {
-                let exists = transaction
-                    .query_row("SELECT 1 FROM clipboard_items WHERE id = ?1", [id], |row| {
-                        row.get::<_, i64>(0)
-                    })
-                    .optional()?;
-                if exists.is_none() {
-                    return Ok(false);
-                }
+            let placeholders: Vec<String> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
+            let where_clause = format!("id IN ({})", placeholders.join(", "));
+            let count: i64 = transaction.query_row(
+                &format!("SELECT COUNT(*) FROM clipboard_items WHERE {where_clause}"),
+                params_from_iter(ids.iter().map(|id| id.as_str())),
+                |row| row.get(0),
+            )?;
+            if (count as usize) < ids.len() {
+                return Ok(false);
             }
 
-            for id in &ids {
-                transaction.execute(
-                    "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1",
-                    params![id, is_favorite],
-                )?;
-            }
+            let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
+                .iter()
+                .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::types::ToSql>)
+                .collect();
+            params.push(Box::new(is_favorite));
+            let fav_pos = ids.len() + 1;
+            let set_clause = format!("is_favorite = ?{fav_pos}");
+            transaction.execute(
+                &format!("UPDATE clipboard_items SET {set_clause} WHERE {where_clause}"),
+                params_from_iter(params.iter().map(|p| p.as_ref())),
+            )?;
 
             transaction.commit()?;
             Ok(true)
@@ -841,7 +847,7 @@ fn current_time_ms() -> i64 {
 fn unique_ids(ids: &[String]) -> Vec<String> {
     let mut seen = HashSet::with_capacity(ids.len());
     ids.iter()
-        .filter(|id| seen.insert((*id).clone()))
+        .filter(|id| seen.insert(id.as_str()))
         .cloned()
         .collect()
 }

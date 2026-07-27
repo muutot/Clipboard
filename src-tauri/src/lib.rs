@@ -21,9 +21,9 @@ use std::thread::{self, JoinHandle};
 use cli::{CliArgs, CliCommand, LocalApiServer};
 use config::{ConfigStore, GeneralConfig};
 use content::{
-    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms,
-    ContentMarkers, FileStore, QuickAction, TextTransform, ThumbnailWorker,
-    TransformOperation, RESOURCE_METADATA_SCHEMA_VERSION,
+    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms, ContentMarkers,
+    FileStore, QuickAction, TextTransform, ThumbnailWorker, TransformOperation,
+    RESOURCE_METADATA_SCHEMA_VERSION,
 };
 use domain::{ClipboardItem, ClipboardKind, OcrResult};
 use export::{
@@ -349,11 +349,10 @@ impl CaptureState {
             return true;
         }
 
-        let ignored = self
-            .ignored_apps
-            .lock()
-            .map(|apps| apps.clone())
-            .unwrap_or_default();
+        let ignored = match self.ignored_apps.lock() {
+            Ok(apps) => apps,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         self.policy.should_skip(&ignored, source_app, text)
     }
 
@@ -618,19 +617,23 @@ fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
         } else {
             None
         },
-        files: files.iter().map(|file| FileEntry {
-            name: file.original_name.clone(),
-            extension: file.extension.clone(),
-            mime_type: file.mime_type.clone(),
-            size_bytes: file.size_bytes,
-            storage_path: file.storage_path.clone(),
-            original_path: file.original_path.clone(),
-            content_hash: file.content_hash.clone(),
-            copied: file.copied,
-            created_at_ms: file.created_at_ms,
-            modified_at_ms: file.modified_at_ms,
-        }).collect(),
-    }).unwrap_or_default()
+        files: files
+            .iter()
+            .map(|file| FileEntry {
+                name: file.original_name.clone(),
+                extension: file.extension.clone(),
+                mime_type: file.mime_type.clone(),
+                size_bytes: file.size_bytes,
+                storage_path: file.storage_path.clone(),
+                original_path: file.original_path.clone(),
+                content_hash: file.content_hash.clone(),
+                copied: file.copied,
+                created_at_ms: file.created_at_ms,
+                modified_at_ms: file.modified_at_ms,
+            })
+            .collect(),
+    })
+    .unwrap_or_default()
 }
 
 #[derive(serde::Serialize)]
@@ -764,9 +767,7 @@ fn get_storage_status(
 }
 
 #[tauri::command]
-fn list_icon_files(
-    paths: tauri::State<'_, StoragePaths>,
-) -> Result<Vec<IconFileInfo>, String> {
+fn list_icon_files(paths: tauri::State<'_, StoragePaths>) -> Result<Vec<IconFileInfo>, String> {
     let icons_dir = paths.storage.join("icons");
     let mut files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&icons_dir) {
@@ -775,7 +776,11 @@ fn list_icon_files(
             if path.extension().is_some_and(|e| e == "png") {
                 if let Ok(meta) = entry.metadata() {
                     files.push(IconFileInfo {
-                        name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        name: path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string(),
                         size_bytes: meta.len(),
                     });
                 }
@@ -1395,7 +1400,11 @@ enum SearchSortDirection {
     Desc,
 }
 
-fn cmp_by_field(a: &ClipboardItem, b: &ClipboardItem, field: SearchSortField) -> std::cmp::Ordering {
+fn cmp_by_field(
+    a: &ClipboardItem,
+    b: &ClipboardItem,
+    field: SearchSortField,
+) -> std::cmp::Ordering {
     match field {
         SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
         SearchSortField::LastUsedAt => b.last_used_at_ms.cmp(&a.last_used_at_ms),
@@ -2025,7 +2034,12 @@ fn copy_file_to(src: String, dst: String) -> Result<(), String> {
 }
 
 fn generated_clipboard_title(text: &str) -> String {
-    text.chars().take(200).collect()
+    if text.is_ascii() {
+        let end = text.len().min(200);
+        text[..end].to_owned()
+    } else {
+        text.chars().take(200).collect()
+    }
 }
 
 fn metadata_custom_title(metadata_json: Option<&str>) -> Option<bool> {
@@ -4386,9 +4400,7 @@ mod capture_tests {
     #[test]
     fn invalid_sensitive_patterns_are_excluded_during_initialization() {
         let mut privacy = PrivacyManager::new();
-        privacy.sensitive_patterns = vec![
-            regex_lite::Regex::new("secret").unwrap(),
-        ];
+        privacy.sensitive_patterns = vec![regex_lite::Regex::new("secret").unwrap()];
         let state = CaptureState::new(&privacy, Vec::new(), 100 * 1024 * 1024);
 
         assert_eq!(state.policy.sensitive_patterns.len(), 1);

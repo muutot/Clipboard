@@ -17,8 +17,8 @@ pub struct SearchFields {
 
 pub fn build_schema() -> (Schema, SearchFields) {
     let mut builder = Schema::builder();
-    let item_id = builder.add_text_field("item_id", STRING | STORED);
-    let kind = builder.add_text_field("kind", STRING | STORED);
+    let item_id = builder.add_text_field("item_id", STRING | FAST | STORED);
+    let kind = builder.add_text_field("kind", STRING | FAST | STORED);
     let content_indexing = TextFieldIndexing::default()
         .set_tokenizer(NGRAM_TOKENIZER_NAME)
         .set_index_option(IndexRecordOption::WithFreqs);
