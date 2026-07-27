@@ -159,6 +159,8 @@ export interface FontSizeSettings {
 export interface DisplaySettings {
   showSecondaryText: boolean;
   maxTextLines: number;
+  pageSize: number;
+  maxVisibleItems: number;
 }
 
 export type Language = "zh-CN" | "en";

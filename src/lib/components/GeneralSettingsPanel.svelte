@@ -93,6 +93,8 @@
   let transparencyEl = $state<HTMLInputElement | null>(null);
   let viewerOpacityEl = $state<HTMLInputElement | null>(null);
   let maxTextLinesEl = $state<HTMLInputElement | null>(null);
+  let pageSizeEl = $state<HTMLInputElement | null>(null);
+  let maxVisibleItemsEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -104,6 +106,14 @@
 
   $effect(() => {
     updateSliderTrack(maxTextLinesEl);
+  });
+
+  $effect(() => {
+    updateSliderTrack(pageSizeEl);
+  });
+
+  $effect(() => {
+    updateSliderTrack(maxVisibleItemsEl);
   });
 </script>
 
@@ -509,6 +519,60 @@
       >
         <span class="toggle-knob"></span>
       </button>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.pageSize")}</strong>
+            <p>{_t("general.pageSizeDescription")}</p>
+          </div>
+          <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="500"
+        step="50"
+        value={s.display.pageSize}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("display", { ...s.display, pageSize: Number(input.value) });
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={pageSizeEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.maxVisibleItems")}</strong>
+            <p>{_t("general.maxVisibleItemsDescription")}</p>
+          </div>
+          <span class="value-label">{s.display.maxVisibleItems} {_t("general.maxVisibleItemsUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="200"
+        max="2000"
+        step="50"
+        value={s.display.maxVisibleItems}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("display", { ...s.display, maxVisibleItems: Number(input.value) });
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={maxVisibleItemsEl}
+      />
     </section>
 
     <section class="setting-card toggle-card">

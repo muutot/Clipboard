@@ -444,6 +444,12 @@ export interface LocaleDefinition {
     maxTextLines: string;
     maxTextLinesDescription: string;
     maxTextLinesUnit: string;
+    pageSize: string;
+    pageSizeDescription: string;
+    pageSizeUnit: string;
+    maxVisibleItems: string;
+    maxVisibleItemsDescription: string;
+    maxVisibleItemsUnit: string;
   };
   compact: {
     title: string;
