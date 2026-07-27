@@ -161,9 +161,7 @@
 
     let lastHeight = -1;
     const report = () => {
-      const height = Math.ceil(
-        element.getBoundingClientRect().height + (compact ? compactCardGap : 0),
-      );
+      const height = Math.ceil(element.clientHeight + (compact ? compactCardGap : 0));
       if (height === lastHeight) return;
       lastHeight = height;
       reportHeight(item.id, height);
@@ -552,9 +550,66 @@
     contextMenu = { x: event.clientX, y: event.clientY, items };
   }
 
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
   function handleContextAction(id: string) {
     if (cardActionIds.includes(id as CardActionId)) {
       runCardAction(id as CardActionId);
+    }
+  }
+
+  function handleMouseEnter() {
+    loadContentActions();
+  }
+
+  function handleFocus() {
+    loadContentActions();
+    onselect(item.id);
+  }
+
+  function handleCardSelect(e: MouseEvent) {
+    onselect(item.id, e);
+  }
+
+  function handleToggleSelect() {
+    ontoggleSelect(item.id);
+  }
+
+  function stopPropagation(e: MouseEvent) {
+    e.stopPropagation();
+  }
+
+  function handleImageFullscreenClick(e: MouseEvent) {
+    e.stopPropagation();
+    onimagefullscreen?.(item.id);
+  }
+
+  function handleEditKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      editing = false;
+      oncanceledit(item.id);
+    }
+  }
+
+  async function handleSaveAsClick(event: MouseEvent) {
+    event.stopPropagation();
+    if (item.resourcePath && isTauriRuntime()) {
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || "file";
+        const ext = defaultName.includes(".") ? defaultName.split(".").pop() : "";
+        const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
+        const filePath = await save({ defaultPath: defaultName, filters });
+        if (filePath) {
+          await invoke("copy_file_to", { src: item.resourcePath, dst: filePath });
+        }
+      } catch {
+        invoke("open_external_url", { url: item.resourcePath }).catch(() => {});
+      }
     }
   }
 </script>
@@ -571,8 +626,8 @@
   class:actions-always={alwaysShowActions}
   class:no-meta={hideMetaRow}
   class="clip-card"
-  onmouseenter={() => loadContentActions()}
-  onfocus={() => { loadContentActions(); onselect(item.id); }}
+  onmouseenter={handleMouseEnter}
+  onfocus={handleFocus}
   style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
   style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
   style:--cg={compact ? `${compactCardGap}px` : undefined}
@@ -598,18 +653,13 @@
     type="button"
     aria-label={_t("card.selectItem", { title: item.title })}
     aria-pressed={selected}
-    onclick={(e) => onselect(item.id, e)}
+    onclick={handleCardSelect}
     ondblclick={(e) => handleDoubleClick(e)}
   ></button>
 
   {#if showCheckbox}
     <label class="card-checkbox">
-      <input
-        type="checkbox"
-        {checked}
-        onchange={() => ontoggleSelect(item.id)}
-        onclick={(e) => e.stopPropagation()}
-      />
+      <input type="checkbox" {checked} onchange={handleToggleSelect} onclick={stopPropagation} />
       <span class="check-mark"><AppIcon name="check" size={14} strokeWidth={2.5} /></span>
     </label>
   {/if}
@@ -624,10 +674,7 @@
               <button
                 type="button"
                 class="image-fullscreen-btn"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  onimagefullscreen?.(item.id);
-                }}
+                onclick={handleImageFullscreenClick}
                 aria-label={_t("general.imageFullscreenButton")}
               >
                 <AppIcon name="maximize" size={14} strokeWidth={2} />
@@ -669,143 +716,127 @@
     </div>
 
     {#if !hideMetaRow}
-    <div class="meta-row">
-      <span class="source-mark">
-        {#if item.iconPath}
-          <img class="source-icon" src={appIconUrl(item.iconPath)} alt={item.sourceApp} />
-        {:else}
-          <span
-            class="source-dot"
-            class:source-red={item.sourceTone === "red"}
-            class:source-blue={item.sourceTone === "blue"}
-            class:source-violet={item.sourceTone === "violet"}
-          ></span>
-        {/if}
-      </span>
-      <span class="source-name">{item.sourceApp}</span>
-      <span>{item.sizeLabel}</span>
-      <span>{formatRelativeTime(item.createdAt, now)}</span>
-      {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
-      <div class="actions" aria-label={_t("card.itemActions")} class:actions-hidden={hideActions}>
-        {#each contentActions as action (`${action.actionType}:${action.payload}`)}
+      <div class="meta-row">
+        <span class="source-mark">
+          {#if item.iconPath}
+            <img class="source-icon" src={appIconUrl(item.iconPath)} alt={item.sourceApp} />
+          {:else}
+            <span
+              class="source-dot"
+              class:source-red={item.sourceTone === "red"}
+              class:source-blue={item.sourceTone === "blue"}
+              class:source-violet={item.sourceTone === "violet"}
+            ></span>
+          {/if}
+        </span>
+        <span class="source-name">{item.sourceApp}</span>
+        <span>{item.sizeLabel}</span>
+        <span>{formatRelativeTime(item.createdAt, now)}</span>
+        {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
+        <div class="actions" aria-label={_t("card.itemActions")} class:actions-hidden={hideActions}>
+          {#each contentActions as action (`${action.actionType}:${action.payload}`)}
+            <button
+              type="button"
+              title={action.label}
+              aria-label={action.label}
+              aria-haspopup={action.actionType === "viewDate" ? "dialog" : undefined}
+              aria-expanded={action.actionType === "viewDate"
+                ? dateView?.isoDate === action.payload
+                : undefined}
+              onclick={(event) => handleAction(event, action)}
+            >
+              {#if quickActionKind(action) === "url"}
+                <AppIcon name="globe" size={16} />
+              {:else if quickActionKind(action) === "email"}
+                <AppIcon name="mail" size={16} />
+              {:else if quickActionKind(action) === "phone"}
+                <AppIcon name="phone" size={16} />
+              {:else if quickActionKind(action) === "date"}
+                <AppIcon name="calendar" size={16} />
+              {:else if quickActionKind(action) === "color"}
+                <AppIcon name="palette" size={16} />
+              {:else}
+                <AppIcon name="copy" size={16} />
+              {/if}
+            </button>
+          {/each}
           <button
             type="button"
-            title={action.label}
-            aria-label={action.label}
-            aria-haspopup={action.actionType === "viewDate" ? "dialog" : undefined}
-            aria-expanded={action.actionType === "viewDate"
-              ? dateView?.isoDate === action.payload
-              : undefined}
-            onclick={(event) => handleAction(event, action)}
+            title={_t("card.viewDetail")}
+            aria-label={_t("card.viewDetail")}
+            onclick={(event) => runCardAction("detail", event)}
+            ><AppIcon name="eye" size={16} /></button
           >
-            {#if quickActionKind(action) === "url"}
-              <AppIcon name="globe" size={16} />
-            {:else if quickActionKind(action) === "email"}
-              <AppIcon name="mail" size={16} />
-            {:else if quickActionKind(action) === "phone"}
-              <AppIcon name="phone" size={16} />
-            {:else if quickActionKind(action) === "date"}
-              <AppIcon name="calendar" size={16} />
-            {:else if quickActionKind(action) === "color"}
-              <AppIcon name="palette" size={16} />
-            {:else}
-              <AppIcon name="copy" size={16} />
-            {/if}
-          </button>
-        {/each}
-        <button
-          type="button"
-          title={_t("card.viewDetail")}
-          aria-label={_t("card.viewDetail")}
-          onclick={(event) => runCardAction("detail", event)}
-          ><AppIcon name="eye" size={16} /></button
-        >
-        <button
-          type="button"
-          title={_t("card.copy")}
-          aria-label={_t("card.copy")}
-          onclick={(event) => runCardAction("copy", event)}
-          ><AppIcon name="copy" size={16} /></button
-        >
-        {#if item.kind === "image" || item.kind === "file"}
           <button
             type="button"
-            title={_t("card.saveAs")}
-            aria-label={_t("card.saveAs")}
-            onclick={async (event) => {
-              event.stopPropagation();
-              if (item.resourcePath && isTauriRuntime()) {
-                try {
-                  const { save } = await import("@tauri-apps/plugin-dialog");
-                  const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || "file";
-                  const ext = defaultName.includes(".") ? defaultName.split(".").pop() : "";
-                  const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
-                  const filePath = await save({ defaultPath: defaultName, filters });
-                  if (filePath) {
-                    await invoke("copy_file_to", { src: item.resourcePath, dst: filePath });
-                  }
-                } catch {
-                  invoke("open_external_url", { url: item.resourcePath }).catch(() => {});
-                }
-              }
-            }}><AppIcon name="download" size={16} /></button
+            title={_t("card.copy")}
+            aria-label={_t("card.copy")}
+            onclick={(event) => runCardAction("copy", event)}
+            ><AppIcon name="copy" size={16} /></button
           >
-        {/if}
-        {#if (item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
+          {#if item.kind === "image" || item.kind === "file"}
+            <button
+              type="button"
+              title={_t("card.saveAs")}
+              aria-label={_t("card.saveAs")}
+              onclick={handleSaveAsClick}><AppIcon name="download" size={16} /></button
+            >
+          {/if}
+          {#if (item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
+            <button
+              type="button"
+              title={item.kind === "image" || item.kind === "file"
+                ? _t("edit.editFileName")
+                : _t("card.edit")}
+              aria-label={item.kind === "image" || item.kind === "file"
+                ? _t("edit.editFileName")
+                : _t("card.edit")}
+              onclick={(event) => runCardAction("edit", event)}
+              ><AppIcon name="edit" size={16} /></button
+            >
+          {/if}
+          {#if item.kind === "text"}
+            <button
+              type="button"
+              title={_t("card.pastePlain")}
+              aria-label={_t("card.pastePlain")}
+              onclick={(event) => runCardAction("plainpaste", event)}
+              ><AppIcon name="type" size={16} /></button
+            >
+          {/if}
           <button
             type="button"
-            title={item.kind === "image" || item.kind === "file"
-              ? _t("edit.editFileName")
-              : _t("card.edit")}
-            aria-label={item.kind === "image" || item.kind === "file"
-              ? _t("edit.editFileName")
-              : _t("card.edit")}
-            onclick={(event) => runCardAction("edit", event)}
-            ><AppIcon name="edit" size={16} /></button
+            class:active={item.favorite}
+            title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+            aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+            onclick={(event) => runCardAction("favorite", event)}
+            ><AppIcon name="star" size={16} filled={item.favorite} /></button
           >
-        {/if}
-        {#if item.kind === "text"}
-          <button
-            type="button"
-            title={_t("card.pastePlain")}
-            aria-label={_t("card.pastePlain")}
-            onclick={(event) => runCardAction("plainpaste", event)}
-            ><AppIcon name="type" size={16} /></button
-          >
-        {/if}
-        <button
-          type="button"
-          class:active={item.favorite}
-          title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-          aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-          onclick={(event) => runCardAction("favorite", event)}
-          ><AppIcon name="star" size={16} filled={item.favorite} /></button
-        >
-        {#if item.deleted && onrestore}
-          <button
-            type="button"
-            title="恢复"
-            aria-label="恢复"
-            onclick={(event) => runCardAction("restore", event)}
-            ><AppIcon name="restore" size={16} /></button
-          >
-        {/if}
-        {#if !item.favorite}
-          <button
-            type="button"
-            title={_t("card.delete")}
-            aria-label={_t("card.delete")}
-            onclick={(event) => runCardAction("delete", event)}
-            ><AppIcon name="trash" size={16} /></button
+          {#if item.deleted && onrestore}
+            <button
+              type="button"
+              title="恢复"
+              aria-label="恢复"
+              onclick={(event) => runCardAction("restore", event)}
+              ><AppIcon name="restore" size={16} /></button
+            >
+          {/if}
+          {#if !item.favorite}
+            <button
+              type="button"
+              title={_t("card.delete")}
+              aria-label={_t("card.delete")}
+              onclick={(event) => runCardAction("delete", event)}
+              ><AppIcon name="trash" size={16} /></button
+            >
+          {/if}
+        </div>
+        {#if index < 9}
+          <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
+            >⌘{index + 1}</span
           >
         {/if}
       </div>
-      {#if index < 9}
-        <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
-          >⌘{index + 1}</span
-        >
-      {/if}
-    </div>
     {/if}
   {:else}
     <div class="edit-area">
@@ -817,15 +848,8 @@
         bind:this={editTextarea}
         rows={Math.min(12, Math.max(3, editContent.split("\n").length))}
         placeholder={_t("edit.placeholder")}
-        onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            editing = false;
-            oncanceledit(item.id);
-          }
-        }}></textarea>
+        onclick={stopPropagation}
+        onkeydown={handleEditKeydown}></textarea>
       <div class="edit-actions">
         <button type="button" class="edit-save" onclick={saveEdit}>
           <AppIcon name="check" size={14} strokeWidth={2.5} />
@@ -884,9 +908,7 @@
     x={contextMenu.x}
     y={contextMenu.y}
     items={contextMenu.items}
-    onclose={() => {
-      contextMenu = null;
-    }}
+    onclose={closeContextMenu}
     onaction={handleContextAction}
   />
 {/if}

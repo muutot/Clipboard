@@ -86,6 +86,37 @@
   };
 
   let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
+
+  function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx < 0) return false;
+    const original = items[idx];
+    const changes = mutator(original);
+    items[idx] = { ...original, ...changes };
+    items = items;
+    if (indexedItems) {
+      const iIdx = indexedItems.findIndex((i) => i.id === id);
+      if (iIdx >= 0) indexedItems[iIdx] = { ...indexedItems[iIdx], ...changes };
+      indexedItems = indexedItems;
+    }
+    return true;
+  }
+
+  function revertItem(id: string, fields: Partial<ClipboardItem>) {
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx >= 0) {
+      items[idx] = { ...items[idx], ...fields };
+      items = items;
+    }
+    if (indexedItems) {
+      const iIdx = indexedItems.findIndex((i) => i.id === id);
+      if (iIdx >= 0) {
+        indexedItems[iIdx] = { ...indexedItems[iIdx], ...fields };
+        indexedItems = indexedItems;
+      }
+    }
+  }
+
   let deletedHistoryLoaded = $state(false);
   let deletedHistoryLoading = $state(false);
   let deletedHistoryOffset = $state(0);
@@ -352,10 +383,14 @@
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
   const selectedDeletedCount = $derived(
-    items.filter((item) => selectedIds.has(item.id) && !!item.deleted).length,
+    selectedIds.size === 0
+      ? 0
+      : items.filter((item) => selectedIds.has(item.id) && !!item.deleted).length,
   );
   const selectedActiveCount = $derived(
-    items.filter((item) => selectedIds.has(item.id) && !item.deleted).length,
+    selectedIds.size === 0
+      ? 0
+      : items.filter((item) => selectedIds.has(item.id) && !item.deleted).length,
   );
   const resultSummary = $derived(
     searchPending
@@ -397,8 +432,16 @@
 
   function estimatedCardHeight(item: ClipboardItem): number {
     if (compactMode && item.kind === "image") {
-      const metaHidden = detailDisplayMode === 'split' && detailItem?.id === item.id;
-      return compactImage + compactPaddingTop + compactPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10 + compactCardGap;
+      const metaHidden = detailDisplayMode === "split" && detailItem?.id === item.id;
+      return (
+        compactImage +
+        compactPaddingTop +
+        compactPaddingBottom +
+        4 +
+        (metaHidden ? 0 : 14) +
+        10 +
+        compactCardGap
+      );
     }
 
     let textLines: number;
@@ -439,8 +482,10 @@
   function compactCardHeightFor(item: ClipboardItem): number {
     if (!compactMode) return 0;
     if (item.kind === "image") {
-      const metaHidden = detailDisplayMode === 'split' && detailItem?.id === item.id;
-      return compactImage + compactPaddingTop + compactPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10;
+      const metaHidden = detailDisplayMode === "split" && detailItem?.id === item.id;
+      return (
+        compactImage + compactPaddingTop + compactPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10
+      );
     }
 
     if (item.customTitle) {
@@ -454,15 +499,15 @@
     }
     // 非自定义标题
     const totalLines = estimateTextLines(item.textContent || item.title, 12);
-    const secondaryVisible = showSecondaryText ? Math.min(maxTextLines, Math.max(0, totalLines - 1)) : 0;
+    const secondaryVisible = showSecondaryText
+      ? Math.min(maxTextLines, Math.max(0, totalLines - 1))
+      : 0;
     const visibleTotal = 1 + secondaryVisible;
     if (visibleTotal <= 1) return compactText;
     return compactTallText + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * PREVIEW_LINE_HEIGHT;
   }
 
-  function cardLayoutSignature(item: ClipboardItem): string {
-    const text = item.textContent || item.title;
-    const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
+  function cardLayoutSignaturePrefix(): string {
     return [
       containerWidth,
       compactMode,
@@ -476,19 +521,19 @@
       showSecondaryText,
       maxTextLines,
       detailDisplayMode,
-      detailItem?.id ?? '',
+      detailItem?.id ?? "",
       $generalSettings.fontSizes.cardTitle,
       $generalSettings.fontSizes.cardPreview,
       $generalSettings.fontSizes.secondary,
-      editingId === item.id,
-      item.id,
-      item.kind,
-      item.customTitle,
-      text.length,
-      logicalLineCount,
-      item.title.length,
-      item.preview.length,
     ].join(":");
+  }
+
+  const cardLayoutSignaturePrefixValue = $derived(cardLayoutSignaturePrefix());
+
+  function cardLayoutSignature(item: ClipboardItem): string {
+    const text = item.textContent || item.title;
+    const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
+    return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}`;
   }
 
   function recordCardHeight(id: string, height: number) {
@@ -530,13 +575,23 @@
     return estimatedCardHeight(item);
   }
 
+  const virtualHeights = $derived(filteredItems.map(virtualHeightFor));
+
+  const filteredItemIndexById = $derived.by(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < filteredItems.length; i++) {
+      map.set(filteredItems[i].id, i);
+    }
+    return map;
+  });
+
   const virtualList = $derived(
     createVirtualList(
       filteredItems.length,
       containerHeight,
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
-      filteredItems.map(virtualHeightFor),
+      virtualHeights,
     ),
   );
 
@@ -639,12 +694,13 @@
       currentTime = Date.now();
     }, 30_000);
 
-    void getStorageStatus().then((status) => {
-      if (status) {
-        iconsDir.set(status.iconsDir);
-      }
-      return loadActiveHistoryPage();
-    })
+    void getStorageStatus()
+      .then((status) => {
+        if (status) {
+          iconsDir.set(status.iconsDir);
+        }
+        return loadActiveHistoryPage();
+      })
       .then(() => {
         if (items.length === 0) return;
         selectedId = items[0]?.id ?? "";
@@ -781,7 +837,7 @@
             return drainWindowBoundsWrites();
           })
           .catch(() => {});
-    }, 50);
+      }, 50);
     }
 
     async function flushWindowBounds() {
@@ -1289,12 +1345,7 @@
     if (!original) return;
 
     const nextFavorite = !original.favorite;
-    items = items.map((item) => (item.id === id ? { ...item, favorite: nextFavorite } : item));
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, favorite: nextFavorite } : item,
-      );
-    }
+    updateItem(id, () => ({ favorite: nextFavorite }));
 
     void persistFavorite(id, nextFavorite)
       .then((updated) => {
@@ -1306,14 +1357,7 @@
       })
       .catch((error) => {
         console.error("Unable to update favorite", error);
-        items = items.map((item) =>
-          item.id === id ? { ...item, favorite: original.favorite } : item,
-        );
-        if (indexedItems) {
-          indexedItems = indexedItems.map((item) =>
-            item.id === id ? { ...item, favorite: original.favorite } : item,
-          );
-        }
+        revertItem(id, { favorite: original.favorite });
         statusMessage = _t("app.favoriteFailed");
         showToast(_t("app.favoriteFailed"), "error");
       });
@@ -1335,13 +1379,7 @@
     const previousSelectedIds = new Set(selectedIds);
 
     deletedHistorySuppressedIds.delete(id);
-    // Soft delete: mark as deleted, don't remove from list
-    items = items.map((item) => (item.id === id ? { ...item, deleted: true } : item));
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, deleted: true } : item,
-      );
-    }
+    updateItem(id, () => ({ deleted: true }));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistDelete(id)
@@ -1425,12 +1463,7 @@
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
 
     addSuppressedId(id);
-    items = items.map((item) => (item.id === id ? { ...item, deleted: false } : item));
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, deleted: false } : item,
-      );
-    }
+    updateItem(id, () => ({ deleted: false }));
     void persistRestore(id)
       .then((restored) => {
         if (restored === false) throw new Error("record not found");
@@ -1856,8 +1889,11 @@
     const permanentIds: string[] = [];
     const hardIds: string[] = [];
     for (const item of selectedItems) {
-      if (item.deleted) { permanentIds.push(item.id); }
-      else if (!item.favorite) { (useRecycleBin ? softIds : hardIds).push(item.id); }
+      if (item.deleted) {
+        permanentIds.push(item.id);
+      } else if (!item.favorite) {
+        (useRecycleBin ? softIds : hardIds).push(item.id);
+      }
     }
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
@@ -2109,7 +2145,10 @@
       return;
     }
 
-    if ((event.key === "/" && !editableTarget) || ((event.ctrlKey || event.metaKey) && event.key === "k")) {
+    if (
+      (event.key === "/" && !editableTarget) ||
+      ((event.ctrlKey || event.metaKey) && event.key === "k")
+    ) {
       event.preventDefault();
       searchInputEl?.focus();
       return;
@@ -2179,7 +2218,11 @@
       return;
     }
 
-    if (event.key === " " && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
+    if (
+      event.key === " " &&
+      !(event.target instanceof HTMLInputElement) &&
+      !(event.target instanceof HTMLTextAreaElement)
+    ) {
       event.preventDefault();
       if (selectedId) openDetail(selectedId);
       return;
@@ -2395,7 +2438,7 @@
 
 <main
   class="app-shell"
-  class:split-detail={detailDisplayMode === 'split' && detailItem != null}
+  class:split-detail={detailDisplayMode === "split" && detailItem != null}
   bind:this={appShellEl}
 >
   <header
@@ -2518,11 +2561,7 @@
       if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
     }}
   >
-    <div
-      class="filters"
-      role="tablist"
-      aria-label={_t("filter.all")}
-    >
+    <div class="filters" role="tablist" aria-label={_t("filter.all")}>
       {#each filters as filter}
         <button
           type="button"
@@ -2661,32 +2700,72 @@
     </div>
   </div>
 
-  <div class="main-content" class:split-detail={detailDisplayMode === 'split' && detailItem != null}>
+  <div
+    class="main-content"
+    class:split-detail={detailDisplayMode === "split" && detailItem != null}
+  >
+    <section class="history-panel" aria-label={_t("app.recentRecords")}>
+      <div class="section-heading"></div>
 
-  <section class="history-panel" aria-label={_t("app.recentRecords")}>
-    <div class="section-heading">
-    </div>
-
-    {#if filteredItems.length > 0}
-      <div
-        class="history-list"
-        role="listbox"
-        aria-label={_t("app.recentRecords")}
-        bind:this={historyListEl}
-        onscroll={handleHistoryScroll}
-      >
+      {#if filteredItems.length > 0}
         <div
-          class="virtual-container"
-          style="height: {useVirtualScroll
-            ? virtualList.totalHeight + 'px'
-            : 'auto'}; position: {useVirtualScroll ? 'relative' : 'static'};"
+          class="history-list"
+          role="listbox"
+          aria-label={_t("app.recentRecords")}
+          bind:this={historyListEl}
+          onscroll={handleHistoryScroll}
         >
-          {#each visiblePageItems as item, visibleIdx (item.id)}
-            {#if useVirtualScroll}
-              <div
-                style="position: absolute; top: {virtualList.visibleItems[visibleIdx]
-                  .top}px; left: 0; right: 0;"
-              >
+          <div
+            class="virtual-container"
+            style="height: {useVirtualScroll
+              ? virtualList.totalHeight + 'px'
+              : 'auto'}; position: {useVirtualScroll ? 'relative' : 'static'};"
+          >
+            {#each visiblePageItems as item, visibleIdx (item.id)}
+              {#if useVirtualScroll}
+                <div
+                  style="position: absolute; top: {virtualList.visibleItems[visibleIdx]
+                    .top}px; left: 0; right: 0;"
+                >
+                  <ClipboardCard
+                    {item}
+                    index={filteredItemIndexById.get(item.id) ?? 0}
+                    now={currentTime}
+                    selected={selectedIds.has(item.id) || item.id === selectedId}
+                    checked={selectedIds.has(item.id)}
+                    showCheckbox={false}
+                    hideActions={selectedIds.size > 0 ||
+                      (detailDisplayMode === "split" && detailItem != null)}
+                    hideMetaRow={detailDisplayMode === "split" && detailItem != null}
+                    compact={compactMode}
+                    {compactPaddingTop}
+                    {compactPaddingBottom}
+                    {compactCardGap}
+                    {compactCardBorderRadius}
+                    compactCardHeight={compactCardHeightFor(item)}
+                    {maxTextLines}
+                    {showSecondaryText}
+                    {alwaysShowActions}
+                    quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible &&
+                      !(detailDisplayMode === "split" && detailItem != null)}
+                    onheightchange={recordCardHeight}
+                    heightMeasurementKey={cardLayoutSignature(item)}
+                    onselect={selectItem}
+                    ontoggleSelect={toggleSelectItem}
+                    ontoggleFavorite={toggleFavorite}
+                    ondelete={deleteItem}
+                    oncopy={copyItem}
+                    ondetail={openDetail}
+                    onimagefullscreen={handleImageFullscreen}
+                    onedit={startEdit}
+                    onsaveedit={saveEdit}
+                    onsaveasnew={saveAsNew}
+                    oncanceledit={cancelEdit}
+                    onplainpaste={plainPaste}
+                    onrestore={restoreItem}
+                  />
+                </div>
+              {:else}
                 <ClipboardCard
                   {item}
                   index={filteredItems.indexOf(item)}
@@ -2694,8 +2773,9 @@
                   selected={selectedIds.has(item.id) || item.id === selectedId}
                   checked={selectedIds.has(item.id)}
                   showCheckbox={false}
-                  hideActions={selectedIds.size > 0 || (detailDisplayMode === 'split' && detailItem != null)}
-                  hideMetaRow={detailDisplayMode === 'split' && detailItem != null}
+                  hideActions={selectedIds.size > 0 ||
+                    (detailDisplayMode === "split" && detailItem != null)}
+                  hideMetaRow={detailDisplayMode === "split" && detailItem != null}
                   compact={compactMode}
                   {compactPaddingTop}
                   {compactPaddingBottom}
@@ -2705,7 +2785,8 @@
                   {maxTextLines}
                   {showSecondaryText}
                   {alwaysShowActions}
-                  quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible && !(detailDisplayMode === 'split' && detailItem != null)}
+                  quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible &&
+                    !(detailDisplayMode === "split" && detailItem != null)}
                   onheightchange={recordCardHeight}
                   heightMeasurementKey={cardLayoutSignature(item)}
                   onselect={selectItem}
@@ -2722,121 +2803,77 @@
                   onplainpaste={plainPaste}
                   onrestore={restoreItem}
                 />
-              </div>
-            {:else}
-              <ClipboardCard
-                {item}
-                index={filteredItems.indexOf(item)}
-                now={currentTime}
-                selected={selectedIds.has(item.id) || item.id === selectedId}
-                checked={selectedIds.has(item.id)}
-                showCheckbox={false}
-                hideActions={selectedIds.size > 0 || (detailDisplayMode === 'split' && detailItem != null)}
-                hideMetaRow={detailDisplayMode === 'split' && detailItem != null}
-                compact={compactMode}
-                {compactPaddingTop}
-                {compactPaddingBottom}
-                {compactCardGap}
-                {compactCardBorderRadius}
-                compactCardHeight={compactCardHeightFor(item)}
-                {maxTextLines}
-                {showSecondaryText}
-                {alwaysShowActions}
-                quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible && !(detailDisplayMode === 'split' && detailItem != null)}
-                onheightchange={recordCardHeight}
-                heightMeasurementKey={cardLayoutSignature(item)}
-                onselect={selectItem}
-                ontoggleSelect={toggleSelectItem}
-                ontoggleFavorite={toggleFavorite}
-                ondelete={deleteItem}
-                oncopy={copyItem}
-                ondetail={openDetail}
-                onimagefullscreen={handleImageFullscreen}
-                onedit={startEdit}
-                onsaveedit={saveEdit}
-                onsaveasnew={saveAsNew}
-                oncanceledit={cancelEdit}
-                onplainpaste={plainPaste}
-                onrestore={restoreItem}
-              />
-            {/if}
-          {/each}
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <div class="empty-state">
+          <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
+          <strong>{items.length === 0 ? _t("app.noRecords") : _t("app.noMatchRecords")}</strong>
+          <p>
+            {items.length === 0 ? _t("app.noRecordsHint") : _t("app.noMatchRecordsHint")}
+          </p>
+        </div>
+      {/if}
+    </section>
+
+    {#if selectedIds.size > 0}
+      <div class="bulk-bar">
+        <button
+          type="button"
+          class="bulk-deselect"
+          onclick={() => (selectedIds = new Set())}
+          title={_t("bulk.deselectAll")}
+        >
+          <AppIcon name="x" size={14} strokeWidth={2.5} />
+          <span>{selectedIds.size}</span>
+        </button>
+        <div class="bulk-actions">
+          <button type="button" onclick={bulkCopy}>
+            <AppIcon name="copy" size={14} />
+            <span>{_t("bulk.copyN", { count: selectedIds.size })}</span>
+          </button>
+          <button type="button" onclick={bulkFavorite}>
+            <AppIcon name="star" size={14} />
+            <span>{_t("bulk.favoriteN", { count: selectedIds.size })}</span>
+          </button>
+          {#if selectedActiveCount > 0}
+            <button type="button" class="danger" onclick={bulkDelete}>
+              <AppIcon name="trash" size={14} />
+              <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
+            </button>
+          {/if}
+          {#if selectedDeletedCount > 0}
+            <button type="button" onclick={bulkRestore}>
+              <AppIcon name="restore" size={14} />
+              <span>{_t("bulk.restoreN", { count: selectedDeletedCount })}</span>
+            </button>
+            <button type="button" class="danger" onclick={bulkPermanentDelete}>
+              <AppIcon name="trash" size={14} />
+              <span>{_t("bulk.permanentDeleteN", { count: selectedDeletedCount })}</span>
+            </button>
+          {/if}
         </div>
       </div>
-    {:else}
-      <div class="empty-state">
-        <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
-        <strong>{items.length === 0 ? _t("app.noRecords") : _t("app.noMatchRecords")}</strong>
-        <p>
-          {items.length === 0 ? _t("app.noRecordsHint") : _t("app.noMatchRecordsHint")}
-        </p>
-      </div>
     {/if}
-  </section>
 
-  {#if selectedIds.size > 0}
-    <div class="bulk-bar">
-      <button
-        type="button"
-        class="bulk-deselect"
-        onclick={() => (selectedIds = new Set())}
-        title={_t("bulk.deselectAll")}
-      >
-        <AppIcon name="x" size={14} strokeWidth={2.5} />
-        <span>{selectedIds.size}</span>
-      </button>
-      <div class="bulk-actions">
-        <button type="button" onclick={bulkCopy}>
-          <AppIcon name="copy" size={14} />
-          <span>{_t("bulk.copyN", { count: selectedIds.size })}</span>
-        </button>
-        <button type="button" onclick={bulkFavorite}>
-          <AppIcon name="star" size={14} />
-          <span>{_t("bulk.favoriteN", { count: selectedIds.size })}</span>
-        </button>
-        {#if selectedActiveCount > 0}
-          <button type="button" class="danger" onclick={bulkDelete}>
-            <AppIcon name="trash" size={14} />
-            <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
-          </button>
-        {/if}
-        {#if selectedDeletedCount > 0}
-          <button
-            type="button"
-            onclick={bulkRestore}
-          >
-            <AppIcon name="restore" size={14} />
-            <span>{_t("bulk.restoreN", { count: selectedDeletedCount })}</span>
-          </button>
-          <button
-            type="button"
-            class="danger"
-            onclick={bulkPermanentDelete}
-          >
-            <AppIcon name="trash" size={14} />
-            <span>{_t("bulk.permanentDeleteN", { count: selectedDeletedCount })}</span>
-          </button>
-        {/if}
-      </div>
-    </div>
-  {/if}
-
-  {#if detailDisplayMode === 'split' && detailItem}
-    <DetailPanel
-      mode="split"
-      bind:startFullscreen
-      item={detailItem}
-      onclose={closeDetail}
-      oncopy={copyItem}
-      onedit={startEdit}
-      onsaveedit={saveEdit}
-      onrenametitle={renameTitle}
-      onplainpaste={plainPaste}
-      onduplicate={duplicateItem}
-      onsaveasnew={saveAsNew}
-      oncopyfilename={copyFilename}
-    />
-  {/if}
+    {#if detailDisplayMode === "split" && detailItem}
+      <DetailPanel
+        mode="split"
+        bind:startFullscreen
+        item={detailItem}
+        onclose={closeDetail}
+        oncopy={copyItem}
+        onedit={startEdit}
+        onsaveedit={saveEdit}
+        onrenametitle={renameTitle}
+        onplainpaste={plainPaste}
+        onduplicate={duplicateItem}
+        onsaveasnew={saveAsNew}
+        oncopyfilename={copyFilename}
+      />
+    {/if}
   </div>
 
   <footer class="status-bar" role="status" aria-live="polite">
@@ -2850,7 +2887,7 @@
 </main>
 
 <Toast />
-{#if detailDisplayMode !== 'split' || !detailItem}
+{#if detailDisplayMode !== "split" || !detailItem}
   <DetailPanel
     bind:startFullscreen
     item={detailItem}
