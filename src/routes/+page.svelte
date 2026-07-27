@@ -2017,8 +2017,9 @@
       return;
     }
 
-    event.preventDefault();
     selectedIds = new Set();
+    // Don't preventDefault — let the event continue so a single Esc
+    // can clear bulk selection, close detail panel, or hide the window.
   }
 
   function handleGlobalKeydown(event: KeyboardEvent) {

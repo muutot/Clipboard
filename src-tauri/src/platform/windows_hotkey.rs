@@ -521,11 +521,15 @@ impl HotkeyManager {
                         quick_paste_target.remember(window_handle);
                     }
                 }
-                if !is_visible {
-                    let _ = window.show();
-                }
-                if !is_focused {
-                    let _ = window.set_focus();
+                if is_visible && is_focused {
+                    let _ = window.hide();
+                } else {
+                    if !is_visible {
+                        let _ = window.show();
+                    }
+                    if !is_focused {
+                        let _ = window.set_focus();
+                    }
                 }
             }
         });
