@@ -771,7 +771,7 @@
       <input
         type="range"
         min="50"
-        max="1000"
+        max="6000"
         step="50"
         value={s.pageSizeLimit}
         oninput={(event) => {

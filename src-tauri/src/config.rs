@@ -559,7 +559,7 @@ impl ConfigStore {
     }
 
     pub fn page_size_limit(&self) -> u32 {
-        self.config.general.page_size_limit.clamp(50, 1_000)
+        self.config.general.page_size_limit.clamp(50, 6_000)
     }
 
     pub fn search_page_size_limit(&self) -> u32 {
@@ -567,7 +567,7 @@ impl ConfigStore {
     }
 
     pub fn set_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.general.page_size_limit = value.clamp(50, 1_000);
+        self.config.general.page_size_limit = value.clamp(50, 6_000);
         self.save()
     }
 
