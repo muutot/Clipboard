@@ -336,7 +336,7 @@
     let disposed = false;
     let requestInFlight = false;
     const poll = () => {
-      if (disposed || requestInFlight || targetItem.ocrStatus === "completed") return;
+      if (disposed || requestInFlight || targetItem.ocrStatus === "completed" || targetItem.ocrStatus === "failed" || targetItem.ocrStatus === "none") return;
 
       requestInFlight = true;
       invoke<{
