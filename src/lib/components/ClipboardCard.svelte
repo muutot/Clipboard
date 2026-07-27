@@ -1014,7 +1014,7 @@
     align-items: center;
     gap: 8px;
     overflow: hidden;
-    font-size: var(--font-size-base, 13px);
+    font-size: var(--font-size-cardTitle, 13px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
