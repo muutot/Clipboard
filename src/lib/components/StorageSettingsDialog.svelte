@@ -640,7 +640,7 @@
         detUnclipRatio = cfg.detUnclipRatio;
         if (cfg.ppocrModelVariant) {
           activeVariant = cfg.ppocrModelVariant;
-          modelVariant = cfg.ppocrModelVariant;
+          if (!modelVariant) modelVariant = cfg.ppocrModelVariant;
         }
       }
     } catch {
