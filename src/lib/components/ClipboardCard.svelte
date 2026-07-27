@@ -11,6 +11,8 @@
     detectContentActions,
     type QuickAction,
     writeClipboardText,
+    getDisplayTitle,
+    getDisplayRemainingLines,
   } from "$lib/services/clipboard";
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -163,10 +165,8 @@
   const primaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title),
   );
-  const primaryFirstLine = $derived(primaryPreviewText.split('\n')[0] || '');
-  const primaryRestLines = $derived(
-    primaryPreviewText.includes('\n') ? primaryPreviewText.slice(primaryPreviewText.indexOf('\n') + 1) : '',
-  );
+  const primaryFirstLine = $derived(getDisplayTitle(primaryPreviewText));
+  const primaryRestLines = $derived(getDisplayRemainingLines(primaryPreviewText));
   const secondaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
   );

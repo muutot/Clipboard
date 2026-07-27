@@ -178,6 +178,20 @@ export function generatedClipboardTitle(text: string): string {
   return Array.from(text).slice(0, 200).join("");
 }
 
+export function getDisplayTitle(title: string): string {
+  const firstNonEmpty = title.split("\n").find((line) => line.trim() !== "");
+  return firstNonEmpty ?? "";
+}
+
+export function getDisplayRemainingLines(text: string): string {
+  const firstLine = getDisplayTitle(text);
+  if (!firstLine) return "";
+  const idx = text.indexOf(firstLine);
+  if (idx === -1) return "";
+  const after = text.slice(idx + firstLine.length);
+  return after.startsWith("\n") ? after.slice(1) : after;
+}
+
 export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
   const locale = getLocale();
   const messages = locales[locale] ?? locales.en;

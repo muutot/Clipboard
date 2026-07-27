@@ -12,7 +12,7 @@
   import { untrack } from "svelte";
   import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { writeClipboardText } from "$lib/services/clipboard";
+  import { writeClipboardText, getDisplayTitle } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -681,7 +681,7 @@
             {#if item.kind === "file" && item.fileMeta && item.fileMeta.length > 1}
               <AppIcon name="file" size={15} /> {item.fileMeta.length} {_t("detail.files")}
             {:else}
-              {item.title.split("\n")[0]}
+              {getDisplayTitle(item.title)}
             {/if}
           </span>
         {/if}
@@ -901,7 +901,7 @@
             <button
               type="button"
               onclick={() => {
-                editContent = item.title.split("\n")[0];
+                editContent = getDisplayTitle(item.title);
                 editing = true;
               }}
             >

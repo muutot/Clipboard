@@ -26,6 +26,7 @@
     toClipboardItem,
     writeClipboardImage,
     writeClipboardText,
+    getDisplayTitle,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -1377,7 +1378,7 @@
         const response = await fetch(src);
         const blob = await response.blob();
         await writeClipboardImage(blob, item.resourcePath, item.contentHash);
-        statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
+        statusMessage = _t("app.copiedItem", { title: getDisplayTitle(item.title) });
         showToast(_t("toast.copySuccess"), "success");
       } catch {
         showToast(_t("toast.copyFailed"), "error");
@@ -1391,7 +1392,7 @@
           const paths = JSON.parse(item.textContent) as string[];
           if (paths.length > 1) {
             await writeClipboardText(paths.join("\n"));
-            statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
+            statusMessage = _t("app.copiedItem", { title: getDisplayTitle(item.title) });
             showToast(_t("toast.copySuccess"), "success");
             return;
           }
@@ -1403,7 +1404,7 @@
         try {
           await writeClipboardText(item.resourcePath);
           statusMessage = _t("app.copiedItem", {
-            title: item.fileName || item.title.split("\n")[0],
+            title: item.fileName || getDisplayTitle(item.title),
           });
           showToast(_t("toast.copySuccess"), "success");
         } catch {
@@ -1415,7 +1416,7 @@
 
     void writeClipboardText(item.textContent || item.title)
       .then(() => {
-        statusMessage = _t("app.copiedItem", { title: item.title.split("\n")[0] });
+        statusMessage = _t("app.copiedItem", { title: getDisplayTitle(item.title) });
         showToast(_t("toast.copySuccess"), "success");
       })
       .catch(() => {
