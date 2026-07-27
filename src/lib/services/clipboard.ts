@@ -39,7 +39,7 @@ export async function writeClipboardImage(
 }
 
 export async function loadClipboardHistory(
-  limit = 100,
+  limit = 1000,
   offset = 0,
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
@@ -56,7 +56,7 @@ export async function loadClipboardHistory(
  * because the regular ClipboardItem payload intentionally represents active
  * history only. */
 export async function loadDeletedClipboardHistory(
-  limit = 100,
+  limit = 1000,
   offset = 0,
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
