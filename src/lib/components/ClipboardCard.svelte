@@ -521,6 +521,7 @@
   aria-selected={selected}
   aria-label={item.title}
   class:selected
+  class:checked
   class:compact
   class:editing
   class:actions-always={alwaysShowActions}
@@ -950,10 +951,19 @@
   }
 
   .clip-card:hover,
-  .clip-card.selected,
   .clip-card:focus-within {
     border-color: rgba(255, 255, 255, 0.035);
     background: var(--hover-bg);
+  }
+
+  .clip-card.selected:not(.checked) {
+    border-color: rgba(255, 255, 255, 0.035);
+    background: var(--hover-bg);
+  }
+
+  .clip-card.selected.checked {
+    border-color: rgba(255, 255, 255, 0.035);
+    background: color-mix(in srgb, var(--selection-color) 18%, var(--hover-bg));
   }
 
   .content {
