@@ -13,6 +13,8 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
+  let _cachedWindowConfig: WindowConfig | null = null;
+
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
@@ -24,10 +26,11 @@
   let s = $state($generalSettings);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let windowConfig = $state<WindowConfig | null>(null);
-  let windowConfigLoading = $state(true);
+  let windowConfig = $state<WindowConfig | null>(
+    _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
+  );
+  let windowConfigLoading = $state(!_cachedWindowConfig);
   let windowConfigSaving = $state(false);
-  let toggleTransitionReady = $state(false);
   let sortDragIdx = $state<number | null>(null);
   let sortDragOverIdx = $state<number | null>(null);
   let sortListEl = $state<HTMLDivElement | null>(null);
@@ -107,19 +110,18 @@
 
   $effect(() => {
     let cancelled = false;
-    toggleTransitionReady = false;
     void getWindowConfig()
       .then((config) => {
-        if (!cancelled) windowConfig = config;
+        if (!cancelled) {
+          _cachedWindowConfig = config;
+          windowConfig = config;
+        }
       })
       .catch(() => {
         if (!cancelled) showFeedback(_t("general.windowConfigLoadFailed"), false);
       })
       .finally(() => {
         if (!cancelled) windowConfigLoading = false;
-        setTimeout(() => {
-          if (!cancelled) toggleTransitionReady = true;
-        }, 0);
       });
     return () => {
       cancelled = true;
@@ -607,7 +609,6 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.launchAtStartup ?? false}
-        style:transition={!toggleTransitionReady ? "none" : undefined}
         onclick={() =>
           void changeWindowSetting("launchAtStartup", !(windowConfig?.launchAtStartup ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
@@ -615,7 +616,7 @@
         aria-label={_t("general.launchAtStartup")}
         role="switch"
       >
-        <span class="toggle-knob" style:transition={!toggleTransitionReady ? "none" : undefined}></span>
+        <span class="toggle-knob"></span>
       </button>
     </section>
 
@@ -631,7 +632,6 @@
         type="button"
         class="toggle-switch"
         class:active={windowConfig?.closeToTray ?? false}
-        style:transition={!toggleTransitionReady ? "none" : undefined}
         onclick={() =>
           void changeWindowSetting("closeToTray", !(windowConfig?.closeToTray ?? false))}
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
@@ -639,7 +639,7 @@
         aria-label={_t("general.closeToTray")}
         role="switch"
       >
-        <span class="toggle-knob" style:transition={!toggleTransitionReady ? "none" : undefined}></span>
+        <span class="toggle-knob"></span>
       </button>
     </section>
 
