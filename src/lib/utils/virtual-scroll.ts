@@ -64,17 +64,12 @@ export function itemHeight({
   const gap = cardGap ?? 5;
   if (kind === "image") return compact ? (compactImage ?? 130) + gap : IMAGE_HEIGHT;
 
-  if (customTitle) {
-    const bodyLines = showPreview ? Math.max(0, textLines) : 0;
-    if (compact) {
-      const baseHeight = bodyLines > 0 ? (compactCustomTitle ?? 80) : (compactText ?? 58);
-      return baseHeight + Math.max(0, bodyLines - 1) * PREVIEW_LINE_HEIGHT + gap;
-    }
-    return TEXT_HEIGHT + (bodyLines > 0 ? 4 + bodyLines * PREVIEW_LINE_HEIGHT : 0);
-  }
-
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
   if (compact) {
+    if (customTitle) {
+      const baseHeight = visibleLines > 1 ? (compactCustomTitle ?? 80) : (compactText ?? 58);
+      return baseHeight + Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT + gap;
+    }
     const baseHeight = visibleLines > 1 ? (compactTallText ?? 70) : (compactText ?? 58);
     return baseHeight + Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT + gap;
   }

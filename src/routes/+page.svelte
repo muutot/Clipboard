@@ -427,9 +427,10 @@
   function displayedTextLines(item: ClipboardItem): number {
     if (item.kind !== "text" && item.kind !== "link") return 1;
     if (item.customTitle) {
-      return showSecondaryText
+      const bodyLines = showSecondaryText
         ? estimateTextLines(item.textContent || item.preview, maxTextLines)
         : 0;
+      return 1 + bodyLines;
     }
     return Math.max(
       1,
@@ -457,9 +458,10 @@
     if (compactMode) {
       effectivePreview = true;
       if (item.customTitle) {
-        textLines = showSecondaryText
+        const bodyLines = showSecondaryText
           ? estimateTextLines(item.textContent || item.preview, maxTextLines)
-          : 1;
+          : 0;
+        textLines = 1 + bodyLines;
       } else {
         const totalLines = estimateTextLines(item.textContent || item.title, 12);
         const secondaryVisible = showSecondaryText
@@ -496,13 +498,12 @@
     }
 
     if (item.customTitle) {
-      if (showSecondaryText) {
-        const bodyLines = estimateTextLines(item.textContent || item.preview, maxTextLines);
-        if (bodyLines <= 0) return compactText;
-        return compactCustomTitle + Math.max(0, bodyLines - 1) * PREVIEW_LINE_HEIGHT;
-      }
-      // 辅助文本关闭时：显示正文首行
-      return compactCustomTitle;
+      const bodyLines = showSecondaryText
+        ? estimateTextLines(item.textContent || item.preview, maxTextLines)
+        : 0;
+      const visibleTotal = 1 + bodyLines;
+      if (visibleTotal <= 1) return compactText;
+      return compactCustomTitle + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * PREVIEW_LINE_HEIGHT;
     }
     // 非自定义标题
     const totalLines = estimateTextLines(item.textContent || item.title, 12);
