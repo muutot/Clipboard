@@ -155,6 +155,7 @@
   let searchHistory = $state<string[]>([]);
   let searchSuggestionsOpen = $state(false);
   let searchSuggestionIndex = $state(-1);
+  let searchBlurTimer: number | undefined;
   let pendingSearchHistoryQuery = "";
   let searchCache = $state<ClipboardItem[]>([]);
   let searchCacheAccessOrder = $state<string[]>([]);
@@ -614,14 +615,18 @@
 
   $effect(() => {
     const requestedQuery = query.trim();
+    const requestedPageSize = $generalSettings.display.pageSize;
+    const requestedSortRules = $generalSettings.searchSortRules;
     const requestId = ++searchRequestId;
+    searchLoadRequestId += 1;
+    searchLoading = false;
+    searchHasMore = false;
+    searchOffset = 0;
 
     if (!requestedQuery || activeFilter === "deleted") {
       indexedItems = null;
       indexedQuery = "";
       searchPending = false;
-      searchHasMore = false;
-      searchOffset = 0;
       return;
     }
 
@@ -629,26 +634,25 @@
       indexedItems = null;
       indexedQuery = "";
       searchPending = false;
-      searchHasMore = false;
-      searchOffset = 0;
       return;
     }
 
     if (parseDateQuery(requestedQuery)) {
+      indexedItems = null;
+      indexedQuery = "";
       searchPending = false;
       return;
     }
 
     searchPending = true;
-    searchOffset = 0;
     const timer = window.setTimeout(() => {
-      void searchClipboardHistory(requestedQuery, $generalSettings.display.pageSize, 0, $generalSettings.searchSortRules)
+      void searchClipboardHistory(requestedQuery, requestedPageSize, 0, requestedSortRules)
         .then((results) => {
           if (requestId !== searchRequestId || results === null) return;
           indexedItems = results;
           indexedQuery = requestedQuery;
           searchOffset = results.length;
-          searchHasMore = results.length === $generalSettings.display.pageSize;
+          searchHasMore = results.length === requestedPageSize;
           updateSearchCache(results);
           statusMessage = _t("app.searchHitSummary", { count: results.length });
           if (
@@ -748,6 +752,7 @@
       } else {
         items = [newItem, ...items];
         selectedId = newItem.id;
+        invalidateActiveHistoryPagination();
       }
     });
 
@@ -766,6 +771,7 @@
         selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
         if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
         if (detailItem && removedIds.has(detailItem.id)) detailItem = null;
+        if (removedIds.size > 0) invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
       },
     );
@@ -973,6 +979,7 @@
       }
     });
 
+    let listenersDisposed = false;
     let unlistenMove: (() => void) | undefined;
     let unlistenResize: (() => void) | undefined;
     if (appWindow) {
@@ -981,25 +988,35 @@
           scheduleWindowBoundsSave();
         })
         .then((fn) => {
-          unlistenMove = fn;
-        });
+          if (listenersDisposed) fn();
+          else unlistenMove = fn;
+        })
+        .catch(() => {});
       appWindow
         .onResized(() => {
           scheduleWindowBoundsSave();
         })
         .then((fn) => {
-          unlistenResize = fn;
-        });
+          if (listenersDisposed) fn();
+          else unlistenResize = fn;
+        })
+        .catch(() => {});
     }
 
     return () => {
+      listenersDisposed = true;
       window.clearInterval(clock);
-      unlisten.then((fn) => fn());
-      unlistenHistoryInvalidated.then((fn) => fn());
-      unlistenTrayOpenSettings.then((fn) => fn());
+      void unlisten.then((fn) => fn()).catch(() => {});
+      void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
+      void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
+      void unsubFontEvent.then((fn) => fn()).catch(() => {});
       unsubSettings();
       if (unlistenMove) unlistenMove();
       if (unlistenResize) unlistenResize();
+      if (heightRafId) cancelAnimationFrame(heightRafId);
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      if (searchBlurTimer !== undefined) window.clearTimeout(searchBlurTimer);
+      pendingHeights.clear();
       void flushWindowBounds();
     };
   });
@@ -1034,30 +1051,52 @@
     void loadDeletedHistoryPage();
   }
 
+  // Active history uses SQLite OFFSET pagination. Any committed insertion,
+  // removal, soft-delete, or restore shifts the rows behind the current
+  // cursor, so rebuild the cursor from page zero instead of compensating with
+  // a fragile local increment/decrement.
+  function invalidateActiveHistoryPagination() {
+    activeHistoryRequestId += 1;
+    activeHistoryLoading = false;
+    activeHistoryOffset = 0;
+    activeHistoryHasMore = true;
+    void loadActiveHistoryPage();
+  }
+
   function updateSearchCache(results: ClipboardItem[]) {
     const loadedIds = new Set(items.map((i) => i.id));
-    const cacheIds = new Set(searchCache.map((c) => c.id));
-    const existing = new Set(searchCacheAccessOrder);
+    const policy = $generalSettings.searchCacheEviction;
+    const cacheById = new Map(searchCache.map((item) => [item.id, item]));
+    let accessOrder = searchCacheAccessOrder.filter((id) => cacheById.has(id));
 
     for (const item of results) {
-      if (loadedIds.has(item.id) || cacheIds.has(item.id)) continue;
-      searchCache = [...searchCache, item];
-      searchCacheAccessOrder = [...searchCacheAccessOrder, item.id];
+      if (loadedIds.has(item.id)) {
+        cacheById.delete(item.id);
+        accessOrder = accessOrder.filter((id) => id !== item.id);
+        continue;
+      }
+
+      const cached = cacheById.has(item.id);
+      cacheById.set(item.id, item);
+      if (!cached) {
+        accessOrder.push(item.id);
+      } else if (policy === "lru") {
+        accessOrder = accessOrder.filter((id) => id !== item.id);
+        accessOrder.push(item.id);
+      }
     }
 
     const max = $generalSettings.searchCacheSize;
-    const policy = $generalSettings.searchCacheEviction;
-    while (searchCache.length > max) {
-      if (policy === "fifo") {
-        const id = searchCacheAccessOrder[0];
-        searchCacheAccessOrder = searchCacheAccessOrder.slice(1);
-        searchCache = searchCache.filter((c) => c.id !== id);
-      } else {
-        const id = searchCacheAccessOrder[0];
-        searchCacheAccessOrder = searchCacheAccessOrder.slice(1);
-        searchCache = searchCache.filter((c) => c.id !== id);
-      }
+    while (accessOrder.length > max) {
+      const id = accessOrder.shift();
+      if (id) cacheById.delete(id);
     }
+
+    searchCacheAccessOrder = accessOrder;
+    searchCache = accessOrder.flatMap((id) => {
+      const item = cacheById.get(id);
+      return item ? [item] : [];
+    });
   }
 
   function promoteFromCache(loadedIds: Set<string>) {
@@ -1153,6 +1192,7 @@
       indexedItems = [...(indexedItems ?? []), ...results];
       searchOffset += results.length;
       searchHasMore = results.length === $generalSettings.display.pageSize;
+      updateSearchCache(results);
     } catch (error) {
       if (requestId !== searchLoadRequestId) return;
       console.error("Unable to load more search results", error);
@@ -1344,7 +1384,9 @@
   }
 
   function handleSearchInputBlur() {
-    window.setTimeout(() => {
+    if (searchBlurTimer !== undefined) window.clearTimeout(searchBlurTimer);
+    searchBlurTimer = window.setTimeout(() => {
+      searchBlurTimer = undefined;
       if (document.activeElement !== searchInputEl) {
         searchSuggestionsOpen = false;
         searchSuggestionIndex = -1;
@@ -1476,6 +1518,7 @@
     void persistDelete(id)
       .then((removed) => {
         if (removed === false) throw new Error("record not found");
+        invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
         showToast(_t("toast.deleteSuccess"), "success");
       })
@@ -1535,6 +1578,7 @@
     void persistHardDelete(id)
       .then((removed) => {
         if (removed === false) throw new Error("record not found");
+        invalidateActiveHistoryPagination();
         showToast(_t("toast.deleteSuccess"), "success");
       })
       .catch((error) => {
@@ -1558,6 +1602,7 @@
     void persistRestore(id)
       .then((restored) => {
         if (restored === false) throw new Error("record not found");
+        invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
         showToast(_t("toast.resumed"), "success");
       })
@@ -1923,6 +1968,7 @@
     void persistBatchRestore(ids)
       .then((restored) => {
         if (restored === false) throw new Error("batch restore failed");
+        invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
         showToast(_t("toast.restoreSuccess", { count: ids.length }), "success");
       })
@@ -2090,6 +2136,9 @@
       if (successfulSoft.size > 0 || successfulPermanent.size > 0) {
         invalidateDeletedHistoryPagination();
       }
+      if (successfulSoft.size > 0 || successfulHard.size > 0) {
+        invalidateActiveHistoryPagination();
+      }
       if (failedIds.size > 0) {
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
@@ -2146,6 +2195,7 @@
 
       void invoke<number>("clear_all_non_favorite_items")
         .then((count) => {
+          invalidateActiveHistoryPagination();
           invalidateDeletedHistoryPagination();
           showToast(_t("toast.clearHistorySuccess", { count }), "success");
         })
@@ -2178,10 +2228,11 @@
       }),
     ).then((outcomes) => {
       const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).map((o) => o.id));
+      const successfulIds = new Set(
+        outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id),
+      );
+      if (successfulIds.size > 0) invalidateActiveHistoryPagination();
       if (failedIds.size > 0) {
-        const successfulIds = new Set(
-          outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.id),
-        );
         items = previousItems.filter((item) => !successfulIds.has(item.id));
         if (previousIndexedItems) {
           indexedItems = previousIndexedItems.filter((item) => !successfulIds.has(item.id));
