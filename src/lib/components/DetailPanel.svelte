@@ -99,7 +99,7 @@
   }: Props = $props();
 
   function copyText(text: string) {
-    void writeClipboardText(text).catch(() => {});
+    void writeClipboardText(text).catch((err) => console.error("Copy to clipboard failed:", err));
   }
 
   let activeTab = $state<"preview" | "details" | "ocr">("preview");

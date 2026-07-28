@@ -605,7 +605,7 @@ function createSettingsStore() {
     if (writeTimer !== undefined) clearTimeout(writeTimer);
     writeTimer = setTimeout(() => {
       writeTimer = undefined;
-      void drainWrites().catch(() => {});
+      void drainWrites().catch((err) => console.error("Settings persist failed:", err));
     }, PERSIST_DEBOUNCE_MS);
   }
 

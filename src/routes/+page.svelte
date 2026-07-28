@@ -1769,7 +1769,7 @@
         item.id === id ? { ...item, title, customTitle: true } : item,
       );
     }
-    invoke("rename_item", { id, newName: title }).catch(() => {});
+    invoke("rename_item", { id, newName: title }).catch((err) => console.error("Rename item failed:", err));
   }
 
   async function plainPaste(_id: string) {
