@@ -17,7 +17,16 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 - `apply_changes()` clears cached IDs after index mutations.
 - `begin_full_rebuild()` clears cached IDs before rebuild.
 
-`search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, and only then slices the requested offset/limit. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order; a silent per-query cap truncates later search pages. Sorting after slicing breaks ordering across page boundaries and is forbidden. When sort fields tie, the incoming Tantivy relevance order remains the fallback order.
+## Backend SearchResultCache
+
+`SearchResultCache` in `src-tauri/src/lib.rs` stores fully-sorted, fetched `ClipboardItem` results keyed by `(query, sort_rules, max_results)`.
+
+- Hit: slice `[offset..offset+limit]` directly from the cached vector; no DB or index access needed.
+- Miss: re-run the full search pipeline (Tantivy → SQL fetch → sort) and cache the result.
+- `rebuild_search_index` clears this cache along with Tantivy's `cached_ids`.
+- Cache miss when `max_results` is larger than the cached value ensures `searchPageSizeLimit` changes invalidate stale entries.
+
+`search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result, and only then slices the requested offset/limit. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order; a silent per-query cap truncates later search pages. Sorting after slicing breaks ordering across page boundaries and is forbidden. When sort fields tie, the incoming Tantivy relevance order remains the fallback order.
 
 Any new index mutation path must invalidate `cached_ids`. Add a regression test showing an old query result cannot survive an upsert, delete, or rebuild.
 
@@ -27,9 +36,9 @@ The main route debounces a first-page indexed search by 300 ms.
 
 - Queries shorter than two characters, empty queries, recycle-bin filtering, and recognized date queries do not use Tantivy.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
-- The same effect synchronously tracks `display.pageSize` and `searchSortRules`; either setting changing invalidates first-page and pagination request IDs before re-querying.
+- The same effect synchronously tracks `display.searchPageSize` and `searchSortRules`; either setting changing invalidates first-page and pagination request IDs before re-querying.
 - Successful first pages set `indexedItems`, `indexedQuery`, `searchOffset`, and `searchHasMore`.
-- `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.pageSize` for scroll pagination.
+- `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination.
 - `searchHasMore` is inferred from a full page; an empty/short page ends pagination.
 
 When changing query, filter, sort, or mutation behavior, audit both first-page and pagination request IDs. A stale pagination response must never append to a newer query. Keep offset reset and result invalidation together.

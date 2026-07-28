@@ -31,6 +31,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `display.showSecondaryText` | `true`  | boolean                 |
 | `display.maxTextLines`      | `3`     | 1–12                    |
 | `display.pageSize`          | `100`   | 50–500                  |
+| `display.searchPageSize`    | `100`   | 50–500                  |
 
 ## Compact-mode settings
 
