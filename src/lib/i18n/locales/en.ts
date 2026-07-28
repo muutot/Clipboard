@@ -497,6 +497,9 @@ const en: LocaleDefinition = {
     searchPageSizeLimit: "Search Result Limit",
     searchPageSizeLimitDescription: "Maximum number of results returned per search query",
     searchPageSizeLimitUnit: "results",
+    searchPageSize: "Search Page Size",
+    searchPageSizeDescription: "Number of search results loaded each time you scroll to the bottom",
+    searchPageSizeUnit: "items",
     searchCacheSize: "Search Cache Size",
     searchCacheSizeDescription:
       "Maximum cached search result items not currently in the loaded list",

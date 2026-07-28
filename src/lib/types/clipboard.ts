@@ -161,6 +161,7 @@ export interface DisplaySettings {
   showSecondaryText: boolean;
   maxTextLines: number;
   pageSize: number;
+  searchPageSize: number;
 }
 
 export type Language = "zh-CN" | "en";

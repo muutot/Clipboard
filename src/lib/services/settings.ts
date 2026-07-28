@@ -22,7 +22,7 @@ const PERSIST_DEBOUNCE_MS = 120;
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   language: "zh-CN",
   fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
-  display: { showSecondaryText: true, maxTextLines: 3, pageSize: 100 },
+  display: { showSecondaryText: true, maxTextLines: 3, pageSize: 100, searchPageSize: 100 },
   windowTransparency: 95,
   compactMode: false,
   compactPaddingTop: 6,
@@ -281,6 +281,12 @@ function normalizeGeneralSettings(
   result.display.pageSize = integerInRange(
     sourceDisplay.pageSize ?? fallbackDisplay("pageSize"),
     defaultSettings.display.pageSize,
+    50,
+    500,
+  );
+  result.display.searchPageSize = integerInRange(
+    sourceDisplay.searchPageSize ?? fallbackDisplay("searchPageSize"),
+    defaultSettings.display.searchPageSize,
     50,
     500,
   );

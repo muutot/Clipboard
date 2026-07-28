@@ -471,6 +471,9 @@ export interface LocaleDefinition {
     searchPageSizeLimit: string;
     searchPageSizeLimitDescription: string;
     searchPageSizeLimitUnit: string;
+    searchPageSize: string;
+    searchPageSizeDescription: string;
+    searchPageSizeUnit: string;
     searchCacheSize: string;
     searchCacheSizeDescription: string;
     searchCacheSizeUnit: string;
