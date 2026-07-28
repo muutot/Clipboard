@@ -1,54 +1,81 @@
-# Services — Detailed Reference
+# Frontend Services and State
 
-## settings.ts
+Frontend services are the preferred Tauri boundary. Keep direct `invoke` calls in routes/components only for behavior that has not yet earned a reusable wrapper; when several call sites appear, move the contract into a service.
 
-- **Exports**: `DEFAULT_GENERAL_SETTINGS`, `generalSettings` (Svelte writable store), `readSettingsFromBackend()`, `syncSettingsToBackend()`, `persistGeneralSettings()` (debounced 120ms), `loadAndApplySettings()`, `setWindowConfig()`, `getWindowConfig()`, `setWindowPosition()`
-- **Pattern**: Svelte writable store for reactive state, debounced persistence (120ms), bidirectional sync between frontend and backend
+## `settings.ts`
 
-## clipboard.ts
+`generalSettings` is a Svelte writable store with `updateSetting`, `merge`, `initialize`, `flush`, and `destroy` helpers.
 
-- **Exports**: `writeClipboardText(text)`, `writeClipboardImage(blob, resourcePath?, contentHash?)`, `loadClipboardHistory(limit, offset)`, `loadRecycleBinHistory(limit, offset)`, `searchClipboardHistory(query, limit, offset, sortRules?)`, `toClipboardItem(record)`, `detectContentActions(item)`, `getDisplayTitle(item)`, `getDisplayRemainingLines(item)`
-- **Pattern**: `writeClipboardText` calls `mark_self_triggered` before write to prevent self-copy loop
-- **Search pagination**: `searchClipboardHistory` accepts `offset` for pagination; first call offset=0, subsequent calls increment by pageSize
+Desktop flow:
 
-## toast.ts
+1. start from normalized defaults;
+2. subscribe to `general-settings-changed` before hydration;
+3. read `get_general_settings` from Rust;
+4. migrate legacy browser/localStorage values once when the backend reports they are needed;
+5. merge edits made before hydration through dirty-key/revision tracking;
+6. debounce writes for 120 ms through `set_general_settings`;
+7. apply the command response as canonical and listen for changes from other windows.
 
-- **Exports**: `ToastType` (type), `ToastEntry` (interface), `onToast(callback): unsub`, `showShowToast(message, type?, duration?)`
-- **Pattern**: Listener-based pub/sub, unique ID generation, auto-remove after duration
+Browser-preview flow uses localStorage and the browser `storage` event. Do not describe localStorage as the desktop source of truth.
 
-## storage.ts
+When changing settings, update normalization, valid unions, numeric ranges, cloning of nested values, legacy migration, backend `GeneralConfig`, UI, and `settings-reference.md` as applicable. Call `flush()` before a lifecycle boundary when pending persistence must be guaranteed.
 
-- **Exports**: `StorageStatus`, `StorageDirectoryUpdate`, `StorageConfig`, `ResourceStorageUpdate`, `PerformanceMetrics`, `RepairResult`, `SearchSyncSummary`, `StorageKind`, `StorageKindStats`, `StorageKindDeleteResult`, `IconFileInfo`
-- **Functions**: `configureStorageDirectory()`, `getStorageKindStats()`, `getStorageConfig()`, `getStorageStatus()`, `permanentlyDeleteStorageKind()`, `rebuildSearchIndex()`, `getPerformanceMetrics()`, `repairDatabase()`, `setResourceStoragePaths()`, `validateSearchIndex()`, `listIconFiles()`, `deleteIconFiles()`
-- **Pattern**: All functions use `invoke()` to call Tauri commands
+## `clipboard.ts`
 
-## keyboard.ts
+Owns the record boundary and list operations:
 
-- **Exports**: `KeyboardConfig` (interface with `shortcuts: Record<string, string[]>`), `getKeyboardConfig()`, `configureKeyboardShortcuts(action, shortcuts)`, `deleteKeyboardAction(action)`, `resetKeyboardConfig()`
-- **Pattern**: CRUD operations for keyboard shortcuts via Tauri invoke
+- writing text/image with self-trigger registration;
+- loading active and deleted pages;
+- searching with offset, limit, and optional sort rules;
+- favorite/delete/restore/permanent/batch operations;
+- source-app listing and content-action detection;
+- `PersistedClipboardItem` → `ClipboardItem` mapping;
+- resource metadata parsing and display title/size helpers.
 
-## capture.ts
+Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard.
 
-- **Exports**: `DiscoveredApplication` (type), `ApplicationFilterSettings` (type), `getApplicationFilterSettings()`, `configureIgnoredApplications(applications)`
-- **Pattern**: Application discovery and filtering for clipboard capture
+## Invoke-wrapper services
 
-## runtime.ts
+| Service       | Responsibility                                                                                                              | Runtime fallback                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `storage.ts`  | storage status/config, per-kind stats/deletion, path changes, search rebuild/validation, DB repair, performance, icon files | nullable/empty values where declared |
+| `keyboard.ts` | get/configure/delete/reset arrays of shortcuts by action                                                                    | nullable or command result           |
+| `capture.ts`  | discovered apps, current ignore config, update ignored applications                                                         | nullable or command result           |
+| `memory.ts`   | process-group/system/OCR memory diagnostics                                                                                 | `null` outside Tauri                 |
+| `runtime.ts`  | safe `isTauriRuntime` detection and runtime capability query                                                                | static browser fallback/`null`       |
 
-- **Exports**: `isTauriRuntime()`, `getRuntimeInfo()`
-- **Pattern**: `isTauriRuntime()` checks `window.__TAURI_INTERNALS__` existence
+Do not silently return `null` from a new wrapper unless the caller can distinguish “not in Tauri” from a command failure. Preserve the existing wrapper's error semantics when extending it.
 
-## paths.ts
+## UI-only services
 
-- **Exports**: `iconsDir` (Svelte writable store)
-- **Pattern**: Icons directory path management
+| Service                 | Responsibility                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `toast.ts`              | listener-based toast pub/sub; public producer is `showToast(message, type?, duration?)`           |
+| `paths.ts`              | writable `iconsDir` used to resolve source icon keys                                              |
+| `settings-bootstrap.ts` | applies font/theme variables to `document.documentElement` and toggles `.compact` on `.app-shell` |
 
-## memory.ts
+`settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping.
 
-- **Exports**: `getMemoryDiagnostics()`
-- **Returns**: `MemoryDiagnostics | null` (nullable)
+## Main route state boundaries
 
-## settings-bootstrap.ts
+`src/routes/+page.svelte` intentionally owns high-level collection/UI state: active/deleted pagination, search request IDs, loaded items, the frontend search-result cache, selection, detail mode, filters, and runtime event reconciliation. Services own IPC and record mapping; cards own rendering and controlled callbacks.
 
-- **Exports**: `applyGeneralSettingsToDocument(settings)`, `syncCompactShellClass(compactMode)`
-- **Pattern**: Sets CSS custom properties on `document.documentElement` (21 color vars + 5 font-size vars), toggles `.compact` class on `.app-shell`
-- **Called during**: App startup initialization
+Events currently crossing windows/runtime include:
+
+- `clipboard-item-added`
+- `clipboard-history-invalidated`
+- `general-settings-changed`
+- `settings-font-changed`
+- `tray-open-settings`
+- `viewer:open`
+- OCR download progress events emitted by the backend.
+
+Search exact event names and payload types before modifying producers or consumers; update `data-contracts.md` when a durable event contract changes.
+
+## Service change checklist
+
+- Match frontend invoke argument names with Rust command parameter names and camelCase serialization.
+- Update return types, null/error handling, and every caller together.
+- Preserve browser-preview behavior when it is intentional; do not let demo behavior masquerade as desktop completion.
+- Clean up event listeners and store subscriptions.
+- Update tests and the matching service/data reference in the same commit.

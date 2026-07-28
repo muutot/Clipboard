@@ -1,80 +1,90 @@
-# Project Structure — Detailed File Listing
+# Project Structure and Runtime Surfaces
 
-## Frontend Components (`src/lib/components/`)
+This reference is a source map, not a substitute for reading the current files. Avoid brittle line counts and module counts; update this map when ownership or entry points change.
 
-| File | Description |
-|---|---|
-| `DetailPanel.svelte` | Side panel + fullscreen image viewer |
-| `ClipboardCard.svelte` | Item card in list |
-| `StorageSettingsDialog.svelte` | Settings dialog (tabs: General/Storage/Keyboard/IgnoredApps) |
-| `GeneralSettingsPanel.svelte` | UI prefs (theme, language, fullscreen mode) |
-| `KeyboardSettingsPanel.svelte` | Shortcut config UI |
-| `IgnoredAppsSettingsPanel.svelte` | Ignored apps management |
-| `FontSizeSettingsPanel.svelte` | Font-size tuning UI with subnav (interface/card), sliders + number inputs |
-| `ThemeSettingsPanel.svelte` | Theme mode selector (dark/light/custom), color swatches, custom preset CRUD |
-| `CompactSettingsPanel.svelte` | Compact mode toggle + 9 dimension sliders |
-| `ContextMenu.svelte` | Right-click context menu with keyboard-dismiss, outside-click, viewport-bound positioning |
-| `CodeEditor.svelte` | Split-pane code editor with contenteditable, line numbers, live preview |
-| `AppIcon.svelte` | Source app icon display |
-| `CodePreview.svelte` | Syntax highlighting (highlight.js) |
-| `MarkdownPreview.svelte` | Markdown rendering |
-| `Toast.svelte` | Toast notification system |
+## Runtime surfaces
 
-## Frontend Services (`src/lib/services/`)
+| Surface             | Entry point                                                         | Responsibility                                                                                          |
+| ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Main desktop window | `src/routes/+page.svelte`                                           | Search, filtering, pagination, virtual list, card actions, bulk actions, detail opening, runtime events |
+| Settings window     | `src/routes/settings/+page.svelte` → `StorageSettingsDialog.svelte` | Standalone settings WebviewWindow, theme/font application, settings navigation and panels               |
+| Image viewer window | `src/routes/viewer/+page.svelte`                                    | Dedicated fullscreen image viewer; receives `viewer:open` events                                        |
+| GUI backend         | `src-tauri/src/lib.rs::run`                                         | Tauri setup, managed state, commands, workers, tray, hotkeys, shutdown                                  |
+| Process CLI         | `src-tauri/src/main.rs` → `cli/mod.rs`                              | `list`, `search`, `copy`, `paste`, `delete`, `export`, and `stats` without launching the GUI            |
+| Loopback API        | `src-tauri/src/cli/api.rs`                                          | Optional local HTTP automation server bound to `127.0.0.1`                                              |
 
-| File | Description |
-|---|---|
-| `settings.ts` | GeneralSettings store (localStorage, cross-window sync) |
-| `clipboard.ts` | Data fetching, mapping PersistedClipboardItem → ClipboardItem |
-| `toast.ts` | Toast notification store |
-| `runtime.ts` | isTauriRuntime() detection |
-| `capture.ts` | Clipboard capture service |
-| `keyboard.ts` | Frontend keyboard shortcut handling |
-| `paths.ts` | Path utilities |
-| `storage.ts` | Storage-related service (StorageStatus, StorageConfig, repair, search sync, etc.) |
-| `memory.ts` | getMemoryDiagnostics() — reads process-group memory snapshot from backend |
-| `settings-bootstrap.ts` | applyGeneralSettingsToDocument() — sets CSS custom properties on document root |
+SvelteKit runs as a static SPA: `src/routes/+layout.ts` disables SSR and awaits `generalSettings.initialize()` before route load. `+layout.svelte` imports global CSS and applies settings to the document.
 
-## Frontend Utils (`src/lib/utils/`)
+## Frontend ownership
 
-| File | Description |
-|---|---|
-| `virtual-scroll.ts` | Custom virtual scrolling |
-| `time.ts` | formatRelativeTime() |
-| `date-query.ts` | Natural language date parsing |
-| `theme.ts` | applyThemeColors() — sets 20 CSS custom properties from ThemeColors |
-| `keyboard.ts` | isEditableKeyboardTarget() — checks if target is editable element |
+| Path                                 | Ownership                                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `src/app.css`                        | Global reset, theme defaults, font variables, focus/accessibility media rules; imports shared settings CSS |
+| `src/lib/styles/settings-shared.css` | Reusable settings-panel primitives                                                                         |
+| `src/lib/components/`                | Cards, detail/view helpers, settings panels, icons, context menu, toast                                    |
+| `src/lib/services/`                  | Tauri invoke wrappers, stores, persistence, record mapping, runtime detection                              |
+| `src/lib/types/`                     | Frontend contracts for clipboard, settings, runtime, and memory diagnostics                                |
+| `src/lib/utils/`                     | Date query, keyboard target checks, theme application, time formatting, virtual-scroll calculations        |
+| `src/lib/i18n/`                      | Locale store, typed message shape, English and Simplified Chinese dictionaries                             |
+| `src/lib/settings-search.ts`         | Search index/metadata for settings items and navigation targets                                            |
+| `src/lib/data/demo-items.ts`         | Browser-preview fallback data; not proof of desktop persistence behavior                                   |
 
-## Frontend Types (`src/lib/types/`)
+Read `components.md` and `services.md` for ownership and change gates inside those directories.
 
-| File | Description |
-|---|---|
-| `clipboard.ts` | All TypeScript interfaces (ClipboardItem, GeneralSettings, etc.) |
-| `memory.ts` | MemoryDiagnostics, MemoryProcess, SystemMemory interfaces |
+## Backend ownership
 
-## Frontend Routes (`src/routes/`)
+| Path                   | Ownership                                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `src-tauri/src/lib.rs` | Runtime composition and Tauri boundary; keep business logic in focused modules when practical      |
+| `config.rs`            | `conf/conf.json` schema, defaults, validation, and atomic persistence                              |
+| `domain/`              | Shared Rust clipboard and OCR domain types                                                         |
+| `storage/`             | SQLite connection/repositories, schema, storage paths, recovery/backups, optional pool module      |
+| `search/`              | Tantivy schema/query/index, manifest, outbox synchronization                                       |
+| `ocr/`                 | Engine trait, PP-OCR/Tesseract/no-op engines, models, restartable worker manager                   |
+| `content/`             | Detection/actions, hashing/self-trigger rules, file storage, metadata, thumbnails, text transforms |
+| `keyboard/`            | Shortcut config in `conf/keyboard.json`, binding parse/match, manager                              |
+| `platform/`            | Clipboard monitor, hotkey, tray, single-instance and platform-specific adapters                    |
+| `privacy/`             | Pause/ignore/sensitive-source policy helpers                                                       |
+| `performance/`         | Startup/search/performance snapshots and monitoring                                                |
+| `export/`              | JSON, CSV, and plain-text import/export                                                            |
+| `cli/`                 | Process CLI execution and loopback API server                                                      |
 
-| File | Description |
-|---|---|
-| `+page.svelte` | Main page: clipboard list, selection, virtual scroll, search pagination |
-| `+layout.svelte` | Root layout, global state init |
-| `+layout.ts` | SPA config (prerender disabled) |
-| `settings/+page.svelte` | Settings window (separate Tauri WebviewWindow) |
-| `viewer/+page.svelte` | Dedicated WebviewWindow for fullscreen image viewing (desktop mode) |
+Platform source files may contain detailed scaffolding or documented intended flows. Verify runtime wiring and tests before claiming platform completion.
 
-## Backend Modules (`src-tauri/src/`)
+## Persistent layout
 
-| Module | Files | Description |
-|---|---|---|
-| top-level | `main.rs`, `lib.rs`, `config.rs`, `memory.rs` | Entry point, 40+ Tauri commands, config, memory diagnostics |
-| `domain/` | `clipboard_item.rs`, `ocr_result.rs` | Domain types (ClipboardItem, ClipboardKind, OcrResult) |
-| `storage/` | `repository.rs`, `ocr_repository.rs`, `search_repository.rs`, `database.rs`, `paths.rs`, `error.rs`, `migrations.rs`, `pool.rs`, `recovery.rs` | CRUD, connection pooling (round-robin reads), corruption recovery/backup |
-| `search/` | `index.rs`, `sync.rs`, `query.rs`, `schema.rs`, `manifest.rs`, `error.rs` | Tantivy index, outbox sync, CJK ngram, search cache |
-| `ocr/` | `engine.rs`, `worker.rs`, `ppocr.rs`, `tesseract.rs`, `noop.rs`, `models.rs` | Pluggable OCR engine, model spec definitions |
-| `keyboard/` | `binding.rs`, `config.rs`, `manager.rs`, `matcher.rs` | Shortcut parsing, global hotkeys, chord matching |
-| `content/` | `detector.rs`, `thumbnail.rs`, `transform.rs`, `resource_metadata.rs`, `hash.rs`, `file_store.rs`, `actions.rs` | Content detection, thumbnails, text transforms, MIME types, dedup hashing, file storage, quick actions |
-| `platform/` | `windows_clipboard.rs`, `windows_hotkey.rs`, `macos.rs`, `linux_x11.rs`, `linux_wayland.rs` | Platform-specific clipboard and hotkey implementations |
-| `export/` | `mod.rs` | JSON/CSV/plain-text export & import |
-| `privacy/` | `mod.rs` | Privacy manager (pause/resume, app ignore, sensitive pattern detection) |
-| `performance/` | `mod.rs` | Performance tracking, startup metrics, search latency, memory monitor |
-| `cli/` | `mod.rs`, `api.rs` | CLI argument parsing, loopback HTTP API server for scripts/automation |
+```text
+<project>/
+├─ conf/
+│  ├─ conf.json                 # ConfigStore; remains beside the executable/project
+│  └─ keyboard.json             # KeyboardManager; separate contract
+└─ storage/                     # default data root, or under a configured data directory
+   ├─ image/
+   │  └─ previews/
+   ├─ files/
+   ├─ icons/
+   └─ database/
+      ├─ clipboard.sqlite3
+      └─ search-index/
+```
+
+Custom image and file roots can replace their default resource directories. Cleanup eligibility is separate from usability and depends on validated ownership markers. See `backend-architecture.md` and `data-contracts.md` before changing paths or migration behavior.
+
+## High-coupling files
+
+Treat these as integration points and avoid concurrent edits:
+
+- `src/routes/+page.svelte`
+- `src/lib/components/StorageSettingsDialog.svelte`
+- `src/lib/types/clipboard.ts`
+- `src/lib/services/settings.ts`
+- locale files plus `src/lib/i18n/types.ts`
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/config.rs`
+- `src-tauri/src/storage/migrations.rs`
+- `TODO.md`
+- `SKILL.md` and shared references
+
+## Structure update rule
+
+When adding, removing, renaming, or moving a route/module/component/service, update this map and the focused reference that describes its contract. Describe stable ownership; do not add transient implementation notes or raw file listings that will immediately go stale.

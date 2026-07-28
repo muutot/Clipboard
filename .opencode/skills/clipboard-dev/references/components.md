@@ -1,67 +1,85 @@
-# Components — Detailed Reference
+# Frontend Components
 
-## AppIcon.svelte
+Read each component's current `Props` interface before changing a call site. This reference records ownership and invariants, not an exhaustive signature snapshot.
 
-- **Props**: `{ name: IconName, size: number = 18, strokeWidth: number = 1.8, filled: boolean = false }`
-- **Type**: `IconName` is a union of 39 icon names (e.g., 'arrow-up', 'check', 'copy', 'gear', 'trash')
-- **Pattern**: `{#if}/{:else if}` chains to render SVG paths based on `name`
+## Main workflow components
 
-## ClipboardCard.svelte
+### `ClipboardCard.svelte`
 
-- **Props**: `{ item: ClipboardItem, onclose?, ondelete?, onfavorite?, ondetail?, oncopy?, onheightchange? }`
-- **State**: `assetUrlCache` (Map, MAX_CACHE_SIZE=500), `contextMenuOpen`, `isDetailPanelOpen`
-- **Key Features**: Context menu integration, relative time display, lazy image loading, keyboard navigation (Enter=copy, Delete=delete, ArrowUp/Down=navigate)
-- **Height reporting**: Uses ResizeObserver with `recordCardHeight(item.id, height)` for virtual scroll. Initial measurement is synchronous via `element.clientHeight`.
+Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste callbacks, compact layout, and measurement reporting.
 
-## CodePreview.svelte
+Key contracts:
 
-- **Props**: `{ content: string, language?: string }`
-- **State**: `$derived` for `languageLabel` (auto-detection from 10+ patterns) and `highlightedHtml`
-- **Pattern**: Custom tokenizer with regex-based tokenization (comments, strings, keywords, numbers, operators)
+- The route owns collection state and persistence decisions; the card emits controlled callbacks keyed by item ID.
+- `onheightchange` plus `heightMeasurementKey` feed virtual scrolling. Re-measure whenever visible content, compact metrics, action/meta visibility, title state, or line limits can alter height.
+- Resource previews use `convertFileSrc`; source app icons are resolved from the managed `iconsDir` store using the icon key, not an arbitrary full path.
+- Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation.
+- Compact dimensions come from `GeneralSettings` and must remain aligned with `virtual-scroll.ts` and route height calculations.
 
-## CodeEditor.svelte
+### `DetailPanel.svelte`
 
-- **Props**: `{ content: string, language?: string, editorLabel: string, previewLabel: string, placeholder?: string, oncontentchange?: (content: string) => void }`
-- **State**: Uses `contenteditable` div, `$derived` for `lineCount` and `languageLabel`, `$effect` for syncing external content changes
-- **Key Features**: Tab key handling (inserts tab or spaces), line numbers, live preview via CodePreview
+Owns overlay/split detail rendering, image fullscreen entry, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste callbacks.
 
-## DetailPanel.svelte
+Key contracts:
 
-- **Props**: `{ item: ClipboardItem, onclose, oncopy }`
-- **State**: `isEditing` toggle, `editedContent` for markdown/code editing, `resourceMetadata` for file info
-- **Key Features**: Markdown preview, code preview, resource metadata display, image/file preview
+- `item` may be null and `mode` is `overlay` or `split`.
+- All fullscreen close paths must run the complete close routine so WebviewWindow/fullscreen state, listeners, and component state are released together.
+- Async OCR and viewer listeners must be unregistered when the item changes, the panel closes, or the component is destroyed. If listener registration resolves after its scope was invalidated, call the returned unlisten function immediately.
+- Keep resource metadata parsing consistent with `clipboard.ts` and backend `resource_metadata.rs`.
 
-## ContextMenu.svelte
+### `ContextMenu.svelte`
 
-- **Props**: `{ x: number, y: number, items: ContextMenuItem[], onclose: () => void, onaction: (id: string) => void }`
-- **Type**: `ContextMenuItem` — `{ id, label, icon?, disabled?, danger?, separator? }`
-- **Key Features**: Viewport-boundary-aware positioning, keyboard navigation (ArrowUp/Down, Enter), click outside to close
-- **z-index**: 9999
+Renders viewport-bounded menu items with `id`, label, icon, destructive state, and disabled state. It closes on Escape or outside click and dispatches `onaction(id)`. It currently does not implement arrow-key item navigation; do not document or rely on that behavior without implementing and testing it.
 
-## Toast.svelte
+## Content preview/editing
 
-- **Props**: None (global singleton)
-- **State**: Subscribes to `generalSettings.showToastNotifications`, `toastStore`, `leaving` state for 2000ms animation
-- **Key Features**: Auto-dismiss after duration, leaving animation
+| Component                | Responsibility                                                               | Important boundary                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `CodePreview.svelte`     | Local regex/token-set language detection and syntax coloring                 | No external highlighting package is used; content must remain escaped through Svelte rendering |
+| `CodeEditor.svelte`      | Controlled `contenteditable` editor with line numbers and live `CodePreview` | Normalizes newlines, handles Tab/Enter/paste, reports all edits through `oncontentchange`      |
+| `MarkdownPreview.svelte` | Small local Markdown-to-HTML renderer                                        | Sanitize generated HTML and restrict URL schemes; do not introduce raw untrusted HTML paths    |
 
-## MarkdownPreview.svelte
+These preview surfaces have niche palettes recorded in `niche_ui_style.md`; do not use them as project-wide theme examples.
 
-- **Props**: `{ content: string }`
-- **State**: `$derived` for `sanitizedHtml` (sanitizes URLs to http/https/mailto/tel only)
+## Settings composition
 
-## StorageSettingsDialog.svelte
+### `StorageSettingsDialog.svelte`
 
-- **Props**: None (main settings dialog, owns the shell hierarchy)
-- **State**: `currentPanel` for navigation, `storageStats`, `searchQuery` for settings search
-- **Shell hierarchy**: Breadcrumb → secondary-group tabs → description → setting cards
-- **Child panels rendered with `showHeader={false}`**
+This is the settings shell and an integration hotspot. It owns:
 
-## Settings Panels (showHeader pattern)
+- modal versus standalone sizing;
+- primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
+- composition of child settings panels with `showHeader={false}`;
+- built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, and restart-required flows;
+- the `--settings-*` semantic metrics consumed by child panels.
 
-All settings panels accept `{ onclose: () => void, showHeader: boolean = true }`:
-- `GeneralSettingsPanel.svelte` — section prop: "search" | "items" | "display" | "window"
-- `FontSizeSettingsPanel.svelte` — subnav: "interface" | "card"
-- `ThemeSettingsPanel.svelte` — theme mode switch, color pickers, preset CRUD
-- `CompactSettingsPanel.svelte` — compact mode toggle + dimension sliders
-- `KeyboardSettingsPanel.svelte` — category prop: "item" | "clipboard" | "system"
-- `IgnoredAppsSettingsPanel.svelte` — two-column transfer list, privacy pause toggle
+Do not treat its long scoped style block as a copy template. Use `settings-shared.css` and `settings-panels.md` for approved reusable primitives.
+
+### Child settings panels
+
+| Component                         | Focus                                                  | Extra routing props                                                |
+| --------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `GeneralSettingsPanel.svelte`     | Window, search, item, and display preferences          | `section`: `"search"`, `"items"`, `"display"`, or `"window"`       |
+| `ThemeSettingsPanel.svelte`       | Dark/light/custom modes and named preset CRUD          | none beyond shell props                                            |
+| `FontSizeSettingsPanel.svelte`    | Interface and card font controls                       | internal `interface`/`card` subview; emits `settings-font-changed` |
+| `CompactSettingsPanel.svelte`     | Compact toggle and dimensions                          | relies entirely on shared CSS                                      |
+| `KeyboardSettingsPanel.svelte`    | Multiple shortcuts per action and recording            | `category`: `"item"`, `"quick"`, or `"system"`; `resetToken`       |
+| `IgnoredAppsSettingsPanel.svelte` | Capture pause, discovered apps, ignore list, app icons | optional `iconsDir`                                                |
+
+Every child panel accepts `onclose` and optional `showHeader`. The parent must render it with `showHeader={false}` so headers are removed from the DOM rather than hidden across Svelte style scopes.
+
+## Shared utility components
+
+| Component        | Contract                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `AppIcon.svelte` | Typed `IconName` union, SVG uses `currentColor`, optional size/stroke/fill. Extend the union and rendering branch together.              |
+| `Toast.svelte`   | Global toast subscriber, respects `showToastNotifications`, animates leaving entries. Producers call `showToast` in `services/toast.ts`. |
+
+## Component change checklist
+
+- Update all call sites when props/callbacks change.
+- Preserve focus, Escape, and outside-click ordering across route, detail, context menu, dialogs, and windows.
+- Clean up store subscriptions, Tauri event listeners, observers, timers, and WebviewWindow references.
+- Update i18n dictionaries and types together for user-visible strings.
+- For visual changes, read `css-theming.md`; for settings, also read `settings-panels.md`.
+- Update this reference when component ownership or a durable interaction contract changes.

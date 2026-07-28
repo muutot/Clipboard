@@ -1,4 +1,4 @@
 interface:
   display_name: "Clipboard Development"
-  short_description: "Audit TODOs and maintain Clipboard consistently"
-  default_prompt: "Use $clipboard-dev to audit the next TODO and implement one verified minimal feature."
+  short_description: "Develop Clipboard with evidence and style gates"
+  default_prompt: "Use $clipboard-dev to inspect the repository, read the routed references, and complete one verified minimal change with the mandatory skill/reference currency check before commit."
