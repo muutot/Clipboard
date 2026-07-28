@@ -32,24 +32,24 @@
     {
       key: "base",
       icon: "type",
-      label: "主文字",
-      desc: "设置界面标题、详情面板等正文的字体大小",
+      label: _t("settings.fontSizeBaseLabel"),
+      desc: _t("settings.fontSizeBaseDescription"),
       min: 11,
       max: 20,
     },
     {
       key: "secondary",
       icon: "info",
-      label: "副文字",
-      desc: "时间戳、来源名称等辅助信息的字体大小",
+      label: _t("settings.fontSizeSecondaryLabel"),
+      desc: _t("settings.fontSizeSecondaryDescription"),
       min: 9,
       max: 16,
     },
     {
       key: "tiny",
       icon: "ruler",
-      label: "小文字",
-      desc: "面包屑、保存提示等最小号文字的字体大小",
+      label: _t("settings.fontSizeTinyLabel"),
+      desc: _t("settings.fontSizeTinyDescription"),
       min: 8,
       max: 13,
     },
@@ -59,16 +59,16 @@
     {
       key: "cardTitle",
       icon: "text",
-      label: "标题",
-      desc: "列表卡片上条目标题的字体大小",
+      label: _t("settings.fontSizeCardTitleLabel"),
+      desc: _t("settings.fontSizeCardTitleDescription"),
       min: 10,
       max: 20,
     },
     {
       key: "cardPreview",
       icon: "info",
-      label: "预览",
-      desc: "列表卡片上条目预览正文的字体大小",
+      label: _t("settings.fontSizeCardPreviewLabel"),
+      desc: _t("settings.fontSizeCardPreviewDescription"),
       min: 8,
       max: 16,
     },
@@ -136,21 +136,23 @@
 {#if showHeader}
   <header>
     <div>
-      <span class="eyebrow">设置 / 显示</span>
-      <h2>字体大小</h2>
-      <p>为不同界面区域单独调整字体大小</p>
+      <span class="eyebrow">{_t("settings.fontSizePanelEyebrow")}</span>
+      <h2>{_t("settings.fontSizePanel")}</h2>
+      <p>{_t("settings.fontSizePanelDescription")}</p>
     </div>
-    <button class="close-button" type="button" aria-label="关闭" onclick={onclose}>×</button>
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+      >×</button
+    >
   </header>
 {/if}
 
 <div class="settings-scroll">
   <nav class="font-subnav">
     <button class:active={fontSection === "interface"} onclick={() => (fontSection = "interface")}
-      >界面文字</button
+      >{_t("settings.fontSizeInterfaceTab")}</button
     >
     <button class:active={fontSection === "card"} onclick={() => (fontSection = "card")}
-      >卡片文字</button
+      >{_t("settings.fontSizeCardTab")}</button
     >
   </nav>
 
@@ -174,7 +176,7 @@
                 value={s.fontSizes[slider.key]}
                 oninput={numberInputHandler(slider.key, slider.min, slider.max)}
                 onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
-                aria-label={`${slider.label}字号`}
+                aria-label={slider.label}
               />
               <span>px</span>
             </label>
@@ -210,7 +212,7 @@
                 value={s.fontSizes[slider.key]}
                 oninput={numberInputHandler(slider.key, slider.min, slider.max)}
                 onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
-                aria-label={`${slider.label}字号`}
+                aria-label={slider.label}
               />
               <span>px</span>
             </label>
