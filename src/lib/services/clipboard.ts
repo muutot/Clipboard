@@ -184,18 +184,17 @@ export function generatedClipboardTitle(text: string): string {
   return Array.from(text).slice(0, 200).join("");
 }
 
-export function getDisplayTitle(title: string): string {
-  const firstNonEmpty = title.split(/\r?\n/).find((line) => line.trim() !== "");
-  return firstNonEmpty ?? "";
+export function getDisplayTitle(text: string): string {
+  const match = /[^\r\n]+/.exec(text);
+  return match ? match[0].trim() : "";
 }
 
 export function getDisplayRemainingLines(text: string): string {
-  const firstLine = getDisplayTitle(text);
-  if (!firstLine) return "";
-  const idx = text.indexOf(firstLine);
-  if (idx === -1) return "";
-  const after = text.slice(idx + firstLine.length);
-  return after.replace(/^\r?\n/, "");
+  const match = /[^\r\n]+/.exec(text);
+  if (!match) return "";
+
+  // 切出第一行后面的部分，直接调用原生 trimStart() 剥离开头所有不可见字符
+  return text.slice(match.index + match[0].length).trimStart();
 }
 
 export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
