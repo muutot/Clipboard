@@ -1,3 +1,6 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "$lib/services/runtime";
+
 const UNITS = ["B", "KB", "MB", "GB", "TB"];
 
 export function formatBytes(bytes: number): string {
@@ -22,4 +25,14 @@ export function sliderPercentage(value: number, min: number, max: number): strin
   if (min >= max) return "100%";
   const pct = ((value - min) / (max - min)) * 100;
   return `${Math.min(100, Math.max(0, pct))}%`;
+}
+
+export function assetUrl(filePath: string | null | undefined): string | undefined {
+  if (!filePath) return undefined;
+  if (!isTauriRuntime()) return undefined;
+  try {
+    return convertFileSrc(filePath.replace(/\\/g, "/"));
+  } catch {
+    return undefined;
+  }
 }

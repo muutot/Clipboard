@@ -7,7 +7,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes, assetUrl } from "$lib/utils/format";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import type { UnlistenFn } from "@tauri-apps/api/event";
   import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -67,16 +67,6 @@
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
-
-  function assetUrl(filePath: string | null | undefined): string | undefined {
-    if (!filePath) return undefined;
-    if (!isTauriRuntime()) return undefined;
-    try {
-      return convertFileSrc(filePath.replace(/\\/g, "/"));
-    } catch {
-      return undefined;
-    }
-  }
 
   interface Props {
     item: ClipboardItem | null;

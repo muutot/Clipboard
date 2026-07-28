@@ -16,6 +16,7 @@
     SOURCE_TONE_COLORS,
   } from "$lib/services/clipboard";
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
+  import { assetUrl as baseAssetUrl } from "$lib/utils/format";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import { tick } from "svelte";
@@ -30,21 +31,15 @@
 
   function assetUrl(filePath: string | null | undefined): string | undefined {
     if (!filePath) return undefined;
-    if (!isTauriRuntime()) return undefined;
     const cached = assetUrlCache.get(filePath);
     if (cached !== undefined) return cached;
-    try {
-      const normalized = filePath.replace(/\\/g, "/");
-      const url = convertFileSrc(normalized);
-      if (assetUrlCache.size >= MAX_CACHE_SIZE) {
-        const first = assetUrlCache.keys().next().value;
-        if (first !== undefined) assetUrlCache.delete(first);
-      }
-      assetUrlCache.set(filePath, url);
-      return url;
-    } catch {
-      return undefined;
+    const url = baseAssetUrl(filePath);
+    if (url && assetUrlCache.size >= MAX_CACHE_SIZE) {
+      const first = assetUrlCache.keys().next().value;
+      if (first !== undefined) assetUrlCache.delete(first);
     }
+    assetUrlCache.set(filePath, url);
+    return url;
   }
 
   const appIconUrlCache = new Map<string, string | undefined>();
@@ -189,6 +184,13 @@
   const primaryRestLines = $derived(getDisplayRemainingLines(primaryPreviewText));
   const secondaryPreviewText = $derived(
     trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
+  );
+  const canEdit = $derived(
+    (item.kind === "text" ||
+      item.kind === "link" ||
+      item.kind === "image" ||
+      item.kind === "file") &&
+      (!item.fileMeta || item.fileMeta.length <= 1),
   );
   let contentActions = $state<QuickAction[]>([]);
   let contentActionRequest = 0;
@@ -508,12 +510,6 @@
   function handleContextMenu(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    const canEdit =
-      (item.kind === "text" ||
-        item.kind === "link" ||
-        item.kind === "image" ||
-        item.kind === "file") &&
-      (!item.fileMeta || item.fileMeta.length <= 1);
     const items: ContextMenuItem[] = [
       { id: "copy", label: _t("card.copy"), icon: "copy" },
       ...(item.kind === "text"
@@ -778,7 +774,7 @@
               onclick={handleSaveAsClick}><AppIcon name="download" size={16} /></button
             >
           {/if}
-          {#if (item.kind === "text" || item.kind === "link" || item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
+          {#if canEdit}
             <button
               type="button"
               title={item.kind === "image" || item.kind === "file"
