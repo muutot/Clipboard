@@ -448,6 +448,95 @@ mod tests {
     }
 
     #[test]
+    fn cjk_character_search() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document("a", "开心脏脏")),
+                SearchIndexChange::Upsert(document("b", "脏兮兮的小心脏散开落一地")),
+                SearchIndexChange::Upsert(document("c", "开开心心每一天")),
+                SearchIndexChange::Upsert(document("d", "脸皮挺脏")),
+                SearchIndexChange::Upsert(document("e", "Nothing here")),
+            ])
+            .unwrap();
+        index.reload_reader().unwrap();
+
+        // ── Single-char CJK terms match non-adjacent positions ──
+        let hits = index.search("开 脏", 20).unwrap();
+        let ids: Vec<_> = hits.iter().map(|h| h.item_id.as_str()).collect();
+        assert!(
+            ids.contains(&"a"),
+            "开 脏 should match 开心脏脏 (chars separated by 心)"
+        );
+        assert!(
+            ids.contains(&"b"),
+            "开 脏 should match 脏兮兮的小心脏 (chars far apart, reversed order)"
+        );
+
+        // ── Order of search terms does not matter ──
+        let forward = index.search("开 脏", 20).unwrap();
+        let reversed = index.search("脏 开", 20).unwrap();
+        assert_eq!(forward, reversed);
+
+        // ── Missing a required char → no match ──
+        assert!(
+            index.search("开 脏 啦", 20).unwrap().is_empty(),
+            "开 脏 啦 should not match any item (no item has 啦)"
+        );
+        assert!(
+            index.search("开 脏", 20)
+                .unwrap()
+                .iter()
+                .map(|h| h.item_id.as_str())
+                .all(|id| id != "c"),
+            "开 脏 should NOT match 开开心心每一天 (missing 脏)"
+        );
+        assert!(
+            index.search("开 脏", 20)
+                .unwrap()
+                .iter()
+                .map(|h| h.item_id.as_str())
+                .all(|id| id != "e"),
+            "开 脏 should NOT match English-only content"
+        );
+
+        // ── Adjacent bigram search ──
+        let bigram_hits = index.search("开心", 20).unwrap();
+        let bigram_ids: Vec<_> = bigram_hits.iter().map(|h| h.item_id.as_str()).collect();
+        assert!(bigram_ids.contains(&"a"), "开心 should match 开心脏脏");
+        assert!(bigram_ids.contains(&"c"), "开心 should match 开开心心每一天");
+        assert!(
+            !bigram_ids.contains(&"b"),
+            "开心 should NOT match 脏兮兮的小心脏 (心 and 开 are not adjacent)"
+        );
+
+        // ── Single CJK char search ──
+        let dirty_hits = index.search("脏", 20).unwrap();
+        let dirty_ids: Vec<_> = dirty_hits.iter().map(|h| h.item_id.as_str()).collect();
+        assert!(dirty_ids.contains(&"a"));
+        assert!(dirty_ids.contains(&"b"));
+        assert!(dirty_ids.contains(&"d"));
+        assert_eq!(dirty_hits.len(), 3);
+
+        // ── Relevance ordering: more occurrences rank higher ──
+        let by_relevance = index.search("心", 20).unwrap();
+        assert!(by_relevance.len() >= 2, "at least 2 items contain 心");
+        // 'c' has two 心 (开开心心), 'b' has one 心 (小心脏)
+        let c_pos = by_relevance.iter().position(|h| h.item_id == "c");
+        let b_pos = by_relevance.iter().position(|h| h.item_id == "b");
+        assert!(c_pos < b_pos, "开开心心每一天 (2×心) should rank above 脏兮兮的小心脏 (1×心)");
+
+        // ── search_all_ids with cache ──
+        let (ids, total) = index.search_all_ids("开 脏", 50).unwrap();
+        assert_eq!(total, 2);
+        // Cached second call returns same result with smaller limit
+        let (cached_ids, cached_total) = index.search_all_ids("开 脏", 1).unwrap();
+        assert_eq!(cached_ids.len(), 1);
+        assert_eq!(cached_total, 2);
+        assert_eq!(cached_ids[0], ids[0]);
+    }
+
+    #[test]
     fn cached_search_respects_a_smaller_requested_limit() {
         let index = in_memory_index();
         index
