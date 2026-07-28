@@ -36,14 +36,25 @@ Rules:
 
 ### `DetailPanel.svelte`
 
-Owns overlay/split detail rendering, image fullscreen entry, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste callbacks.
+Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste callbacks.
+
+Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimagefullscreen` callback; DetailPanel no longer owns the fullscreen viewer or WebviewWindow lifecycle.
 
 Key contracts:
 
 - `item` may be null and `mode` is `overlay` or `split`.
-- All fullscreen close paths must run the complete close routine so WebviewWindow/fullscreen state, listeners, and component state are released together.
-- Async OCR and viewer listeners must be unregistered when the item changes, the panel closes, or the component is destroyed. If listener registration resolves after its scope was invalidated, call the returned unlisten function immediately.
+- Async OCR listeners must be unregistered when the item changes, the panel closes, or the component is destroyed.
 - Keep resource metadata parsing consistent with `clipboard.ts` and backend `resource_metadata.rs`.
+
+### `ImageFullscreenOverlay.svelte`
+
+Standalone fullscreen image viewer overlay for in-app overlay mode. Renders at `z-index: 200` with zoom, pan, drag, double-click reset, and Escape/close-button dismissal. Uses `window.addEventListener("keydown", ..., true)` in capture phase with `stopPropagation` to intercept Escape before other handlers.
+
+Key contracts:
+
+- Props: `filePath: string`, `opacity: number` (0–1), `onclose: () => void`.
+- Owns all viewer state (zoom, pan, drag) and destroys listener on unmount.
+- Close paths: Escape key (capture phase), X button (`onclick`), no backdrop-click-to-close.
 
 ### `ContextMenu.svelte`
 

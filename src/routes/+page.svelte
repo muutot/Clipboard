@@ -5,6 +5,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
   import Toast from "$lib/components/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
@@ -170,7 +171,10 @@
   let dateDropdownOpen = $state(false);
 
   let detailItem = $state<ClipboardItem | null>(null);
-  let startFullscreen = $state(false);
+
+  let fullscreenFilePath = $state<string | null>(null);
+  let fullscreenOpacity = $state(0.92);
+  let viewerWindow: import("@tauri-apps/api/webviewWindow").WebviewWindow | null = null;
 
   let selectedIds = $state<Set<string>>(new Set());
   let lastClickedIndex = $state(-1);
@@ -1630,9 +1634,62 @@
     if (item) detailItem = item;
   }
 
-  function handleImageFullscreen(id: string) {
-    openDetail(id);
-    startFullscreen = true;
+  async function handleImageFullscreen(id: string) {
+    const item = items.find((i) => i.id === id);
+    const filePath = item?.resourcePath || item?.previewPath;
+    if (!filePath) return;
+
+    if ($generalSettings.imageFullscreenMode === "desktop" && isTauriRuntime()) {
+      const opacity = $generalSettings.viewerBackdropOpacity / 100;
+      try {
+        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+        const { emit } = await import("@tauri-apps/api/event");
+
+        const existing = await WebviewWindow.getByLabel("image-viewer");
+        if (existing) {
+          viewerWindow = existing;
+          await existing.show();
+          await existing.setFocus();
+          await emit("viewer:open", { src: filePath, opacity });
+          return;
+        }
+
+        const createdWindow = new WebviewWindow("image-viewer", {
+          url: `/viewer?src=${encodeURIComponent(filePath)}&opacity=${opacity}`,
+          title: "",
+          decorations: false,
+          transparent: true,
+          maximized: true,
+          skipTaskbar: true,
+          alwaysOnTop: true,
+        });
+        viewerWindow = createdWindow;
+      } catch (e) {
+        console.error("[viewer] failed to open", e);
+      }
+      return;
+    }
+
+    fullscreenFilePath = filePath;
+    fullscreenOpacity = $generalSettings.viewerBackdropOpacity / 100;
+  }
+
+  async function closeViewerWindow() {
+    const w = viewerWindow;
+    viewerWindow = null;
+    if (w) {
+      try {
+        await w.close();
+      } catch {
+        try {
+          await w.hide();
+        } catch {}
+      }
+    }
+  }
+
+  function closeFullscreen() {
+    fullscreenFilePath = null;
   }
 
   function closeDetail() {
@@ -2213,7 +2270,12 @@
       (event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null;
 
     if (event.key === "Escape") {
-      if (event.defaultPrevented || editingId) return;
+      if (event.defaultPrevented || editingId || fullscreenFilePath) return;
+
+      if (viewerWindow) {
+        closeViewerWindow();
+        return;
+      }
 
       const detailEditorTarget =
         editableTarget &&
@@ -2951,7 +3013,6 @@
     {#if detailDisplayMode === "split" && detailItem}
       <DetailPanel
         mode="split"
-        bind:startFullscreen
         item={detailItem}
         onclose={closeDetail}
         oncopy={copyItem}
@@ -2962,6 +3023,7 @@
         onduplicate={duplicateItem}
         onsaveasnew={saveAsNew}
         oncopyfilename={copyFilename}
+        onimagefullscreen={handleImageFullscreen}
       />
     {/if}
   </div>
@@ -2979,7 +3041,6 @@
 <Toast />
 {#if detailDisplayMode !== "split" || !detailItem}
   <DetailPanel
-    bind:startFullscreen
     item={detailItem}
     onclose={closeDetail}
     oncopy={copyItem}
@@ -2990,6 +3051,15 @@
     onduplicate={duplicateItem}
     onsaveasnew={saveAsNew}
     oncopyfilename={copyFilename}
+    onimagefullscreen={handleImageFullscreen}
+  />
+{/if}
+
+{#if fullscreenFilePath}
+  <ImageFullscreenOverlay
+    filePath={fullscreenFilePath}
+    opacity={fullscreenOpacity}
+    onclose={closeFullscreen}
   />
 {/if}
 

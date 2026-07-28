@@ -9,15 +9,10 @@
   import { formatRelativeTime } from "$lib/utils/time";
   import { formatBytes, assetUrl } from "$lib/utils/format";
   import { extractEmails, extractUrls, extractPhones, extractColors } from "$lib/utils/patterns";
-  import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-  import type { UnlistenFn } from "@tauri-apps/api/event";
-  import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { untrack } from "svelte";
-  import { get } from "svelte/store";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { writeClipboardText, getDisplayTitle } from "$lib/services/clipboard";
-  import { generalSettings } from "$lib/services/settings";
 
   const MARKDOWN_RE = /^#{1,6}\s|^>\s|^-\s|^\*\*|^\`\`\`|^\[.+\]\(.+\)/m;
   const CODE_PATTERNS: [RegExp, string][] = [
@@ -72,7 +67,6 @@
   interface Props {
     item: ClipboardItem | null;
     mode?: "overlay" | "split";
-    startFullscreen?: boolean;
     onclose: () => void;
     oncopy: (id: string) => void;
     onedit: (id: string) => void;
@@ -82,12 +76,12 @@
     onduplicate: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncopyfilename: (id: string) => void;
+    onimagefullscreen?: (id: string) => void;
   }
 
   let {
     item,
     mode = "overlay",
-    startFullscreen = $bindable(false),
     onclose,
     oncopy,
     onedit,
@@ -97,6 +91,7 @@
     onduplicate,
     onsaveasnew,
     oncopyfilename,
+    onimagefullscreen,
   }: Props = $props();
 
   function copyText(text: string) {
@@ -108,20 +103,6 @@
   let editingTitle = $state(false);
   let editContent = $state("");
   let editTitleContent = $state("");
-  let imageFullscreen = $state(false);
-  let zoom = $state(1);
-  let panX = $state(0);
-  let panY = $state(0);
-  let isDragging = $state(false);
-  let dragStartX = 0;
-  let dragStartY = 0;
-  let panStartX = 0;
-  let panStartY = 0;
-  let viewerWindow: WebviewWindow | null = null;
-  let viewerErrorUnlisten: UnlistenFn | null = null;
-  let viewerListenerRequestId = 0;
-  let fullscreenRequestId = 0;
-  let overlayOpenTimer: ReturnType<typeof setTimeout> | undefined;
   let ocrFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let regeneratingOcr = $state(false);
   let ocrFeedback = $state("");
@@ -193,172 +174,6 @@
     );
   }
 
-  function clearOverlayOpenTimer(): void {
-    if (overlayOpenTimer === undefined) return;
-    clearTimeout(overlayOpenTimer);
-    overlayOpenTimer = undefined;
-  }
-
-  function detachViewerWindow(): WebviewWindow | null {
-    const targetWindow = viewerWindow;
-    viewerWindow = null;
-    viewerListenerRequestId += 1;
-    if (viewerErrorUnlisten) {
-      viewerErrorUnlisten();
-      viewerErrorUnlisten = null;
-    }
-    return targetWindow;
-  }
-
-  function attachViewerErrorListener(targetWindow: WebviewWindow): void {
-    const listenerRequestId = ++viewerListenerRequestId;
-    void targetWindow
-      .once<unknown>("tauri://error", (event) => {
-        console.error("[viewer] window error", event);
-      })
-      .then((unlisten) => {
-        if (listenerRequestId !== viewerListenerRequestId || viewerWindow !== targetWindow) {
-          unlisten();
-          return;
-        }
-        viewerErrorUnlisten = unlisten;
-      })
-      .catch((error) => {
-        if (listenerRequestId === viewerListenerRequestId) {
-          console.error("[viewer] failed to register error listener", error);
-        }
-      });
-  }
-
-  function resetImageFullscreenState(): WebviewWindow | null {
-    fullscreenRequestId += 1;
-    clearOverlayOpenTimer();
-    imageFullscreen = false;
-    zoom = 1;
-    panX = 0;
-    panY = 0;
-    return detachViewerWindow();
-  }
-
-  function disposeImageFullscreenState(): void {
-    const targetWindow = resetImageFullscreenState();
-    if (targetWindow) {
-      void targetWindow.hide().catch(() => {});
-    }
-  }
-
-  async function openImageFullscreen() {
-    const targetItem = item;
-    if (!targetItem?.previewPath && !targetItem?.resourcePath) return;
-    const filePath = targetItem.previewPath || targetItem.resourcePath;
-    if (!filePath) return;
-    const targetItemId = targetItem.id;
-    const requestId = ++fullscreenRequestId;
-    clearOverlayOpenTimer();
-    const requestIsCurrent = () => requestId === fullscreenRequestId && item?.id === targetItemId;
-
-    if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      try {
-        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-        const { emit } = await import("@tauri-apps/api/event");
-        const opacity = get(generalSettings).viewerBackdropOpacity / 100;
-
-        const existing = await WebviewWindow.getByLabel("image-viewer");
-        if (!requestIsCurrent()) return;
-        if (existing) {
-          const previousWindow = detachViewerWindow();
-          if (previousWindow && previousWindow !== existing) {
-            void previousWindow.hide().catch(() => {});
-          }
-          viewerWindow = existing;
-          await existing.show();
-          if (!requestIsCurrent()) return;
-          await existing.setFocus();
-          if (!requestIsCurrent()) return;
-          await emit("viewer:open", { src: filePath, opacity });
-          return;
-        }
-
-        const createdWindow = new WebviewWindow("image-viewer", {
-          url: `/viewer?src=${encodeURIComponent(filePath)}&opacity=${opacity}`,
-          title: "",
-          width: 800,
-          height: 600,
-          center: true,
-          decorations: false,
-          transparent: true,
-          maximized: true,
-          skipTaskbar: true,
-          alwaysOnTop: true,
-        });
-        const previousWindow = detachViewerWindow();
-        if (previousWindow) void previousWindow.hide().catch(() => {});
-        viewerWindow = createdWindow;
-        attachViewerErrorListener(createdWindow);
-      } catch (e) {
-        if (requestIsCurrent()) {
-          detachViewerWindow();
-          console.error("[viewer] failed to open", e);
-        }
-      }
-      return;
-    }
-
-    // Overlay mode: show within app window
-    overlayOpenTimer = setTimeout(() => {
-      overlayOpenTimer = undefined;
-      if (!requestIsCurrent()) return;
-      zoom = 1;
-      panX = 0;
-      panY = 0;
-      imageFullscreen = true;
-    }, 0);
-  }
-
-  async function closeImageFullscreen() {
-    const targetWindow = resetImageFullscreenState();
-    if (targetWindow) {
-      try {
-        await targetWindow.hide();
-      } catch {}
-    }
-  }
-
-  function onWheel(e: WheelEvent) {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    zoom = Math.min(20, Math.max(0.1, zoom * delta));
-  }
-
-  function onMouseDown(e: MouseEvent) {
-    if (e.button !== 0) return;
-    isDragging = true;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    panStartX = panX;
-    panStartY = panY;
-  }
-
-  function onMouseMove(e: MouseEvent) {
-    if (!isDragging) return;
-    panX = panStartX + (e.clientX - dragStartX);
-    panY = panStartY + (e.clientY - dragStartY);
-  }
-
-  function onMouseUp() {
-    isDragging = false;
-  }
-
-  function onDblClick() {
-    if (zoom !== 1 || panX !== 0 || panY !== 0) {
-      zoom = 1;
-      panX = 0;
-      panY = 0;
-    } else {
-      zoom = 2;
-    }
-  }
-
   async function regenerateOcr() {
     if (!item || item.kind !== "image" || regeneratingOcr) return;
 
@@ -395,33 +210,16 @@
   $effect(() => {
     const currentItem = item;
     if (currentItem) {
-      imageFullscreen = false;
-      zoom = 1;
-      panX = 0;
-      panY = 0;
       activeTab = "preview";
       editing = false;
       selectedFileIndex = 0;
     }
     return () => {
-      disposeImageFullscreenState();
       if (ocrFeedbackTimer !== undefined) {
         clearTimeout(ocrFeedbackTimer);
         ocrFeedbackTimer = undefined;
       }
     };
-  });
-
-  $effect(() => {
-    if (item && startFullscreen) {
-      startFullscreen = false;
-      untrack(() => void openImageFullscreen());
-    }
-  });
-
-  $effect(() => {
-    if (imageFullscreen) {
-    }
   });
 
   $effect(() => {
@@ -593,12 +391,6 @@
   function handleKeydown(event: KeyboardEvent) {
     if (!item || event.key !== "Escape" || event.defaultPrevented) return;
 
-    if (imageFullscreen) {
-      event.preventDefault();
-      closeImageFullscreen();
-      return;
-    }
-
     const editorTarget =
       isEditableKeyboardTarget(event.target) &&
       event.target instanceof Element &&
@@ -648,20 +440,18 @@
   {#if mode !== "split"}
     <div
       class="detail-backdrop"
-      class:fullscreen-backdrop={imageFullscreen}
-      onclick={imageFullscreen ? closeImageFullscreen : onclose}
+      onclick={onclose}
       aria-hidden="true"
     ></div>
   {/if}
   <div
     class="detail-panel"
-    class:fullscreen={imageFullscreen}
     class:inline={mode === "split"}
     role="dialog"
     aria-modal={mode !== "split"}
     aria-label={_t("detail.title")}
   >
-    <div class="detail-header" class:hidden={imageFullscreen} data-tauri-drag-region>
+    <div class="detail-header" data-tauri-drag-region>
       <button class="back-btn" type="button" onclick={onclose} aria-label={_t("detail.back")}>
         <AppIcon name="chevron-left" size={18} strokeWidth={2} />
       </button>
@@ -749,7 +539,7 @@
                   class="image-fullscreen-btn"
                   onclick={(e) => {
                     e.stopPropagation();
-                    openImageFullscreen();
+                    onimagefullscreen?.(item.id);
                   }}
                   aria-label={_t("detail.fullscreenPreview")}
                 >
@@ -1211,39 +1001,6 @@
       {/if}
     </div>
   </div>
-
-  {#if imageFullscreen}
-    <div
-      class="image-viewer-overlay"
-      style="background: rgba(0, 0, 0, {get(generalSettings).viewerBackdropOpacity / 100})"
-      onwheel={onWheel}
-      onmousedown={onMouseDown}
-      onmousemove={onMouseMove}
-      onmouseup={onMouseUp}
-      onmouseleave={onMouseUp}
-      ondblclick={onDblClick}
-      role="presentation"
-    >
-      <button
-        type="button"
-        class="viewer-close-btn"
-        onclick={closeImageFullscreen}
-        aria-label={_t("actions.close")}
-      >
-        <AppIcon name="x" size={20} strokeWidth={2.5} />
-      </button>
-      <div class="viewer-zoom-hint">{Math.round(zoom * 100)}%</div>
-      <img
-        class="viewer-image"
-        class:dragging={isDragging}
-        src={assetUrl(item.previewPath || item.resourcePath)}
-        alt={item.preview || item.title}
-        draggable="false"
-        style="transform: translate({panX}px, {panY}px) scale({zoom})"
-        onerror={(e) => console.error("[fullscreen] image load error", e)}
-      />
-    </div>
-  {/if}
 {/if}
 
 <style>
@@ -1253,10 +1010,6 @@
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(3px);
-  }
-
-  .detail-backdrop.fullscreen-backdrop {
-    display: none;
   }
 
   .detail-panel {
@@ -1272,10 +1025,6 @@
     background: var(--bg-settings);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
     animation: slide-in 220ms ease-out;
-  }
-
-  .detail-panel.fullscreen {
-    display: none;
   }
 
   .detail-panel.inline {
@@ -2095,77 +1844,5 @@
   .image-fullscreen-btn:hover {
     color: var(--text-primary);
     background: rgba(0, 0, 0, 0.75);
-  }
-
-  .image-viewer-overlay {
-    position: fixed;
-    z-index: 100;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.92);
-    cursor: grab;
-    user-select: none;
-  }
-
-  .image-viewer-overlay:active {
-    cursor: grabbing;
-  }
-
-  .viewer-image {
-    max-width: 90vw;
-    max-height: 90vh;
-    object-fit: contain;
-    transform-origin: center center;
-    transition: transform 0.05s linear;
-    pointer-events: none;
-  }
-
-  .viewer-image.dragging {
-    transition: none;
-  }
-
-  .viewer-close-btn {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    z-index: 101;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-secondary);
-    background: rgba(30, 30, 30, 0.7);
-    backdrop-filter: blur(6px);
-    cursor: pointer;
-    transition:
-      color 120ms ease,
-      background 120ms ease;
-  }
-
-  .viewer-close-btn:hover {
-    color: var(--text-primary);
-    background: rgba(60, 60, 60, 0.8);
-  }
-
-  .viewer-zoom-hint {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 101;
-    padding: 4px 14px;
-    border-radius: 6px;
-    color: var(--text-secondary);
-    background: rgba(30, 30, 30, 0.7);
-    backdrop-filter: blur(6px);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    pointer-events: none;
   }
 </style>

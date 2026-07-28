@@ -1127,14 +1127,8 @@
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(4px);
     cursor: pointer;
-    opacity: 0;
-    transition:
-      opacity 150ms ease,
-      background 150ms ease;
-  }
-
-  .image-preview:hover .image-fullscreen-btn {
-    opacity: 1;
+    pointer-events: auto;
+    transition: background 150ms ease;
   }
 
   .image-fullscreen-btn:hover {
