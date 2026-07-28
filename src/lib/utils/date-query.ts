@@ -5,19 +5,19 @@ export interface DateRange {
 
 const dayMs = 24 * 60 * 60 * 1_000;
 
-function startOfDay(ts: number): number {
+export function startOfDay(ts: number): number {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
-function endOfDay(ts: number): number {
+export function endOfDay(ts: number): number {
   const d = new Date(ts);
   d.setHours(23, 59, 59, 999);
   return d.getTime();
 }
 
-function startOfWeek(ts: number): number {
+export function startOfWeek(ts: number): number {
   const d = new Date(ts);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);

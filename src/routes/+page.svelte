@@ -42,7 +42,7 @@
     buildPositions,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
-  import { parseDateQuery } from "$lib/utils/date-query";
+  import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { applyThemeColors } from "$lib/utils/theme";
   import { listen } from "@tauri-apps/api/event";
@@ -227,25 +227,6 @@
   function resolveDateRange(filter: string): { from: number; to: number } | null {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1_000;
-
-    const startOfDay = (ts: number) => {
-      const d = new Date(ts);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    };
-    const endOfDay = (ts: number) => {
-      const d = new Date(ts);
-      d.setHours(23, 59, 59, 999);
-      return d.getTime();
-    };
-    const startOfWeek = (ts: number) => {
-      const d = new Date(ts);
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      d.setDate(diff);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    };
 
     switch (filter) {
       case "today":
