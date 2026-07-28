@@ -32,24 +32,24 @@
     {
       key: "base",
       icon: "type",
-      label: _t("settings.fontSizeBaseLabel"),
-      desc: _t("settings.fontSizeBaseDescription"),
+      label: _t("general.fontSizeBaseLabel"),
+      desc: _t("general.fontSizeBaseDescription"),
       min: 11,
       max: 20,
     },
     {
       key: "secondary",
       icon: "info",
-      label: _t("settings.fontSizeSecondaryLabel"),
-      desc: _t("settings.fontSizeSecondaryDescription"),
+      label: _t("general.fontSizeSecondaryLabel"),
+      desc: _t("general.fontSizeSecondaryDescription"),
       min: 9,
       max: 16,
     },
     {
       key: "tiny",
       icon: "ruler",
-      label: _t("settings.fontSizeTinyLabel"),
-      desc: _t("settings.fontSizeTinyDescription"),
+      label: _t("general.fontSizeTinyLabel"),
+      desc: _t("general.fontSizeTinyDescription"),
       min: 8,
       max: 13,
     },
@@ -59,16 +59,16 @@
     {
       key: "cardTitle",
       icon: "text",
-      label: _t("settings.fontSizeCardTitleLabel"),
-      desc: _t("settings.fontSizeCardTitleDescription"),
+      label: _t("general.fontSizeCardTitleLabel"),
+      desc: _t("general.fontSizeCardTitleDescription"),
       min: 10,
       max: 20,
     },
     {
       key: "cardPreview",
       icon: "info",
-      label: _t("settings.fontSizeCardPreviewLabel"),
-      desc: _t("settings.fontSizeCardPreviewDescription"),
+      label: _t("general.fontSizeCardPreviewLabel"),
+      desc: _t("general.fontSizeCardPreviewDescription"),
       min: 8,
       max: 16,
     },
@@ -136,9 +136,9 @@
 {#if showHeader}
   <header>
     <div>
-      <span class="eyebrow">{_t("settings.fontSizePanelEyebrow")}</span>
-      <h2>{_t("settings.fontSizePanel")}</h2>
-      <p>{_t("settings.fontSizePanelDescription")}</p>
+      <span class="eyebrow">{_t("general.fontSizePanelEyebrow")}</span>
+      <h2>{_t("general.fontSizePanel")}</h2>
+      <p>{_t("general.fontSizePanelDescription")}</p>
     </div>
     <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
       >×</button
@@ -149,10 +149,10 @@
 <div class="settings-scroll">
   <nav class="font-subnav">
     <button class:active={fontSection === "interface"} onclick={() => (fontSection = "interface")}
-      >{_t("settings.fontSizeInterfaceTab")}</button
+      >{_t("general.fontSizeInterfaceTab")}</button
     >
     <button class:active={fontSection === "card"} onclick={() => (fontSection = "card")}
-      >{_t("settings.fontSizeCardTab")}</button
+      >{_t("general.fontSizeCardTab")}</button
     >
   </nav>
 
