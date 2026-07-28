@@ -16,6 +16,24 @@ Key contracts:
 - Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation.
 - Compact dimensions come from `GeneralSettings` and must remain aligned with `virtual-scroll.ts` and route height calculations.
 
+### Height calculation contract
+
+Card height for virtual-scroll positioning and compact rendering is governed by a **single canonical function** in `+page.svelte`:
+
+```
+estimatedCardHeight(item)   →  total occupied height (content + cardGap)
+compactCardHeightFor(item)  →  estimatedCardHeight(item) - compactCardGap   (CSS height for compact cards)
+virtualHeightFor(item)      →  measuredCardHeights[item.id] ?? estimatedCardHeight(item)
+```
+
+Rules:
+
+- **`estimatedCardHeight`** is the single source of truth. It handles all item kinds (text, link, image, file) and both compact/non-compact modes. The returned value always includes `compactCardGap` in compact mode.
+- **`compactCardHeightFor`** delegates to `estimatedCardHeight - compactCardGap`. It returns `0` in non-compact mode (card auto-sizes). Do not add independent logic to this function.
+- **`virtualHeightFor`** is the virtual-scroll estimator. It checks `measuredCardHeights` (populated by `ClipboardCard`'s `onheightchange` ResizeObserver) first, then falls back to `estimatedCardHeight`.
+- Any future height-affecting change (new item kind, new layout option, compact metric) must be implemented in `estimatedCardHeight` only. The other functions will stay consistent automatically.
+- `itemHeight()` in `virtual-scroll.ts` is a shared helper used internally by `estimatedCardHeight` for text/image formula computation. It must match the compact-card formula so that `estimatedCardHeight - compactCardGap` equals the CSS height set on `ClipboardCard`.
+
 ### `DetailPanel.svelte`
 
 Owns overlay/split detail rendering, image fullscreen entry, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste callbacks.
