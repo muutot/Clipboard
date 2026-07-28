@@ -1191,11 +1191,17 @@ fn list_clipboard_items(
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .page_size_limit();
+    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(100).clamp(1, max_limit);
+
+    let limit = if offset >= max_limit {
+        0
+    } else {
+        (max_limit - offset).min(limit)
+    };
+
     database
-        .list_recent(
-            limit.unwrap_or(100).clamp(1, max_limit),
-            offset.unwrap_or(0),
-        )
+        .list_recent(limit, offset)
         .map_err(|error| error.to_string())
 }
 
@@ -1379,11 +1385,64 @@ fn paste_to_previous_application(
     Ok(true)
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SearchSortRule {
     field: SearchSortField,
     direction: SearchSortDirection,
+}
+
+pub struct SearchResultCache {
+    inner: Mutex<Option<CachedSearchResult>>,
+}
+
+type CachedSearchResult = (String, Vec<SearchSortRule>, usize, Vec<ClipboardItem>);
+
+impl SearchResultCache {
+    fn new() -> Self {
+        Self {
+            inner: Mutex::new(None),
+        }
+    }
+
+    fn get(
+        &self,
+        query: &str,
+        rules: &[SearchSortRule],
+        max_results: usize,
+        offset: usize,
+        limit: usize,
+    ) -> Option<Vec<ClipboardItem>> {
+        let cache = self.inner.lock().ok()?;
+        let (cached_query, cached_rules, cached_max, cached_items) = cache.as_ref()?;
+        if cached_query != query || cached_rules != rules || *cached_max < max_results {
+            return None;
+        }
+        let total = cached_items.len();
+        if offset >= total {
+            return Some(Vec::new());
+        }
+        let end = (offset + limit).min(total);
+        Some(cached_items[offset..end].to_vec())
+    }
+
+    fn set(
+        &self,
+        query: String,
+        rules: Vec<SearchSortRule>,
+        max_results: usize,
+        items: Vec<ClipboardItem>,
+    ) {
+        if let Ok(mut cache) = self.inner.lock() {
+            *cache = Some((query, rules, max_results, items));
+        }
+    }
+
+    fn clear(&self) {
+        if let Ok(mut cache) = self.inner.lock() {
+            *cache = None;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
@@ -1446,16 +1505,6 @@ fn apply_sort_rules(items: &mut [ClipboardItem], rules: &[SearchSortRule]) {
     });
 }
 
-fn sort_and_paginate_search_items(
-    mut items: Vec<ClipboardItem>,
-    rules: &[SearchSortRule],
-    offset: usize,
-    limit: usize,
-) -> Vec<ClipboardItem> {
-    apply_sort_rules(&mut items, rules);
-    items.into_iter().skip(offset).take(limit).collect()
-}
-
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn search_clipboard_items(
@@ -1463,6 +1512,7 @@ fn search_clipboard_items(
     search_index: tauri::State<'_, SearchIndex>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     performance_tracker: tauri::State<'_, PerformanceTracker>,
+    search_cache: tauri::State<'_, SearchResultCache>,
     query: String,
     limit: Option<usize>,
     offset: Option<usize>,
@@ -1471,10 +1521,27 @@ fn search_clipboard_items(
     let started = Instant::now();
     let page_size = limit.unwrap_or(100).clamp(1, 500);
     let page_offset = offset.unwrap_or(0);
+
+    let rules = sort_rules.unwrap_or_else(|| {
+        vec![SearchSortRule {
+            field: SearchSortField::CreatedAt,
+            direction: SearchSortDirection::Desc,
+        }]
+    });
+
     let max_results = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .search_page_size_limit() as usize;
+
+    if let Some(cached) = search_cache.get(&query, &rules, max_results, page_offset, page_size) {
+        performance_tracker.record_search(
+            &query,
+            started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+            cached.len(),
+        );
+        return Ok(cached);
+    }
 
     let (_all_ids, _total) = search_index
         .search_all_ids(&query, max_results)
@@ -1484,20 +1551,23 @@ fn search_clipboard_items(
         .get_items_by_ids(&_all_ids)
         .map_err(|error| error.to_string())?;
 
-    let rules = sort_rules.unwrap_or_else(|| {
-        vec![SearchSortRule {
-            field: SearchSortField::CreatedAt,
-            direction: SearchSortDirection::Desc,
-        }]
-    });
-    let items = sort_and_paginate_search_items(items, &rules, page_offset, page_size);
+    let mut sorted = items;
+    apply_sort_rules(&mut sorted, &rules);
+
+    search_cache.set(query.clone(), rules.clone(), max_results, sorted.clone());
+
+    let result = sorted
+        .into_iter()
+        .skip(page_offset)
+        .take(page_size)
+        .collect::<Vec<_>>();
 
     performance_tracker.record_search(
         &query,
         started.elapsed().as_millis().min(u64::MAX as u128) as u64,
-        items.len(),
+        result.len(),
     );
-    Ok(items)
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -1535,8 +1605,13 @@ mod search_pagination_tests {
             direction: SearchSortDirection::Desc,
         }];
 
-        let first_page = sort_and_paginate_search_items(candidates.clone(), &rules, 0, 2);
-        let second_page = sort_and_paginate_search_items(candidates, &rules, 2, 2);
+        let mut first = candidates.clone();
+        apply_sort_rules(&mut first, &rules);
+        let first_page: Vec<_> = first.into_iter().take(2).collect();
+
+        let mut second = candidates.clone();
+        apply_sort_rules(&mut second, &rules);
+        let second_page: Vec<_> = second.into_iter().skip(2).take(2).collect();
 
         assert_eq!(
             first_page
@@ -1553,7 +1628,9 @@ mod search_pagination_tests {
 fn rebuild_search_index(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
+    search_cache: tauri::State<'_, SearchResultCache>,
 ) -> Result<SearchSyncSummary, String> {
+    search_cache.clear();
     SearchSynchronizer::default()
         .rebuild(database.inner(), search_index.inner())
         .map_err(|error| error.to_string())
@@ -4066,6 +4143,7 @@ pub fn run() {
             app.manage(database);
             app.manage(search_index);
             app.manage(performance_tracker);
+            app.manage(SearchResultCache::new());
             app.manage(Mutex::new(privacy_manager));
             app.manage(Mutex::new(clipboard_monitor));
             app.manage(Mutex::new(shortcut_manager));
