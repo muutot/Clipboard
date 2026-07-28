@@ -171,10 +171,8 @@ impl SearchIndex {
             .collect();
         let query = BooleanQuery::intersection(required_queries);
         let searcher = self.reader.searcher();
-        let top_documents = searcher.search(
-            &query,
-            &TopDocs::with_limit(limit).order_by_score(),
-        )?;
+        let top_documents =
+            searcher.search(&query, &TopDocs::with_limit(limit).order_by_score())?;
 
         top_documents
             .into_iter()
@@ -198,7 +196,11 @@ impl SearchIndex {
             .collect()
     }
 
-    pub fn search_all_ids(&self, input: &str, max_results: usize) -> Result<(Vec<String>, usize), SearchError> {
+    pub fn search_all_ids(
+        &self,
+        input: &str,
+        max_results: usize,
+    ) -> Result<(Vec<String>, usize), SearchError> {
         let normalized = input.trim().to_owned();
         {
             let cache = self
@@ -208,7 +210,7 @@ impl SearchIndex {
             if let Some((ref cached_query, cached_max, ref ids)) = *cache {
                 if cached_query.as_str() == normalized.as_str() && cached_max >= max_results {
                     let total = ids.len();
-                    return Ok((ids.clone(), total));
+                    return Ok((ids[..max_results.min(total)].to_vec(), total));
                 }
             }
         }
@@ -443,5 +445,26 @@ mod tests {
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].item_id, "dense");
         assert!(hits[0].score > hits[1].score);
+    }
+
+    #[test]
+    fn cached_search_respects_a_smaller_requested_limit() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document("first", "shared cache term")),
+                SearchIndexChange::Upsert(document("second", "shared cache term")),
+                SearchIndexChange::Upsert(document("third", "shared cache term")),
+            ])
+            .unwrap();
+        index.reload_reader().unwrap();
+
+        let (all, _) = index.search_all_ids("shared cache", 3).unwrap();
+        let (limited, cached_total) = index.search_all_ids("shared cache", 1).unwrap();
+
+        assert_eq!(all.len(), 3);
+        assert_eq!(limited.len(), 1);
+        assert_eq!(cached_total, 3);
+        assert_eq!(limited[0], all[0]);
     }
 }

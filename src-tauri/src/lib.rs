@@ -1192,7 +1192,10 @@ fn list_clipboard_items(
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .page_size_limit();
     database
-        .list_recent(limit.unwrap_or(100).clamp(1, max_limit), offset.unwrap_or(0))
+        .list_recent(
+            limit.unwrap_or(100).clamp(1, max_limit),
+            offset.unwrap_or(0),
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -1443,6 +1446,16 @@ fn apply_sort_rules(items: &mut [ClipboardItem], rules: &[SearchSortRule]) {
     });
 }
 
+fn sort_and_paginate_search_items(
+    mut items: Vec<ClipboardItem>,
+    rules: &[SearchSortRule],
+    offset: usize,
+    limit: usize,
+) -> Vec<ClipboardItem> {
+    apply_sort_rules(&mut items, rules);
+    items.into_iter().skip(offset).take(limit).collect()
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn search_clipboard_items(
@@ -1467,14 +1480,8 @@ fn search_clipboard_items(
         .search_all_ids(&query, max_results)
         .map_err(|error| error.to_string())?;
 
-    let slice: Vec<String> = _all_ids
-        .into_iter()
-        .skip(page_offset)
-        .take(page_size)
-        .collect();
-
-    let mut items = database
-        .get_items_by_ids(&slice)
+    let items = database
+        .get_items_by_ids(&_all_ids)
         .map_err(|error| error.to_string())?;
 
     let rules = sort_rules.unwrap_or_else(|| {
@@ -1483,7 +1490,7 @@ fn search_clipboard_items(
             direction: SearchSortDirection::Desc,
         }]
     });
-    apply_sort_rules(&mut items, &rules);
+    let items = sort_and_paginate_search_items(items, &rules, page_offset, page_size);
 
     performance_tracker.record_search(
         &query,
@@ -1491,6 +1498,55 @@ fn search_clipboard_items(
         items.len(),
     );
     Ok(items)
+}
+
+#[cfg(test)]
+mod search_pagination_tests {
+    use super::*;
+
+    fn item(id: &str, created_at_ms: i64) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind: ClipboardKind::Text,
+            title: id.to_owned(),
+            text_content: Some(id.to_owned()),
+            resource_path: None,
+            preview_path: None,
+            content_hash: format!("hash-{id}"),
+            source_app: None,
+            icon_path: None,
+            size_bytes: 1,
+            created_at_ms,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: None,
+        }
+    }
+
+    #[test]
+    fn search_items_are_sorted_before_pagination() {
+        let candidates = vec![
+            item("oldest", 100),
+            item("newest", 300),
+            item("middle", 200),
+        ];
+        let rules = [SearchSortRule {
+            field: SearchSortField::CreatedAt,
+            direction: SearchSortDirection::Desc,
+        }];
+
+        let first_page = sort_and_paginate_search_items(candidates.clone(), &rules, 0, 2);
+        let second_page = sort_and_paginate_search_items(candidates, &rules, 2, 2);
+
+        assert_eq!(
+            first_page
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newest", "middle"]
+        );
+        assert_eq!(second_page[0].id, "oldest");
+    }
 }
 
 #[tauri::command]
@@ -2268,7 +2324,10 @@ fn list_deleted_clipboard_items(
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .page_size_limit();
     database
-        .list_deleted(limit.unwrap_or(100).clamp(1, max_limit), offset.unwrap_or(0))
+        .list_deleted(
+            limit.unwrap_or(100).clamp(1, max_limit),
+            offset.unwrap_or(0),
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -3318,7 +3377,12 @@ fn run_cli_command(
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .search_page_size_limit();
 
-    cli::run_cli_command(&args, database.inner(), page_size_limit, search_page_size_limit)
+    cli::run_cli_command(
+        &args,
+        database.inner(),
+        page_size_limit,
+        search_page_size_limit,
+    )
 }
 
 #[derive(Debug, Serialize)]

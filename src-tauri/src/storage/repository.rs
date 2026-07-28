@@ -22,6 +22,7 @@ const ITEM_COLUMNS: &str = "
     icon_path,
     metadata_json
 ";
+const ITEM_LOOKUP_CHUNK_SIZE: usize = 500;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct StorageFileReferences {
@@ -276,28 +277,30 @@ impl ClipboardRepository for Database {
         }
 
         self.with_connection(|connection| {
-            let ids = &ids[..ids.len().min(500)];
-            let placeholders = (1..=ids.len())
-                .map(|position| format!("?{position}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let sql = format!(
-                "SELECT {ITEM_COLUMNS}
-                 FROM clipboard_items
-                 WHERE deleted = 0
-                   AND id IN ({placeholders})"
-            );
-            let mut statement = connection.prepare(&sql)?;
-            let stored_items = statement
-                .query_map(params_from_iter(ids.iter()), StoredClipboardItem::from_row)?
-                .collect::<Result<Vec<_>, _>>()?;
-            let mut items_by_id = stored_items
-                .into_iter()
-                .map(|item| {
-                    let item = ClipboardItem::try_from(item)?;
-                    Ok((item.id.clone(), item))
-                })
-                .collect::<Result<HashMap<_, _>, StorageError>>()?;
+            let mut items_by_id = HashMap::with_capacity(ids.len());
+            for chunk in ids.chunks(ITEM_LOOKUP_CHUNK_SIZE) {
+                let placeholders = (1..=chunk.len())
+                    .map(|position| format!("?{position}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let sql = format!(
+                    "SELECT {ITEM_COLUMNS}
+                     FROM clipboard_items
+                     WHERE deleted = 0
+                       AND id IN ({placeholders})"
+                );
+                let mut statement = connection.prepare(&sql)?;
+                let stored_items = statement
+                    .query_map(
+                        params_from_iter(chunk.iter()),
+                        StoredClipboardItem::from_row,
+                    )?
+                    .collect::<Result<Vec<_>, _>>()?;
+                for stored_item in stored_items {
+                    let item = ClipboardItem::try_from(stored_item)?;
+                    items_by_id.insert(item.id.clone(), item);
+                }
+            }
 
             Ok(ids.iter().filter_map(|id| items_by_id.remove(id)).collect())
         })
@@ -1103,6 +1106,28 @@ mod tests {
                 .map(|item| item.id.as_str())
                 .collect::<Vec<_>>(),
             vec!["second", "first"]
+        );
+    }
+
+    #[test]
+    fn batch_lookup_reads_more_than_one_query_chunk() {
+        let database = Database::open_in_memory().unwrap();
+        let ids = (0..=500)
+            .map(|index| format!("item-{index:03}"))
+            .collect::<Vec<_>>();
+        for (index, id) in ids.iter().enumerate() {
+            database
+                .save_item(&text_item(id, &format!("hash-{index}"), index as i64))
+                .unwrap();
+        }
+
+        let requested_ids = ids.into_iter().rev().collect::<Vec<_>>();
+        let items = database.get_items_by_ids(&requested_ids).unwrap();
+
+        assert_eq!(items.len(), 501);
+        assert_eq!(
+            items.into_iter().map(|item| item.id).collect::<Vec<_>>(),
+            requested_ids
         );
     }
 
