@@ -2,6 +2,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
+  import { sliderPercentage } from "$lib/utils/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -20,11 +21,6 @@
     });
     return unsub;
   });
-
-  function sliderPercentage(value: number, min: number, max: number): string {
-    const percentage = ((value - min) / (max - min)) * 100;
-    return `${Math.min(100, Math.max(0, percentage))}%`;
-  }
 
   function sliderHandler(key: keyof typeof s) {
     return (event: Event) => {

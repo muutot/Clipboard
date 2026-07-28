@@ -34,7 +34,7 @@
   import { getMemoryDiagnostics } from "$lib/services/memory";
   import type { MemoryDiagnostics } from "$lib/types/memory";
   import { messages, resolvePath } from "$lib/i18n";
-  import { formatBytes } from "$lib/utils/format";
+  import { formatBytes, updateSliderTrack } from "$lib/utils/format";
   import {
     filterSettingsSearchItems,
     normalizeSettingsSearch,
@@ -587,12 +587,6 @@
     highlightedSettingsItem?.classList.remove("settings-search-target-highlight");
     highlightedSettingsItem = null;
   });
-
-  function updateSliderTrack(el: HTMLInputElement | null) {
-    if (!el) return;
-    const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
-    el.style.setProperty("--slider-pct", `${pct}%`);
-  }
 
   $effect(() => {
     if (activeSection !== "ocr") return;

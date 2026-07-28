@@ -8,3 +8,18 @@ export function formatBytes(bytes: number): string {
   const precision = i === 0 ? 0 : value >= 100 ? 0 : 1;
   return `${value.toFixed(precision)} ${UNITS[i]}`;
 }
+
+export function updateSliderTrack(el: HTMLInputElement | null): void {
+  if (!el) return;
+  const min = Number(el.min);
+  const max = Number(el.max);
+  const range = max - min;
+  const pct = range > 0 ? ((Number(el.value) - min) / range) * 100 : 100;
+  el.style.setProperty("--slider-pct", `${pct}%`);
+}
+
+export function sliderPercentage(value: number, min: number, max: number): string {
+  if (min >= max) return "100%";
+  const pct = ((value - min) / (max - min)) * 100;
+  return `${Math.min(100, Math.max(0, pct))}%`;
+}

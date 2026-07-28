@@ -9,6 +9,7 @@
     WindowConfig,
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
+  import { updateSliderTrack } from "$lib/utils/format";
   import { onDestroy } from "svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -180,13 +181,6 @@
     } finally {
       windowConfigSaving = false;
     }
-  }
-
-  function updateSliderTrack(el: HTMLInputElement | null) {
-    if (!el) return;
-    const range = Number(el.max) - Number(el.min);
-    const pct = range > 0 ? ((Number(el.value) - Number(el.min)) / range) * 100 : 100;
-    el.style.setProperty("--slider-pct", pct + "%");
   }
 
   let transparencyEl = $state<HTMLInputElement | null>(null);

@@ -2,6 +2,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
+  import { updateSliderTrack } from "$lib/utils/format";
   import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -77,11 +78,6 @@
     });
     return unsub;
   });
-
-  function updateSliderTrack(el: HTMLInputElement) {
-    const pct = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100;
-    el.style.setProperty("--slider-pct", pct + "%");
-  }
 
   function applyFontSize(category: keyof typeof s.fontSizes, value: number) {
     generalSettings.updateSetting("fontSizes", { ...s.fontSizes, [category]: value });
