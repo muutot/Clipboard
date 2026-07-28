@@ -332,6 +332,7 @@
   }
 
   $effect(() => {
+    const id = item.id;
     contentActionsLoaded = false;
     contentActions = [];
     contentActionRequest = 0;
