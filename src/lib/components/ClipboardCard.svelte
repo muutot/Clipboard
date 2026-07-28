@@ -161,7 +161,7 @@
 
     let lastHeight = -1;
     const report = () => {
-      const height = Math.ceil(element.clientHeight + (compact ? compactCardGap : 0));
+      const height = Math.ceil(element.offsetHeight + (compact ? compactCardGap : 0));
       if (height === lastHeight) return;
       lastHeight = height;
       reportHeight(item.id, height);
