@@ -622,6 +622,7 @@
   class:compact
   class:editing
   class:actions-always={alwaysShowActions}
+  class:actions-hidden={hideActions}
   class:no-meta={hideMetaRow}
   class="clip-card"
   onmouseenter={handleMouseEnter}
@@ -726,7 +727,7 @@
         <span>{item.sizeLabel}</span>
         <span>{formatRelativeTime(item.createdAt, now)}</span>
         {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
-        <div class="actions" aria-label={_t("card.itemActions")} class:actions-hidden={hideActions}>
+        <div class="actions" aria-label={_t("card.itemActions")}>
           {#each contentActions as action (`${action.actionType}:${action.payload}`)}
             <button
               type="button"
@@ -1219,9 +1220,9 @@
     transition: opacity 120ms ease;
   }
 
-  .actions-hidden {
-    opacity: 0 !important;
-    pointer-events: none !important;
+  .clip-card.actions-hidden .actions {
+    opacity: 0;
+    pointer-events: none;
   }
 
   .clip-card:hover .actions,

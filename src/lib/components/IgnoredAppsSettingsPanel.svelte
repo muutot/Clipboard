@@ -729,7 +729,7 @@
     .transfer-column {
       min-height: 38px;
       border-top: 1px solid var(--border-subtle);
-      border-left: 0 !important;
+      border-left: 0;
     }
     .transfer-column button {
       transform: rotate(90deg);
