@@ -40,7 +40,6 @@
     itemHeight,
     measureVisualLines,
     buildPositions,
-    TEXT_LINE_HEIGHT,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery } from "$lib/utils/date-query";
@@ -493,41 +492,7 @@
 
   function compactCardHeightFor(item: ClipboardItem): number {
     if (!compactMode) return 0;
-    if (item.kind === "image") {
-      const metaHidden = detailDisplayMode === "split" && detailItem?.id === item.id;
-      return (
-        compactImage + compactPaddingTop + compactPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10
-      );
-    }
-
-    const textAreaWidth = Math.max(1, effectiveContainerWidth - 26 - 76);
-    let visibleTotal: number;
-    if (item.customTitle) {
-      const bodyLines = showSecondaryText
-        ? measureVisualLines(
-            item.textContent || item.preview || "",
-            $generalSettings.fontSizes.cardPreview,
-            textAreaWidth,
-            maxTextLines,
-          )
-        : 0;
-      visibleTotal = 1 + bodyLines;
-    } else {
-      const fullText = item.textContent || item.title || "";
-      const nl = fullText.indexOf("\n");
-      const bodyOnly = nl >= 0 ? fullText.slice(nl + 1) : "";
-      const bodyLines = showSecondaryText
-        ? measureVisualLines(
-            bodyOnly,
-            $generalSettings.fontSizes.cardPreview,
-            textAreaWidth,
-            maxTextLines,
-          )
-        : 0;
-      visibleTotal = 1 + bodyLines;
-    }
-    if (visibleTotal <= 1) return compactText;
-    return compactTallText + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * TEXT_LINE_HEIGHT;
+    return Math.max(0, estimatedCardHeight(item) - compactCardGap);
   }
 
   function cardLayoutSignaturePrefix(): string {
