@@ -101,28 +101,7 @@ function validHexColor(value: unknown, fallback: string): string {
     : fallback;
 }
 
-const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
-  "bg",
-  "settingsBg",
-  "accent",
-  "textPrimary",
-  "textMuted",
-  "border",
-  "cardBg",
-  "surfaceBg",
-  "statusBarBg",
-  "hoverBg",
-  "inputBg",
-  "textSecondary",
-  "textFaint",
-  "placeholderColor",
-  "borderSubtle",
-  "selectionColor",
-  "successColor",
-  "dangerColor",
-  "warningColor",
-  "scrollbarColor",
-];
+const THEME_COLOR_KEYS = Object.keys(DARK_THEME_COLORS) as (keyof ThemeColors)[];
 
 function normalizeThemeColors(source: unknown, fallback: ThemeColors): ThemeColors {
   const result: Record<string, string> = { ...fallback };
