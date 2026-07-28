@@ -13,6 +13,7 @@
     writeClipboardText,
     getDisplayTitle,
     getDisplayRemainingLines,
+    SOURCE_TONE_COLORS,
   } from "$lib/services/clipboard";
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -721,12 +722,7 @@
           {#if item.iconPath}
             <img class="source-icon" src={appIconUrl(item.iconPath)} alt={item.sourceApp} />
           {:else}
-            <span
-              class="source-dot"
-              class:source-red={item.sourceTone === "red"}
-              class:source-blue={item.sourceTone === "blue"}
-              class:source-violet={item.sourceTone === "violet"}
-            ></span>
+            <span class="source-dot" style:color={SOURCE_TONE_COLORS[item.sourceTone]}></span>
           {/if}
         </span>
         <span class="source-name">{item.sourceApp}</span>
@@ -1207,15 +1203,6 @@
     border-radius: 3px 6px 3px 6px;
     background: currentColor;
     transform: rotate(-12deg);
-  }
-  .source-red {
-    color: #ff4655;
-  }
-  .source-blue {
-    color: #66bde1;
-  }
-  .source-violet {
-    color: #746dff;
   }
   .source-name {
     color: var(--text-muted);
