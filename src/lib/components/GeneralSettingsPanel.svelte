@@ -195,6 +195,7 @@
   let pageSizeEl = $state<HTMLInputElement | null>(null);
   let pageSizeLimitEl = $state<HTMLInputElement | null>(null);
   let searchPageSizeLimitEl = $state<HTMLInputElement | null>(null);
+  let searchPageSizeEl = $state<HTMLInputElement | null>(null);
   let searchCacheSizeEl = $state<HTMLInputElement | null>(null);
   let loadToleranceEl = $state<HTMLInputElement | null>(null);
 
@@ -208,6 +209,7 @@
     updateSliderTrack(pageSizeEl);
     updateSliderTrack(pageSizeLimitEl);
     updateSliderTrack(searchPageSizeLimitEl);
+    updateSliderTrack(searchPageSizeEl);
     updateSliderTrack(searchCacheSizeEl);
     updateSliderTrack(loadToleranceEl);
   });
@@ -395,6 +397,39 @@
         }}
         class="transparency-slider"
         bind:this={searchPageSizeLimitEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.searchPageSize")}</strong>
+            <p>{_t("general.searchPageSizeDescription")}</p>
+          </div>
+          <span class="value-label"
+            >{s.display.searchPageSize} {_t("general.searchPageSizeUnit")}</span
+          >
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max={Math.min(s.searchPageSizeLimit, 500)}
+        step="50"
+        value={Math.min(s.display.searchPageSize, s.searchPageSizeLimit)}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Math.min(Number(input.value), s.searchPageSizeLimit);
+          generalSettings.updateSetting("display", {
+            ...s.display,
+            searchPageSize: val,
+          });
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={searchPageSizeEl}
       />
     </section>
 
