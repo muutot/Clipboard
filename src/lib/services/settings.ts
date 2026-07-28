@@ -190,10 +190,7 @@ function validSortRules(value: unknown, fallback: SortRule[]): SortRule[] {
   return rules.length > 0 ? rules : fallback;
 }
 
-function validCacheEviction(
-  value: unknown,
-  fallback: "fifo" | "lru",
-): "fifo" | "lru" {
+function validCacheEviction(value: unknown, fallback: "fifo" | "lru"): "fifo" | "lru" {
   return value === "fifo" || value === "lru" ? value : fallback;
 }
 

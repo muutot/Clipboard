@@ -75,8 +75,10 @@ const en: LocaleDefinition = {
     generalItemsTab: "Items",
     generalDisplayTab: "Display & Preview",
     generalWindowTab: "Window & General",
-    generalSearchDescription: "Search suggestions, search history and result sort rules preferences",
-    generalItemsDescription: "Item action buttons, quick copy, copy-to-top, recycle bin and load count settings",
+    generalSearchDescription:
+      "Search suggestions, search history and result sort rules preferences",
+    generalItemsDescription:
+      "Item action buttons, quick copy, copy-to-top, recycle bin and load count settings",
     generalDisplayDescription: "Card text display, image preview and list loading settings",
     generalWindowDescription:
       "Window appearance, startup behavior, system integration and feedback settings",
@@ -496,7 +498,8 @@ const en: LocaleDefinition = {
     searchPageSizeLimitDescription: "Maximum number of results returned per search query",
     searchPageSizeLimitUnit: "results",
     searchCacheSize: "Search Cache Size",
-    searchCacheSizeDescription: "Maximum cached search result items not currently in the loaded list",
+    searchCacheSizeDescription:
+      "Maximum cached search result items not currently in the loaded list",
     searchCacheSizeUnit: "items",
     searchCacheEviction: "Cache Eviction Policy",
     searchCacheEvictionDescription: "Strategy for removing items when the cache is full",
@@ -504,7 +507,7 @@ const en: LocaleDefinition = {
     searchCacheEvictionLru: "Least Recently Used (LRU)",
     loadTolerance: "Load Tolerance",
     loadToleranceDescription:
-      "When loaded items exceed \"Max Load Items\" plus this value, the oldest batch is evicted",
+      'When loaded items exceed "Max Load Items" plus this value, the oldest batch is evicted',
     loadToleranceUnit: "items",
   },
   compact: {

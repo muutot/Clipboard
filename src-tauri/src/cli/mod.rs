@@ -65,9 +65,7 @@ where
         CliCommand::List => {
             let items = database
                 .list_recent(
-                    args.limit
-                        .unwrap_or(20)
-                        .clamp(1, page_size_limit as usize) as u32,
+                    args.limit.unwrap_or(20).clamp(1, page_size_limit as usize) as u32,
                     0,
                 )
                 .map_err(|e| e.to_string())?;

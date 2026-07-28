@@ -22,6 +22,8 @@
   --warning-color: #e2c05d;
   --scrollbar-color: #858585;
   font-family:
+    "Cascadia Code",
+    "SFMono-Regular",
     Inter,
     ui-sans-serif,
     system-ui,

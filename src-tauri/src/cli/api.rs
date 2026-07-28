@@ -150,12 +150,9 @@ fn serve(
 
         match listener.accept() {
             Ok((stream, _peer)) => {
-                if let Err(error) = handle_connection(
-                    stream,
-                    &database,
-                    page_size_limit,
-                    search_page_size_limit,
-                ) {
+                if let Err(error) =
+                    handle_connection(stream, &database, page_size_limit, search_page_size_limit)
+                {
                     eprintln!("[local-api] request failed: {error}");
                 }
             }
