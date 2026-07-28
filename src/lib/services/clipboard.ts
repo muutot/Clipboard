@@ -8,6 +8,7 @@ import type {
   SortRule,
 } from "$lib/types/clipboard";
 import { getLocale, resolvePath } from "$lib/i18n";
+import { formatBytes } from "$lib/utils/format";
 import zhCN from "$lib/i18n/locales/zh-CN";
 import en from "$lib/i18n/locales/en";
 
@@ -512,18 +513,7 @@ export function formatSizeSimple(record: PersistedClipboardItem): string {
   if (record.kind === "text" || record.kind === "link") {
     return formatTextLength((record.textContent || record.title).length);
   }
-
-  const units = ["B", "KB", "MB", "GB"];
-  let value = record.sizeBytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const precision = unitIndex === 0 || value >= 100 ? 0 : 1;
-  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+  return formatBytes(record.sizeBytes);
 }
 
 function fileNameFromPath(path: string | null): string | undefined {
@@ -539,3 +529,10 @@ function sourceTone(sourceApp: string, locale: string): ClipboardItem["sourceTon
   if (normalized.includes("browser") || normalized.includes("chrome")) return "blue";
   return "red";
 }
+
+export const SOURCE_TONE_COLORS: Record<ClipboardItem["sourceTone"], string> = {
+  neutral: "var(--text-muted)",
+  red: "#ff4655",
+  blue: "#66bde1",
+  violet: "#746dff",
+};

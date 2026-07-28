@@ -7,6 +7,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
+  import { formatBytes } from "$lib/utils/format";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import type { UnlistenFn } from "@tauri-apps/api/event";
   import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -365,18 +366,6 @@
     } else {
       zoom = 2;
     }
-  }
-
-  function formatFileSize(bytes: number): string {
-    const units = ["B", "KB", "MB", "GB"];
-    let value = bytes;
-    let unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex += 1;
-    }
-    const precision = unitIndex === 0 || value >= 100 ? 0 : 1;
-    return `${value.toFixed(precision)} ${units[unitIndex]}`;
   }
 
   async function regenerateOcr() {
@@ -807,7 +796,7 @@
                         {/if}
                       </span>
                       <span class="file-tree-name">{file.name}</span>
-                      <span class="file-tree-size">{formatFileSize(file.size)}</span>
+                      <span class="file-tree-size">{formatBytes(file.size)}</span>
                     </div>
                   {/each}
                 </div>
@@ -832,7 +821,7 @@
                 <AppIcon name="file" size={48} strokeWidth={1.5} />
                 <strong>{item.fileName ?? item.title}</strong>
                 {#if item.sizeBytes}
-                  <span class="file-tree-size">{formatFileSize(item.sizeBytes)}</span>
+                  <span class="file-tree-size">{formatBytes(item.sizeBytes)}</span>
                 {/if}
               {/if}
             </div>
