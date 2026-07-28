@@ -1,5 +1,5 @@
 ﻿<script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
@@ -376,13 +376,6 @@
     void tick().then(() => updateSettingsItemCount());
   });
 
-  $effect(() => {
-    return () => {
-      if (settingsHighlightTimer !== undefined) clearTimeout(settingsHighlightTimer);
-      highlightedSettingsItem?.classList.remove("settings-search-target-highlight");
-    };
-  });
-
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
   let recycleBinDays = $state(30);
@@ -573,12 +566,33 @@
   let ocrProgressCurrent = $state(0);
   let ocrProgressTotal = $state(0);
   let modelVariant = $state("small");
+  let ocrDownloadUnlisten: (() => void) | undefined;
+  let ocrInstallRequestId = 0;
+  let componentDestroyed = false;
   let detScoreThreshold = $state(0.3);
   let detBoxThreshold = $state(0.6);
   let detUnclipRatio = $state(1.5);
   let detScoreSlider = $state<HTMLInputElement | null>(null);
   let detBoxSlider = $state<HTMLInputElement | null>(null);
   let detUnclipSlider = $state<HTMLInputElement | null>(null);
+
+  function releaseOcrDownloadListener(): void {
+    if (!ocrDownloadUnlisten) return;
+    ocrDownloadUnlisten();
+    ocrDownloadUnlisten = undefined;
+  }
+
+  onDestroy(() => {
+    componentDestroyed = true;
+    ocrInstallRequestId += 1;
+    releaseOcrDownloadListener();
+    if (settingsHighlightTimer !== undefined) {
+      clearTimeout(settingsHighlightTimer);
+      settingsHighlightTimer = undefined;
+    }
+    highlightedSettingsItem?.classList.remove("settings-search-target-highlight");
+    highlightedSettingsItem = null;
+  });
 
   function updateSliderTrack(el: HTMLInputElement | null) {
     if (!el) return;
@@ -699,35 +713,50 @@
   }
 
   async function installPpocr() {
+    const requestId = ++ocrInstallRequestId;
+    releaseOcrDownloadListener();
     ocrInstalling = true;
     feedbackSuccess = false;
     ocrProgressPct = -1;
     ocrProgressLabel = "";
     ocrProgressCurrent = 0;
     ocrProgressTotal = 0;
-    const unlisten = await listen<{
-      filename: string;
-      label: string;
-      current: number;
-      total: number;
-      percentage: number;
-    }>("ppocr-download-progress", (event) => {
-      ocrProgressLabel = event.payload.label;
-      ocrProgressPct = event.payload.percentage;
-      ocrProgressCurrent = event.payload.current;
-      ocrProgressTotal = event.payload.total;
-    });
     try {
+      const unlisten = await listen<{
+        filename: string;
+        label: string;
+        current: number;
+        total: number;
+        percentage: number;
+      }>("ppocr-download-progress", (event) => {
+        if (componentDestroyed || requestId !== ocrInstallRequestId) return;
+        ocrProgressLabel = event.payload.label;
+        ocrProgressPct = event.payload.percentage;
+        ocrProgressCurrent = event.payload.current;
+        ocrProgressTotal = event.payload.total;
+      });
+      if (componentDestroyed || requestId !== ocrInstallRequestId) {
+        unlisten();
+        return;
+      }
+      ocrDownloadUnlisten = unlisten;
       await invoke<string>("install_ppocr", { variant: modelVariant });
+      if (componentDestroyed || requestId !== ocrInstallRequestId) return;
       feedback = _t("storage.ocrModelInstalled", { variant: modelVariant });
       feedbackSuccess = true;
       await loadOcrStatus();
     } catch (e) {
-      feedback = _t("storage.ocrModelInstallFailed", { error: String(e) });
+      if (!componentDestroyed && requestId === ocrInstallRequestId) {
+        feedback = _t("storage.ocrModelInstallFailed", { error: String(e) });
+      }
     } finally {
-      unlisten();
-      ocrInstalling = false;
-      ocrProgressPct = -1;
+      if (requestId === ocrInstallRequestId) {
+        releaseOcrDownloadListener();
+        if (!componentDestroyed) {
+          ocrInstalling = false;
+          ocrProgressPct = -1;
+        }
+      }
     }
   }
 

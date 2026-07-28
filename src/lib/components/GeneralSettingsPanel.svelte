@@ -9,6 +9,7 @@
     WindowConfig,
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
+  import { onDestroy } from "svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -34,6 +35,9 @@
   let sortDragIdx = $state<number | null>(null);
   let sortDragOverIdx = $state<number | null>(null);
   let sortListEl = $state<HTMLDivElement | null>(null);
+  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+  let pageSizeRaf = 0;
+  let stopPointerDrag: (() => void) | undefined;
 
   const ALL_SORT_FIELDS: SortRule["field"][] = [
     "createdAt",
@@ -54,6 +58,7 @@
   };
 
   function pointerDragStart(idx: number, _e: PointerEvent) {
+    stopPointerDrag?.();
     sortDragIdx = idx;
     sortDragOverIdx = null;
     const rows = sortListEl?.querySelectorAll<HTMLElement>(".sort-rule-row");
@@ -77,18 +82,24 @@
       }
     }
 
+    function cleanup() {
+      rows?.forEach((row) => row.classList.remove("sort-drag-over"));
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      if (stopPointerDrag === cleanup) stopPointerDrag = undefined;
+    }
+
     function onUp() {
       const target = [...(rows ?? [])].findIndex((r) => r.classList.contains("sort-drag-over"));
       if (target !== -1 && target !== sortDragIdx) {
         moveSortRule(sortDragIdx!, target);
       }
-      rows?.forEach((r) => r.classList.remove("sort-drag-over"));
       sortDragIdx = null;
       sortDragOverIdx = null;
-      document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
+      cleanup();
     }
 
+    stopPointerDrag = cleanup;
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
   }
@@ -131,8 +142,18 @@
   function showFeedback(message: string, success: boolean) {
     feedback = message;
     feedbackSuccess = success;
-    setTimeout(() => (feedback = ""), 2000);
+    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+      feedbackTimer = undefined;
+      feedback = "";
+    }, 2000);
   }
+
+  onDestroy(() => {
+    stopPointerDrag?.();
+    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
+    if (pageSizeRaf) cancelAnimationFrame(pageSizeRaf);
+  });
 
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);
@@ -385,9 +406,7 @@
             <strong>{_t("general.searchCacheSize")}</strong>
             <p>{_t("general.searchCacheSizeDescription")}</p>
           </div>
-          <span class="value-label"
-            >{s.searchCacheSize} {_t("general.searchCacheSizeUnit")}</span
-          >
+          <span class="value-label">{s.searchCacheSize} {_t("general.searchCacheSizeUnit")}</span>
         </div>
       </div>
       <input
@@ -683,9 +702,7 @@
             <strong>{_t("general.pageSizeLimit")}</strong>
             <p>{_t("general.pageSizeLimitDescription")}</p>
           </div>
-          <span class="value-label"
-            >{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span
-          >
+          <span class="value-label">{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span>
         </div>
       </div>
       <input
@@ -702,7 +719,11 @@
             generalSettings.updateSetting("display", { ...s.display, pageSize: val });
           }
           updateSliderTrack(input);
-          requestAnimationFrame(() => updateSliderTrack(pageSizeEl));
+          if (pageSizeRaf) cancelAnimationFrame(pageSizeRaf);
+          pageSizeRaf = requestAnimationFrame(() => {
+            pageSizeRaf = 0;
+            updateSliderTrack(pageSizeEl);
+          });
         }}
         class="transparency-slider"
         bind:this={pageSizeLimitEl}
@@ -717,9 +738,7 @@
             <strong>{_t("general.loadTolerance")}</strong>
             <p>{_t("general.loadToleranceDescription")}</p>
           </div>
-          <span class="value-label"
-            >{s.loadTolerance} {_t("general.loadToleranceUnit")}</span
-          >
+          <span class="value-label">{s.loadTolerance} {_t("general.loadToleranceUnit")}</span>
         </div>
       </div>
       <input

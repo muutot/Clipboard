@@ -25,6 +25,10 @@
   let feedback = $state("");
   let feedbackSuccess = $state(false);
   let recordingAction = $state("");
+  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+  let recordingTimer: ReturnType<typeof setTimeout> | undefined;
+  let configRequestId = 0;
+  let componentDestroyed = false;
 
   interface SystemAction {
     id: string;
@@ -212,23 +216,36 @@
   });
 
   async function loadConfig() {
+    const requestId = ++configRequestId;
     loading = true;
+    if (feedbackTimer !== undefined) {
+      clearTimeout(feedbackTimer);
+      feedbackTimer = undefined;
+    }
     feedback = "";
 
     try {
-      config = await getKeyboardConfig();
-      if (!config) feedback = _t("keyboard.browserUnavailable");
+      const loadedConfig = await getKeyboardConfig();
+      if (componentDestroyed || requestId !== configRequestId) return;
+      config = loadedConfig;
+      if (!loadedConfig) feedback = _t("keyboard.browserUnavailable");
     } catch (error) {
-      feedback = error instanceof Error ? error.message : String(error);
+      if (!componentDestroyed && requestId === configRequestId) {
+        feedback = error instanceof Error ? error.message : String(error);
+      }
     } finally {
-      loading = false;
+      if (!componentDestroyed && requestId === configRequestId) loading = false;
     }
   }
 
   function showFeedback(msg: string, success: boolean) {
     feedback = msg;
     feedbackSuccess = success;
-    setTimeout(() => (feedback = ""), 2000);
+    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+      feedbackTimer = undefined;
+      feedback = "";
+    }, 2000);
   }
 
   async function addBinding(action: string, shortcut: string) {
@@ -236,9 +253,12 @@
     const current = config.shortcuts[action] ?? [];
     try {
       const normalized = await configureKeyboardShortcuts(action, [...current, shortcut]);
+      if (componentDestroyed || !config) return;
       config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : String(error), false);
+      if (!componentDestroyed) {
+        showFeedback(error instanceof Error ? error.message : String(error), false);
+      }
     }
   }
 
@@ -250,19 +270,30 @@
         action,
         current.filter((s) => s !== shortcut),
       );
+      if (componentDestroyed || !config) return;
       config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : String(error), false);
+      if (!componentDestroyed) {
+        showFeedback(error instanceof Error ? error.message : String(error), false);
+      }
     }
   }
 
   function startRecording(action: string) {
+    stopRecording();
     recordingAction = action;
     window.addEventListener("keydown", onRecordingKey);
-    setTimeout(() => stopRecording(), 3000);
+    recordingTimer = setTimeout(() => {
+      recordingTimer = undefined;
+      stopRecording();
+    }, 3000);
   }
 
   function stopRecording() {
+    if (recordingTimer !== undefined) {
+      clearTimeout(recordingTimer);
+      recordingTimer = undefined;
+    }
     recordingAction = "";
     window.removeEventListener("keydown", onRecordingKey);
   }
@@ -299,6 +330,10 @@
   }
 
   onDestroy(() => {
+    componentDestroyed = true;
+    configRequestId += 1;
+    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
+    if (recordingTimer !== undefined) clearTimeout(recordingTimer);
     window.removeEventListener("keydown", onRecordingKey);
   });
 </script>
