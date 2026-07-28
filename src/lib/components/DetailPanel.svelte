@@ -8,6 +8,7 @@
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
   import { formatBytes, assetUrl } from "$lib/utils/format";
+  import { extractEmails, extractUrls, extractPhones, extractColors } from "$lib/utils/patterns";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import type { UnlistenFn } from "@tauri-apps/api/event";
   import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -518,22 +519,13 @@
 
   const specialMarkers = $derived.by(() => {
     if (!item)
-      return {
-        emails: [] as string[],
-        urls: [] as string[],
-        phones: [] as string[],
-        colors: [] as string[],
-      };
+      return { emails: [] as string[], urls: [] as string[], phones: [] as string[], colors: [] as string[] };
     const text = [item.title, item.preview].filter(Boolean).join(" ");
     return {
-      emails: [...new Set(text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [])],
-      urls: [...new Set(text.match(/https?:\/\/[^\s)]+/g) ?? [])],
-      phones: [
-        ...new Set(
-          text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [],
-        ),
-      ],
-      colors: [...new Set(text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [])],
+      emails: extractEmails(text),
+      urls: extractUrls(text),
+      phones: extractPhones(text),
+      colors: extractColors(text),
     };
   });
   const emails = $derived(specialMarkers.emails);

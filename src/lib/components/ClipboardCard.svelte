@@ -17,6 +17,7 @@
   } from "$lib/services/clipboard";
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { assetUrl as baseAssetUrl } from "$lib/utils/format";
+  import { EMAIL_RE, URL_RE, PHONE_RE, COLOR_RE } from "$lib/utils/patterns";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import { tick } from "svelte";
@@ -253,11 +254,10 @@
   }
 
   function detectInlineActions(text: string): QuickAction[] {
-    const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? [];
-    const urls = text.match(/https?:\/\/[^\s)]+/g) ?? [];
-    const phones =
-      text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g) ?? [];
-    const colors = text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/g) ?? [];
+    const emails = text.match(EMAIL_RE) ?? [];
+    const urls = text.match(URL_RE) ?? [];
+    const phones = text.match(PHONE_RE) ?? [];
+    const colors = text.match(COLOR_RE) ?? [];
     const dates = detectInlineDateValues(text);
 
     const seen = new Set<string>();
