@@ -37,9 +37,9 @@
   import {
     createVirtualList,
     editHeight,
-    estimateTextLines,
     itemHeight,
-    PREVIEW_LINE_HEIGHT,
+    measureVisualLines,
+    buildPositions,
     TEXT_LINE_HEIGHT,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
@@ -178,7 +178,9 @@
   let appShellEl = $state<HTMLElement | null>(null);
   let scrollTop = $state(0);
   let containerHeight = $state(0);
-  let containerWidth = $state(0);
+  let containerWidth = $state(
+    typeof window !== "undefined" ? Math.max(700, window.innerWidth - 20) : 700,
+  );
 
   type MeasuredCardHeight = { height: number; signature: string };
   let measuredCardHeights = $state<Record<string, MeasuredCardHeight>>({});
@@ -408,6 +410,7 @@
   // --- Virtual scrolling ---
 
   const compactMode = $derived($generalSettings.compactMode);
+  const effectiveContainerWidth = $derived(Math.max(680, containerWidth));
   const compactText = $derived($generalSettings.compactTextHeight);
   const compactTallText = $derived($generalSettings.compactTallTextHeight);
   const compactImage = $derived($generalSettings.compactImageHeight);
@@ -424,67 +427,55 @@
   const quickCopyBadgeAlwaysVisible = $derived($generalSettings.quickCopyBadgeAlwaysVisible);
   const detailDisplayMode = $derived($generalSettings.detailDisplayMode);
 
-  function displayedTextLines(item: ClipboardItem): number {
-    if (item.kind !== "text" && item.kind !== "link") return 1;
+  function estimatedCardHeight(item: ClipboardItem): number {
+    if (item.kind !== "text" && item.kind !== "link") {
+      return itemHeight({
+        kind: item.kind,
+        compact: compactMode,
+        compactImage,
+        compactText,
+        compactTallText,
+        compactCustomTitle,
+        cardGap: compactCardGap,
+        showPreview: showSecondaryText,
+      });
+    }
+
+    let totalLines = 1;
     if (item.customTitle) {
       const bodyLines = showSecondaryText
-        ? estimateTextLines(item.textContent || item.preview, maxTextLines)
+        ? measureVisualLines(
+            item.textContent || item.preview || "",
+            $generalSettings.fontSizes.cardPreview,
+            Math.max(1, effectiveContainerWidth - 26 - 76),
+            maxTextLines,
+          )
         : 0;
-      return 1 + bodyLines;
-    }
-    return Math.max(
-      1,
-      estimateTextLines(item.textContent || item.title, showSecondaryText ? maxTextLines : 1),
-    );
-  }
-
-  function estimatedCardHeight(item: ClipboardItem): number {
-    if (compactMode && item.kind === "image") {
-      const metaHidden = detailDisplayMode === "split" && detailItem?.id === item.id;
-      return (
-        compactImage +
-        compactPaddingTop +
-        compactPaddingBottom +
-        4 +
-        (metaHidden ? 0 : 14) +
-        10 +
-        compactCardGap
-      );
-    }
-
-    let textLines: number;
-    let effectivePreview: boolean;
-
-    if (compactMode) {
-      effectivePreview = true;
-      if (item.customTitle) {
-        const bodyLines = showSecondaryText
-          ? estimateTextLines(item.textContent || item.preview, maxTextLines)
-          : 0;
-        textLines = 1 + bodyLines;
-      } else {
-        const totalLines = estimateTextLines(item.textContent || item.title, 12);
-        const secondaryVisible = showSecondaryText
-          ? Math.min(maxTextLines, Math.max(0, totalLines - 1))
-          : 0;
-        textLines = 1 + secondaryVisible;
-      }
+      totalLines = 1 + bodyLines;
     } else {
-      textLines = displayedTextLines(item);
-      effectivePreview = showSecondaryText;
+      const fullText = item.textContent || item.title || "";
+      const nl = fullText.indexOf("\n");
+      const bodyOnly = nl >= 0 ? fullText.slice(nl + 1) : "";
+      const bodyLines = showSecondaryText
+        ? measureVisualLines(
+            bodyOnly,
+            $generalSettings.fontSizes.cardPreview,
+            Math.max(1, effectiveContainerWidth - 26 - 76),
+            maxTextLines,
+          )
+        : 0;
+      totalLines = 1 + bodyLines;
     }
 
     return itemHeight({
       kind: item.kind,
-      textLines,
+      textLines: totalLines,
       compact: compactMode,
       compactText,
       compactTallText,
       compactImage,
       cardGap: compactCardGap,
-      showPreview: effectivePreview,
-      customTitle: !!item.customTitle,
-      compactCustomTitle,
+      showPreview: showSecondaryText,
     });
   }
 
@@ -497,22 +488,34 @@
       );
     }
 
+    const textAreaWidth = Math.max(1, effectiveContainerWidth - 26 - 76);
+    let visibleTotal: number;
     if (item.customTitle) {
       const bodyLines = showSecondaryText
-        ? estimateTextLines(item.textContent || item.preview, maxTextLines)
+        ? measureVisualLines(
+            item.textContent || item.preview || "",
+            $generalSettings.fontSizes.cardPreview,
+            textAreaWidth,
+            maxTextLines,
+          )
         : 0;
-      const visibleTotal = 1 + bodyLines;
-      if (visibleTotal <= 1) return compactText;
-      return compactCustomTitle + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * PREVIEW_LINE_HEIGHT;
+      visibleTotal = 1 + bodyLines;
+    } else {
+      const fullText = item.textContent || item.title || "";
+      const nl = fullText.indexOf("\n");
+      const bodyOnly = nl >= 0 ? fullText.slice(nl + 1) : "";
+      const bodyLines = showSecondaryText
+        ? measureVisualLines(
+            bodyOnly,
+            $generalSettings.fontSizes.cardPreview,
+            textAreaWidth,
+            maxTextLines,
+          )
+        : 0;
+      visibleTotal = 1 + bodyLines;
     }
-    // 非自定义标题
-    const totalLines = estimateTextLines(item.textContent || item.title, 12);
-    const secondaryVisible = showSecondaryText
-      ? Math.min(maxTextLines, Math.max(0, totalLines - 1))
-      : 0;
-    const visibleTotal = 1 + secondaryVisible;
     if (visibleTotal <= 1) return compactText;
-    return compactTallText + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * PREVIEW_LINE_HEIGHT;
+    return compactTallText + TEXT_LINE_HEIGHT + Math.max(0, visibleTotal - 2) * TEXT_LINE_HEIGHT;
   }
 
   function cardLayoutSignaturePrefix(): string {
@@ -585,6 +588,10 @@
 
   const virtualHeights = $derived(filteredItems.map(virtualHeightFor));
 
+  const virtualPositions = $derived(
+    buildPositions(virtualHeights, VIRTUAL_SCROLL_CONFIG.itemHeight),
+  );
+
   const filteredItemIndexById = $derived.by(() => {
     const map = new Map<string, number>();
     for (let i = 0; i < filteredItems.length; i++) {
@@ -600,6 +607,7 @@
       scrollTop,
       VIRTUAL_SCROLL_CONFIG,
       virtualHeights,
+      virtualPositions,
     ),
   );
 
@@ -616,7 +624,7 @@
 
   $effect(() => {
     const requestedQuery = query.trim();
-    const requestedPageSize = $generalSettings.display.pageSize;
+    const requestedPageSize = $generalSettings.display.searchPageSize;
     const requestedSortRules = $generalSettings.searchSortRules;
     const requestId = ++searchRequestId;
     searchLoadRequestId += 1;
@@ -1180,7 +1188,7 @@
     try {
       const results = await searchClipboardHistory(
         indexedQuery,
-        $generalSettings.display.pageSize,
+        $generalSettings.display.searchPageSize,
         offset,
         $generalSettings.searchSortRules,
       );
@@ -1192,7 +1200,7 @@
 
       indexedItems = [...(indexedItems ?? []), ...results];
       searchOffset += results.length;
-      searchHasMore = results.length === $generalSettings.display.pageSize;
+      searchHasMore = results.length === $generalSettings.display.searchPageSize;
       updateSearchCache(results);
     } catch (error) {
       if (requestId !== searchLoadRequestId) return;
