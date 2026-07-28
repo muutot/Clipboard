@@ -185,17 +185,22 @@ export function generatedClipboardTitle(text: string): string {
 }
 
 export function getDisplayTitle(title: string): string {
-  const firstNonEmpty = title.split("\n").find((line) => line.trim() !== "");
-  return firstNonEmpty ?? "";
+  const firstNonEmpty = title.split(/\r?\n/).find((line) => line.trim() !== "");
+  const result = (firstNonEmpty ?? "").trim();
+  return result;
 }
 
 export function getDisplayRemainingLines(text: string): string {
-  const firstLine = getDisplayTitle(text);
-  if (!firstLine) return "";
-  const idx = text.indexOf(firstLine);
-  if (idx === -1) return "";
-  const after = text.slice(idx + firstLine.length);
-  return after.startsWith("\n") ? after.slice(1) : after;
+  const lines = text.split(/\r?\n/);
+  let titleIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== "") {
+      titleIdx = i;
+      break;
+    }
+  }
+  if (titleIdx < 0) return "";
+  return lines.slice(titleIdx + 1).join("\n");
 }
 
 export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
