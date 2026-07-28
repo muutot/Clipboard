@@ -8,6 +8,8 @@
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+  import type { UnlistenFn } from "@tauri-apps/api/event";
+  import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { untrack } from "svelte";
   import { get } from "svelte/store";
@@ -123,7 +125,12 @@
   let dragStartY = 0;
   let panStartX = 0;
   let panStartY = 0;
-  let viewerWindow: any = null;
+  let viewerWindow: WebviewWindow | null = null;
+  let viewerErrorUnlisten: UnlistenFn | null = null;
+  let viewerListenerRequestId = 0;
+  let fullscreenRequestId = 0;
+  let overlayOpenTimer: ReturnType<typeof setTimeout> | undefined;
+  let ocrFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let regeneratingOcr = $state(false);
   let ocrFeedback = $state("");
   let filePreviewState = $state<"idle" | "loading" | "ready" | "unavailable" | "failed">("idle");
@@ -194,10 +201,69 @@
     );
   }
 
+  function clearOverlayOpenTimer(): void {
+    if (overlayOpenTimer === undefined) return;
+    clearTimeout(overlayOpenTimer);
+    overlayOpenTimer = undefined;
+  }
+
+  function detachViewerWindow(): WebviewWindow | null {
+    const targetWindow = viewerWindow;
+    viewerWindow = null;
+    viewerListenerRequestId += 1;
+    if (viewerErrorUnlisten) {
+      viewerErrorUnlisten();
+      viewerErrorUnlisten = null;
+    }
+    return targetWindow;
+  }
+
+  function attachViewerErrorListener(targetWindow: WebviewWindow): void {
+    const listenerRequestId = ++viewerListenerRequestId;
+    void targetWindow
+      .once<unknown>("tauri://error", (event) => {
+        console.error("[viewer] window error", event);
+      })
+      .then((unlisten) => {
+        if (listenerRequestId !== viewerListenerRequestId || viewerWindow !== targetWindow) {
+          unlisten();
+          return;
+        }
+        viewerErrorUnlisten = unlisten;
+      })
+      .catch((error) => {
+        if (listenerRequestId === viewerListenerRequestId) {
+          console.error("[viewer] failed to register error listener", error);
+        }
+      });
+  }
+
+  function resetImageFullscreenState(): WebviewWindow | null {
+    fullscreenRequestId += 1;
+    clearOverlayOpenTimer();
+    imageFullscreen = false;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+    return detachViewerWindow();
+  }
+
+  function disposeImageFullscreenState(): void {
+    const targetWindow = resetImageFullscreenState();
+    if (targetWindow) {
+      void targetWindow.hide().catch(() => {});
+    }
+  }
+
   async function openImageFullscreen() {
-    if (!item?.previewPath && !item?.resourcePath) return;
-    const filePath = item.previewPath || item.resourcePath;
+    const targetItem = item;
+    if (!targetItem?.previewPath && !targetItem?.resourcePath) return;
+    const filePath = targetItem.previewPath || targetItem.resourcePath;
     if (!filePath) return;
+    const targetItemId = targetItem.id;
+    const requestId = ++fullscreenRequestId;
+    clearOverlayOpenTimer();
+    const requestIsCurrent = () => requestId === fullscreenRequestId && item?.id === targetItemId;
 
     if (get(generalSettings).imageFullscreenMode === "desktop" && isTauriRuntime()) {
       try {
@@ -206,14 +272,22 @@
         const opacity = get(generalSettings).viewerBackdropOpacity / 100;
 
         const existing = await WebviewWindow.getByLabel("image-viewer");
+        if (!requestIsCurrent()) return;
         if (existing) {
+          const previousWindow = detachViewerWindow();
+          if (previousWindow && previousWindow !== existing) {
+            void previousWindow.hide().catch(() => {});
+          }
+          viewerWindow = existing;
           await existing.show();
+          if (!requestIsCurrent()) return;
           await existing.setFocus();
+          if (!requestIsCurrent()) return;
           await emit("viewer:open", { src: filePath, opacity });
           return;
         }
 
-        viewerWindow = new WebviewWindow("image-viewer", {
+        const createdWindow = new WebviewWindow("image-viewer", {
           url: `/viewer?src=${encodeURIComponent(filePath)}&opacity=${opacity}`,
           title: "",
           width: 800,
@@ -225,17 +299,23 @@
           skipTaskbar: true,
           alwaysOnTop: true,
         });
-        viewerWindow.on("tauri://error", (e: any) => {
-          console.error("[viewer] window error", e);
-        });
+        const previousWindow = detachViewerWindow();
+        if (previousWindow) void previousWindow.hide().catch(() => {});
+        viewerWindow = createdWindow;
+        attachViewerErrorListener(createdWindow);
       } catch (e) {
-        console.error("[viewer] failed to open", e);
+        if (requestIsCurrent()) {
+          detachViewerWindow();
+          console.error("[viewer] failed to open", e);
+        }
       }
       return;
     }
 
     // Overlay mode: show within app window
-    setTimeout(() => {
+    overlayOpenTimer = setTimeout(() => {
+      overlayOpenTimer = undefined;
+      if (!requestIsCurrent()) return;
       zoom = 1;
       panX = 0;
       panY = 0;
@@ -244,23 +324,13 @@
   }
 
   async function closeImageFullscreen() {
-    imageFullscreen = false;
-    zoom = 1;
-    panX = 0;
-    panY = 0;
-    if (viewerWindow) {
+    const targetWindow = resetImageFullscreenState();
+    if (targetWindow) {
       try {
-        await viewerWindow.hide();
+        await targetWindow.hide();
       } catch {}
     }
   }
-
-  $effect(() => {
-    if (item && startFullscreen) {
-      startFullscreen = false;
-      openImageFullscreen();
-    }
-  });
 
   function onWheel(e: WheelEvent) {
     e.preventDefault();
@@ -332,21 +402,19 @@
       }
     } finally {
       regeneratingOcr = false;
-      setTimeout(() => {
-        if (item?.id === targetId) {
-          ocrFeedback = "";
-        }
-      }, 3000);
+      if (ocrFeedbackTimer !== undefined) clearTimeout(ocrFeedbackTimer);
+      if (item?.id === targetId) {
+        ocrFeedbackTimer = setTimeout(() => {
+          ocrFeedbackTimer = undefined;
+          if (item?.id === targetId) ocrFeedback = "";
+        }, 3000);
+      }
     }
   }
 
   $effect(() => {
-    if (item) {
-      untrack(() => {
-        if (imageFullscreen) {
-          closeImageFullscreen();
-        }
-      });
+    const currentItem = item;
+    if (currentItem) {
       imageFullscreen = false;
       zoom = 1;
       panX = 0;
@@ -354,6 +422,20 @@
       activeTab = "preview";
       editing = false;
       selectedFileIndex = 0;
+    }
+    return () => {
+      disposeImageFullscreenState();
+      if (ocrFeedbackTimer !== undefined) {
+        clearTimeout(ocrFeedbackTimer);
+        ocrFeedbackTimer = undefined;
+      }
+    };
+  });
+
+  $effect(() => {
+    if (item && startFullscreen) {
+      startFullscreen = false;
+      untrack(() => void openImageFullscreen());
     }
   });
 
