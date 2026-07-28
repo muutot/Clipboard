@@ -1,5 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import type { Locale, LocaleDefinition } from "./types";
+import { isTauriRuntime } from "$lib/services/runtime";
 import zhCN from "./locales/zh-CN";
 import en from "./locales/en";
 
@@ -9,10 +10,6 @@ const locales: Record<Locale, LocaleDefinition> = {
 };
 
 const STORAGE_KEY = "clipboard-locale";
-
-function isDesktopRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 function detectLocale(): Locale {
   try {
@@ -33,7 +30,7 @@ export const locale = writable<Locale>(detectLocale());
 export const messages = derived(locale, ($locale) => locales[$locale]);
 
 locale.subscribe(($locale) => {
-  if (!isDesktopRuntime()) {
+  if (!isTauriRuntime()) {
     try {
       localStorage.setItem(STORAGE_KEY, $locale);
     } catch {
