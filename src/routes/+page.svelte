@@ -44,7 +44,10 @@
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
-  import { applyThemeColors } from "$lib/utils/theme";
+  import {
+    applyGeneralSettingsToDocument,
+    applyFontSizesToDocument,
+  } from "$lib/services/settings-bootstrap";
   import { listen } from "@tauri-apps/api/event";
   import type { PersistedClipboardItem } from "$lib/types/clipboard";
   import {
@@ -886,21 +889,7 @@
     }
 
     function applySettings(s: typeof $generalSettings) {
-      const r = document.documentElement.style;
-      if (s.fontSizes) {
-        r.fontSize = `${s.fontSizes.base}px`;
-        r.setProperty("--font-size-base", `${s.fontSizes.base}px`);
-        r.setProperty("--font-size-secondary", `${s.fontSizes.secondary}px`);
-        r.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
-        r.setProperty("--font-size-cardTitle", `${s.fontSizes.cardTitle}px`);
-        r.setProperty("--font-size-cardPreview", `${s.fontSizes.cardPreview}px`);
-      }
-      if (s.display) {
-        r.setProperty("--show-secondary", s.display.showSecondaryText ? "block" : "none");
-      }
-      if (s.themeColors) {
-        applyThemeColors(s.themeColors);
-      }
+      applyGeneralSettingsToDocument(s);
       if (appWindow) {
         appWindow.setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
         appWindow.setDecorations(s.useSystemTitleBar).catch(() => {});
@@ -928,21 +917,9 @@
       };
       display: { showSecondaryText: boolean; maxTextLines: number };
     }>("settings-font-changed", (event) => {
-      const { base, secondary, tiny, cardTitle, cardPreview } = event.payload.fontSizes || {};
-      const display = event.payload.display;
-      if (base !== undefined) {
-        document.documentElement.style.fontSize = `${base}px`;
-        document.documentElement.style.setProperty("--font-size-base", `${base}px`);
-        document.documentElement.style.setProperty("--font-size-secondary", `${secondary}px`);
-        document.documentElement.style.setProperty("--font-size-tiny", `${tiny}px`);
-        document.documentElement.style.setProperty("--font-size-cardTitle", `${cardTitle}px`);
-        document.documentElement.style.setProperty("--font-size-cardPreview", `${cardPreview}px`);
-      }
-      if (display) {
-        document.documentElement.style.setProperty(
-          "--show-secondary",
-          display.showSecondaryText ? "block" : "none",
-        );
+      const { fontSizes, display } = event.payload;
+      if (fontSizes) {
+        applyFontSizesToDocument(fontSizes, display);
       }
     });
 

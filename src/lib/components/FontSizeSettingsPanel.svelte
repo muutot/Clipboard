@@ -3,6 +3,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
   import { updateSliderTrack } from "$lib/utils/format";
+  import { applyFontSizesToDocument } from "$lib/services/settings-bootstrap";
   import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -80,13 +81,9 @@
   });
 
   function applyFontSize(category: keyof typeof s.fontSizes, value: number) {
-    generalSettings.updateSetting("fontSizes", { ...s.fontSizes, [category]: value });
-    document.documentElement.style.fontSize = `${s.fontSizes.base}px`;
-    document.documentElement.style.setProperty(`--font-size-${category}`, `${value}px`);
-    emit("settings-font-changed", {
-      fontSizes: { ...s.fontSizes, [category]: value },
-      display: s.display,
-    }).catch(() => {});
+    const updated = { ...s.fontSizes, [category]: value };
+    generalSettings.updateSetting("fontSizes", updated);
+    emit("settings-font-changed", { fontSizes: updated, display: s.display }).catch(() => {});
   }
 
   function sliderHandler(category: keyof typeof s.fontSizes) {
@@ -132,21 +129,7 @@
   });
 
   $effect(() => {
-    document.documentElement.style.fontSize = `${s.fontSizes.base}px`;
-    document.documentElement.style.setProperty("--font-size-base", `${s.fontSizes.base}px`);
-    document.documentElement.style.setProperty(
-      "--font-size-secondary",
-      `${s.fontSizes.secondary}px`,
-    );
-    document.documentElement.style.setProperty("--font-size-tiny", `${s.fontSizes.tiny}px`);
-    document.documentElement.style.setProperty(
-      "--font-size-cardTitle",
-      `${s.fontSizes.cardTitle}px`,
-    );
-    document.documentElement.style.setProperty(
-      "--font-size-cardPreview",
-      `${s.fontSizes.cardPreview}px`,
-    );
+    applyFontSizesToDocument(s.fontSizes, s.display);
   });
 </script>
 
