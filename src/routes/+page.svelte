@@ -428,6 +428,18 @@
   const detailDisplayMode = $derived($generalSettings.detailDisplayMode);
 
   function estimatedCardHeight(item: ClipboardItem): number {
+    if (compactMode && item.kind === "image") {
+      const metaHidden = detailDisplayMode === "split" && detailItem?.id === item.id;
+      return (
+        compactImage +
+        compactPaddingTop +
+        compactPaddingBottom +
+        4 +
+        (metaHidden ? 0 : 14) +
+        10 +
+        compactCardGap
+      );
+    }
     if (item.kind !== "text" && item.kind !== "link") {
       return itemHeight({
         kind: item.kind,

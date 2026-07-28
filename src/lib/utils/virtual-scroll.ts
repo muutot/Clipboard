@@ -61,8 +61,13 @@ export function itemHeight({
 
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
   if (compact) {
-    const baseHeight = visibleLines > 1 ? (compactTallText ?? 70) : (compactText ?? 58);
-    return baseHeight + Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT + gap;
+    if (visibleLines <= 1) return (compactText ?? 58) + gap;
+    return (
+      (compactTallText ?? 70) +
+      TEXT_LINE_HEIGHT +
+      Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT +
+      gap
+    );
   }
   return TEXT_HEIGHT + Math.max(0, visibleLines - 1) * TEXT_LINE_HEIGHT;
 }
