@@ -37,8 +37,9 @@ This runs the full pipeline:
 2. `npm run verify`
 3. Version bump in `package.json`, `tauri.conf.json`, `Cargo.toml`
 4. Changelog generation from commits since last tag
-5. Git commit + annotated tag
-6. Tauri production build
+5. `${version}` / `${date}` placeholder substitution in `RELEASE.md`
+6. Git commit (version files + CHANGELOG.md + RELEASE.md) + annotated tag
+7. Tauri production build
 
 ### Semantic bump
 
@@ -85,6 +86,26 @@ node scripts/changelog.mjs --from v0.1.0   # from specific tag
 node scripts/changelog.mjs --preview       # preview without writing
 ```
 
+## Release body (`RELEASE.md`)
+
+`RELEASE.md` is the canonical release body template for GitHub Releases. The release script (`release.mjs`) automatically substitutes `${version}` and `${date}` placeholders and includes the file in the release commit.
+
+Before each release, update `RELEASE.md` with a curated summary of the current changelog:
+
+1. Group related commits into feature areas (see existing sections for reference)
+2. Attach commit hash links using the format:
+
+   ```
+   - **Feature description** — detail | [`hash`](https://github.com/muutot/Clipboard/commit/hash) [`hash2`](https://github.com/muutot/Clipboard/commit/hash2)
+   ```
+
+   Rules:
+   - One point can reference multiple hashes; multiple points can reuse the same hash
+   - Use the full 7+ char shortened hash visible in `CHANGELOG.md`
+   - Group related commits under a single bullet with shared links
+
+3. When creating a GitHub Release from the tag, copy the body from `RELEASE.md` (placeholders already substituted in the committed file)
+
 ## Post-release
 
 After a successful release, report:
@@ -103,7 +124,7 @@ After a successful release, report:
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 
 - Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
-- Creates a draft GitHub Release with artifacts
+- Creates a draft GitHub Release with artifacts using `RELEASE.md` as the release body
 
 ## Version source files
 
