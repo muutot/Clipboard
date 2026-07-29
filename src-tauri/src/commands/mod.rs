@@ -1,6 +1,10 @@
+pub mod api;
 pub mod capture;
+pub mod cleanup;
 pub mod clipboard;
 pub mod config;
 pub mod export;
+pub mod files;
 pub mod ocr;
+pub mod signal;
 pub mod system;

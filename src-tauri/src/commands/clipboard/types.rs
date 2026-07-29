@@ -2,11 +2,13 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+use super::super::cleanup::cleanup_orphan_storage_files;
 use crate::domain::{ClipboardItem, ClipboardKind};
-use crate::search::{SearchIndex, SearchSynchronizer, SearchSyncSummary};
-use crate::storage::{ClipboardRepository, Database, KindDeleteResult, KindStorageStats, StoragePaths};
+use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
+use crate::storage::{
+    ClipboardRepository, Database, KindDeleteResult, KindStorageStats, StoragePaths,
+};
 use crate::STORAGE_KIND_DELETE_SCOPE;
-use super::super::system::cleanup_orphan_storage_files;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +22,12 @@ pub struct SearchResultCache {
 }
 
 pub(crate) type CachedSearchResult = (String, Vec<SearchSortRule>, usize, Vec<ClipboardItem>);
+
+impl Default for SearchResultCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SearchResultCache {
     pub fn new() -> Self {
