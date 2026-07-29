@@ -48,6 +48,10 @@ pub mod linux_wayland;
 pub mod linux_wayland;
 
 pub mod windows_clipboard;
+#[cfg(target_os = "windows")]
+pub mod windows_hotkey;
+#[cfg(not(target_os = "windows"))]
+#[path = "windows_hotkey_stub.rs"]
 pub mod windows_hotkey;
 
 // ---------------------------------------------------------------------------

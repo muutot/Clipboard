@@ -5,6 +5,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+#[cfg(target_os = "windows")]
 use crate::content::icon_key;
 
 pub const CF_UNICODETEXT: u32 = 13;
