@@ -86,7 +86,7 @@ impl FileStore {
 
         let mut hasher = Sha256::new();
         hasher.update(data);
-        let content_hash = format!("{:x}", hasher.finalize());
+        let content_hash = hex::encode(hasher.finalize());
 
         let detected_mime_type = mime_type_from_bytes(data, None);
         let (ext, mime_type) = match detected_mime_type {
@@ -168,7 +168,7 @@ fn hash_file(path: &Path) -> Result<String, StorageError> {
         }
         hasher.update(&buffer[..bytes_read]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 #[cfg(test)]

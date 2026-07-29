@@ -95,7 +95,7 @@ fn hash_path(path: &Path) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(path.display().to_string().as_bytes());
-    format!("{:x}", hasher.finalize())[..16].to_owned()
+    hex::encode(hasher.finalize())[..16].to_owned()
 }
 
 enum ThumbnailTask {

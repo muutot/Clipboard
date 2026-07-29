@@ -14,14 +14,14 @@ pub fn compute_content_hash(kind: &str, text: &str, resource_path: Option<&str>)
     if let Some(path) = resource_path {
         hasher.update(path.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn compute_media_hash(kind: &str, data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(kind.as_bytes());
     hasher.update(data);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// Computes an image hash from decoded RGBA pixels instead of the source
@@ -47,7 +47,7 @@ pub fn compute_normalized_media_hash(kind: &str, data: &[u8]) -> String {
     hasher.update(rgba.width().to_le_bytes());
     hasher.update(rgba.height().to_le_bytes());
     hasher.update(rgba.as_raw());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// Returns the hashes that can be observed for a media write. The raw hash

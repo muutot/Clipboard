@@ -77,21 +77,21 @@ fn md5_hash(input: &str) -> String {
     use md5::Digest;
     let mut hasher = md5::Md5::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn sha256_hash(input: &str) -> String {
     use sha2::Digest;
     let mut hasher = sha2::Sha256::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn sha512_hash(input: &str) -> String {
     use sha2::Digest;
     let mut hasher = sha2::Sha512::new();
     hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 #[cfg(test)]
