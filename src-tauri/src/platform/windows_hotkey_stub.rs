@@ -25,7 +25,10 @@ impl QuickPasteTarget {
     }
 
     fn take(&self) -> Option<isize> {
-        self.window_handle.lock().ok().and_then(|mut target| target.take())
+        self.window_handle
+            .lock()
+            .ok()
+            .and_then(|mut target| target.take())
     }
 
     fn clear(&self) {
