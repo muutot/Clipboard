@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::{BTreeSet, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -222,7 +224,7 @@ impl HotkeyManager {
         self.window = Some(window.clone());
         let (tx, rx) = mpsc::channel::<()>();
         let handle = spawn_hotkey_thread_with_hotkeys(bindings, double_modifiers, tx);
-        let quick_paste_target = Arc::clone(&self.quick_paste_target);
+        let _quick_paste_target = Arc::clone(&self.quick_paste_target);
 
         thread::spawn(move || {
             while let Ok(()) = rx.recv() {

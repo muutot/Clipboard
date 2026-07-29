@@ -101,6 +101,7 @@ mod x11_ffi {
     pub type KeySym = u64;
     pub type Status = i32;
     pub type Bool = i32;
+    #[allow(clippy::upper_case_acronyms)]
     pub type XID = u64;
 
     // XEvent union — we only define the parts we use.
@@ -696,11 +697,11 @@ pub fn read_clipboard_text() -> Option<String> {
             return None;
         }
 
-        let atom_clipboard = x11_ffi::XInternAtom(display, b"CLIPBOARD\0".as_ptr() as *const i8, 0);
-        let atom_utf8 = x11_ffi::XInternAtom(display, b"UTF8_STRING\0".as_ptr() as *const i8, 0);
+        let atom_clipboard = x11_ffi::XInternAtom(display, c"CLIPBOARD".as_ptr(), 0);
+        let atom_utf8 = x11_ffi::XInternAtom(display, c"UTF8_STRING".as_ptr(), 0);
         let atom_property = x11_ffi::XInternAtom(
             display,
-            b"CLIPBOARD_DESKTOP_READ\0".as_ptr() as *const i8,
+            c"CLIPBOARD_DESKTOP_READ".as_ptr(),
             0,
         );
 
@@ -718,13 +719,12 @@ pub fn read_clipboard_text() -> Option<String> {
             if x11_ffi::XPending(display) > 0 {
                 let mut event: x11_ffi::XEvent = std::mem::zeroed();
                 x11_ffi::XNextEvent(display, &mut event);
-                if event.data.any.type_ == x11_ffi::SELECTION_NOTIFY {
-                    if event.data.selection.requestor == window
-                        && event.data.selection.property == atom_property
-                    {
-                        got_selection = true;
-                        break;
-                    }
+                if event.data.any.type_ == x11_ffi::SELECTION_NOTIFY
+                    && event.data.selection.requestor == window
+                    && event.data.selection.property == atom_property
+                {
+                    got_selection = true;
+                    break;
                 }
             } else {
                 std::thread::sleep(std::time::Duration::from_millis(10));
@@ -827,9 +827,9 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
 
         let root = x11_ffi::XDefaultRootWindow(display);
         let atom_active =
-            x11_ffi::XInternAtom(display, b"_NET_ACTIVE_WINDOW\0".as_ptr() as *const i8, 0);
-        let atom_pid = x11_ffi::XInternAtom(display, b"_NET_WM_PID\0".as_ptr() as *const i8, 0);
-        let atom_cardinal = x11_ffi::XInternAtom(display, b"CARDINAL\0".as_ptr() as *const i8, 0);
+            x11_ffi::XInternAtom(display, c"_NET_ACTIVE_WINDOW".as_ptr(), 0);
+        let atom_pid = x11_ffi::XInternAtom(display, c"_NET_WM_PID".as_ptr(), 0);
+        let atom_cardinal = x11_ffi::XInternAtom(display, c"CARDINAL".as_ptr(), 0);
 
         // Get _NET_ACTIVE_WINDOW property from root window
         let mut actual_type: x11_ffi::Atom = 0;
