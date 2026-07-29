@@ -233,6 +233,7 @@ mod x11_ffi {
 
     pub const ANY_MODIFIER: u32 = 1 << 15;
 
+    #[link(name = "X11")]
     extern "C" {
         // Connection management
         pub fn XOpenDisplay(name: *const i8) -> *mut Display;
@@ -319,7 +320,10 @@ mod x11_ffi {
         // Error handling
         pub fn XSetErrorHandler(handler: *const std::ffi::c_void) -> *const std::ffi::c_void;
         pub fn XSync(display: *mut Display, discard: Bool) -> i32;
+    }
 
+    #[link(name = "Xfixes")]
+    extern "C" {
         // XFixes (query version, select selection input)
         pub fn XFixesQueryExtension(
             display: *mut Display,
@@ -670,6 +674,293 @@ impl X11ClipboardMonitor {
         // 4. XGetAtomName on each to get target string
         vec![]
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Top-level platform dispatch functions (called from mod.rs)
+// ---------------------------------------------------------------------------
+
+/// Reads plain text from the X11 CLIPBOARD selection using XConvertSelection.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_text() -> Option<String> {
+    unsafe {
+        let display = x11_ffi::XOpenDisplay(std::ptr::null());
+        if display.is_null() {
+            return None;
+        }
+
+        let root = x11_ffi::XDefaultRootWindow(display);
+        let window = x11_ffi::XCreateSimpleWindow(display, root, 0, 0, 1, 1, 0, 0, 0);
+        if window == 0 {
+            x11_ffi::XCloseDisplay(display);
+            return None;
+        }
+
+        let atom_clipboard = x11_ffi::XInternAtom(display, b"CLIPBOARD\0".as_ptr() as *const i8, 0);
+        let atom_utf8 = x11_ffi::XInternAtom(display, b"UTF8_STRING\0".as_ptr() as *const i8, 0);
+        let atom_property = x11_ffi::XInternAtom(
+            display,
+            b"CLIPBOARD_DESKTOP_READ\0".as_ptr() as *const i8,
+            0,
+        );
+
+        x11_ffi::XConvertSelection(display, atom_clipboard, atom_utf8, atom_property, window, 0);
+        x11_ffi::XFlush(display);
+
+        // Wait for SelectionNotify with 500ms timeout
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+        let mut got_selection = false;
+
+        loop {
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            if x11_ffi::XPending(display) > 0 {
+                let mut event: x11_ffi::XEvent = std::mem::zeroed();
+                x11_ffi::XNextEvent(display, &mut event);
+                if event.data.any.type_ == x11_ffi::SELECTION_NOTIFY {
+                    if event.data.selection.requestor == window
+                        && event.data.selection.property == atom_property
+                    {
+                        got_selection = true;
+                        break;
+                    }
+                }
+            } else {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+
+        if !got_selection {
+            x11_ffi::XDestroyWindow(display, window);
+            x11_ffi::XCloseDisplay(display);
+            return None;
+        }
+
+        // Read the property data
+        let mut actual_type: x11_ffi::Atom = 0;
+        let mut actual_format: i32 = 0;
+        let mut nitems: u64 = 0;
+        let mut bytes_after: u64 = 0;
+        let mut prop: *mut u8 = std::ptr::null_mut();
+
+        let result = x11_ffi::XGetWindowProperty(
+            display,
+            window,
+            atom_property,
+            0,
+            !0i64 >> 1,
+            0,
+            0,
+            &mut actual_type,
+            &mut actual_format,
+            &mut nitems,
+            &mut bytes_after,
+            &mut prop,
+        );
+
+        let text = if result == 0 && !prop.is_null() && nitems > 0 {
+            let slice = std::slice::from_raw_parts(prop, nitems as usize);
+            let s = String::from_utf8(slice.to_vec()).ok();
+            x11_ffi::XFree(prop as *mut std::ffi::c_void);
+            s
+        } else {
+            None
+        };
+
+        x11_ffi::XDestroyWindow(display, window);
+        x11_ffi::XCloseDisplay(display);
+        text
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_text() -> Option<String> {
+    None
+}
+
+/// Reads clipboard image data – not supported via command-line tools on X11.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    // Try xclip with common image targets
+    for target in &["image/png", "image/bmp", "image/jpeg", "image/tiff"] {
+        if let Ok(output) = std::process::Command::new("xclip")
+            .args(["-selection", "clipboard", "-t", target, "-out"])
+            .output()
+        {
+            if output.status.success() && !output.stdout.is_empty() {
+                if let Ok(img) = image::load_from_memory(&output.stdout) {
+                    let rgba = img.to_rgba8();
+                    let (w, h) = rgba.dimensions();
+                    return Some((rgba.into_raw(), w, h));
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    None
+}
+
+/// Reads file paths – not supported via simple command-line tools on X11.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+/// Returns the foreground application on X11 using `_NET_ACTIVE_WINDOW`.
+#[cfg(target_os = "linux")]
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
+    let (name, exe_path) = unsafe {
+        let display = x11_ffi::XOpenDisplay(std::ptr::null());
+        if display.is_null() {
+            return crate::platform::ForegroundApp::empty();
+        }
+
+        let root = x11_ffi::XDefaultRootWindow(display);
+        let atom_active =
+            x11_ffi::XInternAtom(display, b"_NET_ACTIVE_WINDOW\0".as_ptr() as *const i8, 0);
+        let atom_pid = x11_ffi::XInternAtom(display, b"_NET_WM_PID\0".as_ptr() as *const i8, 0);
+
+        // Get _NET_ACTIVE_WINDOW property from root window
+        let mut actual_type: x11_ffi::Atom = 0;
+        let mut actual_format: i32 = 0;
+        let mut nitems: u64 = 0;
+        let mut bytes_after: u64 = 0;
+        let mut prop: *mut u8 = std::ptr::null_mut();
+
+        let res = x11_ffi::XGetWindowProperty(
+            display,
+            root,
+            atom_active,
+            0,
+            1,
+            0,
+            0,
+            &mut actual_type,
+            &mut actual_format,
+            &mut nitems,
+            &mut bytes_after,
+            &mut prop,
+        );
+
+        let window_id = if res == 0 && !prop.is_null() && nitems > 0 && actual_format == 32 {
+            let w = *(prop as *mut u32) as u64;
+            x11_ffi::XFree(prop as *mut std::ffi::c_void);
+            w
+        } else {
+            x11_ffi::XCloseDisplay(display);
+            return crate::platform::ForegroundApp::empty();
+        };
+
+        // Get _NET_WM_PID from the active window
+        let mut actual_type2: x11_ffi::Atom = 0;
+        let mut actual_format2: i32 = 0;
+        let mut nitems2: u64 = 0;
+        let mut bytes_after2: u64 = 0;
+        let mut prop2: *mut u8 = std::ptr::null_mut();
+
+        let res2 = x11_ffi::XGetWindowProperty(
+            display,
+            window_id,
+            atom_pid,
+            0,
+            1,
+            0,
+            x11_ffi::XA_CARDINAL,
+            &mut actual_type2,
+            &mut actual_format2,
+            &mut nitems2,
+            &mut bytes_after2,
+            &mut prop2,
+        );
+
+        let pid: Option<u32> =
+            if res2 == 0 && !prop2.is_null() && nitems2 > 0 && actual_format2 == 32 {
+                let p = *(prop2 as *mut u32);
+                x11_ffi::XFree(prop2 as *mut std::ffi::c_void);
+                Some(p)
+            } else {
+                None
+            };
+
+        x11_ffi::XCloseDisplay(display);
+
+        let name = pid
+            .and_then(|p| std::fs::read_to_string(format!("/proc/{p}/comm")).ok())
+            .map(|s| s.trim().to_owned())
+            .unwrap_or_default();
+
+        let exe_path = pid
+            .and_then(|p| std::fs::read_link(format!("/proc/{p}/exe")).ok())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        (name, exe_path)
+    };
+
+    crate::platform::ForegroundApp { name, exe_path }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
+    crate::platform::ForegroundApp::empty()
+}
+
+/// Extracts an app icon – not supported via command-line tools on X11.
+#[cfg(target_os = "linux")]
+pub fn extract_app_icon(
+    _icon_dir: &std::path::Path,
+    _app_name: &str,
+    _exe_path: &str,
+) -> Option<String> {
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn extract_app_icon(
+    _icon_dir: &std::path::Path,
+    _app_name: &str,
+    _exe_path: &str,
+) -> Option<String> {
+    None
+}
+
+/// Writes text to the X11 CLIPBOARD selection using xclip.
+#[cfg(target_os = "linux")]
+pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut child = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-in"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to spawn xclip: {e}"))?;
+
+    if let Some(ref mut stdin) = child.stdin {
+        stdin
+            .write_all(text.as_bytes())
+            .map_err(|e| format!("failed to write to xclip stdin: {e}"))?;
+    }
+
+    child
+        .wait()
+        .map_err(|e| format!("xclip wait failed: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String> {
+    Err("X11 clipboard writing is not supported on this platform".to_owned())
 }
 
 // ---------------------------------------------------------------------------

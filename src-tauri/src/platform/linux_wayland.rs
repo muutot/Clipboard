@@ -801,6 +801,197 @@ impl WaylandCompositorInfo {
 }
 
 // ---------------------------------------------------------------------------
+//  Top-level platform dispatch functions (called from mod.rs)
+// ---------------------------------------------------------------------------
+
+/// Reads plain text from the Wayland clipboard using `wl-paste`.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_text() -> Option<String> {
+    std::process::Command::new("wl-paste")
+        .args(["--no-newline"])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout).ok()
+            } else {
+                None
+            }
+        })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_text() -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    for target in &["image/png", "image/bmp", "image/jpeg", "image/tiff"] {
+        if let Ok(output) = std::process::Command::new("wl-paste")
+            .args(["--type", target])
+            .output()
+        {
+            if output.status.success() && !output.stdout.is_empty() {
+                if let Ok(img) = image::load_from_memory(&output.stdout) {
+                    let rgba = img.to_rgba8();
+                    let (w, h) = rgba.dimensions();
+                    return Some((rgba.into_raw(), w, h));
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+/// Returns the foreground application on Wayland using `swaymsg` or `hyprctl`.
+#[cfg(target_os = "linux")]
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
+    // Try Sway first, then Hyprland, then fallback to /proc via xdotool (XWayland)
+    let pid = std::process::Command::new("swaymsg")
+        .args(["-t", "get_seats"])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                // Parse JSON to get the focused view PID
+                let text = String::from_utf8(output.stdout).ok()?;
+                let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+                json.as_array()?
+                    .first()?
+                    .get("focus")?
+                    .as_array()?
+                    .first()?
+                    .as_u64()
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            // Hyprland
+            std::process::Command::new("hyprctl")
+                .args(["activewindow"])
+                .output()
+                .ok()
+                .and_then(|output| {
+                    if output.status.success() {
+                        let text = String::from_utf8(output.stdout).ok()?;
+                        // Parse "PID: 1234" from output
+                        for line in text.lines() {
+                            if let Some(pid_str) = line.strip_prefix("PID: ") {
+                                return pid_str.trim().parse::<u64>().ok();
+                            }
+                        }
+                    }
+                    None
+                })
+        })
+        .or_else(|| {
+            // Fallback: use xdotool (works in XWayland sessions)
+            std::process::Command::new("xdotool")
+                .args(["getactivewindow", "getwindowpid"])
+                .output()
+                .ok()
+                .and_then(|output| {
+                    if output.status.success() {
+                        String::from_utf8(output.stdout)
+                            .ok()
+                            .and_then(|s| s.trim().parse::<u64>().ok())
+                    } else {
+                        None
+                    }
+                })
+        });
+
+    let pid_u32 = pid.and_then(|p| u32::try_from(p).ok());
+
+    let (name, exe_path) = match pid_u32 {
+        Some(pid) => {
+            let name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+                .ok()
+                .map(|s| s.trim().to_owned())
+                .unwrap_or_default();
+
+            let exe_path = std::fs::read_link(format!("/proc/{pid}/exe"))
+                .ok()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            (name, exe_path)
+        }
+        None => (String::new(), String::new()),
+    };
+
+    crate::platform::ForegroundApp { name, exe_path }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
+    crate::platform::ForegroundApp::empty()
+}
+
+#[cfg(target_os = "linux")]
+pub fn extract_app_icon(
+    _icon_dir: &std::path::Path,
+    _app_name: &str,
+    _exe_path: &str,
+) -> Option<String> {
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn extract_app_icon(
+    _icon_dir: &std::path::Path,
+    _app_name: &str,
+    _exe_path: &str,
+) -> Option<String> {
+    None
+}
+
+/// Writes text to the Wayland clipboard using `wl-copy`.
+#[cfg(target_os = "linux")]
+pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut child = std::process::Command::new("wl-copy")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to spawn wl-copy: {e}"))?;
+
+    if let Some(ref mut stdin) = child.stdin {
+        stdin
+            .write_all(text.as_bytes())
+            .map_err(|e| format!("failed to write to wl-copy stdin: {e}"))?;
+    }
+
+    child
+        .wait()
+        .map_err(|e| format!("wl-copy wait failed: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String> {
+    Err("Wayland clipboard writing is not supported on this platform".to_owned())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

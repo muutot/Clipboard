@@ -470,7 +470,7 @@ fn normalize_app_name(app: &str) -> String {
     path_name.to_lowercase()
 }
 
-fn foreground_app_name(app: &platform::windows_clipboard::ForegroundApp) -> Option<String> {
+fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
     if !app.exe_path.trim().is_empty() {
         let leaf = app
             .exe_path
@@ -2973,13 +2973,13 @@ fn start_clipboard_monitoring(
                             break;
                         }
 
-                        let app_info = platform::windows_clipboard::get_foreground_app();
+                        let app_info = platform::get_foreground_app();
                         let source_app = foreground_app_name(&app_info);
                         if capture_for_thread.should_skip(source_app.as_deref(), None) {
                             continue;
                         }
 
-                        let text = match platform::windows_clipboard::read_clipboard_text() {
+                        let text = match platform::read_clipboard_text() {
                             Some(t) => t,
                             None => continue,
                         };
@@ -3804,7 +3804,7 @@ pub fn run() {
                                     break;
                                 }
 
-                                let app_info = platform::windows_clipboard::get_foreground_app();
+                                let app_info = platform::get_foreground_app();
                                 let source_app = foreground_app_name(&app_info);
                                 if capture_for_thread.should_skip(source_app.as_deref(), None) {
                                     continue;
@@ -3813,7 +3813,7 @@ pub fn run() {
                                 // Extract and cache app icon
                                 let icon_dir = storage_path.join("icons");
                                 let icon_path = if let Some(source_name) = source_app.as_deref() {
-                                    platform::windows_clipboard::extract_app_icon(
+                                    platform::extract_app_icon(
                                         &icon_dir,
                                         source_name,
                                         &app_info.exe_path,
@@ -3822,9 +3822,9 @@ pub fn run() {
                                     None
                                 };
 
-                                let text = platform::windows_clipboard::read_clipboard_text();
-                                let image_data = platform::windows_clipboard::read_clipboard_image();
-                                let file_paths = platform::windows_clipboard::read_clipboard_file_paths();
+                                let text = platform::read_clipboard_text();
+                                let image_data = platform::read_clipboard_image();
+                                let file_paths = platform::read_clipboard_file_paths();
 
                                 if capture_for_thread.should_skip(source_app.as_deref(), text.as_deref()) {
                                     continue;
@@ -4373,11 +4373,11 @@ mod capture_tests {
 
     #[test]
     fn foreground_source_uses_name_then_executable_fallback() {
-        let named = platform::windows_clipboard::ForegroundApp {
+        let named = platform::ForegroundApp {
             name: "Editor".to_owned(),
             exe_path: r"C:\Apps\editor.exe".to_owned(),
         };
-        let path_only = platform::windows_clipboard::ForegroundApp {
+        let path_only = platform::ForegroundApp {
             name: String::new(),
             exe_path: r"C:\Apps\Browser.exe".to_owned(),
         };

@@ -44,7 +44,7 @@ pub fn clipboard_change_is_self_write(marker: &[u8], observed_text: &str) -> boo
         .any(|expected| marker_hashes.clone().any(|marked| marked == expected))
 }
 
-fn normalize_app_icon(image: image::RgbaImage) -> image::RgbaImage {
+pub(crate) fn normalize_app_icon(image: image::RgbaImage) -> image::RgbaImage {
     image::imageops::resize(
         &image,
         APP_ICON_SIZE,
@@ -696,14 +696,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     vec![]
 }
 
-#[cfg(target_os = "windows")]
-pub struct ForegroundApp {
-    pub name: String,
-    pub exe_path: String,
-}
-
-#[cfg(target_os = "windows")]
-pub fn get_foreground_app() -> ForegroundApp {
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
@@ -726,7 +719,7 @@ pub fn get_foreground_app() -> ForegroundApp {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd == 0 {
-            return ForegroundApp {
+            return crate::platform::ForegroundApp {
                 name: String::new(),
                 exe_path: String::new(),
             };
@@ -744,7 +737,7 @@ pub fn get_foreground_app() -> ForegroundApp {
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, &mut pid);
         if pid == 0 {
-            return ForegroundApp {
+            return crate::platform::ForegroundApp {
                 name: title.clone(),
                 exe_path: String::new(),
             };
@@ -752,7 +745,7 @@ pub fn get_foreground_app() -> ForegroundApp {
 
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process == 0 {
-            return ForegroundApp {
+            return crate::platform::ForegroundApp {
                 name: title.clone(),
                 exe_path: String::new(),
             };
@@ -770,31 +763,17 @@ pub fn get_foreground_app() -> ForegroundApp {
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
-            return ForegroundApp {
+            return crate::platform::ForegroundApp {
                 name,
                 exe_path: full_path,
             };
         }
 
-        ForegroundApp {
+        crate::platform::ForegroundApp {
             name: title,
             exe_path: String::new(),
         }
     }
-}
-
-#[cfg(not(target_os = "windows"))]
-pub fn get_foreground_app() -> ForegroundApp {
-    ForegroundApp {
-        name: String::new(),
-        exe_path: String::new(),
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-pub struct ForegroundApp {
-    pub name: String,
-    pub exe_path: String,
 }
 
 #[cfg(target_os = "windows")]
@@ -1108,6 +1087,119 @@ pub fn unregister_global_hotkey(hwnd: isize, id: i32) -> Result<(), String> {
 #[cfg(not(target_os = "windows"))]
 pub fn unregister_global_hotkey(_hwnd: isize, _id: i32) -> Result<(), String> {
     Err("global hotkey unregistration is not supported on this platform".to_string())
+}
+
+// ---------------------------------------------------------------------------
+//  Non-Windows stubs for WindowsClipboardMonitor and ClipboardChange
+// ---------------------------------------------------------------------------
+
+#[cfg(not(target_os = "windows"))]
+pub struct WindowsClipboardMonitor {
+    running: bool,
+    ignored_apps: Vec<String>,
+    sender: Option<mpsc::Sender<ClipboardChange>>,
+    stop_sender: Option<mpsc::Sender<()>>,
+    handle: Option<JoinHandle<()>>,
+}
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Debug, Clone)]
+pub struct ClipboardChange {
+    pub sequence: u32,
+}
+
+#[cfg(not(target_os = "windows"))]
+impl Default for WindowsClipboardMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+impl WindowsClipboardMonitor {
+    pub fn new() -> Self {
+        Self {
+            running: false,
+            ignored_apps: vec![],
+            sender: None,
+            stop_sender: None,
+            handle: None,
+        }
+    }
+
+    pub fn start(&mut self) -> Result<mpsc::Receiver<ClipboardChange>, String> {
+        if self.running {
+            return Err("clipboard monitor is already running".to_string());
+        }
+
+        let (sender, receiver) = mpsc::channel();
+        let (stop_sender, stop_receiver) = mpsc::channel();
+        let sender_for_thread = sender.clone();
+
+        let handle = thread::Builder::new()
+            .name("clipboard-monitor".to_owned())
+            .spawn(move || {
+                let mut last_text: Option<String> = None;
+                let mut sequence = 0u32;
+
+                loop {
+                    match stop_receiver.recv_timeout(Duration::from_millis(500)) {
+                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    }
+
+                    let current_text = crate::platform::read_clipboard_text();
+
+                    let changed = match (&last_text, &current_text) {
+                        (Some(old), Some(new)) => old != new,
+                        (None, None) => false,
+                        _ => true,
+                    };
+
+                    if changed {
+                        sequence = sequence.wrapping_add(1);
+                        last_text = current_text;
+                        let _ = sender_for_thread.send(ClipboardChange { sequence });
+                    }
+                }
+            })
+            .map_err(|error| format!("failed to spawn clipboard monitor: {error}"))?;
+
+        self.sender = Some(sender);
+        self.stop_sender = Some(stop_sender);
+        self.handle = Some(handle);
+        self.running = true;
+
+        Ok(receiver)
+    }
+
+    pub fn stop(&mut self) {
+        self.running = false;
+        if let Some(sender) = self.stop_sender.take() {
+            let _ = sender.send(());
+        }
+        self.sender = None;
+        if let Some(handle) = self.handle.take() {
+            if handle.thread().id() != thread::current().id() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+
+    pub fn set_ignored_apps(&mut self, apps: Vec<String>) {
+        self.ignored_apps = apps;
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+impl Drop for WindowsClipboardMonitor {
+    fn drop(&mut self) {
+        self.stop();
+    }
 }
 
 #[cfg(test)]

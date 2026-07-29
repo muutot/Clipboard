@@ -72,26 +72,105 @@ pub type MacOSResult<T> = Result<T, MacOSError>;
 // FFI boundary.
 
 #[cfg(target_os = "macos")]
+mod objc {
+    #![allow(non_camel_case_types, dead_code)]
+
+    #[repr(C)]
+    pub struct Object([u8; 0]);
+    pub type Sel = *mut Object;
+    pub type Id = *mut Object;
+
+    pub const YES: i8 = 1;
+    pub const NO: i8 = 0;
+
+    extern "C" {
+        pub fn objc_getClass(name: *const i8) -> Id;
+        pub fn sel_registerName(name: *const i8) -> Sel;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend(receiver: Id, sel: Sel) -> Id;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_isize(receiver: Id, sel: Sel) -> isize;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_ptr(receiver: Id, sel: Sel) -> *const i8;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_id_id(receiver: Id, sel: Sel, arg: Id) -> Id;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_id_Int(receiver: Id, sel: Sel, arg: isize) -> Id;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_i32_Id(receiver: Id, sel: Sel, arg: i32) -> Id;
+        pub fn objc_autoreleasePoolPush() -> Id;
+        pub fn objc_autoreleasePoolPop(pool: Id);
+    }
+
+    pub fn nsstring_from_str(s: &str) -> Id {
+        let cls = unsafe { objc_getClass(b"NSString\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(b"stringWithUTF8String:\0".as_ptr() as *const i8) };
+        let cstr = std::ffi::CString::new(s).unwrap_or_default();
+        unsafe { msgSend_id_id(cls, sel, cstr.as_ptr() as Id) }
+    }
+
+    pub fn nsstring_to_str(s: Id) -> Option<String> {
+        if s.is_null() {
+            return None;
+        }
+        let sel = unsafe { sel_registerName(b"UTF8String\0".as_ptr() as *const i8) };
+        let ptr = unsafe { msgSend_ptr(s, sel) };
+        if ptr.is_null() {
+            None
+        } else {
+            unsafe { Some(std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()) }
+        }
+    }
+
+    pub fn get_nspasteboard() -> Id {
+        let cls = unsafe { objc_getClass(b"NSPasteboard\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(b"generalPasteboard\0".as_ptr() as *const i8) };
+        unsafe { msgSend(cls, sel) }
+    }
+
+    pub fn pasteboard_change_count(pb: Id) -> isize {
+        let sel = unsafe { sel_registerName(b"changeCount\0".as_ptr() as *const i8) };
+        unsafe { msgSend_isize(pb, sel) }
+    }
+
+    pub fn pasteboard_string_for_type(pb: Id, type_name: &str) -> Option<String> {
+        let type_ns = nsstring_from_str(type_name);
+        let sel = unsafe { sel_registerName(b"stringForType:\0".as_ptr() as *const i8) };
+        let result = unsafe { msgSend_id_id(pb, sel, type_ns) };
+        nsstring_to_str(result)
+    }
+
+    pub fn get_nsworkspace() -> Id {
+        let cls = unsafe { objc_getClass(b"NSWorkspace\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(b"sharedWorkspace\0".as_ptr() as *const i8) };
+        unsafe { msgSend(cls, sel) }
+    }
+
+    pub fn workspace_frontmost_app(ws: Id) -> Id {
+        let sel = unsafe { sel_registerName(b"frontmostApplication\0".as_ptr() as *const i8) };
+        unsafe { msgSend(ws, sel) }
+    }
+
+    pub fn running_app_name(app: Id) -> Option<String> {
+        let sel = unsafe { sel_registerName(b"localizedName\0".as_ptr() as *const i8) };
+        let result = unsafe { msgSend(app, sel) };
+        nsstring_to_str(result)
+    }
+
+    pub fn running_app_exe_path(app: Id) -> Option<String> {
+        let sel = unsafe { sel_registerName(b"executableURL\0".as_ptr() as *const i8) };
+        let url = unsafe { msgSend(app, sel) };
+        if url.is_null() {
+            return None;
+        }
+        let sel_path = unsafe { sel_registerName(b"path\0".as_ptr() as *const i8) };
+        let path_str = unsafe { msgSend(url, sel_path) };
+        nsstring_to_str(path_str)
+    }
+}
+
+#[cfg(target_os = "macos")]
 extern "C" {
-    // ---- NSPasteboard --------------------------------------------------
-    fn NSPasteboard_generalPasteboard() -> *mut std::ffi::c_void;
-    fn NSPasteboard_changeCount(pasteboard: *mut std::ffi::c_void) -> isize;
-    fn NSPasteboard_types(pasteboard: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn NSPasteboard_stringForType(
-        pasteboard: *mut std::ffi::c_void,
-        data_type: *mut std::ffi::c_void,
-    ) -> *mut std::ffi::c_void;
-    // NSString helpers
-    fn NSString_UTF8String(string: *mut std::ffi::c_void) -> *const i8;
-    fn NSArray_count(array: *mut std::ffi::c_void) -> isize;
-    fn NSArray_objectAtIndex(array: *mut std::ffi::c_void, index: isize) -> *mut std::ffi::c_void;
-
-    // ---- NSWorkspace ---------------------------------------------------
-    fn NSWorkspace_sharedWorkspace() -> *mut std::ffi::c_void;
-    fn NSWorkspace_frontmostApplication(workspace: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn NSRunningApplication_localizedName(app: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn NSRunningApplication_bundleIdentifier(app: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-
     // ---- CGEvent (CoreGraphics) ----------------------------------------
     fn CGEventSourceCreate(state_id: i32) -> *mut std::ffi::c_void;
     fn CGEventTapCreate(
@@ -218,17 +297,6 @@ impl MacOSModifierMapping {
 // Clipboard format reading
 // ---------------------------------------------------------------------------
 
-/// Represents the available pasteboard data at a single point in time.
-#[derive(Debug, Clone)]
-pub struct PasteboardSnapshot {
-    /// Pasteboard change count (monotonically increasing).
-    pub change_count: isize,
-    /// MIME / UTI types available on the pasteboard (e.g. `public.utf8-plain-text`).
-    pub available_types: Vec<String>,
-    /// The plain-text content, if available.
-    pub text_content: Option<String>,
-}
-
 // ---------------------------------------------------------------------------
 // MacOSClipboardMonitor
 // ---------------------------------------------------------------------------
@@ -267,10 +335,6 @@ pub struct MacOSClipboardMonitor {
     /// Set of application bundle identifiers whose clipboard activity
     /// should be ignored (e.g. password managers).
     ignored_apps: Arc<Mutex<HashSet<String>>>,
-    /// Last known NSPasteboard change count.
-    last_change_count: isize,
-    /// Channel sender used to emit clipboard-snapshot callbacks.
-    snapshot_tx: Option<mpsc::Sender<PasteboardSnapshot>>,
     /// Join handle for the background polling thread.
     poll_thread: Option<thread::JoinHandle<()>>,
 }
@@ -287,46 +351,61 @@ impl MacOSClipboardMonitor {
         Self {
             running: Arc::new(AtomicBool::new(false)),
             ignored_apps: Arc::new(Mutex::new(HashSet::new())),
-            last_change_count: -1,
-            snapshot_tx: None,
             poll_thread: None,
         }
     }
 
     /// Starts the background polling loop.
     ///
-    /// Every 500ms the loop:
-    /// 1. Obtains `[NSPasteboard generalPasteboard]`.
-    /// 2. Reads `changeCount` and compares with the previous value.
-    /// 3. If changed, calls `read_available_types()` and `read_text()`.
-    /// 4. Checks whether the frontmost application is in the ignored set.
-    /// 5. If not ignored, sends a `PasteboardSnapshot` through the channel.
-    pub fn start(&mut self) -> MacOSResult<()> {
-        // Implementation outline:
-        //
-        // self.running.store(true, Ordering::SeqCst);
-        // let (tx, rx) = mpsc::channel::<PasteboardSnapshot>();
-        // self.snapshot_tx = Some(tx);
-        // let running = Arc::clone(&self.running);
-        // let ignored = Arc::clone(&self.ignored_apps);
-        //
-        // self.poll_thread = Some(thread::spawn(move || {
-        //     while running.load(Ordering::SeqCst) {
-        //         // 1. NSPasteboard_generalPasteboard()
-        //         // 2. NSPasteboard_changeCount(pb)
-        //         // 3. If count != last_count:
-        //         //    a. NSPasteboard_types(pb) → iterate via NSArray_* → UTI strings
-        //         //    b. NSPasteboard_stringForType(pb, "public.utf8-plain-text")
-        //         //    c. Check frontmost app bundle ID vs ignored_apps
-        //         //    d. If not ignored, tx.send(snapshot)
-        //         // 4. thread::sleep(Duration::from_millis(500))
-        //     }
-        // }));
-        // Ok(())
-        //
-        // On non-macOS this is a stub.
+    /// On macOS, uses native NSPasteboard changeCount. On other platforms returns a stub.
+    #[cfg(target_os = "macos")]
+    pub fn start(
+        &mut self,
+    ) -> Result<mpsc::Receiver<crate::platform::windows_clipboard::ClipboardChange>, String> {
+        if self.running.load(Ordering::SeqCst) {
+            return Err("clipboard monitor is already running".to_string());
+        }
+
+        let (sender, receiver) = mpsc::channel();
+        let running = Arc::clone(&self.running);
+
+        let handle = thread::Builder::new()
+            .name("macos-clipboard-monitor".to_owned())
+            .spawn(move || {
+                let mut last_count: isize = -1;
+
+                while running.load(Ordering::SeqCst) {
+                    let pool = unsafe { objc::objc_autoreleasePoolPush() };
+                    let pb = objc::get_nspasteboard();
+                    let count = objc::pasteboard_change_count(pb);
+                    unsafe { objc::objc_autoreleasePoolPop(pool) };
+
+                    if count != last_count {
+                        last_count = count;
+                        let _ = sender.send(crate::platform::windows_clipboard::ClipboardChange {
+                            sequence: count as u32,
+                        });
+                    }
+
+                    thread::sleep(std::time::Duration::from_millis(500));
+                }
+            })
+            .map_err(|e| format!("failed to spawn clipboard monitor: {e}"))?;
+
         self.running.store(true, Ordering::SeqCst);
-        Ok(())
+        self.poll_thread = Some(handle);
+
+        Ok(receiver)
+    }
+
+    /// Non-macOS stub: returns an error.
+    #[cfg(not(target_os = "macos"))]
+    pub fn start(
+        &mut self,
+    ) -> Result<mpsc::Receiver<crate::platform::windows_clipboard::ClipboardChange>, String> {
+        let (_sender, receiver) = mpsc::channel();
+        self.running.store(true, Ordering::SeqCst);
+        Ok(receiver)
     }
 
     /// Stops the polling loop and joins the background thread.
@@ -335,7 +414,6 @@ impl MacOSClipboardMonitor {
         if let Some(handle) = self.poll_thread.take() {
             let _ = handle.join();
         }
-        self.snapshot_tx = None;
         Ok(())
     }
 
@@ -409,6 +487,261 @@ impl MacOSClipboardMonitor {
     pub fn read_pasteboard_types() -> Vec<String> {
         vec![]
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Top-level platform dispatch functions (called from mod.rs)
+//  Uses command-line tools (pbpaste/pbcopy/osascript) since the Objective-C
+//  runtime cannot be called via direct C FFI without the `objc` crate.
+// ---------------------------------------------------------------------------
+
+/// Reads plain text from the system clipboard using native NSPasteboard API.
+#[cfg(target_os = "macos")]
+pub fn read_clipboard_text() -> Option<String> {
+    let pool = unsafe { objc::objc_autoreleasePoolPush() };
+    let pb = objc::get_nspasteboard();
+    let result = objc::pasteboard_string_for_type(pb, "public.utf8-plain-text");
+    unsafe { objc::objc_autoreleasePoolPop(pool) };
+    result
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn read_clipboard_text() -> Option<String> {
+    None
+}
+
+/// Reads clipboard image data using macOS native tools.
+#[cfg(target_os = "macos")]
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    // Try pngpaste first (brew install pngpaste)
+    if let Some(data) = try_clipboard_image_tool("pngpaste", &["-"]) {
+        if let Ok(img) = image::load_from_memory(&data) {
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            return Some((rgba.into_raw(), w, h));
+        }
+    }
+    // Try imgpaste (alternative tool)
+    if let Some(data) = try_clipboard_image_tool("imgpaste", &[]) {
+        if let Ok(img) = image::load_from_memory(&data) {
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            return Some((rgba.into_raw(), w, h));
+        }
+    }
+
+    // Fallback: write clipboard TIFF via osascript, convert with sips
+    let tiff_path = std::env::temp_dir().join("clipboard_img.tiff");
+    let png_path = std::env::temp_dir().join("clipboard_img.png");
+
+    let escaped = tiff_path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let script = format!(
+        "set img to (the clipboard as picture)\n\
+         set fileRef to open for access POSIX file \"{escaped}\" with write permission\n\
+         write img to fileRef\n\
+         close access fileRef"
+    );
+    let ok = std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .ok()
+        .is_some_and(|o| o.status.success() && tiff_path.exists());
+    if !ok {
+        return None;
+    }
+
+    let conv_ok = std::process::Command::new("sips")
+        .args([
+            "-s",
+            "format",
+            "png",
+            &tiff_path.to_string_lossy(),
+            "--out",
+            &png_path.to_string_lossy(),
+        ])
+        .output()
+        .ok()
+        .is_some_and(|o| o.status.success() && png_path.exists());
+    let _ = std::fs::remove_file(&tiff_path);
+    if !conv_ok {
+        return None;
+    }
+
+    let data = std::fs::read(&png_path).ok()?;
+    let _ = std::fs::remove_file(&png_path);
+
+    if let Ok(img) = image::load_from_memory(&data) {
+        let rgba = img.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        Some((rgba.into_raw(), w, h))
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn try_clipboard_image_tool(cmd: &str, args: &[&str]) -> Option<Vec<u8>> {
+    let output = std::process::Command::new(cmd).args(args).output().ok()?;
+    if output.status.success() && !output.stdout.is_empty() {
+        Some(output.stdout)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    None
+}
+
+/// Reads file paths – not supported via simple command-line tools.
+#[cfg(target_os = "macos")]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    vec![]
+}
+
+/// Returns the foreground (frontmost) application using native NSWorkspace API.
+#[cfg(target_os = "macos")]
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
+    let pool = unsafe { objc::objc_autoreleasePoolPush() };
+    let ws = objc::get_nsworkspace();
+    let app = objc::workspace_frontmost_app(ws);
+    let name = objc::running_app_name(app).unwrap_or_default();
+    let exe_path = objc::running_app_exe_path(app).unwrap_or_default();
+    unsafe { objc::objc_autoreleasePoolPop(pool) };
+    crate::platform::ForegroundApp { name, exe_path }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn get_foreground_app() -> crate::platform::ForegroundApp {
+    crate::platform::ForegroundApp::empty()
+}
+
+/// Extracts an app icon from the .app bundle on macOS.
+#[cfg(target_os = "macos")]
+pub fn extract_app_icon(
+    icon_dir: &std::path::Path,
+    app_name: &str,
+    exe_path: &str,
+) -> Option<String> {
+    let icon_key = crate::content::icon_key(app_name);
+    let dest = icon_dir.join(format!("{}.png", icon_key));
+    if dest.exists() {
+        return Some(dest.to_string_lossy().to_string());
+    }
+
+    // Walk up from exe_path to find the .app bundle
+    let exe = std::path::Path::new(exe_path);
+    let bundle = exe.parent()?.parent()?; // Contents/MacOS/exe -> Contents -> .app
+    if !bundle.extension().map_or(false, |ext| ext == "app") {
+        return None;
+    }
+
+    // Read CFBundleIconFile from Info.plist via plutil
+    let info_plist = bundle.join("Contents/Info.plist");
+    if !info_plist.exists() {
+        return None;
+    }
+    let plist_json = std::process::Command::new("plutil")
+        .args(["-convert", "json", "-o", "-", &info_plist.to_string_lossy()])
+        .output()
+        .ok()?;
+    if !plist_json.status.success() {
+        return None;
+    }
+    let plist: std::collections::HashMap<String, serde_json::Value> =
+        serde_json::from_slice(&plist_json.stdout).ok()?;
+
+    let icon_name = plist
+        .get("CFBundleIconFile")
+        .and_then(|v| v.as_str())
+        .unwrap_or("icon");
+    let icon_name = icon_name.trim_end_matches(".icns");
+
+    // Search for the .icns in Resources
+    let resources = bundle.join("Contents/Resources");
+    let mut icns_path = None;
+    for entry in std::fs::read_dir(&resources).ok()? {
+        let entry = entry.ok()?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str == format!("{icon_name}.icns")
+            || name_str.eq_ignore_ascii_case(&format!("{icon_name}.icns"))
+        {
+            icns_path = Some(entry.path());
+            break;
+        }
+    }
+
+    let icns_path = icns_path?;
+
+    // Create output directory
+    let _ = std::fs::create_dir_all(icon_dir);
+
+    // Convert icns to png using sips
+    let ok = std::process::Command::new("sips")
+        .args([
+            "-s",
+            "format",
+            "png",
+            &icns_path.to_string_lossy(),
+            "--out",
+            &dest.to_string_lossy(),
+        ])
+        .output()
+        .ok()
+        .is_some_and(|o| o.status.success() && dest.exists());
+
+    if ok {
+        Some(dest.to_string_lossy().to_string())
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn extract_app_icon(
+    _icon_dir: &std::path::Path,
+    _app_name: &str,
+    _exe_path: &str,
+) -> Option<String> {
+    None
+}
+
+/// Writes text to the system clipboard using `pbcopy`.
+#[cfg(target_os = "macos")]
+pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut child = std::process::Command::new("pbcopy")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to spawn pbcopy: {e}"))?;
+
+    if let Some(ref mut stdin) = child.stdin {
+        stdin
+            .write_all(text.as_bytes())
+            .map_err(|e| format!("failed to write to pbcopy stdin: {e}"))?;
+    }
+
+    child
+        .wait()
+        .map_err(|e| format!("pbcopy wait failed: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String> {
+    Err("macOS clipboard writing is not supported on this platform".to_owned())
 }
 
 // ---------------------------------------------------------------------------

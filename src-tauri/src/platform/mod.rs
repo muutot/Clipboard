@@ -219,6 +219,165 @@ pub fn get_platform_info() -> PlatformInfo {
 }
 
 // ---------------------------------------------------------------------------
+//  ForegroundApp (platform-agnostic type)
+// ---------------------------------------------------------------------------
+
+/// Information about the foreground (focused) application.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForegroundApp {
+    pub name: String,
+    pub exe_path: String,
+}
+
+impl ForegroundApp {
+    pub fn empty() -> Self {
+        Self {
+            name: String::new(),
+            exe_path: String::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  Platform dispatch clipboard functions
+// ---------------------------------------------------------------------------
+
+/// Returns the foreground application based on the current platform.
+pub fn get_foreground_app() -> ForegroundApp {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::get_foreground_app();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::get_foreground_app();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return match Platform::detect() {
+            Platform::LinuxWayland => linux_wayland::get_foreground_app(),
+            _ => linux_x11::get_foreground_app(),
+        };
+    }
+
+    #[allow(unreachable_code)]
+    ForegroundApp::empty()
+}
+
+/// Reads clipboard text.
+pub fn read_clipboard_text() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::read_clipboard_text();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::read_clipboard_text();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return match Platform::detect() {
+            Platform::LinuxWayland => linux_wayland::read_clipboard_text(),
+            _ => linux_x11::read_clipboard_text(),
+        };
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+/// Reads clipboard image data as PNG bytes with dimensions.
+pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::read_clipboard_image();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::read_clipboard_image();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return match Platform::detect() {
+            Platform::LinuxWayland => linux_wayland::read_clipboard_image(),
+            _ => linux_x11::read_clipboard_image(),
+        };
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+/// Reads clipboard file paths.
+pub fn read_clipboard_file_paths() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::read_clipboard_file_paths();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::read_clipboard_file_paths();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return match Platform::detect() {
+            Platform::LinuxWayland => linux_wayland::read_clipboard_file_paths(),
+            _ => linux_x11::read_clipboard_file_paths(),
+        };
+    }
+
+    #[allow(unreachable_code)]
+    {
+        Vec::new()
+    }
+}
+
+/// Extracts and caches an application icon, returning the icon path.
+pub fn extract_app_icon(icon_dir: &Path, app_name: &str, exe_path: &str) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::extract_app_icon(icon_dir, app_name, exe_path);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::extract_app_icon(icon_dir, app_name, exe_path);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return match Platform::detect() {
+            Platform::LinuxWayland => linux_wayland::extract_app_icon(icon_dir, app_name, exe_path),
+            _ => linux_x11::extract_app_icon(icon_dir, app_name, exe_path),
+        };
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+/// Writes text to the clipboard with a self-trigger marker.
+pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::write_clipboard_text_with_self_trigger(text);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::write_clipboard_text_with_self_trigger(text);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return match Platform::detect() {
+            Platform::LinuxWayland => linux_wayland::write_clipboard_text_with_self_trigger(text),
+            _ => linux_x11::write_clipboard_text_with_self_trigger(text),
+        };
+    }
+
+    #[allow(unreachable_code)]
+    Err("clipboard writing is not supported on this platform".to_owned())
+}
+
+// ---------------------------------------------------------------------------
 //  PlatformAdapter trait
 // ---------------------------------------------------------------------------
 
