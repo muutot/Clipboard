@@ -22,22 +22,22 @@
  *   node scripts/release.mjs --dry-run <version>    # preview without committing
  */
 
-import { execSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { argv, exit } from 'node:process';
+import { execSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { argv, exit } from "node:process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, "..");
 
 function run(cmd, opts = {}) {
   console.log(`  > ${cmd}`);
   try {
     return execSync(cmd, {
       cwd: ROOT,
-      encoding: 'utf-8',
-      stdio: opts.silent ? 'pipe' : 'inherit',
+      encoding: "utf-8",
+      stdio: opts.silent ? "pipe" : "inherit",
       shell: true,
       ...opts,
     });
@@ -49,12 +49,12 @@ function run(cmd, opts = {}) {
 }
 
 function getCurrentVersion() {
-  return JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf-8')).version;
+  return JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8")).version;
 }
 
 function isDirty() {
   try {
-    const status = execSync('git status --porcelain', { cwd: ROOT, encoding: 'utf-8' });
+    const status = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf-8" });
     return status.trim().length > 0;
   } catch {
     return true;
@@ -63,11 +63,16 @@ function isDirty() {
 
 function hasUnpushedCommits() {
   try {
-    const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: ROOT, encoding: 'utf-8' }).trim();
-    const ahead = execSync(`git rev-list --count origin/${branch}..HEAD 2>nul`, {
-      cwd: ROOT, encoding: 'utf-8', shell: true,
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd: ROOT,
+      encoding: "utf-8",
     }).trim();
-    return parseInt(ahead || '0') > 0;
+    const ahead = execSync(`git rev-list --count origin/${branch}..HEAD 2>nul`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+      shell: true,
+    }).trim();
+    return parseInt(ahead || "0") > 0;
   } catch {
     return true;
   }
@@ -84,39 +89,41 @@ function printBanner(version) {
 
 // --- Main ---
 const args = argv.slice(2);
-const isDryRun = args.includes('--dry-run');
-const isRegenerate = args.includes('--regenerate');
-const versionArg = args.filter(a => !a.startsWith('--'))[0];
+const isDryRun = args.includes("--dry-run");
+const isRegenerate = args.includes("--regenerate");
+const versionArg = args.filter((a) => !a.startsWith("--"))[0];
 
 if (!versionArg) {
-  console.log(`Usage: node scripts/release.mjs [--dry-run] [--regenerate] <version|patch|minor|major>`);
+  console.log(
+    `Usage: node scripts/release.mjs [--dry-run] [--regenerate] <version|patch|minor|major>`,
+  );
   console.log(`Current version: ${getCurrentVersion()}`);
   exit(1);
 }
 
 const currentVersion = getCurrentVersion();
-const mode = isRegenerate ? 'REGENERATE' : (isDryRun ? 'DRY RUN' : 'RELEASE');
+const mode = isRegenerate ? "REGENERATE" : isDryRun ? "DRY RUN" : "RELEASE";
 
 // Step 1: Pre-flight checks
 console.log(`\n[1/6] Pre-flight checks (${mode})...`);
 if (!isDryRun && !isRegenerate) {
   if (isDirty()) {
-    console.error('  ERROR: Working directory is dirty. Commit or stash changes first.');
+    console.error("  ERROR: Working directory is dirty. Commit or stash changes first.");
     exit(1);
   }
-  console.log('  ✓ Working directory clean');
+  console.log("  ✓ Working directory clean");
 }
 
 // Step 2: Verify
-console.log('\n[2/6] Running verification...');
+console.log("\n[2/6] Running verification...");
 if (!isDryRun) {
-  run('npm run verify');
+  run("npm run verify");
 } else {
-  console.log('  (skipped in dry-run mode)');
+  console.log("  (skipped in dry-run mode)");
 }
 
 // Step 3: Bump version (except in regenerate mode which keeps current version)
-console.log('\n[3/6] Bumping version...');
+console.log("\n[3/6] Bumping version...");
 let newVersion;
 if (isRegenerate) {
   newVersion = currentVersion;
@@ -127,25 +134,25 @@ if (isRegenerate) {
 }
 
 // Step 4: Generate changelog
-console.log('\n[4/6] Generating changelog...');
+console.log("\n[4/6] Generating changelog...");
 if (isRegenerate) {
-  run('node scripts/changelog.mjs --all');
+  run("node scripts/changelog.mjs --all");
 } else {
-  run('node scripts/changelog.mjs');
+  run("node scripts/changelog.mjs");
 }
 
 // Step 5: Commit and tag
 if (!isDryRun) {
-  const changedFiles = execSync('git diff --name-only', { cwd: ROOT, encoding: 'utf-8' }).trim();
+  const changedFiles = execSync("git diff --name-only", { cwd: ROOT, encoding: "utf-8" }).trim();
 
   if (changedFiles) {
     const tagVersion = `v${newVersion}`;
     const releaseBranch = `release/${tagVersion}`;
 
-    console.log('\n[5/6] Committing and tagging...');
+    console.log("\n[5/6] Committing and tagging...");
 
     // Stage changed files
-    const files = changedFiles.split('\n').join(' ');
+    const files = changedFiles.split("\n").join(" ");
     run(`git add ${files}`);
 
     const commitMsg = `🔖 chore[release]: bump version to ${newVersion}`;
@@ -157,18 +164,18 @@ if (!isDryRun) {
 
     console.log(`\n  ✓ Committed and tagged ${tagVersion}`);
   } else {
-    console.log('\n[5/6] No changes to commit (version already at target).');
+    console.log("\n[5/6] No changes to commit (version already at target).");
   }
 } else {
-  console.log('\n[5/6] Commit and tag (skipped in dry-run mode)');
+  console.log("\n[5/6] Commit and tag (skipped in dry-run mode)");
 }
 
 // Step 6: Build
-console.log('\n[6/6] Building release artifacts...');
+console.log("\n[6/6] Building release artifacts...");
 if (!isDryRun) {
-  run('npm run tauri build');
+  run("npm run tauri build");
 } else {
-  console.log('  (skipped in dry-run mode)');
+  console.log("  (skipped in dry-run mode)");
 }
 
 // Done

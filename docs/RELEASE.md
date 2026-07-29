@@ -29,12 +29,14 @@ node scripts/release.mjs --regenerate 0.1.0
 ### 1. Pre-flight
 
 The release script checks:
+
 - Working directory is clean
 - No uncommitted changes
 
 ### 2. Verification
 
 Runs the full verification suite:
+
 ```sh
 npm run verify
 # = format:check + check + build + test:rust + lint:rust
@@ -43,11 +45,13 @@ npm run verify
 ### 3. Version Bump
 
 Updates version in three files atomically:
+
 - `package.json`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml`
 
 Can also be run standalone:
+
 ```sh
 node scripts/version.mjs 0.2.0          # to specific version
 node scripts/version.mjs patch          # semver bump
@@ -58,19 +62,20 @@ node scripts/version.mjs --current      # show current version
 
 Generates `CHANGELOG.md` from gitmoji commit messages since the last git tag. Commits are grouped by type:
 
-| Section | Commit Type |
-|:---|:---|
-| ✨ Features | `feat` |
-| 🐛 Bug Fixes | `fix` |
-| 🚀 Performance | `perf` |
-| ♻️ Refactoring | `refactor` |
-| 🎨 Styling | `style` |
-| 📝 Documentation | `docs` |
-| ✅ Testing | `test` |
-| 🔧 Chores | `chore`, `build` |
-| 🌐 i18n | `i18n` |
+| Section          | Commit Type      |
+| :--------------- | :--------------- |
+| ✨ Features      | `feat`           |
+| 🐛 Bug Fixes     | `fix`            |
+| 🚀 Performance   | `perf`           |
+| ♻️ Refactoring   | `refactor`       |
+| 🎨 Styling       | `style`          |
+| 📝 Documentation | `docs`           |
+| ✅ Testing       | `test`           |
+| 🔧 Chores        | `chore`, `build` |
+| 🌐 i18n          | `i18n`           |
 
 Standalone usage:
+
 ```sh
 node scripts/changelog.mjs              # since last tag
 node scripts/changelog.mjs --all        # full history
@@ -81,6 +86,7 @@ node scripts/changelog.mjs --preview    # preview only
 ### 5. Commit & Tag
 
 Creates a release commit and annotated tag:
+
 ```sh
 git commit -m "🔖 chore[release]: bump version to 0.2.0"
 git tag -a v0.2.0 -m "Release v0.2.0"
@@ -89,6 +95,7 @@ git tag -a v0.2.0 -m "Release v0.2.0"
 ### 6. Build
 
 Runs Tauri production build for all platforms:
+
 ```sh
 npm run tauri build
 ```
@@ -96,12 +103,14 @@ npm run tauri build
 ### 7. Publish
 
 After successful build, push to remote:
+
 ```sh
 git push origin core
 git push origin v0.2.0
 ```
 
 Pushing the tag triggers the CI/CD pipeline (`.github/workflows/release.yml`) which:
+
 - Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
 - Creates a draft GitHub Release with artifacts attached
 
@@ -114,11 +123,13 @@ node scripts/release.mjs --regenerate 0.1.0
 ```
 
 This is useful when:
+
 - You've made changes and want to update the release artifacts
 - The changelog needs to be regenerated from scratch
 - You're iterating on a pre-release version
 
 Regenerate mode:
+
 1. Keeps the current version (does not bump)
 2. Re-generates `CHANGELOG.md` from the full commit history (`--all`)
 3. Commits and tags normally
@@ -127,17 +138,18 @@ Regenerate mode:
 
 ### Version Sources
 
-| File | Key | Format |
-|:---|:---|:---|
-| `package.json` | `.version` | JSON string |
+| File                        | Key        | Format      |
+| :-------------------------- | :--------- | :---------- |
+| `package.json`              | `.version` | JSON string |
 | `src-tauri/tauri.conf.json` | `.version` | JSON string |
-| `src-tauri/Cargo.toml` | `version` | TOML string |
+| `src-tauri/Cargo.toml`      | `version`  | TOML string |
 
 All three must stay in sync. The `scripts/version.mjs` script ensures atomic updates.
 
 ### Pre-release Versions
 
 Semver pre-release tags are supported:
+
 ```sh
 node scripts/release.mjs 0.2.0-beta.1
 node scripts/release.mjs 0.2.0-rc.1

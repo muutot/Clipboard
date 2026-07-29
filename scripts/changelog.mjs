@@ -9,39 +9,41 @@
  *   node scripts/changelog.mjs --preview           # preview without writing
  */
 
-import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
-const CHANGELOG_PATH = resolve(ROOT, 'CHANGELOG.md');
+const ROOT = resolve(__dirname, "..");
+const CHANGELOG_PATH = resolve(ROOT, "CHANGELOG.md");
 
 // Gitmoji → changelog section mapping
 const TYPE_SECTION = {
-  feat: '### ✨ Features',
-  fix: '### 🐛 Bug Fixes',
-  perf: '### 🚀 Performance',
-  refactor: '### ♻️ Refactoring',
-  style: '### 🎨 Styling',
-  docs: '### 📝 Documentation',
-  test: '### ✅ Testing',
-  chore: '### 🔧 Chores',
-  build: '### 🔧 Build',
-  revert: '### ⏪ Reverts',
-  i18n: '### 🌐 Internationalization',
-  cleanup: '### 🧹 Cleanup',
+  feat: "### ✨ Features",
+  fix: "### 🐛 Bug Fixes",
+  perf: "### 🚀 Performance",
+  refactor: "### ♻️ Refactoring",
+  style: "### 🎨 Styling",
+  docs: "### 📝 Documentation",
+  test: "### ✅ Testing",
+  chore: "### 🔧 Chores",
+  build: "### 🔧 Build",
+  revert: "### ⏪ Reverts",
+  i18n: "### 🌐 Internationalization",
+  cleanup: "### 🧹 Cleanup",
 };
 
 function gitLog(fromRef) {
-  const range = fromRef ? `${fromRef}..HEAD` : 'HEAD';
+  const range = fromRef ? `${fromRef}..HEAD` : "HEAD";
   try {
-    const output = execSync(
-      `git log ${range} --format="%H||%ai||%s" --no-merges`,
-      { cwd: ROOT, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, shell: true }
-    );
-    return output.trim().split('\n').filter(Boolean);
+    const output = execSync(`git log ${range} --format="%H||%ai||%s" --no-merges`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024,
+      shell: true,
+    });
+    return output.trim().split("\n").filter(Boolean);
   } catch {
     return [];
   }
@@ -49,18 +51,20 @@ function gitLog(fromRef) {
 
 function getLatestTag() {
   try {
-    const tags = execSync('git tag --sort=-creatordate', {
-      cwd: ROOT, encoding: 'utf-8', shell: true,
+    const tags = execSync("git tag --sort=-creatordate", {
+      cwd: ROOT,
+      encoding: "utf-8",
+      shell: true,
     }).trim();
-    return tags.split('\n').filter(Boolean)[0] || '';
+    return tags.split("\n").filter(Boolean)[0] || "";
   } catch {
-    return '';
+    return "";
   }
 }
 
 function parseCommit(line) {
   // Format: <hash>||<date>||<gitmoji> <type>[<scope>]: <message>
-  const parts = line.split('||');
+  const parts = line.split("||");
   if (parts.length < 3) return null;
   const [hash, date, fullMsg] = parts;
 
@@ -70,9 +74,9 @@ function parseCommit(line) {
 
   return {
     hash: hash.slice(0, 8),
-    date: date.split(' ')[0], // YYYY-MM-DD
+    date: date.split(" ")[0], // YYYY-MM-DD
     type: match[1],
-    scope: match[2] || '',
+    scope: match[2] || "",
     message: match[3].trim(),
   };
 }
@@ -80,9 +84,9 @@ function parseCommit(line) {
 function groupCommits(commits) {
   const sections = {};
   for (const c of commits) {
-    const section = TYPE_SECTION[c.type] || '### 🔧 Chores';
+    const section = TYPE_SECTION[c.type] || "### 🔧 Chores";
     if (!sections[section]) sections[section] = [];
-    const scope = c.scope ? `**${c.scope}**: ` : '';
+    const scope = c.scope ? `**${c.scope}**: ` : "";
     sections[section].push(`- ${scope}${c.message} (${c.hash})`);
   }
   return sections;
@@ -102,7 +106,7 @@ function generateChangelog(version, date, commits) {
       for (const line of sections[sectionName]) {
         md += `${line}\n`;
       }
-      md += '\n';
+      md += "\n";
     }
   }
 
@@ -113,7 +117,7 @@ function generateChangelog(version, date, commits) {
       for (const line of entries) {
         md += `${line}\n`;
       }
-      md += '\n';
+      md += "\n";
     }
   }
 
@@ -121,27 +125,27 @@ function generateChangelog(version, date, commits) {
 }
 
 function getLatestVersion() {
-  const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf-8'));
+  const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8"));
   return pkg.version;
 }
 
 // --- Main ---
 const args = process.argv.slice(2);
-const isPreview = args.includes('--preview');
-const isAll = args.includes('--all');
-const fromIdx = args.indexOf('--from');
+const isPreview = args.includes("--preview");
+const isAll = args.includes("--all");
+const fromIdx = args.indexOf("--from");
 const fromRef = fromIdx >= 0 ? args[fromIdx + 1] : getLatestTag();
 
-const lines = gitLog(isAll ? null : (fromRef || null));
+const lines = gitLog(isAll ? null : fromRef || null);
 const commits = lines.map(parseCommit).filter(Boolean);
 
 if (commits.length === 0) {
-  console.log('No commits found for changelog.');
+  console.log("No commits found for changelog.");
   process.exit(0);
 }
 
 const version = getLatestVersion();
-const today = new Date().toISOString().split('T')[0];
+const today = new Date().toISOString().split("T")[0];
 const changelog = generateChangelog(version, today, commits);
 
 if (isPreview) {
@@ -149,14 +153,14 @@ if (isPreview) {
 } else {
   // Prepend to existing or create new
   if (existsSync(CHANGELOG_PATH)) {
-    const existing = readFileSync(CHANGELOG_PATH, 'utf-8');
+    const existing = readFileSync(CHANGELOG_PATH, "utf-8");
     // Remove the header line if it exists, then prepend new content
-    const existingBody = existing.replace(/^# Changelog\n\n/, '');
-    writeFileSync(CHANGELOG_PATH, changelog + existingBody, 'utf-8');
+    const existingBody = existing.replace(/^# Changelog\n\n/, "");
+    writeFileSync(CHANGELOG_PATH, changelog + existingBody, "utf-8");
   } else {
-    writeFileSync(CHANGELOG_PATH, changelog, 'utf-8');
+    writeFileSync(CHANGELOG_PATH, changelog, "utf-8");
   }
 
   console.log(`CHANGELOG.md updated with ${commits.length} commits for v${version}`);
-  console.log(`  Sections: ${Object.keys(groupCommits(commits)).join(', ')}`);
+  console.log(`  Sections: ${Object.keys(groupCommits(commits)).join(", ")}`);
 }

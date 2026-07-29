@@ -213,7 +213,7 @@
 - **i18n**: correct fontSize i18n key prefix settings. -> general. (0028a6bb)
 - **error-handling**: add console.error to silent catch blocks for clipboard copy, rename, settings persist (41dc974a)
 - **i18n**: extract hardcoded Chinese strings in FontSizeSettingsPanel to i18n keys (c9b47484)
-- **card**: scope contentActions reset  to item.id, prevent resetting on every tick (20cfe557)
+- **card**: scope contentActions reset to item.id, prevent resetting on every tick (20cfe557)
 - **display**: use regex match for first-line extraction, trimStart for remaining lines (c035dc8d)
 - **virtual-scroll**: align itemHeight compact formula and image estimate with compactCardHeightFor (d77f0c4e)
 - **display**: use indexOf+slice approach for remaining lines, keep raw first line (866bdc2f)
@@ -491,7 +491,7 @@
 - **patterns**: extract shared email/url/phone/color regex to utils/patterns.ts (5877ff56)
 - **theme**: derive THEME_COLOR_KEYS from DARK_THEME_COLORS, use COLOR_CSS_MAP in applyThemeColors (337345b2)
 - **css**: remove !important from actions-hidden and transfer-column, use specificity instead (0b0a0ea6)
-- **card**: extract shared assetUrl, promote canEdit to  for template reuse (55c84c69)
+- **card**: extract shared assetUrl, promote canEdit to for template reuse (55c84c69)
 - **settings**: extract applyFontSizesToDocument, centralize font CSS application (ee692d18)
 - **slider**: extract shared updateSliderTrack and sliderPercentage to utils/format.ts (ca06a9c0)
 - **i18n**: reuse isTauriRuntime from runtime.ts, remove duplicate isDesktopRuntime (b3513cc2)
@@ -692,4 +692,3 @@
 
 - **css**: fix all remaining a11y and CSS warnings (a93d7d61)
 - **settings**: fix all errors and warnings across settings panels (83e9f5e0)
-

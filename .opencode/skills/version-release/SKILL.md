@@ -32,6 +32,7 @@ node scripts/release.mjs <version>
 ```
 
 This runs the full pipeline:
+
 1. Pre-flight checks (clean working directory)
 2. `npm run verify`
 3. Version bump in `package.json`, `tauri.conf.json`, `Cargo.toml`
@@ -54,6 +55,7 @@ node scripts/release.mjs --regenerate <version>
 ```
 
 This mode:
+
 - Keeps the current version (does not bump)
 - Re-generates `CHANGELOG.md` from the **full** commit history
 - Commits and tags normally
@@ -98,22 +100,24 @@ After a successful release, report:
 ## CI/CD
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
+
 - Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
 - Creates a draft GitHub Release with artifacts
 
 ## Version source files
 
-| File | Key |
-|:---|:---|
-| `package.json` | `.version` |
+| File                        | Key        |
+| :-------------------------- | :--------- |
+| `package.json`              | `.version` |
 | `src-tauri/tauri.conf.json` | `.version` |
-| `src-tauri/Cargo.toml` | `version` |
+| `src-tauri/Cargo.toml`      | `version`  |
 
 All three are updated atomically by `scripts/version.mjs`.
 
 ## Error recovery
 
 If the release script fails mid-way:
+
 - If version was already bumped: run `git checkout -- .` to revert config files
 - If commit was created but tag failed: `git reset --soft HEAD~1` then re-run
 - If build fails: fix the issue, then re-run with `--regenerate` mode
@@ -121,6 +125,7 @@ If the release script fails mid-way:
 ## Commit message format
 
 Release commits use the gitmoji convention:
+
 ```
 🔖 chore[release]: bump version to x.x.x
 ```

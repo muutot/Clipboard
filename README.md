@@ -41,6 +41,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 <td width="50%">
 
 ### 📋 剪贴板记录
+
 - **文本** / **链接** / **图片** / **文件** 四种内容类型
 - 智能内容识别：邮箱、电话、颜色值、日期、货币、IP
 - 快速操作：一键发邮件、拨号、打开链接、查看日期
@@ -49,6 +50,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 - 历史上限 10,000 条 / 30 天保留（可配置）
 
 ### 🔍 全文搜索
+
 - Tantivy 全文检索引擎，N-gram 中文分词
 - 多关键词无序 AND 匹配 + 相关性评分
 - 自然语言日期搜索（"昨天"、"上周"）
@@ -60,12 +62,14 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 <td width="50%">
 
 ### 🖼️ 图片 OCR
+
 - PP-OCR 引擎，本地运行无需联网
 - 后台任务队列，增量写入搜索索引
 - 模型选择 / 下载 / 安装 / 热重载
 - 识别状态面板，可查看 OCR 文本
 
 ### 🎨 现代 UI
+
 - Svelte 5 响应式界面，暗色主题
 - 虚拟滚动，万级列表流畅滚动
 - 详情面板：覆盖切入 / 左右分栏双模式
@@ -75,6 +79,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 - 系统托盘，透明窗口，开机自启
 
 ### ⚙️ 完善设置
+
 - 双栏设置界面，分类导航 + 全局搜索
 - 通用 / 外观 / 键盘 / 存储 / OCR / 主题 / 忽略应用 / 统计
 - 5 级字体大小调节 + 像素输入
@@ -107,16 +112,16 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
   <img src="https://skillicons.dev/icons?i=tauri,rust,svelte,typescript,vite,sqlite" alt="tech stack" />
 </p>
 
-| 层级 | 技术 | 说明 |
-|:---|:---|:---|
-| 桌面框架 | **Tauri 2** | 轻量跨平台桌面壳，Rust 后端 + Web 前端 |
-| 后端 | **Rust** (edition 2021) | 剪贴板监听、存储、搜索、OCR、快捷键 |
-| 数据库 | **SQLite** (rusqlite 0.40) | 版本化 Schema，仓储模式，自动备份恢复 |
-| 搜索引擎 | **Tantivy 0.26** | 全文检索，自定义 N-gram 分词（中文友好） |
-| OCR | **oar-ocr 0.8** (PP-OCR) | 本地 ONNX 推理，支持 Tesseract 备选 |
-| 前端 | **Svelte 5 + SvelteKit** | Runes 响应式语法，SPA 模式 |
-| 构建 | **Vite 6 + Cargo** | 前端 HMR + Rust 增量编译 |
-| 打包 | **Tauri Bundler** | NSIS (Windows) / App Bundle (macOS) / Deb/AppImage (Linux) |
+| 层级     | 技术                       | 说明                                                       |
+| :------- | :------------------------- | :--------------------------------------------------------- |
+| 桌面框架 | **Tauri 2**                | 轻量跨平台桌面壳，Rust 后端 + Web 前端                     |
+| 后端     | **Rust** (edition 2021)    | 剪贴板监听、存储、搜索、OCR、快捷键                        |
+| 数据库   | **SQLite** (rusqlite 0.40) | 版本化 Schema，仓储模式，自动备份恢复                      |
+| 搜索引擎 | **Tantivy 0.26**           | 全文检索，自定义 N-gram 分词（中文友好）                   |
+| OCR      | **oar-ocr 0.8** (PP-OCR)   | 本地 ONNX 推理，支持 Tesseract 备选                        |
+| 前端     | **Svelte 5 + SvelteKit**   | Runes 响应式语法，SPA 模式                                 |
+| 构建     | **Vite 6 + Cargo**         | 前端 HMR + Rust 增量编译                                   |
+| 打包     | **Tauri Bundler**          | NSIS (Windows) / App Bundle (macOS) / Deb/AppImage (Linux) |
 
 ---
 
@@ -168,18 +173,18 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 
 ## 开发命令
 
-| 命令 | 说明 |
-|:---|:---|
-| `npm run dev` | 启动 Vite 开发服务器（仅前端） |
-| `npm run build` | 前端生产构建 |
-| `npm run tauri dev` | Tauri 桌面应用开发模式 |
-| `npm run tauri build` | Tauri 桌面应用生产构建 |
-| `npm run check` | TypeScript / Svelte 类型检查 |
-| `npm run format` | 代码格式化（Prettier + `cargo fmt`） |
-| `npm run format:check` | 格式检查（不修改文件） |
-| `npm run test:rust` | Rust 单元测试 |
-| `npm run lint:rust` | Rust Clippy 检查 |
-| `npm run verify` | **全量检查**：格式 + 类型 + 构建 + Rust 测试 + Clippy |
+| 命令                   | 说明                                                  |
+| :--------------------- | :---------------------------------------------------- |
+| `npm run dev`          | 启动 Vite 开发服务器（仅前端）                        |
+| `npm run build`        | 前端生产构建                                          |
+| `npm run tauri dev`    | Tauri 桌面应用开发模式                                |
+| `npm run tauri build`  | Tauri 桌面应用生产构建                                |
+| `npm run check`        | TypeScript / Svelte 类型检查                          |
+| `npm run format`       | 代码格式化（Prettier + `cargo fmt`）                  |
+| `npm run format:check` | 格式检查（不修改文件）                                |
+| `npm run test:rust`    | Rust 单元测试                                         |
+| `npm run lint:rust`    | Rust Clippy 检查                                      |
+| `npm run verify`       | **全量检查**：格式 + 类型 + 构建 + Rust 测试 + Clippy |
 
 ### 推荐 IDE 插件
 
@@ -233,14 +238,14 @@ clipboard/
 
 ## 文档
 
-| 文档 | 内容 |
-|:---|:---|
-| [TODO.md](TODO.md) | 项目路线图与进度追踪 |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境搭建、编码规范、提交规范 |
-| [docs/SEARCH.md](docs/SEARCH.md) | 搜索架构：Tantivy 索引、N-gram 分词、查询策略 |
-| [docs/OCR.md](docs/OCR.md) | OCR 管线：引擎选择、模型管理、任务队列 |
-| [docs/PITFALLS.md](docs/PITFALLS.md) | Svelte 5 / Tauri / Rust 开发陷阱 |
-| [docs/DEFAULTS_AND_PRIVACY.md](docs/DEFAULTS_AND_PRIVACY.md) | 默认策略与隐私边界 |
+| 文档                                                         | 内容                                          |
+| :----------------------------------------------------------- | :-------------------------------------------- |
+| [TODO.md](TODO.md)                                           | 项目路线图与进度追踪                          |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                           | 开发环境搭建、编码规范、提交规范              |
+| [docs/SEARCH.md](docs/SEARCH.md)                             | 搜索架构：Tantivy 索引、N-gram 分词、查询策略 |
+| [docs/OCR.md](docs/OCR.md)                                   | OCR 管线：引擎选择、模型管理、任务队列        |
+| [docs/PITFALLS.md](docs/PITFALLS.md)                         | Svelte 5 / Tauri / Rust 开发陷阱              |
+| [docs/DEFAULTS_AND_PRIVACY.md](docs/DEFAULTS_AND_PRIVACY.md) | 默认策略与隐私边界                            |
 
 ---
 

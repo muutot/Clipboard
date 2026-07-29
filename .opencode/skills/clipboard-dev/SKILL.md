@@ -92,36 +92,36 @@ Follow the gitmoji convention established by the earliest ~70 commits of this re
 
 ### Gitmoji mapping
 
-| Emoji | Type     | Use when                                                |
-| ----- | -------- | ------------------------------------------------------- |
-| ✨    | feat     | new feature or capability                               |
-| 🐛    | fix      | bug fix or correction                                   |
-| 📝    | docs     | documentation, roadmap, skill, or reference update      |
-| ♻️    | refactor | code restructuring without behavior change              |
-| 🎨    | style    | formatting, CSS, visual polish                          |
-| 🚀    | perf     | performance improvement                                 |
-| ✅    | test     | adding or updating tests                                |
-| 🔧    | chore    | tooling, dependencies, build scripts, CI                |
-| 🎉    | chore    | initial commit / project bootstrap                      |
-| 🗃️    | feat     | database / schema changes                               |
-| 🔒    | feat     | privacy, security, permissions, defaults enforcement    |
-| 🔍    | feat     | search / index functionality                            |
-| 🔌    | feat     | exposing commands / connecting frontend to backend      |
-| 🔄    | feat     | synchronization, reload, outbox                         |
-| ⌨️    | feat     | keyboard / shortcuts                                    |
-| ⚙️    | feat     | configuration / settings                                |
-| 💾    | feat     | storage / persistence                                   |
-| 📦    | feat     | packaging / dependencies                                |
-| 🔎    | feat     | search / query / listing                                |
-| 🏷️    | feat     | versioning / identification                             |
-| 💬    | fix      | messaging / empty-state / user-facing text              |
-| 🙈    | fix      | hiding / ignoring / suppressing                         |
-| 📁    | feat     | file / directory organization                           |
-| 📂    | feat     | directory / path support                                |
-| 🔡    | fix      | text normalization / case handling                      |
-| ✏️    | fix      | minor text / copy corrections                           |
-| ⚡    | chore    | build / dependency addition                             |
-| 🛠️    | feat     | tooling / utility commands                              |
+| Emoji | Type     | Use when                                             |
+| ----- | -------- | ---------------------------------------------------- |
+| ✨    | feat     | new feature or capability                            |
+| 🐛    | fix      | bug fix or correction                                |
+| 📝    | docs     | documentation, roadmap, skill, or reference update   |
+| ♻️    | refactor | code restructuring without behavior change           |
+| 🎨    | style    | formatting, CSS, visual polish                       |
+| 🚀    | perf     | performance improvement                              |
+| ✅    | test     | adding or updating tests                             |
+| 🔧    | chore    | tooling, dependencies, build scripts, CI             |
+| 🎉    | chore    | initial commit / project bootstrap                   |
+| 🗃️    | feat     | database / schema changes                            |
+| 🔒    | feat     | privacy, security, permissions, defaults enforcement |
+| 🔍    | feat     | search / index functionality                         |
+| 🔌    | feat     | exposing commands / connecting frontend to backend   |
+| 🔄    | feat     | synchronization, reload, outbox                      |
+| ⌨️    | feat     | keyboard / shortcuts                                 |
+| ⚙️    | feat     | configuration / settings                             |
+| 💾    | feat     | storage / persistence                                |
+| 📦    | feat     | packaging / dependencies                             |
+| 🔎    | feat     | search / query / listing                             |
+| 🏷️    | feat     | versioning / identification                          |
+| 💬    | fix      | messaging / empty-state / user-facing text           |
+| 🙈    | fix      | hiding / ignoring / suppressing                      |
+| 📁    | feat     | file / directory organization                        |
+| 📂    | feat     | directory / path support                             |
+| 🔡    | fix      | text normalization / case handling                   |
+| ✏️    | fix      | minor text / copy corrections                        |
+| ⚡    | chore    | build / dependency addition                          |
+| 🛠️    | feat     | tooling / utility commands                           |
 
 ### Examples
 
