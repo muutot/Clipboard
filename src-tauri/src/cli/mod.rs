@@ -76,41 +76,13 @@ where
                 .query
                 .as_deref()
                 .ok_or_else(|| "search requires a query".to_owned())?;
-            let normalized = query.to_lowercase();
             let wanted = args
                 .limit
                 .unwrap_or(50)
                 .clamp(1, search_page_size_limit as usize);
-            let scan_page = page_size_limit as usize;
-            let mut offset = 0u32;
-            let mut filtered = Vec::new();
-            loop {
-                let page = database
-                    .list_recent(scan_page as u32, offset)
-                    .map_err(|e| e.to_string())?;
-                let page_len = page.len();
-                filtered.extend(page.into_iter().filter(|item| {
-                    item.title.to_lowercase().contains(&normalized)
-                        || item
-                            .text_content
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_lowercase()
-                            .contains(&normalized)
-                        || item
-                            .source_app
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_lowercase()
-                            .contains(&normalized)
-                }));
-                if filtered.len() >= wanted || page_len < scan_page {
-                    break;
-                }
-                offset = offset.saturating_add(scan_page as u32);
-            }
-            filtered.truncate(wanted);
-            format_items(&filtered)
+            let items =
+                search_items_by_scanning(database, query, wanted, page_size_limit as usize)?;
+            format_items(&items)
         }
         CliCommand::Copy => {
             let id = args
@@ -143,29 +115,7 @@ where
             } else {
                 ClipboardKind::Text
             };
-            let kind_name = if kind == ClipboardKind::Link {
-                "link"
-            } else {
-                "text"
-            };
-            let content_hash = crate::content::hash::compute_content_hash(kind_name, &text, None);
-            let now_ms = current_time_ms();
-            let item = ClipboardItem {
-                id: format!("cli-{content_hash}-{now_ms}"),
-                kind,
-                title: text.chars().take(200).collect(),
-                text_content: Some(text.clone()),
-                resource_path: None,
-                preview_path: None,
-                content_hash,
-                source_app: Some("CLI".to_owned()),
-                size_bytes: text.len() as u64,
-                created_at_ms: now_ms,
-                last_used_at_ms: None,
-                is_favorite: false,
-                icon_path: None,
-                metadata_json: None,
-            };
+            let item = build_text_clipboard_item(text, kind, "cli", "CLI");
             let saved_id = database
                 .save_item(&item)
                 .map_err(|error| error.to_string())?;
@@ -254,7 +204,78 @@ fn write_export_file(path: &str, output: &str) -> Result<(), String> {
     std::fs::write(path, output).map_err(|error| format!("failed to write export: {error}"))
 }
 
-fn current_time_ms() -> i64 {
+pub(crate) fn build_text_clipboard_item(
+    text: String,
+    kind: ClipboardKind,
+    id_prefix: &str,
+    source_app: &str,
+) -> ClipboardItem {
+    let kind_name = match kind {
+        ClipboardKind::Link => "link",
+        ClipboardKind::Text => "text",
+        _ => "text",
+    };
+    let content_hash = crate::content::hash::compute_content_hash(kind_name, &text, None);
+    let now_ms = current_time_ms();
+    let size_bytes = text.len() as u64;
+    let title = text.chars().take(200).collect();
+    ClipboardItem {
+        id: format!("{id_prefix}-{content_hash}-{now_ms}"),
+        kind,
+        title,
+        text_content: Some(text),
+        resource_path: None,
+        preview_path: None,
+        content_hash,
+        source_app: Some(source_app.to_owned()),
+        size_bytes,
+        created_at_ms: now_ms,
+        last_used_at_ms: None,
+        is_favorite: false,
+        icon_path: None,
+        metadata_json: None,
+    }
+}
+
+pub(crate) fn search_items_by_scanning(
+    database: &Database,
+    query: &str,
+    limit: usize,
+    scan_page_size: usize,
+) -> Result<Vec<ClipboardItem>, String> {
+    let normalized = query.to_lowercase();
+    let mut offset = 0u32;
+    let mut matches = Vec::new();
+    loop {
+        let page = database
+            .list_recent(scan_page_size as u32, offset)
+            .map_err(|e| e.to_string())?;
+        let page_len = page.len();
+        matches.extend(page.into_iter().filter(|item| {
+            item.title.to_lowercase().contains(&normalized)
+                || item
+                    .text_content
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains(&normalized)
+                || item
+                    .source_app
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains(&normalized)
+        }));
+        if matches.len() >= limit || page_len < scan_page_size {
+            break;
+        }
+        offset = offset.saturating_add(scan_page_size as u32);
+    }
+    matches.truncate(limit);
+    Ok(matches)
+}
+
+pub(crate) fn current_time_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

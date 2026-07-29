@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use serde::Serialize;
 
@@ -488,37 +488,7 @@ fn search_items(
     limit: usize,
     scan_page_size: usize,
 ) -> Result<Vec<ClipboardItem>, String> {
-    let normalized = query.to_lowercase();
-    let wanted = limit;
-    let mut offset = 0u32;
-    let mut matches = Vec::new();
-    loop {
-        let page = database
-            .list_recent(scan_page_size as u32, offset)
-            .map_err(|error| error.to_string())?;
-        let page_len = page.len();
-        matches.extend(page.into_iter().filter(|item| {
-            item.title.to_lowercase().contains(&normalized)
-                || item
-                    .text_content
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_lowercase()
-                    .contains(&normalized)
-                || item
-                    .source_app
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_lowercase()
-                    .contains(&normalized)
-        }));
-        if matches.len() >= wanted || page_len < scan_page_size {
-            break;
-        }
-        offset = offset.saturating_add(scan_page_size as u32);
-    }
-    matches.truncate(wanted);
-    Ok(matches)
+    super::search_items_by_scanning(database, query, limit, scan_page_size)
 }
 
 fn parse_paste_body(body: &str) -> String {
@@ -540,33 +510,7 @@ fn save_text(database: &Database, text: &str) -> Result<ClipboardItem, String> {
     } else {
         ClipboardKind::Text
     };
-    let kind_name = if kind == ClipboardKind::Link {
-        "link"
-    } else {
-        "text"
-    };
-    let content_hash = content::hash::compute_content_hash(kind_name, text, None);
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64;
-    let item = ClipboardItem {
-        id: format!("api-{content_hash}-{now_ms}"),
-        kind,
-        title: text.chars().take(200).collect(),
-        text_content: Some(text.to_owned()),
-        resource_path: None,
-        preview_path: None,
-        content_hash,
-        source_app: Some("Local API".to_owned()),
-        size_bytes: text.len() as u64,
-        created_at_ms: now_ms,
-        last_used_at_ms: None,
-        is_favorite: false,
-        icon_path: None,
-        metadata_json: None,
-    };
+    let item = super::build_text_clipboard_item(text.to_owned(), kind, "api", "Local API");
     let saved_id = database
         .save_item(&item)
         .map_err(|error| error.to_string())?;
