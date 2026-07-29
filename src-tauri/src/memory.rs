@@ -896,13 +896,14 @@ mod tests {
     fn process_probe_always_includes_the_current_process() {
         let current_pid = std::process::id();
         let processes = collect_processes(current_pid);
-        let current = processes
+        let _current = processes
             .iter()
             .find(|process| process.pid == current_pid)
             .expect("current process should be present in diagnostics");
 
         #[cfg(target_os = "windows")]
         {
+            let current = _current;
             assert!(current.working_set_bytes.is_some_and(|bytes| bytes > 0));
             assert!(current.private_bytes.is_some_and(|bytes| bytes > 0));
             assert!(current
