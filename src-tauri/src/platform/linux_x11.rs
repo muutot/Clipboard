@@ -699,11 +699,7 @@ pub fn read_clipboard_text() -> Option<String> {
 
         let atom_clipboard = x11_ffi::XInternAtom(display, c"CLIPBOARD".as_ptr(), 0);
         let atom_utf8 = x11_ffi::XInternAtom(display, c"UTF8_STRING".as_ptr(), 0);
-        let atom_property = x11_ffi::XInternAtom(
-            display,
-            c"CLIPBOARD_DESKTOP_READ".as_ptr(),
-            0,
-        );
+        let atom_property = x11_ffi::XInternAtom(display, c"CLIPBOARD_DESKTOP_READ".as_ptr(), 0);
 
         x11_ffi::XConvertSelection(display, atom_clipboard, atom_utf8, atom_property, window, 0);
         x11_ffi::XFlush(display);
@@ -826,8 +822,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
         }
 
         let root = x11_ffi::XDefaultRootWindow(display);
-        let atom_active =
-            x11_ffi::XInternAtom(display, c"_NET_ACTIVE_WINDOW".as_ptr(), 0);
+        let atom_active = x11_ffi::XInternAtom(display, c"_NET_ACTIVE_WINDOW".as_ptr(), 0);
         let atom_pid = x11_ffi::XInternAtom(display, c"_NET_WM_PID".as_ptr(), 0);
         let atom_cardinal = x11_ffi::XInternAtom(display, c"CARDINAL".as_ptr(), 0);
 
