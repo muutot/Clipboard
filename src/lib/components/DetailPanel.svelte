@@ -8,7 +8,13 @@
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
   import { formatBytes, assetUrl } from "$lib/utils/format";
-  import { extractEmails, extractUrls, extractPhones, extractColors, extractDates } from "$lib/utils/patterns";
+  import {
+    extractEmails,
+    extractUrls,
+    extractPhones,
+    extractColors,
+    extractDates,
+  } from "$lib/utils/patterns";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isTauriRuntime } from "$lib/services/runtime";
@@ -339,7 +345,11 @@
   const colors = $derived(specialMarkers.colors);
   const dates = $derived(specialMarkers.dates);
   const hasSpecialMarkers = $derived(
-    emails.length > 0 || urls.length > 0 || phones.length > 0 || colors.length > 0 || dates.length > 0,
+    emails.length > 0 ||
+      urls.length > 0 ||
+      phones.length > 0 ||
+      colors.length > 0 ||
+      dates.length > 0,
   );
 
   const markerGroups = $derived.by(() => {
