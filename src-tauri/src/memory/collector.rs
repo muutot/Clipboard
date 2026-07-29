@@ -13,72 +13,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde::Serialize;
-
 use crate::{config::ConfigStore, ocr, storage::StoragePaths};
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MemoryDiagnostics {
-    pub sampled_at_ms: u64,
-    pub current_process: MemoryProcess,
-    pub process_group: MemoryProcessGroup,
-    pub system: SystemMemory,
-    pub ocr: OcrMemoryDiagnostics,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MemoryProcess {
-    pub pid: u32,
-    pub parent_pid: Option<u32>,
-    pub name: String,
-    pub role: Option<String>,
-    /// Resident pages currently mapped into the process, including shared
-    /// pages.  This is the Windows `WorkingSetSize` / Linux `VmRSS` value.
-    pub working_set_bytes: Option<u64>,
-    /// Private committed bytes on Windows (`PrivateUsage`).  Platforms that
-    /// do not expose an equivalent safely return `null`.
-    pub private_bytes: Option<u64>,
-    /// Windows 10+ exposes private resident pages separately from private
-    /// commit.  Older Windows versions and other platforms may return null.
-    pub private_working_set_bytes: Option<u64>,
-    /// Windows reports private committed memory (commit charge) here rather
-    /// than the full reserved address space.  Linux reports `VmSize`.  Other
-    /// platforms may return `null` when an equivalent safe probe is absent.
-    pub virtual_bytes: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MemoryProcessGroup {
-    pub working_set_bytes: u64,
-    pub private_bytes: u64,
-    pub virtual_bytes: u64,
-    pub processes: Vec<MemoryProcess>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SystemMemory {
-    pub total_bytes: Option<u64>,
-    pub available_bytes: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrMemoryDiagnostics {
-    pub engine: String,
-    pub model_variant: String,
-    pub model_bytes: u64,
-    pub model_file_count: u64,
-    pub model_directory: String,
-    /// Whether PP-OCR is selected and all files for the configured model
-    /// variant are present. OCR loads the model lazily, so this is a readiness
-    /// signal rather than a claim that the ONNX graph is resident right now.
-    pub loaded: bool,
-    pub installed_variants: Vec<String>,
-}
+use super::types::*;
 
 /// Returns a read-only snapshot of process-group and system memory usage.
 #[tauri::command]
@@ -118,7 +55,7 @@ pub fn collect_memory_diagnostics(
     }
 }
 
-fn summarize_process_group(mut processes: Vec<MemoryProcess>) -> MemoryProcessGroup {
+pub(crate) fn summarize_process_group(mut processes: Vec<MemoryProcess>) -> MemoryProcessGroup {
     let working_set_bytes = processes
         .iter()
         .filter_map(|process| process.working_set_bytes)
@@ -209,7 +146,7 @@ fn collect_ocr_memory(paths: &StoragePaths, config: &Mutex<ConfigStore>) -> OcrM
     }
 }
 
-fn directory_size(root: &Path) -> (u64, u64) {
+pub(crate) fn directory_size(root: &Path) -> (u64, u64) {
     let mut pending = vec![root.to_path_buf()];
     let mut total_bytes = 0u64;
     let mut file_count = 0u64;
@@ -240,37 +177,37 @@ fn directory_size(root: &Path) -> (u64, u64) {
 }
 
 #[cfg(target_os = "windows")]
-fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
+pub(crate) fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
     windows::collect_processes(current_pid)
 }
 
 #[cfg(target_os = "linux")]
-fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
+pub(crate) fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
     linux::collect_processes(current_pid)
 }
 
 #[cfg(target_os = "macos")]
-fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
+pub(crate) fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
     macos::collect_processes(current_pid)
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
+pub(crate) fn collect_processes(current_pid: u32) -> Vec<MemoryProcess> {
     vec![fallback_current_process(current_pid)]
 }
 
 #[cfg(target_os = "windows")]
-fn collect_system_memory() -> SystemMemory {
+pub(crate) fn collect_system_memory() -> SystemMemory {
     windows::collect_system_memory()
 }
 
 #[cfg(target_os = "linux")]
-fn collect_system_memory() -> SystemMemory {
+pub(crate) fn collect_system_memory() -> SystemMemory {
     linux::collect_system_memory()
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn collect_system_memory() -> SystemMemory {
+pub(crate) fn collect_system_memory() -> SystemMemory {
     SystemMemory {
         total_bytes: None,
         available_bytes: None,
@@ -426,8 +363,6 @@ mod linux {
                     .fold(0u64, u64::saturating_add);
                 found.then_some(total)
             });
-        // Linux's smaps rollup reports resident private pages, which is a
-        // useful private-working-set diagnostic but not private commit.
         (working_set, None, private_working_set, virtual_bytes)
     }
 
@@ -535,7 +470,6 @@ mod windows {
 
     impl Default for ProcessEntry32W {
         fn default() -> Self {
-            // All fields are plain integers and a fixed UTF-16 buffer.
             unsafe { zeroed() }
         }
     }
@@ -784,9 +718,6 @@ mod windows {
             );
         }
 
-        // PROCESS_MEMORY_COUNTERS_EX2 is available on supported Windows 10+
-        // builds.  Fall back to EX so older systems still receive working-set
-        // and commit values; private resident pages remain unknown there.
         let mut counters = ProcessMemoryCountersEx {
             cb: size_of::<ProcessMemoryCountersEx>() as u32,
             page_fault_count: 0,
@@ -829,91 +760,5 @@ mod windows {
     fn is_webview_process(name: &str) -> bool {
         let name = name.to_ascii_lowercase();
         name.contains("webview") || name.contains("msedge")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn group_sums_available_process_metrics_without_panicking_on_missing_values() {
-        let processes = vec![
-            MemoryProcess {
-                pid: 1,
-                parent_pid: None,
-                name: "main".to_owned(),
-                role: Some("main".to_owned()),
-                working_set_bytes: Some(10),
-                private_bytes: Some(20),
-                private_working_set_bytes: Some(8),
-                virtual_bytes: Some(30),
-            },
-            MemoryProcess {
-                pid: 2,
-                parent_pid: Some(1),
-                name: "child".to_owned(),
-                role: Some("child".to_owned()),
-                working_set_bytes: None,
-                private_bytes: Some(4),
-                private_working_set_bytes: None,
-                virtual_bytes: Some(5),
-            },
-        ];
-        let group = summarize_process_group(processes);
-        assert_eq!(group.working_set_bytes, 10);
-        assert_eq!(group.private_bytes, 24);
-        assert_eq!(group.virtual_bytes, 35);
-        assert_eq!(group.processes.len(), 2);
-    }
-
-    #[test]
-    fn memory_process_serializes_camel_case_and_preserves_missing_values() {
-        let process = MemoryProcess {
-            pid: 7,
-            parent_pid: Some(3),
-            name: "worker".to_owned(),
-            role: Some("child".to_owned()),
-            working_set_bytes: Some(10),
-            private_bytes: None,
-            private_working_set_bytes: Some(8),
-            virtual_bytes: None,
-        };
-        let value = serde_json::to_value(process).unwrap();
-        assert_eq!(value["parentPid"], 3);
-        assert_eq!(value["privateWorkingSetBytes"], 8);
-        assert!(value["privateBytes"].is_null());
-    }
-
-    #[test]
-    fn directory_size_ignores_missing_roots() {
-        let path =
-            std::env::temp_dir().join(format!("clipboard-memory-missing-{}", std::process::id()));
-        assert_eq!(directory_size(&path), (0, 0));
-    }
-
-    #[test]
-    fn process_probe_always_includes_the_current_process() {
-        let current_pid = std::process::id();
-        let processes = collect_processes(current_pid);
-        let _current = processes
-            .iter()
-            .find(|process| process.pid == current_pid)
-            .expect("current process should be present in diagnostics");
-
-        #[cfg(target_os = "windows")]
-        {
-            let current = _current;
-            assert!(current.working_set_bytes.is_some_and(|bytes| bytes > 0));
-            assert!(current.private_bytes.is_some_and(|bytes| bytes > 0));
-            assert!(current
-                .private_working_set_bytes
-                .is_some_and(|bytes| bytes > 0));
-            assert!(current.virtual_bytes.is_some_and(|bytes| bytes > 0));
-            assert!(current.private_working_set_bytes <= current.working_set_bytes);
-            let system = collect_system_memory();
-            assert!(system.total_bytes.is_some_and(|bytes| bytes > 0));
-            assert!(system.available_bytes <= system.total_bytes);
-        }
     }
 }
