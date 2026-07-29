@@ -1,7 +1,6 @@
 use std::sync::Mutex;
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
 use crate::config::ConfigStore;
@@ -9,13 +8,14 @@ use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
 use crate::search::{SearchIndex, SearchSynchronizer, SearchSyncSummary};
-use crate::storage::{
-    ClipboardRepository, Database, KindDeleteResult, KindStorageStats, OcrRepository,
-    StoragePaths, TextItemUpdate,
-};
+use crate::storage::{ClipboardRepository, Database, KindStorageStats, OcrRepository, StoragePaths, TextItemUpdate};
 use crate::CaptureState;
-use crate::STORAGE_KIND_DELETE_SCOPE;
-use super::system::cleanup_orphan_storage_files;
+
+use super::types::{
+    permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, SearchResultCache,
+    SearchSortDirection, SearchSortField, SearchSortRule, StorageKindDeleteExpectation,
+    StorageKindDeleteResult,
+};
 
 #[tauri::command]
 pub fn list_clipboard_items(
@@ -53,9 +53,6 @@ pub fn set_clipboard_item_favorite(
         .map_err(|error| error.to_string())
 }
 
-/// Update the favorite flag for a selected group of records in one
-/// transaction. The repository validates every id before changing anything,
-/// so a stale selection cannot leave the UI and database out of sync.
 #[tauri::command]
 pub fn batch_set_favorite(
     database: tauri::State<'_, Database>,
@@ -72,8 +69,6 @@ pub fn delete_clipboard_item(database: tauri::State<'_, Database>, id: String) -
     database.delete_item(&id).map_err(|error| error.to_string())
 }
 
-/// Soft-delete a selected group of records. Favorite protection and error
-/// wording intentionally match `soft_delete_clipboard_item`.
 #[tauri::command]
 pub fn batch_delete_clipboard_items(
     database: tauri::State<'_, Database>,
@@ -112,7 +107,6 @@ pub fn list_source_applications(database: tauri::State<'_, Database>) -> Result<
 }
 
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
@@ -213,8 +207,6 @@ pub fn restore_clipboard_item(
         .map_err(|error| error.to_string())
 }
 
-/// List soft-deleted records for the recycle-bin view.  The repository keeps
-/// the same bounded pagination contract as the active history endpoint.
 #[tauri::command]
 pub fn list_deleted_clipboard_items(
     database: tauri::State<'_, Database>,
@@ -424,92 +416,6 @@ pub fn update_clipboard_text(
         .map_err(|e| e.to_string())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchSortRule {
-    pub(crate) field: SearchSortField,
-    pub(crate) direction: SearchSortDirection,
-}
-
-pub struct SearchResultCache {
-    inner: Mutex<Option<CachedSearchResult>>,
-}
-
-pub(crate) type CachedSearchResult = (String, Vec<SearchSortRule>, usize, Vec<ClipboardItem>);
-
-impl SearchResultCache {
-    pub fn new() -> Self {
-        Self {
-            inner: Mutex::new(None),
-        }
-    }
-
-    pub fn get(
-        &self,
-        query: &str,
-        rules: &[SearchSortRule],
-        max_results: usize,
-        offset: usize,
-        limit: usize,
-    ) -> Option<Vec<ClipboardItem>> {
-        let cache = self.inner.lock().ok()?;
-        let (cached_query, cached_rules, cached_max, cached_items) = cache.as_ref()?;
-        if cached_query != query || cached_rules != rules || *cached_max < max_results {
-            return None;
-        }
-        let total = cached_items.len();
-        if offset >= total {
-            return Some(Vec::new());
-        }
-        let end = (offset + limit).min(total);
-        Some(cached_items[offset..end].to_vec())
-    }
-
-    pub fn set(
-        &self,
-        query: String,
-        rules: Vec<SearchSortRule>,
-        max_results: usize,
-        items: Vec<ClipboardItem>,
-    ) {
-        if let Ok(mut cache) = self.inner.lock() {
-            *cache = Some((query, rules, max_results, items));
-        }
-    }
-
-    pub fn clear(&self) {
-        if let Ok(mut cache) = self.inner.lock() {
-            *cache = None;
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum SearchSortField {
-    #[serde(rename = "createdAt")]
-    CreatedAt,
-    #[serde(rename = "lastUsedAt")]
-    LastUsedAt,
-    #[serde(rename = "title")]
-    Title,
-    #[serde(rename = "size")]
-    Size,
-    #[serde(rename = "kind")]
-    Kind,
-    #[serde(rename = "favorite")]
-    Favorite,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) enum SearchSortDirection {
-    #[serde(rename = "asc")]
-    Asc,
-    #[serde(rename = "desc")]
-    Desc,
-}
-
 pub fn cmp_by_field(
     a: &ClipboardItem,
     b: &ClipboardItem,
@@ -586,70 +492,4 @@ pub fn set_custom_title_metadata(
         );
     serde_json::to_string(&value)
         .map_err(|error| format!("serialize custom title metadata: {error}"))
-}
-
-pub(crate) fn permanently_delete_storage_kind_for(
-    database: &Database,
-    paths: &StoragePaths,
-    search_index: &SearchIndex,
-    kind: ClipboardKind,
-    expected: Option<KindStorageStats>,
-) -> Result<StorageKindDeleteResult, String> {
-    let KindDeleteResult { stats, deleted_ids } = match expected {
-        Some(expected) => database
-            .permanently_delete_by_kind_if_stats_match(kind, STORAGE_KIND_DELETE_SCOPE, expected)
-            .map_err(|error| error.to_string())?,
-        None => database
-            .permanently_delete_by_kind(kind, STORAGE_KIND_DELETE_SCOPE)
-            .map_err(|error| error.to_string())?,
-    };
-    let mut warnings = Vec::new();
-    let search_sync = match SearchSynchronizer::default().sync_until_idle(database, search_index) {
-        Ok(summary) => Some(summary),
-        Err(error) => {
-            warnings.push(format!("search index cleanup is pending: {error}"));
-            None
-        }
-    };
-    let removed_files = match cleanup_orphan_storage_files(database, paths) {
-        Ok(cleanup) => cleanup.removed_files,
-        Err(error) => {
-            warnings.push(format!("managed resource cleanup is pending: {error}"));
-            0
-        }
-    };
-
-    Ok(StorageKindDeleteResult {
-        deleted_count: stats.item_count,
-        deleted_size_bytes: stats.size_bytes,
-        removed_files,
-        search_sync,
-        warnings,
-        deleted_ids,
-    })
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StorageKindDeleteExpectation {
-    item_count: u64,
-    size_bytes: u64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StorageKindDeleteResult {
-    pub(crate) deleted_count: u64,
-    pub(crate) deleted_size_bytes: u64,
-    pub(crate) removed_files: u64,
-    pub(crate) search_sync: Option<SearchSyncSummary>,
-    pub(crate) warnings: Vec<String>,
-    #[serde(skip_serializing)]
-    pub(crate) deleted_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClipboardHistoryInvalidated {
-    deleted_ids: Vec<String>,
 }
