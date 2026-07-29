@@ -104,7 +104,7 @@ if (!versionArg) {
   exit(1);
 }
 
-const currentVersion = getCurrentVersion();
+let currentVersion = getCurrentVersion();
 const mode = isRegenerate ? "REGENERATE" : isDryRun ? "DRY RUN" : "RELEASE";
 let didDrop = false;
 
@@ -153,6 +153,7 @@ if (isRegenerate) {
         run(`git rebase --onto ${parentSha} ${tagCommit}`);
         run(`git tag -d ${tagVersion}`);
         didDrop = true;
+        currentVersion = getCurrentVersion(); // re-read after rebase reverted version files
         console.log("  ✓ Old release commit removed from history, tag deleted\n");
       } else {
         console.log("  (would drop via rebase in real run)\n");
