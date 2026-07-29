@@ -58,7 +58,7 @@ This mode:
 
 **No existing tag:** Keeps current version, regenerates changelog, commits and tags.
 
-**Existing tag detected:** Automatically `git revert --no-commit` the old release commit, delete the old tag, bump to target version, regenerate changelog, and create a fresh commit + tag.
+**Existing tag detected:** Uses `git rebase --onto` to **drop** the old release commit from history entirely, delete the old tag, bump to target version, regenerate changelog, and create a fresh commit + tag.
 
 Useful when re-releasing with updated content.
 

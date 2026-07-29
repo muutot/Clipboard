@@ -136,17 +136,17 @@ If no tag for the version exists yet:
 2. Re-generates `CHANGELOG.md` from the full commit history (`--all`)
 3. Commits and tags normally
 
-### Existing tag → auto revert
+### Existing tag → auto drop from history
 
 If a release commit and tag already exist for the version, the script automatically:
 
 1. Detects the existing tag (e.g., `v1.0.0`)
-2. Runs `git revert --no-commit` against that release commit (undoes the version bump + old changelog)
+2. Runs `git rebase --onto <parent> <tag-commit>` to **drop** the old release commit from history entirely
 3. Deletes the local tag
 4. Bumps to the target version, regenerates changelog from full history
 5. Creates a fresh commit and tag
 
-The revert is a **new commit** on top of current history — all subsequent commits keep their timestamps, content, and hashes. After pushing:
+The old release commit is **removed from the Git DAG**, as if it never existed. All subsequent commits are rewired on top of the parent, preserving their timestamps and content. After pushing:
 
 ```sh
 git push origin core --force-with-lease
