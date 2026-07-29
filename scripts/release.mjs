@@ -171,7 +171,7 @@ if (!isDryRun) {
 // Step 3: Bump version
 console.log("\n[3/7] Bumping version...");
 let newVersion;
-if (isRegenerate && !didDrop) {
+if (isRegenerate && currentVersion === versionArg) {
   // No old tag to undo — version is already at target, keep it
   newVersion = currentVersion;
   console.log(`  Version stays at ${currentVersion} (regenerate mode)`);
