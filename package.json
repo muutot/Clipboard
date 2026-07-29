@@ -14,6 +14,7 @@
     "test:rust": "cargo test -j 1 --manifest-path src-tauri/Cargo.toml",
     "lint:rust": "cargo clippy -j 1 --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "verify": "npm run format:check && npm run check && npm run build && npm run test:rust && npm run lint:rust",
+    "ci:local": "powershell -ExecutionPolicy Bypass -File scripts/local-ci.ps1",
     "tauri": "tauri"
   },
   "license": "AGPL-3.0-only",
