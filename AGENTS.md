@@ -8,6 +8,7 @@ In particular:
 - Preserve the approved main-page style and apply the settings style gate before CSS changes.
 - Keep parallel agent ownership non-overlapping.
 - Commit one verified minimal feature or fix at a time.
+- **Commit message must follow gitmoji format:** `<emoji> <type>[<scope>]: <message>` (e.g., `✨ feat[search]: add pagination`, `🐛 fix[viewer]: correct fullscreen crash`, `📝 docs[release]: ...`). See full type/emoji table in `.opencode/skills/clipboard-dev/SKILL.md:96-135`.
 
 ## Release
 
