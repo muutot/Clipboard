@@ -1,6 +1,6 @@
-pub mod storage;
-pub mod settings;
 pub mod misc;
+pub mod settings;
+pub mod storage;
 
 use serde::Serialize;
 

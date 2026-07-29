@@ -6,11 +6,11 @@ use tauri::Manager;
 
 use crate::config::ConfigStore;
 use crate::keyboard::{KeyboardConfig, KeyboardManager};
-use crate::platform::{self, ClipboardMonitor, RuntimeInfo};
 use crate::platform::windows_hotkey::HotkeyManager;
+use crate::platform::{self, ClipboardMonitor, RuntimeInfo};
 use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database};
-use crate::{CaptureState, TOGGLE_WINDOW_ACTION, resolve_toggle_hotkeys};
+use crate::{resolve_toggle_hotkeys, CaptureState, TOGGLE_WINDOW_ACTION};
 
 use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacyStatus};
 

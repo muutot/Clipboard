@@ -4,7 +4,6 @@ mod traits;
 
 use helpers::*;
 
-
 pub use traits::*;
 
 #[cfg(test)]

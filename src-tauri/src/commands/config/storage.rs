@@ -11,7 +11,10 @@ use crate::search::{SearchIndex, SEARCH_INDEX_VERSION};
 use crate::storage::{ClipboardRepository, Database, StorageError, StoragePaths};
 use crate::{CaptureState, STORAGE_KIND_DELETE_SCOPE};
 
-use super::{ResourceStorageUpdate, StorageConfigInfo, StorageDirectoryUpdate, StorageKindStats, StorageStatus};
+use super::{
+    ResourceStorageUpdate, StorageConfigInfo, StorageDirectoryUpdate, StorageKindStats,
+    StorageStatus,
+};
 
 #[tauri::command]
 pub fn get_storage_status(

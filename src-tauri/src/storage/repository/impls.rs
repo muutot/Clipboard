@@ -6,10 +6,10 @@ use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{Database, StorageError};
 
 use super::{
-    current_time_ms, delete_kind_records, kind_to_storage,
-    query_kind_storage_stats, unique_ids, StoredClipboardItem,
+    current_time_ms, delete_kind_records, kind_to_storage, query_kind_storage_stats, unique_ids,
     ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    StorageFileReferences, TextItemUpdate, ITEM_COLUMNS, ITEM_LOOKUP_CHUNK_SIZE,
+    StorageFileReferences, StoredClipboardItem, TextItemUpdate, ITEM_COLUMNS,
+    ITEM_LOOKUP_CHUNK_SIZE,
 };
 
 impl ClipboardRepository for Database {

@@ -1,4 +1,6 @@
-use super::collector::{collect_processes, collect_system_memory, directory_size, summarize_process_group};
+use super::collector::{
+    collect_processes, collect_system_memory, directory_size, summarize_process_group,
+};
 use super::types::MemoryProcess;
 
 #[test]

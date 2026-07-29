@@ -42,11 +42,9 @@ fn places_storage_under_a_custom_data_directory() {
     let project = root.join("project");
     let data_directory = root.join("data");
 
-    let paths = StoragePaths::initialize_with_data_directory(
-        project.clone(),
-        Some(data_directory.clone()),
-    )
-    .unwrap();
+    let paths =
+        StoragePaths::initialize_with_data_directory(project.clone(), Some(data_directory.clone()))
+            .unwrap();
 
     assert_eq!(paths.project, project);
     assert_eq!(paths.data_directory, data_directory);

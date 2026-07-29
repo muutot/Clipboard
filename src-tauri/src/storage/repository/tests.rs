@@ -3,8 +3,7 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
 use crate::storage::{Database, OcrRepository, SearchOperation, SearchRepository, StorageError};
 
 use super::{
-    ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    TextItemUpdate,
+    ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats, TextItemUpdate,
 };
 
 fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
@@ -136,8 +135,7 @@ fn storage_references_include_every_path_from_multi_file_records() {
         kind: ClipboardKind::File,
         title: "first.txt".to_owned(),
         text_content: Some(
-            serde_json::to_string(&["C:\\managed\\first.txt", "C:\\managed\\second.txt"])
-                .unwrap(),
+            serde_json::to_string(&["C:\\managed\\first.txt", "C:\\managed\\second.txt"]).unwrap(),
         ),
         resource_path: Some("C:\\managed\\first.txt".to_owned()),
         preview_path: None,

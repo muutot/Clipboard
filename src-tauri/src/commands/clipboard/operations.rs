@@ -7,8 +7,10 @@ use crate::config::ConfigStore;
 use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
-use crate::search::{SearchIndex, SearchSynchronizer, SearchSyncSummary};
-use crate::storage::{ClipboardRepository, Database, KindStorageStats, OcrRepository, StoragePaths, TextItemUpdate};
+use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
+use crate::storage::{
+    ClipboardRepository, Database, KindStorageStats, OcrRepository, StoragePaths, TextItemUpdate,
+};
 use crate::CaptureState;
 
 use super::types::{
@@ -65,7 +67,10 @@ pub fn batch_set_favorite(
 }
 
 #[tauri::command]
-pub fn delete_clipboard_item(database: tauri::State<'_, Database>, id: String) -> Result<bool, String> {
+pub fn delete_clipboard_item(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<bool, String> {
     database.delete_item(&id).map_err(|error| error.to_string())
 }
 
@@ -100,13 +105,16 @@ pub fn regenerate_clipboard_item_ocr(
 }
 
 #[tauri::command]
-pub fn list_source_applications(database: tauri::State<'_, Database>) -> Result<Vec<String>, String> {
+pub fn list_source_applications(
+    database: tauri::State<'_, Database>,
+) -> Result<Vec<String>, String> {
     database
         .list_source_applications()
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn search_clipboard_items(
     database: tauri::State<'_, Database>,
     search_index: tauri::State<'_, SearchIndex>,
