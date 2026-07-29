@@ -77,10 +77,67 @@ npm run verify
 
 Run the narrowest relevant checks during implementation. Run `npm run verify` at integration milestones or before a commit whose scope crosses frontend and backend. If an environment prevents a required runtime, visual, platform, packaging, or performance check, report the missing evidence and leave the corresponding TODO unverified.
 
+## Commit message format
+
+Follow the gitmoji convention established by the earliest ~70 commits of this repository:
+
+```
+<gitmoji> <type>[<scope>]: <message>
+```
+
+- **gitmoji**: single emoji indicating the change category (see table below).
+- **type**: lowercase change type matching the emoji (e.g., `feat`, `fix`, `docs`, `refactor`).
+- **scope**: optional, lowercase, in **square brackets** (e.g., `[storage]`, `[settings]`, `[search]`).
+- **message**: concise imperative description, Chinese or English.
+
+### Gitmoji mapping
+
+| Emoji | Type     | Use when                                                |
+| ----- | -------- | ------------------------------------------------------- |
+| ✨    | feat     | new feature or capability                               |
+| 🐛    | fix      | bug fix or correction                                   |
+| 📝    | docs     | documentation, roadmap, skill, or reference update      |
+| ♻️    | refactor | code restructuring without behavior change              |
+| 🎨    | style    | formatting, CSS, visual polish                          |
+| 🚀    | perf     | performance improvement                                 |
+| ✅    | test     | adding or updating tests                                |
+| 🔧    | chore    | tooling, dependencies, build scripts, CI                |
+| 🎉    | chore    | initial commit / project bootstrap                      |
+| 🗃️    | feat     | database / schema changes                               |
+| 🔒    | feat     | privacy, security, permissions, defaults enforcement    |
+| 🔍    | feat     | search / index functionality                            |
+| 🔌    | feat     | exposing commands / connecting frontend to backend      |
+| 🔄    | feat     | synchronization, reload, outbox                         |
+| ⌨️    | feat     | keyboard / shortcuts                                    |
+| ⚙️    | feat     | configuration / settings                                |
+| 💾    | feat     | storage / persistence                                   |
+| 📦    | feat     | packaging / dependencies                                |
+| 🔎    | feat     | search / query / listing                                |
+| 🏷️    | feat     | versioning / identification                             |
+| 💬    | fix      | messaging / empty-state / user-facing text              |
+| 🙈    | fix      | hiding / ignoring / suppressing                         |
+| 📁    | feat     | file / directory organization                           |
+| 📂    | feat     | directory / path support                                |
+| 🔡    | fix      | text normalization / case handling                      |
+| ✏️    | fix      | minor text / copy corrections                           |
+| ⚡    | chore    | build / dependency addition                             |
+| 🛠️    | feat     | tooling / utility commands                              |
+
+### Examples
+
+```
+📝 docs[skill]: document commit message format convention
+✨ feat[search]: add backend SearchResultCache and DB-level pagination truncation
+🐛 fix[viewer]: finalize fullscreen refactor, a11y fix, cleanup old viewer route
+♻️ refactor[css]: remove !important from actions-hidden and transfer-column
+🎨 style[settings]: format code and minor cleanup across settings modules
+🚀 perf[frontend]: cache virtual scroll heights, updateItem helper, named card handlers
+```
+
 ## Commit discipline
 
 1. Review `git diff` and `git diff --cached`; stage only the intended unit.
 2. Run the relevant verification and the mandatory documentation currency gate.
 3. Update matching TODO evidence in the same commit only when completion is directly proven.
-4. Use a focused message such as `fix(storage): ...`, `style(settings): ...`, or `docs(skill): ...`.
+4. Write the commit message in the gitmoji format described above.
 5. Recheck `git status` after committing and report verification plus any evidence gaps.
