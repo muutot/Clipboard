@@ -57,6 +57,7 @@ mod search_pagination_tests {
 #[cfg(test)]
 mod capture_tests {
     use super::*;
+    use std::path::Path;
 
     fn capture_state() -> CaptureState {
         CaptureState::new(
@@ -159,7 +160,7 @@ mod capture_tests {
         };
         database.save_item(&original).unwrap();
 
-        let mut guard = content::hash::SelfTriggerGuard::new();
+        let mut guard = content::self_trigger::SelfTriggerGuard::new();
         guard.mark_clipboard_write(text);
         assert!(should_skip_self_triggered_text(
             &mut guard,
@@ -176,7 +177,7 @@ mod capture_tests {
     #[test]
     fn self_triggered_file_writes_match_single_and_group_hashes() {
         let single_path = r"C:\Users\admin\Documents\report.txt";
-        let mut single_guard = content::hash::SelfTriggerGuard::new();
+        let mut single_guard = content::self_trigger::SelfTriggerGuard::new();
         single_guard.mark_clipboard_write(single_path);
         let single_hash = content::hash::compute_content_hash("file", single_path, None);
         assert!(should_skip_self_triggered_hash(
@@ -188,7 +189,7 @@ mod capture_tests {
             r"C:\Users\admin\Documents\zeta.txt",
             r"C:\Users\admin\Documents\alpha.txt",
         ];
-        let mut group_guard = content::hash::SelfTriggerGuard::new();
+        let mut group_guard = content::self_trigger::SelfTriggerGuard::new();
         group_guard.mark_clipboard_write(&paths.join("\n"));
         let mut sorted_paths = paths.to_vec();
         sorted_paths.sort();
@@ -310,7 +311,7 @@ mod capture_tests {
         ));
         std::fs::write(&path, stored_png.get_ref()).expect("test image should be writable");
 
-        let mut guard = content::hash::SelfTriggerGuard::new();
+        let mut guard = content::self_trigger::SelfTriggerGuard::new();
         register_image_self_trigger(&mut guard, path.to_str(), None).unwrap();
         assert!(should_skip_self_triggered_media(
             &mut guard,
@@ -325,7 +326,7 @@ mod capture_tests {
     fn image_self_trigger_registration_falls_back_to_persisted_hash() {
         let bytes = b"legacy-image-bytes";
         let fallback_hash = content::hash::compute_media_hash("image", bytes);
-        let mut guard = content::hash::SelfTriggerGuard::new();
+        let mut guard = content::self_trigger::SelfTriggerGuard::new();
 
         register_image_self_trigger(
             &mut guard,

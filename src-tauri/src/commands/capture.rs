@@ -4,18 +4,18 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use serde::Serialize;
+use super::signal::{stop_signal_requested, wait_for_stop};
 use crate::content;
 use crate::content::RESOURCE_METADATA_SCHEMA_VERSION;
-use crate::content::{FileStore, created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms};
+use crate::content::{
+    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms, FileStore,
+};
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::platform;
 use crate::platform::ClipboardMonitor;
+use crate::state::{CaptureState, CaptureWorker, SelfTriggerState};
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
-use super::system::{stop_signal_requested, wait_for_stop};
-use crate::CaptureState;
-use crate::CaptureWorker;
-use crate::SelfTriggerState;
+use serde::Serialize;
 
 pub fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
     if !app.exe_path.trim().is_empty() {
@@ -35,14 +35,14 @@ pub fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
 }
 
 pub fn should_skip_self_triggered_hash(
-    guard: &mut content::hash::SelfTriggerGuard,
+    guard: &mut content::self_trigger::SelfTriggerGuard,
     content_hash: &str,
 ) -> bool {
     guard.is_self_triggered(content_hash)
 }
 
 pub fn should_skip_self_triggered_text(
-    guard: &mut content::hash::SelfTriggerGuard,
+    guard: &mut content::self_trigger::SelfTriggerGuard,
     kind: ClipboardKind,
     text: &str,
 ) -> bool {
@@ -55,7 +55,7 @@ pub fn should_skip_self_triggered_text(
 }
 
 pub fn should_skip_self_triggered_media(
-    guard: &mut content::hash::SelfTriggerGuard,
+    guard: &mut content::self_trigger::SelfTriggerGuard,
     kind: &str,
     data: &[u8],
 ) -> bool {
@@ -63,7 +63,7 @@ pub fn should_skip_self_triggered_media(
 }
 
 pub fn register_image_self_trigger(
-    guard: &mut content::hash::SelfTriggerGuard,
+    guard: &mut content::self_trigger::SelfTriggerGuard,
     resource_path: Option<&str>,
     fallback_hash: Option<&str>,
 ) -> Result<(), String> {
