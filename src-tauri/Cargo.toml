@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-desktop"
-version = "0.1.0"
+version = "1.0.0"
 description = "A high-performance cross-platform clipboard manager"
 authors = []
 edition = "2021"
@@ -35,3 +35,4 @@ tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 oar-ocr = { version = "0.8", features = ["download-binaries", "auto-download"] }
 reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls"] }
+ort = "=2.0.0-rc.12"
