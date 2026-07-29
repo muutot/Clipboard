@@ -116,7 +116,7 @@ Pushing the tag triggers the CI/CD pipeline (`.github/workflows/release.yml`) wh
 
 ## Special: Regenerate Mode
 
-`--regenerate` re-releases the **current version** with updated content:
+`--regenerate` re-releases the specified version with updated content:
 
 ```sh
 node scripts/release.mjs --regenerate 0.1.0
@@ -128,11 +128,30 @@ This is useful when:
 - The changelog needs to be regenerated from scratch
 - You're iterating on a pre-release version
 
-Regenerate mode:
+### No existing tag
+
+If no tag for the version exists yet:
 
 1. Keeps the current version (does not bump)
 2. Re-generates `CHANGELOG.md` from the full commit history (`--all`)
 3. Commits and tags normally
+
+### Existing tag → auto revert
+
+If a release commit and tag already exist for the version, the script automatically:
+
+1. Detects the existing tag (e.g., `v1.0.0`)
+2. Runs `git revert --no-commit` against that release commit (undoes the version bump + old changelog)
+3. Deletes the local tag
+4. Bumps to the target version, regenerates changelog from full history
+5. Creates a fresh commit and tag
+
+The revert is a **new commit** on top of current history — all subsequent commits keep their timestamps, content, and hashes. After pushing:
+
+```sh
+git push origin core --force-with-lease
+git push origin v<version> --force
+```
 
 ## Version Management
 

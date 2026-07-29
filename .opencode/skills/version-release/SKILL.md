@@ -56,10 +56,11 @@ node scripts/release.mjs --regenerate <version>
 
 This mode:
 
-- Keeps the current version (does not bump)
-- Re-generates `CHANGELOG.md` from the **full** commit history
-- Commits and tags normally
-- Useful when re-releasing with updated content
+**No existing tag:** Keeps current version, regenerates changelog, commits and tags.
+
+**Existing tag detected:** Automatically `git revert --no-commit` the old release commit, delete the old tag, bump to target version, regenerate changelog, and create a fresh commit + tag.
+
+Useful when re-releasing with updated content.
 
 ### Dry run
 

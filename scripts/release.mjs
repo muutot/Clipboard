@@ -103,6 +103,7 @@ if (!versionArg) {
 
 const currentVersion = getCurrentVersion();
 const mode = isRegenerate ? "REGENERATE" : isDryRun ? "DRY RUN" : "RELEASE";
+let didRevert = false;
 
 // Step 1: Pre-flight checks
 console.log(`\n[1/6] Pre-flight checks (${mode})...`);
@@ -114,6 +115,41 @@ if (!isDryRun && !isRegenerate) {
   console.log("  ✓ Working directory clean");
 }
 
+// Step 1b: In regenerate mode, revert the old release commit if tag exists
+if (isRegenerate) {
+  const tagVersion = `v${versionArg}`;
+  const tagExists = execSync(`git tag -l "${tagVersion}"`, {
+    cwd: ROOT, encoding: "utf-8",
+  }).trim() === tagVersion;
+
+  if (tagExists) {
+    const tagCommit = execSync(`git rev-list -n 1 "${tagVersion}"`, {
+      cwd: ROOT, encoding: "utf-8",
+    }).trim();
+    const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, {
+      cwd: ROOT, encoding: "utf-8",
+    }).trim();
+    const shortSha = tagCommit.slice(0, 7);
+
+    if (commitMsg.includes("chore[release]") || commitMsg.includes("bump version to")) {
+      console.log(`  Found existing ${tagVersion} at ${shortSha}: "${commitMsg}"`);
+      if (!isDryRun) {
+        console.log(`  Reverting...`);
+        run(`git revert --no-commit ${tagCommit}`);
+        run(`git tag -d ${tagVersion}`);
+        didRevert = true;
+        // Cargo.lock may have been reverted too; bring it in line
+        execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
+          cwd: ROOT, encoding: "utf-8", stdio: "pipe",
+        });
+        console.log("  ✓ Old release reverted, tag deleted\n");
+      } else {
+        console.log("  (would revert in real run)\n");
+      }
+    }
+  }
+}
+
 // Step 2: Verify
 console.log("\n[2/6] Running verification...");
 if (!isDryRun) {
@@ -122,10 +158,11 @@ if (!isDryRun) {
   console.log("  (skipped in dry-run mode)");
 }
 
-// Step 3: Bump version (except in regenerate mode which keeps current version)
+// Step 3: Bump version
 console.log("\n[3/6] Bumping version...");
 let newVersion;
-if (isRegenerate) {
+if (isRegenerate && !didRevert) {
+  // No old tag to undo — version is already at target, keep it
   newVersion = currentVersion;
   console.log(`  Version stays at ${currentVersion} (regenerate mode)`);
 } else {
@@ -134,15 +171,11 @@ if (isRegenerate) {
 }
 
 // Step 3.5: Update Cargo.lock to match the new version
-if (!isRegenerate) {
-  console.log("  > cargo generate-lockfile (sync Cargo.lock)");
-  execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
-    cwd: ROOT,
-    encoding: "utf-8",
-    stdio: "pipe",
-  });
-  console.log("  ✓ Cargo.lock updated");
-}
+console.log("  > cargo generate-lockfile (sync Cargo.lock)");
+execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
+  cwd: ROOT, encoding: "utf-8", stdio: "pipe",
+});
+console.log("  ✓ Cargo.lock updated");
 
 // Step 4: Generate changelog
 console.log("\n[4/6] Generating changelog...");
@@ -195,5 +228,10 @@ console.log(`Release ${newVersion} complete!`);
 console.log(`\n  Tag: v${newVersion}`);
 console.log(`  Bundle: src-tauri/target/release/bundle/`);
 console.log(`\n  To publish:`);
-console.log(`    git push origin core`);
-console.log(`    git push origin v${newVersion}`);
+if (didRevert) {
+  console.log(`    git push origin core --force-with-lease  # rewrite the old release commit`);
+  console.log(`    git push origin v${newVersion} --force    # replace remote tag`);
+} else {
+  console.log(`    git push origin core`);
+  console.log(`    git push origin v${newVersion}`);
+}
