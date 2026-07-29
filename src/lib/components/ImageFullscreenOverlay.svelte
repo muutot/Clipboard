@@ -71,10 +71,11 @@
       zoom = 2;
     }
   }
-
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  role="presentation"
   class="image-viewer-overlay"
   style="background: rgba(0, 0, 0, {opacity})"
   onwheel={onWheel}
@@ -84,12 +85,7 @@
   onmouseleave={onMouseUp}
   ondblclick={onDblClick}
 >
-  <button
-    type="button"
-    class="viewer-close-btn"
-    onclick={onclose}
-    aria-label={_t("actions.close")}
-  >
+  <button type="button" class="viewer-close-btn" onclick={onclose} aria-label={_t("actions.close")}>
     <AppIcon name="x" size={20} strokeWidth={2.5} />
   </button>
   <div class="viewer-zoom-hint">{Math.round(zoom * 100)}%</div>

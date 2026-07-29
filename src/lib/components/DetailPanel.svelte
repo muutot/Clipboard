@@ -317,7 +317,12 @@
 
   const specialMarkers = $derived.by(() => {
     if (!item)
-      return { emails: [] as string[], urls: [] as string[], phones: [] as string[], colors: [] as string[] };
+      return {
+        emails: [] as string[],
+        urls: [] as string[],
+        phones: [] as string[],
+        colors: [] as string[],
+      };
     const text = [item.title, item.preview].filter(Boolean).join(" ");
     return {
       emails: extractEmails(text),
@@ -438,11 +443,7 @@
 
 {#if item}
   {#if mode !== "split"}
-    <div
-      class="detail-backdrop"
-      onclick={onclose}
-      aria-hidden="true"
-    ></div>
+    <div class="detail-backdrop" onclick={onclose} aria-hidden="true"></div>
   {/if}
   <div
     class="detail-panel"

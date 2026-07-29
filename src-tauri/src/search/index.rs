@@ -484,7 +484,8 @@ mod tests {
             "开 脏 啦 should not match any item (no item has 啦)"
         );
         assert!(
-            index.search("开 脏", 20)
+            index
+                .search("开 脏", 20)
                 .unwrap()
                 .iter()
                 .map(|h| h.item_id.as_str())
@@ -492,7 +493,8 @@ mod tests {
             "开 脏 should NOT match 开开心心每一天 (missing 脏)"
         );
         assert!(
-            index.search("开 脏", 20)
+            index
+                .search("开 脏", 20)
                 .unwrap()
                 .iter()
                 .map(|h| h.item_id.as_str())
@@ -504,7 +506,10 @@ mod tests {
         let bigram_hits = index.search("开心", 20).unwrap();
         let bigram_ids: Vec<_> = bigram_hits.iter().map(|h| h.item_id.as_str()).collect();
         assert!(bigram_ids.contains(&"a"), "开心 should match 开心脏脏");
-        assert!(bigram_ids.contains(&"c"), "开心 should match 开开心心每一天");
+        assert!(
+            bigram_ids.contains(&"c"),
+            "开心 should match 开开心心每一天"
+        );
         assert!(
             !bigram_ids.contains(&"b"),
             "开心 should NOT match 脏兮兮的小心脏 (心 and 开 are not adjacent)"
@@ -524,7 +529,10 @@ mod tests {
         // 'c' has two 心 (开开心心), 'b' has one 心 (小心脏)
         let c_pos = by_relevance.iter().position(|h| h.item_id == "c");
         let b_pos = by_relevance.iter().position(|h| h.item_id == "b");
-        assert!(c_pos < b_pos, "开开心心每一天 (2×心) should rank above 脏兮兮的小心脏 (1×心)");
+        assert!(
+            c_pos < b_pos,
+            "开开心心每一天 (2×心) should rank above 脏兮兮的小心脏 (1×心)"
+        );
 
         // ── search_all_ids with cache ──
         let (ids, total) = index.search_all_ids("开 脏", 50).unwrap();

@@ -72,15 +72,20 @@ get(generalSettings).imageFullscreenMode; // 启动时快照，不会变
 get(generalSettings).someSetting; // 调用时读取，不是模块顶层
 ```
 
-### `setFullscreen()` 需要正确配对
+### 图片预览全屏模式
 
-桌面全屏模式下 `openImageFullscreen` 调用 `setFullscreen(true)`，但以下场景会导致窗口卡在全屏状态：
+桌面全屏模式 (`imageFullscreenMode === "desktop"`) 使用 `element.requestFullscreen()` 填满物理屏幕。全屏状态通过监听 `fullscreenchange` 事件同步，不能仅依赖本地布尔变量，因为用户可通过浏览器 ESC 退出全屏。全屏时仅右上角 X 按钮和 ESC 可关闭。
 
-- 背景点击只设了 `imageFullscreen = false`，没调用 `setFullscreen(false)`
-- `$effect` 直接重置 `imageFullscreen`，没走 `closeImageFullscreen()`
-- Escape 被父组件拦截，`closeImageFullscreen()` 根本没执行
-
-**原则：所有关闭路径都必须经过 `closeImageFullscreen()` 函数。**
+```typescript
+// 正确做法
+onMount(() => {
+  function onFullscreenChange() {
+    isNativeFullscreen = !!document.fullscreenElement;
+  }
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+  return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+});
+```
 
 ### Tauri 命令返回类型必须是 `Result`
 

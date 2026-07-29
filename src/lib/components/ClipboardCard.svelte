@@ -401,7 +401,9 @@
         }
         return;
       case "copy":
-        void writeClipboardText(action.payload).catch((err) => console.error("Copy to clipboard failed:", err));
+        void writeClipboardText(action.payload).catch((err) =>
+          console.error("Copy to clipboard failed:", err),
+        );
         return;
       case "viewDate":
         await showDateDialog(action);

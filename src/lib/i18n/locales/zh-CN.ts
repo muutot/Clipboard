@@ -433,7 +433,7 @@ const zhCN: LocaleDefinition = {
     showSettingsCloseButton: "显示设置关闭按钮",
     showSettingsCloseButtonDescription: "开启后在设置界面标题栏显示关闭按钮",
     desktopFullscreen: "桌面全屏预览",
-    desktopFullscreenDescription: "开启时图片全屏覆盖桌面，关闭时仅在应用内全屏",
+    desktopFullscreenDescription: "开启时使用全屏 API 填满物理屏幕，关闭时仅在应用窗口内预览",
     viewerBackdropOpacity: "全屏蒙版透明度",
     viewerBackdropOpacityDescription: "全屏预览图片时蒙版的透明度",
     theme: "主题",

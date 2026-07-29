@@ -83,7 +83,9 @@
   function applyFontSize(category: keyof typeof s.fontSizes, value: number) {
     const updated = { ...s.fontSizes, [category]: value };
     generalSettings.updateSetting("fontSizes", updated);
-    emit("settings-font-changed", { fontSizes: updated, display: s.display }).catch((err) => console.warn("settings-font-changed emit failed:", err));
+    emit("settings-font-changed", { fontSizes: updated, display: s.display }).catch((err) =>
+      console.warn("settings-font-changed emit failed:", err),
+    );
   }
 
   function sliderHandler(category: keyof typeof s.fontSizes) {

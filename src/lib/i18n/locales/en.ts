@@ -453,7 +453,7 @@ const en: LocaleDefinition = {
     showSettingsCloseButtonDescription: "Show a close button in the settings title bar",
     desktopFullscreen: "Desktop Fullscreen Preview",
     desktopFullscreenDescription:
-      "When enabled, images fullscreen over desktop. When disabled, fullscreen within app only.",
+      "When enabled, uses the Fullscreen API to fill the physical screen. When disabled, preview within the app window only.",
     viewerBackdropOpacity: "Viewer Backdrop Opacity",
     viewerBackdropOpacityDescription:
       "Opacity of the backdrop when previewing images in fullscreen",
