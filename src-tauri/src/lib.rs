@@ -10,6 +10,7 @@ pub mod config;
 pub mod content;
 pub mod domain;
 pub mod export;
+pub mod geometry;
 pub mod keyboard;
 pub mod memory;
 pub mod ocr;
@@ -17,20 +18,23 @@ pub mod performance;
 pub mod platform;
 pub mod privacy;
 pub mod search;
+pub mod shutdown;
+pub mod state;
 pub mod storage;
 
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread;
+use std::time::Duration;
 
 use cli::LocalApiServer;
+use commands::clipboard::SearchResultCache;
 use config::ConfigStore;
-use content::{
-    ThumbnailWorker,
-    RESOURCE_METADATA_SCHEMA_VERSION,
-};
+use content::{resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION, self_trigger, ThumbnailWorker};
 use domain::{ClipboardItem, ClipboardKind};
+#[allow(unused_imports)]
+use geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceTracker, StartupMetrics, StartupTimer};
@@ -38,18 +42,17 @@ use platform::windows_hotkey::{
     shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys, HotkeyManager,
 };
 use platform::{
-    show_main_window, sync_autostart, ClipboardMonitor, GlobalShortcutManager,
-    SingleInstanceError, SingleInstanceGuard, SystemTray,
+    show_main_window, sync_autostart, ClipboardMonitor, GlobalShortcutManager, SingleInstanceError,
+    SingleInstanceGuard, SystemTray,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSynchronizer};
-use serde::Serialize;
+use shutdown::stop_runtime_services;
+use state::{CaptureState, CaptureWorker, SelfTriggerState};
 use std::str::FromStr;
-use std::time::Duration;
 use storage::{
     quarantine_search_index, recover_database_if_needed, refresh_database_backup,
-    ClipboardRepository, Database, KindDeleteScope,
-    OcrRepository, StoragePaths,
+    ClipboardRepository, Database, KindDeleteScope, OcrRepository, StoragePaths,
 };
 use tauri::{Emitter, Manager};
 
@@ -58,52 +61,10 @@ pub(crate) const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
     include_favorites: false,
     include_deleted: true,
 };
+#[cfg_attr(not(test), allow(dead_code))]
 const MAIN_WINDOW_MIN_WIDTH: u32 = 730;
+#[cfg_attr(not(test), allow(dead_code))]
 const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
-
-fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> (Vec<(u32, u32)>, Vec<keyboard::Modifier>) {
-    let Some(shortcuts) = config.shortcuts.get(TOGGLE_WINDOW_ACTION) else {
-        return (Vec::new(), Vec::new());
-    };
-
-    let bindings = shortcuts
-        .iter()
-        .filter_map(|shortcut| keyboard::ShortcutBinding::from_str(shortcut).ok())
-        .collect::<Vec<_>>();
-
-    (
-        shortcut_bindings_to_windows_hotkeys(&bindings),
-        shortcut_bindings_to_double_modifiers(&bindings),
-    )
-}
-
-/// Shared state for ignored applications list, synced between capture thread and Tauri commands.
-/// Capture policy shared by every clipboard ingestion path.
-///
-/// The command handlers and background workers do not share a Tauri `State`
-/// reference directly.  Instead they hold this small, thread-safe snapshot so
-/// pause/ignore changes take effect without restarting a monitor thread.
-#[derive(Clone)]
-pub struct CaptureState {
-    paused: Arc<AtomicBool>,
-    max_file_copy_size_bytes: Arc<AtomicU64>,
-    ignored_apps: Arc<Mutex<Vec<String>>>,
-    policy: Arc<CapturePolicy>,
-    ingestion_guard: Arc<Mutex<()>>,
-    worker: Arc<Mutex<Option<CaptureWorker>>>,
-}
-
-#[derive(Clone)]
-struct CapturePolicy {
-    sensitive_patterns: Arc<Vec<regex_lite::Regex>>,
-    password_manager_apps: Arc<Vec<String>>,
-}
-
-struct CaptureWorker {
-    stop_flag: Arc<AtomicBool>,
-    stop_sender: Option<mpsc::Sender<()>>,
-    handle: Option<JoinHandle<()>>,
-}
 
 const HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const SCHEDULED_ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
@@ -111,7 +72,7 @@ const SCHEDULED_ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
 pub(crate) struct CleanupWorker {
     stop_flag: Arc<AtomicBool>,
     stop_sender: Mutex<Option<mpsc::Sender<()>>>,
-    handle: Mutex<Option<JoinHandle<()>>>,
+    handle: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 impl CleanupWorker {
@@ -140,7 +101,7 @@ impl CleanupWorker {
                 }
 
                 match ConfigStore::load(&project_directory) {
-                    Ok(config) => match enforce_history_cleanup_for(
+                    Ok(config) => match commands::cleanup::enforce_history_cleanup_for(
                         &database,
                         &config,
                         &paths,
@@ -155,7 +116,7 @@ impl CleanupWorker {
                     Err(error) => eprintln!("[cleanup] failed to load configuration: {error}"),
                 }
 
-                if wait_for_stop(&stop_receiver, &worker_flag, interval) {
+                if commands::signal::wait_for_stop(&stop_receiver, &worker_flag, interval) {
                     break;
                 }
             })
@@ -198,341 +159,20 @@ impl Drop for CleanupWorker {
     }
 }
 
-impl CaptureState {
-    fn new(
-        privacy: &PrivacyManager,
-        ignored_apps: Vec<String>,
-        max_file_copy_size_bytes: u64,
-    ) -> Self {
-        let sensitive_patterns = privacy.sensitive_patterns.clone();
-        Self {
-            paused: Arc::new(AtomicBool::new(privacy.is_paused())),
-            max_file_copy_size_bytes: Arc::new(AtomicU64::new(max_file_copy_size_bytes)),
-            ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
-            policy: Arc::new(CapturePolicy {
-                sensitive_patterns: Arc::new(sensitive_patterns),
-                password_manager_apps: Arc::new(privacy.password_manager_apps.clone()),
-            }),
-            ingestion_guard: Arc::new(Mutex::new(())),
-            worker: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    pub(crate) fn set_paused(&self, paused: bool) {
-        self.paused.store(paused, Ordering::SeqCst);
-    }
-
-    pub(crate) fn is_paused(&self) -> bool {
-        self.paused.load(Ordering::SeqCst)
-    }
-
-    fn set_max_file_copy_size_bytes(&self, value: u64) {
-        self.max_file_copy_size_bytes.store(value, Ordering::SeqCst);
-    }
-
-    fn max_file_copy_size_bytes(&self) -> u64 {
-        self.max_file_copy_size_bytes.load(Ordering::SeqCst)
-    }
-
-    fn set_ignored_apps(&self, apps: Vec<String>) -> Vec<String> {
-        let normalized = normalize_app_list(&apps);
-        if let Ok(mut ignored) = self.ignored_apps.lock() {
-            *ignored = normalized.clone();
-        }
-        normalized
-    }
-
-    fn ignored_apps(&self) -> Vec<String> {
-        self.ignored_apps
-            .lock()
-            .map(|apps| apps.clone())
-            .unwrap_or_default()
-    }
-
-    fn should_skip(&self, source_app: Option<&str>, text: Option<&str>) -> bool {
-        if self.is_paused() {
-            return true;
-        }
-
-        let ignored = match self.ignored_apps.lock() {
-            Ok(apps) => apps,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        self.policy.should_skip(&ignored, source_app, text)
-    }
-
-    fn install_worker(&self, worker: CaptureWorker) {
-        self.stop_worker();
-        let mut slot = self
-            .worker
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        *slot = Some(worker);
-    }
-
-    fn stop_worker(&self) {
-        let worker = self
-            .worker
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take();
-        if let Some(mut worker) = worker {
-            worker.stop();
-        }
-    }
-
-    fn worker_running(&self) -> bool {
-        self.worker
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .as_ref()
-            .and_then(|worker| worker.handle.as_ref())
-            .is_some_and(|handle| !handle.is_finished())
-    }
-}
-
-impl CapturePolicy {
-    fn should_skip(
-        &self,
-        ignored_apps: &[String],
-        source_app: Option<&str>,
-        text: Option<&str>,
-    ) -> bool {
-        if source_app.is_some_and(|app| {
-            app_matches(app, ignored_apps) || app_matches(app, &self.password_manager_apps)
-        }) {
-            return true;
-        }
-
-        text.is_some_and(|text| {
-            self.sensitive_patterns
-                .iter()
-                .any(|pattern| pattern.is_match(text))
-        })
-    }
-}
-
-impl CaptureWorker {
-    fn stop(&mut self) {
-        self.stop_flag.store(true, Ordering::SeqCst);
-        if let Some(sender) = self.stop_sender.take() {
-            let _ = sender.send(());
-        }
-
-        if let Some(handle) = self.handle.take() {
-            if handle.thread().id() != thread::current().id() {
-                if handle.join().is_err() {
-                    eprintln!("[clipboard-worker] capture thread terminated with a panic");
-                }
-            } else {
-                // A worker must not join itself.  This path is defensive (the
-                // normal stop command runs on the Tauri thread).
-                self.handle = Some(handle);
-            }
-        }
-    }
-}
-
-impl Drop for CaptureWorker {
-    fn drop(&mut self) {
-        self.stop();
-    }
-}
-
-fn normalize_app_list(apps: &[String]) -> Vec<String> {
-    let mut normalized: Vec<String> = Vec::new();
-    for app in apps {
-        let app = app.trim().to_owned();
-        if !app.is_empty()
-            && !normalized
-                .iter()
-                .any(|existing| normalize_app_name(existing) == normalize_app_name(&app))
-        {
-            normalized.push(app);
-        }
-    }
-    normalized
-}
-
-fn app_matches(app: &str, candidates: &[String]) -> bool {
-    let app = normalize_app_name(app);
-    !app.is_empty()
-        && candidates
-            .iter()
-            .map(|candidate| normalize_app_name(candidate))
-            .any(|candidate| candidate == app)
-}
-
-fn normalize_app_name(app: &str) -> String {
-    let trimmed = app.trim();
-    let leaf = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
-    let path_name = Path::new(leaf)
-        .file_stem()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| leaf.to_owned());
-    path_name.to_lowercase()
-}
-
-/// Shared state for self-trigger guard to prevent capturing app's own clipboard writes.
-#[derive(Clone)]
-pub struct SelfTriggerState(Arc<Mutex<content::hash::SelfTriggerGuard>>);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowPosition {
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct WindowWorkArea {
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
-}
-
-fn window_intersection_area(bounds: WindowPosition, area: WindowWorkArea) -> u64 {
-    let left = i64::from(bounds.x).max(i64::from(area.x));
-    let top = i64::from(bounds.y).max(i64::from(area.y));
-    let right = (i64::from(bounds.x) + i64::from(bounds.width))
-        .min(i64::from(area.x) + i64::from(area.width));
-    let bottom = (i64::from(bounds.y) + i64::from(bounds.height))
-        .min(i64::from(area.y) + i64::from(area.height));
-    if right <= left || bottom <= top {
-        return 0;
-    }
-    ((right - left) as u64).saturating_mul((bottom - top) as u64)
-}
-
-fn window_center_distance_squared(bounds: WindowPosition, area: WindowWorkArea) -> i128 {
-    let bounds_center_x = i128::from(bounds.x) * 2 + i128::from(bounds.width);
-    let bounds_center_y = i128::from(bounds.y) * 2 + i128::from(bounds.height);
-    let area_center_x = i128::from(area.x) * 2 + i128::from(area.width);
-    let area_center_y = i128::from(area.y) * 2 + i128::from(area.height);
-    let dx = bounds_center_x - area_center_x;
-    let dy = bounds_center_y - area_center_y;
-    dx * dx + dy * dy
-}
-
-fn clamp_window_axis(position: i32, area_start: i32, area_size: u32, window_size: u32) -> i32 {
-    let minimum = i64::from(area_start);
-    let maximum = minimum + i64::from(area_size) - i64::from(window_size);
-    if maximum <= minimum {
-        return area_start;
-    }
-    i64::from(position).clamp(minimum, maximum) as i32
-}
-
-fn clamp_window_position_to_work_areas(
-    saved: WindowPosition,
-    work_areas: &[WindowWorkArea],
-) -> WindowPosition {
-    let normalized = WindowPosition {
-        width: saved.width.max(MAIN_WINDOW_MIN_WIDTH),
-        height: saved.height.max(MAIN_WINDOW_MIN_HEIGHT),
-        ..saved
+fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> (Vec<(u32, u32)>, Vec<keyboard::Modifier>) {
+    let Some(shortcuts) = config.shortcuts.get(TOGGLE_WINDOW_ACTION) else {
+        return (Vec::new(), Vec::new());
     };
-    let mut best_overlap: Option<(WindowWorkArea, u64)> = None;
-    let mut nearest: Option<(WindowWorkArea, i128)> = None;
 
-    for area in work_areas
+    let bindings = shortcuts
         .iter()
-        .copied()
-        .filter(|area| area.width > 0 && area.height > 0)
-    {
-        let overlap = window_intersection_area(normalized, area);
-        if best_overlap
-            .as_ref()
-            .is_none_or(|(_, current)| overlap > *current)
-        {
-            best_overlap = Some((area, overlap));
-        }
+        .filter_map(|shortcut| keyboard::ShortcutBinding::from_str(shortcut).ok())
+        .collect::<Vec<_>>();
 
-        let distance = window_center_distance_squared(normalized, area);
-        if nearest
-            .as_ref()
-            .is_none_or(|(_, current)| distance < *current)
-        {
-            nearest = Some((area, distance));
-        }
-    }
-
-    let target = best_overlap
-        .filter(|(_, overlap)| *overlap > 0)
-        .map(|(area, _)| area)
-        .or_else(|| nearest.map(|(area, _)| area));
-    let Some(target) = target else {
-        return normalized;
-    };
-
-    let width = normalized
-        .width
-        .min(target.width.max(MAIN_WINDOW_MIN_WIDTH));
-    let height = normalized
-        .height
-        .min(target.height.max(MAIN_WINDOW_MIN_HEIGHT));
-    WindowPosition {
-        x: clamp_window_axis(normalized.x, target.x, target.width, width),
-        y: clamp_window_axis(normalized.y, target.y, target.height, height),
-        width,
-        height,
-    }
-}
-
-fn stop_runtime_services(app: &tauri::AppHandle) {
-    if let Some(cleanup) = app.try_state::<Mutex<CleanupWorker>>() {
-        match cleanup.lock() {
-            Ok(cleanup) => cleanup.stop(),
-            Err(_) => eprintln!("[shutdown] history cleanup lock is poisoned"),
-        }
-    }
-
-    if let Some(monitor) = app.try_state::<Mutex<ClipboardMonitor>>() {
-        match monitor.lock() {
-            Ok(mut monitor) => {
-                if let Err(error) = monitor.stop() {
-                    eprintln!("[shutdown] failed to stop clipboard monitor: {error}");
-                }
-            }
-            Err(_) => eprintln!("[shutdown] clipboard monitor lock is poisoned"),
-        }
-    }
-
-    if let Some(capture) = app.try_state::<CaptureState>() {
-        capture.stop_worker();
-    }
-
-    if let Some(worker) = app.try_state::<OcrWorkerManager>() {
-        worker.stop();
-    }
-
-    if let Some(thumbnails) = app.try_state::<Mutex<ThumbnailWorker>>() {
-        match thumbnails.lock() {
-            Ok(mut worker) => worker.stop(),
-            Err(_) => eprintln!("[shutdown] thumbnail worker lock is poisoned"),
-        }
-    }
-
-    if let Some(hotkey) = app.try_state::<Mutex<HotkeyManager>>() {
-        match hotkey.lock() {
-            Ok(mut hotkey) => hotkey.stop(),
-            Err(_) => eprintln!("[shutdown] hotkey manager lock is poisoned"),
-        }
-    }
-
-    if let Some(api) = app.try_state::<Mutex<LocalApiServer>>() {
-        match api.lock() {
-            Ok(mut api) => {
-                if let Err(error) = api.stop() {
-                    eprintln!("[shutdown] failed to stop local API: {error}");
-                }
-            }
-            Err(_) => eprintln!("[shutdown] local API lock is poisoned"),
-        }
-    }
+    (
+        shortcut_bindings_to_windows_hotkeys(&bindings),
+        shortcut_bindings_to_double_modifiers(&bindings),
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -687,7 +327,7 @@ pub fn run() {
             );
             app.manage(capture_state.clone());
 
-            let self_trigger_guard = Arc::new(Mutex::new(content::hash::SelfTriggerGuard::new()));
+            let self_trigger_guard = Arc::new(Mutex::new(self_trigger::SelfTriggerGuard::new()));
             let self_trigger_guard_managed = SelfTriggerState(self_trigger_guard.clone());
             app.manage(self_trigger_guard_managed);
 

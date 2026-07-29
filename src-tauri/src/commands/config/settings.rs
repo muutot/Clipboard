@@ -3,12 +3,10 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
 use crate::config::{ConfigStore, GeneralConfig};
+use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use crate::platform::{self, sync_autostart, WindowManager};
-use crate::{WindowPosition, WindowWorkArea, clamp_window_position_to_work_areas};
 
-use super::{
-    ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo,
-};
+use super::{ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo};
 
 #[tauri::command]
 pub fn get_general_settings(
