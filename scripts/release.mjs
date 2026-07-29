@@ -6,10 +6,11 @@
  *   1. Verify project health (npm run verify)
  *   2. Bump version across all configs
  *   3. Generate changelog from commits since last tag
- *   4. Commit version bump + changelog
- *   5. Create git tag
- *   6. Build release artifacts
- *   7. Report results
+ *   4. Substitue ${version}/${date} placeholders in RELEASE.md
+ *   5. Commit version bump + changelog + RELEASE.md
+ *   6. Create git tag
+ *   7. Build release artifacts
+ *   8. Report results
  *
  * Special mode: --regenerate
  *   Re-generates changelog from scratch for the current version
@@ -23,13 +24,14 @@
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { argv, exit } from "node:process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
+const RELEASE_PATH = resolve(ROOT, "RELEASE.md");
 
 function run(cmd, opts = {}) {
   console.log(`  > ${cmd}`);
@@ -106,7 +108,7 @@ const mode = isRegenerate ? "REGENERATE" : isDryRun ? "DRY RUN" : "RELEASE";
 let didDrop = false;
 
 // Step 1: Pre-flight checks
-console.log(`\n[1/6] Pre-flight checks (${mode})...`);
+console.log(`\n[1/7] Pre-flight checks (${mode})...`);
 if (!isDryRun && !isRegenerate) {
   if (isDirty()) {
     console.error("  ERROR: Working directory is dirty. Commit or stash changes first.");
@@ -159,7 +161,7 @@ if (isRegenerate) {
 }
 
 // Step 2: Verify
-console.log("\n[2/6] Running verification...");
+console.log("\n[2/7] Running verification...");
 if (!isDryRun) {
   run("npm run verify");
 } else {
@@ -167,7 +169,7 @@ if (!isDryRun) {
 }
 
 // Step 3: Bump version
-console.log("\n[3/6] Bumping version...");
+console.log("\n[3/7] Bumping version...");
 let newVersion;
 if (isRegenerate && !didDrop) {
   // No old tag to undo — version is already at target, keep it
@@ -188,22 +190,42 @@ execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
 console.log("  ✓ Cargo.lock updated");
 
 // Step 4: Generate changelog
-console.log("\n[4/6] Generating changelog...");
+console.log("\n[4/7] Generating changelog...");
 if (isRegenerate) {
   run("node scripts/changelog.mjs --all");
 } else {
   run("node scripts/changelog.mjs");
 }
 
-// Step 5: Commit and tag
+// Step 5: Update RELEASE.md with version and date
+console.log("\n[5/7] Updating RELEASE.md...");
+if (existsSync(RELEASE_PATH)) {
+  let releaseBody = readFileSync(RELEASE_PATH, "utf-8");
+  const today = new Date().toISOString().split("T")[0];
+  releaseBody = releaseBody.replaceAll("${version}", newVersion);
+  releaseBody = releaseBody.replaceAll("${date}", today);
+
+  if (!isDryRun) {
+    writeFileSync(RELEASE_PATH, releaseBody, "utf-8");
+    console.log(`  ✓ RELEASE.md: ${newVersion} / ${today}`);
+  } else {
+    console.log(`  (would write ${newVersion} / ${today} in real run)`);
+  }
+} else {
+  // RELEASE.md is optional — warn but continue
+  console.log("  (RELEASE.md not found, skipping)");
+}
+
+// Step 6: Commit and tag
 if (!isDryRun) {
+  // Include RELEASE.md in changed files even if prettier didn't touch it
   const changedFiles = execSync("git diff --name-only", { cwd: ROOT, encoding: "utf-8" }).trim();
 
   if (changedFiles) {
     const tagVersion = `v${newVersion}`;
     const releaseBranch = `release/${tagVersion}`;
 
-    console.log("\n[5/6] Committing and tagging...");
+    console.log("\n[6/7] Committing and tagging...");
 
     // Stage changed files
     const files = changedFiles.split("\n").join(" ");
@@ -218,14 +240,14 @@ if (!isDryRun) {
 
     console.log(`\n  ✓ Committed and tagged ${tagVersion}`);
   } else {
-    console.log("\n[5/6] No changes to commit (version already at target).");
+    console.log("\n[6/7] No changes to commit (version already at target).");
   }
 } else {
-  console.log("\n[5/6] Commit and tag (skipped in dry-run mode)");
+  console.log("\n[6/7] Commit and tag (skipped in dry-run mode)");
 }
 
-// Step 6: Build
-console.log("\n[6/6] Building release artifacts...");
+// Step 7: Build
+console.log("\n[7/7] Building release artifacts...");
 if (!isDryRun) {
   run("npm run tauri build");
 } else {
