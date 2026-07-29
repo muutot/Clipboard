@@ -174,7 +174,6 @@
 
   let fullscreenFilePath = $state<string | null>(null);
   let fullscreenOpacity = $state(0.92);
-  let viewerWindow: import("@tauri-apps/api/webviewWindow").WebviewWindow | null = null;
 
   let selectedIds = $state<Set<string>>(new Set());
   let lastClickedIndex = $state(-1);
@@ -1634,39 +1633,15 @@
     if (item) detailItem = item;
   }
 
+  let desktopViewerEl: HTMLDivElement | null = null;
+
   async function handleImageFullscreen(id: string) {
     const item = items.find((i) => i.id === id);
     const filePath = item?.resourcePath || item?.previewPath;
     if (!filePath) return;
 
-    if ($generalSettings.imageFullscreenMode === "desktop" && isTauriRuntime()) {
-      const opacity = $generalSettings.viewerBackdropOpacity / 100;
-      try {
-        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-        const { emit } = await import("@tauri-apps/api/event");
-
-        const existing = await WebviewWindow.getByLabel("image-viewer");
-        if (existing) {
-          viewerWindow = existing;
-          await existing.show();
-          await existing.setFocus();
-          await emit("viewer:open", { src: filePath, opacity });
-          return;
-        }
-
-        const createdWindow = new WebviewWindow("image-viewer", {
-          url: `/viewer?src=${encodeURIComponent(filePath)}&opacity=${opacity}`,
-          title: "",
-          decorations: false,
-          transparent: true,
-          maximized: true,
-          skipTaskbar: true,
-          alwaysOnTop: true,
-        });
-        viewerWindow = createdWindow;
-      } catch (e) {
-        console.error("[viewer] failed to open", e);
-      }
+    if ($generalSettings.imageFullscreenMode === "desktop") {
+      openDesktopViewer(filePath);
       return;
     }
 
@@ -1674,18 +1649,126 @@
     fullscreenOpacity = $generalSettings.viewerBackdropOpacity / 100;
   }
 
-  async function closeViewerWindow() {
-    const w = viewerWindow;
-    viewerWindow = null;
-    if (w) {
-      try {
-        await w.close();
-      } catch {
-        try {
-          await w.hide();
-        } catch {}
+  function openDesktopViewer(filePath: string) {
+    const src = convertFileSrc(filePath.replace(/\\/g, "/"));
+    const container = document.createElement("div");
+    container.className = "desktop-viewer";
+    container.innerHTML = `
+      <button class="desktop-viewer-close" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+        </svg>
+      </button>
+      <div class="desktop-viewer-zoom-hint">100%</div>
+      <img src="${src}" alt="" draggable="false" />
+    `;
+    document.body.appendChild(container);
+    desktopViewerEl = container;
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    const zoomHint = container.querySelector(".desktop-viewer-zoom-hint") as HTMLElement;
+    const closeBtn = container.querySelector(".desktop-viewer-close") as HTMLElement;
+    let cleaningUp = false;
+
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let panStartX = 0;
+    let panStartY = 0;
+
+    function applyTransform() {
+      img.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      zoomHint.textContent = `${Math.round(zoom * 100)}%`;
+    }
+
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      zoom = Math.min(20, Math.max(0.1, zoom * delta));
+      applyTransform();
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      if (e.button !== 0) return;
+      isDragging = true;
+      container.classList.add("dragging");
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!isDragging) return;
+      panX = panStartX + (e.clientX - dragStartX);
+      panY = panStartY + (e.clientY - dragStartY);
+      applyTransform();
+    }
+
+    function onMouseUp() {
+      isDragging = false;
+      container.classList.remove("dragging");
+    }
+
+    function onDblClick() {
+      if (zoom !== 1 || panX !== 0 || panY !== 0) {
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+      } else {
+        zoom = 2;
+      }
+      applyTransform();
+    }
+
+    function cleanup() {
+      if (cleaningUp) return;
+      cleaningUp = true;
+      if (container.parentNode) {
+        if (document.fullscreenElement === container) {
+          document.exitFullscreen();
+        }
+        container.remove();
+      }
+      desktopViewerEl = null;
+      container.removeEventListener("wheel", onWheel);
+      container.removeEventListener("mousedown", onMouseDown);
+      container.removeEventListener("mousemove", onMouseMove);
+      container.removeEventListener("mouseup", onMouseUp);
+      container.removeEventListener("mouseleave", onMouseUp);
+      container.removeEventListener("dblclick", onDblClick);
+      document.removeEventListener("keydown", onEsc, true);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    }
+
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        cleanup();
       }
     }
+
+    function onFullscreenChange() {
+      if (!document.fullscreenElement && !cleaningUp) {
+        cleanup();
+      }
+    }
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    container.addEventListener("mousedown", onMouseDown);
+    container.addEventListener("mousemove", onMouseMove);
+    container.addEventListener("mouseup", onMouseUp);
+    container.addEventListener("mouseleave", onMouseUp);
+    container.addEventListener("dblclick", onDblClick);
+    closeBtn.addEventListener("click", cleanup);
+    document.addEventListener("keydown", onEsc, true);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+
+    container.requestFullscreen().catch(() => cleanup());
   }
 
   function closeFullscreen() {
@@ -1826,7 +1909,9 @@
         item.id === id ? { ...item, title, customTitle: true } : item,
       );
     }
-    invoke("rename_item", { id, newName: title }).catch((err) => console.error("Rename item failed:", err));
+    invoke("rename_item", { id, newName: title }).catch((err) =>
+      console.error("Rename item failed:", err),
+    );
   }
 
   async function plainPaste(_id: string) {
@@ -2271,11 +2356,6 @@
 
     if (event.key === "Escape") {
       if (event.defaultPrevented || editingId || fullscreenFilePath) return;
-
-      if (viewerWindow) {
-        closeViewerWindow();
-        return;
-      }
 
       const detailEditorTarget =
         editableTarget &&
@@ -3684,5 +3764,77 @@
     .status-bar {
       justify-content: flex-end;
     }
+  }
+
+  :global(.desktop-viewer) {
+    position: fixed;
+    z-index: 200;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 1);
+    cursor: grab;
+    user-select: none;
+  }
+
+  :global(.desktop-viewer.dragging) {
+    cursor: grabbing;
+  }
+
+  :global(.desktop-viewer img) {
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
+    transform-origin: center center;
+    transition: transform 0.05s linear;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :global(.desktop-viewer.dragging img) {
+    transition: none;
+  }
+
+  :global(.desktop-viewer-close) {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 201;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(30, 30, 30, 0.7);
+    backdrop-filter: blur(6px);
+    cursor: pointer;
+    transition:
+      color 120ms ease,
+      background 120ms ease;
+  }
+
+  :global(.desktop-viewer-close:hover) {
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(60, 60, 60, 0.8);
+  }
+
+  :global(.desktop-viewer-zoom-hint) {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 201;
+    padding: 4px 14px;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(30, 30, 30, 0.7);
+    backdrop-filter: blur(6px);
+    font-size: 12px;
+    pointer-events: none;
   }
 </style>

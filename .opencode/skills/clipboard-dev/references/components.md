@@ -56,6 +56,10 @@ Key contracts:
 - Owns all viewer state (zoom, pan, drag) and destroys listener on unmount.
 - Close paths: Escape key (capture phase), X button (`onclick`), no backdrop-click-to-close.
 
+### Desktop fullscreen viewer (`+page.svelte`)
+
+When `imageFullscreenMode` is `"desktop"`, `handleImageFullscreen` calls `openDesktopViewer()` which creates a raw DOM container, enters the Fullscreen API (`requestFullscreen`), and supports the same zoom/pan/drag/double-click-reset behavior. The zoom hint is displayed as a fixed overlay. Close via Escape key, close button, or `fullscreenchange` event. All event listeners are cleaned up on close.
+
 ### `ContextMenu.svelte`
 
 Renders viewport-bounded menu items with `id`, label, icon, destructive state, and disabled state. It closes on Escape or outside click and dispatches `onaction(id)`. It currently does not implement arrow-key item navigation; do not document or rely on that behavior without implementing and testing it.

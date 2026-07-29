@@ -4,14 +4,14 @@ This reference is a source map, not a substitute for reading the current files. 
 
 ## Runtime surfaces
 
-| Surface             | Entry point                                                         | Responsibility                                                                                          |
-| ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Main desktop window | `src/routes/+page.svelte`                                           | Search, filtering, pagination, virtual list, card actions, bulk actions, detail opening, runtime events |
-| Settings window     | `src/routes/settings/+page.svelte` → `StorageSettingsDialog.svelte` | Standalone settings WebviewWindow, theme/font application, settings navigation and panels               |
-| Image viewer window | `src/routes/viewer/+page.svelte`                                    | Dedicated fullscreen image viewer; receives `viewer:open` events                                        |
-| GUI backend         | `src-tauri/src/lib.rs::run`                                         | Tauri setup, managed state, commands, workers, tray, hotkeys, shutdown                                  |
-| Process CLI         | `src-tauri/src/main.rs` → `cli/mod.rs`                              | `list`, `search`, `copy`, `paste`, `delete`, `export`, and `stats` without launching the GUI            |
-| Loopback API        | `src-tauri/src/cli/api.rs`                                          | Optional local HTTP automation server bound to `127.0.0.1`                                              |
+| Surface                   | Entry point                                                         | Responsibility                                                                                          |
+| ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Main desktop window       | `src/routes/+page.svelte`                                           | Search, filtering, pagination, virtual list, card actions, bulk actions, detail opening, runtime events |
+| Settings window           | `src/routes/settings/+page.svelte` → `StorageSettingsDialog.svelte` | Standalone settings WebviewWindow, theme/font application, settings navigation and panels               |
+| Desktop fullscreen viewer | `src/routes/+page.svelte::openDesktopViewer`                        | Fullscreen image viewer via Fullscreen API with zoom, pan, drag; created in `+page.svelte`              |
+| GUI backend               | `src-tauri/src/lib.rs::run`                                         | Tauri setup, managed state, commands, workers, tray, hotkeys, shutdown                                  |
+| Process CLI               | `src-tauri/src/main.rs` → `cli/mod.rs`                              | `list`, `search`, `copy`, `paste`, `delete`, `export`, and `stats` without launching the GUI            |
+| Loopback API              | `src-tauri/src/cli/api.rs`                                          | Optional local HTTP automation server bound to `127.0.0.1`                                              |
 
 SvelteKit runs as a static SPA: `src/routes/+layout.ts` disables SSR and awaits `generalSettings.initialize()` before route load. `+layout.svelte` imports global CSS and applies settings to the document.
 
