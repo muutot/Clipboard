@@ -12,7 +12,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="platform">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="license">
   <img src="https://img.shields.io/badge/Tauri-2.x-ffc131?logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Svelte-5.x-ff3e00?logo=svelte" alt="svelte">
   <img src="https://img.shields.io/badge/Rust-edition2021-dea584?logo=rust" alt="rust">
@@ -265,4 +265,4 @@ clipboard/
 
 ## 许可证
 
-MIT © Clipboard Desktop Contributors
+AGPL-3.0 © Clipboard Desktop Contributors
