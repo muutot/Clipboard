@@ -7,6 +7,7 @@ use crate::export::{export_database, ExportFormat, ExportOptions};
 use crate::storage::{ClipboardRepository, Database};
 
 mod api;
+pub mod args;
 pub use api::LocalApiServer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
