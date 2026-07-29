@@ -6,7 +6,7 @@
  *   1. Verify project health (npm run verify)
  *   2. Bump version across all configs
  *   3. Generate changelog from commits since last tag
- *   4. Substitue ${version}/${date} placeholders in RELEASE.md
+ *   4. RELEASE.md must be pre-generated (run generate-release-body.mjs BEFORE this script)
  *   5. Commit version bump + changelog + RELEASE.md
  *   6. Create git tag
  *   7. Build release artifacts
@@ -197,22 +197,18 @@ if (isRegenerate) {
   run("node scripts/changelog.mjs");
 }
 
-// Step 5: Update RELEASE.md with version and date
-console.log("\n[5/7] Updating RELEASE.md...");
+// Step 5: Verify RELEASE.md exists (must be pre-generated)
+console.log("\n[5/7] Checking RELEASE.md...");
 if (existsSync(RELEASE_PATH)) {
-  let releaseBody = readFileSync(RELEASE_PATH, "utf-8");
-  const today = new Date().toISOString().split("T")[0];
-  releaseBody = releaseBody.replaceAll("${version}", newVersion);
-  releaseBody = releaseBody.replaceAll("${date}", today);
-
-  if (!isDryRun) {
-    writeFileSync(RELEASE_PATH, releaseBody, "utf-8");
-    console.log(`  ✓ RELEASE.md: ${newVersion} / ${today}`);
-  } else {
-    console.log(`  (would write ${newVersion} / ${today} in real run)`);
+  const releaseBody = readFileSync(RELEASE_PATH, "utf-8");
+  const isStale = !releaseBody.includes(`v${newVersion}`);
+  if (isStale && !isDryRun) {
+    console.error(`  WARNING: RELEASE.md content does not match v${newVersion}.`);
+    console.error(`  Run 'node scripts/generate-release-body.mjs' first, then re-run this script.`);
+    process.exit(1);
   }
+  console.log(`  ✓ RELEASE.md verified for v${newVersion}`);
 } else {
-  // RELEASE.md is optional — warn but continue
   console.log("  (RELEASE.md not found, skipping)");
 }
 
