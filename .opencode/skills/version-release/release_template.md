@@ -40,6 +40,7 @@
 ---
 
 ## 界面特性
+
 - **虚拟滚动列表** — 自适应卡片高度，支持图文混排、紧凑模式 | [`3494536`](https://github.com/muutot/Clipboard/commit/3494536) [`8fcfae3`](https://github.com/muutot/Clipboard/commit/8fcfae3) [`9a78132`](https://github.com/muutot/Clipboard/commit/9a78132)
 - **详情面板** — 同画布切换 / 左右分栏两种展示模式 | [`64bb49b`](https://github.com/muutot/Clipboard/commit/64bb49b) [`c7cd722`](https://github.com/muutot/Clipboard/commit/c7cd722)
 - **图片全屏查看器** — 缩放、平移、拖拽，独立窗口展示 | [`724c091`](https://github.com/muutot/Clipboard/commit/724c091) [`70670cc`](https://github.com/muutot/Clipboard/commit/70670cc) [`2f1171d`](https://github.com/muutot/Clipboard/commit/2f1171d)
@@ -52,6 +53,7 @@
 ---
 
 ## 自定义设置
+
 ### 主题系统
 
 - **19 属性颜色系统** — 覆盖全部 UI 组件，深色/浅色预设 | [`bdf3550`](https://github.com/muutot/Clipboard/commit/bdf3550) [`563e014`](https://github.com/muutot/Clipboard/commit/563e014) [`8717302`](https://github.com/muutot/Clipboard/commit/8717302)
@@ -60,6 +62,7 @@
 - **占位符颜色独立设置** | [`797faa5`](https://github.com/muutot/Clipboard/commit/797faa5)
 
 ### 字体与显示
+
 - **独立字号控制** — 卡片标题/预览/备注文字字号分别设置 | [`b824138`](https://github.com/muutot/Clipboard/commit/b824138) [`2b4bb9a`](https://github.com/muutot/Clipboard/commit/2b4bb9a)
 - **分页控制** — 单页加载数、最大加载条目上限、缓存条目数 | [`177d6d6`](https://github.com/muutot/Clipboard/commit/177d6d6) [`2799c7f`](https://github.com/muutot/Clipboard/commit/2799c7f) [`ddd7a42`](https://github.com/muutot/Clipboard/commit/ddd7a42)
 - **操作按钮** — 悬停/常显两种显示模式 | [`a825943`](https://github.com/muutot/Clipboard/commit/a825943)

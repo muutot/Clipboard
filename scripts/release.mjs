@@ -218,7 +218,9 @@ if (existsSync(RELEASE_PATH)) {
   if (!releaseBody.includes(`v${newVersion}`)) {
     console.log(`  RELEASE.md is stale (still references a different version).`);
     console.log(`  → Read CHANGELOG.md and update RELEASE.md following the template.`);
-    console.log(`  → git add RELEASE.md && git commit -m "docs: update RELEASE.md for v${newVersion}"`);
+    console.log(
+      `  → git add RELEASE.md && git commit -m "docs: update RELEASE.md for v${newVersion}"`,
+    );
     console.log(`  → Then re-run this script (already-bumped steps will be skipped).`);
     process.exit(0);
   }
