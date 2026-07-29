@@ -103,7 +103,7 @@ if (!versionArg) {
 
 const currentVersion = getCurrentVersion();
 const mode = isRegenerate ? "REGENERATE" : isDryRun ? "DRY RUN" : "RELEASE";
-let didRevert = false;
+let didDrop = false;
 
 // Step 1: Pre-flight checks
 console.log(`\n[1/6] Pre-flight checks (${mode})...`);
@@ -115,7 +115,7 @@ if (!isDryRun && !isRegenerate) {
   console.log("  ✓ Working directory clean");
 }
 
-// Step 1b: In regenerate mode, revert the old release commit if tag exists
+// Step 1b: In regenerate mode, drop the old release commit from history if tag exists
 if (isRegenerate) {
   const tagVersion = `v${versionArg}`;
   const tagExists =
@@ -138,19 +138,21 @@ if (isRegenerate) {
     if (commitMsg.includes("chore[release]") || commitMsg.includes("bump version to")) {
       console.log(`  Found existing ${tagVersion} at ${shortSha}: "${commitMsg}"`);
       if (!isDryRun) {
-        console.log(`  Reverting...`);
-        run(`git revert --no-commit ${tagCommit}`);
-        run(`git tag -d ${tagVersion}`);
-        didRevert = true;
-        // Cargo.lock may have been reverted too; bring it in line
-        execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
+        const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, {
           cwd: ROOT,
           encoding: "utf-8",
-          stdio: "pipe",
-        });
-        console.log("  ✓ Old release reverted, tag deleted\n");
+        })
+          .trim()
+          .split(" ")[1]; // second word = first parent
+        console.log(
+          `  Dropping old release commit ${shortSha} via rebase (parent ${parentSha.slice(0, 7)})...`,
+        );
+        run(`git rebase --onto ${parentSha} ${tagCommit}`);
+        run(`git tag -d ${tagVersion}`);
+        didDrop = true;
+        console.log("  ✓ Old release commit removed from history, tag deleted\n");
       } else {
-        console.log("  (would revert in real run)\n");
+        console.log("  (would drop via rebase in real run)\n");
       }
     }
   }
@@ -167,7 +169,7 @@ if (!isDryRun) {
 // Step 3: Bump version
 console.log("\n[3/6] Bumping version...");
 let newVersion;
-if (isRegenerate && !didRevert) {
+if (isRegenerate && !didDrop) {
   // No old tag to undo — version is already at target, keep it
   newVersion = currentVersion;
   console.log(`  Version stays at ${currentVersion} (regenerate mode)`);
@@ -236,7 +238,7 @@ console.log(`Release ${newVersion} complete!`);
 console.log(`\n  Tag: v${newVersion}`);
 console.log(`  Bundle: src-tauri/target/release/bundle/`);
 console.log(`\n  To publish:`);
-if (didRevert) {
+if (didDrop) {
   console.log(`    git push origin core --force-with-lease  # rewrite the old release commit`);
   console.log(`    git push origin v${newVersion} --force    # replace remote tag`);
 } else {

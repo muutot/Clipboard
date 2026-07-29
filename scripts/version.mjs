@@ -11,6 +11,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -27,6 +28,15 @@ function readJson(filePath) {
 
 function writeJson(filePath, data) {
   writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  try {
+    execSync(`npx prettier --write "${filePath}"`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+  } catch {
+    // non-fatal — file is valid JSON regardless
+  }
 }
 
 function readToml(filePath) {

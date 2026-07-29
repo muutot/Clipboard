@@ -161,6 +161,17 @@ if (isPreview) {
     writeFileSync(CHANGELOG_PATH, changelog, "utf-8");
   }
 
+  // Re-format with prettier to keep lint clean
+  try {
+    execSync(`npx prettier --write "${CHANGELOG_PATH}"`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+  } catch {
+    // non-fatal
+  }
+
   console.log(`CHANGELOG.md updated with ${commits.length} commits for v${version}`);
   console.log(`  Sections: ${Object.keys(groupCommits(commits)).join(", ")}`);
 }
