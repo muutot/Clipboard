@@ -1,0 +1,355 @@
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use serde_json::Value;
+
+use crate::storage::StorageError;
+
+use super::types::*;
+
+impl ConfigStore {
+    pub fn load(project_directory: &Path) -> Result<Self, StorageError> {
+        let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
+        fs::create_dir_all(&config_directory)?;
+        let path = config_directory.join(CONFIG_FILE_NAME);
+        let (config, general_settings_present) = if path.exists() {
+            let mut raw: Value = serde_json::from_slice(&fs::read(&path)?)?;
+            let general_settings_present =
+                raw.get("general").map(Value::is_object).unwrap_or(false);
+
+            if !general_settings_present {
+                if let Value::Object(object) = &mut raw {
+                    object.remove("general");
+                }
+            }
+
+            (serde_json::from_value(raw)?, general_settings_present)
+        } else {
+            (AppConfig::default(), true)
+        };
+        let store = Self {
+            path,
+            config,
+            general_settings_present,
+        };
+
+        if !store.path.exists() {
+            store.save()?;
+        }
+
+        Ok(store)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn general_settings(&self) -> &GeneralConfig {
+        &self.config.general
+    }
+
+    pub fn has_general_settings(&self) -> bool {
+        self.general_settings_present
+    }
+
+    pub fn set_general_settings(&mut self, settings: GeneralConfig) -> Result<(), StorageError> {
+        let previous_settings = self.config.general.clone();
+        let previous_present = self.general_settings_present;
+        self.config.general = settings;
+        self.general_settings_present = true;
+
+        if let Err(error) = self.save() {
+            self.config.general = previous_settings;
+            self.general_settings_present = previous_present;
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
+    pub fn storage_directory(&self) -> Option<&Path> {
+        self.config.storage.data_directory.as_deref()
+    }
+
+    pub fn set_storage_directory(
+        &mut self,
+        data_directory: Option<PathBuf>,
+    ) -> Result<(), StorageError> {
+        self.config.storage.data_directory = data_directory;
+        self.save()
+    }
+
+    pub fn set_resource_storage_paths(
+        &mut self,
+        image_storage_path: Option<PathBuf>,
+        file_storage_path: Option<PathBuf>,
+    ) -> Result<(), StorageError> {
+        validate_resource_directory("storage.imageStoragePath", image_storage_path.as_deref())?;
+        validate_resource_directory("storage.fileStoragePath", file_storage_path.as_deref())?;
+
+        if let (Some(image), Some(file)) = (&image_storage_path, &file_storage_path) {
+            let same_path = fs::canonicalize(image).unwrap_or_else(|_| image.clone())
+                == fs::canonicalize(file).unwrap_or_else(|_| file.clone());
+            if same_path {
+                return Err(StorageError::ResourceDirectoriesMustBeDistinct);
+            }
+        }
+
+        self.config.storage.image_storage_path = image_storage_path;
+        self.config.storage.file_storage_path = file_storage_path;
+        self.save()
+    }
+
+    pub fn ignored_applications(&self) -> &[String] {
+        &self.config.privacy.ignored_applications
+    }
+
+    pub fn set_ignored_applications(
+        &mut self,
+        applications: Vec<String>,
+    ) -> Result<Vec<String>, StorageError> {
+        let mut normalized = BTreeMap::new();
+        for application in applications {
+            let application = application.trim();
+            if application.is_empty() {
+                continue;
+            }
+            normalized
+                .entry(application.to_lowercase())
+                .or_insert_with(|| application.to_owned());
+        }
+
+        let applications = normalized.into_values().collect::<Vec<_>>();
+        self.config.privacy.ignored_applications = applications.clone();
+        self.save()?;
+        Ok(applications)
+    }
+
+    pub fn launch_at_startup(&self) -> bool {
+        self.config.window.launch_at_startup
+    }
+
+    pub fn set_launch_at_startup(&mut self, value: bool) -> Result<(), StorageError> {
+        self.config.window.launch_at_startup = value;
+        self.save()
+    }
+
+    pub fn close_to_tray(&self) -> bool {
+        self.config.window.close_to_tray
+    }
+
+    pub fn set_close_to_tray(&mut self, value: bool) -> Result<(), StorageError> {
+        self.config.window.close_to_tray = value;
+        self.save()
+    }
+
+    pub fn single_instance(&self) -> bool {
+        self.config.window.single_instance
+    }
+
+    pub fn set_single_instance(&mut self, value: bool) -> Result<(), StorageError> {
+        self.config.window.single_instance = value;
+        self.save()
+    }
+
+    pub fn window_position(&self) -> Option<(i32, i32, u32, u32)> {
+        let x = self.config.window.x?;
+        let y = self.config.window.y?;
+        let width = self.config.window.width?;
+        let height = self.config.window.height?;
+        Some((x, y, width, height))
+    }
+
+    pub fn set_window_position(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> Result<(), StorageError> {
+        self.config.window.x = Some(x);
+        self.config.window.y = Some(y);
+        self.config.window.width = Some(width);
+        self.config.window.height = Some(height);
+        self.save()
+    }
+
+    pub fn privacy_paused(&self) -> bool {
+        self.config.privacy.paused
+    }
+
+    pub fn set_privacy_paused(&mut self, value: bool) -> Result<(), StorageError> {
+        self.config.privacy.paused = value;
+        self.save()
+    }
+
+    pub fn privacy_master_password_hash(&self) -> Option<&str> {
+        self.config.privacy.master_password_hash.as_deref()
+    }
+
+    pub fn set_privacy_master_password_hash(
+        &mut self,
+        value: Option<String>,
+    ) -> Result<(), StorageError> {
+        self.config.privacy.master_password_hash = value;
+        self.save()
+    }
+
+    pub fn schedule_auto_export(&self) -> Option<&str> {
+        self.config.export.schedule_auto_export.as_deref()
+    }
+
+    pub fn set_schedule_auto_export(&mut self, value: Option<String>) -> Result<(), StorageError> {
+        self.config.export.schedule_auto_export = value;
+        self.save()
+    }
+
+    pub fn ocr_engine(&self) -> &str {
+        &self.config.ocr.engine
+    }
+
+    pub fn tesseract_languages(&self) -> &str {
+        &self.config.ocr.tesseract_languages
+    }
+
+    pub fn models_dir(&self) -> Option<&Path> {
+        self.config.ocr.models_dir.as_deref()
+    }
+
+    pub fn set_models_dir(&mut self, value: Option<PathBuf>) -> Result<(), StorageError> {
+        self.config.ocr.models_dir = value;
+        self.save()
+    }
+
+    pub fn det_score_threshold(&self) -> f32 {
+        self.config.ocr.det_score_threshold
+    }
+
+    pub fn ppocr_model_variant(&self) -> &str {
+        &self.config.ocr.ppocr_model_variant
+    }
+
+    pub fn set_ocr_settings(
+        &mut self,
+        engine: String,
+        ppocr_model_variant: String,
+        score_threshold: f32,
+        box_threshold: f32,
+        unclip_ratio: f32,
+    ) -> Result<(), StorageError> {
+        let previous = self.config.ocr.clone();
+        self.config.ocr.engine = engine;
+        self.config.ocr.ppocr_model_variant = ppocr_model_variant;
+        self.config.ocr.det_score_threshold = score_threshold;
+        self.config.ocr.det_box_threshold = box_threshold;
+        self.config.ocr.det_unclip_ratio = unclip_ratio;
+
+        if let Err(error) = self.save() {
+            self.config.ocr = previous;
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
+    pub fn page_size_limit(&self) -> u32 {
+        self.config.general.page_size_limit.clamp(500, 6_000)
+    }
+
+    pub fn search_page_size_limit(&self) -> u32 {
+        self.config.general.search_page_size_limit.clamp(50, 1_000)
+    }
+
+    pub fn set_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.general.page_size_limit = value.clamp(500, 6_000);
+        self.save()
+    }
+
+    pub fn set_search_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.general.search_page_size_limit = value.clamp(50, 1_000);
+        self.save()
+    }
+
+    pub fn det_box_threshold(&self) -> f32 {
+        self.config.ocr.det_box_threshold
+    }
+
+    pub fn det_unclip_ratio(&self) -> f32 {
+        self.config.ocr.det_unclip_ratio
+    }
+
+    pub fn image_storage_path(&self) -> Option<&Path> {
+        self.config.storage.image_storage_path.as_deref()
+    }
+
+    pub fn file_storage_path(&self) -> Option<&Path> {
+        self.config.storage.file_storage_path.as_deref()
+    }
+
+    pub fn max_file_copy_size_bytes(&self) -> u64 {
+        self.config.storage.max_file_copy_size_bytes
+    }
+
+    pub fn max_screenshot_size_bytes(&self) -> u64 {
+        self.config.storage.max_screenshot_size_bytes
+    }
+
+    pub fn retention_days(&self) -> u32 {
+        self.config.history.retention_days
+    }
+
+    pub fn max_items(&self) -> u32 {
+        self.config.history.max_items
+    }
+
+    pub fn recycle_bin_days(&self) -> u32 {
+        self.config.history.recycle_bin_days
+    }
+
+    pub fn set_retention_days(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.history.retention_days = value;
+        self.save()
+    }
+
+    pub fn set_max_items(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.history.max_items = value;
+        self.save()
+    }
+
+    pub fn set_recycle_bin_days(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.history.recycle_bin_days = value;
+        self.save()
+    }
+
+    pub fn set_max_file_copy_size_bytes(&mut self, value: u64) -> Result<(), StorageError> {
+        self.config.storage.max_file_copy_size_bytes = value;
+        self.save()
+    }
+
+    fn save(&self) -> Result<(), StorageError> {
+        let mut value = serde_json::to_value(&self.config)?;
+        if !self.general_settings_present {
+            if let Value::Object(object) = &mut value {
+                object.remove("general");
+            }
+        }
+        fs::write(&self.path, serde_json::to_vec_pretty(&value)?)?;
+        Ok(())
+    }
+}
+
+fn validate_resource_directory(
+    field: &'static str,
+    path: Option<&Path>,
+) -> Result<(), StorageError> {
+    if let Some(path) = path.filter(|path| !path.is_absolute()) {
+        return Err(StorageError::ResourceDirectoryMustBeAbsolute {
+            field,
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(())
+}
