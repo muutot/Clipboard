@@ -300,7 +300,7 @@ mod linux {
                 MemoryProcess {
                     pid: entry.pid,
                     parent_pid: entry.parent_pid,
-                    name: entry.name,
+                    name: entry.name.clone(),
                     role: Some(if entry.pid == current_pid {
                         "main".to_owned()
                     } else if is_webview_process(&entry.name) {

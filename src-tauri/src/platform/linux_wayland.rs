@@ -69,6 +69,7 @@ use std::{
 };
 
 use crate::keyboard::ShortcutBinding;
+use serde::Serialize;
 
 // ---------------------------------------------------------------------------
 // WaylandCapabilities
@@ -78,7 +79,7 @@ use crate::keyboard::ShortcutBinding;
 ///
 /// This is populated at startup by probing environment variables and
 /// attempting protocol connections.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WaylandCapabilities {
     /// The compositor name (e.g. "sway", "Hyprland", "GNOME Shell", "KWin").
     pub compositor: String,

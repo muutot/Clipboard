@@ -186,12 +186,12 @@ mod x11_ffi {
     // We keep the event union minimal.
     #[repr(C)]
     pub union XEventData {
-        pub any: XAnyEvent,
-        pub key: XKeyEvent,
-        pub selection: XSelectionEvent,
-        pub selection_request: XSelectionRequestEvent,
-        pub property: XPropertyEvent,
-        pub client_message: XClientMessageEvent,
+        pub any: std::mem::ManuallyDrop<XAnyEvent>,
+        pub key: std::mem::ManuallyDrop<XKeyEvent>,
+        pub selection: std::mem::ManuallyDrop<XSelectionEvent>,
+        pub selection_request: std::mem::ManuallyDrop<XSelectionRequestEvent>,
+        pub property: std::mem::ManuallyDrop<XPropertyEvent>,
+        pub client_message: std::mem::ManuallyDrop<XClientMessageEvent>,
         pub _pad: [u64; 24],
     }
 

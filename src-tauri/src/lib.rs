@@ -4187,6 +4187,7 @@ pub fn run() {
             }
 
             // Register global hotkey from keyboard config
+            #[allow(unused_mut)]
             let mut hotkey_manager = HotkeyManager::new();
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {

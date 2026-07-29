@@ -5,7 +5,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::content::hash::icon_key;
+use crate::content::icon_key;
 
 pub const CF_UNICODETEXT: u32 = 13;
 pub const CF_DIB: u32 = 8;
