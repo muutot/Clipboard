@@ -194,7 +194,19 @@ console.log("  ✓ Cargo.lock updated");
 // Step 4: Generate changelog
 console.log("\n[4/7] Generating changelog...");
 if (isRegenerate) {
-  run("node scripts/changelog.mjs --all");
+  // After dropping old release commit, find the previous tag for changelog range
+  const tags = execSync("git tag -l", { cwd: ROOT, encoding: "utf-8" })
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .sort()
+    .reverse();
+  const prevTag = tags.find((t) => t !== `v${newVersion}`);
+  if (prevTag) {
+    run(`node scripts/changelog.mjs --from ${prevTag}`);
+  } else {
+    run("node scripts/changelog.mjs");
+  }
 } else {
   run("node scripts/changelog.mjs");
 }
