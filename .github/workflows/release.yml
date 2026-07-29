@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libssl-dev libgtk-3-dev \
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            node_modules
+          key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: verify
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: macos-x64
+            runner: macos-latest
+            target: x86_64-apple-darwin
+          - platform: macos-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+          - platform: linux-x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libssl-dev libgtk-3-dev \
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            node_modules
+          key: ${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Clipboard Desktop v__VERSION__'
+          releaseBody: 'See [CHANGELOG.md](./CHANGELOG.md) for details.'
+          releaseDraft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}

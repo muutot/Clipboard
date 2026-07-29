@@ -8,3 +8,7 @@ In particular:
 - Preserve the approved main-page style and apply the settings style gate before CSS changes.
 - Keep parallel agent ownership non-overlapping.
 - Commit one verified minimal feature or fix at a time.
+
+## Release
+
+Use `.opencode/skills/version-release/SKILL.md` for version bumping, changelog generation, and release. Trigger with "升级版本到 x.x.x" or "release version x.x.x". Supports `--regenerate` mode for re-releasing current content.

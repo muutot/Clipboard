@@ -1,0 +1,4 @@
+interface:
+  display_name: "Version Release"
+  short_description: "Automated version bump, changelog generation, and release for Clipboard Desktop"
+  default_prompt: "Use $version-release to run the automated release pipeline: bump version across all configs, generate changelog from gitmoji commits, create git tag, and build release artifacts. Support normal release, semantic bump (patch/minor/major), and regenerate mode for re-releasing current content."
