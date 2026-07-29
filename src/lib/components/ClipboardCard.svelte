@@ -17,7 +17,7 @@
   } from "$lib/services/clipboard";
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { assetUrl as baseAssetUrl } from "$lib/utils/format";
-  import { EMAIL_RE, URL_RE, PHONE_RE, COLOR_RE } from "$lib/utils/patterns";
+  import { detectQuickActions, parseIsoDate } from "$lib/utils/patterns";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import { tick } from "svelte";
@@ -198,108 +198,6 @@
   let dateDialog = $state<HTMLDialogElement | null>(null);
   let dateView = $state<{ isoDate: string; formattedDate: string; label: string } | null>(null);
 
-  function parseIsoDate(value: string): Date | null {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-    if (!match) return null;
-
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    if (year < 1 || month < 1 || month > 12 || day < 1) return null;
-
-    const date = new Date(0);
-    date.setUTCHours(12, 0, 0, 0);
-    date.setUTCFullYear(year, month - 1, day);
-    if (
-      date.getUTCFullYear() !== year ||
-      date.getUTCMonth() !== month - 1 ||
-      date.getUTCDate() !== day
-    ) {
-      return null;
-    }
-    return date;
-  }
-
-  function normalizeInlineDate(year: number, month: number, day: number): string | null {
-    const isoDate = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return parseIsoDate(isoDate) ? isoDate : null;
-  }
-
-  function detectInlineDateValues(text: string): string[] {
-    const values: string[] = [];
-    const add = (value: string | null) => {
-      if (value && !values.includes(value)) values.push(value);
-    };
-
-    for (const pattern of [
-      /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g,
-      /\b(\d{4})年(\d{1,2})月(\d{1,2})日/g,
-    ]) {
-      for (const match of text.matchAll(pattern)) {
-        add(normalizeInlineDate(Number(match[1]), Number(match[2]), Number(match[3])));
-      }
-    }
-
-    for (const match of text.matchAll(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/g)) {
-      const first = Number(match[1]);
-      const second = Number(match[2]);
-      const year = Number(match[3]);
-      const dayFirst = normalizeInlineDate(year, second, first);
-      const monthFirst = normalizeInlineDate(year, first, second);
-      if (dayFirst && monthFirst && dayFirst !== monthFirst) continue;
-      add(dayFirst ?? monthFirst);
-    }
-
-    return values;
-  }
-
-  function detectInlineActions(text: string): QuickAction[] {
-    const emails = text.match(EMAIL_RE) ?? [];
-    const urls = text.match(URL_RE) ?? [];
-    const phones = text.match(PHONE_RE) ?? [];
-    const colors = text.match(COLOR_RE) ?? [];
-    const dates = detectInlineDateValues(text);
-
-    const seen = new Set<string>();
-    return [
-      ...emails.map((value) => ({
-        label: `Send email to ${value}`,
-        actionType: "open" as const,
-        payload: `mailto:${value}`,
-        kind: "email" as const,
-      })),
-      ...phones.map((value) => ({
-        label: `Call ${value}`,
-        actionType: "open" as const,
-        payload: `tel:${value.replace(/[^+\d]/g, "")}`,
-        kind: "phone" as const,
-      })),
-      ...urls.map((value) => ({
-        label: `Open ${value}`,
-        actionType: "open" as const,
-        payload: value,
-        kind: "url" as const,
-      })),
-      ...dates.map((value) => ({
-        label: `View date ${value}`,
-        actionType: "viewDate" as const,
-        payload: value,
-        kind: "date" as const,
-      })),
-      ...colors.map((value) => ({
-        label: `Copy color ${value}`,
-        actionType: "copy" as const,
-        payload: value,
-        kind: "color" as const,
-      })),
-    ].filter((action) => {
-      const key = `${action.actionType}:${action.payload}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-
   let contentActionsLoaded = $state(false);
 
   function loadContentActions() {
@@ -308,13 +206,13 @@
     const text = item.textContent || [item.title, item.preview].filter(Boolean).join("\n");
     const request = ++contentActionRequest;
     if (!isTauriRuntime()) {
-      contentActions = detectInlineActions(text);
+      contentActions = detectQuickActions(text, true);
       return;
     }
     void detectContentActions(text)
       .then((actions) => {
         if (request === contentActionRequest) {
-          const raw = actions ?? detectInlineActions(text);
+          const raw = actions ?? detectQuickActions(text, true);
           const seen = new Set<string>();
           contentActions = raw.filter((a) => {
             const key = `${a.actionType}:${a.payload}`;
@@ -326,7 +224,7 @@
       })
       .catch(() => {
         if (request === contentActionRequest) {
-          contentActions = detectInlineActions(text);
+          contentActions = detectQuickActions(text, true);
         }
       });
   }
@@ -341,8 +239,28 @@
   function quickActionKind(
     action: QuickAction,
   ): "url" | "email" | "phone" | "date" | "color" | "copy" {
-    return action.kind ?? "copy";
+    if (action.kind) return action.kind;
+    if (action.actionType === "viewDate") return "date";
+    if (action.payload.startsWith("mailto:")) return "email";
+    if (action.payload.startsWith("tel:")) return "phone";
+    if (
+      action.actionType === "open" &&
+      (action.payload.startsWith("http://") || action.payload.startsWith("https://"))
+    )
+      return "url";
+    if (action.actionType === "copy" && /^#[0-9a-fA-F]{3,8}\b/.test(action.payload)) return "color";
+    return "copy";
   }
+
+  let displayContentActions = $derived.by(() => {
+    const seenKinds = new Set<string>();
+    return contentActions.filter((action) => {
+      const kind = quickActionKind(action);
+      if (seenKinds.has(kind)) return false;
+      seenKinds.add(kind);
+      return true;
+    });
+  });
 
   async function showDateDialog(action: QuickAction) {
     const date = parseIsoDate(action.payload);
@@ -730,7 +648,7 @@
         <span>{formatRelativeTime(item.createdAt, now)}</span>
         {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
         <div class="actions" aria-label={_t("card.itemActions")}>
-          {#each contentActions as action (`${action.actionType}:${action.payload}`)}
+          {#each displayContentActions as action (`${action.actionType}:${action.payload}`)}
             <button
               type="button"
               title={action.label}

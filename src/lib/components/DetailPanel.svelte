@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AppIcon from "$lib/components/AppIcon.svelte";
+  import AppIcon, { type IconName } from "$lib/components/AppIcon.svelte";
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
@@ -8,7 +8,7 @@
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { formatRelativeTime } from "$lib/utils/time";
   import { formatBytes, assetUrl } from "$lib/utils/format";
-  import { extractEmails, extractUrls, extractPhones, extractColors } from "$lib/utils/patterns";
+  import { extractEmails, extractUrls, extractPhones, extractColors, extractDates } from "$lib/utils/patterns";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isTauriRuntime } from "$lib/services/runtime";
@@ -322,22 +322,50 @@
         urls: [] as string[],
         phones: [] as string[],
         colors: [] as string[],
+        dates: [] as string[],
       };
-    const text = [item.title, item.preview].filter(Boolean).join(" ");
+    const text = item.textContent || [item.title, item.preview].filter(Boolean).join(" ");
     return {
       emails: extractEmails(text),
       urls: extractUrls(text),
       phones: extractPhones(text),
       colors: extractColors(text),
+      dates: extractDates(text),
     };
   });
   const emails = $derived(specialMarkers.emails);
   const urls = $derived(specialMarkers.urls);
   const phones = $derived(specialMarkers.phones);
   const colors = $derived(specialMarkers.colors);
+  const dates = $derived(specialMarkers.dates);
   const hasSpecialMarkers = $derived(
-    emails.length > 0 || urls.length > 0 || phones.length > 0 || colors.length > 0,
+    emails.length > 0 || urls.length > 0 || phones.length > 0 || colors.length > 0 || dates.length > 0,
   );
+
+  const markerGroups = $derived.by(() => {
+    const groups: { kind: string; label: string; icon: IconName; items: string[] }[] = [];
+    if (emails.length > 0)
+      groups.push({ kind: "email", label: _t("detail.markerEmails"), icon: "mail", items: emails });
+    if (urls.length > 0)
+      groups.push({ kind: "url", label: _t("detail.markerLinks"), icon: "globe", items: urls });
+    if (phones.length > 0)
+      groups.push({
+        kind: "phone",
+        label: _t("detail.markerPhones"),
+        icon: "phone",
+        items: phones,
+      });
+    if (colors.length > 0)
+      groups.push({
+        kind: "color",
+        label: _t("detail.markerColors"),
+        icon: "palette",
+        items: colors,
+      });
+    return groups;
+  });
+  const showMarkerFilters = $derived(markerGroups.length > 1);
+  let activeMarkerFilter = $state<string | null>(null);
 
   const detailContent = $derived(item ? item.textContent || item.title : "");
   const resourceMetadata = $derived(item?.resourceMetadata);
@@ -902,42 +930,66 @@
           {#if hasSpecialMarkers}
             <div class="special-section">
               <strong class="special-title">{_t("detail.specialMarkers")}</strong>
+              {#if showMarkerFilters}
+                <div class="marker-filters">
+                  <button
+                    type="button"
+                    class="marker-filter-btn"
+                    class:active={activeMarkerFilter === null}
+                    onclick={() => (activeMarkerFilter = null)}
+                  >
+                    {_t("filter.all")}
+                  </button>
+                  {#each markerGroups as group (group.kind)}
+                    <button
+                      type="button"
+                      class="marker-filter-btn"
+                      class:active={activeMarkerFilter === group.kind}
+                      onclick={() =>
+                        (activeMarkerFilter =
+                          activeMarkerFilter === group.kind ? null : group.kind)}
+                    >
+                      <AppIcon name={group.icon} size={12} />
+                      {group.label} ({group.items.length})
+                    </button>
+                  {/each}
+                </div>
+              {/if}
               <div class="markers-list">
-                {#each emails as email}
-                  <div class="marker-item">
-                    <AppIcon name="mail" size={13} />
-                    <span>{email}</span>
-                    <button type="button" onclick={() => copyText(email)}>
-                      <AppIcon name="copy" size={11} />
-                    </button>
-                  </div>
-                {/each}
-                {#each urls as url}
-                  <div class="marker-item">
-                    <AppIcon name="globe" size={13} />
-                    <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
-                    <button type="button" onclick={() => copyText(url)}>
-                      <AppIcon name="copy" size={11} />
-                    </button>
-                  </div>
-                {/each}
-                {#each phones as phone}
-                  <div class="marker-item">
-                    <AppIcon name="phone" size={13} />
-                    <span>{phone}</span>
-                    <button type="button" onclick={() => copyText(phone)}>
-                      <AppIcon name="copy" size={11} />
-                    </button>
-                  </div>
-                {/each}
-                {#each colors as color}
-                  <div class="marker-item color-marker">
-                    <span class="color-swatch" style="background:{color}"></span>
-                    <code>{color}</code>
-                    <button type="button" onclick={() => copyText(color)}>
-                      <AppIcon name="copy" size={11} />
-                    </button>
-                  </div>
+                {#each markerGroups as group (group.kind)}
+                  {#if activeMarkerFilter === null || activeMarkerFilter === group.kind}
+                    {#if group.kind === "color"}
+                      {#each group.items as item}
+                        <div class="marker-item color-marker">
+                          <span class="color-swatch" style="background:{item}"></span>
+                          <code>{item}</code>
+                          <button type="button" onclick={() => copyText(item)}>
+                            <AppIcon name="copy" size={11} />
+                          </button>
+                        </div>
+                      {/each}
+                    {:else if group.kind === "url"}
+                      {#each group.items as item}
+                        <div class="marker-item">
+                          <AppIcon name="globe" size={13} />
+                          <a href={item} target="_blank" rel="noopener noreferrer">{item}</a>
+                          <button type="button" onclick={() => copyText(item)}>
+                            <AppIcon name="copy" size={11} />
+                          </button>
+                        </div>
+                      {/each}
+                    {:else}
+                      {#each group.items as item}
+                        <div class="marker-item">
+                          <AppIcon name={group.icon} size={13} />
+                          <span>{item}</span>
+                          <button type="button" onclick={() => copyText(item)}>
+                            <AppIcon name="copy" size={11} />
+                          </button>
+                        </div>
+                      {/each}
+                    {/if}
+                  {/if}
                 {/each}
               </div>
             </div>
@@ -1506,6 +1558,42 @@
   .markers-list {
     display: grid;
     gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .marker-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+
+  .marker-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    transition: all 120ms ease;
+  }
+
+  .marker-filter-btn:hover {
+    border-color: var(--selection-color);
+    color: var(--selection-color);
+    background: color-mix(in srgb, var(--selection-color) 8%, transparent);
+  }
+
+  .marker-filter-btn.active {
+    border-color: var(--selection-color);
+    color: var(--selection-color);
+    background: color-mix(in srgb, var(--selection-color) 14%, transparent);
   }
 
   .marker-item {

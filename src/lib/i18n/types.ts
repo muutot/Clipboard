@@ -353,6 +353,10 @@ export interface LocaleDefinition {
     completed: string;
     failed: string;
     specialMarkers: string;
+    markerEmails: string;
+    markerLinks: string;
+    markerPhones: string;
+    markerColors: string;
     fileInfo: string;
     back: string;
     tabAriaLabel: string;
