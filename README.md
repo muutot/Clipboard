@@ -1,6 +1,8 @@
 <h1 align="center">
-  <img src="static/favicon.png" width="32" height="32" align="center">
-  Clipboard Desktop
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="static/logo-dark.png">
+    <img src="static/logo-light.png" alt="Clipboard Desktop">
+  </picture>
 </h1>
 
 <p align="center">
