@@ -31,17 +31,13 @@ Write-Host "  Platform: Windows" -ForegroundColor Magenta
 Write-Host "========================================" -ForegroundColor Magenta
 
 if (-not $SkipFrontend) {
-    Step "Frontend: npm ci" { & "C:\bin\node\npm.cmd" ci }
-    Step "Frontend: format:check" { & "C:\bin\node\npm.cmd" run format:check }
-    Step "Frontend: check (svelte-check)" { & "C:\bin\node\npm.cmd" run check }
-    Step "Frontend: build (vite)" { & "C:\bin\node\npm.cmd" run build }
+    Step "Frontend: npm ci" { & "npm.cmd" ci }
+    Step "Frontend: format:check" { & "npm.cmd" run format:check }
+    Step "Frontend: check (svelte-check)" { & "npm.cmd" run check }
+    Step "Frontend: build (vite)" { & "npm.cmd" run build }
 }
 
 if (-not $SkipRust) {
-    $env:RUSTUP_HOME = "C:\bin\rust\rustup"
-    $env:CARGO_HOME = "C:\bin\rust\cargo"
-    $env:Path = "C:\bin\git\bin;C:\bin\node;C:\bin\rust\cargo\bin;$env:Path"
-
     Step "Rust: cargo fmt --check" {
         cargo fmt --manifest-path "$rustDir\Cargo.toml" -- --check
     }
