@@ -83,7 +83,7 @@ function bumpVersion(current, target) {
     cur.pre = "";
   } else {
     // Assume it's a specific version string like "0.2.0" or "0.2.0-beta.1"
-    return target;
+    return target.replace(/^v/, "");
   }
   return formatSemver(cur);
 }
