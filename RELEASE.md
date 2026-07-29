@@ -1,8 +1,8 @@
-# Clipboard Desktop v${version}
+# Clipboard Desktop v1.0.0
 
 > 剪贴板桌面管理工具 — Windows 原生剪贴板监控、全文搜索、OCR 识别、多引擎支持
 >
-> Released: ${date}
+> Released: 2026-07-29
 
 ---
 
@@ -114,5 +114,5 @@
 
 ## 构建产物
 
-- **MSI 安装包**: `Clipboard_${version}_x64_en-US.msi`
-- **NSIS 安装包**: `Clipboard_${version}_x64-setup.exe`
+- **MSI 安装包**: `Clipboard_1.0.0_x64_en-US.msi`
+- **NSIS 安装包**: `Clipboard_1.0.0_x64-setup.exe`
