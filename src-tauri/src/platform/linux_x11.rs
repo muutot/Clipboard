@@ -829,6 +829,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
         let atom_active =
             x11_ffi::XInternAtom(display, b"_NET_ACTIVE_WINDOW\0".as_ptr() as *const i8, 0);
         let atom_pid = x11_ffi::XInternAtom(display, b"_NET_WM_PID\0".as_ptr() as *const i8, 0);
+        let atom_cardinal = x11_ffi::XInternAtom(display, b"CARDINAL\0".as_ptr() as *const i8, 0);
 
         // Get _NET_ACTIVE_WINDOW property from root window
         let mut actual_type: x11_ffi::Atom = 0;
@@ -875,7 +876,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             0,
             1,
             0,
-            x11_ffi::XA_CARDINAL,
+            atom_cardinal,
             &mut actual_type2,
             &mut actual_format2,
             &mut nitems2,

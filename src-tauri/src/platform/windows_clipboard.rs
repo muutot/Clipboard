@@ -59,6 +59,7 @@ fn is_normalized_app_icon(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(target_os = "windows")]
 pub struct WindowsClipboardMonitor {
     running: bool,
     ignored_apps: Vec<String>,
@@ -68,17 +69,20 @@ pub struct WindowsClipboardMonitor {
     handle: Option<JoinHandle<()>>,
 }
 
+#[cfg(target_os = "windows")]
 #[derive(Debug, Clone)]
 pub struct ClipboardChange {
     pub sequence: u32,
 }
 
+#[cfg(target_os = "windows")]
 impl Default for WindowsClipboardMonitor {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(target_os = "windows")]
 impl WindowsClipboardMonitor {
     pub fn new() -> Self {
         Self {
@@ -169,6 +173,7 @@ impl WindowsClipboardMonitor {
     }
 }
 
+#[cfg(target_os = "windows")]
 impl Drop for WindowsClipboardMonitor {
     fn drop(&mut self) {
         self.stop();
@@ -696,6 +701,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     vec![]
 }
 
+#[cfg(target_os = "windows")]
 pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
@@ -1206,6 +1212,7 @@ impl Drop for WindowsClipboardMonitor {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn monitor_starts_and_stops() {
         let mut monitor = WindowsClipboardMonitor::new();
@@ -1219,6 +1226,7 @@ mod tests {
         assert!(!monitor.is_running());
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn double_start_returns_error() {
         let mut monitor = WindowsClipboardMonitor::new();
@@ -1228,6 +1236,7 @@ mod tests {
         monitor.stop();
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn format_name_lookup() {
         assert_eq!(format_id_to_name(1), "CF_TEXT");
@@ -1235,6 +1244,7 @@ mod tests {
         assert_eq!(format_id_to_name(15), "CF_HDROP");
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn unknown_format_gets_fallback_name() {
         assert!(format_id_to_name(99999).starts_with("format_"));
