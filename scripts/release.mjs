@@ -6,11 +6,12 @@
  *   1. Verify project health (npm run verify)
  *   2. Bump version across all configs
  *   3. Generate changelog from commits since last tag
- *   4. RELEASE.md must be pre-generated (run generate-release-body.mjs BEFORE this script)
- *   5. Commit version bump + changelog + RELEASE.md
- *   6. Create git tag
- *   7. Build release artifacts
- *   8. Report results
+ *   4. Generate changelog from commits since last tag (CHANGELOG.md)
+ *   5. Verify RELEASE.md — exit if stale; YOU update it, then re-run (the script auto-skips done steps)
+ *   6. Commit version bump + changelog + RELEASE.md
+ *   7. Create git tag
+ *   8. Build release artifacts
+ *   9. Report results
  *
  * Special mode: --regenerate
  *   Re-generates changelog from scratch for the current version
@@ -197,17 +198,18 @@ if (isRegenerate) {
   run("node scripts/changelog.mjs");
 }
 
-// Step 5: Verify RELEASE.md exists (must be pre-generated)
+// Step 5: Verify RELEASE.md (exit if stale — update it, commit, then re-run)
 console.log("\n[5/7] Checking RELEASE.md...");
 if (existsSync(RELEASE_PATH)) {
   const releaseBody = readFileSync(RELEASE_PATH, "utf-8");
-  const isStale = !releaseBody.includes(`v${newVersion}`);
-  if (isStale && !isDryRun) {
-    console.error(`  WARNING: RELEASE.md content does not match v${newVersion}.`);
-    console.error(`  Run 'node scripts/generate-release-body.mjs' first, then re-run this script.`);
-    process.exit(1);
+  if (!releaseBody.includes(`v${newVersion}`)) {
+    console.log(`  RELEASE.md is stale (still references a different version).`);
+    console.log(`  → Read CHANGELOG.md and update RELEASE.md following the template.`);
+    console.log(`  → git add RELEASE.md && git commit -m "docs: update RELEASE.md for v${newVersion}"`);
+    console.log(`  → Then re-run this script (already-bumped steps will be skipped).`);
+    process.exit(0);
   }
-  console.log(`  ✓ RELEASE.md verified for v${newVersion}`);
+  console.log(`  ✓ RELEASE.md matches v${newVersion}`);
 } else {
   console.log("  (RELEASE.md not found, skipping)");
 }

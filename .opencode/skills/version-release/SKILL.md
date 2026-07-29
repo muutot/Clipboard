@@ -27,19 +27,61 @@ Before running any release command:
 
 ### Normal release (bump to new version)
 
+The release happens in **two passes** because `RELEASE.md` must be curated manually by the LLM.
+
+#### Pass 1 — Script runs steps 1–4 (verify → bump → changelog)
+
 ```
 node scripts/release.mjs <version>
 ```
 
-This runs the full pipeline:
+The pipeline runs:
 
 1. Pre-flight checks (clean working directory)
 2. `npm run verify`
 3. Version bump in `package.json`, `tauri.conf.json`, `Cargo.toml`
-4. Changelog generation from commits since last tag
-5. `${version}` / `${date}` placeholder substitution in `RELEASE.md`
-6. Git commit (version files + CHANGELOG.md + RELEASE.md) + annotated tag
-7. Tauri production build
+4. Changelog generation from commits since last tag (`CHANGELOG.md`)
+5. Check `RELEASE.md` — if stale, prints instructions and exits cleanly
+
+At this point the script **exits** with a message telling you to update `RELEASE.md`.
+
+#### Between passes — LLM generates RELEASE.md
+
+Read `CHANGELOG.md` and use `.opencode/skills/version-release/release_template.md` as a format reference:
+
+1. Group related commits into feature areas (see template sections for reference)
+2. Attach commit hash links using the format:
+
+   ```
+   - **Feature description** — detail | [`hash`](https://github.com/muutot/Clipboard/commit/hash) [`hash2`](https://github.com/muutot/Clipboard/commit/hash2)
+   ```
+
+   Rules:
+   - One point can reference multiple hashes; multiple points can reuse the same hash
+   - Use the full 7+ char shortened hash visible in `CHANGELOG.md`
+   - Group related commits under a single bullet with shared links
+
+3. Write the curated body to `RELEASE.md`
+4. Commit it:
+
+   ```
+   git add RELEASE.md
+   git commit -m "📝 docs[release]: update RELEASE.md for v<version>"
+   ```
+
+#### Pass 2 — Script runs steps 5–7 (verify RELEASE.md → commit → tag → build)
+
+Re-run the **same** command — already-bumped steps are idempotent:
+
+```
+node scripts/release.mjs <version>
+```
+
+The pipeline continues:
+
+5. Verify `RELEASE.md` matches the target version ✓
+6. Commit (version files + CHANGELOG.md + RELEASE.md) + annotated tag
+7. Tauri production build (MSI + NSIS)
 
 ### Semantic bump
 
@@ -48,6 +90,8 @@ node scripts/release.mjs patch    # 0.1.0 → 0.1.1
 node scripts/release.mjs minor    # 0.1.0 → 0.2.0
 node scripts/release.mjs major    # 0.1.0 → 1.0.0
 ```
+
+Same two-pass flow applies.
 
 ### Regenerate mode (re-release current version)
 
@@ -88,23 +132,11 @@ node scripts/changelog.mjs --preview       # preview without writing
 
 ## Release body (`RELEASE.md`)
 
-`RELEASE.md` is the canonical release body template for GitHub Releases. The release script (`release.mjs`) automatically substitutes `${version}` and `${date}` placeholders and includes the file in the release commit.
+`RELEASE.md` is the canonical release body for GitHub Releases. It is **manually curated** by the LLM during each release, following the format in `.opencode/skills/version-release/release_template.md`.
 
-Before each release, update `RELEASE.md` with a curated summary of the current changelog:
+The release script no longer performs placeholder substitution — it only verifies that `RELEASE.md` references the correct version before proceeding to commit.
 
-1. Group related commits into feature areas (see existing sections for reference)
-2. Attach commit hash links using the format:
-
-   ```
-   - **Feature description** — detail | [`hash`](https://github.com/muutot/Clipboard/commit/hash) [`hash2`](https://github.com/muutot/Clipboard/commit/hash2)
-   ```
-
-   Rules:
-   - One point can reference multiple hashes; multiple points can reuse the same hash
-   - Use the full 7+ char shortened hash visible in `CHANGELOG.md`
-   - Group related commits under a single bullet with shared links
-
-3. Pushing the tag triggers CI/CD which reads `RELEASE.md` automatically as the GitHub Release body
+Pushing the tag triggers CI/CD which reads `RELEASE.md` automatically as the GitHub Release body.
 
 ## Post-release
 
