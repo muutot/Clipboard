@@ -133,6 +133,17 @@ if (isRegenerate) {
   newVersion = getCurrentVersion();
 }
 
+// Step 3.5: Update Cargo.lock to match the new version
+if (!isRegenerate) {
+  console.log("  > cargo generate-lockfile (sync Cargo.lock)");
+  execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
+    cwd: ROOT,
+    encoding: "utf-8",
+    stdio: "pipe",
+  });
+  console.log("  ✓ Cargo.lock updated");
+}
+
 // Step 4: Generate changelog
 console.log("\n[4/6] Generating changelog...");
 if (isRegenerate) {
