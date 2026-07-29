@@ -117,7 +117,7 @@ impl SystemTray {
     }
 }
 
-pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         eprintln!("[tray] main window is unavailable");
         return;
