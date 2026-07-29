@@ -104,7 +104,7 @@ Before each release, update `RELEASE.md` with a curated summary of the current c
    - Use the full 7+ char shortened hash visible in `CHANGELOG.md`
    - Group related commits under a single bullet with shared links
 
-3. When creating a GitHub Release from the tag, copy the body from `RELEASE.md` (placeholders already substituted in the committed file)
+3. Pushing the tag triggers CI/CD which reads `RELEASE.md` automatically as the GitHub Release body
 
 ## Post-release
 

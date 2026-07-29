@@ -105,6 +105,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare release body
+        id: release_body
+        shell: bash
+        run: |
+          if [ -f RELEASE.md ]; then
+            echo "body<<BODY_EOF" >> "$GITHUB_OUTPUT"
+            cat RELEASE.md >> "$GITHUB_OUTPUT"
+            echo "BODY_EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "body=See CHANGELOG.md for details." >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -112,7 +124,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Clipboard Desktop v__VERSION__"
-          releaseBody: "See [CHANGELOG.md](./CHANGELOG.md) for details."
+          releaseBody: ${{ steps.release_body.outputs.body }}
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
