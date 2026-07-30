@@ -1,31 +1,27 @@
 #!/usr/bin/env node
 /**
- * release.mjs — Full release orchestration.
+ * release.mjs — Release orchestration.
  *
- * Flow:
- *   1. Verify project health (npm run verify)
- *   2. Bump version across all configs
- *   3. Generate changelog from commits since last tag
- *   4. Generate changelog from commits since last tag (CHANGELOG.md)
- *   5. Verify RELEASE.md — exit if stale; YOU update it, then re-run (the script auto-skips done steps)
- *   6. Build release artifacts
- *   7. Commit version bump + changelog + RELEASE.md
- *   8. Create git tag
- *   9. Report results
+ * Normal flow:
+ *   1. Bump version across all configs
+ *   2. Generate changelog from commits since last tag
+ *   3. Verify RELEASE.md references the target version (exit for LLM to curate)
+ *   4. Commit version files + CHANGELOG.md + RELEASE.md
+ *   5. Create git tag
+ *   6. Push to origin (triggers CI/CD)
  *
- * Special mode: --regenerate
- *   Re-generates changelog from scratch for the current version
- *   Useful for re-releasing with updated content
+ * Regenerate mode (--regenerate):
+ *   Before normal flow, drops the old release commit + tag from history
+ *   (preserving other commits' content and timestamps), then runs normal flow.
  *
  * Usage:
- *   node scripts/release.mjs <version>              # normal release
- *   node scripts/release.mjs patch|minor|major      # semantic bump
- *   node scripts/release.mjs --regenerate <version> # re-release current content
- *   node scripts/release.mjs --dry-run <version>    # preview without committing
+ *   node scripts/release.mjs <version|patch|minor|major>
+ *   node scripts/release.mjs --regenerate <version>
+ *   node scripts/release.mjs --dry-run <version>
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { argv, exit } from "node:process";
@@ -33,252 +29,129 @@ import { argv, exit } from "node:process";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const RELEASE_PATH = resolve(ROOT, "RELEASE.md");
+const BRANCH = execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, encoding: "utf-8" }).trim();
 
 function run(cmd, opts = {}) {
   console.log(`  > ${cmd}`);
   try {
-    return execSync(cmd, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      stdio: opts.silent ? "pipe" : "inherit",
-      shell: true,
-      ...opts,
-    });
+    return execSync(cmd, { cwd: ROOT, encoding: "utf-8", stdio: opts.silent ? "pipe" : "inherit", shell: true, ...opts });
   } catch (err) {
-    console.error(`\n  ERROR: Command failed: ${cmd}`);
-    console.error(err.stderr || err.message);
+    console.error(`\n  ERROR: ${err.stderr || err.message}`);
     exit(1);
   }
 }
 
-function getCurrentVersion() {
+function getVersion() {
   return JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8")).version;
 }
 
-function isDirty() {
-  try {
-    const status = execSync("git status --porcelain", { cwd: ROOT, encoding: "utf-8" });
-    return status.trim().length > 0;
-  } catch {
-    return true;
-  }
+function checkReleaseMd(ver) {
+  if (!existsSync(RELEASE_PATH)) return false;
+  return readFileSync(RELEASE_PATH, "utf-8").includes(`v${ver}`);
 }
 
-function hasUnpushedCommits() {
-  try {
-    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
-      cwd: ROOT,
-      encoding: "utf-8",
-    }).trim();
-    const ahead = execSync(`git rev-list --count origin/${branch}..HEAD 2>nul`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      shell: true,
-    }).trim();
-    return parseInt(ahead || "0") > 0;
-  } catch {
-    return true;
-  }
-}
-
-function printBanner(version) {
-  console.log(`
-╔══════════════════════════════════════════╗
-║      Clipboard Desktop Release          ║
-║            v${version.padEnd(26)}║
-╚══════════════════════════════════════════╝
-`);
-}
-
-// --- Main ---
+// --- Parse args ---
 const args = argv.slice(2);
-const isDryRun = args.includes("--dry-run");
 const isRegenerate = args.includes("--regenerate");
-const versionArg = args.filter((a) => !a.startsWith("--"))[0];
+const isDryRun = args.includes("--dry-run");
+const versionArg = args.filter(a => !a.startsWith("--"))[0];
 
 if (!versionArg) {
-  console.log(
-    `Usage: node scripts/release.mjs [--dry-run] [--regenerate] <version|patch|minor|major>`,
-  );
-  console.log(`Current version: ${getCurrentVersion()}`);
+  console.log(`Usage: node scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`);
+  console.log(`Current version: ${getVersion()}`);
   exit(1);
 }
 
-let currentVersion = getCurrentVersion();
-const mode = isRegenerate ? "REGENERATE" : isDryRun ? "DRY RUN" : "RELEASE";
-let didDrop = false;
-
-// Step 1: Pre-flight checks
-console.log(`\n[1/7] Pre-flight checks (${mode})...`);
-if (!isDryRun && !isRegenerate) {
-  const dirty = isDirty();
-  const versionAlreadyAtTarget = getCurrentVersion() === versionArg;
-  if (dirty && !versionAlreadyAtTarget) {
-    console.error("  ERROR: Working directory is dirty. Commit or stash changes first.");
-    exit(1);
-  }
-  console.log(
-    dirty
-      ? "  ✓ Continuing with uncommitted version changes (Pass 2)"
-      : "  ✓ Working directory clean",
-  );
-}
-
-// Step 1b: In regenerate mode, drop the old release commit from history if tag exists
+// --- Regenerate: drop old release commit + tag before normal flow ---
 if (isRegenerate) {
-  const tagVersion = `v${versionArg}`;
-  const tagExists =
-    execSync(`git tag -l "${tagVersion}"`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-    }).trim() === tagVersion;
+  const tagVer = `v${versionArg}`;
+  const tagExists = execSync(`git tag -l "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVer;
 
   if (tagExists) {
-    const tagCommit = execSync(`git rev-list -n 1 "${tagVersion}"`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-    }).trim();
-    const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-    }).trim();
+    const tagCommit = execSync(`git rev-list -n 1 "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim();
     const shortSha = tagCommit.slice(0, 7);
+    const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, { cwd: ROOT, encoding: "utf-8" }).trim();
 
     if (commitMsg.includes("chore[release]") || commitMsg.includes("bump version to")) {
-      console.log(`  Found existing ${tagVersion} at ${shortSha}: "${commitMsg}"`);
+      console.log(`\n[Regenerate] Found old release commit ${shortSha}: "${commitMsg}"`);
       if (!isDryRun) {
-        const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, {
-          cwd: ROOT,
-          encoding: "utf-8",
-        })
-          .trim()
-          .split(" ")[1]; // second word = first parent
-        console.log(
-          `  Dropping old release commit ${shortSha} via rebase (parent ${parentSha.slice(0, 7)})...`,
-        );
+        const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, { cwd: ROOT, encoding: "utf-8" }).trim().split(" ")[1];
+        console.log(`  Dropping commit ${shortSha} via rebase (onto ${parentSha.slice(0, 7)})...`);
         run(`git rebase --onto ${parentSha} ${tagCommit}`);
-        run(`git tag -d ${tagVersion}`);
-        didDrop = true;
-        currentVersion = getCurrentVersion(); // re-read after rebase reverted version files
-        console.log("  ✓ Old release commit removed from history, tag deleted\n");
+        run(`git tag -d ${tagVer}`);
+        console.log(`  ✓ Old release commit removed, tag ${tagVer} deleted\n`);
       } else {
-        console.log("  (would drop via rebase in real run)\n");
+        console.log(`  (would drop ${shortSha} and tag ${tagVer} in real run)\n`);
       }
     }
   }
 }
 
-// Step 2: Verify
-console.log("\n[2/7] Running verification...");
-if (!isDryRun) {
-  run("npm run verify");
-} else {
-  console.log("  (skipped in dry-run mode)");
-}
+// --- Normal flow ---
+let currentVersion = getVersion();
+const tagVersion = `v${currentVersion}`;
 
-// Step 3: Bump version
-console.log("\n[3/7] Bumping version...");
-let newVersion;
-if (isRegenerate && currentVersion === versionArg) {
-  // No old tag to undo — version is already at target, keep it
-  newVersion = currentVersion;
-  console.log(`  Version stays at ${currentVersion} (regenerate mode)`);
-} else {
+// Step 1: Bump version
+console.log(`\n[1/6] Bumping version (${BRANCH})...`);
+if (currentVersion !== versionArg) {
   run(`node scripts/version.mjs ${versionArg}`);
-  newVersion = getCurrentVersion();
-}
-
-// Step 3.5: Update Cargo.lock to match the new version
-console.log("  > cargo generate-lockfile (sync Cargo.lock)");
-execSync("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", {
-  cwd: ROOT,
-  encoding: "utf-8",
-  stdio: "pipe",
-});
-console.log("  ✓ Cargo.lock updated");
-
-// Step 4: Generate changelog
-console.log("\n[4/7] Generating changelog...");
-if (isRegenerate) {
-  // After dropping old release commit, find the previous tag for changelog range
-  const tags = execSync("git tag -l", { cwd: ROOT, encoding: "utf-8" })
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .sort()
-    .reverse();
-  const prevTag = tags.find((t) => t !== `v${newVersion}`);
-  if (prevTag) {
-    run(`node scripts/changelog.mjs --from ${prevTag}`);
-  } else {
-    run("node scripts/changelog.mjs");
-  }
+  currentVersion = getVersion();
+  run("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", { silent: true });
+  console.log(`  ✓ ${currentVersion}`);
 } else {
-  run("node scripts/changelog.mjs");
+  console.log(`  ✓ Already at ${currentVersion}`);
 }
 
-// Step 5: Verify RELEASE.md (exit if stale — update it, commit, then re-run)
-console.log("\n[5/7] Checking RELEASE.md...");
-if (existsSync(RELEASE_PATH)) {
-  const releaseBody = readFileSync(RELEASE_PATH, "utf-8");
-  if (!releaseBody.includes(`v${newVersion}`)) {
-    console.log(`  RELEASE.md is stale (still references a different version).`);
-    console.log(`  → Read CHANGELOG.md and update RELEASE.md following the template.`);
-    console.log(
-      `  → git add RELEASE.md && git commit -m "docs: update RELEASE.md for v${newVersion}"`,
-    );
-    console.log(`  → Then re-run this script (already-bumped steps will be skipped).`);
-    process.exit(0);
-  }
-  console.log(`  ✓ RELEASE.md matches v${newVersion}`);
-} else {
-  console.log("  (RELEASE.md not found, skipping)");
-}
+// Step 2: Generate changelog
+console.log("\n[2/6] Generating changelog...");
+run("node scripts/changelog.mjs");
 
-// Step 6: Build
-console.log("\n[6/7] Building release artifacts...");
+// Step 3: RELEASE.md check
+console.log("\n[3/6] Checking RELEASE.md...");
+if (!checkReleaseMd(currentVersion)) {
+  console.log(`  RELEASE.md needs update for v${currentVersion}.`);
+  console.log("  → Read CHANGELOG.md and curate RELEASE.md, then re-run.");
+  process.exit(0);
+}
+console.log(`  ✓ RELEASE.md matches v${currentVersion}`);
+
+// Step 4: Commit
 if (!isDryRun) {
-  run("npm run tauri build");
-} else {
-  console.log("  (skipped in dry-run mode)");
-}
-
-// Step 7: Commit and tag (only if build succeeded)
-if (!isDryRun) {
+  console.log("\n[4/6] Committing...");
   const changedFiles = execSync("git diff --name-only", { cwd: ROOT, encoding: "utf-8" }).trim();
-
   if (changedFiles) {
-    const tagVersion = `v${newVersion}`;
-
-    console.log("\n[7/7] Committing and tagging...");
-
-    const files = changedFiles.split("\n").join(" ");
-    run(`git add ${files}`);
-
-    const commitMsg = `🔖 chore[release]: bump version to ${newVersion}`;
-    run(`git commit -m "${commitMsg}"`);
-
-    const tagMsg = `Release ${tagVersion}`;
-    run(`git tag -a ${tagVersion} -m "${tagMsg}"`);
-
-    console.log(`\n  ✓ Committed and tagged ${tagVersion}`);
+    run(`git add ${changedFiles.split("\n").join(" ")}`);
+    run(`git commit -m "\u{1F516} chore[release]: bump version to ${currentVersion}"`);
+    console.log("  ✓ Committed");
   } else {
-    console.log("\n[7/7] No changes to commit (version already at target).");
+    console.log("  No changes to commit.");
   }
 } else {
-  console.log("\n[7/7] Commit and tag (skipped in dry-run mode)");
+  console.log("\n[4/6] Commit (skipped in dry-run mode)");
 }
 
-// Done
-printBanner(newVersion);
-console.log(`Release ${newVersion} complete!`);
-console.log(`\n  Tag: v${newVersion}`);
-console.log(`  Bundle: src-tauri/target/release/bundle/`);
-console.log(`\n  To publish:`);
-if (didDrop) {
-  console.log(`    git push origin core --force-with-lease  # rewrite the old release commit`);
-  console.log(`    git push origin v${newVersion} --force    # replace remote tag`);
+// Step 5: Tag
+if (!isDryRun) {
+  console.log("\n[5/6] Tagging...");
+  const exists = execSync(`git tag -l "${tagVersion}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVersion;
+  if (!exists) {
+    run(`git tag -a ${tagVersion} -m "Release ${tagVersion}"`);
+    console.log(`  ✓ ${tagVersion}`);
+  } else {
+    console.log(`  ✓ Tag ${tagVersion} already exists`);
+  }
 } else {
-  console.log(`    git push origin core`);
-  console.log(`    git push origin v${newVersion}`);
+  console.log("\n[5/6] Tag (skipped in dry-run mode)");
 }
+
+// Step 6: Push
+if (!isDryRun) {
+  console.log("\n[6/6] Pushing...");
+  run(`git push origin ${BRANCH}`);
+  run(`git push origin ${tagVersion}`);
+  console.log(`  ✓ Pushed ${BRANCH} and ${tagVersion}`);
+} else {
+  console.log("\n[6/6] Push (skipped in dry-run mode)");
+}
+
+console.log(`\n✓ Release ${currentVersion} complete! Tag: ${tagVersion}`);

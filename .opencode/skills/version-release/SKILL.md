@@ -1,6 +1,6 @@
 ---
 name: version-release
-description: Automated version bumping and release workflow for Clipboard Desktop. Use when the user asks to bump the version, release a new version, or regenerate a release. Supports semantic version bumping (patch/minor/major), specific version targets, and regenerate mode for re-releasing current content.
+description: Automated version bumping and release workflow for Clipboard Desktop. Use when the user asks to bump the version, release a new version, or regenerate a release. Supports semantic version bumping (patch/minor/major) and specific version targets.
 ---
 
 # Version Release
@@ -15,69 +15,57 @@ Start this skill when the user says any of:
 - "升级 patch/minor/major 版本"
 - "release" combined with a version number or bump type
 
-## Prerequisites
+## Release workflow (single script, two passes for RELEASE.md)
 
-Before running any release command:
-
-1. Check `git status --short --branch` — working directory must be clean.
-2. Run `npm run verify` — all checks must pass.
-3. If verification fails, report the failures and stop.
-
-## Release workflow
-
-### Normal release (bump to new version)
-
-The release happens in **two passes** because `RELEASE.md` must be curated manually by the LLM.
-
-#### Pass 1 — Script runs steps 1–4 (verify → bump → changelog)
+Run:
 
 ```
 node scripts/release.mjs <version>
 ```
 
-The pipeline runs:
+The script does the following:
 
-1. Pre-flight checks (clean working directory)
-2. `npm run verify`
-3. Version bump in `package.json`, `tauri.conf.json`, `Cargo.toml`
-4. Changelog generation from commits since last tag (`CHANGELOG.md`)
-5. Check `RELEASE.md` — if stale, prints instructions and exits cleanly
+| Step | What |
+|------|------|
+| 1 | Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml` |
+| 2 | Generate `CHANGELOG.md` from commits since last tag |
+| 3 | Check `RELEASE.md` — if stale, prints instructions and exits cleanly |
+| 4 | Commit version files + CHANGELOG.md + RELEASE.md |
+| 5 | Create git tag `vx.x.x` |
+| 6 | Push to origin (triggers GitHub Actions release workflow) |
 
-At this point the script **exits** with a message telling you to update `RELEASE.md`.
+The script is **idempotent**: re-running with the same version skips already-done steps.
 
-#### Between passes — LLM generates RELEASE.md
+### Pass 1 — Script bumps + generates changelog
+
+```
+node scripts/release.mjs <version>
+```
+
+Steps 1–2 run, then Step 3 detects stale `RELEASE.md` and exits.
+
+### Between passes — LLM generates RELEASE.md
 
 Read `CHANGELOG.md` and use `.opencode/skills/version-release/release_template.md` as a format reference:
 
-1. Group related commits into feature areas (see template sections for reference)
-2. Attach commit hash links using the format:
-
+1. Group related commits into feature areas
+2. Attach commit hash links:
    ```
-   - **Feature description** — detail | [`hash`](https://github.com/muutot/Clipboard/commit/hash) [`hash2`](https://github.com/muutot/Clipboard/commit/hash2)
+   - **Feature description** — detail | [`hash`](https://github.com/muutot/Clipboard/commit/hash)
    ```
-
-   Rules:
-   - One point can reference multiple hashes; multiple points can reuse the same hash
-   - Use the full 7+ char shortened hash visible in `CHANGELOG.md`
-   - Group related commits under a single bullet with shared links
-
 3. Write the curated body to `RELEASE.md`
 
-   **Do NOT commit** — Pass 2 will include `RELEASE.md` in the release commit automatically.
+**Do NOT commit** — Pass 2 will include `RELEASE.md` in the release commit automatically.
 
-#### Pass 2 — Script runs steps 5–7 (verify RELEASE.md → build → commit → tag)
+### Pass 2 — Script commits + tags + pushes
 
-Re-run the **same** command — already-bumped steps are idempotent, and the pre-flight check allows a dirty working directory when the version is already at target:
+Re-run the **same** command — already-bumped steps skip, `RELEASE.md` check passes:
 
 ```
 node scripts/release.mjs <version>
 ```
 
-The pipeline continues:
-
-5. Verify `RELEASE.md` matches the target version ✓
-6. Tauri production build (MSI + NSIS)
-7. Commit (version files + CHANGELOG.md + RELEASE.md) + annotated tag
+Steps 3–6 run: check, commit, tag, push to origin.
 
 ### Semantic bump
 
@@ -89,19 +77,15 @@ node scripts/release.mjs major    # 0.1.0 → 1.0.0
 
 Same two-pass flow applies.
 
-### Regenerate mode (re-release current version)
+### Regenerate mode
+
+Re-releases the current version by dropping the old release commit + tag from history first, then re-running the normal flow:
 
 ```
 node scripts/release.mjs --regenerate <version>
 ```
 
-This mode:
-
-**No existing tag:** Keeps current version, regenerates changelog, commits and tags.
-
-**Existing tag detected:** Uses `git rebase --onto` to **drop** the old release commit from history entirely, delete the old tag, bump to target version, regenerate changelog, and create a fresh commit + tag.
-
-Useful when re-releasing with updated content.
+Uses `git rebase --onto` to surgically remove the previous release commit (preserving other commits' content and timestamps) and deletes the old tag. The normal flow then creates a fresh changelog, commit, and tag.
 
 ### Dry run
 
@@ -109,7 +93,7 @@ Useful when re-releasing with updated content.
 node scripts/release.mjs --dry-run <version>
 ```
 
-Previews the process without committing or building.
+Previews the process without committing, tagging, or pushing.
 
 ## Standalone tools
 
@@ -130,47 +114,36 @@ node scripts/changelog.mjs --preview       # preview without writing
 
 `RELEASE.md` is the canonical release body for GitHub Releases. It is **manually curated** by the LLM during each release, following the format in `.opencode/skills/version-release/release_template.md`.
 
-The release script no longer performs placeholder substitution — it only verifies that `RELEASE.md` references the correct version before proceeding to commit.
-
 Pushing the tag triggers CI/CD which reads `RELEASE.md` automatically as the GitHub Release body.
 
 ## Post-release
 
 After a successful release, report:
-
 1. New version number
 2. Tag created (`vx.x.x`)
-3. Bundle location: `src-tauri/target/release/bundle/`
-4. Push commands:
-   ```
-   git push origin core
-   git push origin v<version>
-   ```
+3. Release has been pushed to origin (GitHub Actions will build artifacts automatically)
 
 ## CI/CD
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
-
 - Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
 - Creates a draft GitHub Release with artifacts using `RELEASE.md` as the release body
 
 ## Version source files
 
-| File                        | Key        |
-| :-------------------------- | :--------- |
-| `package.json`              | `.version` |
+| File | Key |
+| :-- | :-- |
+| `package.json` | `.version` |
 | `src-tauri/tauri.conf.json` | `.version` |
-| `src-tauri/Cargo.toml`      | `version`  |
+| `src-tauri/Cargo.toml` | `version` |
 
 All three are updated atomically by `scripts/version.mjs`.
 
 ## Error recovery
 
 If the release script fails mid-way:
-
 - If version was already bumped: run `git checkout -- .` to revert config files
 - If commit was created but tag failed: `git reset --soft HEAD~1` then re-run
-- If build fails: fix the issue, then re-run with `--regenerate` mode
 
 ## Commit message format
 
