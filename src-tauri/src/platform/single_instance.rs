@@ -2,7 +2,6 @@ use std::{
     fmt, fs,
     io::{self, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
 };
 
 #[cfg(target_os = "windows")]

@@ -4,7 +4,6 @@ use crate::keyboard::ShortcutBinding;
 
 use super::{
     platform_info::{ForegroundApp, Platform, PlatformCapabilities},
-    windows_clipboard,
 };
 
 // ---------------------------------------------------------------------------
