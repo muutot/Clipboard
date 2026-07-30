@@ -111,11 +111,17 @@ let didDrop = false;
 // Step 1: Pre-flight checks
 console.log(`\n[1/7] Pre-flight checks (${mode})...`);
 if (!isDryRun && !isRegenerate) {
-  if (isDirty()) {
+  const dirty = isDirty();
+  const versionAlreadyAtTarget = getCurrentVersion() === versionArg;
+  if (dirty && !versionAlreadyAtTarget) {
     console.error("  ERROR: Working directory is dirty. Commit or stash changes first.");
     exit(1);
   }
-  console.log("  ✓ Working directory clean");
+  console.log(
+    dirty
+      ? "  ✓ Continuing with uncommitted version changes (Pass 2)"
+      : "  ✓ Working directory clean",
+  );
 }
 
 // Step 1b: In regenerate mode, drop the old release commit from history if tag exists

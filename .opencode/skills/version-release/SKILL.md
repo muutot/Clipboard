@@ -62,16 +62,12 @@ Read `CHANGELOG.md` and use `.opencode/skills/version-release/release_template.m
    - Group related commits under a single bullet with shared links
 
 3. Write the curated body to `RELEASE.md`
-4. Commit it:
 
-   ```
-   git add RELEASE.md
-   git commit -m "📝 docs[release]: update RELEASE.md for v<version>"
-   ```
+   **Do NOT commit** — Pass 2 will include `RELEASE.md` in the release commit automatically.
 
-#### Pass 2 — Script runs steps 5–7 (verify RELEASE.md → commit → tag → build)
+#### Pass 2 — Script runs steps 5–7 (verify RELEASE.md → build → commit → tag)
 
-Re-run the **same** command — already-bumped steps are idempotent:
+Re-run the **same** command — already-bumped steps are idempotent, and the pre-flight check allows a dirty working directory when the version is already at target:
 
 ```
 node scripts/release.mjs <version>
@@ -80,8 +76,8 @@ node scripts/release.mjs <version>
 The pipeline continues:
 
 5. Verify `RELEASE.md` matches the target version ✓
-6. Commit (version files + CHANGELOG.md + RELEASE.md) + annotated tag
-7. Tauri production build (MSI + NSIS)
+6. Tauri production build (MSI + NSIS)
+7. Commit (version files + CHANGELOG.md + RELEASE.md) + annotated tag
 
 ### Semantic bump
 
