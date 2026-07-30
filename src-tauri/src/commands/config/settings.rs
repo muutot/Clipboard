@@ -1,10 +1,13 @@
 use std::sync::Mutex;
 
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
+
+#[cfg(target_os = "windows")]
+use tauri::Manager;
 
 use crate::config::{ConfigStore, GeneralConfig};
 use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
-use crate::platform::{self, sync_autostart, WindowManager};
+use crate::platform::{sync_autostart, WindowManager};
 
 use super::{ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo};
 
@@ -50,7 +53,7 @@ pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
         };
         match window.hwnd() {
             Ok(hwnd) => {
-                if let Err(error) = platform::apply_window_transparency(hwnd.0 as isize, percent) {
+                if let Err(error) = crate::platform::apply_window_transparency(hwnd.0 as isize, percent) {
                     eprintln!("[window] failed to apply transparency: {error}");
                 }
             }

@@ -2,10 +2,10 @@ use std::path::Path;
 
 use crate::keyboard::ShortcutBinding;
 
-use super::{
-    platform_info::{ForegroundApp, Platform, PlatformCapabilities},
-    windows_clipboard,
-};
+#[cfg(target_os = "windows")]
+use super::windows_clipboard;
+
+use super::platform_info::{ForegroundApp, Platform, PlatformCapabilities};
 
 // ---------------------------------------------------------------------------
 //  Platform dispatch clipboard functions
