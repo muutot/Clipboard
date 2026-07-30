@@ -17,6 +17,21 @@ Start this skill when the user says any of:
 
 ## Release workflow (single script, two passes for RELEASE.md)
 
+### Prerequisite: only version files in the release commit
+
+Before running the release script, ensure that **every other change** has already been committed separately.
+
+The release commit (`🔖 chore[release]: bump version to x.x.x`) **must only contain**:
+
+- `package.json`
+- `src-tauri/tauri.conf.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `CHANGELOG.md`
+- `RELEASE.md`
+
+Any change to scripts, skills, references, tests, or other source files **must be committed before** the release. The release script's `git diff --name-only` may pick up unrelated dirty files — verify the staged diff before allowing the commit.
+
 Run:
 
 ```
@@ -25,14 +40,14 @@ node scripts/release.mjs <version>
 
 The script does the following:
 
-| Step | What |
-|------|------|
-| 1 | Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml` |
-| 2 | Generate `CHANGELOG.md` from commits since last tag |
-| 3 | Check `RELEASE.md` — if stale, prints instructions and exits cleanly |
-| 4 | Commit version files + CHANGELOG.md + RELEASE.md |
-| 5 | Create git tag `vx.x.x` |
-| 6 | Push to origin (triggers GitHub Actions release workflow) |
+| Step | What                                                                 |
+| ---- | -------------------------------------------------------------------- |
+| 1    | Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml`      |
+| 2    | Generate `CHANGELOG.md` from commits since last tag                  |
+| 3    | Check `RELEASE.md` — if stale, prints instructions and exits cleanly |
+| 4    | Commit version files + CHANGELOG.md + RELEASE.md                     |
+| 5    | Create git tag `vx.x.x`                                              |
+| 6    | Push to origin (triggers GitHub Actions release workflow)            |
 
 The script is **idempotent**: re-running with the same version skips already-done steps.
 
@@ -119,6 +134,7 @@ Pushing the tag triggers CI/CD which reads `RELEASE.md` automatically as the Git
 ## Post-release
 
 After a successful release, report:
+
 1. New version number
 2. Tag created (`vx.x.x`)
 3. Release has been pushed to origin (GitHub Actions will build artifacts automatically)
@@ -126,22 +142,24 @@ After a successful release, report:
 ## CI/CD
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
+
 - Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
 - Creates a draft GitHub Release with artifacts using `RELEASE.md` as the release body
 
 ## Version source files
 
-| File | Key |
-| :-- | :-- |
-| `package.json` | `.version` |
+| File                        | Key        |
+| :-------------------------- | :--------- |
+| `package.json`              | `.version` |
 | `src-tauri/tauri.conf.json` | `.version` |
-| `src-tauri/Cargo.toml` | `version` |
+| `src-tauri/Cargo.toml`      | `version`  |
 
 All three are updated atomically by `scripts/version.mjs`.
 
 ## Error recovery
 
 If the release script fails mid-way:
+
 - If version was already bumped: run `git checkout -- .` to revert config files
 - If commit was created but tag failed: `git reset --soft HEAD~1` then re-run
 
