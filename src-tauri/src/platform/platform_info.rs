@@ -153,7 +153,7 @@ pub struct PlatformInfo {
     pub system_tray_supported: bool,
     #[cfg(target_os = "linux")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub wayland_capabilities: Option<linux_wayland::WaylandCapabilities>,
+    pub wayland_capabilities: Option<super::linux_wayland::WaylandCapabilities>,
     pub platform_notes: Vec<String>,
 }
 
@@ -180,7 +180,7 @@ pub fn get_platform_info() -> PlatformInfo {
     #[cfg(target_os = "linux")]
     {
         if platform.is_wayland() {
-            let wayland_caps = linux_wayland::WaylandCapabilities::detect();
+            let wayland_caps = super::linux_wayland::WaylandCapabilities::detect();
             if wayland_caps.requires_config {
                 notes.extend(wayland_caps.notes.clone());
             }
@@ -206,7 +206,7 @@ pub fn get_platform_info() -> PlatformInfo {
 
         #[cfg(target_os = "linux")]
         wayland_capabilities: if platform.is_wayland() {
-            Some(linux_wayland::WaylandCapabilities::detect())
+            Some(super::linux_wayland::WaylandCapabilities::detect())
         } else {
             None
         },

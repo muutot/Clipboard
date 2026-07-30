@@ -18,13 +18,13 @@ pub fn get_foreground_app() -> ForegroundApp {
     }
     #[cfg(target_os = "macos")]
     {
-        return macos::get_foreground_app();
+        return super::macos::get_foreground_app();
     }
     #[cfg(target_os = "linux")]
     {
         return match Platform::detect() {
-            Platform::LinuxWayland => linux_wayland::get_foreground_app(),
-            _ => linux_x11::get_foreground_app(),
+            Platform::LinuxWayland => super::linux_wayland::get_foreground_app(),
+            _ => super::linux_x11::get_foreground_app(),
         };
     }
 
@@ -39,13 +39,13 @@ pub fn read_clipboard_text() -> Option<String> {
     }
     #[cfg(target_os = "macos")]
     {
-        return macos::read_clipboard_text();
+        return super::macos::read_clipboard_text();
     }
     #[cfg(target_os = "linux")]
     {
         return match Platform::detect() {
-            Platform::LinuxWayland => linux_wayland::read_clipboard_text(),
-            _ => linux_x11::read_clipboard_text(),
+            Platform::LinuxWayland => super::linux_wayland::read_clipboard_text(),
+            _ => super::linux_x11::read_clipboard_text(),
         };
     }
 
@@ -60,13 +60,13 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     }
     #[cfg(target_os = "macos")]
     {
-        return macos::read_clipboard_image();
+        return super::macos::read_clipboard_image();
     }
     #[cfg(target_os = "linux")]
     {
         return match Platform::detect() {
-            Platform::LinuxWayland => linux_wayland::read_clipboard_image(),
-            _ => linux_x11::read_clipboard_image(),
+            Platform::LinuxWayland => super::linux_wayland::read_clipboard_image(),
+            _ => super::linux_x11::read_clipboard_image(),
         };
     }
 
@@ -81,13 +81,13 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     }
     #[cfg(target_os = "macos")]
     {
-        return macos::read_clipboard_file_paths();
+        return super::macos::read_clipboard_file_paths();
     }
     #[cfg(target_os = "linux")]
     {
         return match Platform::detect() {
-            Platform::LinuxWayland => linux_wayland::read_clipboard_file_paths(),
-            _ => linux_x11::read_clipboard_file_paths(),
+            Platform::LinuxWayland => super::linux_wayland::read_clipboard_file_paths(),
+            _ => super::linux_x11::read_clipboard_file_paths(),
         };
     }
 
@@ -104,13 +104,15 @@ pub fn extract_app_icon(icon_dir: &Path, app_name: &str, exe_path: &str) -> Opti
     }
     #[cfg(target_os = "macos")]
     {
-        return macos::extract_app_icon(icon_dir, app_name, exe_path);
+        return super::macos::extract_app_icon(icon_dir, app_name, exe_path);
     }
     #[cfg(target_os = "linux")]
     {
         return match Platform::detect() {
-            Platform::LinuxWayland => linux_wayland::extract_app_icon(icon_dir, app_name, exe_path),
-            _ => linux_x11::extract_app_icon(icon_dir, app_name, exe_path),
+            Platform::LinuxWayland => {
+                super::linux_wayland::extract_app_icon(icon_dir, app_name, exe_path)
+            }
+            _ => super::linux_x11::extract_app_icon(icon_dir, app_name, exe_path),
         };
     }
 
@@ -125,13 +127,15 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
     }
     #[cfg(target_os = "macos")]
     {
-        return macos::write_clipboard_text_with_self_trigger(text);
+        return super::macos::write_clipboard_text_with_self_trigger(text);
     }
     #[cfg(target_os = "linux")]
     {
         return match Platform::detect() {
-            Platform::LinuxWayland => linux_wayland::write_clipboard_text_with_self_trigger(text),
-            _ => linux_x11::write_clipboard_text_with_self_trigger(text),
+            Platform::LinuxWayland => {
+                super::linux_wayland::write_clipboard_text_with_self_trigger(text)
+            }
+            _ => super::linux_x11::write_clipboard_text_with_self_trigger(text),
         };
     }
 
