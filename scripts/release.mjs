@@ -63,6 +63,7 @@ if (!versionArg) {
 }
 
 // --- Regenerate: drop old release commit + tag before normal flow ---
+let forcePush = false;
 if (isRegenerate) {
   const tagVer = `v${versionArg}`;
   const tagExists = execSync(`git tag -l "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVer;
@@ -79,6 +80,7 @@ if (isRegenerate) {
         console.log(`  Dropping commit ${shortSha} via rebase (onto ${parentSha.slice(0, 7)})...`);
         run(`git rebase --onto ${parentSha} ${tagCommit}`);
         run(`git tag -d ${tagVer}`);
+        forcePush = true;
         console.log(`  ✓ Old release commit removed, tag ${tagVer} deleted\n`);
       } else {
         console.log(`  (would drop ${shortSha} and tag ${tagVer} in real run)\n`);
@@ -89,13 +91,14 @@ if (isRegenerate) {
 
 // --- Normal flow ---
 let currentVersion = getVersion();
-const tagVersion = `v${currentVersion}`;
+let tagVersion = `v${currentVersion}`;
 
 // Step 1: Bump version
 console.log(`\n[1/6] Bumping version (${BRANCH})...`);
 if (currentVersion !== versionArg) {
   run(`node scripts/version.mjs ${versionArg}`);
   currentVersion = getVersion();
+  tagVersion = `v${currentVersion}`;
   run("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", { silent: true });
   console.log(`  ✓ ${currentVersion}`);
 } else {
@@ -147,8 +150,26 @@ if (!isDryRun) {
 // Step 6: Push
 if (!isDryRun) {
   console.log("\n[6/6] Pushing...");
-  run(`git push origin ${BRANCH}`);
-  run(`git push origin ${tagVersion}`);
+
+  // Auto-detect if force push is needed (regenerate rewrites history)
+  let needsForce = forcePush;
+  if (!needsForce) {
+    try {
+      const aheadBehind = execSync(
+        `git rev-list --count --left-right origin/${BRANCH}...HEAD`,
+        { cwd: ROOT, encoding: "utf-8" },
+      ).trim();
+      const parts = aheadBehind.split(/\s+/).filter(Boolean);
+      if (parts.length > 1) needsForce = true;
+    } catch {
+      // remote branch doesn't exist — first push, no force needed
+    }
+  }
+
+  const branchFlag = needsForce ? "--force-with-lease" : "";
+  const tagFlag = needsForce ? "--force" : "";
+  run(`git push origin ${BRANCH} ${branchFlag}`.trim());
+  run(`git push origin ${tagVersion} ${tagFlag}`.trim());
   console.log(`  ✓ Pushed ${BRANCH} and ${tagVersion}`);
 } else {
   console.log("\n[6/6] Push (skipped in dry-run mode)");
