@@ -8,9 +8,9 @@
  *   3. Generate changelog from commits since last tag
  *   4. Generate changelog from commits since last tag (CHANGELOG.md)
  *   5. Verify RELEASE.md — exit if stale; YOU update it, then re-run (the script auto-skips done steps)
- *   6. Commit version bump + changelog + RELEASE.md
- *   7. Create git tag
- *   8. Build release artifacts
+ *   6. Build release artifacts
+ *   7. Commit version bump + changelog + RELEASE.md
+ *   8. Create git tag
  *   9. Report results
  *
  * Special mode: --regenerate
@@ -229,42 +229,38 @@ if (existsSync(RELEASE_PATH)) {
   console.log("  (RELEASE.md not found, skipping)");
 }
 
-// Step 6: Commit and tag
+// Step 6: Build
+console.log("\n[6/7] Building release artifacts...");
 if (!isDryRun) {
-  // Include RELEASE.md in changed files even if prettier didn't touch it
+  run("npm run tauri build");
+} else {
+  console.log("  (skipped in dry-run mode)");
+}
+
+// Step 7: Commit and tag (only if build succeeded)
+if (!isDryRun) {
   const changedFiles = execSync("git diff --name-only", { cwd: ROOT, encoding: "utf-8" }).trim();
 
   if (changedFiles) {
     const tagVersion = `v${newVersion}`;
-    const releaseBranch = `release/${tagVersion}`;
 
-    console.log("\n[6/7] Committing and tagging...");
+    console.log("\n[7/7] Committing and tagging...");
 
-    // Stage changed files
     const files = changedFiles.split("\n").join(" ");
     run(`git add ${files}`);
 
     const commitMsg = `🔖 chore[release]: bump version to ${newVersion}`;
     run(`git commit -m "${commitMsg}"`);
 
-    // Create tag
     const tagMsg = `Release ${tagVersion}`;
     run(`git tag -a ${tagVersion} -m "${tagMsg}"`);
 
     console.log(`\n  ✓ Committed and tagged ${tagVersion}`);
   } else {
-    console.log("\n[6/7] No changes to commit (version already at target).");
+    console.log("\n[7/7] No changes to commit (version already at target).");
   }
 } else {
-  console.log("\n[6/7] Commit and tag (skipped in dry-run mode)");
-}
-
-// Step 7: Build
-console.log("\n[7/7] Building release artifacts...");
-if (!isDryRun) {
-  run("npm run tauri build");
-} else {
-  console.log("  (skipped in dry-run mode)");
+  console.log("\n[7/7] Commit and tag (skipped in dry-run mode)");
 }
 
 // Done
