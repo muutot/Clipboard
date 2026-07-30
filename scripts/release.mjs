@@ -34,7 +34,13 @@ const BRANCH = execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, encoding
 function run(cmd, opts = {}) {
   console.log(`  > ${cmd}`);
   try {
-    return execSync(cmd, { cwd: ROOT, encoding: "utf-8", stdio: opts.silent ? "pipe" : "inherit", shell: true, ...opts });
+    return execSync(cmd, {
+      cwd: ROOT,
+      encoding: "utf-8",
+      stdio: opts.silent ? "pipe" : "inherit",
+      shell: true,
+      ...opts,
+    });
   } catch (err) {
     console.error(`\n  ERROR: ${err.stderr || err.message}`);
     exit(1);
@@ -54,10 +60,12 @@ function checkReleaseMd(ver) {
 const args = argv.slice(2);
 const isRegenerate = args.includes("--regenerate");
 const isDryRun = args.includes("--dry-run");
-const versionArg = args.filter(a => !a.startsWith("--"))[0];
+const versionArg = args.filter((a) => !a.startsWith("--"))[0];
 
 if (!versionArg) {
-  console.log(`Usage: node scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`);
+  console.log(
+    `Usage: node scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`,
+  );
   console.log(`Current version: ${getVersion()}`);
   exit(1);
 }
@@ -66,17 +74,29 @@ if (!versionArg) {
 let forcePush = false;
 if (isRegenerate) {
   const tagVer = `v${versionArg}`;
-  const tagExists = execSync(`git tag -l "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVer;
+  const tagExists =
+    execSync(`git tag -l "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVer;
 
   if (tagExists) {
-    const tagCommit = execSync(`git rev-list -n 1 "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim();
+    const tagCommit = execSync(`git rev-list -n 1 "${tagVer}"`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+    }).trim();
     const shortSha = tagCommit.slice(0, 7);
-    const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, { cwd: ROOT, encoding: "utf-8" }).trim();
+    const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+    }).trim();
 
     if (commitMsg.includes("chore[release]") || commitMsg.includes("bump version to")) {
       console.log(`\n[Regenerate] Found old release commit ${shortSha}: "${commitMsg}"`);
       if (!isDryRun) {
-        const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, { cwd: ROOT, encoding: "utf-8" }).trim().split(" ")[1];
+        const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, {
+          cwd: ROOT,
+          encoding: "utf-8",
+        })
+          .trim()
+          .split(" ")[1];
         console.log(`  Dropping commit ${shortSha} via rebase (onto ${parentSha.slice(0, 7)})...`);
         run(`git rebase --onto ${parentSha} ${tagCommit}`);
         run(`git tag -d ${tagVer}`);
@@ -136,7 +156,8 @@ if (!isDryRun) {
 // Step 5: Tag
 if (!isDryRun) {
   console.log("\n[5/6] Tagging...");
-  const exists = execSync(`git tag -l "${tagVersion}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVersion;
+  const exists =
+    execSync(`git tag -l "${tagVersion}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVersion;
   if (!exists) {
     run(`git tag -a ${tagVersion} -m "Release ${tagVersion}"`);
     console.log(`  ✓ ${tagVersion}`);
@@ -155,10 +176,10 @@ if (!isDryRun) {
   let needsForce = forcePush;
   if (!needsForce) {
     try {
-      const aheadBehind = execSync(
-        `git rev-list --count --left-right origin/${BRANCH}...HEAD`,
-        { cwd: ROOT, encoding: "utf-8" },
-      ).trim();
+      const aheadBehind = execSync(`git rev-list --count --left-right origin/${BRANCH}...HEAD`, {
+        cwd: ROOT,
+        encoding: "utf-8",
+      }).trim();
       const parts = aheadBehind.split(/\s+/).filter(Boolean);
       if (parts.length > 1) needsForce = true;
     } catch {
