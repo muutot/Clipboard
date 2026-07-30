@@ -2,9 +2,7 @@ use std::path::Path;
 
 use crate::keyboard::ShortcutBinding;
 
-use super::{
-    platform_info::{ForegroundApp, Platform, PlatformCapabilities},
-};
+use super::platform_info::{ForegroundApp, Platform, PlatformCapabilities};
 
 // ---------------------------------------------------------------------------
 //  Platform dispatch clipboard functions
