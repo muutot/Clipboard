@@ -1,10 +1,10 @@
 use std::sync::Mutex;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use crate::config::{ConfigStore, GeneralConfig};
 use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
-use crate::platform::{sync_autostart, WindowManager};
+use crate::platform::{self, sync_autostart, WindowManager};
 
 use super::{ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo};
 
