@@ -401,6 +401,9 @@ pub fn run() {
                                 };
 
                                 let text = platform::read_clipboard_text();
+                                let html = platform::read_clipboard_html().filter(|html| {
+                                    !html.trim().is_empty() && html.len() <= 500_000
+                                });
                                 let image_data = platform::read_clipboard_image();
                                 let file_paths = platform::read_clipboard_file_paths();
 
@@ -452,6 +455,7 @@ pub fn run() {
                                         kind: ClipboardKind::Image,
                                         title: img_path.file_stem().unwrap_or_default().to_string_lossy().to_string(),
                                         text_content: None,
+                                        html_content: None,
                                         resource_path: Some(image_path.clone()),
                                         preview_path: Some(image_path),
                                         content_hash: img_hash,
@@ -517,6 +521,7 @@ pub fn run() {
                                             kind: ClipboardKind::File,
                                             title: stored_file.original_name.clone(),
                                             text_content: None,
+                                            html_content: None,
                                             resource_path: Some(stored_file.storage_path.clone()),
                                             preview_path: None,
                                             content_hash: file_hash,
@@ -574,6 +579,7 @@ pub fn run() {
                                             kind: ClipboardKind::File,
                                             title: stored_files[0].original_name.clone(),
                                             text_content: Some(paths_json),
+                                            html_content: None,
                                             resource_path: Some(stored_files[0].storage_path.clone()),
                                             preview_path: None,
                                             content_hash: group_hash,
@@ -649,6 +655,7 @@ pub fn run() {
                                     kind,
                                     title: title.clone(),
                                     text_content: Some(text.clone()),
+                                    html_content: html,
                                     resource_path: None,
                                     preview_path: None,
                                     content_hash: content_hash.clone(),

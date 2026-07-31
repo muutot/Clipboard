@@ -510,6 +510,135 @@ pub fn read_clipboard_text() -> Option<String> {
     None
 }
 
+/// The registered clipboard format name used by browsers and office apps to
+/// expose the HTML fragment of a rich-text copy.
+const CF_HTML_REGISTERED_NAME: &str = "HTML Format";
+
+#[cfg(target_os = "windows")]
+fn html_format_id() -> Option<u32> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::sync::OnceLock;
+
+    extern "system" {
+        fn RegisterClipboardFormatW(name: *const u16) -> u32;
+    }
+
+    static FORMAT_ID: OnceLock<Option<u32>> = OnceLock::new();
+    *FORMAT_ID.get_or_init(|| {
+        let name = OsStr::new(CF_HTML_REGISTERED_NAME)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
+        (format != 0).then_some(format)
+    })
+}
+
+/// Extracts the HTML fragment from a CF_HTML payload.
+///
+/// CF_HTML is a text header followed by the markup; `StartFragment:` /
+/// `EndFragment:` give byte offsets into the whole buffer. Headers use the
+/// `StartFragment:0000000141` shape, so the label search includes the colon.
+/// Falls back to `StartHTML:` / `EndHTML:` when the fragment offsets are
+/// missing, and rejects empty results.
+fn parse_cf_html(data: &[u8]) -> Option<String> {
+    fn field_value(data: &[u8], label: &str) -> Option<usize> {
+        let needle = label.as_bytes();
+        let pos = data
+            .windows(needle.len())
+            .position(|window| window == needle)?;
+        let rest = &data[pos + needle.len()..];
+        let line_end = rest
+            .iter()
+            .position(|&byte| byte == b'\r' || byte == b'\n')
+            .unwrap_or(rest.len());
+        let value = rest[..line_end]
+            .iter()
+            .copied()
+            .skip_while(u8::is_ascii_whitespace)
+            .collect::<Vec<_>>();
+        std::str::from_utf8(&value).ok()?.trim().parse().ok()
+    }
+
+    let (start, end) = match (
+        field_value(data, "StartFragment:"),
+        field_value(data, "EndFragment:"),
+    ) {
+        (Some(start), Some(end)) if end > start && end <= data.len() => (start, end),
+        _ => {
+            let start = field_value(data, "StartHTML:")?;
+            let end = field_value(data, "EndHTML:")?;
+            if end <= start || end > data.len() {
+                return None;
+            }
+            (start, end)
+        }
+    };
+
+    let fragment = String::from_utf8_lossy(&data[start..end]);
+    let trimmed = fragment.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
+/// Reads the HTML fragment of a rich-text clipboard copy, if present.
+#[cfg(target_os = "windows")]
+pub fn read_clipboard_html() -> Option<String> {
+    extern "system" {
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> isize;
+        fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalUnlock(handle: isize) -> i32;
+        fn GlobalSize(handle: isize) -> usize;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+    }
+
+    let format = html_format_id()?;
+    unsafe {
+        if IsClipboardFormatAvailable(format) == 0 {
+            return None;
+        }
+
+        if OpenClipboard(0) == 0 {
+            return None;
+        }
+
+        let handle = GetClipboardData(format);
+        if handle == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let size = GlobalSize(handle);
+        if size == 0 {
+            CloseClipboard();
+            return None;
+        }
+
+        let ptr = GlobalLock(handle);
+        if ptr.is_null() {
+            CloseClipboard();
+            return None;
+        }
+
+        let data = std::slice::from_raw_parts(ptr, size).to_vec();
+        GlobalUnlock(handle);
+        CloseClipboard();
+
+        parse_cf_html(&data)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn read_clipboard_html() -> Option<String> {
+    None
+}
+
 #[cfg(target_os = "windows")]
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     extern "system" {
@@ -1301,5 +1430,64 @@ mod tests {
         let source = image::RgbaImage::new(96, 48);
         let normalized = normalize_app_icon(source);
         assert_eq!(normalized.dimensions(), (APP_ICON_SIZE, APP_ICON_SIZE));
+    }
+
+    #[test]
+    fn cf_html_extracts_the_fragment_using_byte_offsets() {
+        let payload = cf_html_payload("<b>bold</b>");
+        assert_eq!(parse_cf_html(&payload).as_deref(), Some("<b>bold</b>"));
+    }
+
+    #[test]
+    fn cf_html_falls_back_to_full_html_offsets_without_fragment() {
+        let payload = cf_html_payload_without_fragment("<i>italic</i>");
+        assert_eq!(parse_cf_html(&payload).as_deref(), Some("<i>italic</i>"));
+    }
+
+    #[test]
+    fn cf_html_rejects_missing_or_empty_content() {
+        assert_eq!(parse_cf_html(b""), None);
+        assert_eq!(parse_cf_html(b"not a cf-html payload"), None);
+        let empty = b"Version:0.9\r\nStartHTML:0000000000\r\nEndHTML:0000000000";
+        assert_eq!(parse_cf_html(empty), None);
+    }
+
+    /// Builds a CF_HTML payload with accurate byte offsets. Header widths are
+    /// fixed-width (10 digits), so header length is independent of the values.
+    fn cf_html_payload(fragment: &str) -> Vec<u8> {
+        let body =
+            format!("<html><body><!--StartFragment-->{fragment}<!--EndFragment--></body></html>");
+        let fragment_start =
+            body.find("<!--StartFragment-->").unwrap() + "<!--StartFragment-->".len();
+        let fragment_end = body.find("<!--EndFragment-->").unwrap();
+        write_cf_html_offsets(body, fragment_start, fragment_end)
+    }
+
+    fn cf_html_payload_without_fragment(body: &str) -> Vec<u8> {
+        write_cf_html_offsets(body.to_owned(), 0, 0)
+    }
+
+    fn write_cf_html_offsets(body: String, fragment_start: usize, fragment_end: usize) -> Vec<u8> {
+        let header = "Version:0.9\r\nStartHTML:0000000000\r\nEndHTML:0000000000\r\nStartFragment:0000000000\r\nEndFragment:0000000000\r\n";
+        let mut out = header.as_bytes().to_vec();
+        let header_len = out.len();
+        out.extend_from_slice(body.as_bytes());
+        let end_html = header_len + body.len();
+        let apply = |out: &mut Vec<u8>, label: &str, value: usize| {
+            let needle = label.as_bytes();
+            let pos = out
+                .windows(needle.len())
+                .position(|window| window == needle)
+                .unwrap();
+            let digits = format!("{value:010}");
+            out[pos + needle.len()..pos + needle.len() + 10].copy_from_slice(digits.as_bytes());
+        };
+        apply(&mut out, "StartHTML:", header_len);
+        apply(&mut out, "EndHTML:", end_html);
+        if fragment_end > fragment_start {
+            apply(&mut out, "StartFragment:", header_len + fragment_start);
+            apply(&mut out, "EndFragment:", header_len + fragment_end);
+        }
+        out
     }
 }

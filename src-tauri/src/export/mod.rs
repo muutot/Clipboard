@@ -181,6 +181,7 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
                 .take(120)
                 .collect(),
             text_content: Some(content.to_owned()),
+            html_content: None,
             resource_path: None,
             preview_path: None,
             content_hash: hash,
@@ -251,6 +252,7 @@ mod tests {
                 kind: ClipboardKind::Text,
                 title: "Hello".to_owned(),
                 text_content: Some("Hello, world!".to_owned()),
+                html_content: None,
                 resource_path: None,
                 preview_path: None,
                 content_hash: "abc".to_owned(),
@@ -267,6 +269,7 @@ mod tests {
                 kind: ClipboardKind::Link,
                 title: "Example".to_owned(),
                 text_content: Some("https://example.com".to_owned()),
+                html_content: None,
                 resource_path: None,
                 preview_path: None,
                 content_hash: "def".to_owned(),
@@ -403,6 +406,32 @@ mod tests {
     }
 
     #[test]
+    fn json_export_import_round_trips_html_content() {
+        let mut items = sample_items();
+        items[0].html_content = Some("<b>Hello, world!</b>".to_owned());
+        let json = serde_json::to_string(&items).unwrap();
+
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let summary = import_from_json(&json, &database).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(
+            database.get_item("item-1").unwrap().unwrap().html_content,
+            Some("<b>Hello, world!</b>".to_owned())
+        );
+    }
+
+    #[test]
+    fn imports_older_json_without_html_content_field() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let json = r#"[{"id":"legacy","kind":"text","title":"legacy","textContent":"plain","resourcePath":null,"previewPath":null,"contentHash":"hash","sourceApp":null,"iconPath":null,"sizeBytes":5,"createdAtMs":1,"lastUsedAtMs":null,"isFavorite":false,"metadataJson":null}]"#;
+
+        let summary = import_from_json(json, &database).unwrap();
+        assert_eq!(summary.imported_count, 1);
+        let item = database.get_item("legacy").unwrap().unwrap();
+        assert_eq!(item.html_content, None);
+    }
+
+    #[test]
     fn imports_plain_text_chunks() {
         let database = crate::storage::Database::open_in_memory().unwrap();
         let summary = import_from_plain_text("first\n---\nsecond\n", &database).unwrap();
@@ -419,6 +448,7 @@ mod tests {
                 kind: ClipboardKind::Text,
                 title: format!("item-{index}"),
                 text_content: Some(format!("text-{index}")),
+                html_content: None,
                 resource_path: None,
                 preview_path: None,
                 content_hash: format!("hash-{index}"),

@@ -84,7 +84,7 @@ Keep these paths aligned when changing OCR: config, model install/status, engine
 
 ## Capture, content, and self-trigger suppression
 
-The clipboard monitor produces change notifications; a named capture thread reads platform content, applies privacy and self-trigger checks, stores resources/metadata, saves through the repository, queues OCR/thumbnails, and emits the saved record.
+The clipboard monitor produces change notifications; a named capture thread reads platform content, applies privacy and self-trigger checks, stores resources/metadata, saves through the repository, queues OCR/thumbnails, and emits the saved record. Text capture also reads an optional HTML fragment (`platform::read_clipboard_html`: `HTML Format`/CF_HTML on Windows, `public.html` on macOS, `None` on Linux), capped at 500_000 bytes, which is stored on the text record for later paste-by-format.
 
 `content/` responsibilities:
 

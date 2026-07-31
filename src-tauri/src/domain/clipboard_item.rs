@@ -19,6 +19,10 @@ pub struct ClipboardItem {
     pub kind: ClipboardKind,
     pub title: String,
     pub text_content: Option<String>,
+    /// Optional HTML/rich-text fragment captured alongside plain text.
+    /// `#[serde(default)]` keeps imports of older JSON exports compatible.
+    #[serde(default)]
+    pub html_content: Option<String>,
     pub resource_path: Option<String>,
     pub preview_path: Option<String>,
     pub content_hash: String,

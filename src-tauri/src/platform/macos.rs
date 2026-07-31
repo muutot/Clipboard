@@ -510,6 +510,21 @@ pub fn read_clipboard_text() -> Option<String> {
     None
 }
 
+/// Reads the HTML fragment (`public.html` UTI) from the general pasteboard.
+#[cfg(target_os = "macos")]
+pub fn read_clipboard_html() -> Option<String> {
+    let pool = unsafe { objc::objc_autoreleasePoolPush() };
+    let pb = objc::get_nspasteboard();
+    let result = objc::pasteboard_string_for_type(pb, "public.html");
+    unsafe { objc::objc_autoreleasePoolPop(pool) };
+    result
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn read_clipboard_html() -> Option<String> {
+    None
+}
+
 /// Reads clipboard image data using macOS native tools.
 #[cfg(target_os = "macos")]
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {

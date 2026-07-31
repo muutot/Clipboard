@@ -279,6 +279,8 @@ pub fn start_clipboard_monitoring(
                             Some(t) => t,
                             None => continue,
                         };
+                        let html = platform::read_clipboard_html()
+                            .filter(|html| !html.trim().is_empty() && html.len() <= 500_000);
 
                         if text.is_empty() || text.len() > 500_000 {
                             continue;
@@ -325,6 +327,7 @@ pub fn start_clipboard_monitoring(
                             kind,
                             title,
                             text_content: Some(text),
+                            html_content: html,
                             resource_path: None,
                             preview_path: None,
                             content_hash,

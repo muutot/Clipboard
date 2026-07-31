@@ -156,6 +156,7 @@ mod tests {
             kind: ClipboardKind::Text,
             title: format!("record-{id}"),
             text_content: Some(format!("content-{id}")),
+            html_content: None,
             resource_path: None,
             preview_path: None,
             content_hash: format!("hash-{id}"),

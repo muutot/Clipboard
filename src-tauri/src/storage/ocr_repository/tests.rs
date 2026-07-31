@@ -8,6 +8,7 @@ fn image_item(id: &str, image_hash: &str) -> ClipboardItem {
         kind: ClipboardKind::Image,
         title: "screenshot.png".to_owned(),
         text_content: None,
+        html_content: None,
         resource_path: Some("images/screenshot.png".to_owned()),
         preview_path: Some("previews/screenshot.webp".to_owned()),
         content_hash: image_hash.to_owned(),

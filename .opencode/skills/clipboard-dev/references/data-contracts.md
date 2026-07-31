@@ -12,7 +12,7 @@ Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSO
 | Frontend view type | `ClipboardItem` in the same file                                         | display-enriched item used by cards/routes                      |
 | Mapping            | `toClipboardItem` and `parseResourceMetadata` in `services/clipboard.ts` | raw payload → view state and metadata                           |
 
-Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. When fields change, update all four layers plus imports/exports and tests.
+Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional HTML content (`html_content`/`htmlContent`) for paste-by-format: the CF_HTML fragment on Windows or `public.html` on macOS, capped at 500_000 bytes, `#[serde(default)]` so older records and imports stay compatible. When fields change, update all four layers plus imports/exports and tests.
 
 `icon_path` currently carries an icon file key in the intended frontend path: `ClipboardCard` joins it with `iconsDir`. Do not reintroduce arbitrary absolute icon paths without re-auditing import validation, migration, cleanup, and `convertFileSrc` use.
 
@@ -20,7 +20,7 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 `src-tauri/src/storage/migrations.rs::create_schema` is authoritative.
 
-- `clipboard_items`: ID, kind, title/text/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique.
+- `clipboard_items`: ID, kind, title/text/html/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique. The `html_content` column is added idempotently via `ensure_column` for databases created before its introduction.
 - `ocr_results`: one row per item, status/engine/model/language/text/blocks/image hash/timestamps/error, with cascade deletion.
 - `search_outbox`: ordered `upsert`/`delete` operations populated by clipboard and OCR triggers.
 

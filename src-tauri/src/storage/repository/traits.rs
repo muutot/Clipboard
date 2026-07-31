@@ -7,6 +7,7 @@ pub(super) const ITEM_COLUMNS: &str = "
     kind,
     title,
     text_content,
+    html_content,
     resource_path,
     preview_path,
     content_hash,

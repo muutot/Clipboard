@@ -9,6 +9,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
             title TEXT NOT NULL,
             text_content TEXT,
+            html_content TEXT,
             resource_path TEXT,
             preview_path TEXT,
             content_hash TEXT NOT NULL,
@@ -100,5 +101,75 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         END;",
     )?;
 
+    // Databases created before HTML capture gained a column get it here.
+    // `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a
+    // separate idempotent ALTER is required for upgrades.
+    ensure_column(connection, "clipboard_items", "html_content", "TEXT")?;
+
     Ok(())
+}
+
+fn ensure_column(
+    connection: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), StorageError> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = statement.query_map([], |row| row.get::<_, String>(1))?;
+    let exists = names
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .any(|name| name == column);
+    if !exists {
+        connection.execute_batch(&format!(
+            "ALTER TABLE {table} ADD COLUMN {column} {definition}"
+        ))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn existing_database_gains_html_content_column() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE clipboard_items (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    text_content TEXT,
+                    resource_path TEXT,
+                    preview_path TEXT,
+                    content_hash TEXT NOT NULL,
+                    source_app TEXT,
+                    icon_path TEXT,
+                    size_bytes INTEGER NOT NULL,
+                    created_at_ms INTEGER NOT NULL,
+                    last_used_at_ms INTEGER,
+                    is_favorite INTEGER NOT NULL DEFAULT 0,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    deleted_at_ms INTEGER,
+                    metadata_json TEXT DEFAULT '{}'
+                );",
+            )
+            .unwrap();
+
+        create_schema(&connection).unwrap();
+
+        let columns: Vec<String> = connection
+            .prepare("PRAGMA table_info(clipboard_items)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(columns.contains(&"html_content".to_owned()));
+
+        create_schema(&connection).unwrap();
+    }
 }

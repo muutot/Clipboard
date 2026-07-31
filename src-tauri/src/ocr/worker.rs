@@ -294,6 +294,7 @@ mod tests {
             kind: ClipboardKind::Image,
             title: format!("{id}.png"),
             text_content: None,
+            html_content: None,
             resource_path: Some(format!("{id}.png")),
             preview_path: None,
             content_hash: format!("hash-{id}"),
