@@ -180,13 +180,18 @@ pub fn search_clipboard_items(
     let mut sorted = items;
     apply_sort_rules(&mut sorted, &rules);
 
-    search_cache.set(query.clone(), rules.clone(), max_results, sorted.clone());
+    // Cache takes ownership of the full sorted vector; slice the requested
+    // page from it before moving to avoid a full extra clone.
+    let total = sorted.len();
+    let page_end = (page_offset + page_size).min(total);
+    let page_start = page_offset.min(total);
+    let result: Vec<ClipboardItem> = if page_start < page_end {
+        sorted[page_start..page_end].to_vec()
+    } else {
+        Vec::new()
+    };
 
-    let result = sorted
-        .into_iter()
-        .skip(page_offset)
-        .take(page_size)
-        .collect::<Vec<_>>();
+    search_cache.set(query.clone(), rules.clone(), max_results, sorted);
 
     performance_tracker.record_search(
         &query,
