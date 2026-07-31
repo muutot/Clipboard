@@ -44,6 +44,7 @@ const en: LocaleDefinition = {
     edit: "Edit",
     pastePlain: "Paste as plain text",
     pasteFormat: "Paste with formatting",
+    cleanPaste: "Clean and paste",
     duplicateItem: "Save as new entry",
   },
   time: {
@@ -362,6 +363,9 @@ const en: LocaleDefinition = {
     formatCopySuccess: "Copied with formatting; no previous application was available",
     formatPasteSuccess: "Pasted with formatting",
     formatPasteFailed: "Failed to restore the previous application and paste",
+    cleanCopySuccess: "Copied cleaned text; no previous application was available",
+    cleanPasteSuccess: "Pasted cleaned text",
+    cleanPasteFailed: "Failed to restore the previous application and paste",
     duplicateSuccess: "Duplicated as new entry",
     saveFailed: "Save failed",
     restoreSuccess: "Restored {count} items",

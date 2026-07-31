@@ -44,6 +44,7 @@ export interface LocaleDefinition {
     edit: string;
     pastePlain: string;
     pasteFormat: string;
+    cleanPaste: string;
     duplicateItem: string;
   };
   time: {
@@ -339,6 +340,9 @@ export interface LocaleDefinition {
     formatCopySuccess: string;
     formatPasteSuccess: string;
     formatPasteFailed: string;
+    cleanCopySuccess: string;
+    cleanPasteSuccess: string;
+    cleanPasteFailed: string;
     duplicateSuccess: string;
     saveFailed: string;
     restoreSuccess: string;

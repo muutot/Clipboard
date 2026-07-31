@@ -80,6 +80,7 @@
     onrenametitle: (id: string, title: string) => void;
     onplainpaste: (id: string) => void;
     onformatpaste: (id: string) => void;
+    oncleanpaste: (id: string) => void;
     onduplicate: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncopyfilename: (id: string) => void;
@@ -96,6 +97,7 @@
     onrenametitle,
     onplainpaste,
     onformatpaste,
+    oncleanpaste,
     onduplicate,
     onsaveasnew,
     oncopyfilename,
@@ -782,6 +784,10 @@
                 {_t("card.pasteFormat")}
               </button>
             {/if}
+            <button type="button" onclick={() => oncleanpaste(item.id)}>
+              <AppIcon name="scan" size={15} />
+              {_t("card.cleanPaste")}
+            </button>
           {/if}
         </div>
       {:else if activeTab === "details"}

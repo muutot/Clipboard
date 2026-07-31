@@ -89,6 +89,7 @@
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
     onformatpaste: (id: string) => void;
+    oncleanpaste: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
@@ -100,6 +101,7 @@
     "copy",
     "plainpaste",
     "formatpaste",
+    "cleanpaste",
     "detail",
     "edit",
     "favorite",
@@ -138,6 +140,7 @@
     oncanceledit,
     onplainpaste,
     onformatpaste,
+    oncleanpaste,
     onsaveasnew,
     onrestore,
     onimagefullscreen,
@@ -389,6 +392,9 @@
       case "formatpaste":
         onformatpaste(item.id);
         return;
+      case "cleanpaste":
+        oncleanpaste(item.id);
+        return;
       case "detail":
         ondetail(item.id);
         return;
@@ -444,6 +450,9 @@
         : []),
       ...(item.kind === "text" && item.htmlContent
         ? [{ id: "formatpaste", label: _t("card.pasteFormat"), icon: "clipboard" as IconName }]
+        : []),
+      ...(item.kind === "text"
+        ? [{ id: "cleanpaste", label: _t("card.cleanPaste"), icon: "scan" as IconName }]
         : []),
       { id: "detail", label: _t("card.viewDetail"), icon: "eye" },
       ...(canEdit
@@ -734,6 +743,15 @@
               aria-label={_t("card.pasteFormat")}
               onclick={(event) => runCardAction("formatpaste", event)}
               ><AppIcon name="clipboard" size={16} /></button
+            >
+          {/if}
+          {#if item.kind === "text"}
+            <button
+              type="button"
+              title={_t("card.cleanPaste")}
+              aria-label={_t("card.cleanPaste")}
+              onclick={(event) => runCardAction("cleanpaste", event)}
+              ><AppIcon name="scan" size={16} /></button
             >
           {/if}
           <button

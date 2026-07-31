@@ -1961,6 +1961,30 @@
     }
   }
 
+  async function cleanPaste(_id: string) {
+    const item = items.find((i) => i.id === _id);
+    if (!item) return;
+    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
+    const text = item.textContent || item.title;
+    try {
+      const cleaned = await invoke<string>("transform_text", { operation: "cleanPaste", text });
+      await writeClipboardText(cleaned);
+      if (!isTauriRuntime()) {
+        showToast(_t("toast.cleanCopySuccess"), "success");
+        return;
+      }
+
+      const pasted = await invoke<boolean>("paste_to_previous_application");
+      showToast(
+        _t(pasted ? "toast.cleanPasteSuccess" : "toast.cleanCopySuccess"),
+        pasted ? "success" : "info",
+      );
+    } catch (error) {
+      console.error("Unable to clean and paste into the previous application", error);
+      showToast(_t("toast.cleanPasteFailed"), "error");
+    }
+  }
+
   function duplicateItem(id: string) {
     invoke("duplicate_clipboard_item", { id })
       .then(() => {
@@ -3019,6 +3043,7 @@
                     oncanceledit={cancelEdit}
                     onplainpaste={plainPaste}
                     onformatpaste={formatPaste}
+                    oncleanpaste={cleanPaste}
                     onrestore={restoreItem}
                   />
                 </div>
@@ -3059,6 +3084,7 @@
                   oncanceledit={cancelEdit}
                   onplainpaste={plainPaste}
                   onformatpaste={formatPaste}
+                  oncleanpaste={cleanPaste}
                   onrestore={restoreItem}
                 />
               {/if}
@@ -3127,6 +3153,7 @@
         onrenametitle={renameTitle}
         onplainpaste={plainPaste}
         onformatpaste={formatPaste}
+        oncleanpaste={cleanPaste}
         onduplicate={duplicateItem}
         onsaveasnew={saveAsNew}
         oncopyfilename={copyFilename}
@@ -3156,6 +3183,7 @@
     onrenametitle={renameTitle}
     onplainpaste={plainPaste}
     onformatpaste={formatPaste}
+    oncleanpaste={cleanPaste}
     onduplicate={duplicateItem}
     onsaveasnew={saveAsNew}
     oncopyfilename={copyFilename}
