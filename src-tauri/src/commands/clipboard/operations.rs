@@ -328,6 +328,16 @@ pub fn permanently_delete_storage_kind(
     Ok(result)
 }
 
+/// Create a metadata-only duplicate of a clipboard item.
+///
+/// The duplicate copies **metadata only** — `resource_path` and
+/// `preview_path` still point at the original item's underlying file (image,
+/// file copy, etc.). Deleting either the original or the duplicate will
+/// remove that shared file from disk and break the survivor's preview.
+///
+/// Users who want to keep both copies should un-favorite / soft-delete the
+/// original instead of duplicating it, or duplicate then remove the original
+/// via the trash (soft delete) rather than permanent delete.
 #[tauri::command]
 pub fn duplicate_clipboard_item(
     database: tauri::State<'_, Database>,
