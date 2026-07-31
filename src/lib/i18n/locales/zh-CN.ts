@@ -43,7 +43,7 @@ const zhCN: LocaleDefinition = {
     viewDetail: "查看详情",
     edit: "编辑",
     pastePlain: "纯文本粘贴",
-    pasteFormat: "保留格式复制",
+    pasteFormat: "带格式粘贴",
     duplicateItem: "另存为新条目",
   },
   time: {
@@ -341,6 +341,9 @@ const zhCN: LocaleDefinition = {
     plainCopySuccess: "已复制为纯文本，未找到可恢复的原应用",
     plainPasteSuccess: "已粘贴为纯文本",
     plainPasteFailed: "恢复原应用并粘贴失败",
+    formatCopySuccess: "已复制为带格式文本，未找到可恢复的原应用",
+    formatPasteSuccess: "已按原格式粘贴",
+    formatPasteFailed: "恢复原应用并粘贴失败",
     duplicateSuccess: "已另存为新条目",
     saveFailed: "保存失败",
     restoreSuccess: "已还原 {count} 项",

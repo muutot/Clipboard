@@ -6,7 +6,7 @@ Read each component's current `Props` interface before changing a call site. Thi
 
 ### `ClipboardCard.svelte`
 
-Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste callbacks, compact layout, and measurement reporting.
+Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste/format-paste callbacks, compact layout, and measurement reporting.
 
 Key contracts:
 
@@ -36,7 +36,7 @@ Rules:
 
 ### `DetailPanel.svelte`
 
-Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste callbacks.
+Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste/format-paste callbacks.
 
 Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimagefullscreen` callback; DetailPanel no longer owns the fullscreen viewer or WebviewWindow lifecycle.
 

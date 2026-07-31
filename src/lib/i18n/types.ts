@@ -336,6 +336,9 @@ export interface LocaleDefinition {
     plainCopySuccess: string;
     plainPasteSuccess: string;
     plainPasteFailed: string;
+    formatCopySuccess: string;
+    formatPasteSuccess: string;
+    formatPasteFailed: string;
     duplicateSuccess: string;
     saveFailed: string;
     restoreSuccess: string;

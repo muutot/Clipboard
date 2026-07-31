@@ -79,6 +79,7 @@
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     onrenametitle: (id: string, title: string) => void;
     onplainpaste: (id: string) => void;
+    onformatpaste: (id: string) => void;
     onduplicate: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncopyfilename: (id: string) => void;
@@ -94,6 +95,7 @@
     onsaveedit,
     onrenametitle,
     onplainpaste,
+    onformatpaste,
     onduplicate,
     onsaveasnew,
     oncopyfilename,
@@ -774,6 +776,12 @@
               <AppIcon name="type" size={15} />
               {_t("copy.plainText")}
             </button>
+            {#if item.htmlContent}
+              <button type="button" onclick={() => onformatpaste(item.id)}>
+                <AppIcon name="clipboard" size={15} />
+                {_t("card.pasteFormat")}
+              </button>
+            {/if}
           {/if}
         </div>
       {:else if activeTab === "details"}

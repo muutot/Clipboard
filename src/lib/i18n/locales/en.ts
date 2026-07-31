@@ -43,7 +43,7 @@ const en: LocaleDefinition = {
     viewDetail: "View Details",
     edit: "Edit",
     pastePlain: "Paste as plain text",
-    pasteFormat: "Copy with formatting",
+    pasteFormat: "Paste with formatting",
     duplicateItem: "Save as new entry",
   },
   time: {
@@ -359,6 +359,9 @@ const en: LocaleDefinition = {
     plainCopySuccess: "Copied as plain text; no previous application was available",
     plainPasteSuccess: "Pasted as plain text",
     plainPasteFailed: "Failed to restore the previous application and paste",
+    formatCopySuccess: "Copied with formatting; no previous application was available",
+    formatPasteSuccess: "Pasted with formatting",
+    formatPasteFailed: "Failed to restore the previous application and paste",
     duplicateSuccess: "Duplicated as new entry",
     saveFailed: "Save failed",
     restoreSuccess: "Restored {count} items",

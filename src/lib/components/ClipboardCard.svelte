@@ -88,6 +88,7 @@
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
+    onformatpaste: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
@@ -98,6 +99,7 @@
   const cardActionIds = [
     "copy",
     "plainpaste",
+    "formatpaste",
     "detail",
     "edit",
     "favorite",
@@ -135,6 +137,7 @@
     onsaveedit,
     oncanceledit,
     onplainpaste,
+    onformatpaste,
     onsaveasnew,
     onrestore,
     onimagefullscreen,
@@ -383,6 +386,9 @@
       case "plainpaste":
         onplainpaste(item.id);
         return;
+      case "formatpaste":
+        onformatpaste(item.id);
+        return;
       case "detail":
         ondetail(item.id);
         return;
@@ -435,6 +441,9 @@
       { id: "copy", label: _t("card.copy"), icon: "copy" },
       ...(item.kind === "text"
         ? [{ id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName }]
+        : []),
+      ...(item.kind === "text" && item.htmlContent
+        ? [{ id: "formatpaste", label: _t("card.pasteFormat"), icon: "clipboard" as IconName }]
         : []),
       { id: "detail", label: _t("card.viewDetail"), icon: "eye" },
       ...(canEdit
@@ -716,6 +725,15 @@
               aria-label={_t("card.pastePlain")}
               onclick={(event) => runCardAction("plainpaste", event)}
               ><AppIcon name="type" size={16} /></button
+            >
+          {/if}
+          {#if item.kind === "text" && item.htmlContent}
+            <button
+              type="button"
+              title={_t("card.pasteFormat")}
+              aria-label={_t("card.pasteFormat")}
+              onclick={(event) => runCardAction("formatpaste", event)}
+              ><AppIcon name="clipboard" size={16} /></button
             >
           {/if}
           <button

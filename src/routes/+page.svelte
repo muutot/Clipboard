@@ -27,6 +27,7 @@
     toClipboardItem,
     writeClipboardImage,
     writeClipboardText,
+    writeClipboardHtml,
     getDisplayTitle,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
@@ -1937,6 +1938,29 @@
     }
   }
 
+  async function formatPaste(_id: string) {
+    const item = items.find((i) => i.id === _id);
+    if (!item || !item.htmlContent) return;
+    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
+    const plainText = item.textContent || undefined;
+    try {
+      await writeClipboardHtml(item.htmlContent, plainText);
+      if (!isTauriRuntime()) {
+        showToast(_t("toast.formatCopySuccess"), "success");
+        return;
+      }
+
+      const pasted = await invoke<boolean>("paste_to_previous_application");
+      showToast(
+        _t(pasted ? "toast.formatPasteSuccess" : "toast.formatCopySuccess"),
+        pasted ? "success" : "info",
+      );
+    } catch (error) {
+      console.error("Unable to paste formatted text into the previous application", error);
+      showToast(_t("toast.formatPasteFailed"), "error");
+    }
+  }
+
   function duplicateItem(id: string) {
     invoke("duplicate_clipboard_item", { id })
       .then(() => {
@@ -2994,6 +3018,7 @@
                     onsaveasnew={saveAsNew}
                     oncanceledit={cancelEdit}
                     onplainpaste={plainPaste}
+                    onformatpaste={formatPaste}
                     onrestore={restoreItem}
                   />
                 </div>
@@ -3033,6 +3058,7 @@
                   onsaveasnew={saveAsNew}
                   oncanceledit={cancelEdit}
                   onplainpaste={plainPaste}
+                  onformatpaste={formatPaste}
                   onrestore={restoreItem}
                 />
               {/if}
@@ -3100,6 +3126,7 @@
         onsaveedit={saveEdit}
         onrenametitle={renameTitle}
         onplainpaste={plainPaste}
+        onformatpaste={formatPaste}
         onduplicate={duplicateItem}
         onsaveasnew={saveAsNew}
         oncopyfilename={copyFilename}
@@ -3128,6 +3155,7 @@
     onsaveedit={saveEdit}
     onrenametitle={renameTitle}
     onplainpaste={plainPaste}
+    onformatpaste={formatPaste}
     onduplicate={duplicateItem}
     onsaveasnew={saveAsNew}
     oncopyfilename={copyFilename}
