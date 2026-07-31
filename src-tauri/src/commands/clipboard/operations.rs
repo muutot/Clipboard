@@ -9,7 +9,8 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
 use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
 use crate::storage::{
-    ClipboardRepository, Database, KindStorageStats, OcrRepository, StoragePaths, TextItemUpdate,
+    ClipboardRepository, Database, KindStorageStats, OcrRepository, SearchRepository, StoragePaths,
+    TextItemUpdate,
 };
 use crate::CaptureState;
 
@@ -147,11 +148,16 @@ pub fn search_clipboard_items(
     // SQLite triggers on every mutation (capture, OCR, delete, favorite,
     // restore, import) but is only applied to the index here, so clear the
     // result cache when the index actually changed to avoid serving stale
-    // pages; leave it untouched when no mutations occurred.
-    match SearchSynchronizer::default().sync_until_idle(database.inner(), search_index.inner()) {
-        Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
-        Ok(_) => {}
-        Err(error) => eprintln!("[search] outbox sync before search failed: {error}"),
+    // pages; leave it untouched when no mutations occurred. The cheap
+    // `has_pending_outbox_events` probe avoids the `LIMIT` scan and reader
+    // reload that `sync_until_idle` would trigger on every search.
+    let pending = database.has_pending_outbox_events().unwrap_or(true);
+    if pending {
+        match SearchSynchronizer::default().sync_until_idle(database.inner(), search_index.inner()) {
+            Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
+            Ok(_) => {}
+            Err(error) => eprintln!("[search] outbox sync before search failed: {error}"),
+        }
     }
 
     if let Some(cached) = search_cache.get(&query, &rules, max_results, page_offset, page_size) {

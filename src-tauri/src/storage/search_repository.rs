@@ -33,6 +33,10 @@ pub trait SearchRepository {
     ) -> Result<Vec<SearchDocument>, StorageError>;
     fn acknowledge_search_outbox(&self, through_sequence: i64) -> Result<u64, StorageError>;
     fn enqueue_full_search_rebuild(&self) -> Result<u64, StorageError>;
+    /// Cheap probe used by the search command to skip the synchronizer loop
+    /// entirely when no mutations are pending. Avoids the `LIMIT` scan and
+    /// reader reload that `read_search_outbox` would trigger on every query.
+    fn has_pending_outbox_events(&self) -> Result<bool, StorageError>;
 }
 
 impl SearchRepository for Database {
@@ -170,6 +174,17 @@ impl SearchRepository for Database {
             transaction.commit()?;
 
             Ok(queued as u64)
+        })
+    }
+
+    fn has_pending_outbox_events(&self) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            let exists: i64 = connection.query_row(
+                "SELECT EXISTS (SELECT 1 FROM search_outbox LIMIT 1)",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(exists != 0)
         })
     }
 }
