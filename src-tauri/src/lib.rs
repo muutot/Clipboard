@@ -256,9 +256,11 @@ pub fn run() {
             let db_open_duration = startup_timer.finish_segment();
 
             let search_index = SearchIndex::open(&paths.search_index)?;
-            if !search_index.validate() {
-                eprintln!("[recovery] search index validation failed, will be rebuilt");
-            }
+            // `SearchSynchronizer::initialize` rebuilds the index when
+            // `SearchIndexLayout` flags it as `rebuild_required`; the previous
+            // `validate()` call here was a no-op (always returned `true`) and
+            // has been removed. Use the `validate_search_index` Tauri command
+            // for an on-demand health probe instead.
             let _search_init_result = SearchSynchronizer::default().initialize(&database, &search_index);
             let search_init_duration = startup_timer.finish_segment();
 

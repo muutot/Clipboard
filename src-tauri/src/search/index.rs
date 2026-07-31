@@ -298,11 +298,12 @@ impl SearchIndex {
     }
 
     pub fn validate(&self) -> bool {
-        let readers = self.reader.searcher();
-        let doc_count = readers.num_docs();
-        // The index is valid if we can acquire a searcher without error
-        // and the document count is non-negative
-        doc_count < u64::MAX
+        // Issue a trivial query so the searcher acquisition path is exercised
+        // and any reader-side corruption surfaces as a hard error rather than
+        // only failing on the next real user search. `Index::open_or_create`
+        // already validates the schema at open time, so this is a best-effort
+        // health probe exposed via the `validate_search_index` Tauri command.
+        self.search("a", 1).is_ok()
     }
 
     fn to_tantivy_document(&self, source: &SearchDocument) -> TantivyDocument {
