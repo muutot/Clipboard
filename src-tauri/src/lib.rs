@@ -1,4 +1,4 @@
-﻿pub mod cli;
+pub mod cli;
 pub mod commands;
 use commands::capture::*;
 use commands::clipboard::*;
@@ -32,8 +32,7 @@ use std::time::Duration;
 use cli::LocalApiServer;
 use commands::clipboard::SearchResultCache;
 use config::ConfigStore;
-use content::{resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION, self_trigger, ThumbnailWorker};
-use domain::{ClipboardItem, ClipboardKind};
+use content::{self_trigger, ThumbnailWorker};
 #[allow(unused_imports)]
 use geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use keyboard::{KeyboardConfig, KeyboardManager};
@@ -53,9 +52,9 @@ use state::{CaptureState, CaptureWorker, SelfTriggerState};
 use std::str::FromStr;
 use storage::{
     quarantine_search_index, recover_database_if_needed, refresh_database_backup,
-    ClipboardRepository, Database, KindDeleteScope, OcrRepository, StoragePaths,
+    Database, KindDeleteScope, OcrRepository, StoragePaths,
 };
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
 pub(crate) const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
@@ -353,355 +352,32 @@ pub fn run() {
                     let handle = thread::Builder::new()
                         .name("clipboard-capture".to_owned())
                         .spawn(move || {
-                    let database = match Database::open(&db_path) {
-                        Ok(db) => db,
-                        Err(e) => {
-                            eprintln!("[clipboard-worker] failed to open database: {e}");
-                            return;
-                        }
-                    };
-
-                    let self_trigger_guard = self_trigger_clone;
-                    let mut consecutive_errors = 0u32;
-
-                    loop {
-                        if stop_flag_for_thread.load(Ordering::SeqCst)
-                            || stop_signal_requested(&stop_receiver)
-                        {
-                            break;
-                        }
-                        match receiver.recv_timeout(Duration::from_millis(500)) {
-                            Ok(_change) => {
-                                let _ingestion_guard = capture_for_thread
-                                    .ingestion_guard
-                                    .lock()
-                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                                if stop_flag_for_thread.load(Ordering::SeqCst)
-                                    || stop_signal_requested(&stop_receiver)
-                                {
-                                    break;
+                            let database = match Database::open(&db_path) {
+                                Ok(db) => db,
+                                Err(e) => {
+                                    eprintln!("[clipboard-worker] failed to open database: {e}");
+                                    return;
                                 }
+                            };
 
-                                let app_info = platform::get_foreground_app();
-                                let source_app = foreground_app_name(&app_info);
-                                if capture_for_thread.should_skip(source_app.as_deref(), None) {
-                                    continue;
-                                }
-
-                                // Extract and cache app icon
-                                let icon_dir = storage_path.join("icons");
-                                let icon_path = if let Some(source_name) = source_app.as_deref() {
-                                    platform::extract_app_icon(
-                                        &icon_dir,
-                                        source_name,
-                                        &app_info.exe_path,
-                                    )
-                                } else {
-                                    None
-                                };
-
-                                let text = platform::read_clipboard_text();
-                                let html = platform::read_clipboard_html().filter(|html| {
-                                    !html.trim().is_empty() && html.len() <= 500_000
-                                });
-                                let image_data = platform::read_clipboard_image();
-                                let file_paths = platform::read_clipboard_file_paths();
-
-                                if capture_for_thread.should_skip(source_app.as_deref(), text.as_deref()) {
-                                    continue;
-                                }
-
-                                if let Some((img, img_width, img_height)) = image_data {
-                                    if stop_flag_for_thread.load(Ordering::SeqCst) {
-                                        break;
-                                    }
-                                    if should_skip_self_triggered_media(
-                                        &mut self_trigger_guard.lock().unwrap(),
-                                        "image",
-                                        &img,
-                                    ) {
-                                        continue;
-                                    }
-                                    let img_hash = content::hash::compute_media_hash("image", &img);
-                                    let now_ms = std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_millis() as i64;
-
-                                    let image_dir = image_storage_path.clone();
-                                    std::fs::create_dir_all(&image_dir).ok();
-                                    let img_path = image_dir.join(format!("{}.png", img_hash));
-                                    match std::fs::write(&img_path, &img) {
-                                        Ok(_) => eprintln!("[clipboard-worker] saved image: {}", img_path.display()),
-                                        Err(e) => eprintln!("[clipboard-worker] failed to write image {}: {}", img_path.display(), e),
-                                    }
-
-                                    let image_path = img_path.to_string_lossy().to_string();
-                                    let metadata = serde_json::json!({
-                                        "schemaVersion": RESOURCE_METADATA_SCHEMA_VERSION,
-                                        "width": img_width,
-                                        "height": img_height,
-                                        "mimeType": "image/png",
-                                        "extension": "png",
-                                        "sizeBytes": img.len(),
-                                        "resourcePath": image_path,
-                                        "previewPath": image_path,
-                                        "storagePath": image_path,
-                                        "contentHash": img_hash,
-                                    });
-
-                                    let item = ClipboardItem {
-                                        id: format!("img_{}", img_hash),
-                                        kind: ClipboardKind::Image,
-                                        title: img_path.file_stem().unwrap_or_default().to_string_lossy().to_string(),
-                                        text_content: None,
-                                        html_content: None,
-                                        resource_path: Some(image_path.clone()),
-                                        preview_path: Some(image_path),
-                                        content_hash: img_hash,
-                                            source_app: source_app.clone(),
-                                            icon_path: icon_path.clone(),
-                                            size_bytes: img.len() as u64,
-                                        created_at_ms: now_ms,
-                                        last_used_at_ms: None,
-                                        is_favorite: false,
-                                        metadata_json: Some(metadata.to_string()),
-                                    };
-
-                                    if stop_flag_for_thread.load(Ordering::SeqCst) {
-                                        break;
-                                    }
-                                    match database.save_item(&item) {
-                                        Ok(saved_id) => {
-                                            consecutive_errors = 0;
-                                            let _ = database.enqueue_ocr(&saved_id);
-                                            thumbnail_queue
-                                                .enqueue(saved_id.clone(), img_path.clone());
-                                            let mut emit_item = item.clone();
-                                            emit_item.id = saved_id;
-                                            let _ = app_handle.emit("clipboard-item-added", &emit_item);
-                                            continue;
-                                        }
-                                        Err(e) => {
-                                            eprintln!("[clipboard-worker] failed to save image: {e}");
-                                        }
-                                    }
-                                    continue;
-                                }
-
-                                if !file_paths.is_empty() {
-                                    if stop_flag_for_thread.load(Ordering::SeqCst) {
-                                        break;
-                                    }
-                                    let now_ms = std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_millis() as i64;
-
-                                    if file_paths.len() == 1 {
-                                        let file_path = &file_paths[0];
-                                        let file_hash = content::hash::compute_file_capture_hash(
-                                            std::slice::from_ref(file_path),
-                                        );
-                                        if should_skip_self_triggered_hash(
-                                            &mut self_trigger_guard.lock().unwrap(),
-                                            &file_hash,
-                                        ) {
-                                            continue;
-                                        }
-                                        let stored_files = store_captured_file_references(
-                                            std::slice::from_ref(file_path),
-                                            &file_storage_path,
-                                            capture_for_thread.max_file_copy_size_bytes(),
-                                        );
-                                        let stored_file = &stored_files[0];
-
-                                        let item = ClipboardItem {
-                                            id: format!("file_{}", file_hash),
-                                            kind: ClipboardKind::File,
-                                            title: stored_file.original_name.clone(),
-                                            text_content: None,
-                                            html_content: None,
-                                            resource_path: Some(stored_file.storage_path.clone()),
-                                            preview_path: None,
-                                            content_hash: file_hash,
-                                            source_app: source_app.clone(),
-                                            icon_path: icon_path.clone(),
-                                            size_bytes: stored_file.size_bytes,
-                                            created_at_ms: now_ms,
-                                            last_used_at_ms: None,
-                                            is_favorite: false,
-                                            metadata_json: Some(captured_file_metadata(&stored_files)),
-                                        };
-
-                                        if stop_flag_for_thread.load(Ordering::SeqCst) {
-                                            break;
-                                        }
-                                        match database.save_item(&item) {
-                                            Ok(saved_id) => {
-                                                consecutive_errors = 0;
-                                                let mut emit_item = item.clone();
-                                                emit_item.id = saved_id;
-                                                let _ = app_handle.emit("clipboard-item-added", &emit_item);
-                                            }
-                                            Err(e) => {
-                                                eprintln!("[clipboard-worker] failed to save file: {e}");
-                                            }
-                                        }
-                                    } else {
-                                        let group_hash =
-                                            content::hash::compute_file_capture_hash(&file_paths);
-                                        if should_skip_self_triggered_hash(
-                                            &mut self_trigger_guard.lock().unwrap(),
-                                            &group_hash,
-                                        ) {
-                                            continue;
-                                        }
-
-                                        let stored_files = store_captured_file_references(
-                                            &file_paths,
-                                            &file_storage_path,
-                                            capture_for_thread.max_file_copy_size_bytes(),
-                                        );
-                                        let total_size = stored_files
-                                            .iter()
-                                            .map(|file| file.size_bytes)
-                                            .sum();
-                                        let stored_paths = stored_files
-                                            .iter()
-                                            .map(|file| file.storage_path.clone())
-                                            .collect::<Vec<_>>();
-                                        let paths_json = serde_json::to_string(&stored_paths)
-                                            .unwrap_or_default();
-
-                                        let item = ClipboardItem {
-                                            id: format!("files_{}", group_hash),
-                                            kind: ClipboardKind::File,
-                                            title: stored_files[0].original_name.clone(),
-                                            text_content: Some(paths_json),
-                                            html_content: None,
-                                            resource_path: Some(stored_files[0].storage_path.clone()),
-                                            preview_path: None,
-                                            content_hash: group_hash,
-                                            source_app: source_app.clone(),
-                                            icon_path: icon_path.clone(),
-                                            size_bytes: total_size,
-                                            created_at_ms: now_ms,
-                                            last_used_at_ms: None,
-                                            is_favorite: false,
-                                            metadata_json: Some(captured_file_metadata(&stored_files)),
-                                        };
-
-                                        if stop_flag_for_thread.load(Ordering::SeqCst) {
-                                            break;
-                                        }
-                                        match database.save_item(&item) {
-                                            Ok(saved_id) => {
-                                                consecutive_errors = 0;
-                                                let mut emit_item = item.clone();
-                                                emit_item.id = saved_id;
-                                                let _ = app_handle.emit("clipboard-item-added", &emit_item);
-                                            }
-                                            Err(e) => {
-                                                eprintln!("[clipboard-worker] failed to save file batch: {e}");
-                                            }
-                                        }
-                                    }
-                                    continue;
-                                }
-
-                                let text = match text {
-                                    Some(t) => t,
-                                    None => continue,
-                                };
-
-                                if text.is_empty() || text.len() > 500_000 {
-                                    continue;
-                                }
-
-                                let markers = content::detect_markers(&text);
-                                let kind = if markers.is_link {
-                                    ClipboardKind::Link
-                                } else {
-                                    ClipboardKind::Text
-                                };
-
-                                let content_hash = content::hash::compute_content_hash(
-                                    if kind == ClipboardKind::Link { "link" } else { "text" },
-                                    &text,
-                                    None,
-                                );
-
-                                if should_skip_self_triggered_text(
-                                    &mut self_trigger_guard.lock().unwrap(),
-                                    kind,
-                                    &text,
-                                ) {
-                                    continue;
-                                }
-
-                                let title = text
-                                    .chars()
-                                    .take(200)
-                                    .collect::<String>();
-                                let size_bytes = text.len() as u64;
-                                let now_ms = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_millis() as i64;
-
-                                let item = ClipboardItem {
-                                    id: format!("{}_{}", content_hash, now_ms),
-                                    kind,
-                                    title: title.clone(),
-                                    text_content: Some(text.clone()),
-                                    html_content: html,
-                                    resource_path: None,
-                                    preview_path: None,
-                                    content_hash: content_hash.clone(),
-                                    source_app: source_app.clone(),
-                                    icon_path: icon_path.clone(),
-                                    size_bytes,
-                                    created_at_ms: now_ms,
-                                    last_used_at_ms: None,
-                                    is_favorite: false,
-                                    metadata_json: None,
-                                };
-
-                                if stop_flag_for_thread.load(Ordering::SeqCst) {
-                                    break;
-                                }
-                                match database.save_item(&item) {
-                                    Ok(saved_id) => {
-                                        consecutive_errors = 0;
-                                        let mut emit_item = item.clone();
-                                        emit_item.id = saved_id;
-                                        let _ = app_handle.emit("clipboard-item-added", &emit_item);
-                                    }
-                                    Err(e) => {
-                                        eprintln!("[clipboard-worker] failed to save item: {e}");
-                                        consecutive_errors += 1;
-                                        if consecutive_errors >= 10 {
-                                            eprintln!("[clipboard-worker] too many errors, pausing");
-                                            if wait_for_stop(
-                                                &stop_receiver,
-                                                &stop_flag_for_thread,
-                                                Duration::from_secs(5),
-                                            ) {
-                                                break;
-                                            }
-                                            consecutive_errors = 0;
-                                        }
-                                    }
-                                }
-                            }
-                            Err(mpsc::RecvTimeoutError::Timeout) => {}
-                            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                                eprintln!("[clipboard-worker] monitor disconnected, stopping");
-                                break;
-                            }
-                        }
-                    }
+                            // The full ingestion loop (text/html, image, files,
+                            // OCR/thumbnail enqueue, `clipboard-item-added`
+                            // emission) lives in the shared helper so the
+                            // startup path and `start_clipboard_monitoring`
+                            // command stay in lock-step.
+                            commands::capture::run_capture_loop(
+                                receiver,
+                                database,
+                                capture_for_thread,
+                                self_trigger_clone,
+                                stop_flag_for_thread,
+                                stop_receiver,
+                                storage_path,
+                                image_storage_path,
+                                file_storage_path,
+                                thumbnail_queue,
+                                app_handle,
+                            );
                         })
                         .map_err(|error| format!("failed to start startup clipboard worker: {error}"))?;
 
