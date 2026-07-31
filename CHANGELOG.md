@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.1.0 (2026-07-31)
+
+### ✨ Features
+
+- **ci**: add ci:local npm script for local CI pipeline (69baa75b)
+
+### 🐛 Bug Fixes
+
+- **platform**: fix macOS clippy errors breaking the build (d22b0f1d)
+- **memory**: gate collect_system_memory import behind windows cfg (f5c0e710)
+- **platform**: remove unused unconditional imports (ee6e421f)
+- **build**: restore necessary imports removed in cleanup (9fee8049)
+- **release**: build before commit so failed builds don't create orphaned tags (3b269327)
+- **platform**: add super:: prefix for sibling module references in dispatch and platform_info (b65b00d2)
+- **release**: regenerate changelog from previous tag, not --all (bb2876ee)
+- **release**: re-read currentVersion after rebase drops old release commit (caeaf7c3)
+- **release**: fix RELEASE.md and template — convert to UTF-8, restore corrupted Chinese text (d4f12877)
+- **ci**: remove hardcoded Rust home paths from local-ci script (1bca1720)
+
+### ♻️ Refactoring
+
+- **release**: simplify release script — remove verify/build, keep regenerate mode (0fa68774)
+- **release**: build before commit, allow dirty working directory in Pass 2 (e752f3e7)
+- **commands**: extract api, cleanup, files, signal from system.rs (50c7a80c)
+- **platform**: extract autostart, dispatch, platform_info, single_instance (562dd7b0)
+- **core**: extract state, geometry, shutdown from lib.rs (e5b9a59b)
+- **content**: extract SelfTriggerGuard into self_trigger module (58a3356d)
+- **cli**: extract CLI argument parsing into dedicated module (368b3aa7)
+- **clipboard**: split commands/clipboard.rs into submodule directory (6476031d)
+- **storage**: split paths.rs into submodule directory (36fdbdb3)
+- **storage**: split ocr_repository.rs into submodule directory (4902bada)
+- **platform**: split platform/mod.rs into submodule directory (fe5473b4)
+- **memory**: split memory.rs into submodule directory (02bb0333)
+- **config**: split config.rs into submodule directory (c9953587)
+- **tests**: extract lib.rs test modules into lib_tests.rs (41ffc36f)
+- **storage**: split repository.rs into submodule directory (910dfd21)
+- **config**: split commands/config.rs into submodule directory (5e4c69d1)
+- **commands**: extract Tauri command functions from lib.rs into commands/ module (c2f18f09)
+- **cli**: extract build_text_clipboard_item and search_items_by_scanning as shared helpers (cbe2dd9a)
+
+### 🎨 Styling
+
+- **format**: fix cargo fmt warning and extract standalone format scripts (d28fc038)
+- **release**: fix prettier formatting (fee4240d)
+- **format**: fix cargo fmt after import cleanup (d389843e)
+- prettier formatting for RELEASE.md, template, and release.mjs (97f94819)
+
+### 📝 Documentation
+
+- **release**: add pre-release format check workflow (14078c5c)
+- **release**: document release commit file scope rule (ee9da172)
+- **release**: rewrite workflow — LLM curates RELEASE.md, script pauses mid-way (2504a405)
+- **release**: simplify release.mjs — RELEASE.md now curated manually per release (1354e111)
+
+### 🔧 Chores
+
+- **release**: drop Intel macOS build (ort lacks x86_64 prebuilt binaries) (f7be9e4f)
+- **release**: auto-detect force push needed for regenerate mode (9a40e38f)
+- sort imports and fix formatting across modules (393af14e)
+
+### 🧹 Cleanup
+
+- **imports**: remove unused imports in Rust source (3ac56566)
+
 ## 1.0.0 (2026-07-29)
 
 ### ✨ Features
