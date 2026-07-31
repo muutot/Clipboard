@@ -61,6 +61,8 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 
 `src/routes/+page.svelte` intentionally owns high-level collection/UI state: active/deleted pagination, search request IDs, loaded items, the frontend search-result cache, selection, detail mode, filters, and runtime event reconciliation. Services own IPC and record mapping; cards own rendering and controlled callbacks.
 
+Paste paths (`plainPaste`, `formatPaste`, `cleanPaste`) live in the route. When `pasteCleaningEnabled` is set, plain/format paste run `transform_text` with `cleanPaste` first; format paste falls back to writing the cleaned plain text (instead of HTML) whenever cleaning changed the content, since URL/whitespace cleanup cannot be applied reliably inside markup.
+
 Events currently crossing windows/runtime include:
 
 - `clipboard-item-added`
