@@ -111,7 +111,8 @@ git push origin v0.2.0
 
 Pushing the tag triggers the CI/CD pipeline (`.github/workflows/release.yml`) which:
 
-- Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
+- Builds for Windows (x64), macOS (arm64), Linux (x64)
+- Intel macOS (x86_64-apple-darwin) is excluded: ort-sys ships no prebuilt ONNX Runtime for it
 - Creates a draft GitHub Release with artifacts attached
 
 ## Special: Regenerate Mode

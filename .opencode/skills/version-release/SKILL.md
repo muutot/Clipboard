@@ -143,7 +143,8 @@ After a successful release, report:
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 
-- Builds for Windows (x64), macOS (x64 + arm64), Linux (x64)
+- Builds for Windows (x64), macOS (arm64), Linux (x64)
+- Intel macOS (x86_64-apple-darwin) is excluded: ort-sys ships no prebuilt ONNX Runtime for it
 - Creates a draft GitHub Release with artifacts using `RELEASE.md` as the release body
 
 ## Version source files
