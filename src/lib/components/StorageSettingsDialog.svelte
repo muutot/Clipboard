@@ -40,6 +40,8 @@
     importFromFile,
     type ExportFormatInfo,
   } from "$lib/services/storage";
+  import { checkForUpdate, type UpdateInfo } from "$lib/services/update";
+  import { getVersion } from "@tauri-apps/api/app";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
   import {
@@ -121,6 +123,7 @@
     | "keyboard_system"
     | "ocr"
     | "statistics"
+    | "about"
   >("general_window");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
   let keyboardResetToken = $state(0);
@@ -243,6 +246,12 @@
                 ? _t("statistics.performanceDescription")
                 : _t("statistics.memoryDescription"),
         };
+      case "about":
+        return {
+          breadcrumb: _t("about.title"),
+          title: _t("about.tabLabel"),
+          desc: _t("about.description"),
+        };
     }
   });
 
@@ -330,6 +339,8 @@
               : _t("statistics.memoryTab");
         return `${settingsLabel} / ${_t("statistics.title")} / ${tabLabel}`;
       }
+      case "about":
+        return `${settingsLabel} / ${_t("about.tabLabel")}`;
     }
   }
 
@@ -633,6 +644,40 @@
     }
   }
 
+  let appVersion = $state("");
+  let checkingUpdate = $state(false);
+  let updateResult = $state<UpdateInfo | null>(null);
+  let updateError = $state("");
+
+  async function loadAppVersion(): Promise<void> {
+    if (!isTauriRuntime()) return;
+    try {
+      appVersion = await getVersion();
+    } catch (error) {
+      console.error("Unable to read app version", error);
+    }
+  }
+
+  async function handleCheckUpdate(): Promise<void> {
+    if (!isTauriRuntime() || checkingUpdate) return;
+    checkingUpdate = true;
+    updateResult = null;
+    updateError = "";
+    try {
+      updateResult = await checkForUpdate();
+    } catch (error) {
+      updateError = error instanceof Error ? error.message : String(error);
+    } finally {
+      checkingUpdate = false;
+    }
+  }
+
+  function formatUpdateDate(value: string | null): string {
+    if (!value) return "";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  }
+
   let ocrEngine = $state("ppocr");
   let ocrEngineAvailable = $state(false);
   let ocrHasEngine = $state(false);
@@ -691,6 +736,7 @@
     if (open) {
       void loadStatus();
       void loadExportFormats();
+      void loadAppVersion();
     }
   });
 
@@ -1305,6 +1351,14 @@
       >
         <AppIcon name="bar-chart" size={16} />
         <span>统计</span>
+      </button>
+      <button
+        class:active={activeSection === "about"}
+        type="button"
+        onclick={() => (activeSection = "about")}
+      >
+        <AppIcon name="info" size={16} />
+        <span>{_t("about.tabLabel")}</span>
       </button>
     </nav>
 
@@ -2134,6 +2188,83 @@
             </div>
           {/if}
           <p class="auto-save-note">数据每 3 秒自动刷新；工作集与私有内存的统计口径不同</p>
+        {/if}
+      </div>
+    {:else if activeSection === "about"}
+      <div class="settings-scroll">
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
+            <div>
+              <strong>{_t("app.name")}</strong>
+              <p>{_t("about.versionLabel", { version: appVersion })}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="setting-card toggle-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+            <div>
+              <strong>{_t("about.updateTitle")}</strong>
+              <p>{_t("about.updateDesc")}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="settings-action-btn"
+            disabled={checkingUpdate}
+            onclick={handleCheckUpdate}
+          >
+            {checkingUpdate ? _t("about.checking") : _t("about.checkUpdate")}
+          </button>
+        </section>
+
+        {#if updateResult}
+          {#if updateResult.updateAvailable}
+            <section class="setting-card">
+              <div class="toggle-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="info" size={17} /></span>
+                  <div>
+                    <strong
+                      >{_t("about.updateAvailable", {
+                        version: updateResult.latestVersion,
+                      })}</strong
+                    >
+                    {#if updateResult.publishedAt}
+                      <p>
+                        {_t("about.releasedAt", {
+                          date: formatUpdateDate(updateResult.publishedAt),
+                        })}
+                      </p>
+                    {/if}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="settings-action-btn"
+                  onclick={() =>
+                    void invoke("open_external_url", { url: updateResult!.releaseUrl })}
+                >
+                  {_t("about.download")}
+                </button>
+              </div>
+              {#if updateResult.releaseNotes}
+                <pre class="about-release-notes">{updateResult.releaseNotes}</pre>
+              {/if}
+            </section>
+          {:else}
+            <div class="about-update-state" role="status">
+              <AppIcon name="check" size={14} />
+              <span>{_t("about.upToDate")}</span>
+            </div>
+          {/if}
+        {:else if updateError}
+          <div class="about-update-state about-update-state--fail" role="alert">
+            <AppIcon name="x" size={14} />
+            <span>{_t("about.checkFailed", { error: updateError })}</span>
+          </div>
         {/if}
       </div>
     {:else}
@@ -3689,6 +3820,41 @@
     border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
     color: color-mix(in srgb, var(--success-color) 75%, white);
     background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
+  }
+
+  .about-update-state {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 7px 10px;
+    border: 1px solid color-mix(in srgb, var(--success-color) 35%, transparent);
+    border-radius: var(--settings-control-radius);
+    color: color-mix(in srgb, var(--success-color) 75%, white);
+    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
+    font-size: var(--settings-description-size);
+  }
+
+  .about-update-state--fail {
+    border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
+    color: color-mix(in srgb, var(--danger-color) 75%, white);
+    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
+  }
+
+  .about-release-notes {
+    max-height: 180px;
+    margin: 10px 0 0;
+    padding: 9px 11px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--settings-control-radius);
+    background: var(--input-bg);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--settings-description-size);
+    line-height: 1.5;
   }
 
   button {

@@ -117,6 +117,10 @@ A CLI/API action that writes to the system clipboard must follow the same self-t
 
 `export/` owns `write_export_file` (creates parent directories and writes export output). Both the CLI and the file-backed Tauri commands in `commands/export.rs` (`export_to_file`, `import_from_file`) reuse it; the GUI import emits `clipboard-history-invalidated` after a successful import so the main window refreshes.
 
+## Update checks
+
+`commands/update.rs` exposes `check_for_update`: a stateless GitHub Releases check against the owning repository using the existing `reqwest` dependency (10s timeout, `clipboard-desktop` UA). It parses the latest non-draft/non-prerelease tag, compares it to the current app version with numeric three-segment ordering (ignoring a `v` prefix and non-numeric segments), and returns `UpdateInfo` with camelCase fields for the settings About panel. No install/apply path exists; the result links to the release page. Test coverage lives in the module's unit tests. A release page URL should remain the only external navigation surface until a signed installer pipeline exists.
+
 ## Unified shutdown
 
 `stop_runtime_services()` stops cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, and local API services. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray instead.

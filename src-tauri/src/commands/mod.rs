@@ -8,3 +8,4 @@ pub mod files;
 pub mod ocr;
 pub mod signal;
 pub mod system;
+pub mod update;

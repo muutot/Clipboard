@@ -15,6 +15,7 @@ export const SETTINGS_SECTIONS = [
   "keyboard_system",
   "ocr",
   "statistics",
+  "about",
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -129,6 +130,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   ],
   ocr: [i18n("storage.ocrTitle"), "OCR", "文字识别"],
   statistics: [i18n("statistics.title"), "统计", "诊断"],
+  about: [i18n("about.tabLabel"), i18n("about.title"), "更新", "版本", "update", "version"],
 };
 
 const STATISTICS_TAB_SEARCH_TEXT: Record<StatisticsTab, readonly SettingsSearchText[]> = {
@@ -526,6 +528,19 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
       "backup",
     ],
   ),
+
+  entry("about.update", { section: "about" }, i18n("about.updateTitle"), i18n("about.updateDesc"), [
+    "检查更新",
+    "升级",
+    "版本",
+    "update",
+    "upgrade",
+  ]),
+  entry("about.info", { section: "about" }, i18n("about.title"), i18n("about.description"), [
+    "版本",
+    "version",
+    "关于",
+  ]),
 
   entry(
     "keyboard.config-file",

@@ -6,6 +6,7 @@ use commands::config::*;
 use commands::export::*;
 use commands::ocr::*;
 use commands::system::*;
+use commands::update::*;
 pub mod config;
 pub mod content;
 pub mod domain;
@@ -817,6 +818,7 @@ pub fn run() {
             check_sensitive_content,
             check_password_manager,
             get_privacy_status,
+            check_for_update,
             export_clipboard_items,
             export_to_file,
             import_clipboard_items,

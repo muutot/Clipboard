@@ -47,6 +47,7 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | `privacy/`             | Pause/ignore/sensitive-source policy helpers                                                       |
 | `performance/`         | Startup/search/performance snapshots and monitoring                                                |
 | `export/`              | JSON, CSV, and plain-text import/export                                                            |
+| `commands/`            | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                         |
 | `cli/`                 | Process CLI execution and loopback API server                                                      |
 
 Platform source files may contain detailed scaffolding or documented intended flows. Verify runtime wiring and tests before claiming platform completion.

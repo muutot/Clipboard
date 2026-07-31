@@ -191,6 +191,21 @@ export interface LocaleDefinition {
     settingsFilteredCount: string;
     settingsSearchNoResults: string;
   };
+  about: {
+    title: string;
+    tabLabel: string;
+    description: string;
+    versionLabel: string;
+    updateTitle: string;
+    updateDesc: string;
+    checkUpdate: string;
+    checking: string;
+    upToDate: string;
+    updateAvailable: string;
+    releasedAt: string;
+    download: string;
+    checkFailed: string;
+  };
   keyboard: {
     settings: string;
     title: string;
