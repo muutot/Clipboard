@@ -1279,7 +1279,7 @@
       <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
       <div>
         <strong>Clipboard</strong>
-        <small>0.1.0</small>
+        <small>{appVersion}</small>
       </div>
     </div>
 
