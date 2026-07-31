@@ -478,17 +478,13 @@ impl ClipboardRepository for Database {
 
     fn restore_deleted(&self, id: &str) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
+            // The `clipboard_items_search_update` trigger already enqueues the
+            // upsert event for the restored row, so no explicit outbox insert
+            // is needed here.
             let affected = connection.execute(
                 "UPDATE clipboard_items SET deleted = 0, deleted_at_ms = NULL WHERE id = ?1 AND deleted = 1",
                 [id],
             )?;
-            if affected > 0 {
-                connection.execute(
-                    "INSERT INTO search_outbox (item_id, operation, created_at_ms)
-                     VALUES (?1, 'upsert', ?2)",
-                    params![id, current_time_ms()],
-                )?;
-            }
             Ok(affected > 0)
         })
     }
