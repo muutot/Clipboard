@@ -28,7 +28,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | Keyboard         | Item, Quick, System → `KeyboardSettingsPanel` with category prop                                        |
 | OCR              | Single current section → built into the parent                                                          |
 | Statistics       | Storage, Performance, Memory → built into the parent                                                    |
-| About            | Version and update check via GitHub Releases (`check_for_update`) → built into the parent                |
+| About            | Version and update check via GitHub Releases (`check_for_update`) → built into the parent               |
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
