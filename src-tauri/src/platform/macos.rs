@@ -73,7 +73,7 @@ pub type MacOSResult<T> = Result<T, MacOSError>;
 
 #[cfg(target_os = "macos")]
 mod objc {
-    #![allow(non_camel_case_types, dead_code)]
+    #![allow(non_camel_case_types, dead_code, clashing_extern_declarations)]
 
     #[repr(C)]
     pub struct Object([u8; 0]);
@@ -103,8 +103,8 @@ mod objc {
     }
 
     pub fn nsstring_from_str(s: &str) -> Id {
-        let cls = unsafe { objc_getClass(b"NSString\0".as_ptr() as *const i8) };
-        let sel = unsafe { sel_registerName(b"stringWithUTF8String:\0".as_ptr() as *const i8) };
+        let cls = unsafe { objc_getClass(c"NSString".as_ptr()) };
+        let sel = unsafe { sel_registerName(c"stringWithUTF8String:".as_ptr()) };
         let cstr = std::ffi::CString::new(s).unwrap_or_default();
         unsafe { msgSend_id_id(cls, sel, cstr.as_ptr() as Id) }
     }
@@ -113,7 +113,7 @@ mod objc {
         if s.is_null() {
             return None;
         }
-        let sel = unsafe { sel_registerName(b"UTF8String\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(c"UTF8String".as_ptr()) };
         let ptr = unsafe { msgSend_ptr(s, sel) };
         if ptr.is_null() {
             None
@@ -123,47 +123,47 @@ mod objc {
     }
 
     pub fn get_nspasteboard() -> Id {
-        let cls = unsafe { objc_getClass(b"NSPasteboard\0".as_ptr() as *const i8) };
-        let sel = unsafe { sel_registerName(b"generalPasteboard\0".as_ptr() as *const i8) };
+        let cls = unsafe { objc_getClass(c"NSPasteboard".as_ptr()) };
+        let sel = unsafe { sel_registerName(c"generalPasteboard".as_ptr()) };
         unsafe { msgSend(cls, sel) }
     }
 
     pub fn pasteboard_change_count(pb: Id) -> isize {
-        let sel = unsafe { sel_registerName(b"changeCount\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(c"changeCount".as_ptr()) };
         unsafe { msgSend_isize(pb, sel) }
     }
 
     pub fn pasteboard_string_for_type(pb: Id, type_name: &str) -> Option<String> {
         let type_ns = nsstring_from_str(type_name);
-        let sel = unsafe { sel_registerName(b"stringForType:\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(c"stringForType:".as_ptr()) };
         let result = unsafe { msgSend_id_id(pb, sel, type_ns) };
         nsstring_to_str(result)
     }
 
     pub fn get_nsworkspace() -> Id {
-        let cls = unsafe { objc_getClass(b"NSWorkspace\0".as_ptr() as *const i8) };
-        let sel = unsafe { sel_registerName(b"sharedWorkspace\0".as_ptr() as *const i8) };
+        let cls = unsafe { objc_getClass(c"NSWorkspace".as_ptr()) };
+        let sel = unsafe { sel_registerName(c"sharedWorkspace".as_ptr()) };
         unsafe { msgSend(cls, sel) }
     }
 
     pub fn workspace_frontmost_app(ws: Id) -> Id {
-        let sel = unsafe { sel_registerName(b"frontmostApplication\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(c"frontmostApplication".as_ptr()) };
         unsafe { msgSend(ws, sel) }
     }
 
     pub fn running_app_name(app: Id) -> Option<String> {
-        let sel = unsafe { sel_registerName(b"localizedName\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(c"localizedName".as_ptr()) };
         let result = unsafe { msgSend(app, sel) };
         nsstring_to_str(result)
     }
 
     pub fn running_app_exe_path(app: Id) -> Option<String> {
-        let sel = unsafe { sel_registerName(b"executableURL\0".as_ptr() as *const i8) };
+        let sel = unsafe { sel_registerName(c"executableURL".as_ptr()) };
         let url = unsafe { msgSend(app, sel) };
         if url.is_null() {
             return None;
         }
-        let sel_path = unsafe { sel_registerName(b"path\0".as_ptr() as *const i8) };
+        let sel_path = unsafe { sel_registerName(c"path".as_ptr()) };
         let path_str = unsafe { msgSend(url, sel_path) };
         nsstring_to_str(path_str)
     }
@@ -641,7 +641,7 @@ pub fn extract_app_icon(
     // Walk up from exe_path to find the .app bundle
     let exe = std::path::Path::new(exe_path);
     let bundle = exe.parent()?.parent()?; // Contents/MacOS/exe -> Contents -> .app
-    if !bundle.extension().map_or(false, |ext| ext == "app") {
+    if !bundle.extension().is_some_and(|ext| ext == "app") {
         return None;
     }
 
