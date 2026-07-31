@@ -468,6 +468,8 @@ export interface LocaleDefinition {
     pinCopiedToTopDescription: string;
     useRecycleBin: string;
     useRecycleBinDescription: string;
+    pasteCleaning: string;
+    pasteCleaningDescription: string;
     toastNotifications: string;
     toastNotificationsDescription: string;
     useSystemTitleBar: string;

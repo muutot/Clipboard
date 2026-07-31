@@ -693,6 +693,28 @@
       </button>
     </section>
 
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="scan" size={17} /></span>
+        <div>
+          <strong>{_t("general.pasteCleaning")}</strong>
+          <p>{_t("general.pasteCleaningDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.pasteCleaningEnabled}
+        onclick={() =>
+          generalSettings.updateSetting("pasteCleaningEnabled", !s.pasteCleaningEnabled)}
+        aria-checked={s.pasteCleaningEnabled}
+        aria-label={_t("general.pasteCleaning")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="file" size={17} /></span>

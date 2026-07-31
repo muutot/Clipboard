@@ -60,6 +60,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`  | `"off"`     | —                  |
 | `pinCopiedToTop`              | boolean                            | `true`      | —                  |
 | `useRecycleBin`               | boolean                            | `true`      | —                  |
+| `pasteCleaningEnabled`        | boolean                            | `false`     | —                  |
 | `showToastNotifications`      | boolean                            | `true`      | —                  |
 | `rememberWindowPosition`      | boolean                            | `false`     | —                  |
 | `alwaysOnTop`                 | boolean                            | `false`     | —                  |

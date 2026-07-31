@@ -38,6 +38,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   compactCardBorderRadius: 10,
   pinCopiedToTop: true,
   useRecycleBin: true,
+  pasteCleaningEnabled: false,
   showToastNotifications: true,
   rememberWindowPosition: false,
   alwaysOnTop: false,
@@ -358,6 +359,10 @@ function normalizeGeneralSettings(
   result.useRecycleBin = booleanValue(
     source.useRecycleBin ?? fallback("useRecycleBin"),
     defaultSettings.useRecycleBin,
+  );
+  result.pasteCleaningEnabled = booleanValue(
+    source.pasteCleaningEnabled ?? fallback("pasteCleaningEnabled"),
+    defaultSettings.pasteCleaningEnabled,
   );
   result.showToastNotifications = booleanValue(
     source.showToastNotifications ?? fallback("showToastNotifications"),

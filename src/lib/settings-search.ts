@@ -230,6 +230,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["删除", "trash"],
   ),
   entry(
+    "general.paste-cleaning",
+    { section: "general_search" },
+    i18n("general.pasteCleaning"),
+    i18n("general.pasteCleaningDescription"),
+    ["清洗", "clean", "粘贴"],
+  ),
+  entry(
     "general.toast-notifications",
     { section: "general_window" },
     i18n("general.toastNotifications"),

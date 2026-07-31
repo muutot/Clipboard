@@ -491,6 +491,9 @@ const en: LocaleDefinition = {
     pinCopiedToTopDescription: "Move a copied item to the top of the list",
     useRecycleBin: "Recycle Bin",
     useRecycleBinDescription: "Move deleted items to recycle bin instead of permanent deletion",
+    pasteCleaning: "Clean on Paste",
+    pasteCleaningDescription:
+      "Trim surrounding whitespace, collapse repeated whitespace, and remove URL tracking parameters before pasting",
     toastNotifications: "Action Notifications",
     toastNotificationsDescription:
       "Show Toast feedback after copy, favorite, delete, and other actions",
