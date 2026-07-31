@@ -53,7 +53,9 @@ pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
         };
         match window.hwnd() {
             Ok(hwnd) => {
-                if let Err(error) = crate::platform::apply_window_transparency(hwnd.0 as isize, percent) {
+                if let Err(error) =
+                    crate::platform::apply_window_transparency(hwnd.0 as isize, percent)
+                {
                     eprintln!("[window] failed to apply transparency: {error}");
                 }
             }
