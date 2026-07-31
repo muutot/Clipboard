@@ -142,6 +142,18 @@ pub fn search_clipboard_items(
         .map_err(|_| "configuration lock is poisoned".to_owned())?
         .search_page_size_limit() as usize;
 
+    // Drain pending search-outbox events so newly captured or mutated items
+    // are reflected in Tantivy before querying. The outbox is populated by
+    // SQLite triggers on every mutation (capture, OCR, delete, favorite,
+    // restore, import) but is only applied to the index here, so clear the
+    // result cache when the index actually changed to avoid serving stale
+    // pages; leave it untouched when no mutations occurred.
+    match SearchSynchronizer::default().sync_until_idle(database.inner(), search_index.inner()) {
+        Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
+        Ok(_) => {}
+        Err(error) => eprintln!("[search] outbox sync before search failed: {error}"),
+    }
+
     if let Some(cached) = search_cache.get(&query, &rules, max_results, page_offset, page_size) {
         performance_tracker.record_search(
             &query,
