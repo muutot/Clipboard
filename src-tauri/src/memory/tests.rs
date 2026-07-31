@@ -1,6 +1,8 @@
-use super::collector::{
-    collect_processes, collect_system_memory, directory_size, summarize_process_group,
-};
+use super::collector::{collect_processes, directory_size, summarize_process_group};
+
+#[cfg(target_os = "windows")]
+use super::collector::collect_system_memory;
+
 use super::types::MemoryProcess;
 
 #[test]
