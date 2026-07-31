@@ -24,7 +24,7 @@ When changing settings, update normalization, valid unions, numeric ranges, clon
 
 Owns the record boundary and list operations:
 
-- writing text/image with self-trigger registration;
+- writing text/image/html with self-trigger registration;
 - loading active and deleted pages;
 - searching with offset, limit, and optional sort rules;
 - favorite/delete/restore/permanent/batch operations;
