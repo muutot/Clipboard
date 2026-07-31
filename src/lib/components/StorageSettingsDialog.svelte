@@ -44,6 +44,7 @@
   import { getVersion } from "@tauri-apps/api/app";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
+  import { endOfDay, startOfDay } from "$lib/utils/date-query";
   import {
     filterSettingsSearchItems,
     normalizeSettingsSearch,
@@ -94,8 +95,29 @@
   let showIconManager = $state(false);
   let exportFormats = $state<ExportFormatInfo[]>([]);
   let exportFormat = $state("json");
+  let exportIncludeFavorites = $state(true);
+  let exportContentTypes = $state<Set<string>>(new Set(["text", "link", "image", "file"]));
+  let exportDateFrom = $state("");
+  let exportDateTo = $state("");
   let exporting = $state(false);
   let importing = $state(false);
+
+  function toggleExportContentType(kind: string) {
+    const next = new Set(exportContentTypes);
+    if (next.has(kind)) {
+      next.delete(kind);
+    } else {
+      next.add(kind);
+    }
+    exportContentTypes = next;
+  }
+
+  function exportDateToMs(value: string, end: boolean): number | null {
+    if (!value) return null;
+    const timestamp = new Date(`${value}T00:00:00`).getTime();
+    if (Number.isNaN(timestamp)) return null;
+    return end ? endOfDay(timestamp) : startOfDay(timestamp);
+  }
 
   $effect(() => {
     if (feedback) {
@@ -593,7 +615,12 @@
         filters: [{ name: format.label, extensions: [format.extension.slice(1)] }],
       });
       if (!filePath) return;
-      const result = await exportToFile(filePath, format.id);
+      const result = await exportToFile(filePath, format.id, {
+        includeFavorites: exportIncludeFavorites,
+        dateFromMs: exportDateToMs(exportDateFrom, false),
+        dateToMs: exportDateToMs(exportDateTo, true),
+        contentTypes: Array.from(exportContentTypes),
+      });
       feedback = _t("storage.exportSuccess", {
         path: result.path,
         size: formatBytes(result.byteCount),
@@ -2423,40 +2450,86 @@
             </section>
           {/if}
           {#if activeSection === "storage_tools"}
-            <section class="setting-card toggle-card">
-              <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-                <div>
-                  <strong>{_t("storage.transferTitle")}</strong>
-                  <p>{_t("storage.transferDesc")}</p>
+            <section class="setting-card">
+              <div class="toggle-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+                  <div>
+                    <strong>{_t("storage.transferTitle")}</strong>
+                    <p>{_t("storage.transferDesc")}</p>
+                  </div>
+                </div>
+                <div class="transfer-actions">
+                  <select
+                    bind:value={exportFormat}
+                    disabled={exporting || importing || exportFormats.length === 0}
+                    aria-label={_t("storage.exportLabel")}
+                  >
+                    {#each exportFormats as format (format.id)}
+                      <option value={format.id}>{format.label}</option>
+                    {/each}
+                  </select>
+                  <button
+                    type="button"
+                    class="settings-action-btn"
+                    disabled={exporting || importing || exportFormats.length === 0}
+                    onclick={handleExport}
+                  >
+                    {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
+                  </button>
+                  <button
+                    type="button"
+                    class="settings-action-btn"
+                    disabled={exporting || importing}
+                    onclick={handleImport}
+                  >
+                    {importing ? _t("storage.importing") : _t("storage.importAction")}
+                  </button>
                 </div>
               </div>
-              <div class="transfer-actions">
-                <select
-                  bind:value={exportFormat}
-                  disabled={exporting || importing || exportFormats.length === 0}
-                  aria-label={_t("storage.exportLabel")}
-                >
-                  {#each exportFormats as format (format.id)}
-                    <option value={format.id}>{format.label}</option>
-                  {/each}
-                </select>
-                <button
-                  type="button"
-                  class="settings-action-btn"
-                  disabled={exporting || importing || exportFormats.length === 0}
-                  onclick={handleExport}
-                >
-                  {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
-                </button>
-                <button
-                  type="button"
-                  class="settings-action-btn"
-                  disabled={exporting || importing}
-                  onclick={handleImport}
-                >
-                  {importing ? _t("storage.importing") : _t("storage.importAction")}
-                </button>
+              <div class="export-options">
+                <div class="export-option-row">
+                  <label class="export-check">
+                    <input
+                      type="checkbox"
+                      checked={exportIncludeFavorites}
+                      onchange={(e) =>
+                        (exportIncludeFavorites = (e.target as HTMLInputElement).checked)}
+                    />
+                    <span>{_t("storage.exportIncludeFavorites")}</span>
+                  </label>
+                </div>
+                <div class="export-option-row">
+                  <span class="export-option-label">{_t("storage.exportContentTypes")}</span>
+                  <div class="export-kind-checks">
+                    {#each storageKinds as kindInfo (kindInfo.kind)}
+                      <label class="export-check">
+                        <input
+                          type="checkbox"
+                          checked={exportContentTypes.has(kindInfo.kind)}
+                          onchange={() => toggleExportContentType(kindInfo.kind)}
+                        />
+                        <span>{_t(kindInfo.labelKey)}</span>
+                      </label>
+                    {/each}
+                  </div>
+                </div>
+                <div class="export-option-row">
+                  <span class="export-option-label">{_t("storage.exportDateRange")}</span>
+                  <input
+                    type="date"
+                    class="export-date-input"
+                    bind:value={exportDateFrom}
+                    aria-label={_t("storage.exportDateFrom")}
+                  />
+                  <span class="export-date-separator">–</span>
+                  <input
+                    type="date"
+                    class="export-date-input"
+                    bind:value={exportDateTo}
+                    aria-label={_t("storage.exportDateTo")}
+                  />
+                </div>
               </div>
             </section>
 
@@ -4165,6 +4238,75 @@
   .transfer-actions select:disabled {
     opacity: 0.55;
     cursor: default;
+  }
+
+  .export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .export-option-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .export-option-label {
+    flex: 0 0 auto;
+    min-width: 64px;
+    color: var(--text-muted);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  }
+
+  .export-kind-checks {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .export-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .export-check input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .export-date-input {
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  }
+
+  .export-date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  .export-date-separator {
+    color: var(--text-faint);
   }
 
   .resource-path-grid {

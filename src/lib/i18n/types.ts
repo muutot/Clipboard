@@ -173,6 +173,11 @@ export interface LocaleDefinition {
     importPartial: string;
     importFailed: string;
     importFilterName: string;
+    exportIncludeFavorites: string;
+    exportContentTypes: string;
+    exportDateRange: string;
+    exportDateFrom: string;
+    exportDateTo: string;
     ocrModelInstalled: string;
     ocrModelInstallFailed: string;
     ocrModelAlreadyApplied: string;

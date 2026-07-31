@@ -90,6 +90,13 @@ export interface ExportFormatInfo {
   extension: string;
 }
 
+export interface ExportFileOptions {
+  includeFavorites: boolean;
+  dateFromMs?: number | null;
+  dateToMs?: number | null;
+  contentTypes: string[];
+}
+
 export interface ExportFileResult {
   path: string;
   format: string;
@@ -242,12 +249,23 @@ export async function getExportFormats(): Promise<ExportFormatInfo[]> {
   return invoke<ExportFormatInfo[]>("get_export_formats");
 }
 
-export async function exportToFile(path: string, format: string): Promise<ExportFileResult> {
+export async function exportToFile(
+  path: string,
+  format: string,
+  options: ExportFileOptions,
+): Promise<ExportFileResult> {
   if (!isTauriRuntime()) {
     throw new Error("Export is only available in the desktop app");
   }
 
-  return invoke<ExportFileResult>("export_to_file", { path, format });
+  return invoke<ExportFileResult>("export_to_file", {
+    path,
+    format,
+    includeFavorites: options.includeFavorites,
+    dateFromMs: options.dateFromMs ?? null,
+    dateToMs: options.dateToMs ?? null,
+    contentTypes: options.contentTypes,
+  });
 }
 
 export async function importFromFile(path: string): Promise<ImportSummary> {
