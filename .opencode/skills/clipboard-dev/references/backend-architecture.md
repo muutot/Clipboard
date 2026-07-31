@@ -95,7 +95,7 @@ The clipboard monitor produces change notifications; a named capture thread read
 | `file_store.rs`              | managed copy decisions and verification                     |
 | `resource_metadata.rs`       | metadata schema/MIME/file details                           |
 | `thumbnail.rs`               | background preview generation and worker lifecycle          |
-| `transform.rs`               | text transforms                                             |
+| `transform.rs`               | text transforms plus the paste-cleaning pipeline (`clean_paste`: trim, collapse whitespace, strip URL tracking params) |
 
 Write-back registration and capture-side checks must use the same canonical hashing rules for text, links, images, and files. A mismatch creates duplicate history records or suppresses legitimate captures.
 

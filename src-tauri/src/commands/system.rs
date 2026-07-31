@@ -46,6 +46,10 @@ pub fn transform_text(input: String, operation: String) -> Result<TextTransform,
         "md5" => TransformOperation::Md5,
         "sha256" => TransformOperation::Sha256,
         "sha512" => TransformOperation::Sha512,
+        "trimWhitespace" => TransformOperation::TrimWhitespace,
+        "collapseWhitespace" => TransformOperation::CollapseWhitespace,
+        "stripUrlTrackingParams" => TransformOperation::StripUrlTrackingParams,
+        "cleanPaste" => TransformOperation::CleanPaste,
         _ => return Err(format!("unknown transform operation: {}", operation)),
     };
 

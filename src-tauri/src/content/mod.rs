@@ -20,4 +20,4 @@ pub use resource_metadata::{
 };
 pub use self_trigger::{DedupResult, SelfTriggerGuard};
 pub use thumbnail::{ThumbnailGenerator, ThumbnailInfo, ThumbnailQueue, ThumbnailWorker};
-pub use transform::{TextTransform, TransformOperation};
+pub use transform::{clean_paste, TextTransform, TransformOperation};
