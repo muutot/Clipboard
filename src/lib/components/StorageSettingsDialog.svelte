@@ -2292,7 +2292,7 @@
             </section>
           {/if}
           {#if activeSection === "storage_tools"}
-            <section class="setting-card">
+            <section class="setting-card toggle-card">
               <div class="setting-heading">
                 <span class="setting-icon"><AppIcon name="download" size={17} /></span>
                 <div>
@@ -2300,12 +2300,11 @@
                   <p>{_t("storage.transferDesc")}</p>
                 </div>
               </div>
-              <div class="dir-input-row">
-                <span class="transfer-label">{_t("storage.exportLabel")}</span>
+              <div class="transfer-actions">
                 <select
-                  class="transfer-select"
                   bind:value={exportFormat}
                   disabled={exporting || importing || exportFormats.length === 0}
+                  aria-label={_t("storage.exportLabel")}
                 >
                   {#each exportFormats as format (format.id)}
                     <option value={format.id}>{format.label}</option>
@@ -2319,9 +2318,6 @@
                 >
                   {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
                 </button>
-              </div>
-              <div class="dir-input-row">
-                <span class="transfer-label">{_t("storage.importLabel")}</span>
                 <button
                   type="button"
                   class="settings-action-btn"
@@ -3987,19 +3983,20 @@
     cursor: default;
   }
 
-  .transfer-label {
+  .transfer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     flex-shrink: 0;
-    color: var(--text-secondary);
-    font-size: var(--settings-description-size);
   }
 
-  .transfer-select {
-    width: 120px;
+  .transfer-actions select {
+    width: 116px;
     height: 34px;
     flex-shrink: 0;
   }
 
-  .transfer-select:disabled {
+  .transfer-actions select:disabled {
     opacity: 0.55;
     cursor: default;
   }
