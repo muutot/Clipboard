@@ -1,5 +1,12 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyThemeColors } from "$lib/utils/theme";
-import type { FontSizeSettings, DisplaySettings, GeneralSettings } from "$lib/types/clipboard";
+import { isTauriRuntime } from "$lib/services/runtime";
+import type {
+  FontSizeSettings,
+  DisplaySettings,
+  GeneralSettings,
+  WindowEffect,
+} from "$lib/types/clipboard";
 
 export function applyFontSizesToDocument(
   fontSizes: FontSizeSettings,
@@ -20,11 +27,23 @@ export function applyFontSizesToDocument(
   }
 }
 
+export function applyWindowEffectToDocument(effect: WindowEffect): void {
+  if (typeof document === "undefined") return;
+  if (!isTauriRuntime()) return;
+  if (getCurrentWindow().label !== "main") return;
+  if (effect === "off") {
+    delete document.documentElement.dataset.windowEffect;
+  } else {
+    document.documentElement.dataset.windowEffect = effect;
+  }
+}
+
 export function applyGeneralSettingsToDocument(settings: GeneralSettings): void {
   if (typeof document === "undefined") return;
 
   applyFontSizesToDocument(settings.fontSizes, settings.display);
   applyThemeColors(settings.themeColors);
+  applyWindowEffectToDocument(settings.windowEffect);
 }
 
 export function syncCompactShellClass(compactMode: boolean): void {

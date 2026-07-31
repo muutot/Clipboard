@@ -166,11 +166,14 @@ export interface DisplaySettings {
 
 export type Language = "zh-CN" | "en";
 
+export type WindowEffect = "off" | "acrylic" | "mica";
+
 export interface GeneralSettings {
   language: Language;
   fontSizes: FontSizeSettings;
   display: DisplaySettings;
   windowTransparency: number;
+  windowEffect: WindowEffect;
   compactMode: boolean;
   compactPaddingTop: number;
   compactPaddingBottom: number;

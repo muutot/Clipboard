@@ -206,6 +206,36 @@ pub fn apply_window_transparency(_window_handle: isize, _percent: u8) -> Result<
     Err("window transparency is not supported on this platform".to_owned())
 }
 
+/// Applies a frosted glass effect to the window. Supported effects are
+/// `"acrylic"` (Windows 10+) and `"mica"` (Windows 11); any other value
+/// clears the active effect. Other platforms are a no-op.
+#[cfg(target_os = "windows")]
+pub fn apply_window_effect<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    effect: &str,
+) -> Result<(), String> {
+    match effect {
+        "acrylic" => window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125)))
+            .map_err(|error| error.to_string()),
+        "mica" => {
+            window_vibrancy::apply_mica(window, Some(true)).map_err(|error| error.to_string())
+        }
+        _ => {
+            let _ = window_vibrancy::clear_acrylic(window);
+            let _ = window_vibrancy::clear_mica(window);
+            Ok(())
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn apply_window_effect<R: Runtime>(
+    _window: &tauri::WebviewWindow<R>,
+    _effect: &str,
+) -> Result<(), String> {
+    Ok(())
+}
+
 /// Capacity information for the volume that stores a given directory.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]

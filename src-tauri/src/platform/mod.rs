@@ -60,8 +60,8 @@ pub use platform_info::{
 pub use shortcuts::GlobalShortcutManager;
 pub use single_instance::{SingleInstanceError, SingleInstanceGuard};
 pub use ui::{
-    apply_window_transparency, disk_space, show_main_window, window_transparency_alpha, DiskSpace,
-    SystemTray, WindowManager,
+    apply_window_effect, apply_window_transparency, disk_space, show_main_window,
+    window_transparency_alpha, DiskSpace, SystemTray, WindowManager,
 };
 
 // ---------------------------------------------------------------------------

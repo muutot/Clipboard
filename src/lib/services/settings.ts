@@ -24,6 +24,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
   display: { showSecondaryText: true, maxTextLines: 3, pageSize: 100, searchPageSize: 100 },
   windowTransparency: 95,
+  windowEffect: "off",
   compactMode: false,
   compactPaddingTop: 6,
   compactPaddingBottom: 4,
@@ -139,6 +140,13 @@ function validCardActionsDisplay(
   fallback: GeneralSettings["cardActionsDisplay"],
 ): GeneralSettings["cardActionsDisplay"] {
   return value === "hover" || value === "always" ? value : fallback;
+}
+
+function validWindowEffect(
+  value: unknown,
+  fallback: GeneralSettings["windowEffect"],
+): GeneralSettings["windowEffect"] {
+  return value === "off" || value === "acrylic" || value === "mica" ? value : fallback;
 }
 
 function validFullscreenMode(
@@ -274,6 +282,10 @@ function normalizeGeneralSettings(
     defaultSettings.windowTransparency,
     60,
     100,
+  );
+  result.windowEffect = validWindowEffect(
+    source.windowEffect ?? fallback("windowEffect"),
+    defaultSettings.windowEffect,
   );
   result.compactMode = booleanValue(
     source.compactMode ?? fallback("compactMode"),

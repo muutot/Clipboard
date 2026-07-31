@@ -7,6 +7,7 @@
     SearchSuggestionMode,
     SortRule,
     WindowConfig,
+    WindowEffect,
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
   import { updateSliderTrack } from "$lib/utils/format";
@@ -825,6 +826,30 @@
         class="transparency-slider"
         bind:this={transparencyEl}
       />
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
+        <div>
+          <strong>{_t("general.windowEffect")}</strong>
+          <p>{_t("general.windowEffectDescription")}</p>
+        </div>
+      </div>
+      <select
+        class="theme-select"
+        value={s.windowEffect}
+        aria-label={_t("general.windowEffect")}
+        onchange={(e) =>
+          generalSettings.updateSetting(
+            "windowEffect",
+            (e.target as HTMLSelectElement).value as WindowEffect,
+          )}
+      >
+        <option value="off">{_t("general.windowEffectOff")}</option>
+        <option value="acrylic">{_t("general.windowEffectAcrylic")}</option>
+        <option value="mica">{_t("general.windowEffectMica")}</option>
+      </select>
     </section>
 
     <section class="setting-card toggle-card">

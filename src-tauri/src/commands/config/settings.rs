@@ -1,9 +1,6 @@
 use std::sync::Mutex;
 
-use tauri::Emitter;
-
-#[cfg(target_os = "windows")]
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::config::{ConfigStore, GeneralConfig};
 use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
@@ -42,6 +39,7 @@ pub fn set_general_settings(
 
     let _ = app.emit("general-settings-changed", &saved);
     apply_window_transparency_to_main(&app, saved.window_transparency);
+    apply_window_effect_to_main(&app, &saved.window_effect);
     Ok(saved)
 }
 
@@ -67,6 +65,15 @@ pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (app, percent);
+    }
+}
+
+pub fn apply_window_effect_to_main(app: &tauri::AppHandle, effect: &str) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if let Err(error) = crate::platform::apply_window_effect(&window, effect) {
+        eprintln!("[window] failed to apply window effect: {error}");
     }
 }
 

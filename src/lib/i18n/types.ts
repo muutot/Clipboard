@@ -412,6 +412,11 @@ export interface LocaleDefinition {
     fontSizeCardPreviewDescription: string;
     windowTransparency: string;
     windowTransparencyDescription: string;
+    windowEffect: string;
+    windowEffectDescription: string;
+    windowEffectOff: string;
+    windowEffectAcrylic: string;
+    windowEffectMica: string;
     compactMode: string;
     compactModeDescription: string;
     launchAtStartup: string;

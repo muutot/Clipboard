@@ -34,6 +34,7 @@ ctrlc = "3"
 open = "5"
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
+window-vibrancy = "0.6"
 oar-ocr = { version = "0.8", features = ["download-binaries", "auto-download"] }
 reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls"] }
 ort = "=2.0.0-rc.12"

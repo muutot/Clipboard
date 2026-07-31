@@ -200,6 +200,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["透明", "opacity"],
   ),
   entry(
+    "general.window-effect",
+    { section: "general_window" },
+    i18n("general.windowEffect"),
+    i18n("general.windowEffectDescription"),
+    ["毛玻璃", "玻璃", "acrylic", "mica", "frosted", "blur"],
+  ),
+  entry(
     "general.compact-mode",
     { section: "compact" },
     i18n("general.compactMode"),

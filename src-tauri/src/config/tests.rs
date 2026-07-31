@@ -31,6 +31,8 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["fontSizes"]["secondary"], 11);
     assert_eq!(saved["general"]["display"]["showSecondaryText"], true);
     assert_eq!(saved["general"]["display"]["maxTextLines"], 3);
+    assert_eq!(saved["general"]["windowTransparency"], 95);
+    assert_eq!(saved["general"]["windowEffect"], "off");
     assert_eq!(saved["general"]["compactMode"], false);
     assert_eq!(saved["general"]["showToastNotifications"], true);
     assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
@@ -59,6 +61,7 @@ fn persists_general_settings_as_one_configuration_group() {
     settings.search_suggestion_mode = "inline".to_owned();
     settings.search_history_enabled = true;
     settings.show_settings_close_button = false;
+    settings.window_effect = "acrylic".to_owned();
 
     store.set_general_settings(settings.clone()).unwrap();
 
@@ -75,6 +78,7 @@ fn persists_general_settings_as_one_configuration_group() {
     assert_eq!(saved["general"]["display"]["maxTextLines"], 7);
     assert_eq!(saved["general"]["compactMode"], true);
     assert_eq!(saved["general"]["showToastNotifications"], false);
+    assert_eq!(saved["general"]["windowEffect"], "acrylic");
     assert_eq!(saved["general"]["theme"], "light");
     assert_eq!(saved["general"]["imageFullscreenMode"], "desktop");
     assert_eq!(saved["general"]["viewerBackdropOpacity"], 64);

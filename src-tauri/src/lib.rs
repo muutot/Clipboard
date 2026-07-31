@@ -715,6 +715,7 @@ pub fn run() {
 
             let launch_at_startup = config.launch_at_startup();
             let startup_transparency = config.general_settings().window_transparency;
+            let startup_window_effect = config.general_settings().window_effect.clone();
             app.manage(Mutex::new(config));
             app.manage(paths);
             app.manage(database);
@@ -782,6 +783,7 @@ pub fn run() {
             app.manage(Mutex::new(hotkey_manager));
 
             apply_window_transparency_to_main(app.handle(), startup_transparency);
+            apply_window_effect_to_main(app.handle(), &startup_window_effect);
 
             Ok(())
         })
