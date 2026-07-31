@@ -510,6 +510,22 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "检查数据库完整性并尝试修复",
     ["修复数据库", "SQLite", "integrity"],
   ),
+  entry(
+    "storage.transfer",
+    { section: "storage_tools" },
+    i18n("storage.transferTitle"),
+    i18n("storage.transferDesc"),
+    [
+      i18n("storage.exportLabel"),
+      i18n("storage.importLabel"),
+      i18n("storage.exportAction"),
+      i18n("storage.importAction"),
+      "备份",
+      "JSON",
+      "CSV",
+      "backup",
+    ],
+  ),
 
   entry(
     "keyboard.config-file",

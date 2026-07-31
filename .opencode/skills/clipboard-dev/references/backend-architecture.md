@@ -115,6 +115,8 @@ Keep shared degradation capabilities accurate in `RuntimeInfo`; never expose an 
 
 A CLI/API action that writes to the system clipboard must follow the same self-trigger and metadata-preservation rules as the GUI.
 
+`export/` owns `write_export_file` (creates parent directories and writes export output). Both the CLI and the file-backed Tauri commands in `commands/export.rs` (`export_to_file`, `import_from_file`) reuse it; the GUI import emits `clipboard-history-invalidated` after a successful import so the main window refreshes.
+
 ## Unified shutdown
 
 `stop_runtime_services()` stops cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, and local API services. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray instead.

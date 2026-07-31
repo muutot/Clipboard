@@ -1,28 +1,36 @@
 use serde::Serialize;
+use tauri::Emitter;
 
+use crate::commands::clipboard::ClipboardHistoryInvalidated;
 use crate::export::{
-    export_database, import_from_json, import_from_plain_text, ExportFormat, ExportOptions,
-    ImportSummary,
+    export_database, import_from_json, import_from_plain_text, write_export_file, ExportFormat,
+    ExportOptions, ImportSummary,
 };
 use crate::storage::Database;
 
-#[tauri::command]
-pub fn export_clipboard_items(
-    database: tauri::State<'_, Database>,
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportFileResult {
+    path: String,
     format: String,
+    byte_count: usize,
+}
+
+fn build_export_options(
+    format: &str,
     include_favorites: Option<bool>,
     date_from_ms: Option<i64>,
     date_to_ms: Option<i64>,
     content_types: Option<Vec<String>>,
-) -> Result<String, String> {
-    let export_format = match format.as_str() {
+) -> Result<ExportOptions, String> {
+    let export_format = match format {
         "json" => ExportFormat::Json,
         "csv" => ExportFormat::Csv,
         "plainText" => ExportFormat::PlainText,
         other => return Err(format!("unknown export format: {other}")),
     };
 
-    let options = ExportOptions {
+    Ok(ExportOptions {
         format: export_format,
         include_favorites: include_favorites.unwrap_or(true),
         date_from_ms,
@@ -35,9 +43,72 @@ pub fn export_clipboard_items(
                 "file".to_owned(),
             ]
         }),
-    };
+    })
+}
 
+#[tauri::command]
+pub fn export_clipboard_items(
+    database: tauri::State<'_, Database>,
+    format: String,
+    include_favorites: Option<bool>,
+    date_from_ms: Option<i64>,
+    date_to_ms: Option<i64>,
+    content_types: Option<Vec<String>>,
+) -> Result<String, String> {
+    let options = build_export_options(
+        &format,
+        include_favorites,
+        date_from_ms,
+        date_to_ms,
+        content_types,
+    )?;
     export_database(database.inner(), &options)
+}
+
+fn export_database_to_path(
+    database: &Database,
+    path: &str,
+    format: &str,
+    include_favorites: Option<bool>,
+    date_from_ms: Option<i64>,
+    date_to_ms: Option<i64>,
+    content_types: Option<Vec<String>>,
+) -> Result<ExportFileResult, String> {
+    let options = build_export_options(
+        format,
+        include_favorites,
+        date_from_ms,
+        date_to_ms,
+        content_types,
+    )?;
+    let content = export_database(database, &options)?;
+    write_export_file(path, &content)?;
+    Ok(ExportFileResult {
+        path: path.to_owned(),
+        format: format.to_owned(),
+        byte_count: content.len(),
+    })
+}
+
+#[tauri::command]
+pub fn export_to_file(
+    database: tauri::State<'_, Database>,
+    path: String,
+    format: String,
+    include_favorites: Option<bool>,
+    date_from_ms: Option<i64>,
+    date_to_ms: Option<i64>,
+    content_types: Option<Vec<String>>,
+) -> Result<ExportFileResult, String> {
+    export_database_to_path(
+        database.inner(),
+        &path,
+        &format,
+        include_favorites,
+        date_from_ms,
+        date_to_ms,
+        content_types,
+    )
 }
 
 #[tauri::command]
@@ -63,6 +134,36 @@ pub fn import_clipboard_items(
         }
         other => Err(format!("unknown import format: {other}")),
     }
+}
+
+fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSummary, String> {
+    let content =
+        std::fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))?;
+    let is_json =
+        path.to_ascii_lowercase().ends_with(".json") || content.trim_start().starts_with('[');
+    if is_json {
+        import_from_json(&content, database)
+    } else {
+        import_from_plain_text(&content, database)
+    }
+}
+
+#[tauri::command]
+pub fn import_from_file(
+    database: tauri::State<'_, Database>,
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<ImportSummary, String> {
+    let summary = import_database_from_path(database.inner(), &path)?;
+    if summary.imported_count > 0 {
+        let _ = app.emit(
+            "clipboard-history-invalidated",
+            ClipboardHistoryInvalidated {
+                deleted_ids: Vec::new(),
+            },
+        );
+    }
+    Ok(summary)
 }
 
 #[tauri::command]
@@ -92,4 +193,141 @@ pub struct ExportFormatInfo {
     id: String,
     label: String,
     extension: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::ClipboardRepository;
+
+    fn sample_items() -> Vec<ClipboardItem> {
+        vec![
+            ClipboardItem {
+                id: "item-1".to_owned(),
+                kind: ClipboardKind::Text,
+                title: "Hello".to_owned(),
+                text_content: Some("Hello, world!".to_owned()),
+                resource_path: None,
+                preview_path: None,
+                content_hash: "abc".to_owned(),
+                source_app: Some("Notepad".to_owned()),
+                size_bytes: 13,
+                created_at_ms: 1000,
+                last_used_at_ms: None,
+                is_favorite: true,
+                icon_path: None,
+                metadata_json: None,
+            },
+            ClipboardItem {
+                id: "item-2".to_owned(),
+                kind: ClipboardKind::Link,
+                title: "Example".to_owned(),
+                text_content: Some("https://example.com".to_owned()),
+                resource_path: None,
+                preview_path: None,
+                content_hash: "def".to_owned(),
+                source_app: Some("Chrome".to_owned()),
+                size_bytes: 19,
+                created_at_ms: 2000,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            },
+        ]
+    }
+
+    #[test]
+    fn build_export_options_maps_formats_and_defaults() {
+        let options = build_export_options("json", None, None, None, None).unwrap();
+        assert_eq!(options.format, ExportFormat::Json);
+        assert!(options.include_favorites);
+        assert_eq!(
+            options.content_types,
+            vec![
+                "text".to_owned(),
+                "link".to_owned(),
+                "image".to_owned(),
+                "file".to_owned()
+            ]
+        );
+        assert!(options.date_from_ms.is_none());
+        assert!(options.date_to_ms.is_none());
+
+        assert_eq!(
+            build_export_options("csv", None, None, None, None)
+                .unwrap()
+                .format,
+            ExportFormat::Csv
+        );
+        assert_eq!(
+            build_export_options("plainText", None, None, None, None)
+                .unwrap()
+                .format,
+            ExportFormat::PlainText
+        );
+        assert!(build_export_options("yaml", None, None, None, None).is_err());
+    }
+
+    #[test]
+    fn export_to_path_writes_the_selected_format() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        for item in sample_items() {
+            crate::storage::ClipboardRepository::save_item(&database, &item).unwrap();
+        }
+        let path =
+            std::env::temp_dir().join(format!("clipboard-export-test-{}.json", std::process::id()));
+
+        let result = export_database_to_path(
+            &database,
+            path.to_str().unwrap(),
+            "json",
+            Some(true),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(result.format, "json");
+        assert_eq!(
+            result.byte_count,
+            std::fs::metadata(&path).unwrap().len() as usize
+        );
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("item-1"));
+        assert!(content.contains("Hello, world!"));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn import_from_path_detects_json_by_extension() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let json = serde_json::to_string(&sample_items()).unwrap();
+        let path =
+            std::env::temp_dir().join(format!("clipboard-import-test-{}.json", std::process::id()));
+        std::fs::write(&path, json).unwrap();
+
+        let summary = import_database_from_path(&database, path.to_str().unwrap()).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(summary.skipped_count, 0);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn import_from_path_falls_back_to_plain_text() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let path =
+            std::env::temp_dir().join(format!("clipboard-import-test-{}.txt", std::process::id()));
+        std::fs::write(&path, "first chunk\n---\nsecond chunk\n").unwrap();
+
+        let summary = import_database_from_path(&database, path.to_str().unwrap()).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(database.item_count().unwrap(), 2);
+
+        let _ = std::fs::remove_file(&path);
+    }
 }

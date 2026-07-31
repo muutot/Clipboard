@@ -19,15 +19,15 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 `StorageSettingsDialog.svelte` is the parent shell for modal and standalone settings. Its primary categories and current secondary sections are:
 
-| Primary category | Secondary sections / implementation                                                          |
-| ---------------- | -------------------------------------------------------------------------------------------- |
-| General          | Window, Search, Items, Display → `GeneralSettingsPanel`                                      |
-| Appearance       | Theme, Font, Compact → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel` |
-| Capture          | Single current section → `IgnoredAppsSettingsPanel`                                          |
-| Storage          | Paths, Limits, Tools → built into the parent                                                 |
-| Keyboard         | Item, Quick, System → `KeyboardSettingsPanel` with category prop                             |
-| OCR              | Single current section → built into the parent                                               |
-| Statistics       | Storage, Performance, Memory → built into the parent                                         |
+| Primary category | Secondary sections / implementation                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| General          | Window, Search, Items, Display → `GeneralSettingsPanel`                                                 |
+| Appearance       | Theme, Font, Compact → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`            |
+| Capture          | Single current section → `IgnoredAppsSettingsPanel`                                                     |
+| Storage          | Paths, Limits, Tools (icon cache, search index, database repair, import/export) → built into the parent |
+| Keyboard         | Item, Quick, System → `KeyboardSettingsPanel` with category prop                                        |
+| OCR              | Single current section → built into the parent                                                          |
+| Statistics       | Storage, Performance, Memory → built into the parent                                                    |
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 

@@ -1,9 +1,7 @@
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
-use crate::export::{export_database, ExportFormat, ExportOptions};
+use crate::export::{export_database, write_export_file, ExportFormat, ExportOptions};
 use crate::storage::{ClipboardRepository, Database};
 
 mod api;
@@ -191,18 +189,6 @@ fn parse_export_format(format: &str) -> Result<ExportFormat, String> {
         "text" | "txt" | "plain" | "plaintext" | "plain-text" => Ok(ExportFormat::PlainText),
         other => Err(format!("unknown export format: {other}")),
     }
-}
-
-fn write_export_file(path: &str, output: &str) -> Result<(), String> {
-    let path = Path::new(path);
-    if let Some(parent) = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create export directory: {error}"))?;
-    }
-    std::fs::write(path, output).map_err(|error| format!("failed to write export: {error}"))
 }
 
 pub(crate) fn build_text_clipboard_item(

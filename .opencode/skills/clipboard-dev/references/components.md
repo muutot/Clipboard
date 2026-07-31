@@ -83,7 +83,7 @@ This is the settings shell and an integration hotspot. It owns:
 - modal versus standalone sizing;
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
 - composition of child settings panels with `showHeader={false}`;
-- built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, and restart-required flows;
+- built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
 - the `--settings-*` semantic metrics consumed by child panels.
 
 Do not treat its long scoped style block as a copy template. Use `settings-shared.css` and `settings-panels.md` for approved reusable primitives.

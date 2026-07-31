@@ -36,13 +36,13 @@ Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDe
 
 ## Invoke-wrapper services
 
-| Service       | Responsibility                                                                                                              | Runtime fallback                     |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `storage.ts`  | storage status/config, per-kind stats/deletion, path changes, search rebuild/validation, DB repair, performance, icon files | nullable/empty values where declared |
-| `keyboard.ts` | get/configure/delete/reset arrays of shortcuts by action                                                                    | nullable or command result           |
-| `capture.ts`  | discovered apps, current ignore config, update ignored applications                                                         | nullable or command result           |
-| `memory.ts`   | process-group/system/OCR memory diagnostics                                                                                 | `null` outside Tauri                 |
-| `runtime.ts`  | safe `isTauriRuntime` detection and runtime capability query                                                                | static browser fallback/`null`       |
+| Service       | Responsibility                                                                                                                                                                                          | Runtime fallback                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `storage.ts`  | storage status/config, per-kind stats/deletion, path changes, search rebuild/validation, DB repair, performance, icon files, export/import (`get_export_formats`, `export_to_file`, `import_from_file`) | nullable/empty values where declared |
+| `keyboard.ts` | get/configure/delete/reset arrays of shortcuts by action                                                                                                                                                | nullable or command result           |
+| `capture.ts`  | discovered apps, current ignore config, update ignored applications                                                                                                                                     | nullable or command result           |
+| `memory.ts`   | process-group/system/OCR memory diagnostics                                                                                                                                                             | `null` outside Tauri                 |
+| `runtime.ts`  | safe `isTauriRuntime` detection and runtime capability query                                                                                                                                            | static browser fallback/`null`       |
 
 Do not silently return `null` from a new wrapper unless the caller can distinguish “not in Tauri” from a command failure. Preserve the existing wrapper's error semantics when extending it.
 

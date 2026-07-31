@@ -68,15 +68,15 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 
 ## Event contract
 
-| Event                           | Producer                           | Consumer/purpose                                                   |
-| ------------------------------- | ---------------------------------- | ------------------------------------------------------------------ |
-| `clipboard-item-added`          | capture/write backend              | main route inserts or replaces the saved record                    |
-| `clipboard-history-invalidated` | destructive storage-kind operation | main route removes IDs and resets affected pagination/search state |
-| `general-settings-changed`      | authoritative config save          | settings stores in other WebviewWindows                            |
-| `settings-font-changed`         | font panel                         | main route live font/display synchronization                       |
-| `tray-open-settings`            | tray backend                       | main route opens settings                                          |
-| `viewer:open`                   | detail panel                       | dedicated viewer window                                            |
-| `ppocr-download-progress`       | OCR installer                      | settings UI download progress                                      |
+| Event                           | Producer                                                             | Consumer/purpose                                                   |
+| ------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `clipboard-item-added`          | capture/write backend                                                | main route inserts or replaces the saved record                    |
+| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`) | main route removes IDs and resets affected pagination/search state |
+| `general-settings-changed`      | authoritative config save                                            | settings stores in other WebviewWindows                            |
+| `settings-font-changed`         | font panel                                                           | main route live font/display synchronization                       |
+| `tray-open-settings`            | tray backend                                                         | main route opens settings                                          |
+| `viewer:open`                   | detail panel                                                         | dedicated viewer window                                            |
+| `ppocr-download-progress`       | OCR installer                                                        | settings UI download progress                                      |
 
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function.
 

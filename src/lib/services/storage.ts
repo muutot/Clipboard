@@ -84,6 +84,24 @@ export interface SearchSyncSummary {
   lastSequence: number | null;
 }
 
+export interface ExportFormatInfo {
+  id: string;
+  label: string;
+  extension: string;
+}
+
+export interface ExportFileResult {
+  path: string;
+  format: string;
+  byteCount: number;
+}
+
+export interface ImportSummary {
+  importedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
 export type StorageKind = "text" | "link" | "image" | "file";
 
 export interface StorageKindStats {
@@ -214,4 +232,28 @@ export async function deleteIconFiles(names: string[]): Promise<number> {
   }
 
   return invoke<number>("delete_icon_files", { names });
+}
+
+export async function getExportFormats(): Promise<ExportFormatInfo[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<ExportFormatInfo[]>("get_export_formats");
+}
+
+export async function exportToFile(path: string, format: string): Promise<ExportFileResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("Export is only available in the desktop app");
+  }
+
+  return invoke<ExportFileResult>("export_to_file", { path, format });
+}
+
+export async function importFromFile(path: string): Promise<ImportSummary> {
+  if (!isTauriRuntime()) {
+    throw new Error("Import is only available in the desktop app");
+  }
+
+  return invoke<ImportSummary>("import_from_file", { path });
 }

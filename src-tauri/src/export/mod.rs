@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ClipboardItem;
@@ -205,6 +207,18 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
         skipped_count: skipped,
         errors,
     })
+}
+
+pub(crate) fn write_export_file(path: &str, output: &str) -> Result<(), String> {
+    let path = Path::new(path);
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create export directory: {error}"))?;
+    }
+    std::fs::write(path, output).map_err(|error| format!("failed to write export: {error}"))
 }
 
 fn clipboard_kind_name(kind: crate::domain::ClipboardKind) -> &'static str {

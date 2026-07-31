@@ -33,6 +33,13 @@
   } from "$lib/services/storage";
   import { getMemoryDiagnostics } from "$lib/services/memory";
   import type { MemoryDiagnostics } from "$lib/types/memory";
+  import { isTauriRuntime } from "$lib/services/runtime";
+  import {
+    exportToFile,
+    getExportFormats,
+    importFromFile,
+    type ExportFormatInfo,
+  } from "$lib/services/storage";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
   import {
@@ -83,6 +90,10 @@
   let selectedIconFiles = $state<Set<string>>(new Set());
   let deletingIcons = $state(false);
   let showIconManager = $state(false);
+  let exportFormats = $state<ExportFormatInfo[]>([]);
+  let exportFormat = $state("json");
+  let exporting = $state(false);
+  let importing = $state(false);
 
   $effect(() => {
     if (feedback) {
@@ -544,6 +555,84 @@
     }
   }
 
+  async function loadExportFormats(): Promise<void> {
+    try {
+      const formats = await getExportFormats();
+      exportFormats = formats;
+      if (formats.length > 0 && !formats.some((format) => format.id === exportFormat)) {
+        exportFormat = formats[0].id;
+      }
+    } catch (error) {
+      console.error("Unable to load export formats", error);
+      exportFormats = [];
+    }
+  }
+
+  async function handleExport() {
+    if (!isTauriRuntime() || exporting || importing) return;
+    const format = exportFormats.find((entry) => entry.id === exportFormat);
+    if (!format) return;
+    exporting = true;
+    feedback = "";
+    feedbackSuccess = false;
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const filePath = await save({
+        defaultPath: `clipboard-export${format.extension}`,
+        filters: [{ name: format.label, extensions: [format.extension.slice(1)] }],
+      });
+      if (!filePath) return;
+      const result = await exportToFile(filePath, format.id);
+      feedback = _t("storage.exportSuccess", {
+        path: result.path,
+        size: formatBytes(result.byteCount),
+      });
+      feedbackSuccess = true;
+    } catch (error) {
+      feedback = _t("storage.exportFailed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      exporting = false;
+    }
+  }
+
+  async function handleImport() {
+    if (!isTauriRuntime() || exporting || importing) return;
+    importing = true;
+    feedback = "";
+    feedbackSuccess = false;
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const filePath = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: _t("storage.importFilterName"), extensions: ["json", "txt"] }],
+      });
+      if (!filePath) return;
+      const result = await importFromFile(filePath);
+      if (result.errors.length > 0) {
+        feedback = _t("storage.importPartial", {
+          imported: result.importedCount,
+          skipped: result.skippedCount,
+          error: result.errors[0],
+        });
+      } else {
+        feedback = _t("storage.importSuccess", {
+          imported: result.importedCount,
+          skipped: result.skippedCount,
+        });
+        feedbackSuccess = true;
+      }
+    } catch (error) {
+      feedback = _t("storage.importFailed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      importing = false;
+    }
+  }
+
   let ocrEngine = $state("ppocr");
   let ocrEngineAvailable = $state(false);
   let ocrHasEngine = $state(false);
@@ -601,6 +690,7 @@
   $effect(() => {
     if (open) {
       void loadStatus();
+      void loadExportFormats();
     }
   });
 
@@ -2202,6 +2292,47 @@
             </section>
           {/if}
           {#if activeSection === "storage_tools"}
+            <section class="setting-card">
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.transferTitle")}</strong>
+                  <p>{_t("storage.transferDesc")}</p>
+                </div>
+              </div>
+              <div class="dir-input-row">
+                <span class="transfer-label">{_t("storage.exportLabel")}</span>
+                <select
+                  class="transfer-select"
+                  bind:value={exportFormat}
+                  disabled={exporting || importing || exportFormats.length === 0}
+                >
+                  {#each exportFormats as format (format.id)}
+                    <option value={format.id}>{format.label}</option>
+                  {/each}
+                </select>
+                <button
+                  type="button"
+                  class="settings-action-btn"
+                  disabled={exporting || importing || exportFormats.length === 0}
+                  onclick={handleExport}
+                >
+                  {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
+                </button>
+              </div>
+              <div class="dir-input-row">
+                <span class="transfer-label">{_t("storage.importLabel")}</span>
+                <button
+                  type="button"
+                  class="settings-action-btn"
+                  disabled={exporting || importing}
+                  onclick={handleImport}
+                >
+                  {importing ? _t("storage.importing") : _t("storage.importAction")}
+                </button>
+              </div>
+            </section>
+
             <section class="setting-card">
               <div class="toggle-card">
                 <div class="setting-heading">
@@ -3852,6 +3983,23 @@
   }
 
   .dir-input-row button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .transfer-label {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: var(--settings-description-size);
+  }
+
+  .transfer-select {
+    width: 120px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+
+  .transfer-select:disabled {
     opacity: 0.55;
     cursor: default;
   }
