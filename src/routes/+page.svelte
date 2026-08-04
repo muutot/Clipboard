@@ -3545,8 +3545,10 @@
     position: absolute;
     z-index: 100;
     top: calc(100% + 4px);
-    left: 0;
+    right: 0;
+    width: max-content;
     min-width: 150px;
+    max-width: calc(100vw - 16px);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: var(--surface-bg);
@@ -3569,6 +3571,7 @@
     background: transparent;
     text-align: left;
     font-size: 12px;
+    white-space: nowrap;
     cursor: pointer;
   }
 
