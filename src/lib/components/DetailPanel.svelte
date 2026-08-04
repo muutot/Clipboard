@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon, { type IconName } from "$lib/components/AppIcon.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
@@ -856,11 +857,15 @@
                 <div class="detail-row">
                   <dt><AppIcon name="file" size={14} /> {_t("detail.file")}</dt>
                   <dd>
-                    <select class="settings-select file-selector" bind:value={selectedFileIndex}>
-                      {#each resourceFiles as file, index}
-                        <option value={index}>{file.name}</option>
-                      {/each}
-                    </select>
+                    <CustomSelect
+                      className="file-selector"
+                      value={selectedFileIndex}
+                      options={resourceFiles.map((file, index) => ({
+                        value: index,
+                        label: file.name,
+                      }))}
+                      onchange={(v) => (selectedFileIndex = v as number)}
+                    />
                   </dd>
                 </div>
               {/if}
@@ -1639,7 +1644,7 @@
     min-width: 0;
   }
 
-  .file-selector {
+  :global(.file-selector) {
     width: 100%;
   }
 

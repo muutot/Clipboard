@@ -2,6 +2,7 @@
   import { onDestroy, tick } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
@@ -1703,33 +1704,40 @@
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
           <span class="setting-label">OCR 引擎</span>
-          <select
-            class="settings-select ocr-engine-select"
-            bind:value={ocrEngine}
-            onchange={() => saveOcrEngine(ocrEngine)}
-          >
-            <option value="ppocr">PP-OCRv6</option>
-            <option value="tesseract">Tesseract</option>
-          </select>
+          <CustomSelect
+            className="ocr-engine-select"
+            value={ocrEngine}
+            options={[
+              { value: "ppocr", label: "PP-OCRv6" },
+              { value: "tesseract", label: "Tesseract" },
+            ]}
+            onchange={(v) => saveOcrEngine(v as string)}
+          />
         </section>
 
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
           <span class="setting-label">模型</span>
-          <select
-            bind:value={modelVariant}
-            class="settings-select ocr-model-select"
+          <CustomSelect
+            className="ocr-model-select"
+            value={modelVariant}
             disabled={ocrInstalling}
-          >
-            <option value="tiny">tiny (~6MB){installedVariants.includes("tiny") ? " ✓" : ""}</option
-            >
-            <option value="small"
-              >small (~30MB){installedVariants.includes("small") ? " ✓" : ""}</option
-            >
-            <option value="medium"
-              >medium (~135MB){installedVariants.includes("medium") ? " ✓" : ""}</option
-            >
-          </select>
+            options={[
+              {
+                value: "tiny",
+                label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ✓" : ""}`,
+              },
+              {
+                value: "small",
+                label: `small (~30MB)${installedVariants.includes("small") ? " ✓" : ""}`,
+              },
+              {
+                value: "medium",
+                label: `medium (~135MB)${installedVariants.includes("medium") ? " ✓" : ""}`,
+              },
+            ]}
+            onchange={(v) => (modelVariant = v as string)}
+          />
           {#if installedVariants.includes(modelVariant)}
             <button
               type="button"
@@ -2460,16 +2468,16 @@
                   </div>
                 </div>
                 <div class="transfer-actions">
-                  <select
-                    class="settings-select"
-                    bind:value={exportFormat}
+                  <CustomSelect
+                    value={exportFormat}
                     disabled={exporting || importing || exportFormats.length === 0}
-                    aria-label={_t("storage.exportLabel")}
-                  >
-                    {#each exportFormats as format (format.id)}
-                      <option value={format.id}>{format.label}</option>
-                    {/each}
-                  </select>
+                    ariaLabel={_t("storage.exportLabel")}
+                    options={exportFormats.map((format) => ({
+                      value: format.id,
+                      label: format.label,
+                    }))}
+                    onchange={(v) => (exportFormat = v as string)}
+                  />
                   <button
                     type="button"
                     class="settings-action-btn"
@@ -2687,16 +2695,17 @@
                 oninput={updateMaxFileSizeFromDisplay}
                 onchange={saveMaxFileCopySize}
               />
-              <select
-                class="settings-select unit-select"
-                bind:value={maxFileCopySizeUnit}
-                onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}
-              >
-                <option value="byte">B</option>
-                <option value="KB">KB</option>
-                <option value="MB">MB</option>
-                <option value="GB">GB</option>
-              </select>
+              <CustomSelect
+                className="unit-select"
+                value={maxFileCopySizeUnit}
+                options={[
+                  { value: "byte", label: "B" },
+                  { value: "KB", label: "KB" },
+                  { value: "MB", label: "MB" },
+                  { value: "GB", label: "GB" },
+                ]}
+                onchange={(v) => changeFileSizeUnit(v as "byte" | "KB" | "MB" | "GB")}
+              />
             </section>
 
             <section class="setting-card storage-kind-delete-card">
@@ -3265,12 +3274,12 @@
     font-size: var(--settings-description-size);
   }
 
-  .ocr-engine-select {
+  :global(.ocr-engine-select) {
     flex: 1;
     max-width: 180px;
   }
 
-  .ocr-model-select {
+  :global(.ocr-model-select) {
     flex: 1;
     max-width: 200px;
   }
@@ -4054,7 +4063,7 @@
       color 100ms ease;
   }
 
-  .setting-card-row .settings-select {
+  :global(.setting-card-row .settings-select) {
     height: 34px;
     box-sizing: border-box;
   }
@@ -4171,7 +4180,7 @@
     flex-shrink: 0;
   }
 
-  .transfer-actions .settings-select {
+  :global(.transfer-actions .settings-select) {
     width: 116px;
     height: 34px;
     flex-shrink: 0;
@@ -4309,11 +4318,14 @@
     grid-row: 1 / span 2;
   }
 
-  .unit-select {
+  :global(.unit-select) {
     width: 64px;
-    padding: 6px 22px 6px 6px;
+  }
+
+  :global(.unit-select .settings-select) {
+    justify-content: center;
+    padding-right: 10px;
     text-align: center;
-    text-align-last: center;
   }
 
   .restart-btn {

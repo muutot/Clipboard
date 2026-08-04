@@ -205,21 +205,90 @@ header p {
   cursor: default;
 }
 
-.settings-select option {
+/* custom popover select (mirrors main page dropdown) */
+.custom-select {
+  position: relative;
+  display: inline-flex;
+}
+
+.custom-select.popover-open .settings-select {
+  border-color: var(--text-faint);
+}
+
+.custom-select .settings-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding-right: 10px;
+  background-image: none;
+}
+
+.custom-select .settings-select > :global(svg) {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  transition: color 120ms ease;
+}
+
+.custom-select .custom-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-popover {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 150px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   background: var(--surface-bg);
-  color: var(--text-secondary);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.custom-select-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+}
+
+.custom-select-popover button {
+  display: flex;
+  align-items: center;
+  width: 100%;
   padding: 7px 12px;
-  font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.settings-select option:hover {
-  background: var(--hover-bg);
+.custom-select-popover button:hover {
   color: var(--text-primary);
+  background: var(--hover-bg);
 }
 
-.settings-select option:checked {
-  background: color-mix(in srgb, var(--selection-color) 8%, transparent);
+.custom-select-popover button.selected {
   color: var(--selection-color);
+  background: color-mix(in srgb, var(--selection-color) 8%, transparent);
+}
+
+.custom-select-popover button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.custom-select-popover button:disabled:hover {
+  color: var(--text-secondary);
+  background: transparent;
 }
 
 /* ── transparency / range slider ── */

@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
   import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
@@ -212,11 +213,16 @@
         <p>{_t("theme.themeModeDescription")}</p>
       </div>
     </div>
-    <select
-      class="settings-select"
+    <CustomSelect
       value={themeDropdownValue}
-      onchange={(e) => {
-        const val = (e.target as HTMLSelectElement).value;
+      ariaLabel={_t("theme.themeMode")}
+      options={[
+        { value: "dark", label: _t("theme.dark") },
+        { value: "light", label: _t("theme.light") },
+        ...(activePreset ? [{ value: activePreset.id, label: activePreset.name }] : []),
+        { value: "custom", label: _t("theme.custom") },
+      ]}
+      onchange={(val) => {
         if (val === "dark" || val === "light") {
           changeTheme(val);
         } else if (val === "custom") {
@@ -228,14 +234,7 @@
           if (preset) applyPreset(preset);
         }
       }}
-    >
-      <option value="dark">{_t("theme.dark")}</option>
-      <option value="light">{_t("theme.light")}</option>
-      {#if activePreset}
-        <option value={activePreset.id}>{activePreset.name}</option>
-      {/if}
-      <option value="custom">{_t("theme.custom")}</option>
-    </select>
+    />
   </section>
 
   {#if isReadonly}

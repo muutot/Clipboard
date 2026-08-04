@@ -1,5 +1,6 @@
-﻿<script lang="ts">
+<script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
   import type {
@@ -160,7 +161,7 @@
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);
     locale.set(lang);
-    showFeedback(_t(lang === "zh-CN" ? "已切换至中文" : "Switched to English"), true);
+    showFeedback(_t(lang === "zh-CN" ? "���л�������" : "Switched to English"), true);
   }
 
   function handleTransparency(event: Event) {
@@ -219,7 +220,7 @@
     </div>
     {#if s.showSettingsCloseButton}
       <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-        >×</button
+        >��</button
       >
     {/if}
   </header>
@@ -235,20 +236,17 @@
           <p>{_t("general.searchSuggestionModeDescription")}</p>
         </div>
       </div>
-      <select
-        class="settings-select"
+      <CustomSelect
         value={s.searchSuggestionMode}
-        aria-label={_t("general.searchSuggestionMode")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "searchSuggestionMode",
-            (e.target as HTMLSelectElement).value as SearchSuggestionMode,
-          )}
-      >
-        <option value="off">{_t("general.searchSuggestionOff")}</option>
-        <option value="panel">{_t("general.searchSuggestionPanel")}</option>
-        <option value="inline">{_t("general.searchSuggestionInline")}</option>
-      </select>
+        ariaLabel={_t("general.searchSuggestionMode")}
+        options={[
+          { value: "off", label: _t("general.searchSuggestionOff") },
+          { value: "panel", label: _t("general.searchSuggestionPanel") },
+          { value: "inline", label: _t("general.searchSuggestionInline") },
+        ]}
+        onchange={(v) =>
+          generalSettings.updateSetting("searchSuggestionMode", v as SearchSuggestionMode)}
+      />
     </section>
 
     <section class="setting-card toggle-card">
@@ -327,26 +325,23 @@
               <span class="grip-dot"></span>
               <span class="grip-dot"></span>
             </span>
-            <select
-              class="settings-select sort-field-select"
+            <CustomSelect
+              className="sort-field-select"
               value={rule.field}
-              aria-label={_t("general.searchSortRules")}
-              onchange={(e) => {
+              ariaLabel={_t("general.searchSortRules")}
+              options={ALL_SORT_FIELDS.map((f) => ({
+                value: f,
+                label: _t(SORT_FIELD_LABELS[f]),
+                disabled: s.searchSortRules.some(
+                  (r: SortRule, i: number) => i !== idx && r.field === f,
+                ),
+              }))}
+              onchange={(v) => {
                 const newRules = [...s.searchSortRules];
-                newRules[idx] = {
-                  ...rule,
-                  field: (e.target as HTMLSelectElement).value as SortRule["field"],
-                };
+                newRules[idx] = { ...rule, field: v as SortRule["field"] };
                 generalSettings.updateSetting("searchSortRules", newRules);
               }}
-            >
-              {#each ALL_SORT_FIELDS as f}
-                {@const usedByOthers = s.searchSortRules.some(
-                  (r: SortRule, i: number) => i !== idx && r.field === f,
-                )}
-                <option value={f} disabled={usedByOthers}>{_t(SORT_FIELD_LABELS[f])}</option>
-              {/each}
-            </select>
+            />
             <button
               type="button"
               class="sort-direction-btn"
@@ -361,7 +356,7 @@
                 generalSettings.updateSetting("searchSortRules", newRules);
               }}
             >
-              {rule.direction === "asc" ? "↑" : "↓"}
+              {rule.direction === "asc" ? "��" : "��"}
             </button>
             {#if s.searchSortRules.length > 1}
               <button
@@ -372,7 +367,7 @@
                 onclick={() => {
                   const newRules = s.searchSortRules.filter((_, i) => i !== idx);
                   generalSettings.updateSetting("searchSortRules", newRules);
-                }}>×</button
+                }}>��</button
               >
             {/if}
           </div>
@@ -494,19 +489,15 @@
           <p>{_t("general.searchCacheEvictionDescription")}</p>
         </div>
       </div>
-      <select
-        class="settings-select"
+      <CustomSelect
         value={s.searchCacheEviction}
-        aria-label={_t("general.searchCacheEviction")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "searchCacheEviction",
-            (e.target as HTMLSelectElement).value as "fifo" | "lru",
-          )}
-      >
-        <option value="fifo">{_t("general.searchCacheEvictionFifo")}</option>
-        <option value="lru">{_t("general.searchCacheEvictionLru")}</option>
-      </select>
+        ariaLabel={_t("general.searchCacheEviction")}
+        options={[
+          { value: "fifo", label: _t("general.searchCacheEvictionFifo") },
+          { value: "lru", label: _t("general.searchCacheEvictionLru") },
+        ]}
+        onchange={(v) => generalSettings.updateSetting("searchCacheEviction", v as "fifo" | "lru")}
+      />
     </section>
 
     <section class="setting-card toggle-card">
@@ -517,19 +508,16 @@
           <p>{_t("general.searchIndexSyncModeDescription")}</p>
         </div>
       </div>
-      <select
-        class="settings-select"
+      <CustomSelect
         value={s.searchIndexSyncMode}
-        aria-label={_t("general.searchIndexSyncMode")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "searchIndexSyncMode",
-            (e.target as HTMLSelectElement).value as "lazy" | "background",
-          )}
-      >
-        <option value="lazy">{_t("general.searchIndexSyncModeLazy")}</option>
-        <option value="background">{_t("general.searchIndexSyncModeBackground")}</option>
-      </select>
+        ariaLabel={_t("general.searchIndexSyncMode")}
+        options={[
+          { value: "lazy", label: _t("general.searchIndexSyncModeLazy") },
+          { value: "background", label: _t("general.searchIndexSyncModeBackground") },
+        ]}
+        onchange={(v) =>
+          generalSettings.updateSetting("searchIndexSyncMode", v as "lazy" | "background")}
+      />
     </section>
   {:else if section === "display"}
     <section class="setting-card toggle-card">
@@ -592,19 +580,16 @@
           <p>{_t("general.detailDisplayModeDescription")}</p>
         </div>
       </div>
-      <select
-        class="settings-select"
+      <CustomSelect
         value={s.detailDisplayMode}
-        aria-label={_t("general.detailDisplayMode")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "detailDisplayMode",
-            (e.target as HTMLSelectElement).value as "overlay" | "split",
-          )}
-      >
-        <option value="overlay">{_t("general.detailDisplayModeOverlay")}</option>
-        <option value="split">{_t("general.detailDisplayModeSplit")}</option>
-      </select>
+        ariaLabel={_t("general.detailDisplayMode")}
+        options={[
+          { value: "overlay", label: _t("general.detailDisplayModeOverlay") },
+          { value: "split", label: _t("general.detailDisplayModeSplit") },
+        ]}
+        onchange={(v) =>
+          generalSettings.updateSetting("detailDisplayMode", v as "overlay" | "split")}
+      />
     </section>
 
     <section class="setting-card toggle-card">
@@ -665,19 +650,16 @@
           <p>{_t("general.cardActionsDisplayDescription")}</p>
         </div>
       </div>
-      <select
-        class="settings-select"
+      <CustomSelect
         value={s.cardActionsDisplay}
-        aria-label={_t("general.cardActionsDisplay")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "cardActionsDisplay",
-            (e.target as HTMLSelectElement).value as CardActionsDisplay,
-          )}
-      >
-        <option value="hover">{_t("general.cardActionsHover")}</option>
-        <option value="always">{_t("general.cardActionsAlways")}</option>
-      </select>
+        ariaLabel={_t("general.cardActionsDisplay")}
+        options={[
+          { value: "hover", label: _t("general.cardActionsHover") },
+          { value: "always", label: _t("general.cardActionsAlways") },
+        ]}
+        onchange={(v) =>
+          generalSettings.updateSetting("cardActionsDisplay", v as CardActionsDisplay)}
+      />
     </section>
 
     <section class="setting-card toggle-card">
@@ -875,7 +857,7 @@
         <button
           type="button"
           class:active={s.language === "zh-CN"}
-          onclick={() => changeLanguage("zh-CN")}>中文</button
+          onclick={() => changeLanguage("zh-CN")}>����</button
         >
         <button
           type="button"
@@ -912,20 +894,16 @@
           <p>{_t("general.windowEffectDescription")}</p>
         </div>
       </div>
-      <select
-        class="settings-select"
+      <CustomSelect
         value={s.windowEffect}
-        aria-label={_t("general.windowEffect")}
-        onchange={(e) =>
-          generalSettings.updateSetting(
-            "windowEffect",
-            (e.target as HTMLSelectElement).value as WindowEffect,
-          )}
-      >
-        <option value="off">{_t("general.windowEffectOff")}</option>
-        <option value="acrylic">{_t("general.windowEffectAcrylic")}</option>
-        <option value="mica">{_t("general.windowEffectMica")}</option>
-      </select>
+        ariaLabel={_t("general.windowEffect")}
+        options={[
+          { value: "off", label: _t("general.windowEffectOff") },
+          { value: "acrylic", label: _t("general.windowEffectAcrylic") },
+          { value: "mica", label: _t("general.windowEffectMica") },
+        ]}
+        onchange={(v) => generalSettings.updateSetting("windowEffect", v as WindowEffect)}
+      />
     </section>
 
     <section class="setting-card toggle-card">
@@ -1204,7 +1182,7 @@
     display: block;
   }
 
-  .sort-field-select {
+  :global(.sort-field-select) {
     flex: 1;
     min-width: 0;
   }
