@@ -128,15 +128,6 @@ pub fn search_clipboard_items(
     sort_rules: Option<Vec<SearchSortRule>>,
 ) -> Result<Vec<ClipboardItem>, String> {
     let started = Instant::now();
-    let page_size = limit.unwrap_or(100).clamp(1, 500);
-    let page_offset = offset.unwrap_or(0);
-
-    let rules = sort_rules.unwrap_or_else(|| {
-        vec![SearchSortRule {
-            field: SearchSortField::CreatedAt,
-            direction: SearchSortDirection::Desc,
-        }]
-    });
 
     let (max_results, sync_mode) = {
         let config = config
@@ -147,6 +138,16 @@ pub fn search_clipboard_items(
             config.search_index_sync_mode(),
         )
     };
+
+    let page_size = limit.unwrap_or(100).clamp(1, max_results);
+    let page_offset = offset.unwrap_or(0);
+
+    let rules = sort_rules.unwrap_or_else(|| {
+        vec![SearchSortRule {
+            field: SearchSortField::CreatedAt,
+            direction: SearchSortDirection::Desc,
+        }]
+    });
 
     // Drain pending search-outbox events so newly captured or mutated items
     // are reflected in Tantivy before querying. The outbox is populated by
