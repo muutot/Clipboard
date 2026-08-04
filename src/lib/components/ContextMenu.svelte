@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { IconName } from "$lib/components/AppIcon.svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath($messages, path, params);
 
   export interface ContextMenuItem {
     id: string;
@@ -60,7 +64,7 @@
   style:left="{posX || x}px"
   style:top="{posY || y}px"
   role="menu"
-  aria-label="上下文菜单"
+  aria-label={_t("actions.contextMenu")}
 >
   {#each items as item}
     <button

@@ -33,6 +33,7 @@
   interface SystemAction {
     id: string;
     labelKey?: string;
+    descKey?: string;
     description: string;
     icon: IconName;
     defaults: string[];
@@ -44,7 +45,8 @@
     {
       id: "copyItem",
       labelKey: "keyboard.copyItem",
-      description: "复制当前选中的条目到剪贴板",
+      descKey: "keyboard.copyItemDesc",
+      description: "",
       icon: "copy",
       defaults: ["Ctrl+C"],
       cat: "item",
@@ -52,7 +54,8 @@
     {
       id: "deleteItem",
       labelKey: "keyboard.deleteItem",
-      description: "删除当前选中的条目",
+      descKey: "keyboard.deleteItemDesc",
+      description: "",
       icon: "trash",
       defaults: ["Ctrl+D"],
       cat: "item",
@@ -60,7 +63,8 @@
     {
       id: "favoriteItem",
       labelKey: "keyboard.favoriteItem",
-      description: "收藏或取消收藏当前条目",
+      descKey: "keyboard.favoriteItemDesc",
+      description: "",
       icon: "star",
       defaults: ["Ctrl+F"],
       cat: "item",
@@ -68,7 +72,8 @@
     {
       id: "editItem",
       labelKey: "keyboard.editItem",
-      description: "编辑当前条目的标题",
+      descKey: "keyboard.editItemDesc",
+      description: "",
       icon: "edit",
       defaults: ["Ctrl+E"],
       cat: "item",
@@ -76,7 +81,8 @@
     {
       id: "openDetail",
       labelKey: "keyboard.openDetail",
-      description: "预览当前条目的详情",
+      descKey: "keyboard.viewDetailDesc",
+      description: "",
       icon: "eye",
       defaults: ["Space"],
       cat: "item",
@@ -84,7 +90,8 @@
     {
       id: "downloadItem",
       labelKey: "keyboard.downloadItem",
-      description: "保存图片或文件到本地",
+      descKey: "keyboard.saveItemDesc",
+      description: "",
       icon: "download",
       defaults: ["Ctrl+S"],
       cat: "item",
@@ -92,7 +99,8 @@
     {
       id: "selectAll",
       labelKey: "keyboard.selectAll",
-      description: "全选列表中的所有条目",
+      descKey: "keyboard.selectAllDesc",
+      description: "",
       icon: "check",
       defaults: ["Ctrl+A"],
       cat: "item",
@@ -100,70 +108,80 @@
     {
       id: "quickPaste",
       labelKey: "keyboard.quickPaste",
-      description: "将当前条目快速粘贴到上一个活跃窗口",
+      descKey: "keyboard.pasteToWindowDesc",
+      description: "",
       icon: "clipboard",
       defaults: [],
       cat: "item",
     },
     {
       id: "quickCopy1",
-      description: "快速复制列表第 1 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+1"],
       cat: "quick",
     },
     {
       id: "quickCopy2",
-      description: "快速复制列表第 2 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+2"],
       cat: "quick",
     },
     {
       id: "quickCopy3",
-      description: "快速复制列表第 3 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+3"],
       cat: "quick",
     },
     {
       id: "quickCopy4",
-      description: "快速复制列表第 4 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+4"],
       cat: "quick",
     },
     {
       id: "quickCopy5",
-      description: "快速复制列表第 5 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+5"],
       cat: "quick",
     },
     {
       id: "quickCopy6",
-      description: "快速复制列表第 6 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+6"],
       cat: "quick",
     },
     {
       id: "quickCopy7",
-      description: "快速复制列表第 7 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+7"],
       cat: "quick",
     },
     {
       id: "quickCopy8",
-      description: "快速复制列表第 8 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+8"],
       cat: "quick",
     },
     {
       id: "quickCopy9",
-      description: "快速复制列表第 9 条",
+      descKey: "keyboard.quickCopyDesc",
+      description: "",
       icon: "clipboard",
       defaults: ["Ctrl+9"],
       cat: "quick",
@@ -171,7 +189,8 @@
     {
       id: "toggleWindow",
       labelKey: "keyboard.toggleWindow",
-      description: "唤起或隐藏主窗口（系统全局热键）",
+      descKey: "keyboard.toggleWindowDesc",
+      description: "",
       icon: "eye",
       defaults: ["Alt+V"],
       cat: "system",
@@ -180,7 +199,8 @@
     {
       id: "focusSearch",
       labelKey: "keyboard.focusSearch",
-      description: "聚焦搜索输入框",
+      descKey: "keyboard.focusSearchDesc",
+      description: "",
       icon: "search",
       defaults: ["/", "Ctrl+K"],
       cat: "system",
@@ -197,8 +217,17 @@
       if (label) return label;
     }
     const m = action.id.match(/^quickCopy(\d+)$/);
-    if (m) return `快速复制 #${m[1]}`;
+    if (m) return _t("keyboard.quickCopyDesc", { n: Number(m[1]) });
     return action.id;
+  }
+
+  function actionDesc(action: SystemAction): string {
+    if (action.descKey) {
+      const m = action.id.match(/^quickCopy(\d+)$/);
+      if (m) return _t(action.descKey as keyof typeof $messages, { n: Number(m[1]) });
+      return _t(action.descKey as keyof typeof $messages);
+    }
+    return action.description;
   }
 
   function bindingsFor(action: string): string[] {
@@ -363,10 +392,10 @@
             <strong>
               {actionLabel(action)}
               {#if action.system}
-                <span class="system-badge">系统</span>
+                <span class="system-badge">{_t("keyboard.systemBadge")}</span>
               {/if}
             </strong>
-            <p>{action.description}</p>
+            <p>{actionDesc(action)}</p>
           </div>
         </div>
         <div class="shortcut-bindings">
@@ -393,12 +422,12 @@
               </div>
             {/each}
           {:else}
-            <span class="binding-disabled">未绑定</span>
+            <span class="binding-disabled">{_t("keyboard.bindingDisabled")}</span>
           {/if}
 
           {#if recordingAction === action.id}
             <div class="binding-chip recording">
-              <kbd>按下快捷键…</kbd>
+              <kbd>{_t("keyboard.pressKey")}</kbd>
               <button type="button" class="binding-chip-close" onclick={stopRecording}
                 >&times;</button
               >

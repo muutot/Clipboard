@@ -1655,7 +1655,7 @@
     const container = document.createElement("div");
     container.className = "desktop-viewer";
     container.innerHTML = `
-      <button class="desktop-viewer-close" aria-label="关闭">
+      <button class="desktop-viewer-close" aria-label={_t("actions.closeViewer")}>
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M18 6 6 18" /><path d="m6 6 12 12" />
         </svg>
@@ -2752,7 +2752,7 @@
   <header
     class="search-header"
     role="presentation"
-    aria-label="拖拽窗口"
+    aria-label={_t("actions.dragWindow")}
     onmousedown={(e) => {
       if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
     }}
@@ -2864,7 +2864,7 @@
   <div
     class="toolbar"
     role="presentation"
-    aria-label="拖拽窗口"
+    aria-label={_t("actions.dragWindow")}
     onmousedown={(e) => {
       if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
     }}

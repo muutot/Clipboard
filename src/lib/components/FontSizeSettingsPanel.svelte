@@ -232,7 +232,7 @@
     {/each}
   {/if}
 
-  <p class="auto-save-note">修改即时生效，无需手动保存</p>
+  <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>
 
 <style>

@@ -630,8 +630,8 @@
           <span class="file-icon"><AppIcon name="file" size={15} /></span>
           {#if item.fileMeta && item.fileMeta.length > 1}
             <span
-              >{item.fileMeta[0].name}{item.fileMeta.length > 2 ? `, ${item.fileMeta[1].name}` : ""} 等
-              {item.fileMeta.length} 个文件</span
+              >{item.fileMeta[0].name}{item.fileMeta.length > 2 ? `, ${item.fileMeta[1].name}` : ""}
+              {_t("card.fileCountSuffix", { count: item.fileMeta.length })}</span
             >
           {:else}
             <span>{item.fileName ?? item.title}</span>
@@ -765,8 +765,8 @@
           {#if item.deleted && onrestore}
             <button
               type="button"
-              title="恢复"
-              aria-label="恢复"
+              title={_t("card.restore")}
+              aria-label={_t("card.restore")}
               onclick={(event) => runCardAction("restore", event)}
               ><AppIcon name="restore" size={16} /></button
             >
@@ -791,7 +791,11 @@
   {:else}
     <div class="edit-area">
       {#if item.customTitle}
-        <input class="edit-title-input" bind:value={editTitle} placeholder="标题" />
+        <input
+          class="edit-title-input"
+          bind:value={editTitle}
+          placeholder={_t("card.editTitlePlaceholder")}
+        />
       {/if}
       <textarea
         bind:value={editContent}

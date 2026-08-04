@@ -251,7 +251,7 @@
       <div class="preset-save-row">
         {#if activePreset && presetColorsDiffer}
           <button class="preset-save-btn update-btn" type="button" onclick={updatePreset}>
-            更新 "{activePreset.name}"
+            {_t("theme.updatePreset")} "{activePreset.name}"
           </button>
         {/if}
         <input

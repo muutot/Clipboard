@@ -1314,7 +1314,7 @@
       </div>
     </div>
 
-    <nav class="settings-primary-nav" aria-label="设置分类">
+    <nav class="settings-primary-nav" aria-label={_t("storage.navAriaLabel")}>
       <button
         class:active={activeSection === "general_search" ||
           activeSection === "general_items" ||
@@ -1342,7 +1342,7 @@
         onclick={() => (activeSection = "capture")}
       >
         <AppIcon name="filter" size={16} />
-        <span>采集</span>
+        <span>{_t("storage.captureTab")}</span>
       </button>
       <button
         class:active={activeSection === "storage_paths" ||
@@ -1378,7 +1378,7 @@
         onclick={() => (activeSection = "statistics")}
       >
         <AppIcon name="bar-chart" size={16} />
-        <span>统计</span>
+        <span>{_t("storage.statisticsTab")}</span>
       </button>
       <button
         class:active={activeSection === "about"}
@@ -1463,7 +1463,7 @@
             <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
             <div>
               <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
-              <p>快捷键配置独立于常规设置保存</p>
+              <p>{_t("storage.keyboardConfigNote")}</p>
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
@@ -1479,7 +1479,8 @@
               {_t("keyboard.openFile") || "打开文件"}
             </button>
             <button type="button" class="config-bar-btn" onclick={() => handleResetKeyboard()}>
-              <AppIcon name="restore" size={13} /> 重置所有
+              <AppIcon name="restore" size={13} />
+              {_t("storage.resetAll")}
             </button>
           </div>
         </section>
@@ -1703,7 +1704,7 @@
       <div class="settings-scroll">
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-          <span class="setting-label">OCR 引擎</span>
+          <span class="setting-label">{_t("storage.ocrEngineLabel")}</span>
           <CustomSelect
             className="ocr-engine-select"
             value={ocrEngine}
@@ -1717,7 +1718,7 @@
 
         <section class="setting-card setting-card-row">
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-          <span class="setting-label">模型</span>
+          <span class="setting-label">{_t("storage.ocrModelLabel")}</span>
           <CustomSelect
             className="ocr-model-select"
             value={modelVariant}
@@ -1744,15 +1745,17 @@
               disabled={ocrInstalling || activeVariant === modelVariant}
               onclick={applyModel}
             >
-              {activeVariant === modelVariant ? "已应用" : "应用"}
+              {activeVariant === modelVariant
+                ? _t("storage.ocrModelApplied")
+                : _t("storage.ocrModelApply")}
             </button>
           {:else}
             <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
               {ocrInstalling
                 ? ocrProgressPct >= 0
                   ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%`
-                  : "下载中..."
-                : "下载"}
+                  : _t("storage.ocrModelInstalling")
+                : _t("storage.ocrModelDownload")}
             </button>
           {/if}
         </section>
@@ -1761,14 +1764,14 @@
           <div class="setting-heading">
             <span class="setting-icon"><AppIcon name="search" size={17} /></span>
             <div>
-              <strong>检测参数</strong>
-              <p>调整文本区域检测参数，影响空格与换行的识别</p>
+              <strong>{_t("storage.ocrDetectionTitle")}</strong>
+              <p>{_t("storage.ocrDetectionDesc")}</p>
             </div>
           </div>
           <div class="ocr-parameter-grid">
             <div class="ocr-parameter">
               <label class="ocr-parameter-label" for="det-score">
-                <span>分数阈值 (score)</span>
+                <span>{_t("storage.ocrScoreThreshold")}</span>
                 <span class="ocr-parameter-value">{detScoreThreshold.toFixed(2)}</span>
               </label>
               <input
@@ -1783,12 +1786,12 @@
                 onchange={() => saveDetConfig()}
               />
               <div class="ocr-parameter-scale">
-                <span>低 (更多区域)</span><span>高 (更少区域)</span>
+                <span>{_t("storage.ocrLow")}</span><span>{_t("storage.ocrHigh")}</span>
               </div>
             </div>
             <div class="ocr-parameter">
               <label class="ocr-parameter-label" for="det-box">
-                <span>框阈值 (box)</span>
+                <span>{_t("storage.ocrBoxThreshold")}</span>
                 <span class="ocr-parameter-value">{detBoxThreshold.toFixed(2)}</span>
               </label>
               <input
@@ -1803,12 +1806,12 @@
                 onchange={() => saveDetConfig()}
               />
               <div class="ocr-parameter-scale">
-                <span>低 (更多区域)</span><span>高 (更少区域)</span>
+                <span>{_t("storage.ocrLow")}</span><span>{_t("storage.ocrHigh")}</span>
               </div>
             </div>
             <div class="ocr-parameter">
               <label class="ocr-parameter-label" for="det-unclip">
-                <span>扩展比例 (unclip)</span>
+                <span>{_t("storage.ocrUnclip")}</span>
                 <span class="ocr-parameter-value">{detUnclipRatio.toFixed(1)}</span>
               </label>
               <input
@@ -1823,7 +1826,7 @@
                 onchange={() => saveDetConfig()}
               />
               <div class="ocr-parameter-scale">
-                <span>小 (区域更紧凑)</span><span>大 (区域更宽松, 合并空格)</span>
+                <span>{_t("storage.ocrSmall")}</span><span>{_t("storage.ocrLarge")}</span>
               </div>
             </div>
           </div>
@@ -1833,8 +1836,8 @@
           <div class="setting-heading">
             <span class="setting-icon"><AppIcon name="search" size={17} /></span>
             <div>
-              <strong>任务状态</strong>
-              <p>当前 OCR 队列与已识别统计</p>
+              <strong>{_t("storage.ocrTaskStatus")}</strong>
+              <p>{_t("storage.ocrTaskStatusDesc")}</p>
             </div>
           </div>
           <div class="ocr-stat-grid">
@@ -1872,7 +1875,7 @@
           </div>
         </section>
 
-        <p class="auto-save-note">修改即时生效，无需手动保存</p>
+        <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
       </div>
       {#if feedback}
         <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
@@ -1885,8 +1888,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>总记录数</strong>
-                  <p>数据库中保留的全部记录</p>
+                  <strong>{_t("statistics.totalRecords")}</strong>
+                  <p>{_t("storage.totalRecordsDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{status.itemCount}</span>
@@ -1896,8 +1899,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="text" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>文本</strong>
-                  <p>纯文本记录数量</p>
+                  <strong>{_t("statistics.text")}</strong>
+                  <p>{_t("storage.textDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{status.textCount}</span>
@@ -1907,8 +1910,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="link" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>链接</strong>
-                  <p>链接记录数量</p>
+                  <strong>{_t("statistics.link")}</strong>
+                  <p>{_t("storage.linkDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{status.linkCount}</span>
@@ -1918,12 +1921,14 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="image" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>图片</strong>
-                  <p>托管图片数量与占用空间</p>
+                  <strong>{_t("statistics.image")}</strong>
+                  <p>{_t("storage.imageDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
-                >{status.imageCount} 张 · {formatBytes(status.imageSizeBytes)}</span
+                >{status.imageCount}{_t("storage.imageCountUnit")} · {formatBytes(
+                  status.imageSizeBytes,
+                )}</span
               >
             </section>
 
@@ -1931,12 +1936,14 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="file" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>文件</strong>
-                  <p>托管文件数量与占用空间</p>
+                  <strong>{_t("statistics.file")}</strong>
+                  <p>{_t("storage.fileDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
-                >{status.fileCount} 个 · {formatBytes(status.fileSizeBytes)}</span
+                >{status.fileCount}{_t("storage.fileCountUnit")} · {formatBytes(
+                  status.fileSizeBytes,
+                )}</span
               >
             </section>
 
@@ -1944,8 +1951,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="file" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>数据库</strong>
-                  <p>SQLite 数据库文件大小</p>
+                  <strong>{_t("statistics.database")}</strong>
+                  <p>{_t("storage.dbDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{formatBytes(status.databaseSizeBytes)}</span>
@@ -1955,26 +1962,26 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="search" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>搜索索引</strong>
-                  <p>用于全文搜索的索引文件大小</p>
+                  <strong>{_t("statistics.indexSize")}</strong>
+                  <p>{_t("storage.searchIndexDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{formatBytes(status.searchIndexSizeBytes)}</span>
             </section>
           {:else}
             <div class="settings-state stats-empty-state">
-              {loading ? "正在读取存储统计..." : "存储统计暂不可用"}
+              {loading ? _t("storage.statsLoading") : _t("storage.statsUnavailable")}
             </div>
           {/if}
-          <p class="auto-save-note">统计数据来自当前项目存储</p>
+          <p class="auto-save-note">{_t("storage.statsNote")}</p>
         {:else if activeStatisticsTab === "performance"}
           {#if perfMetrics}
             <section class="setting-card stats-metric-card">
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>启动总耗时</strong>
-                  <p>应用完成初始化所需时间</p>
+                  <strong>{_t("storage.startupTime")}</strong>
+                  <p>{_t("storage.startupTimeDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{perfMetrics.startup.totalStartupMs}ms</span>
@@ -1984,8 +1991,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="file" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>数据库打开</strong>
-                  <p>打开本地 SQLite 数据库所需时间</p>
+                  <strong>{_t("storage.dbOpenTime")}</strong>
+                  <p>{_t("storage.dbOpenTimeDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{perfMetrics.startup.dbOpenMs}ms</span>
@@ -1995,8 +2002,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="search" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>搜索初始化</strong>
-                  <p>加载搜索索引所需时间</p>
+                  <strong>{_t("storage.searchInitTime")}</strong>
+                  <p>{_t("storage.searchInitTimeDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{perfMetrics.startup.searchInitMs}ms</span>
@@ -2006,8 +2013,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>数据库迁移</strong>
-                  <p>启动时执行数据迁移所需时间</p>
+                  <strong>{_t("storage.dbMigrateTime")}</strong>
+                  <p>{_t("storage.dbMigrateTimeDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{perfMetrics.startup.migrationsMs}ms</span>
@@ -2017,8 +2024,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>运行时长</strong>
-                  <p>本次应用进程已运行时间</p>
+                  <strong>{_t("storage.uptime")}</strong>
+                  <p>{_t("storage.uptimeDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value">{perfMetrics.memory.uptimeSeconds}s</span>
@@ -2028,8 +2035,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>内存峰值</strong>
-                  <p>进程运行期间的最高内存占用</p>
+                  <strong>{_t("storage.memoryPeak")}</strong>
+                  <p>{_t("storage.memoryPeakDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
@@ -2042,8 +2049,8 @@
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="search" size={17} /></span>
                   <div class="stats-metric-copy">
-                    <strong>搜索次数</strong>
-                    <p>已纳入延迟统计的搜索次数</p>
+                    <strong>{_t("storage.searchCount")}</strong>
+                    <p>{_t("storage.searchCountDesc")}</p>
                   </div>
                 </div>
                 <span class="stats-metric-value">{perfMetrics.searchLatency.searchesRecorded}</span>
@@ -2053,8 +2060,8 @@
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
                   <div class="stats-metric-copy">
-                    <strong>平均搜索耗时</strong>
-                    <p>所有已记录搜索的平均耗时</p>
+                    <strong>{_t("storage.searchAvgTime")}</strong>
+                    <p>{_t("storage.searchAvgTimeDesc")}</p>
                   </div>
                 </div>
                 <span class="stats-metric-value"
@@ -2066,8 +2073,8 @@
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
                   <div class="stats-metric-copy">
-                    <strong>P95 搜索耗时</strong>
-                    <p>95% 的搜索会在此时间内完成</p>
+                    <strong>{_t("storage.searchP95Time")}</strong>
+                    <p>{_t("storage.searchP95TimeDesc")}</p>
                   </div>
                 </div>
                 <span class="stats-metric-value">{perfMetrics.searchLatency.p95Ms ?? "-"}ms</span>
@@ -2077,29 +2084,31 @@
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
                   <div class="stats-metric-copy">
-                    <strong>P99 搜索耗时</strong>
-                    <p>99% 的搜索会在此时间内完成</p>
+                    <strong>{_t("storage.searchP99Time")}</strong>
+                    <p>{_t("storage.searchP99TimeDesc")}</p>
                   </div>
                 </div>
                 <span class="stats-metric-value">{perfMetrics.searchLatency.p99Ms ?? "-"}ms</span>
               </section>
             {/if}
           {:else}
-            <div class="settings-state stats-empty-state">性能统计暂不可用</div>
+            <div class="settings-state stats-empty-state">{_t("storage.perfUnavailable")}</div>
           {/if}
-          <p class="auto-save-note">启动性能为应用初始化耗时，搜索延迟需触发搜索后统计</p>
+          <p class="auto-save-note">{_t("storage.perfNote")}</p>
         {:else}
           {#if memoryDiagnostics}
             <div class="memory-toolbar">
               <span class="memory-sampled-at"
-                >采样时间：{new Date(memoryDiagnostics.sampledAtMs).toLocaleTimeString()}</span
+                >{_t("storage.sampleTime")}{new Date(
+                  memoryDiagnostics.sampledAtMs,
+                ).toLocaleTimeString()}</span
               >
               <button
                 type="button"
                 class="memory-refresh"
                 onclick={() => void loadMemoryDiagnostics()}
               >
-                {memoryLoading ? "读取中…" : "立即刷新"}
+                {memoryLoading ? _t("storage.reading") : _t("storage.refreshNow")}
               </button>
             </div>
 
@@ -2107,8 +2116,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>应用进程工作集</strong>
-                  <p>Rust 主进程当前驻留内存，任务管理器中的 Clipboard 主项</p>
+                  <strong>{_t("storage.processWorkingSet")}</strong>
+                  <p>{_t("storage.processWorkingSetDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
@@ -2120,8 +2129,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="bar-chart" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>应用进程私有内存</strong>
-                  <p>不与其他进程共享的提交内存，更适合判断实际增长</p>
+                  <strong>{_t("storage.processPrivateMem")}</strong>
+                  <p>{_t("storage.processPrivateMemDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
@@ -2133,8 +2142,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>应用进程组工作集</strong>
-                  <p>主进程与 Settings/WebView 子进程合计</p>
+                  <strong>{_t("storage.processGroupWorkingSet")}</strong>
+                  <p>{_t("storage.processGroupWorkingSetDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
@@ -2146,8 +2155,8 @@
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
                 <div class="stats-metric-copy">
-                  <strong>系统可用内存</strong>
-                  <p>当前机器可供应用继续使用的物理内存</p>
+                  <strong>{_t("storage.systemAvailableMemory")}</strong>
+                  <p>{_t("storage.systemAvailableMemoryDesc")}</p>
                 </div>
               </div>
               <span class="stats-metric-value"
@@ -2162,8 +2171,8 @@
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="code" size={17} /></span>
                   <div class="stats-metric-copy">
-                    <strong>当前设置窗口 JS 堆</strong>
-                    <p>仅代表这个设置 WebView，不等于整个应用进程</p>
+                    <strong>{_t("storage.jsHeapTitle")}</strong>
+                    <p>{_t("storage.jsHeapDesc")}</p>
                   </div>
                 </div>
                 <span class="stats-metric-value"
@@ -2178,8 +2187,8 @@
               <div class="setting-heading">
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
                 <div>
-                  <strong>进程明细</strong>
-                  <p>用于判断内存主要落在主进程还是 WebView 子进程</p>
+                  <strong>{_t("storage.processDetail")}</strong>
+                  <p>{_t("storage.processDetailDesc")}</p>
                 </div>
               </div>
               <div class="memory-process-list">
@@ -2200,29 +2209,32 @@
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
                   <div class="stats-metric-copy">
-                    <strong>OCR 模型</strong>
+                    <strong>{_t("storage.ocrModelLabel")}</strong>
                     <p>
                       {memoryDiagnostics.ocr.engine} / {memoryDiagnostics.ocr.modelVariant}
-                      {memoryDiagnostics.ocr.loaded ? " · 模型文件已安装" : " · 模型文件未安装"}
+                      {memoryDiagnostics.ocr.loaded
+                        ? ` · ${_t("statistics.ocrEngineAvailable")}`
+                        : ` · ${_t("storage.ocrModelNotInstalled")}`}
                     </p>
                   </div>
                 </div>
                 <span class="stats-metric-value"
                   >{formatBytes(memoryDiagnostics.ocr.modelBytes)} · {memoryDiagnostics.ocr
-                    .modelFileCount} 个文件</span
+                    .modelFileCount}
+                  {_t("storage.ocrModelFileCount")}</span
                 >
               </section>
             {/if}
           {:else}
             <div class="settings-state stats-empty-state">
               {#if memoryError}
-                内存诊断不可用：{memoryError}
+                {_t("storage.memoryDiagUnavailable")}{memoryError}
               {:else}
-                {memoryLoading ? "正在读取内存诊断…" : "内存诊断暂不可用"}
+                {memoryLoading ? _t("storage.memoryDiagLoading") : _t("storage.memoryDiagEmpty")}
               {/if}
             </div>
           {/if}
-          <p class="auto-save-note">数据每 3 秒自动刷新；工作集与私有内存的统计口径不同</p>
+          <p class="auto-save-note">{_t("storage.memoryNote")}</p>
         {/if}
       </div>
     {:else if activeSection === "about"}
@@ -2310,14 +2322,15 @@
           {#if activeSection === "storage_paths"}
             <section class="setting-card setting-card-row">
               <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-              <span class="setting-label">常规配置文件</span>
+              <span class="setting-label">{_t("storage.currentProfile")}</span>
               <span class="config-path">{relativePath(status!.configPath)}</span>
               <button
                 type="button"
                 class="open-btn"
                 onclick={() => invoke("open_external_url", { url: status!.configPath })}
               >
-                <AppIcon name="file" size={14} /> 打开
+                <AppIcon name="file" size={14} />
+                {_t("storage.open")}
               </button>
             </section>
 
@@ -2354,10 +2367,12 @@
 
               {#if pending}
                 <div class="pending-path">
-                  <span>下次启动</span>
+                  <span>{_t("storage.nextLaunch")}</span>
                   <code title={pending.storagePath}>{pending.storagePath}</code>
                   {#if restartNeeded}
-                    <button class="restart-btn" type="button" onclick={restartApp}>立即重启</button>
+                    <button class="restart-btn" type="button" onclick={restartApp}
+                      >{_t("storage.restartNow")}</button
+                    >
                   {/if}
                 </div>
               {/if}
@@ -2441,20 +2456,7 @@
                   <p>{_t("storage.directoryTreeDesc")}</p>
                 </div>
               </div>
-              <pre>data/
-├─ conf/                           ← 配置文件
-│  ├─ conf.json                    ← 常规设置
-│  └─ keyboard.json                ← 快捷键
-├─ models/                         ← OCR 模型
-│  └─ ppocr/
-├─ image/                          ← 图片原图
-│  └─ previews/                    ← 缩略图
-├─ files/                          ← 文件副本
-├─ icons/                          ← 应用图标缓存
-└─ database/
-   ├─ clipboard.sqlite3            ← 剪贴板数据库
-   ├─ clipboard.sqlite3-wal        ← 预写日志
-    └─ search-index/                ← 全文搜索索引</pre>
+              <pre>{_t("storage.directoryTree")}</pre>
             </section>
           {/if}
           {#if activeSection === "storage_tools"}
@@ -2669,7 +2671,7 @@
                 step="100"
                 onchange={saveHistoryConfig}
               />
-              <span class="number-suffix">条</span>
+              <span class="number-suffix">{_t("storage.recordCountUnit")}</span>
             </section>
 
             <section class="setting-card setting-card-row">
@@ -2752,22 +2754,24 @@
           {#if activeSection === "storage_tools"}
             <section class="setting-card setting-card-row">
               <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-              <span class="setting-label">数据库维护</span>
+              <span class="setting-label">{_t("storage.databaseMaintenance")}</span>
               <button type="button" disabled={repairLoading} onclick={doRepair}>
-                {repairLoading ? "检查中..." : "修复数据库"}
+                {repairLoading ? _t("storage.checkingDatabase") : _t("storage.checkDatabase")}
               </button>
             </section>
             {#if repairResult}
               <div class="repair-result">
                 <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
-                  {repairResult.integrityOk ? "完整性正常" : "发现问题"}
+                  {repairResult.integrityOk
+                    ? _t("storage.integrityOk")
+                    : _t("storage.integrityProblem")}
                 </span>
                 <code>{repairResult.integrityMessage}</code>
               </div>
             {/if}
           {/if}
 
-          <p class="auto-save-note">修改即时生效，无需手动保存</p>
+          <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
         </div>
       {:else}
         <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
