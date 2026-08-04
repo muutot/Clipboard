@@ -45,6 +45,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 - **文本** / **链接** / **图片** / **文件** 四种内容类型
 - 智能内容识别：邮箱、电话、颜色值、日期、货币、IP
 - 快速操作：一键发邮件、拨号、打开链接、查看日期
+- 富文本（HTML）记录与**带格式粘贴**、**清洗并粘贴**（去除追踪参数与多余空白）
 - 内容哈希去重，避免重复记录
 - 自触发抑制，防止捕获自身写入
 - 历史上限 10,000 条 / 30 天保留（可配置）
@@ -81,9 +82,10 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 ### ⚙️ 完善设置
 
 - 双栏设置界面，分类导航 + 全局搜索
-- 通用 / 外观 / 键盘 / 存储 / OCR / 主题 / 忽略应用 / 统计
+- 常规 / 外观 / 采集 / 存储 / 快捷键 / OCR / 统计 / 关于
 - 5 级字体大小调节 + 像素输入
 - 性能监控面板（启动耗时、搜索延迟、内存占用）
+- 毛玻璃窗口特效、版本检查更新
 
 </td>
 </tr>
@@ -101,7 +103,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 
 - **CLI 命令行**：`clipboard search` / `clipboard list` / `clipboard copy`
 - **本地 API**：HTTP 接口供外部脚本调用
-- **导入导出**：JSON / CSV / 纯文本，支持类型和日期筛选
+- **导入导出**：JSON / CSV / 纯文本 GUI，支持收藏、内容类型与日期范围筛选
 - **快捷键系统**：全局热键 + 应用内快捷键 + 双击修饰键（Shift+Shift）
 
 ---
@@ -234,19 +236,25 @@ clipboard/
 │   └── src/
 │       ├── main.rs              # 入口
 │       ├── lib.rs               # 命令注册与应用初始化
+│       ├── cli/                 # CLI 命令行解析
+│       ├── commands/            # Tauri IPC 命令
+│       ├── config/              # 配置读写与默认值
 │       ├── domain/              # 领域模型
 │       ├── storage/             # SQLite 数据库与仓储
-│       ├── search/              # Tantivy 搜索引擎
+│       ├── search/              # Tantivy 搜索引擎与索引同步
 │       ├── ocr/                 # OCR 引擎与任务队列
 │       ├── keyboard/            # 快捷键解析匹配
 │       ├── platform/            # 平台适配（Windows / macOS / Linux）
-│       ├── content/             # 内容检测、哈希、缩略图
+│       ├── content/             # 内容检测、哈希、缩略图、清洗
 │       ├── privacy/             # 隐私管理
+│       ├── memory/              # 内存诊断
+│       ├── performance/         # 性能监控
 │       └── export/              # 导入导出
 ├── docs/                        # 设计文档
 │   ├── SEARCH.md                # 搜索架构
 │   ├── OCR.md                   # OCR 架构
-│   └── PITFALLS.md              # 开发陷阱与约定
+│   ├── PITFALLS.md              # 开发陷阱与约定
+│   └── SEARCH_OPTIMIZATION_REPORT.md # 搜索优化基准测试报告
 ├── static/                      # 静态资源
 ├── TODO.md                      # 项目路线图
 ├── CONTRIBUTING.md              # 贡献指南
@@ -257,14 +265,15 @@ clipboard/
 
 ## 文档
 
-| 文档                                                         | 内容                                          |
-| :----------------------------------------------------------- | :-------------------------------------------- |
-| [TODO.md](TODO.md)                                           | 项目路线图与进度追踪                          |
-| [CONTRIBUTING.md](CONTRIBUTING.md)                           | 开发环境搭建、编码规范、提交规范              |
-| [docs/SEARCH.md](docs/SEARCH.md)                             | 搜索架构：Tantivy 索引、N-gram 分词、查询策略 |
-| [docs/OCR.md](docs/OCR.md)                                   | OCR 管线：引擎选择、模型管理、任务队列        |
-| [docs/PITFALLS.md](docs/PITFALLS.md)                         | Svelte 5 / Tauri / Rust 开发陷阱              |
-| [docs/DEFAULTS_AND_PRIVACY.md](docs/DEFAULTS_AND_PRIVACY.md) | 默认策略与隐私边界                            |
+| 文档                                                                     | 内容                                          |
+| :----------------------------------------------------------------------- | :-------------------------------------------- |
+| [TODO.md](TODO.md)                                                       | 项目路线图与进度追踪                          |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                                       | 开发环境搭建、编码规范、提交规范              |
+| [docs/SEARCH.md](docs/SEARCH.md)                                         | 搜索架构：Tantivy 索引、N-gram 分词、查询策略 |
+| [docs/OCR.md](docs/OCR.md)                                               | OCR 管线：引擎选择、模型管理、任务队列        |
+| [docs/PITFALLS.md](docs/PITFALLS.md)                                     | Svelte 5 / Tauri / Rust 开发陷阱              |
+| [docs/DEFAULTS_AND_PRIVACY.md](docs/DEFAULTS_AND_PRIVACY.md)             | 默认策略与隐私边界                            |
+| [docs/SEARCH_OPTIMIZATION_REPORT.md](docs/SEARCH_OPTIMIZATION_REPORT.md) | 搜索优化对比测试报告                          |
 
 ---
 
@@ -285,3 +294,9 @@ clipboard/
 ## 许可证
 
 AGPL-3.0 © Clipboard Desktop Contributors
+
+---
+
+## 推广
+
+- [Linux.do](https://linux.do)
