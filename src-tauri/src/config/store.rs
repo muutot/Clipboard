@@ -342,9 +342,34 @@ impl ConfigStore {
                 object.remove("general");
             }
         }
-        fs::write(&self.path, serde_json::to_vec_pretty(&value)?)?;
-        Ok(())
+        atomic_write_json(&self.path, serde_json::to_vec_pretty(&value)?)
     }
+}
+
+fn atomic_write_json(path: &Path, contents: Vec<u8>) -> Result<(), StorageError> {
+    use std::io::Write;
+
+    let directory = path.parent().ok_or_else(|| {
+        StorageError::Io(std::io::Error::other("config file has no parent directory"))
+    })?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| StorageError::Io(std::io::Error::other("config file has no file name")))?;
+    let temporary_path = directory.join(format!(".{}.tmp", file_name.to_string_lossy()));
+
+    let result = (|| -> Result<(), StorageError> {
+        let mut file = fs::File::create(&temporary_path)?;
+        file.write_all(&contents)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary_path, path)?;
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary_path);
+    }
+    result
 }
 
 fn validate_resource_directory(

@@ -138,8 +138,29 @@ impl KeyboardConfigStore {
     }
 
     fn save(&self) -> Result<(), StorageError> {
-        fs::write(&self.path, serde_json::to_vec_pretty(&self.config)?)?;
-        Ok(())
+        use std::io::Write;
+
+        let directory = self.path.parent().ok_or_else(|| {
+            StorageError::Io(std::io::Error::other(
+                "keyboard config has no parent directory",
+            ))
+        })?;
+        let temporary_path = directory.join(".keyboard.json.tmp");
+        let contents = serde_json::to_vec_pretty(&self.config)?;
+
+        let result = (|| -> Result<(), StorageError> {
+            let mut file = fs::File::create(&temporary_path)?;
+            file.write_all(&contents)?;
+            file.sync_all()?;
+            drop(file);
+            fs::rename(&temporary_path, &self.path)?;
+            Ok(())
+        })();
+
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary_path);
+        }
+        result
     }
 }
 
