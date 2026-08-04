@@ -1,10 +1,11 @@
 #![windows_subsystem = "windows"]
 
 use std::ffi::OsString;
+use std::path::PathBuf;
 
 use clipboard_desktop_lib::cli::args::{parse_process_args, ProcessAction, CLI_USAGE};
 use clipboard_desktop_lib::cli::CliArgs;
-use clipboard_desktop_lib::storage::Database;
+use clipboard_desktop_lib::storage::{Database, StoragePaths};
 
 fn main() {
     let raw_args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -107,13 +108,16 @@ fn run_cli_process(args: &CliArgs) -> Result<(), String> {
     let project_directory = executable
         .parent()
         .ok_or_else(|| "executable has no parent directory".to_owned())?;
-    let database_path = project_directory
-        .join("storage")
-        .join("database")
-        .join("clipboard.sqlite3");
-    let database = Database::open(&database_path).map_err(|error| error.to_string())?;
     let config = clipboard_desktop_lib::config::ConfigStore::load(project_directory)
         .map_err(|error| error.to_string())?;
+    let paths = StoragePaths::initialize_with_resource_directories(
+        project_directory.to_path_buf(),
+        config.storage_directory().map(PathBuf::from),
+        config.image_storage_path().map(PathBuf::from),
+        config.file_storage_path().map(PathBuf::from),
+    )
+    .map_err(|error| error.to_string())?;
+    let database = Database::open(&paths.database).map_err(|error| error.to_string())?;
     let page_size_limit = config.page_size_limit();
     let search_page_size_limit = config.search_page_size_limit();
     let output = clipboard_desktop_lib::cli::run_cli_command(

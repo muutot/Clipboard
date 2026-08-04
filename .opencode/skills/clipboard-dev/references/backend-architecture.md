@@ -111,7 +111,7 @@ Keep shared degradation capabilities accurate in `RuntimeInfo`; never expose an 
 
 ## CLI and loopback API
 
-`main.rs` parses GUI versus process CLI execution. `cli/mod.rs` implements commands over the database. `cli/api.rs` starts only on explicit command, binds to `127.0.0.1`, accepts configured limits, and must retain a stoppable listener/thread lifecycle.
+`main.rs` parses GUI versus process CLI execution. `cli/mod.rs` implements commands over the database. The process CLI resolves the database path from the configured storage/data directory through the same `StoragePaths` used by the GUI, so a custom storage directory stays consistent between CLI and desktop. `cli/api.rs` starts only on explicit command, binds to `127.0.0.1`, accepts configured limits, and must retain a stoppable listener/thread lifecycle.
 
 A CLI/API action that writes to the system clipboard must follow the same self-trigger and metadata-preservation rules as the GUI.
 
