@@ -108,44 +108,52 @@ impl SearchRepository for Database {
             return Ok(Vec::new());
         }
 
-        self.with_connection(|connection| {
-            let placeholders = item_ids
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("?{}", i + 1))
-                .collect::<Vec<_>>()
-                .join(", ");
+        const LOOKUP_CHUNK_SIZE: usize = 500;
 
-            let sql = format!(
-                "SELECT
-                    clipboard_items.id,
-                    clipboard_items.kind,
-                    clipboard_items.title,
-                    clipboard_items.text_content,
-                    clipboard_items.source_app,
-                    CASE
-                        WHEN ocr_results.status = 'completed' THEN ocr_results.full_text
-                        ELSE NULL
-                    END,
-                    clipboard_items.created_at_ms,
-                    clipboard_items.is_favorite
-                 FROM clipboard_items
-                 LEFT JOIN ocr_results
-                    ON ocr_results.item_id = clipboard_items.id
-                 WHERE clipboard_items.id IN ({placeholders})
-                   AND clipboard_items.deleted = 0"
-            );
+        let mut documents = Vec::new();
+        for chunk in item_ids.chunks(LOOKUP_CHUNK_SIZE) {
+            let chunk_documents = self.with_connection(|connection| {
+                let placeholders = chunk
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("?{}", i + 1))
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-            let mut statement = connection.prepare(&sql)?;
-            let rows = statement
-                .query_map(
-                    rusqlite::params_from_iter(item_ids.iter().map(|id| id.as_ref())),
-                    SearchDocument::from_row,
-                )?
-                .collect::<Result<Vec<_>, _>>()?;
+                let sql = format!(
+                    "SELECT
+                        clipboard_items.id,
+                        clipboard_items.kind,
+                        clipboard_items.title,
+                        clipboard_items.text_content,
+                        clipboard_items.source_app,
+                        CASE
+                            WHEN ocr_results.status = 'completed' THEN ocr_results.full_text
+                            ELSE NULL
+                        END,
+                        clipboard_items.created_at_ms,
+                        clipboard_items.is_favorite
+                     FROM clipboard_items
+                     LEFT JOIN ocr_results
+                        ON ocr_results.item_id = clipboard_items.id
+                     WHERE clipboard_items.id IN ({placeholders})
+                       AND clipboard_items.deleted = 0"
+                );
 
-            Ok(rows)
-        })
+                let mut statement = connection.prepare(&sql)?;
+                let rows = statement
+                    .query_map(
+                        rusqlite::params_from_iter(chunk.iter().map(|id| id.as_ref())),
+                        SearchDocument::from_row,
+                    )?
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                Ok(rows)
+            })?;
+            documents.extend(chunk_documents);
+        }
+
+        Ok(documents)
     }
 
     fn acknowledge_search_outbox(&self, through_sequence: i64) -> Result<u64, StorageError> {
