@@ -239,27 +239,18 @@ header p {
   white-space: nowrap;
 }
 
-.custom-select-popover {
-  position: fixed;
+/* shared dropdown popover surface (settings + main page) */
+.popover-surface {
   z-index: 100;
   width: max-content;
-  min-width: 50px;
   max-width: calc(100vw - 16px);
-  max-height: 240px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--surface-bg);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
-  overflow-y: auto;
 }
 
-.custom-select-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-}
-
-.custom-select-popover button {
+.popover-surface button {
   display: flex;
   align-items: center;
   width: 100%;
@@ -273,24 +264,37 @@ header p {
   cursor: pointer;
 }
 
-.custom-select-popover button:hover {
+.popover-surface button:hover {
   color: var(--text-primary);
   background: var(--hover-bg);
 }
 
-.custom-select-popover button.selected {
+.popover-surface button.selected {
   color: var(--selection-color);
   background: color-mix(in srgb, var(--selection-color) 8%, transparent);
 }
 
-.custom-select-popover button:disabled {
+.popover-surface button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.custom-select-popover button:disabled:hover {
+.popover-surface button:disabled:hover {
   color: var(--text-secondary);
   background: transparent;
+}
+
+.custom-select-popover {
+  position: fixed;
+  min-width: 50px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.custom-select-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
 }
 
 /* ── transparency / range slider ── */

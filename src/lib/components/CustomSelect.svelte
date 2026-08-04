@@ -110,7 +110,7 @@
 
   {#if open}
     <div
-      class="custom-select-popover"
+      class="custom-select-popover popover-surface"
       role="listbox"
       aria-label={ariaLabel}
       style="top: {popoverTop}px; left: {popoverLeft}px; width: {popoverWidth}px;"

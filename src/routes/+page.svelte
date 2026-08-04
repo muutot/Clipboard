@@ -2905,7 +2905,7 @@
           <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
         </button>
         {#if sourceAppDropdownOpen}
-          <div class="dropdown-popover" role="menu">
+          <div class="dropdown-popover popover-surface" role="menu">
             <div
               class="dropdown-backdrop"
               onclick={() => (sourceAppDropdownOpen = false)}
@@ -2966,7 +2966,7 @@
           <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
         </button>
         {#if dateDropdownOpen}
-          <div class="dropdown-popover" role="menu">
+          <div class="dropdown-popover popover-surface" role="menu">
             <div
               class="dropdown-backdrop"
               onclick={() => (dateDropdownOpen = false)}
@@ -3543,16 +3543,9 @@
 
   .dropdown-popover {
     position: absolute;
-    z-index: 100;
     top: calc(100% + 4px);
     right: 0;
-    width: max-content;
     min-width: 100%;
-    max-width: calc(100vw - 16px);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--surface-bg);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
     overflow: hidden;
   }
 
@@ -3560,29 +3553,6 @@
     position: fixed;
     inset: 0;
     z-index: -1;
-  }
-
-  .dropdown-popover button {
-    display: block;
-    width: 100%;
-    padding: 7px 12px;
-    border: 0;
-    color: var(--text-secondary);
-    background: transparent;
-    text-align: left;
-    font-size: 12px;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .dropdown-popover button:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
-  .dropdown-popover button.selected {
-    color: var(--selection-color);
-    background: color-mix(in srgb, var(--selection-color) 8%, transparent);
   }
 
   .dropdown-search {
