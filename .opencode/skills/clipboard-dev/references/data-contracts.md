@@ -46,6 +46,8 @@ Schema changes require schema/migration logic, row mapping, repository tests, re
 
 The frontend `GeneralSettings` type/defaults/normalizer are richer than the explicit Rust `GeneralConfig` fields. Extra frontend keys are preserved through Rust's flattened map. Therefore a setting change must be checked in both places even when it appears to survive through `extra`: explicit Rust fields provide typed/defaulted backend behavior; flattened-only keys remain frontend-defined.
 
+`searchPlaceholder` is a flattened-only frontend string (default `""`, trimmed to 80 chars). It is not an explicit `GeneralConfig` member: the main search box uses `searchPlaceholder.trim() || localized app.searchPlaceholder` as its `placeholder`/`aria-label`, so an empty value falls back to the language-aware default. No backend change is needed for it.
+
 `search_index_sync_mode` is an explicit `GeneralConfig` member (values `"lazy"`/`"background"`, default `"lazy"`) with a typed `SearchIndexSyncMode` enum in `config/types.rs`; unknown values parse as `Lazy`. It selects between lazy outbox draining inside `search_clipboard_items` and the startup-created `SearchSyncWorker`, and takes effect on restart.
 
 ### Keyboard settings

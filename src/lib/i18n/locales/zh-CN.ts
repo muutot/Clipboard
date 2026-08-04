@@ -3,7 +3,7 @@ import type { LocaleDefinition } from "../types";
 const zhCN: LocaleDefinition = {
   app: {
     name: "Clipboard",
-    searchPlaceholder: "输入关键字，唤醒沉睡记忆",
+    searchPlaceholder: "唤醒记忆深处，拾起久违的片段",
     clearSearch: "清除搜索",
     recentRecords: "最近记录",
     noRecords: "暂无剪贴板记录",
@@ -507,6 +507,9 @@ const zhCN: LocaleDefinition = {
     quickCopyBadgeDescription: "在前九个条目右侧常驻显示 #1-#9 快速复制标记，无需先悬停或选中",
     searchHistory: "最近搜索词",
     searchHistoryDescription: "在搜索框中显示并记录最近提交过的查询",
+    searchPlaceholder: "搜索框提示文案",
+    searchPlaceholderDescription: "主界面搜索框的占位文字，留空则使用默认文案",
+    searchPlaceholderDefault: "恢复默认",
     searchSortRules: "搜索排序",
     searchSortRulesDescription: "搜索结果按以下规则依次排序，点击可调整顺序",
     sortFieldCreatedAt: "创建时间",

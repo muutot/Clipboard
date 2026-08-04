@@ -201,6 +201,8 @@ export interface GeneralSettings {
   viewerBackdropOpacity: number;
   searchSuggestionMode: SearchSuggestionMode;
   searchHistoryEnabled: boolean;
+  /** 搜索框自定义占位文案；空字符串表示使用默认（随语言本地化）文案 */
+  searchPlaceholder: string;
   cardActionsDisplay: CardActionsDisplay;
   quickCopyBadgeAlwaysVisible: boolean;
   showSettingsCloseButton: boolean;

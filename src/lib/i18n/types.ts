@@ -503,6 +503,9 @@ export interface LocaleDefinition {
     quickCopyBadgeDescription: string;
     searchHistory: string;
     searchHistoryDescription: string;
+    searchPlaceholder: string;
+    searchPlaceholderDescription: string;
+    searchPlaceholderDefault: string;
     searchSortRules: string;
     searchSortRulesDescription: string;
     sortFieldCreatedAt: string;

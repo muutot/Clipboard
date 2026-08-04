@@ -51,6 +51,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
   searchHistoryEnabled: false,
+  searchPlaceholder: "",
   cardActionsDisplay: "hover",
   quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
@@ -188,6 +189,11 @@ function validSearchIndexSyncMode(
   fallback: "lazy" | "background",
 ): "lazy" | "background" {
   return value === "lazy" || value === "background" ? value : fallback;
+}
+
+function validSearchPlaceholder(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  return value.trim().slice(0, 80);
 }
 
 /**
@@ -412,6 +418,10 @@ function normalizeGeneralSettings(
   result.searchHistoryEnabled = booleanValue(
     source.searchHistoryEnabled ?? fallback("searchHistoryEnabled"),
     defaultSettings.searchHistoryEnabled,
+  );
+  result.searchPlaceholder = validSearchPlaceholder(
+    source.searchPlaceholder ?? fallback("searchPlaceholder"),
+    defaultSettings.searchPlaceholder,
   );
   result.cardActionsDisplay = validCardActionsDisplay(
     source.cardActionsDisplay ?? fallback("cardActionsDisplay"),

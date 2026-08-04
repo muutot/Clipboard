@@ -2761,7 +2761,7 @@
       <input
         bind:this={searchInputEl}
         bind:value={query}
-        aria-label={_t("app.searchPlaceholder")}
+        aria-label={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
         aria-autocomplete={searchAutocomplete}
         aria-controls={showSearchSuggestions ? "search-suggestions" : undefined}
         aria-expanded={showSearchSuggestions}
@@ -2769,7 +2769,7 @@
           ? `search-option-${searchOptions.indexOf(activeSearchOption)}`
           : undefined}
         autocomplete="off"
-        placeholder={_t("app.searchPlaceholder")}
+        placeholder={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
         spellcheck="false"
         style={compactMode
           ? `height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;`

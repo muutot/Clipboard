@@ -3,7 +3,7 @@ import type { LocaleDefinition } from "../types";
 const en: LocaleDefinition = {
   app: {
     name: "Clipboard",
-    searchPlaceholder: "Type to search clipboard history...",
+    searchPlaceholder: "Awaken old memories, rediscover forgotten snippets",
     clearSearch: "Clear search",
     recentRecords: "Recent",
     noRecords: "No clipboard records yet",
@@ -531,6 +531,10 @@ const en: LocaleDefinition = {
       "Always show the #1-#9 quick copy marks on the first nine items without focusing them first",
     searchHistory: "Recent Search Terms",
     searchHistoryDescription: "Show and record queries that you submit from the search box",
+    searchPlaceholder: "Search Box Hint",
+    searchPlaceholderDescription:
+      "Placeholder text of the main search box; leave empty to use the default",
+    searchPlaceholderDefault: "Restore default",
     searchSortRules: "Search Sort",
     searchSortRulesDescription: "Sort search results using the following rules in order",
     sortFieldCreatedAt: "Created Time",

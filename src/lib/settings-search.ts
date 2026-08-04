@@ -181,6 +181,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["搜索历史", "recent search"],
   ),
   entry(
+    "general.search-placeholder",
+    { section: "general_search" },
+    i18n("general.searchPlaceholder"),
+    i18n("general.searchPlaceholderDescription"),
+    ["提示文案", "占位", "placeholder", "hint"],
+  ),
+  entry(
     "general.search-index-sync-mode",
     { section: "general_search" },
     i18n("general.searchIndexSyncMode"),

@@ -273,6 +273,37 @@
       </button>
     </section>
 
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.searchPlaceholder")}</strong>
+            <p>{_t("general.searchPlaceholderDescription")}</p>
+          </div>
+          {#if s.searchPlaceholder.trim()}
+            <button
+              type="button"
+              class="reset-btn"
+              title={_t("general.searchPlaceholderDefault")}
+              onclick={() => generalSettings.updateSetting("searchPlaceholder", "")}
+              >{_t("general.searchPlaceholderDefault")}</button
+            >
+          {/if}
+        </div>
+      </div>
+      <input
+        type="text"
+        class="settings-text-input"
+        value={s.searchPlaceholder}
+        maxlength="80"
+        placeholder={_t("app.searchPlaceholder")}
+        aria-label={_t("general.searchPlaceholder")}
+        oninput={(e) =>
+          generalSettings.updateSetting("searchPlaceholder", (e.target as HTMLInputElement).value)}
+      />
+    </section>
+
     <section class="setting-card sort-rules-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
@@ -1089,6 +1120,47 @@
   }
 
   .theme-select:focus {
+    border-color: var(--text-faint);
+  }
+
+  .settings-text-input {
+    width: 100%;
+    margin-top: 12px;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+
+  .settings-text-input::placeholder {
+    color: var(--placeholder-color);
+  }
+
+  .settings-text-input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .reset-btn {
+    flex-shrink: 0;
+    padding: 4px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    background: var(--hover-bg);
+    color: var(--text-muted);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease,
+      color 100ms ease;
+  }
+
+  .reset-btn:hover {
+    color: var(--text-primary);
     border-color: var(--text-faint);
   }
 
