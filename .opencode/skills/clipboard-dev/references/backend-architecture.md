@@ -113,6 +113,8 @@ Keep shared degradation capabilities accurate in `RuntimeInfo`; never expose an 
 
 `main.rs` parses GUI versus process CLI execution. `cli/mod.rs` implements commands over the database. The process CLI resolves the database path from the configured storage/data directory through the same `StoragePaths` used by the GUI, so a custom storage directory stays consistent between CLI and desktop. `cli/api.rs` starts only on explicit command, binds to `127.0.0.1`, accepts configured limits, and must retain a stoppable listener/thread lifecycle.
 
+The loopback API does not send a wildcard CORS header, so browser-based cross-origin requests cannot read clipboard data; automation clients that do not rely on CORS are unaffected.
+
 A CLI/API action that writes to the system clipboard must follow the same self-trigger and metadata-preservation rules as the GUI.
 
 `export/` owns `write_export_file` (creates parent directories and writes export output). Both the CLI and the file-backed Tauri commands in `commands/export.rs` (`export_to_file`, `import_from_file`) reuse it; the GUI import emits `clipboard-history-invalidated` after a successful import so the main window refreshes.
