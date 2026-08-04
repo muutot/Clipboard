@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
 
   export interface CustomSelectOption {
@@ -30,10 +31,51 @@
   }: Props = $props();
 
   let open = $state(false);
+  let popoverTop = $state(0);
+  let popoverLeft = $state(0);
+  let popoverWidth = $state(150);
+  let triggerEl: HTMLButtonElement | undefined = $state();
+  let popoverEl: HTMLDivElement | undefined = $state();
 
   const current = $derived(
     options.find((o) => o.value === value)?.label ?? value?.toString() ?? placeholder,
   );
+
+  function positionPopover() {
+    if (!open || !triggerEl || !popoverEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const popHeight = popoverEl.offsetHeight;
+    const gap = 4;
+    const topBelow = rect.bottom + gap;
+    const topAbove = rect.top - gap - popHeight;
+    const fitsBelow = topBelow + popHeight <= window.innerHeight - 8;
+    const fitsAbove = topAbove >= 8;
+    popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
+    popoverLeft = Math.max(8, Math.min(rect.left, window.innerWidth - 8 - popoverEl.offsetWidth));
+    popoverWidth = Math.max(rect.width, 150);
+  }
+
+  function toggle() {
+    if (disabled) return;
+    open = !open;
+  }
+
+  $effect(() => {
+    if (open) {
+      tick().then(() => positionPopover());
+      window.addEventListener("resize", positionPopover);
+      window.addEventListener("scroll", onScroll, true);
+      return () => {
+        window.removeEventListener("resize", positionPopover);
+        window.removeEventListener("scroll", onScroll, true);
+      };
+    }
+  });
+
+  function onScroll(e: Event) {
+    if (popoverEl && e.target instanceof Node && popoverEl.contains(e.target)) return;
+    open = false;
+  }
 
   function select(option: CustomSelectOption) {
     if (option.disabled || value === option.value) {
@@ -54,7 +96,8 @@
     aria-label={ariaLabel}
     {title}
     {disabled}
-    onclick={() => (open = !open)}
+    bind:this={triggerEl}
+    onclick={toggle}
     onkeydown={(e) => {
       if (e.key === "Escape") open = false;
     }}
@@ -64,7 +107,13 @@
   </button>
 
   {#if open}
-    <div class="custom-select-popover" role="listbox" aria-label={ariaLabel}>
+    <div
+      class="custom-select-popover"
+      role="listbox"
+      aria-label={ariaLabel}
+      style="top: {popoverTop}px; left: {popoverLeft}px; width: {popoverWidth}px;"
+      bind:this={popoverEl}
+    >
       <div class="custom-select-backdrop" onclick={() => (open = false)} aria-hidden="true"></div>
       {#each options as option}
         <button

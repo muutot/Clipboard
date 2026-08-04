@@ -240,16 +240,14 @@ header p {
 }
 
 .custom-select-popover {
-  position: absolute;
+  position: fixed;
   z-index: 100;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 150px;
+  max-height: 240px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--surface-bg);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .custom-select-backdrop {
