@@ -175,11 +175,11 @@ header p {
   -moz-appearance: none;
   box-sizing: border-box;
   padding: 6px 28px 6px 10px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-color);
   border-radius: var(--settings-control-radius, 6px);
   outline: none;
-  color: var(--text-muted);
-  background-color: transparent;
+  color: var(--text-primary);
+  background-color: var(--input-bg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23777'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
@@ -188,21 +188,16 @@ header p {
   cursor: pointer;
   flex-shrink: 0;
   transition:
-    color 100ms ease,
-    border-color 100ms ease,
-    background-color 100ms ease;
+    border-color 120ms ease,
+    background-color 120ms ease;
 }
 
 .settings-select:hover {
-  color: var(--text-secondary);
-  border-color: var(--border-color);
-  background-color: var(--hover-bg);
+  border-color: var(--text-faint);
 }
 
 .settings-select:focus {
-  color: var(--text-secondary);
-  border-color: var(--border-color);
-  background-color: var(--hover-bg);
+  border-color: var(--text-faint);
 }
 
 .settings-select:disabled {
@@ -212,8 +207,18 @@ header p {
 
 .settings-select option {
   background: var(--surface-bg);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+}
+
+.settings-select option:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.settings-select option:checked {
+  background: var(--surface-bg);
+  color: var(--selection-color);
 }
 
 /* ── transparency / range slider ── */
