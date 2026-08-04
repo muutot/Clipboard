@@ -515,7 +515,6 @@
         <div>
           <strong>{_t("general.searchIndexSyncMode")}</strong>
           <p>{_t("general.searchIndexSyncModeDescription")}</p>
-          <p class="restart-note">{_t("general.searchIndexSyncModeRestartNote")}</p>
         </div>
       </div>
       <select

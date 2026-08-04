@@ -555,7 +555,6 @@ export interface LocaleDefinition {
     searchIndexSyncModeDescription: string;
     searchIndexSyncModeLazy: string;
     searchIndexSyncModeBackground: string;
-    searchIndexSyncModeRestartNote: string;
     loadTolerance: string;
     loadToleranceDescription: string;
     loadToleranceUnit: string;
