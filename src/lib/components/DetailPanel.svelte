@@ -729,7 +729,9 @@
           {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
             <button
               type="button"
-              onclick={() => invoke("reveal_in_explorer", { path: item.resourcePath })}
+              onclick={() => {
+                invoke("reveal_in_explorer", { path: item.resourcePath }).catch(() => {});
+              }}
             >
               <AppIcon name="file" size={15} />
               {_t("detail.locateFile")}
@@ -738,7 +740,7 @@
               type="button"
               onclick={() => {
                 const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
-                invoke("open_external_url", { url: folder });
+                invoke("open_external_url", { url: folder }).catch(() => {});
               }}
             >
               <AppIcon name="download" size={15} />
