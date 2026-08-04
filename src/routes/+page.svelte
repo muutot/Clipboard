@@ -1655,21 +1655,29 @@
     const src = convertFileSrc(filePath.replace(/\\/g, "/"));
     const container = document.createElement("div");
     container.className = "desktop-viewer";
-    container.innerHTML = `
-      <button class="desktop-viewer-close" aria-label={_t("actions.closeViewer")}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-        </svg>
-      </button>
-      <div class="desktop-viewer-zoom-hint">100%</div>
-      <img src="${src}" alt="" draggable="false" />
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "desktop-viewer-close";
+    closeBtn.setAttribute("aria-label", _t("actions.closeViewer"));
+    closeBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+      </svg>
     `;
+
+    const zoomHint = document.createElement("div");
+    zoomHint.className = "desktop-viewer-zoom-hint";
+    zoomHint.textContent = "100%";
+
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = "";
+    img.draggable = false;
+
+    container.append(closeBtn, zoomHint, img);
     document.body.appendChild(container);
     desktopViewerEl = container;
 
-    const img = container.querySelector("img") as HTMLImageElement;
-    const zoomHint = container.querySelector(".desktop-viewer-zoom-hint") as HTMLElement;
-    const closeBtn = container.querySelector(".desktop-viewer-close") as HTMLElement;
     let cleaningUp = false;
 
     let zoom = 1;
