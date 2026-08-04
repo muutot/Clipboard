@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
 
   export interface CustomSelectOption {
@@ -33,6 +32,7 @@
   let open = $state(false);
   let popoverTop = $state(0);
   let popoverLeft = $state(0);
+  let popoverWidth = $state(0);
   let triggerEl: HTMLButtonElement | undefined = $state();
   let popoverEl: HTMLDivElement | undefined = $state();
 
@@ -43,7 +43,6 @@
   function positionPopover() {
     if (!open || !triggerEl || !popoverEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const popWidth = popoverEl.offsetWidth;
     const popHeight = popoverEl.offsetHeight;
     const gap = 4;
     const topBelow = rect.bottom + gap;
@@ -51,8 +50,12 @@
     const fitsBelow = topBelow + popHeight <= window.innerHeight - 8;
     const fitsAbove = topAbove >= 8;
     popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
-    popoverLeft = Math.max(8, Math.min(rect.right - popWidth, window.innerWidth - 8 - popWidth));
-    popoverEl.style.minWidth = `${rect.width}px`;
+    const targetWidth = Math.max(rect.width, popoverEl.offsetWidth);
+    popoverWidth = Math.min(targetWidth, window.innerWidth - 16);
+    popoverLeft = Math.max(
+      8,
+      Math.min(rect.right - popoverWidth, window.innerWidth - 8 - popoverWidth),
+    );
   }
 
   function toggle() {
@@ -61,15 +64,14 @@
   }
 
   $effect(() => {
-    if (open) {
-      tick().then(() => positionPopover());
-      window.addEventListener("resize", positionPopover);
-      window.addEventListener("scroll", onScroll, true);
-      return () => {
-        window.removeEventListener("resize", positionPopover);
-        window.removeEventListener("scroll", onScroll, true);
-      };
-    }
+    if (!open) return;
+    positionPopover();
+    window.addEventListener("resize", positionPopover);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("resize", positionPopover);
+      window.removeEventListener("scroll", onScroll, true);
+    };
   });
 
   function onScroll(e: Event) {
@@ -111,7 +113,7 @@
       class="custom-select-popover"
       role="listbox"
       aria-label={ariaLabel}
-      style="top: {popoverTop}px; left: {popoverLeft}px;"
+      style="top: {popoverTop}px; left: {popoverLeft}px; width: {popoverWidth}px;"
       bind:this={popoverEl}
     >
       <div class="custom-select-backdrop" onclick={() => (open = false)} aria-hidden="true"></div>
