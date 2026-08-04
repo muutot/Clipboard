@@ -211,6 +211,8 @@ export interface GeneralSettings {
   searchPageSizeLimit: number;
   searchCacheSize: number;
   searchCacheEviction: "fifo" | "lru";
+  /** 搜索索引同步模式：'lazy' 搜索前排空 outbox | 'background' 后台 worker 实时同步 */
+  searchIndexSyncMode: "lazy" | "background";
   loadTolerance: number;
 }
 

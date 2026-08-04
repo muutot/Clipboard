@@ -578,6 +578,11 @@ const en: LocaleDefinition = {
     searchCacheEvictionDescription: "Strategy for removing items when the cache is full",
     searchCacheEvictionFifo: "First-In-First-Out (FIFO)",
     searchCacheEvictionLru: "Least Recently Used (LRU)",
+    searchIndexSyncMode: "Index Sync Mode",
+    searchIndexSyncModeDescription: "How the search index follows clipboard record changes",
+    searchIndexSyncModeLazy: "Sync on Search",
+    searchIndexSyncModeBackground: "Background Sync",
+    searchIndexSyncModeRestartNote: "Changing this requires an app restart to take effect.",
     loadTolerance: "Load Tolerance",
     loadToleranceDescription:
       'When loaded items exceed "Max Load Items" plus this value, the oldest batch is evicted',

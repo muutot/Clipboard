@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use cli::LocalApiServer;
 use commands::clipboard::SearchResultCache;
-use config::ConfigStore;
+use config::{ConfigStore, SearchIndexSyncMode};
 use content::{self_trigger, ThumbnailWorker};
 #[allow(unused_imports)]
 use geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
@@ -46,13 +46,13 @@ use platform::{
     SingleInstanceGuard, SystemTray,
 };
 use privacy::PrivacyManager;
-use search::{SearchIndex, SearchSynchronizer};
+use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
 use shutdown::stop_runtime_services;
 use state::{CaptureState, CaptureWorker, SelfTriggerState};
 use std::str::FromStr;
 use storage::{
-    quarantine_search_index, recover_database_if_needed, refresh_database_backup,
-    Database, KindDeleteScope, OcrRepository, StoragePaths,
+    quarantine_search_index, recover_database_if_needed, refresh_database_backup, Database,
+    KindDeleteScope, OcrRepository, StoragePaths,
 };
 use tauri::Manager;
 
@@ -255,7 +255,7 @@ pub fn run() {
             database.requeue_interrupted_ocr()?;
             let db_open_duration = startup_timer.finish_segment();
 
-            let search_index = SearchIndex::open(&paths.search_index)?;
+            let search_index = Arc::new(SearchIndex::open(&paths.search_index)?);
             // `SearchSynchronizer::initialize` rebuilds the index when
             // `SearchIndexLayout` flags it as `rebuild_required`; the previous
             // `validate()` call here was a no-op (always returned `true`) and
@@ -399,6 +399,39 @@ pub fn run() {
             let cleanup_worker =
                 CleanupWorker::start(project_directory.clone(), cleanup_database, paths.clone())?;
 
+            // Optional background search-index synchronizer. In `Lazy` mode the
+            // search command drains the outbox itself; in `Background` mode this
+            // worker keeps the Tantivy index fresh off the hot path so queries
+            // never block on indexing. The mode only takes effect at startup.
+            let search_sync_worker: Option<SearchSyncWorker> =
+                if config.search_index_sync_mode() == SearchIndexSyncMode::Background {
+                    let sync_database = Database::open(&paths.database)?;
+                    let sync_index = search_index.clone();
+                    let app_for_sync = app.handle().clone();
+                    let on_changes_applied = Arc::new(move || {
+                        if let Some(cache) = app_for_sync.try_state::<SearchResultCache>() {
+                            cache.clear();
+                        }
+                    });
+                    match SearchSyncWorker::start(
+                        sync_database,
+                        sync_index,
+                        Duration::from_millis(500),
+                        on_changes_applied,
+                    ) {
+                        Ok(worker) => {
+                            eprintln!("[search-sync] background synchronizer started");
+                            Some(worker)
+                        }
+                        Err(error) => {
+                            eprintln!("[search-sync] failed to start background synchronizer: {error}");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
             let launch_at_startup = config.launch_at_startup();
             let startup_transparency = config.general_settings().window_transparency;
             let startup_window_effect = config.general_settings().window_effect.clone();
@@ -408,6 +441,7 @@ pub fn run() {
             app.manage(search_index);
             app.manage(performance_tracker);
             app.manage(SearchResultCache::new());
+            app.manage(Mutex::new(search_sync_worker));
             app.manage(Mutex::new(privacy_manager));
             app.manage(Mutex::new(clipboard_monitor));
             app.manage(Mutex::new(shortcut_manager));

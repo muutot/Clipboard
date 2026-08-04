@@ -72,7 +72,7 @@ Changing data directories is a migration workflow, not a path-string edit. Keep 
 
 ## Search
 
-Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite triggers append `search_outbox` operations; `SearchSynchronizer` drains them and applies index changes. Full rebuild begins by clearing/recreating derived index state and repopulating from SQLite.
+Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite triggers append `search_outbox` operations; `SearchSynchronizer` drains them and applies index changes. Outbox draining runs lazily inside `search_clipboard_items` by default, or in a `SearchSyncWorker` background thread when `GeneralConfig.search_index_sync_mode` is `"background"` (see `search-cache-strategy.md`). Full rebuild begins by clearing/recreating derived index state and repopulating from SQLite.
 
 Read `search-cache-strategy.md` before changing query pagination or caching. Index writes/rebuilds must invalidate backend cached IDs.
 
@@ -88,13 +88,13 @@ The clipboard monitor produces change notifications; a named capture thread read
 
 `content/` responsibilities:
 
-| File                         | Responsibility                                              |
-| ---------------------------- | ----------------------------------------------------------- |
-| `detector.rs` / `actions.rs` | content kind/marker detection and quick actions             |
-| `hash.rs`                    | canonical content/media/file hashes plus `SelfTriggerGuard` |
-| `file_store.rs`              | managed copy decisions and verification                     |
-| `resource_metadata.rs`       | metadata schema/MIME/file details                           |
-| `thumbnail.rs`               | background preview generation and worker lifecycle          |
+| File                         | Responsibility                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `detector.rs` / `actions.rs` | content kind/marker detection and quick actions                                                                        |
+| `hash.rs`                    | canonical content/media/file hashes plus `SelfTriggerGuard`                                                            |
+| `file_store.rs`              | managed copy decisions and verification                                                                                |
+| `resource_metadata.rs`       | metadata schema/MIME/file details                                                                                      |
+| `thumbnail.rs`               | background preview generation and worker lifecycle                                                                     |
 | `transform.rs`               | text transforms plus the paste-cleaning pipeline (`clean_paste`: trim, collapse whitespace, strip URL tracking params) |
 
 Write-back registration and capture-side checks must use the same canonical hashing rules for text, links, images, and files. A mismatch creates duplicate history records or suppresses legitimate captures.

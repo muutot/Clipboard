@@ -14,6 +14,8 @@ pub use super::files::{
 };
 pub use super::signal::{stop_signal_requested, wait_for_stop};
 
+use std::sync::Arc;
+
 use crate::content;
 use crate::content::{ContentMarkers, QuickAction, TextTransform, TransformOperation};
 use crate::performance::{PerformanceSnapshot, PerformanceTracker};
@@ -87,6 +89,8 @@ pub fn repair_database(
 }
 
 #[tauri::command]
-pub fn validate_search_index(search_index: tauri::State<'_, SearchIndex>) -> Result<bool, String> {
+pub fn validate_search_index(
+    search_index: tauri::State<'_, Arc<SearchIndex>>,
+) -> Result<bool, String> {
     Ok(search_index.validate())
 }

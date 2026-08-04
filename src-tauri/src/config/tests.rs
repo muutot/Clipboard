@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, time::SystemTime};
+use std::{fs, path::PathBuf, str::FromStr, time::SystemTime};
 
 use serde_json::{json, Value};
 
@@ -62,6 +62,7 @@ fn persists_general_settings_as_one_configuration_group() {
     settings.search_history_enabled = true;
     settings.show_settings_close_button = false;
     settings.window_effect = "acrylic".to_owned();
+    settings.search_index_sync_mode = "background".to_owned();
 
     store.set_general_settings(settings.clone()).unwrap();
 
@@ -85,6 +86,7 @@ fn persists_general_settings_as_one_configuration_group() {
     assert_eq!(saved["general"]["searchSuggestionMode"], "inline");
     assert_eq!(saved["general"]["searchHistoryEnabled"], true);
     assert_eq!(saved["general"]["showSettingsCloseButton"], false);
+    assert_eq!(saved["general"]["searchIndexSyncMode"], "background");
     fs::remove_dir_all(project).unwrap();
 }
 
@@ -342,6 +344,53 @@ fn persists_export_settings() {
     store.set_schedule_auto_export(None).unwrap();
     assert!(store.schedule_auto_export().is_none());
     fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn search_index_sync_mode_defaults_to_lazy_and_round_trips() {
+    let project = temporary_test_directory("search-sync-mode");
+    let mut store = ConfigStore::load(&project).unwrap();
+
+    // Default is lazy (current behavior) for existing/legacy configurations.
+    assert_eq!(
+        store.search_index_sync_mode(),
+        crate::config::SearchIndexSyncMode::Lazy
+    );
+
+    let mut settings = store.general_settings().clone();
+    settings.search_index_sync_mode = "background".to_owned();
+    store.set_general_settings(settings.clone()).unwrap();
+    assert_eq!(
+        store.search_index_sync_mode(),
+        crate::config::SearchIndexSyncMode::Background
+    );
+
+    let reloaded = ConfigStore::load(&project).unwrap();
+    assert_eq!(
+        reloaded.search_index_sync_mode(),
+        crate::config::SearchIndexSyncMode::Background
+    );
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn search_index_sync_mode_parses_unknown_values_as_lazy() {
+    use crate::config::SearchIndexSyncMode;
+    assert_eq!(
+        SearchIndexSyncMode::from_str("lazy"),
+        Ok(SearchIndexSyncMode::Lazy)
+    );
+    assert_eq!(
+        SearchIndexSyncMode::from_str("background"),
+        Ok(SearchIndexSyncMode::Background)
+    );
+    assert_eq!(
+        SearchIndexSyncMode::from_str("anything-else"),
+        Ok(SearchIndexSyncMode::Lazy)
+    );
+    assert_eq!(SearchIndexSyncMode::Lazy.as_str(), "lazy");
+    assert_eq!(SearchIndexSyncMode::Background.as_str(), "background");
 }
 
 fn temporary_test_directory(label: &str) -> PathBuf {

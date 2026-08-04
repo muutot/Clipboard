@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -99,6 +100,7 @@ pub struct GeneralConfig {
     pub show_settings_close_button: bool,
     pub page_size_limit: u32,
     pub search_page_size_limit: u32,
+    pub search_index_sync_mode: String,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -136,7 +138,39 @@ impl Default for GeneralConfig {
             show_settings_close_button: true,
             page_size_limit: 500,
             search_page_size_limit: 500,
+            search_index_sync_mode: "lazy".to_owned(),
             extra: BTreeMap::new(),
+        }
+    }
+}
+
+/// How the Tantivy search index follows clipboard record changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchIndexSyncMode {
+    /// Drain the search outbox synchronously inside the search command
+    /// (with a cheap empty-outbox probe) so results are always fresh.
+    Lazy,
+    /// A background worker continuously drains the outbox; the search hot
+    /// path never blocks on indexing.
+    Background,
+}
+
+impl SearchIndexSyncMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Lazy => "lazy",
+            Self::Background => "background",
+        }
+    }
+}
+
+impl FromStr for SearchIndexSyncMode {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "background" => Ok(Self::Background),
+            _ => Ok(Self::Lazy),
         }
     }
 }

@@ -60,6 +60,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchPageSizeLimit: 500,
   searchCacheSize: 500,
   searchCacheEviction: "fifo",
+  searchIndexSyncMode: "lazy",
   loadTolerance: 100,
 };
 
@@ -180,6 +181,13 @@ function validSortRules(value: unknown, fallback: SortRule[]): SortRule[] {
 
 function validCacheEviction(value: unknown, fallback: "fifo" | "lru"): "fifo" | "lru" {
   return value === "fifo" || value === "lru" ? value : fallback;
+}
+
+function validSearchIndexSyncMode(
+  value: unknown,
+  fallback: "lazy" | "background",
+): "lazy" | "background" {
+  return value === "lazy" || value === "background" ? value : fallback;
 }
 
 /**
@@ -446,6 +454,10 @@ function normalizeGeneralSettings(
   result.searchCacheEviction = validCacheEviction(
     source.searchCacheEviction ?? fallback("searchCacheEviction"),
     defaultSettings.searchCacheEviction,
+  );
+  result.searchIndexSyncMode = validSearchIndexSyncMode(
+    source.searchIndexSyncMode ?? fallback("searchIndexSyncMode"),
+    defaultSettings.searchIndexSyncMode,
   );
   result.loadTolerance = integerInRange(
     source.loadTolerance ?? fallback("loadTolerance"),

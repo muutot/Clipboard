@@ -548,6 +548,11 @@ export interface LocaleDefinition {
     searchCacheEvictionDescription: string;
     searchCacheEvictionFifo: string;
     searchCacheEvictionLru: string;
+    searchIndexSyncMode: string;
+    searchIndexSyncModeDescription: string;
+    searchIndexSyncModeLazy: string;
+    searchIndexSyncModeBackground: string;
+    searchIndexSyncModeRestartNote: string;
     loadTolerance: string;
     loadToleranceDescription: string;
     loadToleranceUnit: string;

@@ -181,6 +181,19 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["搜索历史", "recent search"],
   ),
   entry(
+    "general.search-index-sync-mode",
+    { section: "general_search" },
+    i18n("general.searchIndexSyncMode"),
+    i18n("general.searchIndexSyncModeDescription"),
+    [
+      i18n("general.searchIndexSyncModeLazy"),
+      i18n("general.searchIndexSyncModeBackground"),
+      "索引同步",
+      "index sync",
+      "outbox",
+    ],
+  ),
+  entry(
     "general.launch-at-startup",
     { section: "general_window" },
     i18n("general.launchAtStartup"),

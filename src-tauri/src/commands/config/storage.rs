@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::params;
 
@@ -22,7 +22,7 @@ pub fn get_storage_status(
     paths: tauri::State<'_, StoragePaths>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
-    search_index: tauri::State<'_, SearchIndex>,
+    search_index: tauri::State<'_, Arc<SearchIndex>>,
 ) -> Result<StorageStatus, String> {
     let config_path = config
         .lock()

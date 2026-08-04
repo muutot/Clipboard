@@ -477,6 +477,30 @@
         <option value="lru">{_t("general.searchCacheEvictionLru")}</option>
       </select>
     </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div>
+          <strong>{_t("general.searchIndexSyncMode")}</strong>
+          <p>{_t("general.searchIndexSyncModeDescription")}</p>
+          <p class="restart-note">{_t("general.searchIndexSyncModeRestartNote")}</p>
+        </div>
+      </div>
+      <select
+        class="theme-select"
+        value={s.searchIndexSyncMode}
+        aria-label={_t("general.searchIndexSyncMode")}
+        onchange={(e) =>
+          generalSettings.updateSetting(
+            "searchIndexSyncMode",
+            (e.target as HTMLSelectElement).value as "lazy" | "background",
+          )}
+      >
+        <option value="lazy">{_t("general.searchIndexSyncModeLazy")}</option>
+        <option value="background">{_t("general.searchIndexSyncModeBackground")}</option>
+      </select>
+    </section>
   {:else if section === "display"}
     <section class="setting-card toggle-card">
       <div class="setting-heading">

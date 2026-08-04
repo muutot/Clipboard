@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use serde_json::Value;
@@ -271,6 +272,11 @@ impl ConfigStore {
     pub fn set_search_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
         self.config.general.search_page_size_limit = value.clamp(50, 1_000);
         self.save()
+    }
+
+    pub fn search_index_sync_mode(&self) -> SearchIndexSyncMode {
+        SearchIndexSyncMode::from_str(&self.config.general.search_index_sync_mode)
+            .expect("SearchIndexSyncMode::from_str is infallible")
     }
 
     pub fn det_box_threshold(&self) -> f32 {

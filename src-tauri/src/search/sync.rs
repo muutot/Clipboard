@@ -1,6 +1,10 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
 use serde::Serialize;
 
-use crate::storage::SearchRepository;
+use crate::storage::{Database, SearchRepository};
 
 use super::{SearchError, SearchIndex, SearchIndexChange};
 
@@ -198,6 +202,69 @@ impl Default for SearchSynchronizer {
     }
 }
 
+/// Background worker that continuously drains the search outbox so the search
+/// hot path never blocks on indexing.
+///
+/// Owns its own database connection (mirroring the OCR/thumbnail/cleanup
+/// workers). `on_changes_applied` is invoked after a drain that actually
+/// applied events so the caller can invalidate derived caches.
+pub struct SearchSyncWorker {
+    stop_flag: Arc<AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl SearchSyncWorker {
+    pub fn start(
+        database: Database,
+        index: Arc<SearchIndex>,
+        interval: Duration,
+        on_changes_applied: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<Self, SearchError> {
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let worker_stop_flag = Arc::clone(&stop_flag);
+        let synchronizer = SearchSynchronizer::default();
+
+        let handle = std::thread::Builder::new()
+            .name("search-sync".to_owned())
+            .spawn(move || {
+                while !worker_stop_flag.load(Ordering::Relaxed) {
+                    let pending = database.has_pending_outbox_events().unwrap_or(true);
+                    if pending {
+                        match synchronizer.sync_until_idle(&database, &index) {
+                            Ok(summary) if summary.processed_events > 0 => {
+                                on_changes_applied();
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                eprintln!("[search-sync] background drain failed: {error}");
+                            }
+                        }
+                    }
+                    std::thread::sleep(interval);
+                }
+            })
+            .map_err(SearchError::from)?;
+
+        Ok(Self {
+            stop_flag,
+            handle: Some(handle),
+        })
+    }
+
+    pub fn stop(&mut self) {
+        self.stop_flag.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Drop for SearchSyncWorker {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -206,6 +273,7 @@ mod tests {
         storage::{ClipboardRepository, Database, OcrRepository, SearchRepository},
     };
 
+    use super::SearchSyncWorker;
     use super::SearchSynchronizer;
 
     fn item(id: &str, title: &str) -> ClipboardItem {
@@ -357,5 +425,66 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].item_id, "image");
         assert_eq!(hits[0].kind, "image");
+    }
+
+    #[test]
+    fn background_worker_drains_the_outbox_and_stops() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use std::time::{Duration, SystemTime};
+
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = std::env::temp_dir().join(format!(
+            "clipboard-search-worker-{}-{unique}.db",
+            std::process::id()
+        ));
+
+        // The worker owns its own connection (like production); the test writes
+        // through a second connection to the same database file.
+        let database = Database::open(&db_path).unwrap();
+        let index = Arc::new(SearchIndex::in_memory().unwrap());
+        let notifications = Arc::new(AtomicUsize::new(0));
+        let worker_notifications = Arc::clone(&notifications);
+        let worker_database = Database::open(&db_path).unwrap();
+        let mut worker = SearchSyncWorker::start(
+            worker_database,
+            index.clone(),
+            Duration::from_millis(20),
+            Arc::new(move || {
+                worker_notifications.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
+        .unwrap();
+
+        database.save_item(&item("bg", "后台同步可见")).unwrap();
+
+        // Give the worker a couple of drain cycles to pick up the event.
+        for _ in 0..50 {
+            if index.search("后台", 20).unwrap().len() == 1 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(index.search("后台", 20).unwrap().len(), 1);
+        assert!(
+            database.read_search_outbox(100).unwrap().is_empty(),
+            "worker must acknowledge the outbox events it applied"
+        );
+        assert!(
+            notifications.load(Ordering::SeqCst) >= 1,
+            "worker must notify the caller after applying changes"
+        );
+
+        worker.stop();
+        assert_eq!(index.search("后台", 20).unwrap().len(), 1);
+        drop(database);
+        drop(index);
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+        let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
     }
 }

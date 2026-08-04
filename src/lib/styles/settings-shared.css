@@ -285,6 +285,12 @@ header p {
   text-align: center;
 }
 
+.restart-note {
+  margin: 4px 0 0;
+  color: var(--text-faint);
+  font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+}
+
 button {
   cursor: pointer;
 }

@@ -46,6 +46,8 @@ Schema changes require schema/migration logic, row mapping, repository tests, re
 
 The frontend `GeneralSettings` type/defaults/normalizer are richer than the explicit Rust `GeneralConfig` fields. Extra frontend keys are preserved through Rust's flattened map. Therefore a setting change must be checked in both places even when it appears to survive through `extra`: explicit Rust fields provide typed/defaulted backend behavior; flattened-only keys remain frontend-defined.
 
+`search_index_sync_mode` is an explicit `GeneralConfig` member (values `"lazy"`/`"background"`, default `"lazy"`) with a typed `SearchIndexSyncMode` enum in `config/types.rs`; unknown values parse as `Lazy`. It selects between lazy outbox draining inside `search_clipboard_items` and the startup-created `SearchSyncWorker`, and takes effect on restart.
+
 ### Keyboard settings
 
 `src-tauri/src/keyboard/config.rs` and `KeyboardManager` own `<project>/conf/keyboard.json`. Each action maps to an array of shortcut strings. Do not merge keyboard configuration into `GeneralSettings` or `conf.json`.

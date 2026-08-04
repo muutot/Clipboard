@@ -1,9 +1,9 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use tauri::Emitter;
 
-use crate::config::ConfigStore;
+use crate::config::{ConfigStore, SearchIndexSyncMode};
 use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
@@ -118,7 +118,7 @@ pub fn list_source_applications(
 #[allow(clippy::too_many_arguments)]
 pub fn search_clipboard_items(
     database: tauri::State<'_, Database>,
-    search_index: tauri::State<'_, SearchIndex>,
+    search_index: tauri::State<'_, Arc<SearchIndex>>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     performance_tracker: tauri::State<'_, PerformanceTracker>,
     search_cache: tauri::State<'_, SearchResultCache>,
@@ -138,10 +138,15 @@ pub fn search_clipboard_items(
         }]
     });
 
-    let max_results = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
-        .search_page_size_limit() as usize;
+    let (max_results, sync_mode) = {
+        let config = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        (
+            config.search_page_size_limit() as usize,
+            config.search_index_sync_mode(),
+        )
+    };
 
     // Drain pending search-outbox events so newly captured or mutated items
     // are reflected in Tantivy before querying. The outbox is populated by
@@ -151,12 +156,19 @@ pub fn search_clipboard_items(
     // pages; leave it untouched when no mutations occurred. The cheap
     // `has_pending_outbox_events` probe avoids the `LIMIT` scan and reader
     // reload that `sync_until_idle` would trigger on every search.
-    let pending = database.has_pending_outbox_events().unwrap_or(true);
-    if pending {
-        match SearchSynchronizer::default().sync_until_idle(database.inner(), search_index.inner()) {
-            Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
-            Ok(_) => {}
-            Err(error) => eprintln!("[search] outbox sync before search failed: {error}"),
+    // When the user opts into background sync (`SearchIndexSyncMode::Background`)
+    // the `SearchSyncWorker` drains the outbox off the hot path, so search
+    // never blocks on indexing here.
+    if sync_mode == SearchIndexSyncMode::Lazy {
+        let pending = database.has_pending_outbox_events().unwrap_or(true);
+        if pending {
+            match SearchSynchronizer::default()
+                .sync_until_idle(database.inner(), search_index.inner())
+            {
+                Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
+                Ok(_) => {}
+                Err(error) => eprintln!("[search] outbox sync before search failed: {error}"),
+            }
         }
     }
 
@@ -204,7 +216,7 @@ pub fn search_clipboard_items(
 #[tauri::command]
 pub fn rebuild_search_index(
     database: tauri::State<'_, Database>,
-    search_index: tauri::State<'_, SearchIndex>,
+    search_index: tauri::State<'_, Arc<SearchIndex>>,
     search_cache: tauri::State<'_, SearchResultCache>,
 ) -> Result<SearchSyncSummary, String> {
     search_cache.clear();
@@ -291,7 +303,7 @@ pub fn batch_permanently_delete_clipboard_items(
 pub fn permanently_delete_storage_kind(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
-    search_index: tauri::State<'_, SearchIndex>,
+    search_index: tauri::State<'_, Arc<SearchIndex>>,
     capture: tauri::State<'_, CaptureState>,
     app: tauri::AppHandle,
     kind: ClipboardKind,

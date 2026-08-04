@@ -31,11 +31,13 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 ### Lazy sync on search
 
-The capture thread and other mutation commands write to SQLite (triggering `search_outbox`) but do not themselves touch Tantivy. To keep the index fresh without per-mutation wiring, `search_clipboard_items` drains the outbox via `SearchSynchronizer::sync_until_idle` before consulting the cache or Tantivy:
+The capture thread and other mutation commands write to SQLite (triggering `search_outbox`) but do not themselves touch Tantivy. Index freshness is guaranteed by outbox draining, which runs either lazily on the search command or in a background worker, depending on `GeneralConfig.search_index_sync_mode`:
 
-- Empty outbox: one cheap `SELECT ... LIMIT` and no reader reload; the result cache is preserved so pagination stays a hit.
-- Pending events: Tantivy is updated, `cached_ids` is cleared by `apply_changes`, and the result cache is cleared so the re-query reflects newly captured or mutated items.
-- Sync failure is logged and swallowed so a broken index does not block search; results may be stale until the next successful sync or rebuild.
+- `"lazy"` (default): `search_clipboard_items` drains the outbox via `SearchSynchronizer::sync_until_idle` before consulting the cache or Tantivy:
+  - Empty outbox: one cheap `SELECT ... LIMIT` and no reader reload; the result cache is preserved so pagination stays a hit.
+  - Pending events: Tantivy is updated, `cached_ids` is cleared by `apply_changes`, and the result cache is cleared so the re-query reflects newly captured or mutated items.
+  - Sync failure is logged and swallowed so a broken index does not block search; results may be stale until the next successful sync or rebuild.
+- `"background"`: a `SearchSyncWorker` started at app startup owns a dedicated database connection and polls the outbox every 500 ms, applying changes via the same `SearchSynchronizer`. The search command skips the blocking drain entirely (no outbox probe), so capture-heavy workloads do not add latency to the search hot path. The worker clears the `SearchResultCache` through an `on_changes_applied` callback. Changing the mode requires a restart because the worker is only created at startup.
 
 This is the only Tantivy search entry point; the CLI/local API uses SQLite scanning and is unaffected. Startup, `rebuild_search_index`, and storage-kind deletion still sync explicitly.
 

@@ -116,7 +116,8 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.toggle-switch`, `.toggle-knob` and active/disabled states;
 - `.transparency-slider` including WebKit and Firefox tracks/thumbs;
 - `.settings-feedback` success/error states;
-- `.auto-save-note` and the default pointer cursor for buttons.
+- `.auto-save-note` and the default pointer cursor for buttons;
+- `.restart-note` for restart-required notices in general-settings cards.
 
 `src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `CompactSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
 

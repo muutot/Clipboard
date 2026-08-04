@@ -54,4 +54,15 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
             Err(_) => eprintln!("[shutdown] local API lock is poisoned"),
         }
     }
+
+    if let Some(worker) = app.try_state::<Mutex<Option<crate::search::SearchSyncWorker>>>() {
+        match worker.lock() {
+            Ok(mut worker) => {
+                if let Some(worker) = worker.as_mut() {
+                    worker.stop();
+                }
+            }
+            Err(_) => eprintln!("[shutdown] search-sync worker lock is poisoned"),
+        }
+    }
 }
