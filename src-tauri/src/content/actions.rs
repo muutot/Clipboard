@@ -78,7 +78,11 @@ fn truncate(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
         text.to_owned()
     } else {
-        format!("{}...", &text[..max_len])
+        let mut boundary = max_len;
+        while boundary > 0 && !text.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        format!("{}...", &text[..boundary])
     }
 }
 
@@ -179,5 +183,17 @@ mod tests {
         let markers = detect_markers("hello world");
         let actions = detect_actions(&markers);
         assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn truncate_does_not_split_multi_byte_characters() {
+        assert_eq!(truncate("中文中文中文", 4), "中...");
+        assert_eq!(truncate("中文中文中文", 6), "中文...");
+    }
+
+    #[test]
+    fn truncate_keeps_short_text_unchanged() {
+        let text = "short";
+        assert_eq!(truncate(text, 5), "short");
     }
 }
