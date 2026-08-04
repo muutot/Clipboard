@@ -538,6 +538,8 @@ export interface LocaleDefinition {
     description: string;
     language: string;
     languageDescription: string;
+    languageSwitchedZh: string;
+    languageSwitchedEn: string;
     fontSize: string;
     fontSizeDescription: string;
     fontSizeSmall: string;

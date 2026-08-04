@@ -161,7 +161,10 @@
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);
     locale.set(lang);
-    showFeedback(_t(lang === "zh-CN" ? "���л�������" : "Switched to English"), true);
+    showFeedback(
+      _t(lang === "zh-CN" ? "general.languageSwitchedZh" : "general.languageSwitchedEn"),
+      true,
+    );
   }
 
   function handleTransparency(event: Event) {
@@ -220,7 +223,7 @@
     </div>
     {#if s.showSettingsCloseButton}
       <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-        >��</button
+        >×</button
       >
     {/if}
   </header>
@@ -356,7 +359,7 @@
                 generalSettings.updateSetting("searchSortRules", newRules);
               }}
             >
-              {rule.direction === "asc" ? "��" : "��"}
+              {rule.direction === "asc" ? "↑" : "↓"}
             </button>
             {#if s.searchSortRules.length > 1}
               <button
@@ -367,7 +370,7 @@
                 onclick={() => {
                   const newRules = s.searchSortRules.filter((_, i) => i !== idx);
                   generalSettings.updateSetting("searchSortRules", newRules);
-                }}>��</button
+                }}>×</button
               >
             {/if}
           </div>
@@ -857,7 +860,7 @@
         <button
           type="button"
           class:active={s.language === "zh-CN"}
-          onclick={() => changeLanguage("zh-CN")}>����</button
+          onclick={() => changeLanguage("zh-CN")}>中文</button
         >
         <button
           type="button"

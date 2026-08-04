@@ -553,6 +553,8 @@ const zhCN: LocaleDefinition = {
     description: "界面外观、操作偏好和应用行为设置",
     language: "语言",
     languageDescription: "界面显示语言",
+    languageSwitchedZh: "已切换到中文",
+    languageSwitchedEn: "已切换到英文",
     fontSize: "字体大小",
     fontSizeDescription: "调整界面元素的字体大小",
     fontSizeSmall: "小",

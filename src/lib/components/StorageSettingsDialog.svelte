@@ -1476,7 +1476,7 @@
                 })}
             >
               <AppIcon name="file" size={13} />
-              {_t("keyboard.openFile") || "打开文件"}
+              {_t("keyboard.openFile")}
             </button>
             <button type="button" class="config-bar-btn" onclick={() => handleResetKeyboard()}>
               <AppIcon name="restore" size={13} />

@@ -576,6 +576,8 @@ const en: LocaleDefinition = {
     description: "Interface appearance, interaction preferences and app behavior.",
     language: "Language",
     languageDescription: "Interface display language",
+    languageSwitchedZh: "Switched to Chinese",
+    languageSwitchedEn: "Switched to English",
     fontSize: "Font Size",
     fontSizeDescription: "Adjust font size of interface elements",
     fontSizeSmall: "Small",
