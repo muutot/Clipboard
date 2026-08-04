@@ -232,7 +232,17 @@ fn clipboard_kind_name(kind: crate::domain::ClipboardKind) -> &'static str {
 }
 
 fn escape_csv(field: &str) -> String {
-    if field.contains(',') || field.contains('"') || field.contains('\n') {
+    let starts_as_formula = field
+        .trim_start()
+        .chars()
+        .next()
+        .is_some_and(|c| matches!(c, '=' | '+' | '-' | '@'));
+    if field.contains(',')
+        || field.contains('"')
+        || field.contains('\n')
+        || field.contains('\r')
+        || starts_as_formula
+    {
         format!("\"{}\"", field.replace('"', "\"\""))
     } else {
         field.to_owned()
@@ -476,5 +486,17 @@ mod tests {
         .unwrap();
         let exported: Vec<ClipboardItem> = serde_json::from_str(&output).unwrap();
         assert_eq!(exported.len(), 510);
+    }
+
+    #[test]
+    fn escape_csv_quotes_formula_cells() {
+        assert_eq!(escape_csv("plain"), "plain");
+        assert_eq!(escape_csv("=SUM(A1)"), "\"=SUM(A1)\"");
+        assert_eq!(escape_csv("+123"), "\"+123\"");
+        assert_eq!(escape_csv("-danger"), "\"-danger\"");
+        assert_eq!(escape_csv("@cmd"), "\"@cmd\"");
+        assert_eq!(escape_csv(" =SUM(A1)"), "\" =SUM(A1)\"");
+        assert_eq!(escape_csv("a,b"), "\"a,b\"");
+        assert_eq!(escape_csv("safe"), "safe");
     }
 }
