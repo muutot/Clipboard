@@ -67,7 +67,7 @@ npm run verify
 
 ## 项目结构
 
-参见 `.opencode/skills/clipboard-dev/SKILL.md` 中的完整架构说明。
+参见 `skills/clipboard-dev/SKILL.md` 中的完整架构说明。
 
 核心目录：
 
@@ -116,7 +116,7 @@ src-tauri/              # 后端（Rust）
 - 提交信息格式：`<emoji> type[scope]: description`
 - 常见 type：`feat`、`fix`、`style`、`docs`、`refactor`、`perf`、`chore`
 - 常见 scope：`ci`、`build`、`scripts`、`release`、`search`、`viewer`、`css`、`settings`、`frontend`、`backend`、`storage`、`keyboard`
-- gitmoji 映射参见 `.opencode/skills/clipboard-dev/SKILL.md`
+- gitmoji 映射参见 `skills/clipboard-dev/SKILL.md`
 - 保持提交最小化，一个提交只做一件事
 
 ## 调试
