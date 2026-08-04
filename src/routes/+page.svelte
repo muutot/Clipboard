@@ -3547,7 +3547,7 @@
     top: calc(100% + 4px);
     right: 0;
     width: max-content;
-    min-width: 50px;
+    min-width: 100%;
     max-width: calc(100vw - 16px);
     border: 1px solid var(--border-color);
     border-radius: 8px;

@@ -52,6 +52,7 @@
     const fitsAbove = topAbove >= 8;
     popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
     popoverLeft = Math.max(8, Math.min(rect.right - popWidth, window.innerWidth - 8 - popWidth));
+    popoverEl.style.minWidth = `${rect.width}px`;
   }
 
   function toggle() {
