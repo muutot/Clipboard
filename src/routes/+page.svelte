@@ -103,6 +103,7 @@
       if (iIdx >= 0) indexedItems[iIdx] = { ...indexedItems[iIdx], ...changes };
       indexedItems = indexedItems;
     }
+    if (detailItem?.id === id) detailItem = { ...detailItem, ...changes };
     return true;
   }
 
