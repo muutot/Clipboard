@@ -2890,47 +2890,6 @@
     </div>
 
     <div class="filter-dropdowns">
-      <!-- Date filter -->
-      <div class="dropdown-wrapper">
-        <button
-          type="button"
-          tabindex="-1"
-          class="filter-dropdown-btn"
-          onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
-          aria-label={_t("dateFilter.all")}
-          title={_t("dateFilter.all")}
-        >
-          <AppIcon name="calendar" size={15} />
-          <span class="dropdown-label"
-            >{dateFilter === "all"
-              ? _t("dateFilter.all")
-              : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
-                _t("dateFilter.all"))}</span
-          >
-          <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
-        </button>
-        {#if dateDropdownOpen}
-          <div class="dropdown-popover" role="menu">
-            <div
-              class="dropdown-backdrop"
-              onclick={() => (dateDropdownOpen = false)}
-              aria-hidden="true"
-            ></div>
-            {#each dateFilterOptions as option}
-              <button
-                type="button"
-                role="menuitem"
-                class:selected={dateFilter === option.id}
-                onclick={() => {
-                  dateFilter = option.id;
-                  dateDropdownOpen = false;
-                }}>{option.label}</button
-              >
-            {/each}
-          </div>
-        {/if}
-      </div>
-
       <!-- Source app filter -->
       <div class="dropdown-wrapper">
         <button
@@ -2983,6 +2942,47 @@
                 >
               {/each}
             </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Date filter -->
+      <div class="dropdown-wrapper">
+        <button
+          type="button"
+          tabindex="-1"
+          class="filter-dropdown-btn"
+          onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
+          aria-label={_t("dateFilter.all")}
+          title={_t("dateFilter.all")}
+        >
+          <AppIcon name="calendar" size={15} />
+          <span class="dropdown-label"
+            >{dateFilter === "all"
+              ? _t("dateFilter.all")
+              : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
+                _t("dateFilter.all"))}</span
+          >
+          <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+        </button>
+        {#if dateDropdownOpen}
+          <div class="dropdown-popover" role="menu">
+            <div
+              class="dropdown-backdrop"
+              onclick={() => (dateDropdownOpen = false)}
+              aria-hidden="true"
+            ></div>
+            {#each dateFilterOptions as option}
+              <button
+                type="button"
+                role="menuitem"
+                class:selected={dateFilter === option.id}
+                onclick={() => {
+                  dateFilter = option.id;
+                  dateDropdownOpen = false;
+                }}>{option.label}</button
+              >
+            {/each}
           </div>
         {/if}
       </div>
