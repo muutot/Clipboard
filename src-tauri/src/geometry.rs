@@ -85,8 +85,10 @@ pub fn clamp_window_position_to_work_areas(
         return WindowPosition {
             x: clamp_window_axis(window.x, window.width, area.x, area.width),
             y: clamp_window_axis(window.y, window.height, area.y, area.height),
-            width: window.width.clamp(MIN_WIDTH, area.width),
-            height: window.height.clamp(MIN_HEIGHT, area.height),
+            width: window.width.clamp(MIN_WIDTH.min(area.width), area.width),
+            height: window
+                .height
+                .clamp(MIN_HEIGHT.min(area.height), area.height),
         };
     }
 
@@ -94,5 +96,61 @@ pub fn clamp_window_position_to_work_areas(
         width: window.width.max(MIN_WIDTH),
         height: window.height.max(MIN_HEIGHT),
         ..window
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_work_area_does_not_panic() {
+        let window = WindowPosition {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let areas = vec![WindowWorkArea {
+            x: 0,
+            y: 0,
+            width: 500,
+            height: 400,
+        }];
+        let result = clamp_window_position_to_work_areas(window, &areas);
+        assert_eq!(result.width, 500);
+        assert_eq!(result.height, 400);
+    }
+
+    #[test]
+    fn window_larger_than_area_is_capped_to_area() {
+        let window = WindowPosition {
+            x: 0,
+            y: 0,
+            width: 2000,
+            height: 2000,
+        };
+        let areas = vec![WindowWorkArea {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1040,
+        }];
+        let result = clamp_window_position_to_work_areas(window, &areas);
+        assert_eq!(result.width, 1920);
+        assert_eq!(result.height, 1040);
+    }
+
+    #[test]
+    fn no_work_areas_keeps_minimum_size() {
+        let window = WindowPosition {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let result = clamp_window_position_to_work_areas(window, &[]);
+        assert_eq!(result.width, 730);
+        assert_eq!(result.height, 500);
     }
 }
