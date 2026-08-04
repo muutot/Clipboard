@@ -242,6 +242,9 @@ header p {
 .custom-select-popover {
   position: fixed;
   z-index: 100;
+  width: max-content;
+  min-width: 150px;
+  max-width: calc(100vw - 16px);
   max-height: 240px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -266,6 +269,7 @@ header p {
   background: transparent;
   text-align: left;
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 

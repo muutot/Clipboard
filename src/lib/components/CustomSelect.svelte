@@ -33,7 +33,6 @@
   let open = $state(false);
   let popoverTop = $state(0);
   let popoverLeft = $state(0);
-  let popoverWidth = $state(150);
   let triggerEl: HTMLButtonElement | undefined = $state();
   let popoverEl: HTMLDivElement | undefined = $state();
 
@@ -44,6 +43,7 @@
   function positionPopover() {
     if (!open || !triggerEl || !popoverEl) return;
     const rect = triggerEl.getBoundingClientRect();
+    const popWidth = popoverEl.offsetWidth;
     const popHeight = popoverEl.offsetHeight;
     const gap = 4;
     const topBelow = rect.bottom + gap;
@@ -51,8 +51,7 @@
     const fitsBelow = topBelow + popHeight <= window.innerHeight - 8;
     const fitsAbove = topAbove >= 8;
     popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
-    popoverLeft = Math.max(8, Math.min(rect.left, window.innerWidth - 8 - popoverEl.offsetWidth));
-    popoverWidth = Math.max(rect.width, 150);
+    popoverLeft = Math.max(8, Math.min(rect.right - popWidth, window.innerWidth - 8 - popWidth));
   }
 
   function toggle() {
@@ -111,7 +110,7 @@
       class="custom-select-popover"
       role="listbox"
       aria-label={ariaLabel}
-      style="top: {popoverTop}px; left: {popoverLeft}px; width: {popoverWidth}px;"
+      style="top: {popoverTop}px; left: {popoverLeft}px;"
       bind:this={popoverEl}
     >
       <div class="custom-select-backdrop" onclick={() => (open = false)} aria-hidden="true"></div>
