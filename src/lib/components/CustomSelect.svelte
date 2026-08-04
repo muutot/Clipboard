@@ -113,7 +113,7 @@
       class="custom-select-popover popover-surface"
       role="listbox"
       aria-label={ariaLabel}
-      style="top: {popoverTop}px; left: {popoverLeft}px; width: {popoverWidth}px;"
+      style="top: {popoverTop}px; left: {popoverLeft}px; min-width: {popoverWidth}px;"
       bind:this={popoverEl}
     >
       <div class="custom-select-backdrop" onclick={() => (open = false)} aria-hidden="true"></div>
