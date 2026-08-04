@@ -111,7 +111,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 `settings-shared.css` currently owns:
 
 - standalone `header`, `.eyebrow`, `h2`, header description, and `.close-button`;
-- `.settings-scroll` and scrollbar treatment;
+- `.settings-scroll` scroll container;
 - `.setting-card`, `.toggle-card`, `.setting-heading`, `.setting-icon`, `.heading-inline`, `.value-label`;
 - `.toggle-switch`, `.toggle-knob` and active/disabled states;
 - `.settings-select` shared select primitive (custom arrow, hover/focus/disabled/option states);
@@ -129,6 +129,7 @@ Legacy/local duplication exists in the settings shell and ignored-app panel; it 
 Before adding a rule, place it at the narrowest correct stable level:
 
 - Theme color or global accessibility/reset → `app.css`, `ThemeColors`, presets, and `theme.ts` together.
+- Global scrollbar treatment (thin width, themed thumb via `--scrollbar-color`) → `app.css` on the universal `*` selectors; components only add scrollability, never per-scope scrollbar rules. The `.filters` row is the intentional exception (hidden scrollbar).
 - Shared settings card/control/feedback primitive → `settings-shared.css`.
 - Settings navigation/shell/built-in storage-OCR-statistics layout → `StorageSettingsDialog.svelte`.
 - One reusable component's unique layout → that component's scoped `<style>`.

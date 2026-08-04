@@ -3234,21 +3234,6 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
-    scrollbar-color: var(--scrollbar-color) transparent;
-    scrollbar-width: thin;
-  }
-
-  .settings-scroll::-webkit-scrollbar {
-    width: 7px;
-  }
-
-  .settings-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .settings-scroll::-webkit-scrollbar-thumb {
-    border-radius: 10px;
-    background: var(--scrollbar-color);
   }
 
   .setting-card {

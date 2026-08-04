@@ -190,8 +190,6 @@
     grid-template-columns: auto minmax(0, 1fr);
     max-height: 320px;
     overflow: auto;
-    scrollbar-color: #696969 transparent;
-    scrollbar-width: thin;
   }
 
   .line-numbers {

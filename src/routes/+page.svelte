@@ -3674,19 +3674,6 @@
     min-height: 0;
     overflow-y: auto;
     padding: 0 7px 18px;
-    scrollbar-color: var(--scrollbar-color) transparent;
-    scrollbar-width: thin;
-  }
-
-  .history-list::-webkit-scrollbar {
-    width: 7px;
-  }
-  .history-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .history-list::-webkit-scrollbar-thumb {
-    border-radius: 10px;
-    background: var(--scrollbar-color);
   }
 
   .virtual-container {

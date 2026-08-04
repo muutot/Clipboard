@@ -1253,8 +1253,6 @@
     min-height: 0;
     overflow-y: auto;
     padding: 16px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-color) transparent;
   }
 
   .preview-section {
