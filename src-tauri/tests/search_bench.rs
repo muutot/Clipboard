@@ -238,9 +238,7 @@ fn pipeline_fast_sorted(
             &TopDocs::with_limit(limit).order_by_fast_field::<i64>("created_at_ms", Order::Desc),
         )
         .unwrap();
-    hits.into_iter()
-        .filter_map(|(k, _a)| k)
-        .collect()
+    hits.into_iter().filter_map(|(k, _a)| k).collect()
 }
 
 fn dir_size(path: &std::path::Path) -> u64 {

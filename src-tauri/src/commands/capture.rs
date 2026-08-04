@@ -6,11 +6,12 @@ use std::time::Duration;
 
 use super::signal::{stop_signal_requested, wait_for_stop};
 use crate::content;
+use crate::content::self_trigger::SelfTriggerGuard;
 use crate::content::RESOURCE_METADATA_SCHEMA_VERSION;
 use crate::content::{
-    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms, FileStore, ThumbnailQueue,
+    created_at_ms, extension_for_path, mime_type_for_path, modified_at_ms, FileStore,
+    ThumbnailQueue,
 };
-use crate::content::self_trigger::SelfTriggerGuard;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::platform;
 use crate::platform::windows_clipboard::ClipboardChange;
@@ -581,8 +582,7 @@ pub(crate) fn run_capture_loop(
                             .iter()
                             .map(|file| file.storage_path.clone())
                             .collect::<Vec<_>>();
-                        let paths_json =
-                            serde_json::to_string(&stored_paths).unwrap_or_default();
+                        let paths_json = serde_json::to_string(&stored_paths).unwrap_or_default();
 
                         let item = ClipboardItem {
                             id: format!("files_{}", group_hash),
@@ -637,7 +637,11 @@ pub(crate) fn run_capture_loop(
                 };
 
                 let content_hash = content::hash::compute_content_hash(
-                    if kind == ClipboardKind::Link { "link" } else { "text" },
+                    if kind == ClipboardKind::Link {
+                        "link"
+                    } else {
+                        "text"
+                    },
                     &text,
                     None,
                 );
