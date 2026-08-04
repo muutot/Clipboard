@@ -1,5 +1,159 @@
 # Changelog
 
+## 1.2.0 (2026-08-04)
+
+### ✨ Features
+
+- **i18n**: replace all hardcoded Chinese strings with _t() calls (0a713621)
+- **settings**: replace native selects with custom popover dropdown (43242c9f)
+- **filter**: swap source app and date filter dropdown order (8a64e713)
+- **settings**: add customizable search box placeholder text (746e3ab5)
+- **settings**: add search index sync mode (lazy/background) (ee72886f)
+- **paste**: apply clean-on-paste to plain and formatted paste paths (30ad79b8)
+- **viewer**: add per-item clean-and-paste action to cards and detail panel (97fead6f)
+- **settings**: add clean-on-paste global toggle (9e842289)
+- **transform**: add clean-paste pipeline with trim, whitespace collapse and URL tracking removal (d9b8cab0)
+- **card**: add paste-with-format action for rich-text items (c8ce56d3)
+- **clipboard**: add htmlContent mapping and writeClipboardHtml service (89429ec1)
+- **capture**: capture and persist CF_HTML rich text for paste-by-format (554b4cdb)
+- **settings**: expose full export options (favorites, content types, date range) (7f315fb6)
+- **settings**: add update check via GitHub Releases (312e82e3)
+- **settings**: add multi-format import/export GUI (525e2cb0)
+- **settings**: add frosted glass window effect (ad4646de)
+
+### 🐛 Bug Fixes
+
+- **viewer**: build desktop viewer DOM with safe element APIs (f8bb29ec)
+- **detail**: keep open detail panel in sync when item changes (5bdb85e7)
+- **detail**: swallow rejected reveal and open-folder invocations (07f76ab0)
+- **content**: avoid splitting multi-byte characters when truncating (22c23701)
+- **search**: clamp requested page size to configured max results (9800b0bd)
+- **window**: clamp to work area when smaller than minimum size (93578629)
+- **export**: quote formula-prefixed cells in CSV export (109e8565)
+- **config**: persist config and keyboard settings atomically (a5a1b1ff)
+- **api**: remove wildcard CORS and add nosniff header (0b20d3be)
+- **cli**: resolve database path from configured storage directories (78f34143)
+- **select**: size settings popover to longest option via min-width (42de5630)
+- **select**: reposition popover reliably on every open (3060b4f1)
+- **i18n**: repair garbled Chinese text and add language switch toast keys (80e6e25f)
+- **select**: overlay popover with fixed positioning (462ac5e0)
+- **settings**: merge index sync description and restart note into one line (f57907dd)
+- **capture**: unify capture loop for monitor restart (471898f1)
+- **search**: drain outbox before search so new captures are indexed (10ea45ca)
+- **settings**: show real app version under sidebar logo (3f4aa5a0)
+
+### 🚀 Performance
+
+- **search**: chunk document lookups to avoid oversized IN queries (3aa49c17)
+- **search**: avoid extra clone when caching search page (a6b21886)
+- **search**: skip outbox sync when no events pending (1b306bcd)
+- **storage**: remove redundant outbox enqueue in restore_deleted (b04f0115)
+
+### ♻️ Refactoring
+
+- **search**: make validate probe index health (91b6a98f)
+
+### 🎨 Styling
+
+- **format**: apply rustfmt formatting (6a7cb8c6)
+- **select**: unify dropdown popover surface between main and settings (31173876)
+- **dropdown**: min-width matches trigger button width (8b05a675)
+- **dropdown**: min-width 50px (4f6c860f)
+- **main**: right-align filter dropdowns and auto-size to longest item (01d2c54a)
+- **select**: right-align popover to trigger and auto-size to longest item (4c4d7ac3)
+- **settings**: mirror main-page popover styling in select option list (b40f2314)
+- **settings**: match select option list to main-page dropdown popover (7df06ea2)
+- **settings**: restyle .settings-select to main-page ghost-button look (ecf7be35)
+- **theme**: centralize scrollbar styling globally in app.css (0b75ec41)
+- **settings**: unify dropdown selects into shared .settings-select primitive (8e58341c)
+- **refs**: align reference table formatting (346d8d69)
+- **settings**: align import/export card with toggle-card pattern (1f4975ce)
+
+### 📝 Documentation
+
+- **marketing**: add WeChat promotional article draft (78d094ea)
+- **settings**: describe custom popover select usage (e51eb8b3)
+- **readme**: update settings categories, new paste actions, structure, and doc links (2a01c310)
+- **search**: add optimization benchmark harness and report (4dbed52b)
+- **clipboard**: warn duplicate shares resource file (086f0f66)
+
+## 1.2.0 (2026-08-04)
+
+### ✨ Features
+
+- **i18n**: replace all hardcoded Chinese strings with _t() calls (0a713621)
+- **settings**: replace native selects with custom popover dropdown (43242c9f)
+- **filter**: swap source app and date filter dropdown order (8a64e713)
+- **settings**: add customizable search box placeholder text (746e3ab5)
+- **settings**: add search index sync mode (lazy/background) (ee72886f)
+- **paste**: apply clean-on-paste to plain and formatted paste paths (30ad79b8)
+- **viewer**: add per-item clean-and-paste action to cards and detail panel (97fead6f)
+- **settings**: add clean-on-paste global toggle (9e842289)
+- **transform**: add clean-paste pipeline with trim, whitespace collapse and URL tracking removal (d9b8cab0)
+- **card**: add paste-with-format action for rich-text items (c8ce56d3)
+- **clipboard**: add htmlContent mapping and writeClipboardHtml service (89429ec1)
+- **capture**: capture and persist CF_HTML rich text for paste-by-format (554b4cdb)
+- **settings**: expose full export options (favorites, content types, date range) (7f315fb6)
+- **settings**: add update check via GitHub Releases (312e82e3)
+- **settings**: add multi-format import/export GUI (525e2cb0)
+- **settings**: add frosted glass window effect (ad4646de)
+
+### 🐛 Bug Fixes
+
+- **viewer**: build desktop viewer DOM with safe element APIs (f8bb29ec)
+- **detail**: keep open detail panel in sync when item changes (5bdb85e7)
+- **detail**: swallow rejected reveal and open-folder invocations (07f76ab0)
+- **content**: avoid splitting multi-byte characters when truncating (22c23701)
+- **search**: clamp requested page size to configured max results (9800b0bd)
+- **window**: clamp to work area when smaller than minimum size (93578629)
+- **export**: quote formula-prefixed cells in CSV export (109e8565)
+- **config**: persist config and keyboard settings atomically (a5a1b1ff)
+- **api**: remove wildcard CORS and add nosniff header (0b20d3be)
+- **cli**: resolve database path from configured storage directories (78f34143)
+- **select**: size settings popover to longest option via min-width (42de5630)
+- **select**: reposition popover reliably on every open (3060b4f1)
+- **i18n**: repair garbled Chinese text and add language switch toast keys (80e6e25f)
+- **select**: overlay popover with fixed positioning (462ac5e0)
+- **settings**: merge index sync description and restart note into one line (f57907dd)
+- **capture**: unify capture loop for monitor restart (471898f1)
+- **search**: drain outbox before search so new captures are indexed (10ea45ca)
+- **settings**: show real app version under sidebar logo (3f4aa5a0)
+
+### 🚀 Performance
+
+- **search**: chunk document lookups to avoid oversized IN queries (3aa49c17)
+- **search**: avoid extra clone when caching search page (a6b21886)
+- **search**: skip outbox sync when no events pending (1b306bcd)
+- **storage**: remove redundant outbox enqueue in restore_deleted (b04f0115)
+
+### ♻️ Refactoring
+
+- **search**: make validate probe index health (91b6a98f)
+
+### 🎨 Styling
+
+- **format**: apply rustfmt formatting (6a7cb8c6)
+- **select**: unify dropdown popover surface between main and settings (31173876)
+- **dropdown**: min-width matches trigger button width (8b05a675)
+- **dropdown**: min-width 50px (4f6c860f)
+- **main**: right-align filter dropdowns and auto-size to longest item (01d2c54a)
+- **select**: right-align popover to trigger and auto-size to longest item (4c4d7ac3)
+- **settings**: mirror main-page popover styling in select option list (b40f2314)
+- **settings**: match select option list to main-page dropdown popover (7df06ea2)
+- **settings**: restyle .settings-select to main-page ghost-button look (ecf7be35)
+- **theme**: centralize scrollbar styling globally in app.css (0b75ec41)
+- **settings**: unify dropdown selects into shared .settings-select primitive (8e58341c)
+- **refs**: align reference table formatting (346d8d69)
+- **settings**: align import/export card with toggle-card pattern (1f4975ce)
+
+### 📝 Documentation
+
+- **marketing**: add WeChat promotional article draft (78d094ea)
+- **settings**: describe custom popover select usage (e51eb8b3)
+- **readme**: update settings categories, new paste actions, structure, and doc links (2a01c310)
+- **search**: add optimization benchmark harness and report (4dbed52b)
+- **clipboard**: warn duplicate shares resource file (086f0f66)
+
 ## 1.1.0 (2026-07-31)
 
 ### ✨ Features
