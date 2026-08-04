@@ -236,7 +236,7 @@
         </div>
       </div>
       <select
-        class="theme-select"
+        class="settings-select"
         value={s.searchSuggestionMode}
         aria-label={_t("general.searchSuggestionMode")}
         onchange={(e) =>
@@ -328,7 +328,7 @@
               <span class="grip-dot"></span>
             </span>
             <select
-              class="theme-select sort-field-select"
+              class="settings-select sort-field-select"
               value={rule.field}
               aria-label={_t("general.searchSortRules")}
               onchange={(e) => {
@@ -495,7 +495,7 @@
         </div>
       </div>
       <select
-        class="theme-select"
+        class="settings-select"
         value={s.searchCacheEviction}
         aria-label={_t("general.searchCacheEviction")}
         onchange={(e) =>
@@ -518,7 +518,7 @@
         </div>
       </div>
       <select
-        class="theme-select"
+        class="settings-select"
         value={s.searchIndexSyncMode}
         aria-label={_t("general.searchIndexSyncMode")}
         onchange={(e) =>
@@ -593,7 +593,7 @@
         </div>
       </div>
       <select
-        class="theme-select"
+        class="settings-select"
         value={s.detailDisplayMode}
         aria-label={_t("general.detailDisplayMode")}
         onchange={(e) =>
@@ -666,7 +666,7 @@
         </div>
       </div>
       <select
-        class="theme-select"
+        class="settings-select"
         value={s.cardActionsDisplay}
         aria-label={_t("general.cardActionsDisplay")}
         onchange={(e) =>
@@ -913,7 +913,7 @@
         </div>
       </div>
       <select
-        class="theme-select"
+        class="settings-select"
         value={s.windowEffect}
         aria-label={_t("general.windowEffect")}
         onchange={(e) =>
@@ -1100,26 +1100,6 @@
     border-color: var(--selection-color);
     color: var(--text-primary);
     background: color-mix(in srgb, var(--selection-color) 15%, transparent);
-  }
-
-  .theme-select {
-    padding: 5px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font: inherit;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    flex-shrink: 0;
-    outline: none;
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-  }
-
-  .theme-select:focus {
-    border-color: var(--text-faint);
   }
 
   .settings-text-input {

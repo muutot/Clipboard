@@ -1704,7 +1704,7 @@
           <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
           <span class="setting-label">OCR 引擎</span>
           <select
-            class="model-select ocr-engine-select"
+            class="settings-select ocr-engine-select"
             bind:value={ocrEngine}
             onchange={() => saveOcrEngine(ocrEngine)}
           >
@@ -1718,7 +1718,7 @@
           <span class="setting-label">模型</span>
           <select
             bind:value={modelVariant}
-            class="model-select ocr-model-select"
+            class="settings-select ocr-model-select"
             disabled={ocrInstalling}
           >
             <option value="tiny">tiny (~6MB){installedVariants.includes("tiny") ? " ✓" : ""}</option
@@ -2461,6 +2461,7 @@
                 </div>
                 <div class="transfer-actions">
                   <select
+                    class="settings-select"
                     bind:value={exportFormat}
                     disabled={exporting || importing || exportFormats.length === 0}
                     aria-label={_t("storage.exportLabel")}
@@ -2687,7 +2688,7 @@
                 onchange={saveMaxFileCopySize}
               />
               <select
-                class="unit-select"
+                class="settings-select unit-select"
                 bind:value={maxFileCopySizeUnit}
                 onchange={() => changeFileSizeUnit(maxFileCopySizeUnit)}
               >
@@ -3494,49 +3495,6 @@
     border-color: var(--text-faint);
   }
 
-  select,
-  .model-select {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px 30px 8px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    outline: none;
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font-size: var(--settings-control-size);
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23999' d='M2 3l3 4 3-4'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    transition:
-      border-color 120ms ease,
-      background-color 120ms ease;
-  }
-
-  select:hover,
-  .model-select:hover {
-    border-color: var(--text-faint);
-  }
-
-  select:focus,
-  .model-select:focus,
-  .unit-select:focus {
-    border-color: var(--text-faint);
-  }
-
-  select option,
-  .model-select option,
-  .unit-select option {
-    background: var(--card-bg);
-    color: var(--text-primary);
-    padding: 6px 10px;
-    font-size: var(--settings-control-size);
-  }
-
   .pending-path {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -4111,8 +4069,7 @@
       color 100ms ease;
   }
 
-  .setting-card-row select,
-  .setting-card-row .model-select {
+  .setting-card-row .settings-select {
     height: 34px;
     box-sizing: border-box;
   }
@@ -4229,15 +4186,10 @@
     flex-shrink: 0;
   }
 
-  .transfer-actions select {
+  .transfer-actions .settings-select {
     width: 116px;
     height: 34px;
     flex-shrink: 0;
-  }
-
-  .transfer-actions select:disabled {
-    opacity: 0.55;
-    cursor: default;
   }
 
   .export-options {
@@ -4374,24 +4326,9 @@
 
   .unit-select {
     width: 64px;
-    padding: 8px 6px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font-size: var(--settings-control-size);
-    cursor: pointer;
-    flex-shrink: 0;
+    padding: 6px 22px 6px 6px;
     text-align: center;
     text-align-last: center;
-    outline: none;
-    transition:
-      border-color 120ms ease,
-      background-color 120ms ease;
-  }
-
-  .unit-select:hover {
-    border-color: var(--text-faint);
   }
 
   .restart-btn {

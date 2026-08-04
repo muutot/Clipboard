@@ -114,6 +114,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.settings-scroll` and scrollbar treatment;
 - `.setting-card`, `.toggle-card`, `.setting-heading`, `.setting-icon`, `.heading-inline`, `.value-label`;
 - `.toggle-switch`, `.toggle-knob` and active/disabled states;
+- `.settings-select` shared select primitive (custom arrow, hover/focus/disabled/option states);
 - `.transparency-slider` including WebKit and Firefox tracks/thumbs;
 - `.settings-feedback` success/error states;
 - `.auto-save-note` and the default pointer cursor for buttons;

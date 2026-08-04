@@ -213,7 +213,7 @@
       </div>
     </div>
     <select
-      class="theme-select"
+      class="settings-select"
       value={themeDropdownValue}
       onchange={(e) => {
         const val = (e.target as HTMLSelectElement).value;
@@ -351,28 +351,6 @@
 {/if}
 
 <style>
-  .theme-select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    padding: 6px 28px 6px 10px;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    flex-shrink: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23777'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-  }
-
-  .theme-select:focus {
-    border-color: var(--text-faint);
-    outline: none;
-  }
-
   .color-swatch {
     width: 20px;
     height: 20px;

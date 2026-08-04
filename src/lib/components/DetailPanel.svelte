@@ -856,7 +856,7 @@
                 <div class="detail-row">
                   <dt><AppIcon name="file" size={14} /> {_t("detail.file")}</dt>
                   <dd>
-                    <select class="file-selector" bind:value={selectedFileIndex}>
+                    <select class="settings-select file-selector" bind:value={selectedFileIndex}>
                       {#each resourceFiles as file, index}
                         <option value={index}>{file.name}</option>
                       {/each}
@@ -1643,13 +1643,6 @@
 
   .file-selector {
     width: 100%;
-    padding: 4px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font-size: 11px;
-    cursor: pointer;
   }
 
   .marker-item a {
