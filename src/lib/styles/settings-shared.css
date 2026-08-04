@@ -243,7 +243,7 @@ header p {
   position: fixed;
   z-index: 100;
   width: max-content;
-  min-width: 150px;
+  min-width: 50px;
   max-width: calc(100vw - 16px);
   max-height: 240px;
   border: 1px solid var(--border-color);
