@@ -114,7 +114,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.settings-scroll` scroll container;
 - `.setting-card`, `.toggle-card`, `.setting-heading`, `.setting-icon`, `.heading-inline`, `.value-label`;
 - `.toggle-switch`, `.toggle-knob` and active/disabled states;
-- `.settings-select` shared select primitive (custom arrow, hover/focus/disabled states); its open option list matches the main-page dropdown popover: `--surface-bg` surface, `--text-secondary` items, `--hover-bg`/`--text-primary` hover, `--selection-color` checked.
+- `.settings-select` shared select primitive: the closed control keeps the settings input look (custom arrow, hover/focus/disabled states); its open `<option>` list mirrors the main-page dropdown popover button style (`--surface-bg` surface, `--text-secondary`, `7px 12px` padding, `--hover-bg`/`--text-primary` hover, `--selection-color` + 8% mix when checked).
 - `.transparency-slider` including WebKit and Firefox tracks/thumbs;
 - `.settings-feedback` success/error states;
 - `.auto-save-note` and the default pointer cursor for buttons;

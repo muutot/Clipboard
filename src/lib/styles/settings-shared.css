@@ -208,6 +208,7 @@ header p {
 .settings-select option {
   background: var(--surface-bg);
   color: var(--text-secondary);
+  padding: 7px 12px;
   font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
 }
 
@@ -217,7 +218,7 @@ header p {
 }
 
 .settings-select option:checked {
-  background: var(--surface-bg);
+  background: color-mix(in srgb, var(--selection-color) 8%, transparent);
   color: var(--selection-color);
 }
 
