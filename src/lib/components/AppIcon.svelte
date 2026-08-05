@@ -44,6 +44,8 @@
     | "tag"
     | "plus"
     | "arrow-up"
+    | "arrow-down"
+    | "arrow-left"
     | "arrow-right";
 
   interface Props {
@@ -236,6 +238,12 @@
   {:else if name === "arrow-up"}
     <path d="M12 19V5" />
     <path d="m6 11 6-6 6 6" />
+  {:else if name === "arrow-down"}
+    <path d="M12 5v14" />
+    <path d="m6 13 6 6 6-6" />
+  {:else if name === "arrow-left"}
+    <path d="M19 12H5" />
+    <path d="m11 18-6-6 6-6" />
   {:else if name === "arrow-right"}
     <path d="M5 12h14" />
     <path d="m13 6 6 6-6 6" />

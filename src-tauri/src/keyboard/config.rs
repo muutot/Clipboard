@@ -25,7 +25,9 @@ const DEFAULT_OPEN_DETAIL_EDIT_SHORTCUT: &str = "Ctrl+E";
 const DEFAULT_MOVE_SELECTION_UP_SHORTCUT: &str = "ArrowUp";
 const DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT: &str = "ArrowDown";
 const DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT: &str = "ArrowRight";
+const DEFAULT_SWITCH_FILTER_NEXT_TAB_SHORTCUT: &str = "Tab";
 const DEFAULT_SWITCH_FILTER_PREV_SHORTCUT: &str = "ArrowLeft";
+const DEFAULT_SWITCH_FILTER_PREV_TAB_SHORTCUT: &str = "Shift+Tab";
 const DEFAULT_SELECT_ALL_SHORTCUT: &str = "Ctrl+A";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -71,17 +73,25 @@ impl Default for KeyboardConfig {
                     vec![DEFAULT_SELECT_ALL_SHORTCUT.to_owned()],
                 ),
                 (
-                    "moveSelection".to_owned(),
+                    "moveSelectionUp".to_owned(),
+                    vec![DEFAULT_MOVE_SELECTION_UP_SHORTCUT.to_owned()],
+                ),
+                (
+                    "moveSelectionDown".to_owned(),
+                    vec![DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT.to_owned()],
+                ),
+                (
+                    "switchFilterNext".to_owned(),
                     vec![
-                        DEFAULT_MOVE_SELECTION_UP_SHORTCUT.to_owned(),
-                        DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT.to_owned(),
+                        DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT.to_owned(),
+                        DEFAULT_SWITCH_FILTER_NEXT_TAB_SHORTCUT.to_owned(),
                     ],
                 ),
                 (
-                    "switchFilter".to_owned(),
+                    "switchFilterPrev".to_owned(),
                     vec![
-                        DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT.to_owned(),
                         DEFAULT_SWITCH_FILTER_PREV_SHORTCUT.to_owned(),
+                        DEFAULT_SWITCH_FILTER_PREV_TAB_SHORTCUT.to_owned(),
                     ],
                 ),
             ]),
@@ -271,12 +281,20 @@ mod tests {
         );
         assert_eq!(saved["shortcuts"]["selectAll"], json!(["Ctrl+A"]));
         assert_eq!(
-            saved["shortcuts"]["moveSelection"],
-            json!(["Arrowup", "Arrowdown"])
+            saved["shortcuts"]["moveSelectionUp"],
+            json!(["Arrowup"])
         );
         assert_eq!(
-            saved["shortcuts"]["switchFilter"],
-            json!(["Arrowright", "Arrowleft"])
+            saved["shortcuts"]["moveSelectionDown"],
+            json!(["Arrowdown"])
+        );
+        assert_eq!(
+            saved["shortcuts"]["switchFilterNext"],
+            json!(["Arrowright", "Tab"])
+        );
+        assert_eq!(
+            saved["shortcuts"]["switchFilterPrev"],
+            json!(["Arrowleft", "Shift+Tab"])
         );
         fs::remove_dir_all(project).unwrap();
     }

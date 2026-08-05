@@ -321,8 +321,10 @@ export interface LocaleDefinition {
     deleteItem: string;
     favoriteItem: string;
     addTag: string;
-    moveSelection: string;
-    switchFilter: string;
+    moveSelectionUp: string;
+    moveSelectionDown: string;
+    switchFilterNext: string;
+    switchFilterPrev: string;
     clearSelection: string;
     hideWindow: string;
     selectAll: string;
