@@ -918,11 +918,9 @@
             >
           {/if}
         </div>
-        {#if index < 9}
-          <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
-            >⌘{index + 1}</span
-          >
-        {/if}
+        <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
+          >{index < 9 ? `⌘${index + 1}` : `#${index + 1}`}</span
+        >
       </div>
     {/if}
   {:else}
@@ -1456,9 +1454,11 @@
   }
 
   .shortcut {
-    flex: 0 0 auto;
+    flex: 0 0 56px;
+    width: 56px;
     margin-left: 8px;
-    overflow: visible;
+    text-align: right;
+    overflow: hidden;
     color: var(--text-faint);
     font-size: 11.5px;
     pointer-events: none;

@@ -662,7 +662,8 @@ const zhCN: LocaleDefinition = {
     cardActionsHover: "悬停或选中时显示",
     cardActionsAlways: "始终显示",
     quickCopyBadge: "快速复制 #N 标记",
-    quickCopyBadgeDescription: "在前九个条目右侧常驻显示 #1-#9 快速复制标记，无需先悬停或选中",
+    quickCopyBadgeDescription:
+      "在每个条目右侧常驻显示 #N 标记，无需先悬停或选中；前九个条目显示 ⌘1-⌘9 快速复制标记",
     searchHistory: "最近搜索词",
     searchHistoryDescription: "在搜索框中显示并记录最近提交过的查询",
     searchPlaceholder: "搜索框提示文案",

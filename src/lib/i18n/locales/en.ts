@@ -692,7 +692,7 @@ const en: LocaleDefinition = {
     cardActionsAlways: "Always visible",
     quickCopyBadge: "Quick Copy #N Marks",
     quickCopyBadgeDescription:
-      "Always show the #1-#9 quick copy marks on the first nine items without focusing them first",
+      "Always show the #N marks on every item without focusing them first; the first nine items show ⌘1-⌘9 quick copy marks",
     searchHistory: "Recent Search Terms",
     searchHistoryDescription: "Show and record queries that you submit from the search box",
     searchPlaceholder: "Search Box Hint",
