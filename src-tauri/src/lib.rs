@@ -548,6 +548,7 @@ pub fn run() {
             import_clipboard_items,
             import_from_file,
             get_export_formats,
+            get_import_formats,
             start_clipboard_monitoring,
             stop_clipboard_monitoring,
             get_clipboard_monitor_status,

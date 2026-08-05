@@ -221,6 +221,35 @@ pub struct ExportFormatInfo {
     extension: String,
 }
 
+#[tauri::command]
+pub fn get_import_formats() -> Result<Vec<ImportFormatInfo>, String> {
+    Ok(vec![
+        ImportFormatInfo {
+            id: "pastebackup".to_owned(),
+            label: "PPaste Backup".to_owned(),
+            extension: BACKUP_EXTENSION.to_owned(),
+        },
+        ImportFormatInfo {
+            id: "json".to_owned(),
+            label: "JSON".to_owned(),
+            extension: ".json".to_owned(),
+        },
+        ImportFormatInfo {
+            id: "plainText".to_owned(),
+            label: "Plain Text".to_owned(),
+            extension: ".txt".to_owned(),
+        },
+    ])
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFormatInfo {
+    id: String,
+    label: String,
+    extension: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,5 +386,17 @@ mod tests {
         assert_eq!(database.item_count().unwrap(), 2);
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn import_formats_cover_ppaste_json_and_plain_text() {
+        let formats = get_import_formats().unwrap();
+        assert_eq!(formats.len(), 3);
+        assert_eq!(formats[0].id, "pastebackup");
+        assert_eq!(formats[0].extension, BACKUP_EXTENSION);
+        assert_eq!(formats[1].id, "json");
+        assert_eq!(formats[1].extension, ".json");
+        assert_eq!(formats[2].id, "plainText");
+        assert_eq!(formats[2].extension, ".txt");
     }
 }

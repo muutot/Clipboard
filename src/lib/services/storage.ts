@@ -90,6 +90,12 @@ export interface ExportFormatInfo {
   extension: string;
 }
 
+export interface ImportFormatInfo {
+  id: string;
+  label: string;
+  extension: string;
+}
+
 export interface ExportFileOptions {
   includeFavorites: boolean;
   dateFromMs?: number | null;
@@ -249,6 +255,14 @@ export async function getExportFormats(): Promise<ExportFormatInfo[]> {
   }
 
   return invoke<ExportFormatInfo[]>("get_export_formats");
+}
+
+export async function getImportFormats(): Promise<ImportFormatInfo[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<ImportFormatInfo[]>("get_import_formats");
 }
 
 export async function exportToFile(
