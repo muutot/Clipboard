@@ -422,7 +422,9 @@ pub(crate) fn run_capture_loop(
                         break;
                     }
                     if should_skip_self_triggered_media(
-                        &mut self_trigger_guard.lock().unwrap(),
+                        &mut self_trigger_guard
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner()),
                         "image",
                         &img,
                     ) {
@@ -519,7 +521,9 @@ pub(crate) fn run_capture_loop(
                             std::slice::from_ref(file_path),
                         );
                         if should_skip_self_triggered_hash(
-                            &mut self_trigger_guard.lock().unwrap(),
+                            &mut self_trigger_guard
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner()),
                             &file_hash,
                         ) {
                             continue;
@@ -566,7 +570,9 @@ pub(crate) fn run_capture_loop(
                     } else {
                         let group_hash = content::hash::compute_file_capture_hash(&file_paths);
                         if should_skip_self_triggered_hash(
-                            &mut self_trigger_guard.lock().unwrap(),
+                            &mut self_trigger_guard
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner()),
                             &group_hash,
                         ) {
                             continue;
@@ -647,7 +653,9 @@ pub(crate) fn run_capture_loop(
                 );
 
                 if should_skip_self_triggered_text(
-                    &mut self_trigger_guard.lock().unwrap(),
+                    &mut self_trigger_guard
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner()),
                     kind,
                     &text,
                 ) {
