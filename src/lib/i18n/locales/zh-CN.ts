@@ -184,6 +184,7 @@ const zhCN: LocaleDefinition = {
     exportFailed: "导出失败：{error}",
     importSuccess: "导入完成：新增 {imported} 条，跳过 {skipped} 条",
     importPartial: "导入完成：新增 {imported} 条，跳过 {skipped} 条；{error}",
+    importErrorsN: "有 {count} 条记录未能导入：",
     importFailed: "导入失败：{error}",
     importFilterName: "剪贴板备份",
     ppasteFilterName: "PPaste 备份",

@@ -656,10 +656,13 @@
       if (!filePath) return;
       const result = await importFromFile(filePath);
       if (result.errors.length > 0) {
+        const detail = `${_t("storage.importErrorsN", {
+          count: result.errors.length,
+        })} ${result.errors[0]}`;
         feedback = _t("storage.importPartial", {
           imported: result.importedCount,
           skipped: result.skippedCount,
-          error: result.errors[0],
+          error: detail,
         });
       } else {
         feedback = _t("storage.importSuccess", {

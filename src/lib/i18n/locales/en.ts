@@ -198,6 +198,7 @@ const en: LocaleDefinition = {
     exportFailed: "Export failed: {error}",
     importSuccess: "Import complete: {imported} imported, {skipped} skipped",
     importPartial: "Import complete: {imported} imported, {skipped} skipped; {error}",
+    importErrorsN: "{count} record(s) could not be imported:",
     importFailed: "Import failed: {error}",
     importFilterName: "Clipboard Backup",
     ppasteFilterName: "PPaste Backup",

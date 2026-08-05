@@ -246,7 +246,8 @@ fn build_item(
             .image_filename
             .as_deref()
             .ok_or_else(|| "image record missing filename".to_owned())?;
-        let bytes = read_zip_entry(archive, &format!("PasteData/{filename}"))?;
+        let bytes = read_zip_entry(archive, &format!("PasteData/{filename}"))
+            .map_err(|_| format!("image file PasteData/{filename} is missing from the backup"))?;
         let content_hash = compute_media_hash("image", &bytes);
 
         let image_dir = paths.images.clone();

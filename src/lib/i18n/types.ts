@@ -179,6 +179,7 @@ export interface LocaleDefinition {
     exportFailed: string;
     importSuccess: string;
     importPartial: string;
+    importErrorsN: string;
     importFailed: string;
     importFilterName: string;
     ppasteFilterName: string;
