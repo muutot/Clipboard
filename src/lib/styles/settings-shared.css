@@ -253,15 +253,31 @@ header p {
 .popover-surface button {
   display: flex;
   align-items: center;
+  justify-content: center;
   width: 100%;
   padding: 7px 12px;
   border: 0;
   color: var(--text-secondary);
   background: transparent;
-  text-align: left;
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.popover-surface.text-overflow button {
+  justify-content: flex-end;
+}
+
+.popover-surface button > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.popover-surface.text-overflow button > span {
+  text-align: right;
 }
 
 .popover-surface button:hover {
@@ -286,8 +302,9 @@ header p {
 
 .custom-select-popover {
   position: fixed;
-  min-width: 50px;
+  max-width: 150px;
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 

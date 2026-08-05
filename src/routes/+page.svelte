@@ -48,6 +48,7 @@
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
+  import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
     applyGeneralSettingsToDocument,
     applyFontSizesToDocument,
@@ -175,6 +176,8 @@
   let sourceAppSearch = $state("");
   let sourceAppDropdownOpen = $state(false);
   let dateDropdownOpen = $state(false);
+  let sourceAppDropdownEl: HTMLDivElement | undefined = $state();
+  let dateDropdownEl: HTMLDivElement | undefined = $state();
 
   let detailItem = $state<ClipboardItem | null>(null);
 
@@ -2705,6 +2708,20 @@
       : sourceApps,
   );
 
+  $effect(() => {
+    if (!sourceAppDropdownOpen) return;
+    void filteredSourceApps;
+    tick().then(() => {
+      if (sourceAppDropdownEl) alignDropdownOptionText(sourceAppDropdownEl);
+    });
+  });
+
+  $effect(() => {
+    if (!dateDropdownOpen || !dateDropdownEl) return;
+    const el = dateDropdownEl;
+    tick().then(() => alignDropdownOptionText(el));
+  });
+
   const matchingSearchHistory = $derived.by<SearchOption[]>(() => {
     if (!$generalSettings.searchHistoryEnabled) return [];
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -2955,12 +2972,16 @@
           aria-label={_t("sourceApp.all")}
           title={_t("sourceApp.all")}
         >
-          <AppIcon name="filter" size={15} />
+          {#if !sourceAppFilter}
+            <AppIcon name="filter" size={15} />
+          {/if}
           <span class="dropdown-label">{sourceAppFilter || _t("sourceApp.all")}</span>
-          <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+          {#if !sourceAppFilter}
+            <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+          {/if}
         </button>
         {#if sourceAppDropdownOpen}
-          <div class="dropdown-popover popover-surface" role="menu">
+          <div class="dropdown-popover popover-surface" role="menu" bind:this={sourceAppDropdownEl}>
             <div
               class="dropdown-backdrop"
               onclick={() => (sourceAppDropdownOpen = false)}
@@ -2983,7 +3004,7 @@
                 onclick={() => {
                   sourceAppFilter = "";
                   sourceAppDropdownOpen = false;
-                }}>{_t("sourceApp.all")}</button
+                }}><span>{_t("sourceApp.all")}</span></button
               >
               {#each filteredSourceApps as app}
                 <button
@@ -2993,7 +3014,7 @@
                   onclick={() => {
                     sourceAppFilter = app;
                     sourceAppDropdownOpen = false;
-                  }}>{app}</button
+                  }}><span>{app}</span></button
                 >
               {/each}
             </div>
@@ -3011,17 +3032,21 @@
           aria-label={_t("dateFilter.all")}
           title={_t("dateFilter.all")}
         >
-          <AppIcon name="calendar" size={15} />
+          {#if dateFilter === "all"}
+            <AppIcon name="calendar" size={15} />
+          {/if}
           <span class="dropdown-label"
             >{dateFilter === "all"
               ? _t("dateFilter.all")
               : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
                 _t("dateFilter.all"))}</span
           >
-          <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+          {#if dateFilter === "all"}
+            <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+          {/if}
         </button>
         {#if dateDropdownOpen}
-          <div class="dropdown-popover popover-surface" role="menu">
+          <div class="dropdown-popover popover-surface" role="menu" bind:this={dateDropdownEl}>
             <div
               class="dropdown-backdrop"
               onclick={() => (dateDropdownOpen = false)}
@@ -3035,7 +3060,7 @@
                 onclick={() => {
                   dateFilter = option.id;
                   dateDropdownOpen = false;
-                }}>{option.label}</button
+                }}><span>{option.label}</span></button
               >
             {/each}
           </div>
@@ -3580,8 +3605,10 @@
   .filter-dropdown-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
     height: 29px;
+    width: 80px;
     padding: 0 8px;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -3603,6 +3630,7 @@
   }
 
   .dropdown-label {
+    min-width: 0;
     max-width: 80px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3613,6 +3641,7 @@
     top: calc(100% + 4px);
     right: 0;
     min-width: 100%;
+    max-width: 150px;
     overflow: hidden;
   }
 

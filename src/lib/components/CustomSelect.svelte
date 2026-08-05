@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import { alignDropdownOptionText } from "$lib/utils/dropdown";
 
   export interface CustomSelectOption {
     value: string | number;
@@ -51,7 +52,7 @@
     const fitsAbove = topAbove >= 8;
     popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
     const targetWidth = Math.max(rect.width, popoverEl.offsetWidth);
-    popoverWidth = Math.min(targetWidth, window.innerWidth - 16);
+    popoverWidth = Math.min(targetWidth, 150);
     popoverLeft = Math.max(
       8,
       Math.min(rect.right - popoverWidth, window.innerWidth - 8 - popoverWidth),
@@ -66,6 +67,7 @@
   $effect(() => {
     if (!open) return;
     positionPopover();
+    if (popoverEl) alignDropdownOptionText(popoverEl);
     window.addEventListener("resize", positionPopover);
     window.addEventListener("scroll", onScroll, true);
     return () => {
@@ -126,7 +128,7 @@
           disabled={option.disabled}
           onclick={() => select(option)}
         >
-          {option.label}
+          <span>{option.label}</span>
         </button>
       {/each}
     </div>

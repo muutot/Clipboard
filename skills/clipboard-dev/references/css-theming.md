@@ -19,7 +19,7 @@ This is the authoritative style reference for reusable project UI. Read it befor
 
 1. The approved main page in `src/routes/+page.svelte` and `ClipboardCard.svelte` defines the product's visual language.
 2. `src/lib/types/clipboard.ts::{DARK_THEME_COLORS,LIGHT_THEME_COLORS}` defines preset values.
-3. `src/lib/utils/theme.ts::applyThemeColors` defines the ThemeColors → CSS-variable mapping.
+3. `src/lib/utils/theme.ts::applyThemeColors` defines the ThemeColors 闂?CSS-variable mapping.
 4. `src/app.css` provides root defaults, global reset, font variables, focus/accessibility rules, and imports shared settings CSS.
 5. `src/lib/styles/settings-shared.css` owns reusable child-panel primitives.
 6. `StorageSettingsDialog.svelte` owns settings-shell layout and built-in storage/OCR/statistics-specific styles.
@@ -36,7 +36,7 @@ Preserve these characteristics unless the task explicitly requests a redesign:
 - Red `--accent` for product/focus emphasis, blue `--selection-color` for selection/current state, and semantic success/danger/warning colors.
 - Large, lightweight, borderless search input at the top; compact icon/text filters and icon-only window actions below it.
 - History cards are transparent at rest, use `--hover-bg` on hover/focus, and mix selection color into the selected+checked state. Do not turn every row into a permanently elevated card.
-- Card content hierarchy: title → optional preview → source/time/actions metadata. Keep truncation, compact mode, and virtual-scroll measurement aligned.
+- Card content hierarchy: title 闂?optional preview 闂?source/time/actions metadata. Keep truncation, compact mode, and virtual-scroll measurement aligned.
 - Status bar is a low-contrast footer separated by one subtle border; popovers/context surfaces are elevated with a border plus shadow.
 - Motion is short and functional. Respect the global reduced-motion rule.
 
@@ -114,7 +114,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.settings-scroll` scroll container;
 - `.setting-card`, `.toggle-card`, `.setting-heading`, `.setting-icon`, `.heading-inline`, `.value-label`;
 - `.toggle-switch`, `.toggle-knob` and active/disabled states;
-- `.popover-surface` shared dropdown popover visual primitive (used by both settings and the main page): `z-index: 100`, `width: max-content`, `max-width: calc(100vw - 16px)`, `1px var(--border-color)` border, `8px` radius, `--surface-bg`, `0 8px 28px` shadow; plus shared `button`/`:hover`/`.selected`/`:disabled` states (`--text-secondary`/`--text-primary`, `--hover-bg`, `--selection-color` + 8% mix, `7px 12px` padding). Because `width: max-content` is what sizes the popover to its longest item, do not force an inline `width` on the popover (it would override the natural size and freeze the width at a stale value). Each surface keeps its own positioning: settings `.custom-select-popover` adds `position: fixed` with JS-computed `top`/`left` plus an inline `min-width` (at least the trigger width, capped at `100vw - 16px`) so `max-content` still sizes to the longest option, flips upward when tight, `max-height: 240px` + `overflow-y: auto`; the main-page `.dropdown-popover` (source app/date filters) keeps `position: absolute; top: calc(100% + 4px); right: 0; min-width: 100%` on its relative wrapper with right-aligned `max-content` sizing.
+- `.popover-surface` shared dropdown popover visual primitive (used by both settings and the main page): `z-index: 100`, `width: max-content`, `max-width: calc(100vw - 16px)`, `1px var(--border-color)` border, `8px` radius, `--surface-bg`, `0 8px 28px` shadow; plus shared `button`/`:hover`/`.selected`/`:disabled` states (`--text-secondary`/`--text-primary`, `--hover-bg`, `--selection-color` + 8% mix, `7px 12px` padding). Option buttons wrap their label in a `<span>` that fills the button's content box (`flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis`) and align via `text-align`: `center` by default, `right` when the list-level `.text-overflow` class is present. Overflowing labels are truncated by `alignDropdownOptionText()` (`src/lib/utils/dropdown.ts`): it measures each label span's `scrollWidth` against `clientWidth` (falling back to the button), cuts the text at a character boundary to fit and appends `闁炽儺娉? then the list-level `text-align: right`makes the truncated result flush right exactly like the fitting options - no hard clipping, so no half character ever shows at the cut point. The full label is stored in the button's`title`for hover. The function runs on open and on option-list changes (both settings`CustomSelect`and main-page dropdowns); spans are re-created per open, so truncation always starts from the full text. The DatePicker calendar popover does not call it, so its grid/footer buttons (direct text nodes, no label spans) are unaffected. Because`width: max-content`is what sizes the popover to its longest item, do not force an inline`width` on the popover (it would override the natural size and freeze the width at a stale value). Dropdown popover widths stay content-based (`width: max-content`), capped at `150px`- the truncation threshold beyond which`alignDropdownOptionText()`cuts labels - so short lists (e.g. a two-character date option) render at their natural width instead of stretching. Each surface keeps its own positioning: settings`.custom-select-popover`adds`position: fixed`with JS-computed`top`/`left`plus an inline`min-width`=`max(trigger width, content width)`capped at`150px`(so the list never collapses below its trigger),`max-width: 150px`, `max-height: 240px`, `overflow-x: hidden`+`overflow-y: auto`; the main-page `.dropdown-popover`(source app/date filters) keeps`position: absolute; top: calc(100% + 4px); right: 0; min-width: 100%; max-width: 150px; overflow: hidden` on its relative wrapper, so the list's minimum width equals the trigger button's FIXED width (`width: 80px`on`.filter-dropdown-btn`; the label truncates with ellipsis via `.dropdown-label { min-width: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis }`) - the list never renders narrower than the button, short lists are not stretched beyond the button width, and 150px remains the cap where truncation kicks in. Because`width: max-content`sizes the popover to its longest item, do not force an inline`width`or a CSS`min-width` of 150px on the popover - it would freeze the natural size and stretch short lists.
 - `.settings-select` shared control/button base (input look: custom arrow, hover/focus/disabled states). Settings dropdowns must use the `CustomSelect.svelte` component, not native `<select>`/`<option>`; the trigger keeps the closed `.settings-select` look, opening into the shared `.popover-surface` described above.
 - `.transparency-slider` including WebKit and Firefox tracks/thumbs;
 - `.settings-feedback` success/error states;
@@ -129,12 +129,12 @@ Legacy/local duplication exists in the settings shell and ignored-app panel; it 
 
 Before adding a rule, place it at the narrowest correct stable level:
 
-- Theme color or global accessibility/reset → `app.css`, `ThemeColors`, presets, and `theme.ts` together.
-- Global scrollbar treatment (thin width, themed thumb via `--scrollbar-color`) → `app.css` on the universal `*` selectors; components only add scrollability, never per-scope scrollbar rules. The `.filters` row is the intentional exception (hidden scrollbar).
-- Shared settings card/control/feedback primitive → `settings-shared.css`.
-- Settings navigation/shell/built-in storage-OCR-statistics layout → `StorageSettingsDialog.svelte`.
-- One reusable component's unique layout → that component's scoped `<style>`.
-- One-off content visualization → scoped style plus a note in `niche_ui_style.md` if it does not follow the general theme contract.
+- Theme color or global accessibility/reset 闂?`app.css`, `ThemeColors`, presets, and `theme.ts` together.
+- Global scrollbar treatment (thin width, themed thumb via `--scrollbar-color`) 闂?`app.css` on the universal `*` selectors; components only add scrollability, never per-scope scrollbar rules. The `.filters` row is the intentional exception (hidden scrollbar).
+- Shared settings card/control/feedback primitive 闂?`settings-shared.css`.
+- Settings navigation/shell/built-in storage-OCR-statistics layout 闂?`StorageSettingsDialog.svelte`.
+- One reusable component's unique layout 闂?that component's scoped `<style>`.
+- One-off content visualization 闂?scoped style plus a note in `niche_ui_style.md` if it does not follow the general theme contract.
 
 Do not use a parent scoped selector to style inside a child Svelte component. Pass props/classes or move the shared rule into a global/shared stylesheet.
 
