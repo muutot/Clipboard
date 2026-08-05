@@ -494,6 +494,8 @@ const zhCN: LocaleDefinition = {
     saveFailed: "保存失败",
     restoreSuccess: "已还原 {count} 项",
     resumed: "已还原",
+    noRecordsToClear: "没有可清除的记录",
+    clearHistorySuccess: "已清除 {count} 项",
   },
   detail: {
     title: "内容详情",

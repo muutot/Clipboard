@@ -518,6 +518,8 @@ const en: LocaleDefinition = {
     saveFailed: "Save failed",
     restoreSuccess: "Restored {count} items",
     resumed: "Restored",
+    noRecordsToClear: "Nothing to clear",
+    clearHistorySuccess: "Cleared {count} items",
   },
   detail: {
     title: "Content Details",

@@ -477,6 +477,8 @@ export interface LocaleDefinition {
     saveFailed: string;
     restoreSuccess: string;
     resumed: string;
+    noRecordsToClear: string;
+    clearHistorySuccess: string;
   };
   detail: {
     title: string;
