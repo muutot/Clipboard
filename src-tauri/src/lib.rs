@@ -1,5 +1,17 @@
 pub mod cli;
 pub mod commands;
+
+pub fn dbg_log(msg: &str) {
+    use std::io::Write;
+    let path = std::env::temp_dir().join("paste_debug.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "{}", msg);
+    }
+}
 use commands::capture::*;
 use commands::clipboard::*;
 use commands::config::*;

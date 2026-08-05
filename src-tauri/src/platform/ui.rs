@@ -9,6 +9,7 @@ use tauri::{
 };
 
 use crate::config::ConfigStore;
+use crate::platform::windows_hotkey::HotkeyManager;
 use crate::privacy::PrivacyManager;
 use crate::CaptureState;
 
@@ -122,6 +123,18 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         eprintln!("[tray] main window is unavailable");
         return;
     };
+
+    let is_visible = window.is_visible().unwrap_or(false);
+    if !is_visible {
+        // Remember which window was active before the clipboard is brought up,
+        // so "paste to previous application" works when opened from the tray
+        // (the toggle hotkey records the target inside its own loop).
+        if let Some(hm) = app.try_state::<Mutex<HotkeyManager>>() {
+            if let Ok(hm) = hm.lock() {
+                hm.remember_foreground();
+            }
+        }
+    }
 
     if let Err(error) = window.show() {
         eprintln!("[tray] failed to show the main window: {error}");

@@ -559,6 +559,15 @@ impl HotkeyManager {
         self.quick_paste_target.take()
     }
 
+    /// Records the current foreground window as the quick-paste target so the
+    /// main window can restore it when it is shown from the tray or another
+    /// entry point (the toggle hotkey path records it inside its own loop).
+    pub fn remember_foreground(&self) {
+        if let Some(window_handle) = foreground_window_handle() {
+            self.quick_paste_target.remember(window_handle);
+        }
+    }
+
     pub fn stop(&mut self) {
         stop_hotkey_thread();
         if let Some(handle) = self.handle.take() {
@@ -597,18 +606,38 @@ pub fn restore_window_and_paste(window_handle: isize) -> Result<(), String> {
     }
 
     if window_handle == 0 || unsafe { IsWindow(window_handle) } == 0 {
+        crate::dbg_log(&format!(
+            "restore: window unavailable handle=0x{window_handle:X} IsWindow={}",
+            unsafe { IsWindow(window_handle) }
+        ));
         return Err("the previous foreground window is no longer available".to_owned());
     }
 
     unsafe {
-        if IsIconic(window_handle) != 0 {
+        let iconic = IsIconic(window_handle);
+        crate::dbg_log(&format!(
+            "restore: prior fg=0x{:X} iconic={}",
+            GetForegroundWindow(),
+            iconic
+        ));
+        if iconic != 0 {
             ShowWindow(window_handle, SW_RESTORE);
         }
         BringWindowToTop(window_handle);
-        SetForegroundWindow(window_handle);
+        let set_ok = SetForegroundWindow(window_handle);
+        crate::dbg_log(&format!(
+            "restore: SetForegroundWindow ret={} then fg=0x{:X}",
+            set_ok,
+            GetForegroundWindow()
+        ));
     }
 
     thread::sleep(QUICK_PASTE_FOCUS_DELAY);
+    let fg = unsafe { GetForegroundWindow() };
+    crate::dbg_log(&format!(
+        "restore: after delay fg=0x{fg:X} target=0x{window_handle:X} equal={}",
+        fg == window_handle as isize
+    ));
     if unsafe { GetForegroundWindow() } != window_handle {
         return Err("failed to restore the previous foreground window".to_owned());
     }
@@ -622,32 +651,62 @@ pub fn restore_window_and_paste(_window_handle: isize) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MouseInput {
+    dx: i32,
+    dy: i32,
+    mouse_data: u32,
+    flags: u32,
+    time: u32,
+    extra_info: usize,
+}
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct KeyboardInput {
+    virtual_key: u16,
+    scan_code: u16,
+    flags: u32,
+    time: u32,
+    extra_info: usize,
+}
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct HardwareInput {
+    message: u32,
+    w_param_l: u16,
+    w_param_h: u16,
+}
+
+// The Win32 `INPUT` union spans all three variants so on 64-bit Windows the
+// whole struct is exactly `sizeof(INPUT)` == 40 bytes. Declaring only the
+// keyboard variant shrank it to 32 bytes, which made `SendInput` reject the
+// buffer with ERROR_INVALID_PARAMETER (87).
+#[cfg(target_os = "windows")]
+#[repr(C)]
+union InputData {
+    mouse: MouseInput,
+    keyboard: KeyboardInput,
+    hardware: HardwareInput,
+}
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+struct Input {
+    input_type: u32,
+    data: InputData,
+}
+
+#[cfg(target_os = "windows")]
 fn send_ctrl_v() -> Result<(), String> {
     const INPUT_KEYBOARD: u32 = 1;
     const KEYEVENTF_KEYUP: u32 = 0x0002;
     const VK_CONTROL: u16 = 0x11;
     const VK_V: u16 = 0x56;
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct KeyboardInput {
-        virtual_key: u16,
-        scan_code: u16,
-        flags: u32,
-        time: u32,
-        extra_info: usize,
-    }
-
-    #[repr(C)]
-    union InputData {
-        keyboard: KeyboardInput,
-    }
-
-    #[repr(C)]
-    struct Input {
-        input_type: u32,
-        data: InputData,
-    }
 
     fn keyboard_input(virtual_key: u16, flags: u32) -> Input {
         Input {
@@ -789,6 +848,23 @@ mod tests {
     const VK_SHIFT: u32 = 0x10;
     const VK_CONTROL: u32 = 0x11;
     const VK_V: u32 = b'V' as u32;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn input_struct_matches_win32_layout() {
+        use super::{HardwareInput, Input, KeyboardInput, MouseInput};
+
+        // sizeof(INPUT) on 64-bit Windows is 40 bytes, on 32-bit 28 bytes.
+        let (expected_input, mouse, keyboard) = if cfg!(target_pointer_width = "64") {
+            (40, 32, 24)
+        } else {
+            (28, 24, 16)
+        };
+        assert_eq!(size_of::<Input>(), expected_input);
+        assert_eq!(size_of::<MouseInput>(), mouse);
+        assert_eq!(size_of::<KeyboardInput>(), keyboard);
+        assert_eq!(size_of::<HardwareInput>(), 8);
+    }
 
     #[test]
     fn quick_paste_target_is_consumed_once() {

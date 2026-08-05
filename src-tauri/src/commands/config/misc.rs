@@ -175,8 +175,10 @@ pub fn paste_to_previous_application(
         .map_err(|_| "hotkey manager lock is poisoned".to_owned())?
         .take_quick_paste_target();
     let Some(target) = target else {
+        crate::dbg_log("paste_to_previous_application: no target");
         return Ok(false);
     };
+    crate::dbg_log(&format!("paste_to_previous_application: target=0x{target:X}"));
 
     let main_window = app.get_webview_window("main");
     if let Some(window) = &main_window {
@@ -185,6 +187,7 @@ pub fn paste_to_previous_application(
     thread::sleep(Duration::from_millis(40));
 
     if let Err(error) = platform::windows_hotkey::restore_window_and_paste(target) {
+        crate::dbg_log(&format!("paste_to_previous_application: error={error}"));
         if let Some(window) = &main_window {
             let _ = window.show();
             let _ = window.set_focus();
@@ -192,6 +195,7 @@ pub fn paste_to_previous_application(
         return Err(error);
     }
 
+    crate::dbg_log("paste_to_previous_application: OK");
     Ok(true)
 }
 
