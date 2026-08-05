@@ -38,7 +38,7 @@ Duplicate imports are not double-counted: before persisting each row, `import_ro
 
 - `clipboard_items`: ID, kind, title/text/html/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique. The `html_content` column is added idempotently via `ensure_column` for databases created before its introduction.
 - `ocr_results`: one row per item, status/engine/model/language/text/blocks/image hash/timestamps/error, with cascade deletion.
-- `search_outbox`: ordered `upsert`/`delete` operations populated by clipboard and OCR triggers.
+- `search_outbox`: ordered `upsert`/`delete` operations populated by clipboard and OCR triggers. Its `sequence` is an `INTEGER PRIMARY KEY` (implicit index); the historical redundant `search_outbox_sequence_idx` is dropped via `DROP INDEX IF EXISTS` on every open.
 
 Core invariants:
 

@@ -62,9 +62,6 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             created_at_ms INTEGER NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS search_outbox_sequence_idx
-            ON search_outbox (sequence);
-
         CREATE TRIGGER IF NOT EXISTS clipboard_items_search_insert
         AFTER INSERT ON clipboard_items
         BEGIN
@@ -113,6 +110,15 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
     // `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a
     // separate idempotent ALTER is required for upgrades.
     ensure_column(connection, "clipboard_items", "html_content", "TEXT")?;
+
+    // `search_outbox.sequence` is an INTEGER PRIMARY KEY, which already
+    // creates an index on the column, so the redundant explicit index adds
+    // maintenance cost on every outbox insert without helping reads. Drop it
+    // from databases that predate this cleanup; `IF EXISTS` keeps this safe on
+    // every open and for fresh databases.
+    connection.execute_batch(
+        "DROP INDEX IF EXISTS search_outbox_sequence_idx;",
+    )?;
 
     Ok(())
 }
@@ -177,6 +183,39 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert!(columns.contains(&"html_content".to_owned()));
+
+        create_schema(&connection).unwrap();
+    }
+
+    #[test]
+    fn drops_the_redundant_outbox_sequence_index_on_open() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS search_outbox (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    created_at_ms INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS search_outbox_sequence_idx
+                    ON search_outbox (sequence);",
+            )
+            .unwrap();
+
+        create_schema(&connection).unwrap();
+
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM sqlite_master
+                 WHERE type = 'index'
+                   AND name = 'search_outbox_sequence_idx'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
 
         create_schema(&connection).unwrap();
     }
