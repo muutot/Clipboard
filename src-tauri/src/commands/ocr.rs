@@ -1,6 +1,7 @@
-use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+use tokio::io::AsyncWriteExt;
 
 use serde::Serialize;
 use tauri::Emitter;
@@ -173,7 +174,9 @@ pub async fn install_ppocr(
     let model = ocr::models::model_spec(&variant)
         .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?;
     let models_dir = ocr::models::models_dir(&paths.storage);
-    std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
+    tokio::fs::create_dir_all(&models_dir)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let client = reqwest::Client::builder()
         .user_agent("clipboard-desktop")
@@ -241,8 +244,12 @@ async fn download_ppocr_file(
 
     let destination = models_dir.join(model_file.filename);
     let temporary = models_dir.join(format!("{}.part", model_file.filename));
-    if temporary.exists() {
-        std::fs::remove_file(&temporary)
+    if tokio::fs::try_exists(&temporary)
+        .await
+        .unwrap_or(false)
+    {
+        tokio::fs::remove_file(&temporary)
+            .await
             .map_err(|e| format!("remove stale {}: {e}", temporary.display()))?;
     }
 
@@ -265,7 +272,9 @@ async fn download_ppocr_file(
         .error_for_status()
         .map_err(|e| format!("download {}: {e}", model_file.filename))?;
     let total = response.content_length().unwrap_or(model_file.size_bytes);
-    let mut file = std::fs::File::create(&temporary).map_err(|e| e.to_string())?;
+    let mut file = tokio::fs::File::create(&temporary)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut downloaded = 0u64;
 
     while let Some(chunk) = response
@@ -273,7 +282,9 @@ async fn download_ppocr_file(
         .await
         .map_err(|e| format!("download {}: {e}", model_file.filename))?
     {
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
         let percentage = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
@@ -292,22 +303,27 @@ async fn download_ppocr_file(
         );
     }
 
-    file.flush().map_err(|e| e.to_string())?;
-    file.sync_all().map_err(|e| e.to_string())?;
+    file.flush().await.map_err(|e| e.to_string())?;
+    file.sync_all().await.map_err(|e| e.to_string())?;
     drop(file);
 
     if downloaded != model_file.size_bytes {
-        let _ = std::fs::remove_file(&temporary);
+        let _ = tokio::fs::remove_file(&temporary).await;
         return Err(format!(
             "downloaded {} has unexpected size: expected {}, got {}",
             model_file.filename, model_file.size_bytes, downloaded
         ));
     }
-    if destination.exists() {
-        std::fs::remove_file(&destination)
+    if tokio::fs::try_exists(&destination)
+        .await
+        .unwrap_or(false)
+    {
+        tokio::fs::remove_file(&destination)
+            .await
             .map_err(|e| format!("replace {}: {e}", destination.display()))?;
     }
-    std::fs::rename(&temporary, &destination)
+    tokio::fs::rename(&temporary, &destination)
+        .await
         .map_err(|e| format!("install {}: {e}", model_file.filename))?;
 
     Ok(())

@@ -701,6 +701,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-dialog",
+ "tokio",
  "urlencoding",
  "window-vibrancy",
  "zip",
