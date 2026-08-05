@@ -452,6 +452,7 @@ export interface LocaleDefinition {
   bulk: {
     copyN: string;
     favoriteN: string;
+    unfavoriteN: string;
     deleteN: string;
     restoreN: string;
     permanentDeleteN: string;
@@ -465,6 +466,7 @@ export interface LocaleDefinition {
     copyFailed: string;
     bulkCopySuccess: string;
     bulkFavoriteSuccess: string;
+    bulkUnfavoriteSuccess: string;
     bulkDeleteSuccess: string;
     editSaved: string;
     plainCopySuccess: string;

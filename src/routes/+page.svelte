@@ -399,6 +399,10 @@
       ? 0
       : items.filter((item) => selectedIds.has(item.id) && !item.deleted).length,
   );
+  const allSelectedFavorites = $derived(
+    selectedIds.size > 0 &&
+      items.filter((item) => selectedIds.has(item.id)).every((item) => item.favorite),
+  );
   const resultSummary = $derived(
     searchPending
       ? _t("status.searching")
@@ -2212,18 +2216,26 @@
 
   function bulkFavorite() {
     const ids = [...selectedIds];
+    const unfavorite = allSelectedFavorites;
     const previousItems = items;
     const previousIndexedItems = indexedItems;
-    items = items.map((item) => (selectedIds.has(item.id) ? { ...item, favorite: true } : item));
+    items = items.map((item) =>
+      selectedIds.has(item.id) ? { ...item, favorite: !unfavorite } : item,
+    );
     if (indexedItems) {
       indexedItems = indexedItems.map((item) =>
-        selectedIds.has(item.id) ? { ...item, favorite: true } : item,
+        selectedIds.has(item.id) ? { ...item, favorite: !unfavorite } : item,
       );
     }
-    void persistBatchFavorite(ids, true)
+    void persistBatchFavorite(ids, !unfavorite)
       .then((updated) => {
         if (updated === false) throw new Error("batch favorite failed");
-        showToast(_t("toast.bulkFavoriteSuccess", { count: ids.length }), "success");
+        showToast(
+          unfavorite
+            ? _t("toast.bulkUnfavoriteSuccess", { count: ids.length })
+            : _t("toast.bulkFavoriteSuccess", { count: ids.length }),
+          "success",
+        );
         selectedIds = new Set();
       })
       .catch((error) => {
@@ -3318,9 +3330,13 @@
           </button>
           <button type="button" onclick={bulkFavorite}>
             <AppIcon name="star" size={14} />
-            <span>{_t("bulk.favoriteN", { count: selectedIds.size })}</span>
+            <span
+              >{allSelectedFavorites
+                ? _t("bulk.unfavoriteN", { count: selectedIds.size })
+                : _t("bulk.favoriteN", { count: selectedIds.size })}</span
+            >
           </button>
-          {#if selectedActiveCount > 0}
+          {#if selectedActiveCount > 0 && activeFilter !== "favorite"}
             <button type="button" class="danger" onclick={bulkDelete}>
               <AppIcon name="trash" size={14} />
               <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>

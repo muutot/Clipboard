@@ -493,6 +493,7 @@ const en: LocaleDefinition = {
   bulk: {
     copyN: "Copy {count} items",
     favoriteN: "Favorite {count} items",
+    unfavoriteN: "Unfavorite {count} items",
     deleteN: "Delete {count} items",
     restoreN: "Restore {count} items",
     permanentDeleteN: "Permanently delete {count} items",
@@ -506,6 +507,7 @@ const en: LocaleDefinition = {
     copyFailed: "Copy failed",
     bulkCopySuccess: "Copied {count} items",
     bulkFavoriteSuccess: "Favorited {count} items",
+    bulkUnfavoriteSuccess: "Unfavorited {count} items",
     bulkDeleteSuccess: "Deleted {count} items",
     editSaved: "Edit saved",
     plainCopySuccess: "Copied as plain text; no previous application was available",

@@ -469,6 +469,7 @@ const zhCN: LocaleDefinition = {
   bulk: {
     copyN: "复制 {count} 项",
     favoriteN: "收藏 {count} 项",
+    unfavoriteN: "取消收藏 {count} 项",
     deleteN: "删除 {count} 项",
     restoreN: "还原 {count} 项",
     permanentDeleteN: "永久删除 {count} 项",
@@ -482,6 +483,7 @@ const zhCN: LocaleDefinition = {
     copyFailed: "复制失败",
     bulkCopySuccess: "已复制 {count} 项",
     bulkFavoriteSuccess: "已收藏 {count} 项",
+    bulkUnfavoriteSuccess: "已取消收藏 {count} 项",
     bulkDeleteSuccess: "已删除 {count} 项",
     editSaved: "已保存编辑内容",
     plainCopySuccess: "已复制为纯文本，未找到可恢复的原应用",
