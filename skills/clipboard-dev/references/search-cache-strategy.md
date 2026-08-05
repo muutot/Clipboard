@@ -14,7 +14,7 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 - Hit: query matches and cached maximum is at least the new maximum; return only the requested prefix while retaining the cached total.
 - Miss: query differs or requested maximum grows; run Tantivy again and replace the cache.
 - Empty query stores/returns an empty ID set.
-- `apply_changes()` clears cached IDs after index mutations.
+- `apply_changes()` clears cached IDs after index mutations and reloads the reader, so a subsequent search reflects the commit without callers having to reload explicitly.
 - `begin_full_rebuild()` clears cached IDs before rebuild.
 
 ## Backend SearchResultCache

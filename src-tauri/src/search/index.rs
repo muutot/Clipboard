@@ -146,6 +146,7 @@ impl SearchIndex {
         }
 
         drop(writer);
+        self.reader.reload()?;
         Ok(())
     }
 
