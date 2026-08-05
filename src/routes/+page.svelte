@@ -2457,6 +2457,8 @@
     // can clear bulk selection, close detail panel, or hide the window.
   }
 
+  let tagAddSignal = $state(0);
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     const editableTarget = isEditableKeyboardTarget(event.target);
     const quickCopyIndex =
@@ -2609,6 +2611,12 @@
       if (event.key === "e") {
         event.preventDefault();
         openDetail(selectedId);
+        return;
+      }
+      if (event.key === "t") {
+        if (selectedIds.size > 0) return;
+        event.preventDefault();
+        tagAddSignal++;
         return;
       }
       if (event.key === "s") {
@@ -3107,6 +3115,7 @@
                     onrestore={restoreItem}
                     onsavetags={saveTags}
                     ontoggleTagFilter={toggleTagFilter}
+                    tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
                   />
                 </div>
               {:else}
@@ -3150,6 +3159,7 @@
                   onrestore={restoreItem}
                   onsavetags={saveTags}
                   ontoggleTagFilter={toggleTagFilter}
+                  tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
                 />
               {/if}
             {/each}

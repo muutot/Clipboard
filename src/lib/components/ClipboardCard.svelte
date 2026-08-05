@@ -97,6 +97,7 @@
     onsavetags?: (id: string, tags: string[]) => void;
     ontoggleTagFilter?: (tag: string) => void;
     heightMeasurementKey?: string;
+    tagAddSignal?: number;
   }
 
   const cardActionIds = [
@@ -151,6 +152,7 @@
     onsavetags,
     ontoggleTagFilter,
     heightMeasurementKey,
+    tagAddSignal = 0,
   }: Props = $props();
 
   let contextMenu = $state<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -169,6 +171,13 @@
     if (!tagAdding) return;
     const input = tagAddInput;
     queueMicrotask(() => input?.focus());
+  });
+
+  $effect(() => {
+    if (tagAddSignal > 0 && !editing) {
+      tagAdding = true;
+      tagDraft = "";
+    }
   });
 
   function confirmAddTag() {
