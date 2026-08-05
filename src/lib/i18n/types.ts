@@ -320,7 +320,11 @@ export interface LocaleDefinition {
     copyItem: string;
     deleteItem: string;
     favoriteItem: string;
-    editItem: string;
+    addTag: string;
+    moveSelection: string;
+    switchFilter: string;
+    clearSelection: string;
+    hideWindow: string;
     selectAll: string;
     actionCode: string;
     shortcutInput: string;
@@ -362,7 +366,11 @@ export interface LocaleDefinition {
     copyItemDesc: string;
     deleteItemDesc: string;
     favoriteItemDesc: string;
-    editItemDesc: string;
+    addTagDesc: string;
+    moveSelectionDesc: string;
+    switchFilterDesc: string;
+    clearSelectionDesc: string;
+    hideWindowDesc: string;
     viewDetailDesc: string;
     saveItemDesc: string;
     selectAllDesc: string;

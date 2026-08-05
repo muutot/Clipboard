@@ -17,9 +17,15 @@ const KEYBOARD_CONFIG_FILE_NAME: &str = "keyboard.json";
 const DEFAULT_TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
 const DEFAULT_TOGGLE_WINDOW_SHORTCUT: &str = "Alt+V";
 const DEFAULT_COPY_ITEM_SHORTCUT: &str = "Ctrl+C";
+const DEFAULT_COPY_ITEM_ACTIVATE_SHORTCUT: &str = "Enter";
 const DEFAULT_DELETE_ITEM_SHORTCUT: &str = "Ctrl+D";
 const DEFAULT_FAVORITE_ITEM_SHORTCUT: &str = "Ctrl+F";
-const DEFAULT_EDIT_ITEM_SHORTCUT: &str = "Ctrl+E";
+const DEFAULT_OPEN_DETAIL_SHORTCUT: &str = "Space";
+const DEFAULT_OPEN_DETAIL_EDIT_SHORTCUT: &str = "Ctrl+E";
+const DEFAULT_MOVE_SELECTION_UP_SHORTCUT: &str = "ArrowUp";
+const DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT: &str = "ArrowDown";
+const DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT: &str = "ArrowRight";
+const DEFAULT_SWITCH_FILTER_PREV_SHORTCUT: &str = "ArrowLeft";
 const DEFAULT_SELECT_ALL_SHORTCUT: &str = "Ctrl+A";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -40,7 +46,10 @@ impl Default for KeyboardConfig {
                 ),
                 (
                     "copyItem".to_owned(),
-                    vec![DEFAULT_COPY_ITEM_SHORTCUT.to_owned()],
+                    vec![
+                        DEFAULT_COPY_ITEM_SHORTCUT.to_owned(),
+                        DEFAULT_COPY_ITEM_ACTIVATE_SHORTCUT.to_owned(),
+                    ],
                 ),
                 (
                     "deleteItem".to_owned(),
@@ -51,12 +60,29 @@ impl Default for KeyboardConfig {
                     vec![DEFAULT_FAVORITE_ITEM_SHORTCUT.to_owned()],
                 ),
                 (
-                    "editItem".to_owned(),
-                    vec![DEFAULT_EDIT_ITEM_SHORTCUT.to_owned()],
+                    "openDetail".to_owned(),
+                    vec![
+                        DEFAULT_OPEN_DETAIL_SHORTCUT.to_owned(),
+                        DEFAULT_OPEN_DETAIL_EDIT_SHORTCUT.to_owned(),
+                    ],
                 ),
                 (
                     "selectAll".to_owned(),
                     vec![DEFAULT_SELECT_ALL_SHORTCUT.to_owned()],
+                ),
+                (
+                    "moveSelection".to_owned(),
+                    vec![
+                        DEFAULT_MOVE_SELECTION_UP_SHORTCUT.to_owned(),
+                        DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT.to_owned(),
+                    ],
+                ),
+                (
+                    "switchFilter".to_owned(),
+                    vec![
+                        DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT.to_owned(),
+                        DEFAULT_SWITCH_FILTER_PREV_SHORTCUT.to_owned(),
+                    ],
                 ),
             ]),
             extra: BTreeMap::new(),
@@ -233,11 +259,25 @@ mod tests {
 
         assert_eq!(store.path(), project.join("conf/keyboard.json"));
         assert_eq!(saved["shortcuts"]["toggleWindow"], json!(["Alt+V"]));
-        assert_eq!(saved["shortcuts"]["copyItem"], json!(["Ctrl+C"]));
+        assert_eq!(
+            saved["shortcuts"]["copyItem"],
+            json!(["Ctrl+C", "Enter"])
+        );
         assert_eq!(saved["shortcuts"]["deleteItem"], json!(["Ctrl+D"]));
         assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+F"]));
-        assert_eq!(saved["shortcuts"]["editItem"], json!(["Ctrl+E"]));
+        assert_eq!(
+            saved["shortcuts"]["openDetail"],
+            json!(["Space", "Ctrl+E"])
+        );
         assert_eq!(saved["shortcuts"]["selectAll"], json!(["Ctrl+A"]));
+        assert_eq!(
+            saved["shortcuts"]["moveSelection"],
+            json!(["Arrowup", "Arrowdown"])
+        );
+        assert_eq!(
+            saved["shortcuts"]["switchFilter"],
+            json!(["Arrowright", "Arrowleft"])
+        );
         fs::remove_dir_all(project).unwrap();
     }
 

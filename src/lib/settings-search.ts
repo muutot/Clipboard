@@ -607,11 +607,11 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["Ctrl+F", "favorite"],
   ),
   entry(
-    "keyboard.edit-item",
+    "keyboard.open-detail",
     { section: "keyboard_item" },
-    i18n("keyboard.editItem"),
-    "设置编辑当前条目标题的快捷键",
-    ["Ctrl+E", "edit"],
+    i18n("keyboard.openDetail"),
+    "设置预览当前条目详情面板的快捷键",
+    ["Ctrl+E", "Space", "view", "详情"],
   ),
   entry(
     "keyboard.select-all",

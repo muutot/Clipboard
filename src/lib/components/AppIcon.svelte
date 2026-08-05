@@ -42,7 +42,9 @@
     | "scan"
     | "pause"
     | "tag"
-    | "plus";
+    | "plus"
+    | "arrow-up"
+    | "arrow-right";
 
   interface Props {
     name: IconName;
@@ -231,5 +233,11 @@
   {:else if name === "plus"}
     <path d="M12 5v14" />
     <path d="M5 12h14" />
+  {:else if name === "arrow-up"}
+    <path d="M12 19V5" />
+    <path d="m6 11 6-6 6 6" />
+  {:else if name === "arrow-right"}
+    <path d="M5 12h14" />
+    <path d="m13 6 6 6-6 6" />
   {/if}
 </svg>
