@@ -1479,6 +1479,7 @@ mod tests {
         assert_eq!(parse_cf_html(empty), None);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn dib_to_png_rejects_pixel_payload_shorter_than_header_claims() {
         let mut header = [0u8; 40];
@@ -1494,6 +1495,7 @@ mod tests {
         assert_eq!(dib_to_png(&dib), None);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn dib_to_png_rejects_header_larger_than_the_buffer() {
         let mut header = [0u8; 56];
@@ -1504,6 +1506,7 @@ mod tests {
         assert_eq!(dib_to_png(&header), None);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn dib_to_png_rejects_negative_width() {
         let mut header = [0u8; 40];
