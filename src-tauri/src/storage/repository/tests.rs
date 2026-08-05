@@ -3,7 +3,8 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
 use crate::storage::{Database, OcrRepository, SearchOperation, SearchRepository, StorageError};
 
 use super::{
-    ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats, TextItemUpdate,
+    ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
+    TextItemUpdate,
 };
 
 fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
@@ -36,11 +37,124 @@ fn saves_and_lists_items_by_recency() {
         .save_item(&text_item("newer", "hash-2", 200))
         .unwrap();
 
-    let items = database.list_recent(20, 0).unwrap();
+    let items = database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap();
 
     assert_eq!(database.item_count().unwrap(), 2);
     assert_eq!(items[0].id, "newer");
     assert_eq!(items[1].id, "older");
+}
+
+#[test]
+fn list_recent_filters_by_tag_and_paginates_matching_records() {
+    let database = Database::open_in_memory().unwrap();
+    for (id, hash, ts) in [("a", "h-a", 100), ("b", "h-b", 200), ("c", "h-c", 300)] {
+        database.save_item(&text_item(id, hash, ts)).unwrap();
+    }
+    database.set_tags("a", &["work".to_owned()]).unwrap();
+    database.set_tags("c", &["work".to_owned()]).unwrap();
+    // "b" deliberately keeps NULL metadata_json: tag filtering must skip it safely.
+
+    let filter = HistoryFilter {
+        tag: Some("work".to_owned()),
+        ..Default::default()
+    };
+    let first = database.list_recent(1, 0, &filter).unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].id, "c");
+    let second = database.list_recent(1, 1, &filter).unwrap();
+    assert_eq!(second.len(), 1);
+    assert_eq!(second[0].id, "a");
+    assert!(database.list_recent(1, 2, &filter).unwrap().is_empty());
+
+    let miss = HistoryFilter {
+        tag: Some("nope".to_owned()),
+        ..Default::default()
+    };
+    assert!(database.list_recent(20, 0, &miss).unwrap().is_empty());
+}
+
+#[test]
+fn list_recent_applies_kind_favorite_source_and_date_filters() {
+    let database = Database::open_in_memory().unwrap();
+    let mut link = text_item("link-1", "hash-1", 100);
+    link.kind = ClipboardKind::Link;
+    database.save_item(&link).unwrap();
+    let mut image = text_item("image-1", "hash-2", 200);
+    image.kind = ClipboardKind::Image;
+    image.source_app = Some("other-app".to_owned());
+    database.save_item(&image).unwrap();
+    let mut fav = text_item("fav-1", "hash-3", 300);
+    fav.is_favorite = true;
+    database.save_item(&fav).unwrap();
+
+    let kind_filter = HistoryFilter {
+        kind: Some(ClipboardKind::Image),
+        ..Default::default()
+    };
+    let items = database.list_recent(20, 0, &kind_filter).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["image-1"]
+    );
+
+    let favorite_filter = HistoryFilter {
+        favorite_only: true,
+        ..Default::default()
+    };
+    let items = database.list_recent(20, 0, &favorite_filter).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["fav-1"]
+    );
+
+    let source_filter = HistoryFilter {
+        source_app: Some("other-app".to_owned()),
+        ..Default::default()
+    };
+    let items = database.list_recent(20, 0, &source_filter).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["image-1"]
+    );
+
+    let date_filter = HistoryFilter {
+        date_from_ms: Some(150),
+        date_to_ms: Some(250),
+        ..Default::default()
+    };
+    let items = database.list_recent(20, 0, &date_filter).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["image-1"]
+    );
+
+    let combined = HistoryFilter {
+        kind: Some(ClipboardKind::Text),
+        date_from_ms: Some(150),
+        ..Default::default()
+    };
+    let items = database.list_recent(20, 0, &combined).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["fav-1"]
+    );
 }
 
 #[test]
@@ -476,7 +590,7 @@ fn batch_soft_delete_protects_favorites_without_partial_changes() {
         .unwrap());
     assert!(database.get_item("regular").unwrap().is_some());
     assert!(!database
-        .list_recent(10, 0)
+        .list_recent(10, 0, &HistoryFilter::default())
         .unwrap()
         .iter()
         .any(|item| item.id == "regular"));
@@ -717,7 +831,9 @@ fn kind_deletion_cascades_ocr_queues_search_deletes_and_drops_references() {
 #[test]
 fn pagination_empty_database_returns_empty() {
     let database = Database::open_in_memory().unwrap();
-    let items = database.list_recent(100, 0).unwrap();
+    let items = database
+        .list_recent(100, 0, &HistoryFilter::default())
+        .unwrap();
     assert!(items.is_empty());
 }
 
@@ -728,7 +844,9 @@ fn pagination_single_page_returns_all_items() {
     database.save_item(&text_item("b", "hash-b", 200)).unwrap();
     database.save_item(&text_item("c", "hash-c", 300)).unwrap();
 
-    let items = database.list_recent(50, 0).unwrap();
+    let items = database
+        .list_recent(50, 0, &HistoryFilter::default())
+        .unwrap();
     assert_eq!(items.len(), 3);
 }
 
@@ -737,7 +855,9 @@ fn pagination_beyond_bounds_returns_empty() {
     let database = Database::open_in_memory().unwrap();
     database.save_item(&text_item("a", "hash-a", 100)).unwrap();
 
-    let items = database.list_recent(100, 1000).unwrap();
+    let items = database
+        .list_recent(100, 1000, &HistoryFilter::default())
+        .unwrap();
     assert!(items.is_empty());
 }
 
@@ -754,7 +874,9 @@ fn pagination_returns_partial_page_at_end() {
             .unwrap();
     }
 
-    let items = database.list_recent(3, 3).unwrap();
+    let items = database
+        .list_recent(3, 3, &HistoryFilter::default())
+        .unwrap();
     assert_eq!(items.len(), 2);
 }
 
@@ -771,7 +893,9 @@ fn pagination_limit_is_respected() {
             .unwrap();
     }
 
-    let items = database.list_recent(100, 0).unwrap();
+    let items = database
+        .list_recent(100, 0, &HistoryFilter::default())
+        .unwrap();
     assert_eq!(items.len(), 100);
 }
 
@@ -829,7 +953,10 @@ fn deleted_records_are_listed_in_recency_order() {
             .collect::<Vec<_>>(),
         vec!["newer", "older"]
     );
-    assert!(database.list_recent(20, 0).unwrap().is_empty());
+    assert!(database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

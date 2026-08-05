@@ -14,6 +14,10 @@ Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSO
 
 Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional HTML content (`html_content`/`htmlContent`) for paste-by-format: the CF_HTML fragment on Windows or `public.html` on macOS, capped at 500_000 bytes, `#[serde(default)]` so older records and imports stay compatible. When fields change, update all four layers plus imports/exports and tests.
 
+### Active-history listing filters
+
+`list_clipboard_items` paginates active history with an optional `filter` argument (camelCase `HistoryFilterArgs` in `commands/clipboard/types.rs`, mirroring `HistoryFilter` in the storage layer): `kind` (`text`/`link`/`image`/`file`), `favorite`, `tag`, `sourceApp`, `dateFromMs`, `dateToMs`. All fields are optional; an omitted or empty payload returns unfiltered pages. Each filter is applied in the `list_recent` SQL `WHERE` clause (`json_each(metadata_json, '$.tags')` matches tags, tolerating `NULL` metadata) so every page returns the latest matching records rather than filtering a loaded set. The main route builds this payload from the active kind tab, tag/source/date dropdowns and resets history pagination when any filter changes; `filteredItems` still re-applies the same predicates client-side.
+
 `icon_path` currently carries an icon file key in the intended frontend path: `ClipboardCard` joins it with `iconsDir`. Do not reintroduce arbitrary absolute icon paths without re-auditing import validation, migration, cleanup, and `convertFileSrc` use.
 
 ### Import summary and truncation warning

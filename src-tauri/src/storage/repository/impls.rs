@@ -4,7 +4,7 @@ use rusqlite::{params, params_from_iter, OptionalExtension};
 
 use super::{
     current_time_ms, delete_kind_records, kind_to_storage, query_kind_storage_stats, unique_ids,
-    ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
+    ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
     StorageFileReferences, StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS,
     ITEM_LOOKUP_CHUNK_SIZE,
 };
@@ -185,21 +185,56 @@ impl ClipboardRepository for Database {
         })
     }
 
-    fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError> {
+    fn list_recent(
+        &self,
+        limit: u32,
+        offset: u32,
+        filter: &HistoryFilter,
+    ) -> Result<Vec<ClipboardItem>, StorageError> {
         self.with_connection(|connection| {
+            let mut conditions: Vec<String> = vec!["deleted = 0".to_owned()];
+            let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+            if let Some(kind) = filter.kind {
+                conditions.push("kind = ?".to_owned());
+                args.push(Box::new(kind_to_storage(kind)));
+            }
+            if filter.favorite_only {
+                conditions.push("is_favorite = 1".to_owned());
+            }
+            if let Some(tag) = &filter.tag {
+                conditions.push(
+                    "EXISTS (SELECT 1 FROM json_each(metadata_json, '$.tags') je \
+                     WHERE je.value = ?)"
+                        .to_owned(),
+                );
+                args.push(Box::new(tag.clone()));
+            }
+            if let Some(app) = &filter.source_app {
+                conditions.push("source_app = ?".to_owned());
+                args.push(Box::new(app.clone()));
+            }
+            if let Some(from) = filter.date_from_ms {
+                conditions.push("created_at_ms >= ?".to_owned());
+                args.push(Box::new(from));
+            }
+            if let Some(to) = filter.date_to_ms {
+                conditions.push("created_at_ms <= ?".to_owned());
+                args.push(Box::new(to));
+            }
+            args.push(Box::new(i64::from(limit)));
+            args.push(Box::new(i64::from(offset)));
+
             let sql = format!(
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
-                 WHERE deleted = 0
+                 WHERE {}
                  ORDER BY created_at_ms DESC
-                 LIMIT ?1 OFFSET ?2"
+                 LIMIT ? OFFSET ?",
+                conditions.join(" AND ")
             );
             let mut statement = connection.prepare_cached(&sql)?;
             let stored_items = statement
-                .query_map(
-                    params![i64::from(limit), i64::from(offset)],
-                    StoredClipboardItem::from_row,
-                )?
+                .query_map(params_from_iter(args), StoredClipboardItem::from_row)?
                 .collect::<Result<Vec<_>, _>>()?;
 
             stored_items.into_iter().map(TryInto::try_into).collect()

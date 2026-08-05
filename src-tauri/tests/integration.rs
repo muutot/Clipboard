@@ -192,7 +192,13 @@ mod integration_tests {
     #[test]
     fn pagination_with_empty_database() {
         let database = Database::open_in_memory().unwrap();
-        let items = database.list_recent(100, 0).unwrap();
+        let items = database
+            .list_recent(
+                100,
+                0,
+                &clipboard_desktop_lib::storage::HistoryFilter::default(),
+            )
+            .unwrap();
         assert!(items.is_empty());
     }
 
@@ -201,7 +207,13 @@ mod integration_tests {
         let database = Database::open_in_memory().unwrap();
         database.save_item(&text_item("a", "content", 100)).unwrap();
 
-        let items = database.list_recent(100, 1000).unwrap();
+        let items = database
+            .list_recent(
+                100,
+                1000,
+                &clipboard_desktop_lib::storage::HistoryFilter::default(),
+            )
+            .unwrap();
         assert!(items.is_empty());
     }
 
@@ -214,7 +226,13 @@ mod integration_tests {
                 .unwrap();
         }
 
-        let items = database.list_recent(3, 3).unwrap();
+        let items = database
+            .list_recent(
+                3,
+                3,
+                &clipboard_desktop_lib::storage::HistoryFilter::default(),
+            )
+            .unwrap();
         assert_eq!(items.len(), 2);
     }
 

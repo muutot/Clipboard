@@ -63,6 +63,19 @@ pub struct TagInfo {
     pub color: String,
 }
 
+/// Optional filters for paginated active-history listing. Every field is
+/// applied in the SQL `WHERE` clause so each page returns the latest
+/// matching records instead of filtering an already-loaded set.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct HistoryFilter {
+    pub kind: Option<ClipboardKind>,
+    pub favorite_only: bool,
+    pub tag: Option<String>,
+    pub source_app: Option<String>,
+    pub date_from_ms: Option<i64>,
+    pub date_to_ms: Option<i64>,
+}
+
 pub struct TextItemUpdate<'a> {
     pub id: &'a str,
     pub kind: ClipboardKind,
@@ -90,7 +103,12 @@ pub trait ClipboardRepository {
     fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError>;
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
-    fn list_recent(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
+    fn list_recent(
+        &self,
+        limit: u32,
+        offset: u32,
+        filter: &HistoryFilter,
+    ) -> Result<Vec<ClipboardItem>, StorageError>;
     /// Lists soft-deleted records for the recycle-bin view.
     fn list_deleted(&self, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, StorageError>;
     fn list_source_applications(&self) -> Result<Vec<String>, StorageError>;

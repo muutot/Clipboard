@@ -9,15 +9,15 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
 use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
 use crate::storage::{
-    ClipboardRepository, Database, KindStorageStats, OcrRepository, SearchRepository, StoragePaths,
-    TagInfo, TextItemUpdate,
+    ClipboardRepository, Database, HistoryFilter, KindStorageStats, OcrRepository,
+    SearchRepository, StoragePaths, TagInfo, TextItemUpdate,
 };
 use crate::CaptureState;
 
 use super::types::{
-    permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, SearchResultCache,
-    SearchSortDirection, SearchSortField, SearchSortRule, StorageKindDeleteExpectation,
-    StorageKindDeleteResult,
+    permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, HistoryFilterArgs,
+    SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
+    StorageKindDeleteExpectation, StorageKindDeleteResult,
 };
 
 #[tauri::command]
@@ -26,6 +26,7 @@ pub fn list_clipboard_items(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     limit: Option<u32>,
     offset: Option<u32>,
+    filter: Option<HistoryFilterArgs>,
 ) -> Result<Vec<ClipboardItem>, String> {
     let max_limit = config
         .lock()
@@ -40,8 +41,17 @@ pub fn list_clipboard_items(
         (max_limit - offset).min(limit)
     };
 
+    let filter = filter.map_or_else(HistoryFilter::default, |args| HistoryFilter {
+        kind: args.kind,
+        favorite_only: args.favorite.unwrap_or(false),
+        tag: args.tag,
+        source_app: args.source_app,
+        date_from_ms: args.date_from_ms,
+        date_to_ms: args.date_to_ms,
+    });
+
     database
-        .list_recent(limit, offset)
+        .list_recent(limit, offset, &filter)
         .map_err(|error| error.to_string())
 }
 

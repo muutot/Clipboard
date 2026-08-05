@@ -25,7 +25,7 @@ When changing settings, update normalization, valid unions, numeric ranges, clon
 Owns the record boundary and list operations:
 
 - writing text/image/html with self-trigger registration;
-- loading active and deleted pages;
+- loading active and deleted pages (`loadClipboardHistory(limit, offset, filter?)` passes an optional `HistoryFilterArgs` `{kind, favorite, tag, sourceApp, dateFromMs, dateToMs}` to `list_clipboard_items` so filtered pages are fetched from the backend);
 - searching with offset, limit, and optional sort rules;
 - favorite/delete/restore/permanent/batch operations;
 - tag persistence (`persistTags(id, tags)` invokes `set_clipboard_item_tags`);

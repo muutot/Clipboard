@@ -66,6 +66,7 @@ where
                 .list_recent(
                     args.limit.unwrap_or(20).clamp(1, page_size_limit as usize) as u32,
                     0,
+                    &crate::storage::HistoryFilter::default(),
                 )
                 .map_err(|e| e.to_string())?;
             format_items(&items)
@@ -236,7 +237,11 @@ pub(crate) fn search_items_by_scanning(
     let mut matches = Vec::new();
     loop {
         let page = database
-            .list_recent(scan_page_size as u32, offset)
+            .list_recent(
+                scan_page_size as u32,
+                offset,
+                &crate::storage::HistoryFilter::default(),
+            )
             .map_err(|e| e.to_string())?;
         let page_len = page.len();
         matches.extend(page.into_iter().filter(|item| {
@@ -539,7 +544,9 @@ mod tests {
         .unwrap();
 
         assert!(result.starts_with("saved clipboard item: "));
-        let saved = database.list_recent(10, 0).unwrap();
+        let saved = database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap();
         assert_eq!(saved.len(), 1);
         assert_eq!(saved[0].kind, ClipboardKind::Link);
         assert_eq!(

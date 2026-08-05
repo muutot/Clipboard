@@ -31,6 +31,7 @@
     writeClipboardText,
     writeClipboardHtml,
     getDisplayTitle,
+    type HistoryFilterArgs,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -1045,6 +1046,19 @@
     void loadActiveHistoryPage();
   }
 
+  function buildActiveHistoryFilter(): HistoryFilterArgs {
+    if (activeFilter === "deleted") return {};
+    const dateRange = resolveDateRange(dateFilter);
+    return {
+      kind: activeFilter === "all" || activeFilter === "favorite" ? null : activeFilter,
+      favorite: activeFilter === "favorite",
+      tag: tagFilter,
+      sourceApp: sourceAppFilter || null,
+      dateFromMs: dateRange?.from ?? null,
+      dateToMs: dateRange?.to ?? null,
+    };
+  }
+
   function updateSearchCache(results: ClipboardItem[]) {
     const loadedIds = new Set(items.map((i) => i.id));
     const policy = $generalSettings.searchCacheEviction;
@@ -1119,7 +1133,11 @@
     const requestId = ++activeHistoryRequestId;
     const offset = activeHistoryOffset;
     try {
-      const page = await loadClipboardHistory($generalSettings.display.pageSize, offset);
+      const page = await loadClipboardHistory(
+        $generalSettings.display.pageSize,
+        offset,
+        buildActiveHistoryFilter(),
+      );
       if (requestId !== activeHistoryRequestId) return;
       if (page === null) {
         activeHistoryHasMore = false;
@@ -1412,12 +1430,18 @@
 
   function setFilter(filter: ClipboardFilter) {
     if (filter === "deleted" && (!$generalSettings.useRecycleBin || !hasDeletedItems)) return;
+    const enteringDeleted = filter === "deleted";
+    if (activeFilter !== filter) resetHistoryScroll();
     activeFilter = filter;
     selectedIds = new Set();
     indexedItems = null;
     indexedQuery = "";
-    if (filter === "deleted" && !deletedHistoryLoaded) {
-      void loadDeletedHistoryPage();
+    if (enteringDeleted) {
+      if (!deletedHistoryLoaded) {
+        void loadDeletedHistoryPage();
+      }
+    } else {
+      void invalidateActiveHistoryPagination();
     }
   }
 
@@ -1959,6 +1983,13 @@
 
   function toggleTagFilter(tag: string) {
     tagFilter = tagFilter === tag ? null : tag;
+    resetHistoryScroll();
+    void invalidateActiveHistoryPagination();
+  }
+
+  function resetHistoryScroll() {
+    scrollTop = 0;
+    if (historyListEl) historyListEl.scrollTop = 0;
   }
 
   async function refreshTagColors() {
@@ -1971,11 +2002,7 @@
     tagColors = map;
   }
 
-  function rewriteTags(
-    item: ClipboardItem,
-    oldName: string,
-    newName: string,
-  ): ClipboardItem {
+  function rewriteTags(item: ClipboardItem, oldName: string, newName: string): ClipboardItem {
     const tags = item.tags ?? [];
     if (!tags.includes(oldName)) return item;
     const seen = new Set<string>();
@@ -3051,6 +3078,8 @@
                 onclick={() => {
                   sourceAppFilter = "";
                   sourceAppDropdownOpen = false;
+                  resetHistoryScroll();
+                  void invalidateActiveHistoryPagination();
                 }}><span>{_t("sourceApp.all")}</span></button
               >
               {#each filteredSourceApps as app}
@@ -3061,6 +3090,8 @@
                   onclick={() => {
                     sourceAppFilter = app;
                     sourceAppDropdownOpen = false;
+                    resetHistoryScroll();
+                    void invalidateActiveHistoryPagination();
                   }}><span>{app}</span></button
                 >
               {/each}
@@ -3107,6 +3138,8 @@
                 onclick={() => {
                   dateFilter = option.id;
                   dateDropdownOpen = false;
+                  resetHistoryScroll();
+                  void invalidateActiveHistoryPagination();
                 }}><span>{option.label}</span></button
               >
             {/each}

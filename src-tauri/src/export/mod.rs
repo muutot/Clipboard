@@ -95,8 +95,13 @@ pub fn export_database(database: &Database, options: &ExportOptions) -> Result<S
     const PAGE_SIZE: u32 = 500;
 
     loop {
-        let page = crate::storage::ClipboardRepository::list_recent(database, PAGE_SIZE, offset)
-            .map_err(|error| error.to_string())?;
+        let page = crate::storage::ClipboardRepository::list_recent(
+            database,
+            PAGE_SIZE,
+            offset,
+            &crate::storage::HistoryFilter::default(),
+        )
+        .map_err(|error| error.to_string())?;
         let page_len = page.len() as u32;
         items.extend(page);
         if page_len < PAGE_SIZE {

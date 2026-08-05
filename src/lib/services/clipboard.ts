@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type {
   ClipboardItem,
+  ClipboardKind,
   PersistedClipboardItem,
   ResourceFileMetadata,
   ResourceMetadata,
@@ -54,15 +55,26 @@ export async function writeClipboardHtml(html: string, plainText?: string | null
   await navigator.clipboard.write([new ClipboardItem(payload)]);
 }
 
+export interface HistoryFilterArgs {
+  kind?: ClipboardKind | null;
+  favorite?: boolean;
+  tag?: string | null;
+  sourceApp?: string | null;
+  dateFromMs?: number | null;
+  dateToMs?: number | null;
+}
+
 export async function loadClipboardHistory(
   limit = 100,
   offset = 0,
+  filter: HistoryFilterArgs = {},
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
 
   const records = await invoke<PersistedClipboardItem[]>("list_clipboard_items", {
     limit,
     offset,
+    filter,
   });
 
   return records.map(toClipboardItem);

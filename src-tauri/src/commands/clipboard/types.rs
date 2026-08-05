@@ -17,6 +17,20 @@ pub struct SearchSortRule {
     pub(crate) direction: SearchSortDirection,
 }
 
+/// Optional filters for paginated active-history listing, matching
+/// `HistoryFilter` in the storage layer. All fields are optional so a partial
+/// payload filters only on the supplied axes.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryFilterArgs {
+    pub(crate) kind: Option<ClipboardKind>,
+    pub(crate) favorite: Option<bool>,
+    pub(crate) tag: Option<String>,
+    pub(crate) source_app: Option<String>,
+    pub(crate) date_from_ms: Option<i64>,
+    pub(crate) date_to_ms: Option<i64>,
+}
+
 pub struct SearchResultCache {
     inner: Mutex<Option<CachedSearchResult>>,
 }

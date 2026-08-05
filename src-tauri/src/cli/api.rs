@@ -316,7 +316,7 @@ fn dispatch(
                 .get("offset")
                 .and_then(|value| value.parse::<u32>().ok())
                 .unwrap_or(0);
-            match database.list_recent(limit, offset) {
+            match database.list_recent(limit, offset, &crate::storage::HistoryFilter::default()) {
                 Ok(items) => json_response(200, &items),
                 Err(error) => error_response(500, &error.to_string()),
             }
@@ -569,7 +569,10 @@ mod tests {
             body: Vec::new(),
         };
         assert_eq!(dispatch(&delete, &database, 500, 500).status, 200);
-        assert!(database.list_recent(10, 0).unwrap().is_empty());
+        assert!(database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

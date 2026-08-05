@@ -1,4 +1,4 @@
-use std::io::Read;
+﻿use std::io::Read;
 
 use rusqlite::Connection;
 
@@ -517,7 +517,9 @@ mod tests {
         assert!(summary.errors[0].contains("file record(s) were skipped"));
         assert_eq!(database.item_count().unwrap(), 4);
 
-        let stored = database.list_recent(10, 0).unwrap();
+        let stored = database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap();
         assert!(stored.iter().any(|i| i.kind == ClipboardKind::Link));
         assert!(stored.iter().any(|i| i.kind == ClipboardKind::Image));
         let image_item = stored
@@ -625,7 +627,7 @@ mod tests {
         assert_eq!(summary.skipped_count, 1);
         assert_eq!(summary.errors.len(), 1);
         assert!(database
-            .list_recent(10, 0)
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
             .unwrap()
             .iter()
             .any(|i| i.kind == ClipboardKind::Image));
