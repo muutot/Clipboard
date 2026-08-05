@@ -178,7 +178,9 @@ pub fn paste_to_previous_application(
         crate::dbg_log("paste_to_previous_application: no target");
         return Ok(false);
     };
-    crate::dbg_log(&format!("paste_to_previous_application: target=0x{target:X}"));
+    crate::dbg_log(&format!(
+        "paste_to_previous_application: target=0x{target:X}"
+    ));
 
     let main_window = app.get_webview_window("main");
     if let Some(window) = &main_window {
