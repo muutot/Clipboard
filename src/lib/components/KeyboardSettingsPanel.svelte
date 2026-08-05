@@ -296,8 +296,12 @@
     Arrowleft: "←",
   };
 
+  function arrowGlyph(shortcut: string): string | null {
+    return ARROW_GLYPHS[shortcut] ?? null;
+  }
+
   function shortcutLabel(shortcut: string): string {
-    return ARROW_GLYPHS[shortcut] ?? shortcut;
+    return arrowGlyph(shortcut) ?? shortcut;
   }
 
   onMount(() => {
@@ -467,7 +471,7 @@
           {#if bindingsFor(action.id).length > 0}
             {#each bindingsFor(action.id) as shortcut}
               <div class="binding-chip">
-                <kbd>{shortcutLabel(shortcut)}</kbd>
+                <kbd class:arrow={arrowGlyph(shortcut) !== null}>{shortcutLabel(shortcut)}</kbd>
                 <button
                   type="button"
                   class="binding-chip-close"
@@ -478,7 +482,7 @@
           {:else if config && !(action.id in config.shortcuts) && action.defaults.length > 0}
             {#each action.defaults as shortcut}
               <div class="binding-chip default">
-                <kbd>{shortcutLabel(shortcut)}</kbd>
+                <kbd class:arrow={arrowGlyph(shortcut) !== null}>{shortcutLabel(shortcut)}</kbd>
                 <button
                   type="button"
                   class="binding-chip-close"
@@ -556,6 +560,11 @@
       Consolas,
       monospace;
     color: var(--text-primary);
+  }
+
+  .binding-chip kbd.arrow {
+    font-size: 15px;
+    line-height: 1;
   }
 
   .binding-chip.recording {
