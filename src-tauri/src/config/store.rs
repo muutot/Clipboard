@@ -279,6 +279,11 @@ impl ConfigStore {
             .expect("SearchIndexSyncMode::from_str is infallible")
     }
 
+    pub fn update_source(&self) -> UpdateSource {
+        UpdateSource::from_str(&self.config.general.update_source)
+            .expect("UpdateSource::from_str is infallible")
+    }
+
     pub fn det_box_threshold(&self) -> f32 {
         self.config.ocr.det_box_threshold
     }

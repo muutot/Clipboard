@@ -101,6 +101,7 @@ pub struct GeneralConfig {
     pub page_size_limit: u32,
     pub search_page_size_limit: u32,
     pub search_index_sync_mode: String,
+    pub update_source: String,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -139,6 +140,7 @@ impl Default for GeneralConfig {
             page_size_limit: 500,
             search_page_size_limit: 500,
             search_index_sync_mode: "lazy".to_owned(),
+            update_source: "gitcode".to_owned(),
             extra: BTreeMap::new(),
         }
     }
@@ -171,6 +173,35 @@ impl FromStr for SearchIndexSyncMode {
         match value {
             "background" => Ok(Self::Background),
             _ => Ok(Self::Lazy),
+        }
+    }
+}
+
+/// Which release source the About panel checks for updates against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateSource {
+    /// Upstream GitHub repository `muutot/Clipboard`.
+    Github,
+    /// GitCode mirror `m2u/Clipboard`.
+    Gitcode,
+}
+
+impl UpdateSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Github => "github",
+            Self::Gitcode => "gitcode",
+        }
+    }
+}
+
+impl FromStr for UpdateSource {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "github" => Ok(Self::Github),
+            _ => Ok(Self::Gitcode),
         }
     }
 }

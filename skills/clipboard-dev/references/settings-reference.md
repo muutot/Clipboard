@@ -80,6 +80,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `searchCacheSize`             | number                             | `500`       | 200–2000                                                                         |
 | `searchCacheEviction`         | `"fifo"` or `"lru"`                | `"fifo"`    | —                                                                                |
 | `searchIndexSyncMode`         | `"lazy"` or `"background"`         | `"lazy"`    | —                                                                                |
+| `updateSource`                | `"github"` or `"gitcode"`          | `"gitcode"` | —                                                                                |
 | `loadTolerance`               | number                             | `100`       | 50–500                                                                           |
 
 ## Theme and sort structures
@@ -104,6 +105,8 @@ History/storage/OCR/privacy/export settings are separate Rust config groups and 
 `GeneralConfig` explicitly types a core subset of the frontend settings and flattens unknown keys. Fields such as theme colors/presets, detail/card display options, search sort/cache policy, and load tolerance can survive through the flattened map without being explicit Rust members.
 
 `search_index_sync_mode` is an explicit `GeneralConfig` member (`"lazy"`/`"background"`, default `"lazy"`) because the backend startup wiring and the search command read it for typed behavior. `ConfigStore::search_index_sync_mode()` returns `SearchIndexSyncMode`. Changing the mode only takes effect after restart: the `SearchSyncWorker` is created at startup when the mode is `background`.
+
+`update_source` is an explicit `GeneralConfig` member (`"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` in `config/types.rs`. `ConfigStore::update_source()` returns `UpdateSource`, and the About-panel `check_for_update` reads it per call, so switching the dropdown applies immediately without a restart.
 
 When backend startup, validation, or native behavior needs one of these fields, add a typed Rust field with a default and tests instead of parsing it opportunistically from `extra`.
 

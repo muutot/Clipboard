@@ -577,6 +577,10 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "版本",
     "update",
     "upgrade",
+    i18n("about.updateSourceGithub"),
+    i18n("about.updateSourceGitcode"),
+    "更新来源",
+    "source",
   ]),
   entry("about.info", { section: "about" }, i18n("about.title"), i18n("about.description"), [
     "版本",

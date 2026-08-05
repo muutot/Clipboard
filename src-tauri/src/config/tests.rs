@@ -393,6 +393,41 @@ fn search_index_sync_mode_parses_unknown_values_as_lazy() {
     assert_eq!(SearchIndexSyncMode::Background.as_str(), "background");
 }
 
+#[test]
+fn update_source_defaults_to_gitcode_and_round_trips() {
+    let project = temporary_test_directory("update-source");
+    let mut store = ConfigStore::load(&project).unwrap();
+
+    // Default is gitcode (current behavior) for fresh/legacy configurations.
+    assert_eq!(store.update_source(), crate::config::UpdateSource::Gitcode);
+
+    let mut settings = store.general_settings().clone();
+    settings.update_source = "github".to_owned();
+    store.set_general_settings(settings.clone()).unwrap();
+    assert_eq!(store.update_source(), crate::config::UpdateSource::Github);
+
+    let reloaded = ConfigStore::load(&project).unwrap();
+    assert_eq!(
+        reloaded.update_source(),
+        crate::config::UpdateSource::Github
+    );
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn update_source_parses_unknown_values_as_gitcode() {
+    use crate::config::UpdateSource;
+    assert_eq!(UpdateSource::from_str("github"), Ok(UpdateSource::Github));
+    assert_eq!(UpdateSource::from_str("gitcode"), Ok(UpdateSource::Gitcode));
+    assert_eq!(
+        UpdateSource::from_str("anything-else"),
+        Ok(UpdateSource::Gitcode)
+    );
+    assert_eq!(UpdateSource::Github.as_str(), "github");
+    assert_eq!(UpdateSource::Gitcode.as_str(), "gitcode");
+}
+
 fn temporary_test_directory(label: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

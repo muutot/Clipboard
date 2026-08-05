@@ -86,7 +86,7 @@ This is the settings shell and an integration hotspot. It owns:
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
 - composition of child settings panels with `showHeader={false}`;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
-- the built-in About section: app version and GitHub Releases update check via `checkForUpdate()`/`update.ts`, with up-to-date/available/error states and release notes;
+- the built-in About section: app version, an update-source dropdown (GitHub/GitCode, persisted via `updateSource`), and update check via `checkForUpdate()`/`update.ts`, with up-to-date/available/error states and release notes;
 - the `--settings-*` semantic metrics consumed by child panels.
 
 Do not treat its long scoped style block as a copy template. Use `settings-shared.css` and `settings-panels.md` for approved reusable primitives.

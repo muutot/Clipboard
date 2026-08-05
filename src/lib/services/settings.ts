@@ -62,6 +62,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchCacheSize: 500,
   searchCacheEviction: "fifo",
   searchIndexSyncMode: "lazy",
+  updateSource: "gitcode",
   loadTolerance: 100,
 };
 
@@ -196,6 +197,10 @@ function validSearchIndexSyncMode(
   fallback: "lazy" | "background",
 ): "lazy" | "background" {
   return value === "lazy" || value === "background" ? value : fallback;
+}
+
+function validUpdateSource(value: unknown, fallback: "github" | "gitcode"): "github" | "gitcode" {
+  return value === "github" || value === "gitcode" ? value : fallback;
 }
 
 function validSearchPlaceholder(value: unknown, fallback: string): string {
@@ -475,6 +480,10 @@ function normalizeGeneralSettings(
   result.searchIndexSyncMode = validSearchIndexSyncMode(
     source.searchIndexSyncMode ?? fallback("searchIndexSyncMode"),
     defaultSettings.searchIndexSyncMode,
+  );
+  result.updateSource = validUpdateSource(
+    source.updateSource ?? fallback("updateSource"),
+    defaultSettings.updateSource,
   );
   result.loadTolerance = integerInRange(
     source.loadTolerance ?? fallback("loadTolerance"),

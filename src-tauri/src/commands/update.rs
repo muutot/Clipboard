@@ -1,8 +1,11 @@
-// update.rs — update checks against the project's GitHub Releases API.
+// update.rs — update checks against the project's release sources. The user
+// picks the source (GitHub upstream or the GitCode mirror) from the settings
+// About panel via the persisted `updateSource` general setting.
 
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 
-const UPDATE_REPO: &str = "muutot/Clipboard";
+use crate::config::{ConfigStore, UpdateSource};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,26 +19,56 @@ pub struct UpdateInfo {
     published_at: Option<String>,
 }
 
+/// Common fields shared by the GitHub and GitCode latest-release payloads.
 #[derive(Debug, Deserialize)]
-struct GithubRelease {
+struct Release {
     tag_name: String,
     name: Option<String>,
-    html_url: String,
     body: Option<String>,
+    #[serde(default)]
+    html_url: Option<String>,
+    #[serde(default)]
     published_at: Option<String>,
+    #[serde(default)]
+    created_at: Option<String>,
+}
+
+impl UpdateSource {
+    fn api_url(self) -> String {
+        match self {
+            Self::Github => {
+                "https://api.github.com/repos/muutot/Clipboard/releases/latest".to_owned()
+            }
+            Self::Gitcode => {
+                "https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/latest".to_owned()
+            }
+        }
+    }
+
+    fn release_page(self) -> String {
+        match self {
+            Self::Github => "https://github.com/muutot/Clipboard/releases".to_owned(),
+            Self::Gitcode => "https://gitcode.com/m2u/Clipboard/releases".to_owned(),
+        }
+    }
 }
 
 #[tauri::command]
-pub async fn check_for_update() -> Result<UpdateInfo, String> {
+pub async fn check_for_update(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<UpdateInfo, String> {
+    let source = {
+        let guard = config.lock().map_err(|e| format!("config lock: {e}"))?;
+        guard.update_source()
+    };
     let client = reqwest::Client::builder()
         .user_agent("clipboard-desktop")
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("create client: {e}"))?;
 
-    let url = format!("https://api.github.com/repos/{UPDATE_REPO}/releases/latest");
     let response = client
-        .get(&url)
+        .get(source.api_url())
         .send()
         .await
         .map_err(|e| format!("request latest release: {e}"))?
@@ -45,7 +78,7 @@ pub async fn check_for_update() -> Result<UpdateInfo, String> {
         .text()
         .await
         .map_err(|e| format!("read response: {e}"))?;
-    let release: GithubRelease =
+    let release: Release =
         serde_json::from_str(&body).map_err(|e| format!("parse release: {e}"))?;
 
     let current_version = env!("CARGO_PKG_VERSION").to_owned();
@@ -56,10 +89,10 @@ pub async fn check_for_update() -> Result<UpdateInfo, String> {
         current_version,
         latest_version,
         update_available,
-        release_url: release.html_url,
+        release_url: release.html_url.unwrap_or_else(|| source.release_page()),
         release_title: release.name,
         release_notes: release.body,
-        published_at: release.published_at,
+        published_at: release.published_at.or(release.created_at),
     })
 }
 

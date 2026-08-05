@@ -308,6 +308,9 @@ export interface LocaleDefinition {
     updateTitle: string;
     updateDesc: string;
     checkUpdate: string;
+    updateSource: string;
+    updateSourceGithub: string;
+    updateSourceGitcode: string;
     checking: string;
     upToDate: string;
     updateAvailable: string;

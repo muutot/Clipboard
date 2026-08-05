@@ -2317,14 +2317,26 @@
               <p>{_t("about.updateDesc")}</p>
             </div>
           </div>
-          <button
-            type="button"
-            class="settings-action-btn"
-            disabled={checkingUpdate}
-            onclick={handleCheckUpdate}
-          >
-            {checkingUpdate ? _t("about.checking") : _t("about.checkUpdate")}
-          </button>
+          <div class="about-update-controls">
+            <CustomSelect
+              value={$generalSettings.updateSource}
+              ariaLabel={_t("about.updateSource")}
+              options={[
+                { value: "gitcode", label: _t("about.updateSourceGitcode") },
+                { value: "github", label: _t("about.updateSourceGithub") },
+              ]}
+              onchange={(v) =>
+                generalSettings.updateSetting("updateSource", v as "gitcode" | "github")}
+            />
+            <button
+              type="button"
+              class="settings-action-btn"
+              disabled={checkingUpdate}
+              onclick={handleCheckUpdate}
+            >
+              {checkingUpdate ? _t("about.checking") : _t("about.checkUpdate")}
+            </button>
+          </div>
         </section>
 
         {#if updateResult}
@@ -3642,6 +3654,13 @@
     transition:
       background 100ms ease,
       color 100ms ease;
+  }
+
+  .about-update-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
   }
 
   .settings-action-btn:hover {

@@ -216,6 +216,8 @@ export interface GeneralSettings {
   searchCacheEviction: "fifo" | "lru";
   /** 搜索索引同步模式：'lazy' 搜索前排空 outbox | 'background' 后台 worker 实时同步 */
   searchIndexSyncMode: "lazy" | "background";
+  /** 更新检查来源：'github' 上游仓库 | 'gitcode' 镜像仓库 */
+  updateSource: "github" | "gitcode";
   loadTolerance: number;
 }
 

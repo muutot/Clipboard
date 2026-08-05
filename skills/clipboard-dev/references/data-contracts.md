@@ -67,6 +67,8 @@ The frontend `GeneralSettings` type/defaults/normalizer are richer than the expl
 
 `search_index_sync_mode` is an explicit `GeneralConfig` member (values `"lazy"`/`"background"`, default `"lazy"`) with a typed `SearchIndexSyncMode` enum in `config/types.rs`; unknown values parse as `Lazy`. It selects between lazy outbox draining inside `search_clipboard_items` and the startup-created `SearchSyncWorker`, and takes effect on restart.
 
+`update_source` is an explicit `GeneralConfig` member (values `"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` enum in `config/types.rs`; unknown values parse as `Gitcode`. The About-panel update check (`check_for_update` in `commands/update.rs`) reads `ConfigStore::update_source()` at call time to pick the latest-release API and release page URL, so the dropdown takes effect without a restart.
+
 ### Keyboard settings
 
 `src-tauri/src/keyboard/config.rs` and `KeyboardManager` own `<project>/conf/keyboard.json`. Each action maps to an array of shortcut strings. Do not merge keyboard configuration into `GeneralSettings` or `conf.json`.
