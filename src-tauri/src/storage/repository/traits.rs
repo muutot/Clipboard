@@ -56,6 +56,13 @@ pub struct KindDeleteResult {
     pub deleted_ids: Vec<String>,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TagInfo {
+    pub name: String,
+    pub count: u64,
+    pub color: String,
+}
+
 pub struct TextItemUpdate<'a> {
     pub id: &'a str,
     pub kind: ClipboardKind,
@@ -94,6 +101,17 @@ pub trait ClipboardRepository {
     /// Replace the tag list for a record. Tags are stored inside `metadata_json`
     /// under the `tags` key; an empty list removes the key.
     fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError>;
+    /// Returns every distinct tag name used by active records with its usage
+    /// count and any globally assigned color from the `tags` registry.
+    fn list_all_tags(&self) -> Result<Vec<TagInfo>, StorageError>;
+    /// Renames a tag across every active record and migrates its registry
+    /// color. Returns the number of records updated.
+    fn rename_tag(&self, old: &str, new: &str) -> Result<u64, StorageError>;
+    /// Removes a tag from every active record and deletes its registry entry.
+    /// Returns the number of records updated.
+    fn delete_tag(&self, name: &str) -> Result<u64, StorageError>;
+    /// Assigns (or clears, when `color` is empty) the global color for a tag.
+    fn set_tag_color(&self, name: &str, color: &str) -> Result<bool, StorageError>;
     /// Update the favorite flag for all requested records atomically.
     ///
     /// The operation returns `false` and makes no changes when any requested

@@ -5,7 +5,7 @@ use rusqlite::{params, params_from_iter, OptionalExtension};
 use super::{
     current_time_ms, delete_kind_records, kind_to_storage, query_kind_storage_stats, unique_ids,
     ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    StorageFileReferences, StoredClipboardItem, TextItemUpdate, ITEM_COLUMNS,
+    StorageFileReferences, StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS,
     ITEM_LOOKUP_CHUNK_SIZE,
 };
 use crate::domain::{ClipboardItem, ClipboardKind};
@@ -330,6 +330,111 @@ impl ClipboardRepository for Database {
                 "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
                 params![id, updated],
             )? > 0)
+        })
+    }
+
+    fn list_all_tags(&self) -> Result<Vec<TagInfo>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection
+                .prepare("SELECT metadata_json FROM clipboard_items WHERE deleted = 0")?;
+            let mut counts: std::collections::BTreeMap<String, u64> =
+                std::collections::BTreeMap::new();
+            let rows = statement.query_map([], |row| row.get::<_, Option<String>>(0))?;
+            for row in rows {
+                let Some(json) = row? else { continue };
+                let Ok(serde_json::Value::Object(object)) =
+                    serde_json::from_str::<serde_json::Value>(&json)
+                else {
+                    continue;
+                };
+                let Some(serde_json::Value::Array(tags)) = object.get("tags") else {
+                    continue;
+                };
+                for tag in tags.iter().filter_map(serde_json::Value::as_str) {
+                    *counts.entry(tag.trim().to_owned()).or_insert(0) += 1;
+                }
+            }
+
+            let mut colors: HashMap<String, String> = HashMap::new();
+            let mut color_statement = connection.prepare("SELECT name, color FROM tags")?;
+            let color_rows = color_statement.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            for (name, color) in color_rows.flatten() {
+                colors.insert(name, color);
+            }
+
+            Ok(counts
+                .into_iter()
+                .map(|(name, count)| TagInfo {
+                    name: name.clone(),
+                    count,
+                    color: colors.get(&name).cloned().unwrap_or_default(),
+                })
+                .collect())
+        })
+    }
+
+    fn rename_tag(&self, old: &str, new: &str) -> Result<u64, StorageError> {
+        let old = old.trim();
+        let new = new.trim();
+        if old.is_empty() || new.is_empty() || old == new {
+            return Ok(0);
+        }
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let updated = rewrite_item_tags(&transaction, old, Some(new))?;
+
+            // Migrate the registry color, preferring an explicit new-name row.
+            let old_color: Option<String> = transaction
+                .query_row("SELECT color FROM tags WHERE name = ?1", [old], |row| {
+                    row.get(0)
+                })
+                .optional()?;
+            if let Some(color) = old_color {
+                transaction.execute(
+                    "INSERT INTO tags (name, color) VALUES (?1, ?2)
+                     ON CONFLICT(name) DO UPDATE SET color = excluded.color",
+                    params![new, color],
+                )?;
+                transaction.execute("DELETE FROM tags WHERE name = ?1", [old])?;
+            }
+
+            transaction.commit()?;
+            Ok(updated)
+        })
+    }
+
+    fn delete_tag(&self, name: &str) -> Result<u64, StorageError> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Ok(0);
+        }
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let updated = rewrite_item_tags(&transaction, name, None)?;
+            transaction.execute("DELETE FROM tags WHERE name = ?1", [name])?;
+            transaction.commit()?;
+            Ok(updated)
+        })
+    }
+
+    fn set_tag_color(&self, name: &str, color: &str) -> Result<bool, StorageError> {
+        let name = name.trim();
+        let color = color.trim();
+        if name.is_empty() {
+            return Ok(false);
+        }
+        if !color.is_empty() && !is_valid_tag_color(color) {
+            return Ok(false);
+        }
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO tags (name, color) VALUES (?1, ?2)
+                 ON CONFLICT(name) DO UPDATE SET color = excluded.color",
+                params![name, color],
+            )?;
+            Ok(true)
         })
     }
 
@@ -759,4 +864,77 @@ impl ClipboardRepository for Database {
             Ok(paths)
         })
     }
+}
+
+/// Rewrites `metadata_json.tags` on every active record, replacing `target`
+/// with `replacement` (or removing it when `replacement` is `None`), preserving
+/// order and de-duplicating. Returns the number of records whose tags changed.
+fn rewrite_item_tags(
+    connection: &rusqlite::Connection,
+    target: &str,
+    replacement: Option<&str>,
+) -> Result<u64, StorageError> {
+    let mut statement =
+        connection.prepare("SELECT id, metadata_json FROM clipboard_items WHERE deleted = 0")?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+    })?;
+
+    let mut updated = 0u64;
+    for row in rows {
+        let (id, json) = row?;
+        let Some(json) = json else { continue };
+        let Ok(serde_json::Value::Object(object)) =
+            serde_json::from_str::<serde_json::Value>(&json)
+        else {
+            continue;
+        };
+        let Some(serde_json::Value::Array(tags)) = object.get("tags") else {
+            continue;
+        };
+        let contains = tags
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .any(|tag| tag.trim() == target);
+        if !contains {
+            continue;
+        }
+
+        let mut seen = std::collections::HashSet::new();
+        let mut rewritten: Vec<serde_json::Value> = Vec::new();
+        for tag in tags.iter().filter_map(serde_json::Value::as_str) {
+            let trimmed = tag.trim();
+            if trimmed == target {
+                if let Some(next) = replacement {
+                    if next.is_empty() || !seen.insert(next.to_owned()) {
+                        continue;
+                    }
+                    rewritten.push(serde_json::Value::String(next.to_owned()));
+                }
+                continue;
+            }
+            if !trimmed.is_empty() && seen.insert(trimmed.to_owned()) {
+                rewritten.push(serde_json::Value::String(trimmed.to_owned()));
+            }
+        }
+
+        let mut updated_object = object.clone();
+        if rewritten.is_empty() {
+            updated_object.remove("tags");
+        } else {
+            updated_object.insert("tags".to_owned(), serde_json::Value::Array(rewritten));
+        }
+        let updated_json = serde_json::to_string(&updated_object).map_err(StorageError::Json)?;
+        connection.execute(
+            "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
+            params![id, updated_json],
+        )?;
+        updated += 1;
+    }
+    Ok(updated)
+}
+
+fn is_valid_tag_color(color: &str) -> bool {
+    let bytes = color.as_bytes();
+    bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
 }

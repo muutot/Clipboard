@@ -19,6 +19,6 @@ pub use recovery::{
 };
 pub use repository::{
     ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    StorageFileReferences, TextItemUpdate,
+    StorageFileReferences, TagInfo, TextItemUpdate,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};

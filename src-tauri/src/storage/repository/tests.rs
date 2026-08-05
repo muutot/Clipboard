@@ -70,6 +70,98 @@ fn set_tags_replaces_and_removes_tags_in_metadata_json() {
 }
 
 #[test]
+fn list_all_tags_returns_distinct_names_with_counts_and_colors() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("item-1", "hash-1", 100))
+        .unwrap();
+    database
+        .save_item(&text_item("item-2", "hash-2", 200))
+        .unwrap();
+    database
+        .set_tags("item-1", &["work".to_owned(), "urgent".to_owned()])
+        .unwrap();
+    database.set_tags("item-2", &["work".to_owned()]).unwrap();
+
+    assert!(database.set_tag_color("work", "#ff0000").unwrap());
+
+    let tags = database.list_all_tags().unwrap();
+    let work = tags.iter().find(|tag| tag.name == "work").unwrap();
+    assert_eq!(work.count, 2);
+    assert_eq!(work.color, "#ff0000");
+    let urgent = tags.iter().find(|tag| tag.name == "urgent").unwrap();
+    assert_eq!(urgent.count, 1);
+    assert_eq!(urgent.color, "");
+    assert_eq!(tags.len(), 2);
+}
+
+#[test]
+fn rename_tag_rewrites_items_and_migrates_color() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("item-1", "hash-1", 100))
+        .unwrap();
+    database
+        .save_item(&text_item("item-2", "hash-2", 200))
+        .unwrap();
+    database
+        .set_tags("item-1", &["work".to_owned(), "urgent".to_owned()])
+        .unwrap();
+    database.set_tags("item-2", &["work".to_owned()]).unwrap();
+    assert!(database.set_tag_color("work", "#00ff00").unwrap());
+
+    let updated = database.rename_tag("work", "jobs").unwrap();
+    assert_eq!(updated, 2);
+
+    let item1 = database.get_item("item-1").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(item1.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(metadata["tags"], serde_json::json!(["jobs", "urgent"]));
+    let item2 = database.get_item("item-2").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(item2.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(metadata["tags"], serde_json::json!(["jobs"]));
+
+    let tags = database.list_all_tags().unwrap();
+    let jobs = tags.iter().find(|tag| tag.name == "jobs").unwrap();
+    assert_eq!(jobs.count, 2);
+    assert_eq!(jobs.color, "#00ff00");
+    assert!(tags.iter().all(|tag| tag.name != "work"));
+}
+
+#[test]
+fn delete_tag_removes_it_from_items_and_registry() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("item-1", "hash-1", 100))
+        .unwrap();
+    database
+        .set_tags("item-1", &["work".to_owned(), "urgent".to_owned()])
+        .unwrap();
+    assert!(database.set_tag_color("urgent", "#0000ff").unwrap());
+
+    let removed = database.delete_tag("urgent").unwrap();
+    assert_eq!(removed, 1);
+
+    let item1 = database.get_item("item-1").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(item1.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(metadata["tags"], serde_json::json!(["work"]));
+
+    let tags = database.list_all_tags().unwrap();
+    assert!(tags.iter().all(|tag| tag.name != "urgent"));
+}
+
+#[test]
+fn tag_color_validation_accepts_hex_and_rejects_invalid() {
+    let database = Database::open_in_memory().unwrap();
+    assert!(database.set_tag_color("work", "#a1b2c3").unwrap());
+    assert!(database.set_tag_color("work", "").unwrap());
+    assert!(!database.set_tag_color("work", "red").unwrap());
+    assert!(!database.set_tag_color("", "#000000").unwrap());
+}
+
+#[test]
 fn tags_are_folded_into_search_document_content() {
     use crate::storage::SearchRepository;
     let database = Database::open_in_memory().unwrap();

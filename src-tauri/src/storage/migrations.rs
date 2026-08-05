@@ -98,7 +98,15 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         BEGIN
             INSERT INTO search_outbox (item_id, operation, created_at_ms)
             VALUES (NEW.item_id, 'upsert', NEW.created_at_ms);
-        END;",
+        END;
+
+        -- Tag registry for the settings tag manager. Item membership is stored
+        -- as strings under `metadata_json.tags`; this table only carries the
+        -- global presentation metadata (color) keyed by tag name.
+        CREATE TABLE IF NOT EXISTS tags (
+            name TEXT PRIMARY KEY NOT NULL,
+            color TEXT NOT NULL DEFAULT ''
+        );",
     )?;
 
     // Databases created before HTML capture gained a column get it here.
