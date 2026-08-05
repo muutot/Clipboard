@@ -67,6 +67,12 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
+  interface TextTransformResult {
+    input: string;
+    operation: string;
+    result: string;
+  }
+
   const dateFilterOptions = $derived([
     { id: "all" as const, label: _t("dateFilter.all") },
     { id: "today" as const, label: _t("dateFilter.today") },
@@ -2046,99 +2052,107 @@
   async function cleanTextIfEnabled(text: string): Promise<string> {
     if (!$generalSettings.pasteCleaningEnabled) return text;
     try {
-      return await invoke<string>("transform_text", { operation: "cleanPaste", text });
+      const transform = await invoke<TextTransformResult>("transform_text", {
+        operation: "cleanPaste",
+        input: text,
+      });
+      return transform.result;
     } catch (error) {
       console.error("Unable to clean text before paste", error);
       return text;
     }
   }
 
+  async function pasteToPreviousApplication(
+    item: ClipboardItem,
+    keys: { paste: string; copy: string; failed: string },
+    write: () => Promise<void>,
+  ): Promise<void> {
+    if ($generalSettings.pinCopiedToTop) moveToTop(item.id);
+    try {
+      await write();
+    } catch (error) {
+      console.error("Unable to prepare clipboard content for paste", error);
+      showToast(_t(keys.failed), "error");
+      return;
+    }
+
+    if (!isTauriRuntime()) {
+      showToast(_t(keys.copy), "success");
+      return;
+    }
+
+    try {
+      const pasted = await invoke<boolean>("paste_to_previous_application");
+      showToast(_t(pasted ? keys.paste : keys.copy), pasted ? "success" : "info");
+    } catch (error) {
+      console.error("Unable to restore the previous application and paste", error);
+      showToast(_t(keys.failed), "error");
+    }
+  }
+
   async function plainPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
     const text = item.textContent || item.title;
-    try {
-      const cleaned = await cleanTextIfEnabled(text);
-      await writeClipboardText(cleaned);
-      if (!isTauriRuntime()) {
-        showToast(_t("toast.plainCopySuccess"), "success");
-        return;
-      }
-
-      const pasted = await invoke<boolean>("paste_to_previous_application");
-      showToast(
-        _t(pasted ? "toast.plainPasteSuccess" : "toast.plainCopySuccess"),
-        pasted ? "success" : "info",
-      );
-    } catch (error) {
-      console.error("Unable to paste into the previous application", error);
-      showToast(_t("toast.plainPasteFailed"), "error");
-    }
+    await pasteToPreviousApplication(
+      item,
+      {
+        paste: "toast.plainPasteSuccess",
+        copy: "toast.plainCopySuccess",
+        failed: "toast.plainPasteFailed",
+      },
+      async () => {
+        const cleaned = await cleanTextIfEnabled(text);
+        await writeClipboardText(cleaned);
+      },
+    );
   }
 
   async function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item || !item.htmlContent) return;
-    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
+    const htmlContent = item.htmlContent;
     const plainText = item.textContent || undefined;
-    try {
-      if (plainText && $generalSettings.pasteCleaningEnabled) {
-        const cleaned = await cleanTextIfEnabled(plainText);
-        if (cleaned !== plainText) {
-          await writeClipboardText(cleaned);
-          if (!isTauriRuntime()) {
-            showToast(_t("toast.formatCopySuccess"), "success");
+    await pasteToPreviousApplication(
+      item,
+      {
+        paste: "toast.formatPasteSuccess",
+        copy: "toast.formatCopySuccess",
+        failed: "toast.formatPasteFailed",
+      },
+      async () => {
+        if (plainText && $generalSettings.pasteCleaningEnabled) {
+          const cleaned = await cleanTextIfEnabled(plainText);
+          if (cleaned !== plainText) {
+            await writeClipboardText(cleaned);
             return;
           }
-
-          const pasted = await invoke<boolean>("paste_to_previous_application");
-          showToast(
-            _t(pasted ? "toast.formatPasteSuccess" : "toast.formatCopySuccess"),
-            pasted ? "success" : "info",
-          );
-          return;
         }
-      }
-      await writeClipboardHtml(item.htmlContent, plainText);
-      if (!isTauriRuntime()) {
-        showToast(_t("toast.formatCopySuccess"), "success");
-        return;
-      }
-
-      const pasted = await invoke<boolean>("paste_to_previous_application");
-      showToast(
-        _t(pasted ? "toast.formatPasteSuccess" : "toast.formatCopySuccess"),
-        pasted ? "success" : "info",
-      );
-    } catch (error) {
-      console.error("Unable to paste formatted text into the previous application", error);
-      showToast(_t("toast.formatPasteFailed"), "error");
-    }
+        await writeClipboardHtml(htmlContent, plainText);
+      },
+    );
   }
 
   async function cleanPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    if ($generalSettings.pinCopiedToTop) moveToTop(_id);
     const text = item.textContent || item.title;
-    try {
-      const cleaned = await invoke<string>("transform_text", { operation: "cleanPaste", text });
-      await writeClipboardText(cleaned);
-      if (!isTauriRuntime()) {
-        showToast(_t("toast.cleanCopySuccess"), "success");
-        return;
-      }
-
-      const pasted = await invoke<boolean>("paste_to_previous_application");
-      showToast(
-        _t(pasted ? "toast.cleanPasteSuccess" : "toast.cleanCopySuccess"),
-        pasted ? "success" : "info",
-      );
-    } catch (error) {
-      console.error("Unable to clean and paste into the previous application", error);
-      showToast(_t("toast.cleanPasteFailed"), "error");
-    }
+    await pasteToPreviousApplication(
+      item,
+      {
+        paste: "toast.cleanPasteSuccess",
+        copy: "toast.cleanCopySuccess",
+        failed: "toast.cleanPasteFailed",
+      },
+      async () => {
+        const transform = await invoke<TextTransformResult>("transform_text", {
+          operation: "cleanPaste",
+          input: text,
+        });
+        await writeClipboardText(transform.result);
+      },
+    );
   }
 
   function duplicateItem(id: string) {
