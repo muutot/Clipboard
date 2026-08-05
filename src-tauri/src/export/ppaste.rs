@@ -10,6 +10,11 @@ use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
 pub(crate) const BACKUP_EXTENSION: &str = ".pastebackup";
 
+/// Maximum uncompressed size for a single entry read from a PPaste backup
+/// (a 76 MB SQLite database or PNG is already unusually large). Guards against
+/// a crafted archive forcing unbounded heap allocation.
+const MAX_PPASTE_ENTRY_BYTES: u64 = 128 * 1024 * 1024;
+
 struct PpRow {
     kind: ClipboardKind,
     text_content: Option<String>,
@@ -379,11 +384,26 @@ fn read_zip_entry<R: Read + std::io::Seek>(
         candidates.push(name.replace('\\', "/"));
     }
     for candidate in candidates {
-        if let Ok(mut entry) = archive.by_name(&candidate) {
+        if let Ok(entry) = archive.by_name(&candidate) {
+            let declared = entry.size();
+            // Reject a single entry whose uncompressed size is unreasonably
+            // large for a PPaste backup (a 76 MB DB or PNG is already large),
+            // so a crafted archive cannot force unbounded heap allocation.
+            if declared > MAX_PPASTE_ENTRY_BYTES {
+                return Err(format!(
+                    "entry {candidate} in backup declares {declared} bytes, exceeding the {MAX_PPASTE_ENTRY_BYTES} limit"
+                ));
+            }
             let mut bytes = Vec::new();
             entry
+                .take(MAX_PPASTE_ENTRY_BYTES + 1)
                 .read_to_end(&mut bytes)
                 .map_err(|error| format!("failed to read {candidate} in backup: {error}"))?;
+            if bytes.len() as u64 > MAX_PPASTE_ENTRY_BYTES {
+                return Err(format!(
+                    "entry {candidate} in backup exceeds the {MAX_PPASTE_ENTRY_BYTES} limit"
+                ));
+            }
             return Ok(bytes);
         }
     }
@@ -400,17 +420,29 @@ fn ppaste_datetime_to_ms(datetime: &str) -> Option<i64> {
         return None;
     }
     let year = numbers[0];
-    let month = numbers[1] as u32;
-    let day = numbers[2] as u32;
+    let month = numbers[1];
+    let day = numbers[2];
     let hour = numbers.get(3).copied().unwrap_or(0);
     let minute = numbers.get(4).copied().unwrap_or(0);
     let second = numbers.get(5).copied().unwrap_or(0);
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    // PPaste timestamps are ordinary calendar times; reject adversarial or
+    // malformed fields rather than truncating or overflowing on them.
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || !(0..=23).contains(&hour)
+        || !(0..=59).contains(&minute)
+        || !(0..=59).contains(&second)
+        || !(1..=9999).contains(&year)
+    {
         return None;
     }
-    let days = days_from_civil(year, month, day);
-    let seconds = days * 86400 + hour * 3600 + minute * 60 + second;
-    Some(seconds * 1000)
+    let days = days_from_civil(year, month as u32, day as u32);
+    let seconds = days
+        .saturating_mul(86_400)
+        .saturating_add(hour.saturating_mul(3_600))
+        .saturating_add(minute.saturating_mul(60))
+        .saturating_add(second);
+    Some(seconds.saturating_mul(1_000))
 }
 
 fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
@@ -644,5 +676,19 @@ mod tests {
             ppaste_datetime_to_ms("2026-04-27 12:15:22"),
             Some(1777292122000)
         );
+    }
+
+    #[test]
+    fn ppaste_datetime_rejects_out_of_range_fields_without_overflow() {
+        assert_eq!(ppaste_datetime_to_ms("2026-04-45 12:15:22"), None);
+        assert_eq!(ppaste_datetime_to_ms("2026-00-27 12:15:22"), None);
+        assert_eq!(ppaste_datetime_to_ms("2026-04-27 25:15:22"), None);
+        assert_eq!(ppaste_datetime_to_ms("2026-04-27 12:99:22"), None);
+        // Adversarially large numbers must not truncate, wrap, or overflow.
+        assert_eq!(
+            ppaste_datetime_to_ms("9223372036854775807-04-27 12:15:22"),
+            None
+        );
+        assert_eq!(ppaste_datetime_to_ms("0000-04-27 12:15:22"), None);
     }
 }
