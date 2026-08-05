@@ -45,6 +45,7 @@ const en: LocaleDefinition = {
     pastePlain: "Paste as plain text",
     pasteFormat: "Paste with formatting",
     cleanPaste: "Clean and paste",
+    paste: "Paste",
     duplicateItem: "Save as new entry",
     restore: "Restore",
     fileCountSuffix: "and {count} more files",

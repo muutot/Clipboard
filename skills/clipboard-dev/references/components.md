@@ -64,7 +64,7 @@ When `imageFullscreenMode` is `"desktop"`, `handleImageFullscreen` calls `openDe
 
 ### `ContextMenu.svelte`
 
-Renders viewport-bounded menu items with `id`, label, icon, destructive state, and disabled state. It closes on Escape or outside click and dispatches `onaction(id)`. It currently does not implement arrow-key item navigation; do not document or rely on that behavior without implementing and testing it.
+Renders viewport-bounded menu items with `id`, label, icon, destructive state, and disabled state. It closes on Escape or outside click and dispatches `onaction(id)`. An item with `children` renders as a parent entry (chevron indicator) whose submenu opens immediately on hover and is placed to the right of the parent, flipping to the left near the right viewport edge; clicking a child dispatches `onaction(child.id)` and closes the menu. It currently does not implement arrow-key item navigation; do not document or rely on that behavior without implementing and testing it.
 
 ## Content preview/editing
 

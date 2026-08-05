@@ -45,6 +45,7 @@ const zhCN: LocaleDefinition = {
     pastePlain: "纯文本粘贴",
     pasteFormat: "带格式粘贴",
     cleanPaste: "清洗并粘贴",
+    paste: "粘贴",
     duplicateItem: "另存为新条目",
     restore: "恢复",
     fileCountSuffix: "等 {count} 个文件",

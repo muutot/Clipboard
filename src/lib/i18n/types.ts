@@ -45,6 +45,7 @@ export interface LocaleDefinition {
     pastePlain: string;
     pasteFormat: string;
     cleanPaste: string;
+    paste: string;
     duplicateItem: string;
     restore: string;
     fileCountSuffix: string;

@@ -20,6 +20,7 @@
   import { detectQuickActions, parseIsoDate } from "$lib/utils/patterns";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
+  import { onContextMenuOpened, notifyContextMenuOpened } from "$lib/services/context-menu";
   import { tick } from "svelte";
 
   let iconsBase = $derived($iconsDir);
@@ -159,6 +160,13 @@
 
   let contextMenu = $state<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   let cardElement = $state<HTMLDivElement | null>(null);
+
+  $effect(() => {
+    const unsubscribe = onContextMenuOpened(() => {
+      contextMenu = null;
+    });
+    return unsubscribe;
+  });
 
   let editing = $state(false);
   let editContent = $state("");
@@ -494,16 +502,30 @@
   function handleContextMenu(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
+    notifyContextMenuOpened();
     const items: ContextMenuItem[] = [
       { id: "copy", label: _t("card.copy"), icon: "copy" },
-      ...(item.kind === "text"
-        ? [{ id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName }]
-        : []),
-      ...(item.kind === "text" && item.htmlContent
-        ? [{ id: "formatpaste", label: _t("card.pasteFormat"), icon: "clipboard" as IconName }]
-        : []),
-      ...(item.kind === "text"
-        ? [{ id: "cleanpaste", label: _t("card.cleanPaste"), icon: "scan" as IconName }]
+      ...(item.kind === "text" || item.kind === "link"
+        ? [
+            {
+              id: "paste",
+              label: _t("card.paste"),
+              icon: "clipboard" as IconName,
+              children: [
+                { id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName },
+                ...(item.htmlContent
+                  ? [
+                      {
+                        id: "formatpaste",
+                        label: _t("card.pasteFormat"),
+                        icon: "clipboard" as IconName,
+                      },
+                    ]
+                  : []),
+                { id: "cleanpaste", label: _t("card.cleanPaste"), icon: "scan" as IconName },
+              ],
+            },
+          ]
         : []),
       { id: "detail", label: _t("card.viewDetail"), icon: "eye" },
       ...(canEdit

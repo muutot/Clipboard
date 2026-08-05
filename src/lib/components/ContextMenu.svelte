@@ -12,6 +12,7 @@
     icon: IconName;
     destructive?: boolean;
     disabled?: boolean;
+    children?: ContextMenuItem[];
   }
 
   interface Props {
@@ -28,6 +29,8 @@
   let posX = $state(0);
   let posY = $state(0);
 
+  let activeSub = $state<string | null>(null);
+
   function adjustPosition(width: number, height: number) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -41,6 +44,14 @@
       adjustPosition(rect.width, rect.height);
     }
   });
+
+  function openSub(id: string) {
+    activeSub = id;
+  }
+
+  function closeSub(id: string) {
+    if (activeSub === id) activeSub = null;
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
@@ -67,20 +78,57 @@
   aria-label={_t("actions.contextMenu")}
 >
   {#each items as item}
-    <button
-      type="button"
-      class="menu-item"
-      class:destructive={item.destructive}
-      role="menuitem"
-      disabled={item.disabled}
-      onclick={() => {
-        onaction(item.id);
-        onclose();
-      }}
-    >
-      <span class="menu-icon"><AppIcon name={item.icon} size={15} /></span>
-      <span class="menu-label">{item.label}</span>
-    </button>
+    {#if item.children?.length}
+      <div
+        class="menu-item menu-item-parent"
+        role="menuitem"
+        tabindex="0"
+        aria-haspopup="menu"
+        aria-expanded={activeSub === item.id}
+        onmouseenter={() => openSub(item.id)}
+        onmouseleave={() => closeSub(item.id)}
+      >
+        <span class="menu-icon"><AppIcon name={item.icon} size={15} /></span>
+        <span class="menu-label">{item.label}</span>
+        <span class="menu-chevron"><AppIcon name="chevron-right" size={13} /></span>
+        {#if activeSub === item.id}
+          <div class="submenu" role="menu">
+            {#each item.children as child}
+              <button
+                type="button"
+                class="menu-item"
+                class:destructive={child.destructive}
+                role="menuitem"
+                disabled={child.disabled}
+                onclick={() => {
+                  onaction(child.id);
+                  onclose();
+                }}
+              >
+                <span class="menu-icon"><AppIcon name={child.icon} size={15} /></span>
+                <span class="menu-label">{child.label}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <button
+        type="button"
+        class="menu-item"
+        class:destructive={item.destructive}
+        role="menuitem"
+        disabled={item.disabled}
+        onmouseenter={() => (activeSub = null)}
+        onclick={() => {
+          onaction(item.id);
+          onclose();
+        }}
+      >
+        <span class="menu-icon"><AppIcon name={item.icon} size={15} /></span>
+        <span class="menu-label">{item.label}</span>
+      </button>
+    {/if}
   {/each}
 </div>
 
@@ -113,6 +161,20 @@
     transition: background 80ms ease;
   }
 
+  .menu-item-parent {
+    position: relative;
+    box-sizing: border-box;
+  }
+
+  .menu-item-parent::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 10px;
+  }
+
   .menu-item:hover {
     background: var(--hover-bg);
   }
@@ -143,5 +205,25 @@
 
   .menu-label {
     flex: 1;
+  }
+
+  .menu-chevron {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+  }
+
+  .submenu {
+    position: absolute;
+    top: 0;
+    left: calc(100% + 8px);
+    z-index: 10000;
+    min-width: 180px;
+    background: var(--surface-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
   }
 </style>
