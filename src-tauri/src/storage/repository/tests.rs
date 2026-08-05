@@ -466,6 +466,43 @@ fn storage_references_include_every_path_from_multi_file_records() {
 }
 
 #[test]
+fn resource_reference_count_reports_shared_files_excluding_the_current_record() {
+    let database = Database::open_in_memory().unwrap();
+    let mut image = text_item("image-1", "hash-1", 100);
+    image.kind = ClipboardKind::Image;
+    image.resource_path = Some("C:\\managed\\shared.png".to_owned());
+    image.preview_path = Some("C:\\managed\\shared.png".to_owned());
+    database.save_item(&image).unwrap();
+
+    // A second record sharing the same resource path (dedup / duplicate).
+    let mut image2 = text_item("image-2", "hash-2", 200);
+    image2.kind = ClipboardKind::Image;
+    image2.resource_path = Some("C:\\managed\\shared.png".to_owned());
+    database.save_item(&image2).unwrap();
+
+    assert_eq!(
+        database
+            .resource_reference_count("C:\\managed\\shared.png", "image-1")
+            .unwrap(),
+        1
+    );
+    // Excluding the other owner also still finds this record referencing it.
+    assert_eq!(
+        database
+            .resource_reference_count("C:\\managed\\shared.png", "image-2")
+            .unwrap(),
+        1
+    );
+    // A path no record references counts as zero.
+    assert_eq!(
+        database
+            .resource_reference_count("C:\\managed\\missing.png", "image-1")
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
 fn update_text_item_replaces_payload_and_preserves_record_metadata() {
     let database = Database::open_in_memory().unwrap();
     let mut original = text_item("editable", "old-hash", 100);

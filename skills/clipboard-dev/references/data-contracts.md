@@ -110,6 +110,7 @@ Event payloads also use camelCase where Rust structs are serialized. Register li
 - Preserve external original paths separately from managed storage paths.
 - Rewrite only managed paths during data-directory migration.
 - Include every path in multi-file reference accounting so cleanup cannot delete active files.
+- Resource files are content-hash-named and may be shared by several records (dedup, duplicates). `rename_item` renames the physical file only when the record is its sole owner (`resource_reference_count(path, id) == 0`); a shared file keeps its hash name and only the display title changes, so renaming one record never breaks another.
 
 ## Tags
 

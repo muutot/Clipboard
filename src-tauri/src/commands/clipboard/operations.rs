@@ -453,7 +453,16 @@ pub fn rename_item(
     if item.kind == ClipboardKind::Image || item.kind == ClipboardKind::File {
         if let Some(ref old_path) = item.resource_path {
             let old = std::path::Path::new(old_path);
-            if old.exists() {
+            // Storage files are content-hash-named and can be shared by several
+            // records (dedup, duplicates, previews). Only rename the physical
+            // file when this record is its sole owner; otherwise the rename
+            // would break the other records sharing it. In that case fall back
+            // to renaming the display title only.
+            let shared = database
+                .resource_reference_count(old_path, &id)
+                .map_err(|e| e.to_string())?
+                > 0;
+            if old.exists() && !shared {
                 let ext = old.extension().unwrap_or_default().to_string_lossy();
                 let parent = old.parent().unwrap_or(std::path::Path::new("."));
                 let new_path = parent.join(format!("{}.{}", new_name.trim(), ext));

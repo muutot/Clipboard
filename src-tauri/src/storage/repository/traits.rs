@@ -195,4 +195,9 @@ pub trait ClipboardRepository {
     /// Soft-deleted records remain recoverable, so their resources must stay
     /// referenced until the record is permanently removed.
     fn list_storage_file_references(&self) -> Result<StorageFileReferences, StorageError>;
+    /// Returns how many records (including soft-deleted ones) reference `path`
+    /// as their resource or preview, excluding `exclude_id`. A value greater
+    /// than zero means another record shares the file, so callers must not
+    /// rename or delete it.
+    fn resource_reference_count(&self, path: &str, exclude_id: &str) -> Result<u64, StorageError>;
 }

@@ -901,6 +901,22 @@ impl ClipboardRepository for Database {
             Ok(paths)
         })
     }
+
+    fn resource_reference_count(&self, path: &str, exclude_id: &str) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*)
+                 FROM clipboard_items
+                 WHERE id <> ?1
+                   AND (resource_path = ?2 OR preview_path = ?2)",
+                params![exclude_id, path],
+                |row| {
+                    let count: i64 = row.get(0)?;
+                    Ok::<_, rusqlite::Error>(count as u64)
+                },
+            )?)
+        })
+    }
 }
 
 /// Rewrites `metadata_json.tags` on every active record, replacing `target`
