@@ -1102,7 +1102,6 @@
     position: relative;
     z-index: 1;
     min-width: 0;
-    padding-right: 76px;
     padding-left: 0;
     pointer-events: none;
   }
@@ -1185,9 +1184,9 @@
   }
 
   .tag-chip {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 3px;
     padding: 1px 5px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -1206,6 +1205,10 @@
   }
 
   .tag-chip-remove {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    z-index: 2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1213,15 +1216,25 @@
     height: 13px;
     padding: 0;
     border: 0;
-    border-radius: 3px;
+    border-radius: 50%;
     color: var(--text-faint);
-    background: transparent;
+    background: var(--surface-bg);
+    box-shadow: 0 0 0 1px var(--border-color);
     cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 100ms ease;
+  }
+
+  .tag-chip:hover .tag-chip-remove,
+  .tag-chip-remove:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .tag-chip-remove:hover {
     color: var(--danger-color);
-    background: var(--hover-bg);
+    border-color: var(--danger-color);
   }
 
   .tag-add-input {
