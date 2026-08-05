@@ -106,6 +106,8 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         );",
     )?;
 
+    ensure_item_tags_table(connection)?;
+
     // Databases created before HTML capture gained a column get it here.
     // `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a
     // separate idempotent ALTER is required for upgrades.
@@ -120,6 +122,42 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         "DROP INDEX IF EXISTS search_outbox_sequence_idx;",
     )?;
 
+    Ok(())
+}
+
+/// Tags are the only listable metadata, but storing them only inside
+/// `metadata_json` forces `list_all_tags` / tag filtering to scan every row and
+/// parse JSON. The `item_tags` junction table mirrors the tags stored in
+/// `clipboard_items.metadata_json['tags']` for active items, so tag filtering
+/// and counting can hit an index. `metadata_json` stays the source of truth;
+/// every read/write path keeps the copy in sync.
+///
+/// The backfill is guarded by an emptiness check so upgrades only pay for the
+/// O(n) JSON scan once, and `INSERT OR IGNORE` makes a concurrent run race-safe.
+fn ensure_item_tags_table(connection: &Connection) -> Result<(), StorageError> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS item_tags (
+            item_id TEXT NOT NULL,
+            tag TEXT NOT NULL,
+            PRIMARY KEY (item_id, tag),
+            FOREIGN KEY (item_id) REFERENCES clipboard_items (id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS item_tags_tag_idx ON item_tags (tag, item_id);",
+    )?;
+
+    let rows: i64 = connection.query_row("SELECT COUNT(*) FROM item_tags", [], |row| {
+        row.get(0)
+    })?;
+    if rows == 0 {
+        connection.execute_batch(
+            "INSERT OR IGNORE INTO item_tags (item_id, tag)
+             SELECT clipboard_items.id, value
+             FROM clipboard_items, json_each(clipboard_items.metadata_json, '$.tags')
+             WHERE deleted = 0
+               AND value IS NOT NULL
+               AND TRIM(value) <> '';",
+        )?;
+    }
     Ok(())
 }
 
@@ -218,5 +256,69 @@ mod tests {
         assert_eq!(count, 0);
 
         create_schema(&connection).unwrap();
+    }
+
+    #[test]
+    fn backfills_item_tags_from_existing_metadata_tags() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE clipboard_items (
+                    id TEXT PRIMARY KEY,
+                    content_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    text_content TEXT,
+                    resource_path TEXT,
+                    preview_path TEXT,
+                    content_hash TEXT NOT NULL,
+                    source_app TEXT,
+                    icon_path TEXT,
+                    size_bytes INTEGER NOT NULL,
+                    created_at_ms INTEGER NOT NULL,
+                    last_used_at_ms INTEGER,
+                    is_favorite INTEGER NOT NULL DEFAULT 0,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    deleted_at_ms INTEGER,
+                    metadata_json TEXT DEFAULT '{}'
+                );
+                INSERT INTO clipboard_items
+                    (id, content_type, title, content_hash, size_bytes,
+                     created_at_ms, deleted, metadata_json)
+                VALUES
+                    ('a', 'text', 'a', 'h-a', 1, 1, 0,
+                        '{\"tags\":[\"work\",\"project\"]}'),
+                    ('b', 'text', 'b', 'h-b', 1, 2, 0,
+                        '{\"tags\":[\"work\"]}'),
+                    ('c', 'text', 'c', 'h-c', 1, 3, 1,
+                        '{\"tags\":[\"archived\"]}');",
+            )
+            .unwrap();
+
+        create_schema(&connection).unwrap();
+
+        let pairs: Vec<(String, String)> = connection
+            .prepare(
+                "SELECT item_id, tag FROM item_tags ORDER BY item_id, tag",
+            )
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("a".to_owned(), "project".to_owned()),
+                ("a".to_owned(), "work".to_owned()),
+                ("b".to_owned(), "work".to_owned()),
+            ]
+        );
+
+        // Re-running schema creation must be idempotent and not duplicate rows.
+        create_schema(&connection).unwrap();
+        let count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM item_tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 3);
     }
 }

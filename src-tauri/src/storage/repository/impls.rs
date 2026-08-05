@@ -205,8 +205,7 @@ impl ClipboardRepository for Database {
             }
             if let Some(tag) = &filter.tag {
                 conditions.push(
-                    "EXISTS (SELECT 1 FROM json_each(metadata_json, '$.tags') je \
-                     WHERE je.value = ?)"
+                    "EXISTS (SELECT 1 FROM item_tags WHERE item_id = clipboard_items.id AND tag = ?)"
                         .to_owned(),
                 );
                 args.push(Box::new(tag.clone()));
@@ -359,40 +358,49 @@ impl ClipboardRepository for Database {
                     map.insert(
                         "tags".to_owned(),
                         serde_json::Value::Array(
-                            dedup.into_iter().map(serde_json::Value::String).collect(),
+                            dedup.iter().cloned().map(serde_json::Value::String).collect(),
                         ),
                     );
                 }
             }
             let updated = object.to_string();
 
-            Ok(connection.execute(
+            let transaction = connection.transaction()?;
+            let changed = transaction.execute(
                 "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
                 params![id, updated],
-            )? > 0)
+            )? > 0;
+            if changed {
+                transaction.execute("DELETE FROM item_tags WHERE item_id = ?1", [id])?;
+                for tag in &dedup {
+                    transaction.execute(
+                        "INSERT OR IGNORE INTO item_tags (item_id, tag) VALUES (?1, ?2)",
+                        params![id, tag],
+                    )?;
+                }
+            }
+            transaction.commit()?;
+            Ok(changed)
         })
     }
 
     fn list_all_tags(&self) -> Result<Vec<TagInfo>, StorageError> {
         self.with_connection(|connection| {
-            let mut statement = connection
-                .prepare("SELECT metadata_json FROM clipboard_items WHERE deleted = 0")?;
+            let mut statement = connection.prepare(
+                "SELECT it.tag, COUNT(*)
+                 FROM item_tags it
+                 JOIN clipboard_items ci ON ci.id = it.item_id
+                 WHERE ci.deleted = 0
+                 GROUP BY it.tag",
+            )?;
             let mut counts: std::collections::BTreeMap<String, u64> =
                 std::collections::BTreeMap::new();
-            let rows = statement.query_map([], |row| row.get::<_, Option<String>>(0))?;
+            let rows = statement.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?;
             for row in rows {
-                let Some(json) = row? else { continue };
-                let Ok(serde_json::Value::Object(object)) =
-                    serde_json::from_str::<serde_json::Value>(&json)
-                else {
-                    continue;
-                };
-                let Some(serde_json::Value::Array(tags)) = object.get("tags") else {
-                    continue;
-                };
-                for tag in tags.iter().filter_map(serde_json::Value::as_str) {
-                    *counts.entry(tag.trim().to_owned()).or_insert(0) += 1;
-                }
+                let (tag, count) = row?;
+                counts.insert(tag, count as u64);
             }
 
             let mut colors: HashMap<String, String> = HashMap::new();
@@ -440,6 +448,28 @@ impl ClipboardRepository for Database {
                 transaction.execute("DELETE FROM tags WHERE name = ?1", [old])?;
             }
 
+            // Sync the derived index. Restrict to active items so deleted rows
+            // keep the old tag in both `metadata_json` and `item_tags`,
+            // mirroring `rewrite_item_tags`, which never rewrites deleted rows.
+            // Drop colliding rows first so an item already carrying `new` cannot
+            // break the (item_id, tag) primary key during the rename.
+            transaction.execute(
+                "DELETE FROM item_tags
+                 WHERE tag = ?1
+                   AND item_id IN (
+                       SELECT item_id FROM item_tags
+                       WHERE tag = ?2
+                         AND item_id IN (SELECT id FROM clipboard_items WHERE deleted = 0)
+                   )",
+                params![old, new],
+            )?;
+            transaction.execute(
+                "UPDATE item_tags SET tag = ?2
+                 WHERE tag = ?1
+                   AND item_id IN (SELECT id FROM clipboard_items WHERE deleted = 0)",
+                params![old, new],
+            )?;
+
             transaction.commit()?;
             Ok(updated)
         })
@@ -454,6 +484,12 @@ impl ClipboardRepository for Database {
             let transaction = connection.transaction()?;
             let updated = rewrite_item_tags(&transaction, name, None)?;
             transaction.execute("DELETE FROM tags WHERE name = ?1", [name])?;
+            transaction.execute(
+                "DELETE FROM item_tags
+                 WHERE tag = ?1
+                   AND item_id IN (SELECT id FROM clipboard_items WHERE deleted = 0)",
+                [name],
+            )?;
             transaction.commit()?;
             Ok(updated)
         })

@@ -179,6 +179,10 @@ _t("status.recordCount", { count: items.length })
 
 `clipboard_items` 表有 `UNIQUE (kind, content_hash)` 约束。新增 item 前必须计算 hash，否则插入会失败。
 
+### `item_tags` 是 `metadata_json['tags']` 的派生索引
+
+标签以 `clipboard_items.metadata_json['tags']` 为唯一数据源，`item_tags` 联结表仅面向活跃行镜像标签，用于标签过滤与计数走索引。任何写标签的路径（`set_tags`、`rename_tag`、`delete_tag`）都必须在同一事务内同步 `item_tags`；删除 item 由外键 `ON DELETE CASCADE` 自动清理。若新增写 `metadata_json` 标签的逻辑，务必同时维护 `item_tags`，避免二者失步。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：
