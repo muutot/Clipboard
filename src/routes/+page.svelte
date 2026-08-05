@@ -54,7 +54,7 @@
     applyFontSizesToDocument,
   } from "$lib/services/settings-bootstrap";
   import { listen } from "@tauri-apps/api/event";
-  import type { PersistedClipboardItem } from "$lib/types/clipboard";
+  import type { PersistedClipboardItem, TagsChangedPayload } from "$lib/types/clipboard";
   import {
     generalSettings,
     restoreWindowPosition,
@@ -939,6 +939,27 @@
       }
     });
 
+    const unsubTagsChanged = listen<TagsChangedPayload>("tags-changed", (event) => {
+      const { renamed, deleted } = event.payload;
+      if (renamed) {
+        const { old, new: fresh } = renamed;
+        items = items.map((item) => rewriteTags(item, old, fresh));
+        if (detailItem) detailItem = rewriteTags(detailItem, old, fresh);
+        if (indexedItems) {
+          indexedItems = indexedItems.map((item) => rewriteTags(item, old, fresh));
+        }
+        if (tagFilter === old) tagFilter = fresh;
+      } else if (deleted) {
+        items = items.map((item) => removeTag(item, deleted));
+        if (detailItem) detailItem = removeTag(detailItem, deleted);
+        if (indexedItems) {
+          indexedItems = indexedItems.map((item) => removeTag(item, deleted));
+        }
+        if (tagFilter === deleted) tagFilter = null;
+      }
+      void refreshTagColors();
+    });
+
     let listenersDisposed = false;
     let unlistenMove: (() => void) | undefined;
     let unlistenResize: (() => void) | undefined;
@@ -970,6 +991,7 @@
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
+      void unsubTagsChanged.then((fn) => fn()).catch(() => {});
       unsubSettings();
       if (unlistenMove) unlistenMove();
       if (unlistenResize) unlistenResize();
@@ -1947,6 +1969,31 @@
       if (tag.color) map[tag.name] = tag.color;
     }
     tagColors = map;
+  }
+
+  function rewriteTags(
+    item: ClipboardItem,
+    oldName: string,
+    newName: string,
+  ): ClipboardItem {
+    const tags = item.tags ?? [];
+    if (!tags.includes(oldName)) return item;
+    const seen = new Set<string>();
+    const next: string[] = [];
+    for (const tag of tags) {
+      const value = tag === oldName ? newName : tag;
+      if (!seen.has(value)) {
+        seen.add(value);
+        next.push(value);
+      }
+    }
+    return { ...item, tags: next };
+  }
+
+  function removeTag(item: ClipboardItem, name: string): ClipboardItem {
+    const tags = item.tags ?? [];
+    if (!tags.includes(name)) return item;
+    return { ...item, tags: tags.filter((tag) => tag !== name) };
   }
 
   async function saveTags(id: string, tags: string[]) {

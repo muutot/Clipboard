@@ -256,6 +256,11 @@ export interface AppSettings {
   capture: CaptureSettings;
 }
 
+export interface TagsChangedPayload {
+  renamed?: { old: string; new: string };
+  deleted?: string;
+}
+
 export interface PersistedClipboardItem {
   id: string;
   kind: ClipboardKind;

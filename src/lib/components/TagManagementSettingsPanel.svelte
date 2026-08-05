@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
+  import type { TagsChangedPayload } from "$lib/types/clipboard";
   import {
     deleteTag,
     listAllTags,
@@ -9,9 +10,16 @@
     setTagColor,
     type TagInfo,
   } from "$lib/services/clipboard";
+  import { emit } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
+
+  function emitTagsChanged(payload: TagsChangedPayload) {
+    emit("tags-changed", payload).catch((err) =>
+      console.warn("tags-changed emit failed:", err),
+    );
+  }
 
   interface Props {
     onclose: () => void;
@@ -61,6 +69,7 @@
       const index = tags.findIndex((t) => t.name === tag.name);
       if (index >= 0) tags[index] = { ...tags[index], color: next };
       notify(next ? _t("tags.colorSaved") : _t("tags.saved"));
+      emitTagsChanged({});
     }
   }
 
@@ -77,6 +86,7 @@
     }
     await renameTag(tag.name, name);
     notify(_t("tags.renamed"));
+    emitTagsChanged({ renamed: { old: tag.name, new: name } });
     void load();
   }
 
@@ -87,6 +97,7 @@
     }
     await deleteTag(tag.name);
     notify(_t("tags.deleted"));
+    emitTagsChanged({ deleted: tag.name });
     void load();
   }
 </script>
