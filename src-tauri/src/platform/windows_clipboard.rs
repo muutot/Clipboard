@@ -471,6 +471,7 @@ pub fn read_clipboard_text() -> Option<String> {
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;
         fn GlobalLock(handle: isize) -> *const u8;
+        fn GlobalSize(handle: isize) -> usize;
         fn GlobalUnlock(handle: isize) -> i32;
         fn IsClipboardFormatAvailable(format: u32) -> i32;
     }
@@ -496,7 +497,11 @@ pub fn read_clipboard_text() -> Option<String> {
             return None;
         }
 
-        let len = (0..).take_while(|&i| *ptr.add(i) != 0).count();
+        // Bound the NUL-terminator scan to the real allocation size so a
+        // producer that omits the terminator cannot cause an out-of-bounds
+        // read past the locked global memory block.
+        let cap_u16 = GlobalSize(handle) / size_of::<u16>();
+        let len = (0..cap_u16).take_while(|&i| *ptr.add(i) != 0).count();
         let wide: Vec<u16> = std::slice::from_raw_parts(ptr, len).to_vec();
         GlobalUnlock(handle);
         CloseClipboard();
