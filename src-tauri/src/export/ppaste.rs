@@ -34,9 +34,16 @@ pub(crate) fn import_from_ppaste_backup(
 
     let db_bytes = read_zip_entry(&mut archive, "PPaste2.db3")?;
     let db_path = extract_db_to_temp(&db_bytes)?;
-    let result = read_records(&db_path).and_then(|rows| {
+    let result = read_records(&db_path).and_then(|(rows, files_dropped)| {
         let _ = std::fs::remove_file(&db_path);
-        import_rows(&rows, &mut archive, database, paths)
+        let mut summary = import_rows(&rows, &mut archive, database, paths)?;
+        if files_dropped > 0 {
+            summary.skipped_count += files_dropped;
+            summary.errors.push(format!(
+                "{files_dropped} file record(s) were skipped: they reference files on the original machine and their contents are not included in the backup"
+            ));
+        }
+        Ok(summary)
     });
     let _ = std::fs::remove_file(&db_path);
     result
@@ -53,7 +60,7 @@ fn extract_db_to_temp(db_bytes: &[u8]) -> Result<String, String> {
     Ok(db_path.to_string_lossy().to_string())
 }
 
-fn read_records(db_path: &str) -> Result<Vec<PpRow>, String> {
+fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64), String> {
     let connection = Connection::open(db_path)
         .map_err(|error| format!("failed to read PPaste database: {error}"))?;
     let mut statement = connection
@@ -75,18 +82,29 @@ fn read_records(db_path: &str) -> Result<Vec<PpRow>, String> {
             let source: Option<String> = row.get(7)?;
             let width: Option<i64> = row.get(8)?;
             let height: Option<i64> = row.get(9)?;
-            Ok(map_row(
-                kind, child, value, search, favorite, created, source, width, height,
+            let is_files = kind.as_deref() == Some("Files");
+            Ok((
+                map_row(
+                    kind, child, value, search, favorite, created, source, width, height,
+                ),
+                is_files,
             ))
         })
         .map_err(|error| format!("failed to read PPaste records: {error}"))?;
 
     let mut out = Vec::new();
+    let mut files_dropped = 0u64;
     for row in rows {
-        let Ok(Some(record)) = row else { continue };
-        out.push(record);
+        let Ok((record, is_files)) = row else { continue };
+        if is_files {
+            files_dropped += 1;
+            continue;
+        }
+        if let Some(record) = record {
+            out.push(record);
+        }
     }
-    Ok(out)
+    Ok((out, files_dropped))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -492,9 +510,11 @@ mod tests {
         let summary =
             import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
 
-        // 3 text/link + 1 image imported; the non-portable Files record is dropped.
+        // 3 text/link + 1 image imported; the non-portable Files record is skipped with a note.
         assert_eq!(summary.imported_count, 4);
-        assert_eq!(summary.skipped_count, 0);
+        assert_eq!(summary.skipped_count, 1);
+        assert_eq!(summary.errors.len(), 1);
+        assert!(summary.errors[0].contains("file record(s) were skipped"));
         assert_eq!(database.item_count().unwrap(), 4);
 
         let stored = database.list_recent(10, 0).unwrap();
@@ -549,13 +569,15 @@ mod tests {
 
         let first = import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
         assert_eq!(first.imported_count, 4);
+        assert_eq!(first.skipped_count, 1);
         assert_eq!(database.item_count().unwrap(), 4);
 
         let second =
             import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
         assert_eq!(second.imported_count, 0);
-        assert_eq!(second.skipped_count, 4);
-        assert!(second.errors.is_empty());
+        assert_eq!(second.skipped_count, 5);
+        assert_eq!(second.errors.len(), 1);
+        assert!(second.errors[0].contains("file record(s) were skipped"));
         assert_eq!(database.item_count().unwrap(), 4);
 
         std::fs::remove_dir_all(&temp).unwrap();
@@ -600,7 +622,8 @@ mod tests {
         let summary =
             import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
         assert_eq!(summary.imported_count, 4);
-        assert_eq!(summary.errors.len(), 0);
+        assert_eq!(summary.skipped_count, 1);
+        assert_eq!(summary.errors.len(), 1);
         assert!(database
             .list_recent(10, 0)
             .unwrap()
