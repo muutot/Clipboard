@@ -289,21 +289,24 @@ impl ClipboardRepository for Database {
     ) -> Result<Vec<(String, Option<String>)>, StorageError> {
         self.with_connection(|connection| {
             let mut statement = connection.prepare_cached(
-                "SELECT
-                    MIN(TRIM(c.source_app)) AS app,
-                    (SELECT ci.icon_path
-                     FROM clipboard_items ci
-                     WHERE LOWER(TRIM(ci.source_app)) = LOWER(TRIM(c.source_app))
-                       AND ci.icon_path IS NOT NULL
-                       AND ci.deleted = 0
-                     ORDER BY ci.created_at_ms DESC
-                     LIMIT 1) AS icon
-                 FROM clipboard_items c
-                 WHERE c.source_app IS NOT NULL
-                   AND TRIM(c.source_app) <> ''
-                   AND c.deleted = 0
-                 GROUP BY LOWER(TRIM(c.source_app))
-                 ORDER BY LOWER(app) ASC",
+                "WITH ranked AS (
+                    SELECT
+                        TRIM(source_app) AS app,
+                        LOWER(TRIM(source_app)) AS app_key,
+                        icon_path,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY LOWER(TRIM(source_app))
+                            ORDER BY (icon_path IS NULL) ASC, created_at_ms DESC
+                        ) AS rn
+                    FROM clipboard_items
+                    WHERE source_app IS NOT NULL
+                      AND TRIM(source_app) <> ''
+                      AND deleted = 0
+                 )
+                 SELECT MIN(app) AS app, MAX(CASE WHEN rn = 1 THEN icon_path END) AS icon
+                 FROM ranked
+                 GROUP BY app_key
+                 ORDER BY LOWER(MIN(app)) ASC",
             )?;
             let apps = statement
                 .query_map([], |row| {

@@ -388,6 +388,34 @@ fn lists_distinct_source_applications_for_filter_configuration() {
 }
 
 #[test]
+fn lists_source_applications_with_the_most_recent_icon() {
+    let database = Database::open_in_memory().unwrap();
+
+    // An older row carries the icon; a newer row for the same app has none.
+    // The most recent row *with* an icon must still win.
+    let mut older_icon = text_item("older", "hash-1", 100);
+    older_icon.source_app = Some("ChatGPT".to_owned());
+    older_icon.icon_path = Some("icons/chatgpt.png".to_owned());
+    let mut newer_no_icon = text_item("newer", "hash-2", 200);
+    newer_no_icon.source_app = Some("ChatGPT".to_owned());
+    let mut browser = text_item("browser", "hash-3", 300);
+    browser.source_app = Some("Browser".to_owned());
+
+    database.save_item(&older_icon).unwrap();
+    database.save_item(&newer_no_icon).unwrap();
+    database.save_item(&browser).unwrap();
+
+    let apps = database.list_source_applications_with_icons().unwrap();
+    assert_eq!(
+        apps,
+        vec![
+            ("Browser".to_owned(), None),
+            ("ChatGPT".to_owned(), Some("icons/chatgpt.png".to_owned())),
+        ]
+    );
+}
+
+#[test]
 fn repeated_content_reuses_the_existing_record() {
     let database = Database::open_in_memory().unwrap();
     let mut first = text_item("original", "same-hash", 100);
