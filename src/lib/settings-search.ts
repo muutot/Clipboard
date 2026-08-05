@@ -7,6 +7,7 @@ export const SETTINGS_SECTIONS = [
   "font",
   "theme",
   "capture",
+  "capture_icons",
   "storage_paths",
   "storage_limits",
   "storage_tools",
@@ -101,6 +102,14 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   font: [i18n("storage.appearanceTab"), i18n("storage.fontTab"), i18n("general.fontSize"), "显示"],
   theme: [i18n("storage.appearanceTab"), i18n("storage.themeTab"), i18n("theme.title"), "配色"],
   capture: [i18n("capture.title"), i18n("capture.settings"), "采集"],
+  capture_icons: [
+    i18n("capture.title"),
+    i18n("capture.settings"),
+    i18n("storage.iconCacheTitle"),
+    i18n("storage.iconCacheDesc"),
+    "图标",
+    "采集",
+  ],
   storage_paths: [i18n("storage.storageTab"), i18n("storage.storagePathsTab"), "存储", "路径"],
   storage_limits: [
     i18n("storage.storageTab"),
@@ -455,6 +464,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
       i18n("capture.addManual"),
       "应用过滤",
     ],
+  ),
+  entry(
+    "capture.icon-cache",
+    { section: "capture_icons" },
+    i18n("storage.iconCacheTitle"),
+    i18n("storage.iconCacheDesc"),
+    [i18n("storage.manageIconCache"), i18n("storage.replaceIcon"), "图标缓存", "替换图标"],
   ),
 
   entry(

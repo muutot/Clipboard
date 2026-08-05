@@ -228,17 +228,22 @@ export async function rebuildSearchIndex(): Promise<SearchSyncSummary> {
   return invoke<SearchSyncSummary>("rebuild_search_index");
 }
 
-export interface IconFileInfo {
-  name: string;
+export interface IconCacheEntry {
+  appName: string | null;
+  displayName: string;
+  iconName: string | null;
+  contentHash: string | null;
+  targetIconName: string;
   sizeBytes: number;
+  firstChar: string;
 }
 
-export async function listIconFiles(): Promise<IconFileInfo[]> {
+export async function listIconCache(): Promise<IconCacheEntry[]> {
   if (!isTauriRuntime()) {
     return [];
   }
 
-  return invoke<IconFileInfo[]>("list_icon_files");
+  return invoke<IconCacheEntry[]>("list_icon_cache");
 }
 
 export async function deleteIconFiles(names: string[]): Promise<number> {
@@ -247,6 +252,14 @@ export async function deleteIconFiles(names: string[]): Promise<number> {
   }
 
   return invoke<number>("delete_icon_files", { names });
+}
+
+export async function replaceIconFile(name: string, sourcePath: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Icon replacement is only available in the desktop app");
+  }
+
+  return invoke<void>("replace_icon_file", { name, sourcePath });
 }
 
 export async function getExportFormats(): Promise<ExportFormatInfo[]> {
