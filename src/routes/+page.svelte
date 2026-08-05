@@ -2189,8 +2189,10 @@
         await invoke("copy_file_to", { src: item.resourcePath, dst: filePath });
         showToast(_t("card.saveAs"), "success");
       }
-    } catch {
-      invoke("open_external_url", { url: item.resourcePath }).catch(() => {});
+    } catch (error) {
+      console.error("Unable to save file", error);
+      statusMessage = _t("toast.saveFailed");
+      showToast(_t("toast.saveFailed"), "error");
     }
   }
 
