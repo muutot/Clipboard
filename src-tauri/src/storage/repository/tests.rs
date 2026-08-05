@@ -405,6 +405,33 @@ fn repeated_content_reuses_the_existing_record() {
 }
 
 #[test]
+fn re_copied_soft_deleted_content_resurrects_the_record() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("original", "same-hash", 100))
+        .unwrap();
+
+    assert!(database.soft_delete("original").unwrap());
+    assert_eq!(database.item_count().unwrap(), 0);
+    assert!(database
+        .content_exists(ClipboardKind::Text, "same-hash")
+        .unwrap());
+
+    let repeated = text_item("replacement", "same-hash", 500);
+    let stored_id = database.save_item(&repeated).unwrap();
+
+    assert_eq!(stored_id, "original");
+    assert_eq!(database.item_count().unwrap(), 1);
+    let stored = database.get_item(&stored_id).unwrap().unwrap();
+    assert_eq!(stored.created_at_ms, 500);
+    let listed = database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, "original");
+}
+
+#[test]
 fn storage_references_include_every_path_from_multi_file_records() {
     let database = Database::open_in_memory().unwrap();
     let item = ClipboardItem {

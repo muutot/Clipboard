@@ -43,6 +43,7 @@ Duplicate imports are not double-counted: before persisting each row, `import_ro
 Core invariants:
 
 - Deduplication returns/reuses the database record ID; event producers must emit that saved ID.
+- Re-capturing content that already exists as a soft-deleted row resurrects that row (`deleted=0`, `deleted_at_ms=NULL`) so the copied item reappears in the active list instead of silently staying hidden.
 - Favorites are protected from normal deletion and history cleanup until explicitly unfavorited.
 - Soft-delete and permanent-delete paths must keep OCR, search outbox/index, resource references, and frontend invalidation consistent.
 - Binary image/file content lives in managed files; SQLite stores paths and metadata, not blobs.

@@ -66,7 +66,9 @@ impl ClipboardRepository for Database {
                     metadata_json = COALESCE(
                         excluded.metadata_json,
                         clipboard_items.metadata_json
-                    )
+                    ),
+                    deleted = 0,
+                    deleted_at_ms = NULL
                  RETURNING id",
                 params![
                     item.id,
