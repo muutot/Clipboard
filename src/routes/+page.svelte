@@ -20,6 +20,7 @@
     persistFavorite,
     persistBatchFavorite,
     persistBatchDelete,
+    persistTags,
     searchClipboardHistory,
     listSourceApplications,
     formatTextLength,
@@ -167,6 +168,7 @@
 
   let dateFilter = $state<string>("all");
   let sourceAppFilter = $state("");
+  let tagFilter = $state<string | null>(null);
   let sourceApps = $state<string[]>([]);
   let sourceAppSearch = $state("");
   let sourceAppDropdownOpen = $state(false);
@@ -356,6 +358,8 @@
               : !isDeleted && item.kind === activeFilter;
 
       if (!matchesFilter) return false;
+
+      if (tagFilter && !(item.tags ?? []).includes(tagFilter)) return false;
 
       if (
         sourceAppFilter &&
@@ -1924,6 +1928,25 @@
     );
   }
 
+  function toggleTagFilter(tag: string) {
+    tagFilter = tagFilter === tag ? null : tag;
+  }
+
+  async function saveTags(id: string, tags: string[]) {
+    const deduped = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
+    items = items.map((item) => (item.id === id ? { ...item, tags: deduped } : item));
+    if (detailItem?.id === id) detailItem = { ...detailItem, tags: deduped };
+    if (indexedItems) {
+      indexedItems = indexedItems.map((item) =>
+        item.id === id ? { ...item, tags: deduped } : item,
+      );
+    }
+    const ok = await persistTags(id, deduped);
+    if (ok === false) {
+      showToast(_t("toast.saveFailed"), "error");
+    }
+  }
+
   async function cleanTextIfEnabled(text: string): Promise<string> {
     if (!$generalSettings.pasteCleaningEnabled) return text;
     try {
@@ -3082,6 +3105,8 @@
                     onformatpaste={formatPaste}
                     oncleanpaste={cleanPaste}
                     onrestore={restoreItem}
+                    onsavetags={saveTags}
+                    ontoggleTagFilter={toggleTagFilter}
                   />
                 </div>
               {:else}
@@ -3123,6 +3148,8 @@
                   onformatpaste={formatPaste}
                   oncleanpaste={cleanPaste}
                   onrestore={restoreItem}
+                  onsavetags={saveTags}
+                  ontoggleTagFilter={toggleTagFilter}
                 />
               {/if}
             {/each}
@@ -3195,6 +3222,7 @@
         onsaveasnew={saveAsNew}
         oncopyfilename={copyFilename}
         onimagefullscreen={handleImageFullscreen}
+        onsavetags={saveTags}
       />
     {/if}
   </div>
@@ -3225,6 +3253,7 @@
     onsaveasnew={saveAsNew}
     oncopyfilename={copyFilename}
     onimagefullscreen={handleImageFullscreen}
+    onsavetags={saveTags}
   />
 {/if}
 

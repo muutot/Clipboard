@@ -50,6 +50,9 @@ export interface LocaleDefinition {
     fileCountSuffix: string;
     fileAndMore: string;
     editTitlePlaceholder: string;
+    addTag: string;
+    addTagPlaceholder: string;
+    removeTag: string;
   };
   time: {
     justNow: string;
@@ -465,6 +468,10 @@ export interface LocaleDefinition {
     ocr: string;
     sourceApp: string;
     contentType: string;
+    tags: string;
+    addTag: string;
+    addTagPlaceholder: string;
+    removeTag: string;
     copyTime: string;
     size: string;
     dimensions: string;

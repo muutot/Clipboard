@@ -28,8 +28,9 @@ Owns the record boundary and list operations:
 - loading active and deleted pages;
 - searching with offset, limit, and optional sort rules;
 - favorite/delete/restore/permanent/batch operations;
+- tag persistence (`persistTags(id, tags)` invokes `set_clipboard_item_tags`);
 - source-app listing and content-action detection;
-- `PersistedClipboardItem` → `ClipboardItem` mapping;
+- `PersistedClipboardItem` → `ClipboardItem` mapping (including `tags` parsed from `metadata_json.tags`);
 - resource metadata parsing and display title/size helpers.
 
 Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard.

@@ -67,6 +67,7 @@ export interface ClipboardItem {
   htmlContent?: string | null;
   iconPath?: string | null;
   metadataJson?: string | null;
+  tags?: string[];
 }
 
 export type ThemeMode = "dark" | "light" | "custom";

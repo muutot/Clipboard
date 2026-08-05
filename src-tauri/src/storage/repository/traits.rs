@@ -85,6 +85,9 @@ pub trait ClipboardRepository {
         &self,
     ) -> Result<Vec<(String, Option<String>)>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
+    /// Replace the tag list for a record. Tags are stored inside `metadata_json`
+    /// under the `tags` key; an empty list removes the key.
+    fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError>;
     /// Update the favorite flag for all requested records atomically.
     ///
     /// The operation returns `false` and makes no changes when any requested

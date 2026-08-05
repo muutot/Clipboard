@@ -2,15 +2,14 @@ use std::collections::HashMap;
 
 use rusqlite::{params, params_from_iter, OptionalExtension};
 
-use crate::domain::{ClipboardItem, ClipboardKind};
-use crate::storage::{Database, StorageError};
-
 use super::{
     current_time_ms, delete_kind_records, kind_to_storage, query_kind_storage_stats, unique_ids,
     ClipboardRepository, KindDeleteResult, KindDeleteScope, KindStorageStats,
     StorageFileReferences, StoredClipboardItem, TextItemUpdate, ITEM_COLUMNS,
     ITEM_LOOKUP_CHUNK_SIZE,
 };
+use crate::domain::{ClipboardItem, ClipboardKind};
+use crate::storage::{Database, StorageError};
 
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
@@ -266,6 +265,53 @@ impl ClipboardRepository for Database {
             Ok(connection.execute(
                 "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1",
                 params![id, is_favorite],
+            )? > 0)
+        })
+    }
+
+    fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            let existing: Option<Option<String>> = connection
+                .query_row(
+                    "SELECT metadata_json FROM clipboard_items WHERE id = ?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(metadata_json) = existing else {
+                return Ok(false);
+            };
+
+            let mut object: serde_json::Value = metadata_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str(json).ok())
+                .filter(serde_json::Value::is_object)
+                .unwrap_or_else(|| serde_json::Value::Object(Default::default()));
+
+            let mut seen = std::collections::HashSet::new();
+            let dedup: Vec<String> = tags
+                .iter()
+                .map(|tag| tag.trim().to_owned())
+                .filter(|tag| !tag.is_empty() && seen.insert(tag.clone()))
+                .collect();
+
+            if let serde_json::Value::Object(map) = &mut object {
+                if dedup.is_empty() {
+                    map.remove("tags");
+                } else {
+                    map.insert(
+                        "tags".to_owned(),
+                        serde_json::Value::Array(
+                            dedup.into_iter().map(serde_json::Value::String).collect(),
+                        ),
+                    );
+                }
+            }
+            let updated = object.to_string();
+
+            Ok(connection.execute(
+                "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
+                params![id, updated],
             )? > 0)
         })
     }

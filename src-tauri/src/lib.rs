@@ -518,6 +518,7 @@ pub fn run() {
             configure_ignored_applications,
             list_clipboard_items,
             set_clipboard_item_favorite,
+            set_clipboard_item_tags,
             batch_set_favorite,
             delete_clipboard_item,
             batch_delete_clipboard_items,

@@ -86,7 +86,8 @@ impl SearchRepository for Database {
                             ELSE NULL
                         END,
                         clipboard_items.created_at_ms,
-                        clipboard_items.is_favorite
+                        clipboard_items.is_favorite,
+                        clipboard_items.metadata_json
                      FROM clipboard_items
                      LEFT JOIN ocr_results
                         ON ocr_results.item_id = clipboard_items.id
@@ -132,7 +133,8 @@ impl SearchRepository for Database {
                             ELSE NULL
                         END,
                         clipboard_items.created_at_ms,
-                        clipboard_items.is_favorite
+                        clipboard_items.is_favorite,
+                        clipboard_items.metadata_json
                      FROM clipboard_items
                      LEFT JOIN ocr_results
                         ON ocr_results.item_id = clipboard_items.id
@@ -203,6 +205,7 @@ impl SearchDocument {
         let text_content = row.get::<_, Option<String>>(3)?;
         let source_app = row.get::<_, Option<String>>(4)?;
         let ocr_text = row.get::<_, Option<String>>(5)?;
+        let metadata_json = row.get::<_, Option<String>>(8)?;
 
         let parts: [&str; 4] = [
             title.as_str(),
@@ -220,6 +223,33 @@ impl SearchDocument {
                 }
                 content.push_str(trimmed);
             }
+        }
+
+        // Fold user tags into the searchable content so tag names are matched
+        // by the n-gram search path.
+        let tag_strings: Vec<String> = metadata_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .map(|value| {
+                value
+                    .get("tags")
+                    .and_then(|tags| tags.as_array())
+                    .map(|array| {
+                        array
+                            .iter()
+                            .filter_map(|tag| tag.as_str())
+                            .map(|tag| tag.trim().to_owned())
+                            .filter(|tag| !tag.is_empty())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        for tag in tag_strings {
+            if !content.is_empty() {
+                content.push('\n');
+            }
+            content.push_str(&tag);
         }
 
         Ok(Self {

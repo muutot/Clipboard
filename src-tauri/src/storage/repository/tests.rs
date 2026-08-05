@@ -44,6 +44,49 @@ fn saves_and_lists_items_by_recency() {
 }
 
 #[test]
+fn set_tags_replaces_and_removes_tags_in_metadata_json() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("item-1", "hash-1", 100))
+        .unwrap();
+
+    assert!(database
+        .set_tags("item-1", &["work".to_owned(), " urgent ".to_owned()])
+        .unwrap());
+    let stored = database.get_item("item-1").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(metadata["tags"], serde_json::json!(["work", "urgent"]));
+
+    // Empty list removes the tags key entirely.
+    assert!(database.set_tags("item-1", &[]).unwrap());
+    let stored = database.get_item("item-1").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+    assert!(metadata.get("tags").is_none());
+
+    // Missing record is a no-op returning false.
+    assert!(!database.set_tags("missing", &["x".to_owned()]).unwrap());
+}
+
+#[test]
+fn tags_are_folded_into_search_document_content() {
+    use crate::storage::SearchRepository;
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("item-1", "hash-1", 100))
+        .unwrap();
+    database
+        .set_tags("item-1", &["project-x".to_owned(), "urgent".to_owned()])
+        .unwrap();
+
+    let document = database.get_search_document("item-1").unwrap().unwrap();
+    assert!(document.content.contains("project-x"));
+    assert!(document.content.contains("urgent"));
+    assert!(document.content.contains("content-item-1"));
+}
+
+#[test]
 fn html_content_round_trips_through_storage() {
     let database = Database::open_in_memory().unwrap();
     let mut item = text_item("rich", "hash-1", 100);

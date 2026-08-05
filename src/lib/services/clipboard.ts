@@ -160,6 +160,12 @@ export async function persistBatchDelete(ids: string[]): Promise<boolean | null>
   return invoke<boolean>("batch_delete_clipboard_items", { ids });
 }
 
+export async function persistTags(id: string, tags: string[]): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("set_clipboard_item_tags", { id, tags });
+}
+
 export async function listSourceApplications(): Promise<string[] | null> {
   if (!isTauriRuntime()) return null;
 
@@ -262,7 +268,17 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     htmlContent: record.htmlContent,
     iconPath: record.iconPath,
     metadataJson: record.metadataJson,
+    tags: parseTags(record.metadataJson),
   };
+}
+
+function parseTags(metadataJson: string | null | undefined): string[] {
+  const metadata = parseMetadataObject(metadataJson);
+  if (!Array.isArray(metadata.tags)) return [];
+  return metadata.tags
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 export function parseResourceMetadata(

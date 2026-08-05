@@ -86,6 +86,7 @@
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncopyfilename: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
+    onsavetags: (id: string, tags: string[]) => void;
   }
 
   let {
@@ -103,15 +104,37 @@
     onsaveasnew,
     oncopyfilename,
     onimagefullscreen,
+    onsavetags,
   }: Props = $props();
 
   function copyText(text: string) {
     void writeClipboardText(text).catch((err) => console.error("Copy to clipboard failed:", err));
   }
 
+  function addTagFromInput() {
+    const value = tagDraft.trim();
+    if (!value || !item) return;
+    const current = item.tags ?? [];
+    if (current.some((t) => t === value)) {
+      tagDraft = "";
+      return;
+    }
+    onsavetags(item.id, [...current, value]);
+    tagDraft = "";
+  }
+
+  function removeTag(tag: string) {
+    if (!item) return;
+    onsavetags(
+      item.id,
+      (item.tags ?? []).filter((t) => t !== tag),
+    );
+  }
+
   let activeTab = $state<"preview" | "details" | "ocr">("preview");
   let editing = $state(false);
   let editingTitle = $state(false);
+  let tagDraft = $state("");
   let editContent = $state("");
   let editTitleContent = $state("");
   let ocrFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -800,6 +823,41 @@
               <dt><AppIcon name="info" size={14} /> {_t("detail.sourceApp")}</dt>
               <dd>{item.sourceApp}</dd>
             </div>
+            <div class="detail-row tags-row">
+              <dt><AppIcon name="tag" size={14} /> {_t("detail.tags")}</dt>
+              <dd class="tags-editor">
+                {#each item.tags ?? [] as tag (tag)}
+                  <span class="tag-chip">
+                    {tag}
+                    <button
+                      type="button"
+                      class="tag-remove"
+                      aria-label={_t("detail.removeTag")}
+                      onclick={() => removeTag(tag)}><AppIcon name="x" size={11} /></button
+                    >
+                  </span>
+                {/each}
+                <span class="tag-input-wrap">
+                  <input
+                    bind:value={tagDraft}
+                    placeholder={_t("detail.addTagPlaceholder")}
+                    onkeydown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addTagFromInput();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    class="tag-add"
+                    aria-label={_t("detail.addTag")}
+                    disabled={!tagDraft.trim()}
+                    onclick={addTagFromInput}><AppIcon name="plus" size={12} /></button
+                  >
+                </span>
+              </dd>
+            </div>
             <div class="detail-row">
               <dt><AppIcon name="file" size={14} /> {_t("detail.contentType")}</dt>
               <dd>{getKindLabel(item.kind)}</dd>
@@ -1462,6 +1520,97 @@
     padding: 10px 14px;
     background: var(--input-bg);
     gap: 12px;
+  }
+
+  .detail-row.tags-row {
+    align-items: flex-start;
+  }
+
+  .tags-editor {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+    max-width: 65%;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    background: var(--surface-bg);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .tag-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    color: var(--text-faint);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .tag-remove:hover {
+    color: var(--danger-color);
+    background: var(--hover-bg);
+  }
+
+  .tag-input-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .tag-input-wrap input {
+    width: 90px;
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--surface-bg);
+    font: inherit;
+    font-size: 11px;
+    outline: none;
+  }
+
+  .tag-input-wrap input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .tag-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    background: var(--surface-bg);
+    cursor: pointer;
+  }
+
+  .tag-add:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+  }
+
+  .tag-add:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .detail-row dt {

@@ -101,6 +101,12 @@ Event payloads also use camelCase where Rust structs are serialized. Register li
 - Rewrite only managed paths during data-directory migration.
 - Include every path in multi-file reference accounting so cleanup cannot delete active files.
 
+## Tags
+
+Tags are stored as an array of strings under `metadata_json.tags` (no dedicated column or schema migration; the `metadata_json` column already exists and defaults to `{}`). `ClipboardRepository::set_tags` reads the current object, trims each tag, deduplicates (preserving order), writes the array, or removes the `tags` key entirely when the resulting list is empty; a missing record is a no-op returning `false`.
+
+The command `set_clipboard_item_tags` (`id: String, tags: Vec<String>`) persists a full replacement of the item's tag list and is registered in `lib.rs`. Because tags are folded into the search document content (`search_repository.rs::SearchDocument::from_row` reads `metadata_json.get("tags")`), setting tags invalidates the derived search content for that item. The frontend view type exposes `ClipboardItem.tags?: string[]` (parsed in `toClipboardItem`), and the `persistTags` wrapper in `services/clipboard.ts` invokes the command. A tag click on a card chip or a detail-panel edit calls `persistTags`; the list routes apply an optional `tagFilter` to `filteredItems`.
+
 ## Change checklist
 
 - Trace create/read/update/delete/import/export/migrate/cleanup behavior, not just the happy-path UI.

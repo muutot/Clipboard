@@ -57,6 +57,17 @@ pub fn set_clipboard_item_favorite(
 }
 
 #[tauri::command]
+pub fn set_clipboard_item_tags(
+    database: tauri::State<'_, Database>,
+    id: String,
+    tags: Vec<String>,
+) -> Result<bool, String> {
+    database
+        .set_tags(&id, &tags)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn batch_set_favorite(
     database: tauri::State<'_, Database>,
     ids: Vec<String>,

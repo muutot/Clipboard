@@ -94,6 +94,8 @@
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
     onheightchange?: (id: string, height: number, immediate?: boolean) => void;
+    onsavetags?: (id: string, tags: string[]) => void;
+    ontoggleTagFilter?: (tag: string) => void;
     heightMeasurementKey?: string;
   }
 
@@ -107,6 +109,7 @@
     "favorite",
     "delete",
     "restore",
+    "addTag",
   ] as const;
   type CardActionId = (typeof cardActionIds)[number];
 
@@ -145,6 +148,8 @@
     onrestore,
     onimagefullscreen,
     onheightchange,
+    onsavetags,
+    ontoggleTagFilter,
     heightMeasurementKey,
   }: Props = $props();
 
@@ -155,6 +160,37 @@
   let editContent = $state("");
   let editTitle = $state("");
   let editTextarea = $state<HTMLTextAreaElement | null>(null);
+
+  let tagAdding = $state(false);
+  let tagDraft = $state("");
+  let tagAddInput = $state<HTMLInputElement | null>(null);
+
+  $effect(() => {
+    if (!tagAdding) return;
+    const input = tagAddInput;
+    queueMicrotask(() => input?.focus());
+  });
+
+  function confirmAddTag() {
+    const value = tagDraft.trim();
+    if (value && !(item.tags ?? []).includes(value)) {
+      onsavetags?.(item.id, [...(item.tags ?? []), value]);
+    }
+    tagDraft = "";
+    tagAdding = false;
+  }
+
+  function cancelAddTag() {
+    tagDraft = "";
+    tagAdding = false;
+  }
+
+  function removeTagCard(tag: string) {
+    onsavetags?.(
+      item.id,
+      (item.tags ?? []).filter((t) => t !== tag),
+    );
+  }
 
   $effect(() => {
     const element = cardElement;
@@ -410,6 +446,10 @@
       case "restore":
         onrestore?.(item.id);
         return;
+      case "addTag":
+        tagAdding = true;
+        tagDraft = "";
+        return;
     }
   }
 
@@ -472,6 +512,7 @@
         label: item.favorite ? _t("card.unfavorite") : _t("card.favorite"),
         icon: "star",
       },
+      { id: "addTag", label: _t("card.addTag"), icon: "tag" },
       ...(!item.favorite
         ? [
             {
@@ -549,6 +590,60 @@
     }
   }
 </script>
+
+{#snippet tagArea()}
+  <span class="tag-chips">
+    {#each item.tags ?? [] as tag (tag)}
+      <span
+        class="tag-chip"
+        role="button"
+        tabindex="0"
+        title={tag}
+        onclick={(e) => {
+          e.stopPropagation();
+          ontoggleTagFilter?.(tag);
+        }}
+        onkeydown={(e) => {
+          if (e.key === "Enter") {
+            e.stopPropagation();
+            ontoggleTagFilter?.(tag);
+          }
+        }}
+      >
+        {tag}
+        <button
+          type="button"
+          class="tag-chip-remove"
+          aria-label={_t("card.removeTag")}
+          onclick={(e) => {
+            e.stopPropagation();
+            removeTagCard(tag);
+          }}><AppIcon name="x" size={10} /></button
+        >
+      </span>
+    {/each}
+    {#if tagAdding}
+      <input
+        class="tag-add-input"
+        bind:value={tagDraft}
+        bind:this={tagAddInput}
+        placeholder={_t("card.addTagPlaceholder")}
+        onkeydown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmAddTag();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelAddTag();
+          }
+        }}
+        onblur={cancelAddTag}
+      />
+    {/if}
+  </span>
+{/snippet}
 
 <div
   bind:this={cardElement}
@@ -634,17 +729,24 @@
               {_t("card.fileCountSuffix", { count: item.fileMeta.length })}</span
             >
           {:else}
-            <span>{item.fileName ?? item.title}</span>
+            <span class="file-name">{item.fileName ?? item.title}</span>
           {/if}
+          {@render tagArea()}
         </div>
       {:else}
+        <div class="title-line">
+          {#if item.customTitle}
+            <div class="text-preview custom-title">{item.title}</div>
+          {:else}
+            <div class="text-preview">{primaryFirstLine}</div>
+          {/if}
+          {@render tagArea()}
+        </div>
         {#if item.customTitle}
-          <div class="text-preview custom-title">{item.title}</div>
           {#if secondaryPreviewText}
             <div class="content-preview">{secondaryPreviewText}</div>
           {/if}
         {:else}
-          <div class="text-preview">{primaryFirstLine}</div>
           {#if showSecondaryText && primaryRestLines}
             <div class="content-preview">{primaryRestLines}</div>
           {/if}
@@ -665,6 +767,7 @@
         <span>{item.sizeLabel}</span>
         <span>{formatRelativeTime(item.createdAt, now)}</span>
         {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
+        {#if item.kind === "image"}{@render tagArea()}{/if}
         <div class="actions" aria-label={_t("card.itemActions")}>
           {#each displayContentActions as action (`${action.actionType}:${action.payload}`)}
             <button
@@ -1037,6 +1140,91 @@
     font-size: var(--font-size-cardTitle, 13px);
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  .file-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .title-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .title-line .text-preview {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .tag-chips {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 55%;
+    overflow: hidden;
+    pointer-events: auto;
+  }
+
+  .meta-row .tag-chips {
+    max-width: 40%;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    background: var(--surface-bg);
+    font-size: 10.5px;
+    line-height: 1.5;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .tag-chip:hover {
+    color: var(--text-primary);
+    border-color: var(--text-faint);
+  }
+
+  .tag-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    color: var(--text-faint);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .tag-chip-remove:hover {
+    color: var(--danger-color);
+    background: var(--hover-bg);
+  }
+
+  .tag-add-input {
+    width: 74px;
+    padding: 1px 5px;
+    border: 1px solid var(--text-faint);
+    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font: inherit;
+    font-size: 10.5px;
+    outline: none;
   }
 
   .file-icon {
