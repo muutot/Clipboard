@@ -563,7 +563,11 @@
   }
 
   .binding-chip kbd.arrow {
-    font-size: 15px;
+    font-size: clamp(
+      13px,
+      calc(var(--settings-control-size, var(--font-size-secondary, 11px)) + 4px),
+      15px
+    );
     line-height: 1;
   }
 
