@@ -16,9 +16,7 @@
     resolvePath($messages, path, params);
 
   function emitTagsChanged(payload: TagsChangedPayload) {
-    emit("tags-changed", payload).catch((err) =>
-      console.warn("tags-changed emit failed:", err),
-    );
+    emit("tags-changed", payload).catch((err) => console.warn("tags-changed emit failed:", err));
   }
 
   interface Props {
