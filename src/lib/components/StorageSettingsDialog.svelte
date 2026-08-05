@@ -3,6 +3,7 @@
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
+  import DatePicker from "$lib/components/DatePicker.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
@@ -39,8 +40,10 @@
   import {
     exportToFile,
     getExportFormats,
+    getImportFormats,
     importFromFile,
     type ExportFormatInfo,
+    type ImportFormatInfo,
   } from "$lib/services/storage";
   import { checkForUpdate, type UpdateInfo } from "$lib/services/update";
   import { getVersion } from "@tauri-apps/api/app";
@@ -99,6 +102,8 @@
   let showIconManager = $state(false);
   let exportFormats = $state<ExportFormatInfo[]>([]);
   let exportFormat = $state("json");
+  let importFormats = $state<ImportFormatInfo[]>([]);
+  let importFormat = $state("pastebackup");
   let exportIncludeFavorites = $state(true);
   let exportContentTypes = $state<Set<string>>(new Set(["text", "link", "image", "file"]));
   let exportDateFrom = $state("");
@@ -614,6 +619,19 @@
     }
   }
 
+  async function loadImportFormats(): Promise<void> {
+    try {
+      const formats = await getImportFormats();
+      importFormats = formats;
+      if (formats.length > 0 && !formats.some((format) => format.id === importFormat)) {
+        importFormat = formats[0].id;
+      }
+    } catch (error) {
+      console.error("Unable to load import formats", error);
+      importFormats = [];
+    }
+  }
+
   async function handleExport() {
     if (!isTauriRuntime() || exporting || importing) return;
     const format = exportFormats.find((entry) => entry.id === exportFormat);
@@ -650,6 +668,8 @@
 
   async function handleImport() {
     if (!isTauriRuntime() || exporting || importing) return;
+    const format = importFormats.find((entry) => entry.id === importFormat);
+    if (!format) return;
     importing = true;
     feedback = "";
     feedbackSuccess = false;
@@ -659,8 +679,10 @@
         multiple: false,
         directory: false,
         filters: [
-          { name: _t("storage.importFilterName"), extensions: ["json", "txt", "pastebackup"] },
-          { name: _t("storage.ppasteFilterName"), extensions: ["pastebackup"] },
+          {
+            name: format.label,
+            extensions: [format.extension.slice(1)],
+          },
         ],
       });
       if (!filePath) return;
@@ -791,6 +813,7 @@
     if (open) {
       void loadStatus();
       void loadExportFormats();
+      void loadImportFormats();
       void loadAppVersion();
     }
   });
@@ -2498,15 +2521,16 @@
           {/if}
           {#if activeSection === "storage_tools"}
             <section class="setting-card">
-              <div class="toggle-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-                  <div>
-                    <strong>{_t("storage.transferTitle")}</strong>
-                    <p>{_t("storage.transferDesc")}</p>
-                  </div>
+              <div class="setting-heading">
+                <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+                <div>
+                  <strong>{_t("storage.transferTitle")}</strong>
+                  <p>{_t("storage.transferDesc")}</p>
                 </div>
-                <div class="transfer-actions">
+              </div>
+              <div class="transfer-actions">
+                <div class="transfer-group">
+                  <span class="transfer-label">{_t("storage.exportLabel")}</span>
                   <CustomSelect
                     value={exportFormat}
                     disabled={exporting || importing || exportFormats.length === 0}
@@ -2525,10 +2549,23 @@
                   >
                     {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
                   </button>
+                </div>
+                <div class="transfer-group">
+                  <span class="transfer-label">{_t("storage.importLabel")}</span>
+                  <CustomSelect
+                    value={importFormat}
+                    disabled={exporting || importing || importFormats.length === 0}
+                    ariaLabel={_t("storage.importLabel")}
+                    options={importFormats.map((format) => ({
+                      value: format.id,
+                      label: format.label,
+                    }))}
+                    onchange={(v) => (importFormat = v as string)}
+                  />
                   <button
                     type="button"
                     class="settings-action-btn"
-                    disabled={exporting || importing}
+                    disabled={exporting || importing || importFormats.length === 0}
                     onclick={handleImport}
                   >
                     {importing ? _t("storage.importing") : _t("storage.importAction")}
@@ -2554,6 +2591,7 @@
               {/if}
               <div class="export-options">
                 <div class="export-option-row">
+                  <span class="export-option-label">{_t("storage.exportFavorites")}</span>
                   <label class="export-check">
                     <input
                       type="checkbox"
@@ -2561,6 +2599,9 @@
                       onchange={(e) =>
                         (exportIncludeFavorites = (e.target as HTMLInputElement).checked)}
                     />
+                    <span class="check-mark"
+                      ><AppIcon name="check" size={11} strokeWidth={2.5} /></span
+                    >
                     <span>{_t("storage.exportIncludeFavorites")}</span>
                   </label>
                 </div>
@@ -2574,25 +2615,26 @@
                           checked={exportContentTypes.has(kindInfo.kind)}
                           onchange={() => toggleExportContentType(kindInfo.kind)}
                         />
+                        <span class="check-mark"
+                          ><AppIcon name="check" size={11} strokeWidth={2.5} /></span
+                        >
                         <span>{_t(kindInfo.labelKey)}</span>
                       </label>
                     {/each}
                   </div>
                 </div>
-                <div class="export-option-row">
+                <div class="export-option-row export-date-row">
                   <span class="export-option-label">{_t("storage.exportDateRange")}</span>
-                  <input
-                    type="date"
-                    class="export-date-input"
-                    bind:value={exportDateFrom}
-                    aria-label={_t("storage.exportDateFrom")}
+                  <DatePicker
+                    value={exportDateFrom}
+                    onchange={(v) => (exportDateFrom = v)}
+                    ariaLabel={_t("storage.exportDateFrom")}
                   />
                   <span class="export-date-separator">–</span>
-                  <input
-                    type="date"
-                    class="export-date-input"
-                    bind:value={exportDateTo}
-                    aria-label={_t("storage.exportDateTo")}
+                  <DatePicker
+                    value={exportDateTo}
+                    onchange={(v) => (exportDateTo = v)}
+                    ariaLabel={_t("storage.exportDateTo")}
                   />
                 </div>
               </div>
@@ -4234,14 +4276,31 @@
   .transfer-actions {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .transfer-group {
+    display: flex;
+    align-items: center;
     gap: 8px;
+    min-width: 0;
+  }
+
+  .transfer-label {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  }
+
+  :global(.transfer-group .custom-select) {
     flex-shrink: 0;
   }
 
-  :global(.transfer-actions .settings-select) {
-    width: 116px;
+  :global(.transfer-group .settings-select) {
+    width: 140px;
     height: 34px;
-    flex-shrink: 0;
   }
 
   .transfer-limit-warning {
@@ -4279,6 +4338,10 @@
     min-width: 0;
   }
 
+  .export-option-row.export-date-row {
+    flex-wrap: nowrap;
+  }
+
   .export-option-label {
     flex: 0 0 auto;
     min-width: 64px;
@@ -4296,7 +4359,7 @@
   .export-check {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     margin: 0;
     color: var(--text-secondary);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
@@ -4304,30 +4367,43 @@
     user-select: none;
   }
 
-  .export-check input[type="checkbox"] {
-    width: auto;
-    accent-color: var(--accent);
-    cursor: pointer;
+  .export-check input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
   }
 
-  .export-date-input {
-    height: 30px;
-    box-sizing: border-box;
-    padding: 0 8px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font: inherit;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  .export-check .check-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    border: 1.5px solid var(--text-faint);
+    border-radius: 4px;
+    color: transparent;
+    background: transparent;
+    transition:
+      background 100ms ease,
+      border-color 100ms ease,
+      color 100ms ease;
   }
 
-  .export-date-input::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    opacity: 0.7;
+  .export-check input:checked + .check-mark {
+    border-color: var(--selection-color);
+    background: var(--selection-color);
+    color: #fff;
+  }
+
+  .export-check input:focus-visible + .check-mark {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
   }
 
   .export-date-separator {
+    flex-shrink: 0;
     color: var(--text-faint);
   }
 

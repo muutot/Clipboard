@@ -26,6 +26,7 @@
     | "x"
     | "chevron-down"
     | "chevron-left"
+    | "chevron-right"
     | "eye"
     | "edit"
     | "code"
@@ -162,6 +163,8 @@
     <path d="m6 9 6 6 6-6" />
   {:else if name === "chevron-left"}
     <path d="m15 18-6-6 6-6" />
+  {:else if name === "chevron-right"}
+    <path d="m9 18 6-6-6-6" />
   {:else if name === "eye"}
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
     <circle cx="12" cy="12" r="3" />

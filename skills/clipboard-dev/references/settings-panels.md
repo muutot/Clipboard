@@ -173,6 +173,7 @@ Before adding CSS:
 
 - Hide number spin buttons when the control is visually a plain value field.
 - Use the shared `CustomSelect.svelte` component for all dropdowns; do not use native `<select>`/`<option>`. Pass `value`, `options` (`{value,label,disabled?}`), and `onchange`; pass a `className` for per-use layout, and adapt the trigger button when a layout override previously targeted `.settings-select` (use `:global()` + `.settings-select` descendant in a component scope).
+- Use `DatePicker.svelte` for date fields; do not use native `<input type="date">` (its picker language follows the webview/OS rather than the app locale).
 - Keep tabular numeric labels stable and non-shrinking.
 - Let long labels/paths/numbers shrink, wrap, or ellipsize without overflowing the card.
 - Use semantic status colors through variables and `color-mix`.
