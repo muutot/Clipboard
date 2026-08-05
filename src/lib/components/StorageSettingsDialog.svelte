@@ -36,7 +36,7 @@
   } from "$lib/services/storage";
   import { getMemoryDiagnostics } from "$lib/services/memory";
   import type { MemoryDiagnostics } from "$lib/types/memory";
-  import { isTauriRuntime } from "$lib/services/runtime";
+  import { isTauriRuntime, getRuntimeInfo } from "$lib/services/runtime";
   import {
     exportToFile,
     getExportFormats,
@@ -722,6 +722,7 @@
   }
 
   let appVersion = $state("");
+  let appExecutablePath = $state("");
   let checkingUpdate = $state(false);
   let updateResult = $state<UpdateInfo | null>(null);
   let updateError = $state("");
@@ -732,6 +733,12 @@
       appVersion = await getVersion();
     } catch (error) {
       console.error("Unable to read app version", error);
+    }
+    try {
+      const info = await getRuntimeInfo();
+      appExecutablePath = info?.executablePath ?? "";
+    } catch (error) {
+      console.error("Unable to read runtime info", error);
     }
   }
 
@@ -2309,6 +2316,16 @@
           </div>
         </section>
 
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+            <div>
+              <strong>{_t("about.executablePathTitle")}</strong>
+              <p class="about-path">{appExecutablePath || _t("about.executablePathEmpty")}</p>
+            </div>
+          </div>
+        </section>
+
         <section class="setting-card toggle-card">
           <div class="setting-heading">
             <span class="setting-icon"><AppIcon name="download" size={17} /></span>
@@ -3661,6 +3678,11 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+  }
+
+  .about-path {
+    overflow-wrap: anywhere;
+    word-break: break-all;
   }
 
   .settings-action-btn:hover {

@@ -586,6 +586,10 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "版本",
     "version",
     "关于",
+    "程序位置",
+    "位置",
+    "location",
+    "executable",
   ]),
 
   entry(

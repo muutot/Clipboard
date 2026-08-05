@@ -305,6 +305,8 @@ export interface LocaleDefinition {
     tabLabel: string;
     description: string;
     versionLabel: string;
+    executablePathTitle: string;
+    executablePathEmpty: string;
     updateTitle: string;
     updateDesc: string;
     checkUpdate: string;

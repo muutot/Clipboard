@@ -322,6 +322,8 @@ const zhCN: LocaleDefinition = {
     tabLabel: "关于",
     description: "应用版本信息与更新检查",
     versionLabel: "当前版本 v{version}",
+    executablePathTitle: "程序位置",
+    executablePathEmpty: "无法获取程序位置",
     updateTitle: "检查更新",
     updateDesc: "通过所选来源检测是否有新版本可用",
     updateSource: "更新来源",

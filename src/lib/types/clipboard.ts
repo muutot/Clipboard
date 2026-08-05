@@ -285,6 +285,7 @@ export interface RuntimeInfo {
   appVersion: string;
   operatingSystem: string;
   architecture: string;
+  executablePath: string;
   capabilities: {
     clipboardMonitoring: boolean;
     globalShortcut: boolean;

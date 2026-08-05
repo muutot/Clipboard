@@ -342,6 +342,8 @@ const en: LocaleDefinition = {
     tabLabel: "About",
     description: "App version and update checks",
     versionLabel: "Current version v{version}",
+    executablePathTitle: "Program Location",
+    executablePathEmpty: "Unable to resolve program location",
     updateTitle: "Check for Updates",
     updateDesc: "Checks the selected source for a newer version",
     updateSource: "Update Source",

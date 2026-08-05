@@ -79,6 +79,7 @@ pub struct RuntimeInfo {
     pub app_version: &'static str,
     pub operating_system: &'static str,
     pub architecture: &'static str,
+    pub executable_path: String,
     pub capabilities: PlatformCapabilities,
 }
 
@@ -91,6 +92,9 @@ pub fn runtime_info() -> RuntimeInfo {
         app_version: env!("CARGO_PKG_VERSION"),
         operating_system: std::env::consts::OS,
         architecture: std::env::consts::ARCH,
+        executable_path: std::env::current_exe()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         capabilities: current_capabilities(),
     }
 }
