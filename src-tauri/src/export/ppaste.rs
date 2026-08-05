@@ -89,6 +89,7 @@ fn read_records(db_path: &str) -> Result<Vec<PpRow>, String> {
     Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn map_row(
     kind: Option<String>,
     child: Option<String>,
@@ -267,13 +268,13 @@ fn build_item(
         item.preview_path = Some(resource_path);
         item.content_hash = content_hash.clone();
         item.size_bytes = bytes.len() as u64;
-        item.title = format!("{content_hash}")[..24.min(content_hash.len())].to_owned();
+        item.title = content_hash[..24.min(content_hash.len())].to_owned();
         item.metadata_json = Some(metadata.to_string());
     } else {
         let text = item
             .text_content
             .as_deref()
-            .or_else(|| item.html_content.as_deref())
+            .or(item.html_content.as_deref())
             .unwrap_or_default();
         item.content_hash =
             crate::content::hash::compute_content_hash(pp_kind_name(item.kind), text, None);
@@ -295,7 +296,7 @@ fn pp_kind_name(kind: ClipboardKind) -> &'static str {
 fn default_title(row: &PpRow) -> String {
     row.text_content
         .as_deref()
-        .or_else(|| row.html_content.as_deref())
+        .or(row.html_content.as_deref())
         .map(|text| {
             let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
             let cut: String = compact.chars().take(120).collect();
