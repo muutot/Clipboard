@@ -17,7 +17,11 @@ const locales = { "zh-CN": zhCN, en };
 
 export async function writeClipboardText(text: string): Promise<void> {
   if (isTauriRuntime()) {
-    await invoke("mark_self_triggered", { text });
+    try {
+      await invoke("mark_self_triggered", { text });
+    } catch (error) {
+      console.warn("Unable to register text self-trigger", error);
+    }
   }
   await navigator.clipboard.writeText(text);
 }
@@ -43,7 +47,11 @@ export async function writeClipboardImage(
 
 export async function writeClipboardHtml(html: string, plainText?: string | null): Promise<void> {
   if (isTauriRuntime() && plainText) {
-    await invoke("mark_self_triggered", { text: plainText });
+    try {
+      await invoke("mark_self_triggered", { text: plainText });
+    } catch (error) {
+      console.warn("Unable to register HTML self-trigger", error);
+    }
   }
 
   const payload: Record<string, Blob> = {
