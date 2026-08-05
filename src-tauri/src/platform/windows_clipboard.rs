@@ -715,30 +715,52 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     }
 
     let width = i32::from_le_bytes([dib[4], dib[5], dib[6], dib[7]]);
+    // DIB width must be positive; a negative value would wrap when cast to
+    // u32 and overflow the per-row math below.
+    let width = u32::try_from(width).ok()?;
     let height_abs = i32::from_le_bytes([dib[8], dib[9], dib[10], dib[11]]).unsigned_abs();
     let bit_count = u16::from_le_bytes([dib[14], dib[15]]);
 
-    let pixel_data = &dib[header_size as usize..];
+    let header_size = header_size as usize;
+    if header_size > dib.len() {
+        return None;
+    }
+    let pixel_data = &dib[header_size..];
+
+    // A clipboard producer may declare a header whose claimed pixel payload is
+    // larger than the actual allocation. Validate the exact byte count up front
+    // so the per-row slices below can never read out of bounds.
+    let required_bytes: u128 = match bit_count {
+        32 => u128::from(width) * u128::from(u64::from(height_abs)) * 4,
+        24 => {
+            let row = (u128::from(width) * 3).div_ceil(4) * 4;
+            row * u128::from(u64::from(height_abs))
+        }
+        _ => return None,
+    };
+    if (pixel_data.len() as u128) < required_bytes {
+        return None;
+    }
 
     let img = match bit_count {
         32 => {
-            let rgba = bgra_to_rgba(pixel_data, width as u32, height_abs);
-            image::RgbaImage::from_raw(width as u32, height_abs, rgba)?
+            let rgba = bgra_to_rgba(pixel_data, width, height_abs);
+            image::RgbaImage::from_raw(width, height_abs, rgba)?
         }
         24 => {
-            let rgb = bgr_to_rgb(pixel_data, width as u32, height_abs);
+            let rgb = bgr_to_rgb(pixel_data, width, height_abs);
             let mut buf = Vec::with_capacity(rgb.len());
             for chunk in rgb.chunks_exact(3) {
                 buf.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
-            image::RgbaImage::from_raw(width as u32, height_abs, buf)?
+            image::RgbaImage::from_raw(width, height_abs, buf)?
         }
         _ => return None,
     };
 
     let mut png_bytes = std::io::Cursor::new(Vec::new());
     img.write_to(&mut png_bytes, image::ImageFormat::Png).ok()?;
-    Some((png_bytes.into_inner(), width as u32, height_abs))
+    Some((png_bytes.into_inner(), width, height_abs))
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1455,6 +1477,43 @@ mod tests {
         assert_eq!(parse_cf_html(b"not a cf-html payload"), None);
         let empty = b"Version:0.9\r\nStartHTML:0000000000\r\nEndHTML:0000000000";
         assert_eq!(parse_cf_html(empty), None);
+    }
+
+    #[test]
+    fn dib_to_png_rejects_pixel_payload_shorter_than_header_claims() {
+        let mut header = [0u8; 40];
+        header[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+        header[4..8].copy_from_slice(&4096i32.to_le_bytes()); // biWidth
+        header[8..12].copy_from_slice(&4096i32.to_le_bytes()); // biHeight
+        header[14..16].copy_from_slice(&32u16.to_le_bytes()); // biBitCount
+
+        // Only 64 bytes of pixel data follow, far less than the 4096*4096*4
+        // bytes the header claims.
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&[0u8; 64]);
+        assert_eq!(dib_to_png(&dib), None);
+    }
+
+    #[test]
+    fn dib_to_png_rejects_header_larger_than_the_buffer() {
+        let mut header = [0u8; 56];
+        header[0..4].copy_from_slice(&100u32.to_le_bytes()); // biSize > buffer length
+        header[4..8].copy_from_slice(&8i32.to_le_bytes());
+        header[8..12].copy_from_slice(&8i32.to_le_bytes());
+        header[14..16].copy_from_slice(&32u16.to_le_bytes());
+        assert_eq!(dib_to_png(&header), None);
+    }
+
+    #[test]
+    fn dib_to_png_rejects_negative_width() {
+        let mut header = [0u8; 40];
+        header[0..4].copy_from_slice(&40u32.to_le_bytes());
+        header[4..8].copy_from_slice(&(-8i32).to_le_bytes()); // negative width
+        header[8..12].copy_from_slice(&8i32.to_le_bytes());
+        header[14..16].copy_from_slice(&32u16.to_le_bytes());
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&[0u8; 256]);
+        assert_eq!(dib_to_png(&dib), None);
     }
 
     /// Builds a CF_HTML payload with accurate byte offsets. Header widths are
