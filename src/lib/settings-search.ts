@@ -13,6 +13,7 @@ export const SETTINGS_SECTIONS = [
   "keyboard_item",
   "keyboard_quick",
   "keyboard_system",
+  "tags",
   "ocr",
   "statistics",
   "about",
@@ -129,6 +130,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "系统",
   ],
   ocr: [i18n("storage.ocrTitle"), "OCR", "文字识别"],
+  tags: [i18n("storage.tagsTab"), i18n("tags.title"), "标签", "tag"],
   statistics: [i18n("statistics.title"), "统计", "诊断"],
   about: [i18n("about.tabLabel"), i18n("about.title"), "更新", "版本", "update", "version"],
 };
@@ -640,6 +642,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "快速复制第 N 条",
     "设置快速复制列表前 9 个条目的快捷键，默认 Ctrl+1~9",
     ["Ctrl+1", "quickCopy", "快速复制"],
+  ),
+
+  entry(
+    "tags.manage",
+    { section: "tags" },
+    i18n("storage.tagsTab"),
+    i18n("storage.tagsDescription"),
+    [i18n("tags.title"), i18n("tags.colorNone"), "标签管理", "重命名", "删除", "颜色"],
   ),
 
   entry(

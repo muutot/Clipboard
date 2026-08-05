@@ -21,6 +21,7 @@
     persistBatchFavorite,
     persistBatchDelete,
     persistTags,
+    listAllTags,
     searchClipboardHistory,
     listSourceApplications,
     formatTextLength,
@@ -169,6 +170,7 @@
   let dateFilter = $state<string>("all");
   let sourceAppFilter = $state("");
   let tagFilter = $state<string | null>(null);
+  let tagColors = $state<Record<string, string>>({});
   let sourceApps = $state<string[]>([]);
   let sourceAppSearch = $state("");
   let sourceAppDropdownOpen = $state(false);
@@ -720,6 +722,8 @@
     void listSourceApplications().then((apps) => {
       if (apps) sourceApps = apps;
     });
+
+    refreshTagColors();
 
     const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
       const record = event.payload;
@@ -1932,6 +1936,16 @@
     tagFilter = tagFilter === tag ? null : tag;
   }
 
+  async function refreshTagColors() {
+    const tags = await listAllTags();
+    if (!tags) return;
+    const map: Record<string, string> = {};
+    for (const tag of tags) {
+      if (tag.color) map[tag.name] = tag.color;
+    }
+    tagColors = map;
+  }
+
   async function saveTags(id: string, tags: string[]) {
     const deduped = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
     items = items.map((item) => (item.id === id ? { ...item, tags: deduped } : item));
@@ -1945,6 +1959,7 @@
     if (ok === false) {
       showToast(_t("toast.saveFailed"), "error");
     }
+    refreshTagColors();
   }
 
   async function cleanTextIfEnabled(text: string): Promise<string> {
@@ -3114,6 +3129,7 @@
                     oncleanpaste={cleanPaste}
                     onrestore={restoreItem}
                     onsavetags={saveTags}
+                    {tagColors}
                     ontoggleTagFilter={toggleTagFilter}
                     tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
                   />
@@ -3158,6 +3174,7 @@
                   oncleanpaste={cleanPaste}
                   onrestore={restoreItem}
                   onsavetags={saveTags}
+                  {tagColors}
                   ontoggleTagFilter={toggleTagFilter}
                   tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
                 />
@@ -3233,6 +3250,7 @@
         oncopyfilename={copyFilename}
         onimagefullscreen={handleImageFullscreen}
         onsavetags={saveTags}
+        {tagColors}
       />
     {/if}
   </div>
@@ -3264,6 +3282,7 @@
     oncopyfilename={copyFilename}
     onimagefullscreen={handleImageFullscreen}
     onsavetags={saveTags}
+    {tagColors}
   />
 {/if}
 

@@ -29,6 +29,7 @@ Owns the record boundary and list operations:
 - searching with offset, limit, and optional sort rules;
 - favorite/delete/restore/permanent/batch operations;
 - tag persistence (`persistTags(id, tags)` invokes `set_clipboard_item_tags`);
+- tag management wrappers for the settings tag manager: `listAllTags()` (`list_all_tags` → `TagInfo[] {name,count,color}`), `renameTag(old,new)` (`rename_tag` → affected-count), `deleteTag(name)` (`delete_tag`), and `setTagColor(name,color)` (`set_tag_color`);
 - source-app listing and content-action detection;
 - `PersistedClipboardItem` → `ClipboardItem` mapping (including `tags` parsed from `metadata_json.tags`);
 - resource metadata parsing and display title/size helpers.

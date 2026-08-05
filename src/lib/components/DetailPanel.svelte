@@ -87,6 +87,7 @@
     oncopyfilename: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
     onsavetags: (id: string, tags: string[]) => void;
+    tagColors?: Record<string, string>;
   }
 
   let {
@@ -105,6 +106,7 @@
     oncopyfilename,
     onimagefullscreen,
     onsavetags,
+    tagColors = {},
   }: Props = $props();
 
   function copyText(text: string) {
@@ -827,7 +829,10 @@
               <dt><AppIcon name="tag" size={14} /> {_t("detail.tags")}</dt>
               <dd class="tags-editor">
                 {#each item.tags ?? [] as tag (tag)}
-                  <span class="tag-chip">
+                  <span
+                    class="tag-chip"
+                    style={tagColors[tag] ? `--tag-accent: ${tagColors[tag]}` : undefined}
+                  >
                     {tag}
                     <button
                       type="button"
@@ -1546,6 +1551,12 @@
     background: var(--surface-bg);
     font-size: 11px;
     line-height: 1.4;
+  }
+
+  .tag-chip[style*="--tag-accent"] {
+    border-color: color-mix(in srgb, var(--tag-accent) 55%, transparent);
+    color: var(--tag-accent);
+    background: color-mix(in srgb, var(--tag-accent) 12%, var(--surface-bg));
   }
 
   .tag-remove {

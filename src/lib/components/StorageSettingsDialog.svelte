@@ -9,6 +9,7 @@
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
   import ThemeSettingsPanel from "$lib/components/ThemeSettingsPanel.svelte";
+  import TagManagementSettingsPanel from "$lib/components/TagManagementSettingsPanel.svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { resetKeyboardConfig } from "$lib/services/keyboard";
   import { listen } from "@tauri-apps/api/event";
@@ -146,6 +147,7 @@
     | "keyboard_item"
     | "keyboard_quick"
     | "keyboard_system"
+    | "tags"
     | "ocr"
     | "statistics"
     | "about"
@@ -212,6 +214,12 @@
           breadcrumb: _t("capture.settings"),
           title: _t("capture.title"),
           desc: _t("capture.description"),
+        };
+      case "tags":
+        return {
+          breadcrumb: _t("storage.tagsTab"),
+          title: _t("storage.tagsTab"),
+          desc: _t("storage.tagsDescription"),
         };
       case "storage_paths":
         return {
@@ -344,6 +352,8 @@
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.themeTab")}`;
       case "capture":
         return `${settingsLabel} / ${_t("capture.title")}`;
+      case "tags":
+        return `${settingsLabel} / ${_t("storage.tagsTab")}`;
       case "storage_paths":
       case "storage_limits":
       case "storage_tools":
@@ -1382,6 +1392,14 @@
         <span>{_t("storage.keyboardTab")}</span>
       </button>
       <button
+        class:active={activeSection === "tags"}
+        type="button"
+        onclick={() => (activeSection = "tags")}
+      >
+        <AppIcon name="tag" size={16} />
+        <span>{_t("storage.tagsTab")}</span>
+      </button>
+      <button
         class:active={activeSection === "ocr"}
         type="button"
         onclick={() => (activeSection = "ocr")}
@@ -1696,6 +1714,8 @@
       <ThemeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
+    {:else if activeSection === "tags"}
+      <TagManagementSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "keyboard_item"}
       <KeyboardSettingsPanel
         {onclose}

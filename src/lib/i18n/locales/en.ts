@@ -76,6 +76,9 @@ const en: LocaleDefinition = {
     generalTab: "General",
     appearanceTab: "Appearance",
     basicTab: "Basic",
+    tagsTab: "Tags",
+    tagsDescription:
+      "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
     compactTab: "Compact",
     fontTab: "Font",
     themeTab: "Theme",
@@ -868,6 +871,22 @@ const en: LocaleDefinition = {
     warningColorDescription: "Warning and favorite marker color",
     scrollbarColor: "Scrollbar",
     scrollbarColorDescription: "List scrollbar thumb color",
+  },
+  tags: {
+    title: "Tags",
+    description:
+      "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
+    empty: "No tags yet. Tags you add to item cards will appear here.",
+    count: "Used on {count} items",
+    renamePlaceholder: "Enter a new name",
+    colorNone: "No color",
+    delete: "Delete",
+    deleteConfirm: "Delete?",
+    renameConflict: "A tag with this name already exists",
+    renamed: "Tag renamed",
+    deleted: "Tag deleted",
+    colorSaved: "Color updated",
+    saved: "Saved",
   },
 };
 

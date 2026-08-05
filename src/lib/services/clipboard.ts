@@ -166,6 +166,36 @@ export async function persistTags(id: string, tags: string[]): Promise<boolean |
   return invoke<boolean>("set_clipboard_item_tags", { id, tags });
 }
 
+export interface TagInfo {
+  name: string;
+  count: number;
+  color: string;
+}
+
+export async function listAllTags(): Promise<TagInfo[] | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<TagInfo[]>("list_all_tags");
+}
+
+export async function renameTag(old: string, newName: string): Promise<number | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<number>("rename_tag", { old, new: newName });
+}
+
+export async function deleteTag(name: string): Promise<number | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<number>("delete_tag", { name });
+}
+
+export async function setTagColor(name: string, color: string): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("set_tag_color", { name, color });
+}
+
 export async function listSourceApplications(): Promise<string[] | null> {
   if (!isTauriRuntime()) return null;
 

@@ -24,6 +24,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | General          | Window, Search, Items, Display → `GeneralSettingsPanel`                                                 |
 | Appearance       | Theme, Font, Compact → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`            |
 | Capture          | Single current section → `IgnoredAppsSettingsPanel`                                                     |
+| Tags             | Single current section → `TagManagementSettingsPanel`                                                   |
 | Storage          | Paths, Limits, Tools (icon cache, search index, database repair, import/export) → built into the parent |
 | Keyboard         | Item, Quick, System → `KeyboardSettingsPanel` with category prop                                        |
 | OCR              | Single current section → built into the parent                                                          |

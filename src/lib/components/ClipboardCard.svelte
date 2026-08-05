@@ -98,6 +98,7 @@
     ontoggleTagFilter?: (tag: string) => void;
     heightMeasurementKey?: string;
     tagAddSignal?: number;
+    tagColors?: Record<string, string>;
   }
 
   const cardActionIds = [
@@ -153,6 +154,7 @@
     ontoggleTagFilter,
     heightMeasurementKey,
     tagAddSignal = 0,
+    tagColors = {},
   }: Props = $props();
 
   let contextMenu = $state<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -608,6 +610,7 @@
         role="button"
         tabindex="0"
         title={tag}
+        style={tagColors[tag] ? `--tag-accent: ${tagColors[tag]}` : undefined}
         onclick={(e) => {
           e.stopPropagation();
           ontoggleTagFilter?.(tag);
@@ -1202,6 +1205,17 @@
   .tag-chip:hover {
     color: var(--text-primary);
     border-color: var(--text-faint);
+  }
+
+  .tag-chip[style*="--tag-accent"] {
+    border-color: color-mix(in srgb, var(--tag-accent) 55%, transparent);
+    color: var(--tag-accent);
+    background: color-mix(in srgb, var(--tag-accent) 12%, var(--surface-bg));
+  }
+
+  .tag-chip[style*="--tag-accent"]:hover {
+    color: var(--tag-accent);
+    border-color: var(--tag-accent);
   }
 
   .tag-chip-remove {

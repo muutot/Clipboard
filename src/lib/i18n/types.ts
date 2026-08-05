@@ -76,6 +76,8 @@ export interface LocaleDefinition {
     generalTab: string;
     appearanceTab: string;
     basicTab: string;
+    tagsTab: string;
+    tagsDescription: string;
     compactTab: string;
     fontTab: string;
     themeTab: string;
@@ -817,6 +819,21 @@ export interface LocaleDefinition {
     warningColorDescription: string;
     scrollbarColor: string;
     scrollbarColorDescription: string;
+  };
+  tags: {
+    title: string;
+    description: string;
+    empty: string;
+    count: string;
+    renamePlaceholder: string;
+    colorNone: string;
+    delete: string;
+    deleteConfirm: string;
+    renameConflict: string;
+    renamed: string;
+    deleted: string;
+    colorSaved: string;
+    saved: string;
   };
 }
 
