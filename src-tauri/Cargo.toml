@@ -39,3 +39,4 @@ oar-ocr = { version = "0.8", features = ["download-binaries", "auto-download"] }
 reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls"] }
 ort = "=2.0.0-rc.12"
 hex = "0.4.3"
+zip = "2"

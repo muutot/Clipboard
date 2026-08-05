@@ -178,6 +178,7 @@ export interface LocaleDefinition {
     importPartial: string;
     importFailed: string;
     importFilterName: string;
+    ppasteFilterName: string;
     importTruncationWarning: string;
     importAdjustLimit: string;
     exportIncludeFavorites: string;

@@ -46,7 +46,7 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | `platform/`            | Clipboard monitor, hotkey, tray, single-instance and platform-specific adapters                    |
 | `privacy/`             | Pause/ignore/sensitive-source policy helpers                                                       |
 | `performance/`         | Startup/search/performance snapshots and monitoring                                                |
-| `export/`              | JSON, CSV, and plain-text import/export                                                            |
+| `export/`              | JSON, CSV, plain-text import/export, and PPaste `.Pastebackup` import (`ppaste.rs`) |
 | `commands/`            | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                        |
 | `cli/`                 | Process CLI execution and loopback API server                                                      |
 

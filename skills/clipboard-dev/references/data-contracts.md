@@ -18,7 +18,11 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 ### Import summary and truncation warning
 
-`ImportSummary` (used by `import_from_file` and `import_clipboard_items`) carries `importedCount`, `skippedCount`, `errors`, plus `pendingTruncation` and `maxItems` (both `#[serde(default)]`; default 0). The file import command `import_from_file` takes `config` state, reads `max_items`, and reports `pendingTruncation = active_count.saturating_sub(max_items)` after importing so the settings UI can warn that the oldest non-favorite items will be removed by the next scheduled capacity cleanup. Capacity is enforced by the history-cleanup worker (`enforce_capacity_limit`), not by the import itself; the import only reports the risk.
+`ImportSummary` (used by `import_from_file` and `import_clipboard_items`) carries `importedCount`, `skippedCount`, `errors`, plus `pendingTruncation` and `maxItems` (both `#[serde(default)]`; default 0). The file import command `import_from_file` takes `config` and `paths` state, reads `max_items`, and reports `pendingTruncation = active_count.saturating_sub(max_items)` after importing so the settings UI can warn that the oldest non-favorite items will be removed by the next scheduled capacity cleanup. Capacity is enforced by the history-cleanup worker (`enforce_capacity_limit`), not by the import itself; the import only reports the risk.
+
+### PPaste backup import
+
+`import_from_file` routes `.Pastebackup` files (a ZIP) to `export::ppaste::import_from_ppaste_backup` (see `src-tauri/src/export/ppaste.rs`). It reads the embedded `PPaste2.db3` plus `PasteData/*.png`, maps `PPaste_Main` rows into `ClipboardItem` (Text/UnicodeText/HtmlText/RtfText/Json/Color → `text`; Links → `link`; Image → `image` with PNG bytes written to the managed images dir and inline image `metadata_json`), and persists via `ClipboardRepository::save_item` so the `(kind, content_hash)` dedup and search outbox triggers apply. Non-portable `Files` rows (absolute-path references to the source machine) are dropped. Timestamps parse PPaste's local-time string as UTC, preserving relative order. The `zip` crate is a new dependency. The import dialog accepts the `.pastebackup` extension; `BACKUP_EXTENSION` is exported from `export::mod`.
 
 ## SQLite schema
 

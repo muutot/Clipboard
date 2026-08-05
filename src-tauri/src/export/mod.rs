@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::domain::ClipboardItem;
 use crate::storage::Database;
 
+mod ppaste;
+pub(crate) use ppaste::{import_from_ppaste_backup, BACKUP_EXTENSION};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ExportFormat {

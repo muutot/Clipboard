@@ -6,10 +6,10 @@ use tauri::Emitter;
 use crate::commands::clipboard::ClipboardHistoryInvalidated;
 use crate::config::ConfigStore;
 use crate::export::{
-    export_database, import_from_json, import_from_plain_text, write_export_file, ExportFormat,
-    ExportOptions, ImportSummary,
+    export_database, import_from_json, import_from_plain_text, import_from_ppaste_backup,
+    write_export_file, ExportFormat, ExportOptions, ImportSummary, BACKUP_EXTENSION,
 };
-use crate::storage::{ClipboardRepository, Database};
+use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -155,10 +155,16 @@ fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSu
 pub fn import_from_file(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    paths: tauri::State<'_, StoragePaths>,
     app: tauri::AppHandle,
     path: String,
 ) -> Result<ImportSummary, String> {
-    let mut summary = import_database_from_path(database.inner(), &path)?;
+    let lower = path.to_ascii_lowercase();
+    let mut summary = if lower.ends_with(BACKUP_EXTENSION) {
+        import_from_ppaste_backup(&path, database.inner(), paths.inner())
+    } else {
+        import_database_from_path(database.inner(), &path)
+    }?;
     annotate_truncation_risk(&mut summary, &database, &config)?;
     if summary.imported_count > 0 {
         let _ = app.emit(

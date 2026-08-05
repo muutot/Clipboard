@@ -648,7 +648,10 @@
       const filePath = await open({
         multiple: false,
         directory: false,
-        filters: [{ name: _t("storage.importFilterName"), extensions: ["json", "txt"] }],
+        filters: [
+          { name: _t("storage.importFilterName"), extensions: ["json", "txt", "pastebackup"] },
+          { name: _t("storage.ppasteFilterName"), extensions: ["pastebackup"] },
+        ],
       });
       if (!filePath) return;
       const result = await importFromFile(filePath);
