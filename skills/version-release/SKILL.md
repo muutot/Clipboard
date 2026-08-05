@@ -17,6 +17,20 @@ Start this skill when the user says any of:
 
 ## Release workflow (single script, two passes for RELEASE.md)
 
+### Pre-release Check Gate
+
+Before any version bump or release (including `--regenerate`), apply the non-compiling release gate **to the final tree**, and commit any formatting-only changes **as a separate, prior `🎨 style` commit**.
+
+Run only (`format` + `check` + lint; **not** `test`/`build`):
+
+1. `npm run format:check` — prettier (`format:prettier:check`) + rustfmt (`format:rust:check`)
+2. `npm run check` — svelte-check type checking
+3. `npm run lint:rust` — cargo clippy `-D warnings`
+
+If any diffs appear, apply them (`npm run format:prettier` / `npm run format:rust`), then re-run the gate. Commit all formatting-only changes in a **single** `🎨 style[...]: apply formatting` commit **before** the release commit.
+
+> The release script _bumps the version first_ (Pass 1), so run the gate on the code **before** starting, then re-check `RELEASE.md` after curating it (see Pass 2 note below).
+
 ### Prerequisite: only version files in the release commit
 
 Before running the release script, ensure that **every other change** has already been committed separately.
@@ -81,6 +95,8 @@ node scripts/release.mjs <version>
 ```
 
 Steps 3–6 run: check, commit, tag, push to origin.
+
+**Re-check formatting after curation.** `RELEASE.md` is written _after_ the pre-release gate. Before Pass 2, run `npm run format:prettier:check` (or `npm run format:prettier -- RELEASE.md` to fix) so the freshly curated `RELEASE.md` is prettier-clean. Fix any diff (`npx prettier --write RELEASE.md`), then commit it either as a separate `🎨 style[release]` commit or folded into the release commit — do **not** push a release whose `RELEASE.md` fails the format gate.
 
 ### Semantic bump
 
