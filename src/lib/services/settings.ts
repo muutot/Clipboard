@@ -72,10 +72,17 @@ function isRecord(value: unknown): value is UnknownRecord {
 }
 
 function cloneDefaults(): GeneralSettings {
+  const defaults = DEFAULT_GENERAL_SETTINGS;
   return {
-    ...DEFAULT_GENERAL_SETTINGS,
-    fontSizes: { ...DEFAULT_GENERAL_SETTINGS.fontSizes },
-    display: { ...DEFAULT_GENERAL_SETTINGS.display },
+    ...defaults,
+    fontSizes: { ...defaults.fontSizes },
+    display: { ...defaults.display },
+    themeColors: defaults.themeColors ? { ...defaults.themeColors } : undefined,
+    customPresets: defaults.customPresets.map((preset) => ({
+      ...preset,
+      colors: { ...preset.colors },
+    })),
+    searchSortRules: defaults.searchSortRules.map((rule) => ({ ...rule })),
   };
 }
 
