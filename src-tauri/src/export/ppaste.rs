@@ -351,14 +351,25 @@ fn read_zip_entry<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
     name: &str,
 ) -> Result<Vec<u8>, String> {
-    let mut entry = archive
-        .by_name(name)
-        .map_err(|error| format!("missing {name} in backup: {error}"))?;
-    let mut bytes = Vec::new();
-    entry
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("failed to read {name} in backup: {error}"))?;
-    Ok(bytes)
+    // PPaste backups are produced on Windows and store zip entry paths with
+    // backslashes (e.g. `PasteData\1745.png`). Some exports use forward
+    // slashes. Try both separators so image files are found either way.
+    let mut candidates: Vec<String> = vec![name.to_owned()];
+    if name.contains('/') {
+        candidates.push(name.replace('/', "\\"));
+    } else if name.contains('\\') {
+        candidates.push(name.replace('\\', "/"));
+    }
+    for candidate in candidates {
+        if let Ok(mut entry) = archive.by_name(&candidate) {
+            let mut bytes = Vec::new();
+            entry
+                .read_to_end(&mut bytes)
+                .map_err(|error| format!("failed to read {candidate} in backup: {error}"))?;
+            return Ok(bytes);
+        }
+    }
+    Err(format!("missing {name} in backup"))
 }
 
 fn ppaste_datetime_to_ms(datetime: &str) -> Option<i64> {
@@ -546,6 +557,55 @@ mod tests {
         assert_eq!(second.skipped_count, 4);
         assert!(second.errors.is_empty());
         assert_eq!(database.item_count().unwrap(), 4);
+
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn imports_images_when_zip_uses_backslash_paths() {
+        let temp = std::env::temp_dir().join(format!(
+            "ppaste-backslash-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("source.db3");
+        make_source_db(&db_path);
+        let db_bytes = std::fs::read(&db_path).unwrap();
+
+        // PPaste exports entry names with Windows backslashes (PasteData\...).
+        let backup = temp.join("backslash.Pastebackup");
+        let file = std::fs::File::create(&backup).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("PPaste2.db3", options).unwrap();
+        writer.write_all(&db_bytes).unwrap();
+        writer.start_file("PasteData\\pixel.png", options).unwrap();
+        writer.write_all(&make_png()).unwrap();
+        writer.finish().unwrap();
+
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            temp.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let summary =
+            import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(summary.imported_count, 4);
+        assert_eq!(summary.errors.len(), 0);
+        assert!(database
+            .list_recent(10, 0)
+            .unwrap()
+            .iter()
+            .any(|i| i.kind == ClipboardKind::Image));
 
         std::fs::remove_dir_all(&temp).unwrap();
     }
