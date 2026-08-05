@@ -636,7 +636,7 @@ pub fn restore_window_and_paste(window_handle: isize) -> Result<(), String> {
     let fg = unsafe { GetForegroundWindow() };
     crate::dbg_log(&format!(
         "restore: after delay fg=0x{fg:X} target=0x{window_handle:X} equal={}",
-        fg == window_handle as isize
+        fg == window_handle
     ));
     if unsafe { GetForegroundWindow() } != window_handle {
         return Err("failed to restore the previous foreground window".to_owned());
