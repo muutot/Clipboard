@@ -3242,7 +3242,7 @@
               {:else}
                 <ClipboardCard
                   {item}
-                  index={filteredItems.indexOf(item)}
+                  index={filteredItemIndexById.get(item.id) ?? 0}
                   now={currentTime}
                   selected={selectedIds.has(item.id) || item.id === selectedId}
                   checked={selectedIds.has(item.id)}
