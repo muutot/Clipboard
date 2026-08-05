@@ -244,10 +244,7 @@ async fn download_ppocr_file(
 
     let destination = models_dir.join(model_file.filename);
     let temporary = models_dir.join(format!("{}.part", model_file.filename));
-    if tokio::fs::try_exists(&temporary)
-        .await
-        .unwrap_or(false)
-    {
+    if tokio::fs::try_exists(&temporary).await.unwrap_or(false) {
         tokio::fs::remove_file(&temporary)
             .await
             .map_err(|e| format!("remove stale {}: {e}", temporary.display()))?;
@@ -282,9 +279,7 @@ async fn download_ppocr_file(
         .await
         .map_err(|e| format!("download {}: {e}", model_file.filename))?
     {
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| e.to_string())?;
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
         let percentage = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
@@ -314,10 +309,7 @@ async fn download_ppocr_file(
             model_file.filename, model_file.size_bytes, downloaded
         ));
     }
-    if tokio::fs::try_exists(&destination)
-        .await
-        .unwrap_or(false)
-    {
+    if tokio::fs::try_exists(&destination).await.unwrap_or(false) {
         tokio::fs::remove_file(&destination)
             .await
             .map_err(|e| format!("replace {}: {e}", destination.display()))?;

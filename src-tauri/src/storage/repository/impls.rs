@@ -358,7 +358,11 @@ impl ClipboardRepository for Database {
                     map.insert(
                         "tags".to_owned(),
                         serde_json::Value::Array(
-                            dedup.iter().cloned().map(serde_json::Value::String).collect(),
+                            dedup
+                                .iter()
+                                .cloned()
+                                .map(serde_json::Value::String)
+                                .collect(),
                         ),
                     );
                 }

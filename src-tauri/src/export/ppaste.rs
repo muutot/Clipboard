@@ -1,4 +1,4 @@
-﻿use std::io::Read;
+use std::io::Read;
 
 use rusqlite::Connection;
 
@@ -100,7 +100,9 @@ fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64), String> {
     let mut out = Vec::new();
     let mut files_dropped = 0u64;
     for row in rows {
-        let Ok((record, is_files)) = row else { continue };
+        let Ok((record, is_files)) = row else {
+            continue;
+        };
         if is_files {
             files_dropped += 1;
             continue;

@@ -118,9 +118,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
     // maintenance cost on every outbox insert without helping reads. Drop it
     // from databases that predate this cleanup; `IF EXISTS` keeps this safe on
     // every open and for fresh databases.
-    connection.execute_batch(
-        "DROP INDEX IF EXISTS search_outbox_sequence_idx;",
-    )?;
+    connection.execute_batch("DROP INDEX IF EXISTS search_outbox_sequence_idx;")?;
 
     Ok(())
 }
@@ -145,9 +143,7 @@ fn ensure_item_tags_table(connection: &Connection) -> Result<(), StorageError> {
         CREATE INDEX IF NOT EXISTS item_tags_tag_idx ON item_tags (tag, item_id);",
     )?;
 
-    let rows: i64 = connection.query_row("SELECT COUNT(*) FROM item_tags", [], |row| {
-        row.get(0)
-    })?;
+    let rows: i64 = connection.query_row("SELECT COUNT(*) FROM item_tags", [], |row| row.get(0))?;
     if rows == 0 {
         connection.execute_batch(
             "INSERT OR IGNORE INTO item_tags (item_id, tag)
@@ -297,9 +293,7 @@ mod tests {
         create_schema(&connection).unwrap();
 
         let pairs: Vec<(String, String)> = connection
-            .prepare(
-                "SELECT item_id, tag FROM item_tags ORDER BY item_id, tag",
-            )
+            .prepare("SELECT item_id, tag FROM item_tags ORDER BY item_id, tag")
             .unwrap()
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()

@@ -269,21 +269,12 @@ mod tests {
 
         assert_eq!(store.path(), project.join("conf/keyboard.json"));
         assert_eq!(saved["shortcuts"]["toggleWindow"], json!(["Alt+V"]));
-        assert_eq!(
-            saved["shortcuts"]["copyItem"],
-            json!(["Ctrl+C", "Enter"])
-        );
+        assert_eq!(saved["shortcuts"]["copyItem"], json!(["Ctrl+C", "Enter"]));
         assert_eq!(saved["shortcuts"]["deleteItem"], json!(["Ctrl+D"]));
         assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+F"]));
-        assert_eq!(
-            saved["shortcuts"]["openDetail"],
-            json!(["Space", "Ctrl+E"])
-        );
+        assert_eq!(saved["shortcuts"]["openDetail"], json!(["Space", "Ctrl+E"]));
         assert_eq!(saved["shortcuts"]["selectAll"], json!(["Ctrl+A"]));
-        assert_eq!(
-            saved["shortcuts"]["moveSelectionUp"],
-            json!(["Arrowup"])
-        );
+        assert_eq!(saved["shortcuts"]["moveSelectionUp"], json!(["Arrowup"]));
         assert_eq!(
             saved["shortcuts"]["moveSelectionDown"],
             json!(["Arrowdown"])
