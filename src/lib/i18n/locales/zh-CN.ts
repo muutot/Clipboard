@@ -183,6 +183,9 @@ const zhCN: LocaleDefinition = {
     importPartial: "导入完成：新增 {imported} 条，跳过 {skipped} 条；{error}",
     importFailed: "导入失败：{error}",
     importFilterName: "剪贴板备份",
+    importTruncationWarning:
+      "导入已超出条目上限 {max} 条：最旧的 {count} 条非收藏项将在下次清理时被移除。建议先提高上限或备份。",
+    importAdjustLimit: "调整条目上限",
     exportIncludeFavorites: "包含收藏项",
     exportContentTypes: "内容类型",
     exportDateRange: "日期范围",

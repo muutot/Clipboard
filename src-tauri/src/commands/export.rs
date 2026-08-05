@@ -1,12 +1,15 @@
+use std::sync::Mutex;
+
 use serde::Serialize;
 use tauri::Emitter;
 
 use crate::commands::clipboard::ClipboardHistoryInvalidated;
+use crate::config::ConfigStore;
 use crate::export::{
     export_database, import_from_json, import_from_plain_text, write_export_file, ExportFormat,
     ExportOptions, ImportSummary,
 };
-use crate::storage::Database;
+use crate::storage::{ClipboardRepository, Database};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -151,10 +154,12 @@ fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSu
 #[tauri::command]
 pub fn import_from_file(
     database: tauri::State<'_, Database>,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
     app: tauri::AppHandle,
     path: String,
 ) -> Result<ImportSummary, String> {
-    let summary = import_database_from_path(database.inner(), &path)?;
+    let mut summary = import_database_from_path(database.inner(), &path)?;
+    annotate_truncation_risk(&mut summary, &database, &config)?;
     if summary.imported_count > 0 {
         let _ = app.emit(
             "clipboard-history-invalidated",
@@ -164,6 +169,21 @@ pub fn import_from_file(
         );
     }
     Ok(summary)
+}
+
+fn annotate_truncation_risk(
+    summary: &mut ImportSummary,
+    database: &Database,
+    config: &tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<(), String> {
+    let guard = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let max_items = guard.max_items();
+    let active = database.item_count().map_err(|error| error.to_string())?;
+    summary.max_items = max_items;
+    summary.pending_truncation = active.saturating_sub(u64::from(max_items));
+    Ok(())
 }
 
 #[tauri::command]

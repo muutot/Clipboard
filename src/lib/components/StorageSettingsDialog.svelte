@@ -71,6 +71,8 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let showLimitWarning = $state(false);
+  let importTruncationCount = $state(0);
   const storageKinds: readonly {
     kind: StorageKind;
     labelKey: "filter.text" | "filter.link" | "filter.image" | "filter.file";
@@ -662,6 +664,15 @@
           skipped: result.skippedCount,
         });
         feedbackSuccess = true;
+      }
+      if (result.pendingTruncation > 0) {
+        feedback = _t("storage.importTruncationWarning", {
+          max: result.maxItems,
+          count: result.pendingTruncation,
+        });
+        feedbackSuccess = false;
+        showLimitWarning = true;
+        importTruncationCount = result.pendingTruncation;
       }
     } catch (error) {
       feedback = _t("storage.importFailed", {
@@ -2498,6 +2509,23 @@
                   </button>
                 </div>
               </div>
+              {#if showLimitWarning}
+                <div class="transfer-limit-warning">
+                  <span
+                    >{_t("storage.importTruncationWarning", {
+                      max: maxItemCount,
+                      count: importTruncationCount,
+                    })}</span
+                  >
+                  <button
+                    type="button"
+                    class="settings-action-btn"
+                    onclick={() => (activeSection = "storage_limits")}
+                  >
+                    {_t("storage.importAdjustLimit")}
+                  </button>
+                </div>
+              {/if}
               <div class="export-options">
                 <div class="export-option-row">
                   <label class="export-check">
@@ -4187,6 +4215,24 @@
   :global(.transfer-actions .settings-select) {
     width: 116px;
     height: 34px;
+    flex-shrink: 0;
+  }
+
+  .transfer-limit-warning {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--warning-color) 35%, transparent);
+    border-radius: var(--settings-feedback-radius, 7px);
+    color: color-mix(in srgb, var(--warning-color) 75%, white);
+    background: color-mix(in srgb, var(--warning-color) 12%, var(--surface-bg));
+    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
+  }
+
+  .transfer-limit-warning button {
     flex-shrink: 0;
   }
 

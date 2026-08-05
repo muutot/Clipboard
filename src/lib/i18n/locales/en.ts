@@ -197,6 +197,9 @@ const en: LocaleDefinition = {
     importPartial: "Import complete: {imported} imported, {skipped} skipped; {error}",
     importFailed: "Import failed: {error}",
     importFilterName: "Clipboard Backup",
+    importTruncationWarning:
+      "Import exceeds the item limit of {max}: the {count} oldest non-favorite items will be removed by the next cleanup. Raise the limit or back up first.",
+    importAdjustLimit: "Adjust item limit",
     exportIncludeFavorites: "Include favorites",
     exportContentTypes: "Content types",
     exportDateRange: "Date range",

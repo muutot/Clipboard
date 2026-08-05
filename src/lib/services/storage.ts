@@ -107,6 +107,8 @@ export interface ImportSummary {
   importedCount: number;
   skippedCount: number;
   errors: string[];
+  pendingTruncation: number;
+  maxItems: number;
 }
 
 export type StorageKind = "text" | "link" | "image" | "file";

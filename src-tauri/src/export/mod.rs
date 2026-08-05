@@ -29,6 +29,10 @@ pub struct ImportSummary {
     pub imported_count: u64,
     pub skipped_count: u64,
     pub errors: Vec<String>,
+    #[serde(default)]
+    pub pending_truncation: u64,
+    #[serde(default)]
+    pub max_items: u32,
 }
 
 pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<String, String> {
@@ -124,6 +128,8 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
         imported_count: imported,
         skipped_count: skipped,
         errors,
+        pending_truncation: 0,
+        max_items: 0,
     })
 }
 
@@ -207,6 +213,8 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
         imported_count: imported,
         skipped_count: skipped,
         errors,
+        pending_truncation: 0,
+        max_items: 0,
     })
 }
 
