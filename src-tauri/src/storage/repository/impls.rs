@@ -90,6 +90,23 @@ impl ClipboardRepository for Database {
         })
     }
 
+    fn content_exists(
+        &self,
+        kind: ClipboardKind,
+        content_hash: &str,
+    ) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM clipboard_items
+                    WHERE kind = ?1 AND content_hash = ?2
+                 )",
+                params![kind_to_storage(kind), content_hash],
+                |row| row.get::<_, bool>(0),
+            )?)
+        })
+    }
+
     fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError> {
         let size_bytes =
             i64::try_from(update.size_bytes).map_err(|_| StorageError::ValueOutOfRange {

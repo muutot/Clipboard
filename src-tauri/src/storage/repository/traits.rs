@@ -68,6 +68,12 @@ pub struct TextItemUpdate<'a> {
 
 pub trait ClipboardRepository {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError>;
+    /// Returns whether any record (including soft-deleted ones) already has the
+    /// given kind/content hash. This matches the `UNIQUE(kind, content_hash)`
+    /// upsert key so duplicate imports can count pre-existing rows as skipped
+    /// instead of re-importing them.
+    fn content_exists(&self, kind: ClipboardKind, content_hash: &str)
+        -> Result<bool, StorageError>;
     /// Atomically replaces the textual payload of an active text/link item.
     ///
     /// Keeping this operation in the repository ensures the content hash and

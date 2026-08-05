@@ -24,6 +24,8 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 `import_from_file` routes `.Pastebackup` files (a ZIP) to `export::ppaste::import_from_ppaste_backup` (see `src-tauri/src/export/ppaste.rs`). It reads the embedded `PPaste2.db3` plus `PasteData/*.png`, maps `PPaste_Main` rows into `ClipboardItem` (Text/UnicodeText/HtmlText/RtfText/Json/Color → `text`; Links → `link`; Image → `image` with PNG bytes written to the managed images dir and inline image `metadata_json`), and persists via `ClipboardRepository::save_item` so the `(kind, content_hash)` dedup and search outbox triggers apply. Non-portable `Files` rows (absolute-path references to the source machine) are dropped. Timestamps parse PPaste's local-time string as UTC, preserving relative order. The `zip` crate is a new dependency. The import dialog accepts the `.pastebackup` extension; `BACKUP_EXTENSION` is exported from `export::mod`.
 
+Duplicate imports are not double-counted: before persisting each row, `import_rows` calls `ClipboardRepository::content_exists(kind, content_hash)` (matches the `UNIQUE(kind, content_hash)` upsert key, includes soft-deleted rows) and counts an existing row as skipped instead of re-upserting. `content_exists` is only used by the PPaste import path; `save_item` still returns the record id on both insert and upsert for other callers.
+
 ## SQLite schema
 
 `src-tauri/src/storage/migrations.rs::create_schema` is authoritative.

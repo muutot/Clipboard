@@ -181,13 +181,26 @@ fn import_rows(
     for (index, row) in rows.iter().enumerate() {
         let id = format!("ppaste_{index}");
         match build_item(row, &id, archive, paths) {
-            Ok(item) => match ClipboardRepository::save_item(database, &item) {
-                Ok(_) => imported += 1,
-                Err(error) => {
+            Ok(item) => {
+                let already_exists = database
+                    .content_exists(item.kind, &item.content_hash)
+                    .map_err(|error| {
+                        format!("failed to check existing record for {id}: {error}")
+                    })?;
+                if already_exists {
+                    // Same content already present: skip instead of upserting so a
+                    // duplicate import does not add or touch the existing record.
                     skipped += 1;
-                    errors.push(format!("failed to import {id}: {error}"));
+                    continue;
                 }
-            },
+                match ClipboardRepository::save_item(database, &item) {
+                    Ok(_) => imported += 1,
+                    Err(error) => {
+                        skipped += 1;
+                        errors.push(format!("failed to import {id}: {error}"));
+                    }
+                }
+            }
             Err(error) => {
                 skipped += 1;
                 errors.push(format!("failed to import {id}: {error}"));
@@ -496,6 +509,42 @@ mod tests {
             image_item.resource_path.as_deref().unwrap()
         );
         assert_eq!(metadata["contentHash"], image_item.content_hash);
+
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn reimporting_same_backup_skips_existing_records() {
+        let temp = std::env::temp_dir().join(format!(
+            "ppaste-reimport-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let backup = make_backup(&temp);
+
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            temp.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let first = import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(first.imported_count, 4);
+        assert_eq!(database.item_count().unwrap(), 4);
+
+        let second =
+            import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(second.imported_count, 0);
+        assert_eq!(second.skipped_count, 4);
+        assert!(second.errors.is_empty());
+        assert_eq!(database.item_count().unwrap(), 4);
 
         std::fs::remove_dir_all(&temp).unwrap();
     }
