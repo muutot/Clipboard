@@ -284,6 +284,7 @@ mod tests {
             title: format!("title-{id}"),
             text_content: (kind == ClipboardKind::Text).then(|| "脸皮挺脏".to_owned()),
             html_content: None,
+            rtf_content: None,
             resource_path: (kind == ClipboardKind::Image)
                 .then(|| "image/screenshot.png".to_owned()),
             preview_path: None,

@@ -525,6 +525,19 @@ pub fn read_clipboard_html() -> Option<String> {
     None
 }
 
+/// RTF capture is not wired on macOS yet; the `public.rtf` UTI carries binary
+/// data (not a string), so the HTML fragment remains the rich-text source for
+/// `formatPaste` there.
+#[cfg(target_os = "macos")]
+pub fn read_clipboard_rtf() -> Option<String> {
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn read_clipboard_rtf() -> Option<String> {
+    None
+}
+
 /// Reads clipboard image data using macOS native tools.
 #[cfg(target_os = "macos")]
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {

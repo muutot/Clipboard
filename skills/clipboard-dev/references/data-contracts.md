@@ -12,7 +12,7 @@ Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSO
 | Frontend view type | `ClipboardItem` in the same file                                         | display-enriched item used by cards/routes                      |
 | Mapping            | `toClipboardItem` and `parseResourceMetadata` in `services/clipboard.ts` | raw payload → view state and metadata                           |
 
-Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional HTML content (`html_content`/`htmlContent`) for paste-by-format: the CF_HTML fragment on Windows or `public.html` on macOS, capped at 500_000 bytes, `#[serde(default)]` so older records and imports stay compatible. When fields change, update all four layers plus imports/exports and tests.
+Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional rich-text fragments for paste-by-format: `html_content`/`htmlContent` (the CF_HTML fragment on Windows or `public.html` on macOS) and `rtf_content`/`rtfContent` (the registered `Rich Text Format` payload on Windows; not yet captured on macOS/Linux). Both are capped at 500_000 bytes and `#[serde(default)]` so older records and imports stay compatible. `writeClipboardHtml(html, plainText?, rtf?)` writes `text/html` plus optional `text/plain` and `text/rtf`, so office suites that prefer RTF keep formatted paste. When fields change, update all four layers plus imports/exports and tests.
 
 ### Active-history listing filters
 
@@ -36,7 +36,7 @@ Duplicate imports are not double-counted: before persisting each row, `import_ro
 
 `src-tauri/src/storage/migrations.rs::create_schema` is authoritative.
 
-- `clipboard_items`: ID, kind, title/text/html/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique. The `html_content` column is added idempotently via `ensure_column` for databases created before its introduction.
+- `clipboard_items`: ID, kind, title/text/html/rtf/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique. The `html_content` and `rtf_content` columns are added idempotently via `ensure_column` for databases created before their introduction.
 - `ocr_results`: one row per item, status/engine/model/language/text/blocks/image hash/timestamps/error, with cascade deletion.
 - `search_outbox`: ordered `upsert`/`delete` operations populated by clipboard and OCR triggers. Its `sequence` is an `INTEGER PRIMARY KEY` (implicit index); the historical redundant `search_outbox_sequence_idx` is dropped via `DROP INDEX IF EXISTS` on every open.
 
@@ -91,16 +91,16 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 
 ## Event contract
 
-| Event                           | Producer                                                             | Consumer/purpose                                                   |
-| ------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `clipboard-item-added`          | capture/write backend                                                | main route inserts or replaces the saved record                    |
-| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`) | main route removes IDs and resets affected pagination/search state |
-| `general-settings-changed`      | authoritative config save                                            | settings stores in other WebviewWindows                            |
-| `settings-font-changed`         | font panel                                                           | main route live font/display synchronization                       |
-| `tags-changed`                  | tag management panel (rename/delete/color)                           | main route refreshes tag colors and rewrites item tags/filter      |
-| `tray-open-settings`            | tray backend                                                         | main route opens settings                                          |
-| `viewer:open`                   | detail panel                                                         | dedicated viewer window                                            |
-| `ppocr-download-progress`       | OCR installer                                                        | settings UI download progress                                      |
+| Event                           | Producer                                                                   | Consumer/purpose                                                   |
+| ------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `clipboard-item-added`          | capture/write backend                                                      | main route inserts or replaces the saved record                    |
+| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`)       | main route removes IDs and resets affected pagination/search state |
+| `general-settings-changed`      | authoritative config save                                                  | settings stores in other WebviewWindows                            |
+| `settings-font-changed`         | font panel                                                                 | main route live font/display synchronization                       |
+| `tags-changed`                  | tag management panel, or main-window `TagEditDialog` (rename/delete/color) | main route refreshes tag colors and rewrites item tags/filter      |
+| `tray-open-settings`            | tray backend                                                               | main route opens settings                                          |
+| `viewer:open`                   | detail panel                                                               | dedicated viewer window                                            |
+| `ppocr-download-progress`       | OCR installer                                                              | settings UI download progress                                      |
 
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function.
 
@@ -122,7 +122,7 @@ The command `set_clipboard_item_tags` (`id: String, tags: Vec<String>`) persists
 
 Tag management (settings) is backed by a `tags` registry table (`name TEXT PRIMARY KEY, color TEXT NOT NULL DEFAULT ''`) created in `migrations.rs`. Item membership remains strings under `metadata_json.tags`; the table only carries global presentation metadata. `ClipboardRepository::list_all_tags` scans active records' `tags` arrays for distinct names with usage counts and joins each with its registry color. `rename_tag(old, new)` rewrites every active record's tag array (de-duplicating, preserving order) and migrates the registry color; `delete_tag(name)` removes it from records and deletes the registry row; `set_tag_color(name, color)` upserts the registry, accepting only empty or `#RRGGBB` hex. Each metadata rewrite is one transaction and is picked up by the `clipboard_items` search update trigger. Commands `list_all_tags`, `rename_tag`, `delete_tag`, and `set_tag_color` are registered in `lib.rs`; `TagInfo { name, count, color }` is serde-serialized for IPC. `rename_tag`/`delete_tag` return the number of records changed; `set_tag_color`/`set_clipboard_item_tags` return a boolean.
 
-Tag management runs in the separate settings WebviewWindow, so the tag panel emits the `tags-changed` event (payload `TagsChangedPayload` in `types/clipboard.ts`: `{ renamed?: { old, new }; deleted?: string }`, empty for color-only changes) after every successful rename/delete/color operation. The main route listens and refreshes `tagColors`, rewrites the in-memory `tags` arrays of `items`/`indexedItems`/`detailItem` (deduplicating on rename), and re-points or clears an active `tagFilter` accordingly.
+Tag management runs in the separate settings WebviewWindow, so the tag panel emits the `tags-changed` event (payload `TagsChangedPayload` in `types/clipboard.ts`: `{ renamed?: { old, new }; deleted?: string }`, empty for color-only changes) after every successful rename/delete/color operation. The main-window `TagEditDialog` (opened by right-clicking a tag chip on a card) uses the same commands and emits the same `tags-changed` payload, so both producers share the same reconciliation path. The main route listens and refreshes `tagColors`, rewrites the in-memory `tags` arrays of `items`/`indexedItems`/`detailItem` (deduplicating on rename), and re-points or clears an active `tagFilter` accordingly.
 
 ## Change checklist
 

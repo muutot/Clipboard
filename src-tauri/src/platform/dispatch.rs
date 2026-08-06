@@ -68,6 +68,21 @@ pub fn read_clipboard_html() -> Option<String> {
     None
 }
 
+pub fn read_clipboard_rtf() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows_clipboard::read_clipboard_rtf();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return super::macos::read_clipboard_rtf();
+    }
+    // Linux clipboard targets are not wired for RTF capture yet; the plain-text
+    // path remains authoritative there.
+    #[allow(unreachable_code)]
+    None
+}
+
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     #[cfg(target_os = "windows")]
     {

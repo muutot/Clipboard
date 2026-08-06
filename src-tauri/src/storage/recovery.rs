@@ -336,6 +336,7 @@ mod tests {
             title: id.to_owned(),
             text_content: Some(format!("content-{id}")),
             html_content: None,
+            rtf_content: None,
             resource_path: None,
             preview_path: None,
             content_hash: format!("hash-{id}"),

@@ -229,6 +229,7 @@ mod tests {
             title: id.to_owned(),
             text_content: None,
             html_content: None,
+            rtf_content: None,
             resource_path: Some(image_path.display().to_string()),
             preview_path: Some(image_path.display().to_string()),
             content_hash: format!("hash-{id}"),

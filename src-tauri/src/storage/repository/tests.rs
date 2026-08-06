@@ -14,6 +14,7 @@ fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem 
         title: format!("record-{id}"),
         text_content: Some(format!("content-{id}")),
         html_content: None,
+        rtf_content: None,
         resource_path: None,
         preview_path: None,
         content_hash: content_hash.to_owned(),
@@ -305,6 +306,33 @@ fn html_content_round_trips_through_storage() {
 }
 
 #[test]
+fn rtf_content_round_trips_through_storage() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("rich-rtf", "hash-rtf-1", 100);
+    item.rtf_content = Some("{\\rtf1\\b bold}".to_owned());
+    database.save_item(&item).unwrap();
+
+    let loaded = database.get_item("rich-rtf").unwrap().unwrap();
+    assert_eq!(loaded.rtf_content.as_deref(), Some("{\\rtf1\\b bold}"));
+    assert_eq!(loaded.text_content.as_deref(), Some("content-rich-rtf"));
+}
+
+#[test]
+fn rtf_content_survives_dedup_upsert_without_plain_text() {
+    let database = Database::open_in_memory().unwrap();
+    let mut first = text_item("rich-rtf", "hash-rtf-1", 100);
+    first.rtf_content = Some("{\\rtf1\\b bold}".to_owned());
+    database.save_item(&first).unwrap();
+
+    // A later plain-text-only copy of the same content keeps the stored rtf.
+    let second = text_item("rich-rtf", "hash-rtf-1", 200);
+    database.save_item(&second).unwrap();
+
+    let loaded = database.get_item("rich-rtf").unwrap().unwrap();
+    assert_eq!(loaded.rtf_content.as_deref(), Some("{\\rtf1\\b bold}"));
+}
+
+#[test]
 fn html_content_survives_dedup_upsert_without_plain_text() {
     let database = Database::open_in_memory().unwrap();
     let mut first = text_item("rich", "hash-1", 100);
@@ -470,6 +498,7 @@ fn storage_references_include_every_path_from_multi_file_records() {
             serde_json::to_string(&["C:\\managed\\first.txt", "C:\\managed\\second.txt"]).unwrap(),
         ),
         html_content: None,
+        rtf_content: None,
         resource_path: Some("C:\\managed\\first.txt".to_owned()),
         preview_path: None,
         content_hash: "files-hash".to_owned(),
@@ -857,6 +886,7 @@ fn kind_deletion_cascades_ocr_queues_search_deletes_and_drops_references() {
         title: "captured image".to_owned(),
         text_content: None,
         html_content: None,
+        rtf_content: None,
         resource_path: Some("C:\\managed\\image.png".to_owned()),
         preview_path: Some("C:\\managed\\preview.jpg".to_owned()),
         content_hash: "image-hash".to_owned(),

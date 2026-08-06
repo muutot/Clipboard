@@ -479,6 +479,7 @@ fn timed_drain(pending: usize, n: u32) -> Vec<Duration> {
             title: "人脸 脏乱".to_owned(),
             text_content: Some("人脸 脏乱 在项目中有标签内容".to_owned()),
             html_content: None,
+            rtf_content: None,
             resource_path: None,
             preview_path: None,
             content_hash: format!("hash-{id}"),

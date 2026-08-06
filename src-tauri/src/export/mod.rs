@@ -196,6 +196,7 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
                 .collect(),
             text_content: Some(content.to_owned()),
             html_content: None,
+            rtf_content: None,
             resource_path: None,
             preview_path: None,
             content_hash: hash,
@@ -279,6 +280,7 @@ mod tests {
                 title: "Hello".to_owned(),
                 text_content: Some("Hello, world!".to_owned()),
                 html_content: None,
+                rtf_content: None,
                 resource_path: None,
                 preview_path: None,
                 content_hash: "abc".to_owned(),
@@ -296,6 +298,7 @@ mod tests {
                 title: "Example".to_owned(),
                 text_content: Some("https://example.com".to_owned()),
                 html_content: None,
+                rtf_content: None,
                 resource_path: None,
                 preview_path: None,
                 content_hash: "def".to_owned(),
@@ -435,6 +438,7 @@ mod tests {
     fn json_export_import_round_trips_html_content() {
         let mut items = sample_items();
         items[0].html_content = Some("<b>Hello, world!</b>".to_owned());
+        items[0].rtf_content = Some("{\\rtf1\\b Hello, world!}".to_owned());
         let json = serde_json::to_string(&items).unwrap();
 
         let database = crate::storage::Database::open_in_memory().unwrap();
@@ -443,6 +447,10 @@ mod tests {
         assert_eq!(
             database.get_item("item-1").unwrap().unwrap().html_content,
             Some("<b>Hello, world!</b>".to_owned())
+        );
+        assert_eq!(
+            database.get_item("item-1").unwrap().unwrap().rtf_content,
+            Some("{\\rtf1\\b Hello, world!}".to_owned())
         );
     }
 
@@ -455,6 +463,7 @@ mod tests {
         assert_eq!(summary.imported_count, 1);
         let item = database.get_item("legacy").unwrap().unwrap();
         assert_eq!(item.html_content, None);
+        assert_eq!(item.rtf_content, None);
     }
 
     #[test]
@@ -475,6 +484,7 @@ mod tests {
                 title: format!("item-{index}"),
                 text_content: Some(format!("text-{index}")),
                 html_content: None,
+                rtf_content: None,
                 resource_path: None,
                 preview_path: None,
                 content_hash: format!("hash-{index}"),

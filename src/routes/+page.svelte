@@ -2130,7 +2130,7 @@
             return;
           }
         }
-        await writeClipboardHtml(htmlContent, plainText);
+        await writeClipboardHtml(htmlContent, plainText, item.rtfContent);
       },
     );
   }

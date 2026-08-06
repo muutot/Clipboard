@@ -26,6 +26,7 @@ impl ClipboardRepository for Database {
                     title,
                     text_content,
                     html_content,
+                    rtf_content,
                     resource_path,
                     preview_path,
                     content_hash,
@@ -37,7 +38,7 @@ impl ClipboardRepository for Database {
                     icon_path,
                     metadata_json
                  ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
                  )
                  ON CONFLICT DO UPDATE SET
                     title = excluded.title,
@@ -45,6 +46,10 @@ impl ClipboardRepository for Database {
                     html_content = COALESCE(
                         excluded.html_content,
                         clipboard_items.html_content
+                    ),
+                    rtf_content = COALESCE(
+                        excluded.rtf_content,
+                        clipboard_items.rtf_content
                     ),
                     resource_path = excluded.resource_path,
                     preview_path = excluded.preview_path,
@@ -76,6 +81,7 @@ impl ClipboardRepository for Database {
                     item.title,
                     item.text_content,
                     item.html_content,
+                    item.rtf_content,
                     item.resource_path,
                     item.preview_path,
                     item.content_hash,

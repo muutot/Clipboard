@@ -23,6 +23,12 @@ pub struct ClipboardItem {
     /// `#[serde(default)]` keeps imports of older JSON exports compatible.
     #[serde(default)]
     pub html_content: Option<String>,
+    /// Optional RTF fragment captured alongside rich text. Office suites
+    /// (Word/Outlook) render RTF over HTML, so carrying it lets formatted
+    /// paste survive those apps instead of degrading to plain text.
+    /// `#[serde(default)]` keeps imports of older JSON exports compatible.
+    #[serde(default)]
+    pub rtf_content: Option<String>,
     pub resource_path: Option<String>,
     pub preview_path: Option<String>,
     pub content_hash: String,

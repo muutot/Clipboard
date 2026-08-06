@@ -45,7 +45,11 @@ export async function writeClipboardImage(
   await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
 }
 
-export async function writeClipboardHtml(html: string, plainText?: string | null): Promise<void> {
+export async function writeClipboardHtml(
+  html: string,
+  plainText?: string | null,
+  rtf?: string | null,
+): Promise<void> {
   if (isTauriRuntime() && plainText) {
     try {
       await invoke("mark_self_triggered", { text: plainText });
@@ -59,6 +63,9 @@ export async function writeClipboardHtml(html: string, plainText?: string | null
   };
   if (plainText) {
     payload["text/plain"] = new Blob([plainText], { type: "text/plain" });
+  }
+  if (rtf) {
+    payload["text/rtf"] = new Blob([rtf], { type: "text/rtf" });
   }
   await navigator.clipboard.write([new ClipboardItem(payload)]);
 }
@@ -316,6 +323,7 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     contentHash: record.contentHash,
     textContent: record.textContent,
     htmlContent: record.htmlContent,
+    rtfContent: record.rtfContent,
     iconPath: record.iconPath,
     metadataJson: record.metadataJson,
     tags: parseTags(record.metadataJson),

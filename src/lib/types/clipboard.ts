@@ -65,6 +65,7 @@ export interface ClipboardItem {
   resourcePath?: string | null;
   textContent?: string | null;
   htmlContent?: string | null;
+  rtfContent?: string | null;
   iconPath?: string | null;
   metadataJson?: string | null;
   tags?: string[];
@@ -271,6 +272,7 @@ export interface PersistedClipboardItem {
   title: string;
   textContent: string | null;
   htmlContent: string | null;
+  rtfContent: string | null;
   resourcePath: string | null;
   previewPath: string | null;
   contentHash: string;
