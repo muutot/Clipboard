@@ -2,6 +2,8 @@ use std::{
     fmt, fs,
     io::{self, Write},
     path::{Path, PathBuf},
+    thread::sleep,
+    time::Duration,
 };
 
 #[cfg(target_os = "windows")]
@@ -207,7 +209,7 @@ impl SingleInstanceGuard {
             ))
         })?;
 
-        for _ in 0..3 {
+        for attempt in 0..10 {
             match create_instance_lock(&lock_path, pid) {
                 Ok(()) => {
                     return Ok(Self {
@@ -220,6 +222,10 @@ impl SingleInstanceGuard {
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                     match read_instance_lock_pid(&lock_path) {
                         Ok(Some(owner_pid)) if is_process_running(owner_pid) => {
+                            if attempt < 9 {
+                                sleep(Duration::from_millis(300));
+                                continue;
+                            }
                             return Err(SingleInstanceError::AlreadyRunning(owner_pid));
                         }
                         Ok(_) => {}
