@@ -698,6 +698,8 @@ export interface LocaleDefinition {
     imageFullscreenButton: string;
     showSecondaryText: string;
     showSecondaryTextDescription: string;
+    colorIcons: string;
+    colorIconsDescription: string;
     maxTextLines: string;
     maxTextLinesDescription: string;
     maxTextLinesUnit: string;

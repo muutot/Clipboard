@@ -747,6 +747,8 @@ const en: LocaleDefinition = {
     imageFullscreenButton: "Fullscreen Preview",
     showSecondaryText: "Show Secondary Text",
     showSecondaryTextDescription: "Show smaller preview text below list items",
+    colorIcons: "Color Icons",
+    colorIconsDescription: "Render interface icons with per-icon colors instead of monochrome",
     maxTextLines: "Secondary Text Lines",
     maxTextLinesDescription: "Maximum lines of secondary text on card",
     maxTextLinesUnit: "lines",

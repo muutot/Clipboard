@@ -65,6 +65,8 @@ The frontend `GeneralSettings` type/defaults/normalizer are richer than the expl
 
 `searchPlaceholder` is a flattened-only frontend string (default `""`, trimmed to 80 chars). It is not an explicit `GeneralConfig` member: the main search box uses `searchPlaceholder.trim() || localized app.searchPlaceholder` as its `placeholder`/`aria-label`, so an empty value falls back to the language-aware default. No backend change is needed for it.
 
+`colorIcons` is a flattened-only frontend boolean (default `false`) consumed solely by `AppIcon.svelte` (renders per-icon fixed colors when enabled). It has no explicit Rust member and no backend behavior; no Rust change is needed for it.
+
 `search_index_sync_mode` is an explicit `GeneralConfig` member (values `"lazy"`/`"background"`, default `"lazy"`) with a typed `SearchIndexSyncMode` enum in `config/types.rs`; unknown values parse as `Lazy`. It selects between lazy outbox draining inside `search_clipboard_items` and the startup-created `SearchSyncWorker`, and takes effect on restart.
 
 `update_source` is an explicit `GeneralConfig` member (values `"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` enum in `config/types.rs`; unknown values parse as `Gitcode`. The About-panel update check (`check_for_update` in `commands/update.rs`) reads `ConfigStore::update_source()` at call time to pick the latest-release API and release page URL, so the dropdown takes effect without a restart.

@@ -716,6 +716,8 @@ const zhCN: LocaleDefinition = {
     imageFullscreenButton: "全屏查看",
     showSecondaryText: "显示辅助文字",
     showSecondaryTextDescription: "列表条目下方的小字预览文本",
+    colorIcons: "彩色图标",
+    colorIconsDescription: "使用每个图标各自的彩色渲染界面图标，而不是单色",
     maxTextLines: "辅助文本行数",
     maxTextLinesDescription: "条目卡片上辅助文本最多显示的行数",
     maxTextLinesUnit: "行",

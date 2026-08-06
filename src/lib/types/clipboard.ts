@@ -223,6 +223,8 @@ export interface GeneralSettings {
   searchIndexSyncMode: "lazy" | "background";
   /** 更新检查来源：'github' 上游仓库 | 'gitcode' 镜像仓库 */
   updateSource: "github" | "gitcode";
+  /** 使用彩色图标渲染 AppIcon（false = 沿用 currentColor 单色图标） */
+  colorIcons: boolean;
   loadTolerance: number;
 }
 

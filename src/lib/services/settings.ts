@@ -65,6 +65,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchCacheEviction: "fifo",
   searchIndexSyncMode: "lazy",
   updateSource: "gitcode",
+  colorIcons: false,
   loadTolerance: 100,
 };
 
@@ -496,6 +497,10 @@ function normalizeGeneralSettings(
   result.updateSource = validUpdateSource(
     source.updateSource ?? fallback("updateSource"),
     defaultSettings.updateSource,
+  );
+  result.colorIcons = booleanValue(
+    source.colorIcons ?? fallback("colorIcons"),
+    defaultSettings.colorIcons,
   );
   result.loadTolerance = integerInRange(
     source.loadTolerance ?? fallback("loadTolerance"),

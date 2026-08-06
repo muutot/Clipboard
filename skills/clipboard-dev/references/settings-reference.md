@@ -62,7 +62,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `useRecycleBin`               | boolean                            | `true`      | —                                                                                |
 | `pasteCleaningEnabled`        | boolean                            | `false`     | —                                                                                |
 | `doubleClickPaste`            | boolean                            | `true`      | —                                                                                |
-| `maxTextCaptureBytes`         | number (bytes)                     | `500_000`   | 10000–10000000                                                                    |
+| `maxTextCaptureBytes`         | number (bytes)                     | `500_000`   | 10000–10000000                                                                   |
 | `showToastNotifications`      | boolean                            | `true`      | —                                                                                |
 | `rememberWindowPosition`      | boolean                            | `false`     | —                                                                                |
 | `alwaysOnTop`                 | boolean                            | `false`     | —                                                                                |
@@ -83,6 +83,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `searchCacheEviction`         | `"fifo"` or `"lru"`                | `"fifo"`    | —                                                                                |
 | `searchIndexSyncMode`         | `"lazy"` or `"background"`         | `"lazy"`    | —                                                                                |
 | `updateSource`                | `"github"` or `"gitcode"`          | `"gitcode"` | —                                                                                |
+| `colorIcons`                  | boolean                            | `false`     | —                                                                                |
 | `loadTolerance`               | number                             | `100`       | 50–500                                                                           |
 
 ## Theme and sort structures

@@ -75,7 +75,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "置顶",
     "操作按钮",
   ],
-  general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示"],
+  general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示", "图标"],
   general_window: [i18n("storage.generalTab"), i18n("storage.generalWindowTab"), "窗口"],
   compact: [
     i18n("storage.appearanceTab"),
@@ -325,6 +325,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("general.showSecondaryText"),
     i18n("general.showSecondaryTextDescription"),
     ["辅助文字", "preview", "secondary"],
+  ),
+  entry(
+    "general.color-icons",
+    { section: "general_display" },
+    i18n("general.colorIcons"),
+    i18n("general.colorIconsDescription"),
+    ["彩色", "彩色图标", "单色", "icons", "color"],
   ),
   entry(
     "general.max-text-lines",

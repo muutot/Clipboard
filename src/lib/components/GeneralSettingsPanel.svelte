@@ -550,6 +550,27 @@
       </button>
     </section>
 
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="palette" size={17} /></span>
+        <div>
+          <strong>{_t("general.colorIcons")}</strong>
+          <p>{_t("general.colorIconsDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.colorIcons}
+        onclick={() => generalSettings.updateSetting("colorIcons", !s.colorIcons)}
+        aria-checked={s.colorIcons}
+        aria-label={_t("general.colorIcons")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="text" size={17} /></span>
