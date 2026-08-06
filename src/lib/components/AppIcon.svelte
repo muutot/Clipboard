@@ -63,9 +63,8 @@
     <path d="m7 7 1 14h8l1-14" />
     <path d="M10 11v6M14 11v6" />
   {:else if name === "restore"}
-    <path d="M3 7v6h6" />
-    <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 3.3L3 13" />
-    <path d="M17 17v6h-6" />
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
   {:else if name === "settings"}
     <circle cx="12" cy="12" r="3" />
     <path
