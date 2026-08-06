@@ -7,7 +7,6 @@ export const SETTINGS_SECTIONS = [
   "font",
   "theme",
   "icons",
-  "recording",
   "capture",
   "capture_icons",
   "storage_paths",
@@ -78,7 +77,14 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "操作按钮",
   ],
   general_window: [i18n("storage.generalTab"), i18n("storage.generalWindowTab"), "窗口"],
-  general_general: [i18n("storage.generalTab"), i18n("storage.generalGeneralTab"), "语言", "通知"],
+  general_general: [
+    i18n("storage.generalTab"),
+    i18n("storage.generalGeneralTab"),
+    "语言",
+    "通知",
+    "剪切板记录",
+    "暂停",
+  ],
   compact: [
     i18n("storage.appearanceTab"),
     i18n("storage.compactTab"),
@@ -94,14 +100,6 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "图标",
     "彩色",
     "color",
-  ],
-  recording: [
-    i18n("capture.title"),
-    i18n("capture.pauseTitle"),
-    i18n("capture.pauseDescription"),
-    "剪切板记录",
-    "记录",
-    "暂停",
   ],
   capture: [i18n("capture.title"), i18n("capture.settings"), "采集"],
   capture_icons: [
@@ -474,7 +472,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
 
   entry(
     "recording.pause",
-    { section: "recording" },
+    { section: "general_general" },
     i18n("capture.pauseTitle"),
     i18n("capture.pauseDescription"),
     [i18n("capture.pauseAction"), i18n("capture.resumeAction")],
@@ -934,7 +932,6 @@ export function resolveSettingsNavPath(
       return [translate("storage.appearanceTab"), translate("storage.themeTab")];
     case "icons":
       return [translate("storage.appearanceTab"), translate("storage.iconsTab")];
-    case "recording":
     case "capture":
     case "capture_icons":
       return [translate("storage.captureTab")];

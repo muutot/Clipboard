@@ -12,7 +12,9 @@
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
   import { updateSliderTrack } from "$lib/utils/format";
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { isTauriRuntime } from "$lib/services/runtime";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -30,6 +32,8 @@
   let s = $state($generalSettings);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let privacyPaused = $state(false);
+  let privacyLoading = $state(true);
   let windowConfig = $state<WindowConfig | null>(
     _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
   );
@@ -165,6 +169,41 @@
       _t(lang === "zh-CN" ? "general.languageSwitchedZh" : "general.languageSwitchedEn"),
       true,
     );
+  }
+
+  onMount(() => {
+    void loadPrivacyStatus();
+  });
+
+  async function loadPrivacyStatus() {
+    if (!isTauriRuntime()) {
+      privacyLoading = false;
+      return;
+    }
+
+    try {
+      const status = await invoke<{ paused: boolean }>("get_privacy_status");
+      privacyPaused = status.paused;
+    } catch (error) {
+      console.error("Unable to load privacy status", error);
+    } finally {
+      privacyLoading = false;
+    }
+  }
+
+  async function togglePrivacyPause() {
+    if (!isTauriRuntime() || privacyLoading) return;
+    privacyLoading = true;
+
+    try {
+      privacyPaused = await invoke<boolean>("toggle_privacy_pause");
+      showFeedback(_t(privacyPaused ? "capture.paused" : "capture.resumed"), true);
+    } catch (error) {
+      console.error("Unable to toggle privacy pause", error);
+      showFeedback(error instanceof Error ? error.message : String(error), false);
+    } finally {
+      privacyLoading = false;
+    }
   }
 
   function handleTransparency(event: Event) {
@@ -308,9 +347,26 @@
     <section class="setting-card sort-rules-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
-        <div>
-          <strong>{_t("general.searchSortRules")}</strong>
-          <p>{_t("general.searchSortRulesDescription")}</p>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.searchSortRules")}</strong>
+            <p>{_t("general.searchSortRulesDescription")}</p>
+          </div>
+          {#if s.searchSortRules.length < 3 && s.searchSortRules.length < ALL_SORT_FIELDS.length}
+            <button
+              type="button"
+              class="sort-add-btn"
+              onclick={() => {
+                const used = new Set(s.searchSortRules.map((r: SortRule) => r.field));
+                const field = (ALL_SORT_FIELDS.find((f) => !used.has(f)) ??
+                  "createdAt") as SortRule["field"];
+                const rule: SortRule = { field, direction: "desc" };
+                generalSettings.updateSetting("searchSortRules", [...s.searchSortRules, rule]);
+              }}
+            >
+              + {_t("general.sortAddRule")}
+            </button>
+          {/if}
         </div>
       </div>
       <div class="sort-rules-list" role="list" bind:this={sortListEl}>
@@ -376,23 +432,6 @@
           </div>
         {/each}
       </div>
-      {#if s.searchSortRules.length < 3}
-        {#if s.searchSortRules.length < ALL_SORT_FIELDS.length}
-          <button
-            type="button"
-            class="sort-add-btn"
-            onclick={() => {
-              const used = new Set(s.searchSortRules.map((r: SortRule) => r.field));
-              const field = (ALL_SORT_FIELDS.find((f) => !used.has(f)) ??
-                "createdAt") as SortRule["field"];
-              const rule: SortRule = { field, direction: "desc" };
-              generalSettings.updateSetting("searchSortRules", [...s.searchSortRules, rule]);
-            }}
-          >
-            + {_t("general.sortAddRule")}
-          </button>
-        {/if}
-      {/if}
     </section>
 
     <section class="setting-card">
@@ -802,50 +841,6 @@
 
     <section class="setting-card toggle-card">
       <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="info" size={17} /></span>
-        <div>
-          <strong>{_t("general.toastNotifications")}</strong>
-          <p>{_t("general.toastNotificationsDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.showToastNotifications}
-        onclick={() =>
-          generalSettings.updateSetting("showToastNotifications", !s.showToastNotifications)}
-        aria-checked={s.showToastNotifications}
-        aria-label={_t("general.toastNotifications")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="x" size={17} /></span>
-        <div>
-          <strong>{_t("general.showSettingsCloseButton")}</strong>
-          <p>{_t("general.showSettingsCloseButtonDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.showSettingsCloseButton}
-        onclick={() =>
-          generalSettings.updateSetting("showSettingsCloseButton", !s.showSettingsCloseButton)}
-        aria-checked={s.showSettingsCloseButton}
-        aria-label={_t("general.showSettingsCloseButton")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
         <div>
           <strong>{_t("general.launchAtStartup")}</strong>
@@ -861,6 +856,75 @@
         disabled={windowConfigLoading || windowConfigSaving || !windowConfig}
         aria-checked={windowConfig?.launchAtStartup ?? false}
         aria-label={_t("general.launchAtStartup")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card" data-settings-search-id="recording.pause">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="pause" size={17} /></span>
+        <div>
+          <strong>{_t("capture.pauseTitle")}</strong>
+          <p>{_t("capture.pauseDescription")}</p>
+        </div>
+      </div>
+      <div class="pause-control">
+        <span class="pause-state">{_t(privacyPaused ? "capture.paused" : "capture.active")}</span>
+        <button
+          type="button"
+          class="toggle-switch"
+          class:active={!privacyPaused}
+          role="switch"
+          aria-checked={!privacyPaused}
+          aria-label={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
+          title={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
+          disabled={privacyLoading || !isTauriRuntime()}
+          onclick={togglePrivacyPause}
+        >
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+        <div>
+          <strong>{_t("general.useRecycleBin")}</strong>
+          <p>{_t("general.useRecycleBinDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.useRecycleBin}
+        onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
+        aria-checked={s.useRecycleBin}
+        aria-label={_t("general.useRecycleBin")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="info" size={17} /></span>
+        <div>
+          <strong>{_t("general.toastNotifications")}</strong>
+          <p>{_t("general.toastNotificationsDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.showToastNotifications}
+        onclick={() =>
+          generalSettings.updateSetting("showToastNotifications", !s.showToastNotifications)}
+        aria-checked={s.showToastNotifications}
+        aria-label={_t("general.toastNotifications")}
         role="switch"
       >
         <span class="toggle-knob"></span>
@@ -913,19 +977,20 @@
 
     <section class="setting-card toggle-card">
       <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+        <span class="setting-icon"><AppIcon name="x" size={17} /></span>
         <div>
-          <strong>{_t("general.useRecycleBin")}</strong>
-          <p>{_t("general.useRecycleBinDescription")}</p>
+          <strong>{_t("general.showSettingsCloseButton")}</strong>
+          <p>{_t("general.showSettingsCloseButtonDescription")}</p>
         </div>
       </div>
       <button
         type="button"
         class="toggle-switch"
-        class:active={s.useRecycleBin}
-        onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
-        aria-checked={s.useRecycleBin}
-        aria-label={_t("general.useRecycleBin")}
+        class:active={s.showSettingsCloseButton}
+        onclick={() =>
+          generalSettings.updateSetting("showSettingsCloseButton", !s.showSettingsCloseButton)}
+        aria-checked={s.showSettingsCloseButton}
+        aria-label={_t("general.showSettingsCloseButton")}
         role="switch"
       >
         <span class="toggle-knob"></span>
@@ -1104,6 +1169,18 @@
     background: color-mix(in srgb, var(--selection-color) 15%, transparent);
   }
 
+  .pause-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+
+  .pause-state {
+    color: var(--text-muted);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  }
+
   .settings-text-input {
     width: 100%;
     margin-top: 12px;
@@ -1154,7 +1231,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin: 8px 0;
+    margin: 8px 0 0;
   }
 
   .sort-rule-row {
@@ -1245,7 +1322,6 @@
   }
 
   .sort-add-btn {
-    margin-top: 4px;
     padding: 6px 12px;
     border-radius: var(--settings-control-radius, 6px);
     border: 1px dashed var(--border-color);
@@ -1253,7 +1329,7 @@
     color: var(--text-muted);
     font-size: var(--settings-control-size, 11px);
     cursor: pointer;
-    align-self: flex-start;
+    flex-shrink: 0;
   }
 
   .sort-add-btn:hover {

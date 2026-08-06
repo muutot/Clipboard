@@ -96,34 +96,6 @@
     };
   }
 
-  function commitNumberInput(
-    input: HTMLInputElement,
-    category: keyof typeof s.fontSizes,
-    min: number,
-    max: number,
-  ) {
-    const parsed = Number(input.value);
-    const fallback = s.fontSizes[category];
-    const value = Number.isFinite(parsed)
-      ? Math.round(Math.min(max, Math.max(min, parsed)))
-      : fallback;
-    input.value = String(value);
-    applyFontSize(category, value);
-  }
-
-  function numberInputHandler(category: keyof typeof s.fontSizes, min: number, max: number) {
-    return (event: Event) => {
-      const input = event.target as HTMLInputElement;
-      if (input.value.trim() !== "") commitNumberInput(input, category, min, max);
-    };
-  }
-
-  function numberBlurHandler(category: keyof typeof s.fontSizes, min: number, max: number) {
-    return (event: Event) => {
-      commitNumberInput(event.target as HTMLInputElement, category, min, max);
-    };
-  }
-
   $effect(() => {
     fontSection;
     const el = document.querySelectorAll<HTMLInputElement>(".transparency-slider");
@@ -168,20 +140,7 @@
               <strong>{slider.label}</strong>
               <p>{slider.desc}</p>
             </div>
-            <label class="font-size-control">
-              <input
-                class="font-size-input"
-                type="number"
-                min={slider.min}
-                max={slider.max}
-                step="1"
-                value={s.fontSizes[slider.key]}
-                oninput={numberInputHandler(slider.key, slider.min, slider.max)}
-                onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
-                aria-label={slider.label}
-              />
-              <span>px</span>
-            </label>
+            <span class="value-label">{s.fontSizes[slider.key]}px</span>
           </div>
         </div>
         <input
@@ -204,20 +163,7 @@
               <strong>{slider.label}</strong>
               <p>{slider.desc}</p>
             </div>
-            <label class="font-size-control">
-              <input
-                class="font-size-input"
-                type="number"
-                min={slider.min}
-                max={slider.max}
-                step="1"
-                value={s.fontSizes[slider.key]}
-                oninput={numberInputHandler(slider.key, slider.min, slider.max)}
-                onblur={numberBlurHandler(slider.key, slider.min, slider.max)}
-                aria-label={slider.label}
-              />
-              <span>px</span>
-            </label>
+            <span class="value-label">{s.fontSizes[slider.key]}px</span>
           </div>
         </div>
         <input
@@ -273,45 +219,5 @@
 
   .heading-inline strong {
     display: block;
-  }
-
-  .font-size-control {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex: 0 0 auto;
-    margin: 0;
-    color: var(--text-muted);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-  }
-
-  .font-size-input {
-    width: 46px;
-    box-sizing: border-box;
-    padding: 5px 6px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    outline: none;
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font: inherit;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    transition: border-color 120ms ease;
-  }
-
-  .font-size-input:focus {
-    border-color: var(--text-faint);
-  }
-
-  .font-size-input[type="number"] {
-    appearance: textfield;
-    -moz-appearance: textfield;
-  }
-
-  .font-size-input[type="number"]::-webkit-inner-spin-button,
-  .font-size-input[type="number"]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
   }
 </style>

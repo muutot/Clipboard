@@ -5,13 +5,10 @@
     configureIgnoredApplications,
     getApplicationFilterSettings,
     type ApplicationFilterSettings,
-    type DiscoveredApplication,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
-  import { generalSettings } from "$lib/services/settings";
-  import { formatBytes, updateSliderTrack } from "$lib/utils/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -31,8 +28,6 @@
 
   let { iconsDir = "", onclose, showHeader = true }: Props = $props();
   let settings = $state<ApplicationFilterSettings | null>(null);
-  let maxTextCaptureSizeEl = $state<HTMLInputElement | null>(null);
-  let captureSettings = $state($generalSettings);
   let availableSearch = $state("");
   let ignoredSearch = $state("");
   let selectedAvailable = $state<string[]>([]);
@@ -62,17 +57,6 @@
 
   onMount(() => {
     void loadSettings();
-  });
-
-  $effect(() => {
-    const unsub = generalSettings.subscribe((v) => {
-      captureSettings = v;
-    });
-    return unsub;
-  });
-
-  $effect(() => {
-    updateSliderTrack(maxTextCaptureSizeEl);
   });
 
   async function loadSettings() {
@@ -166,33 +150,6 @@
   <div class="settings-state">{_t("capture.readingApps")}</div>
 {:else if settings}
   <div class="settings-scroll">
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.maxTextCaptureSize")}</strong>
-            <p>{_t("general.maxTextCaptureSizeDescription")}</p>
-          </div>
-          <span class="value-label">{formatBytes(captureSettings.maxTextCaptureBytes)}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="10000"
-        max="10000000"
-        step="10000"
-        value={captureSettings.maxTextCaptureBytes}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("maxTextCaptureBytes", Number(input.value));
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={maxTextCaptureSizeEl}
-      />
-    </section>
-
     <section class="filter-board">
       <div class="application-column">
         <div class="column-heading">
@@ -355,55 +312,6 @@
     min-height: 0;
     padding: 14px 18px 48px;
     overflow: auto;
-  }
-
-  .setting-card {
-    padding: 10px 13px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius, 9px);
-    background: var(--card-bg);
-  }
-
-  .toggle-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .setting-heading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex: 1;
-  }
-
-  .setting-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 29px;
-    height: 29px;
-    flex: 0 0 auto;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-icon-radius, 7px);
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-  }
-
-  .setting-heading strong {
-    display: block;
-    color: var(--text-primary);
-    font-size: var(--settings-heading-size, 13px);
-    font-weight: 560;
-  }
-
-  .setting-heading p {
-    margin: 2px 0 0;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-    line-height: 1.45;
   }
 
   .filter-board {

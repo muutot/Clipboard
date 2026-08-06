@@ -21,9 +21,9 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 | Primary category | Secondary sections / implementation                                                                                                                                     |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| General          | General, Window, Search, Items → `GeneralSettingsPanel`                                                                                                                 |
+| General          | General, Window, Search, Items → `GeneralSettingsPanel`; the General page includes the clipboard recording pause/resume toggle                                          |
 | Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`                                          |
-| Capture          | Recording → `RecordingSettingsPanel`; Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                                            |
+| Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                                                                                  |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                   |
 | Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent |
 | Keyboard         | Item, Quick, Global → `KeyboardSettingsPanel` with category prop                                                                                                        |
