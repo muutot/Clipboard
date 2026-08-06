@@ -163,6 +163,9 @@ After a successful release, report:
 
 ## CI/CD
 
+The release commit push to the main branch does **not** trigger the CI workflow:
+`ci.yml` ignores pushes that only touch release files (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `CHANGELOG.md`, `RELEASE.md`).
+
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 
 - Builds for Windows (x64), macOS (arm64), Linux (x64)

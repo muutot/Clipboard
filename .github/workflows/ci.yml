@@ -3,6 +3,13 @@ name: CI
 on:
   push:
     branches: [core]
+    paths-ignore:
+      - package.json
+      - src-tauri/tauri.conf.json
+      - src-tauri/Cargo.toml
+      - src-tauri/Cargo.lock
+      - CHANGELOG.md
+      - RELEASE.md
   pull_request:
     branches: [master]
 
