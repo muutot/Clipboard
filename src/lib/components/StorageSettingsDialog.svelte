@@ -7,7 +7,6 @@
   import DatePicker from "$lib/components/DatePicker.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
-  import RecordingSettingsPanel from "$lib/components/RecordingSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
@@ -158,7 +157,6 @@
     | "font"
     | "theme"
     | "icons"
-    | "recording"
     | "capture"
     | "capture_icons"
     | "storage_paths"
@@ -226,11 +224,6 @@
         return {
           title: _t("storage.iconsTab"),
           desc: _t("general.iconColorsDescription"),
-        };
-      case "recording":
-        return {
-          title: _t("capture.pauseTitle"),
-          desc: _t("capture.pauseDescription"),
         };
       case "capture":
         return {
@@ -1476,9 +1469,7 @@
         <span>{_t("storage.appearanceTab")}</span>
       </button>
       <button
-        class:active={activeSection === "recording" ||
-          activeSection === "capture" ||
-          activeSection === "capture_icons"}
+        class:active={activeSection === "capture" || activeSection === "capture_icons"}
         type="button"
         onclick={() => (activeSection = "capture")}
       >
@@ -1762,16 +1753,8 @@
             {_t("storage.keyboardSystemTab")}
           </button>
         </nav>
-      {:else if activeSection === "recording" || activeSection === "capture" || activeSection === "capture_icons"}
+      {:else if activeSection === "capture" || activeSection === "capture_icons"}
         <nav class="settings-subnav" aria-label={_t("storage.captureTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "recording"}
-            aria-current={activeSection === "recording" ? "page" : undefined}
-            onclick={() => (activeSection = "recording")}
-          >
-            {_t("capture.pauseTitle")}
-          </button>
           <button
             type="button"
             class:active={activeSection === "capture"}
@@ -1867,8 +1850,6 @@
       <ThemeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "icons"}
       <IconColorsSettingsPanel {onclose} showHeader={false} />
-    {:else if activeSection === "recording"}
-      <RecordingSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
     {:else if activeSection === "capture_icons"}
