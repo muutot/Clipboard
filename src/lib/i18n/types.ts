@@ -860,8 +860,12 @@ export interface LocaleDefinition {
     description: string;
     empty: string;
     count: string;
+    editTitle: string;
+    name: string;
+    color: string;
     renamePlaceholder: string;
     colorNone: string;
+    customColor: string;
     delete: string;
     deleteConfirm: string;
     renameConflict: string;

@@ -16,7 +16,7 @@ Key contracts:
 - Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation.
 - Double-clicking a card calls `ondblclickpaste(item.id)` when the `doubleClickPaste` prop is true (route-side smart paste: format/plain text, image, file), otherwise it falls back to `ondetail`. Keep this toggle in sync with the `general.doubleClickPaste` setting.
 - Compact dimensions come from `GeneralSettings` and must remain aligned with `virtual-scroll.ts` and route height calculations.
-- Tag chips share the title/file text line (right-aligned, `flex: 0 0 auto`), so adding tags does **not** add a new row and must not change card height. Right-click `Add tag` toggles an inline input; a chip's `×` removes the tag via `onsavetags`; clicking a chip calls `ontoggleTagFilter`. Keep tag height changes out of `estimatedCardHeight`.
+- Tag chips share the title/file text line (right-aligned, `flex: 0 0 auto`), so adding tags does **not** add a new row and must not change card height. Right-click `Add tag` toggles an inline input; a chip's `×` removes the tag via `onsavetags`; clicking a chip calls `ontoggleTagFilter`; right-clicking a chip calls `oneditTag(tag)` so the route can open `TagEditDialog` for that tag. Keep tag height changes out of `estimatedCardHeight`.
 
 ### Height calculation contract
 
@@ -48,6 +48,12 @@ Key contracts:
 - Async OCR listeners must be unregistered when the item changes, the panel closes, or the component is destroyed.
 - Keep resource metadata parsing consistent with `clipboard.ts` and backend `resource_metadata.rs`.
 - The Details tab renders an editable tag row: chips with remove `×`, plus an inline input/`+` that calls `onsavetags(id, tags)` (full replacement). It reads/writes `item.tags`.
+
+### `TagEditDialog.svelte`
+
+Modal edit dialog for a single tag, opened from the main route by right-clicking a tag chip on a `ClipboardCard` (`oneditTag`). Props: `tag: string`, `color: string` (current registry color, empty when none), `onclose: () => void`. It lets the user rename the tag (Enter commits, conflict-checked against `listAllTags()`) and pick a color from an 8-column swatch grid (two rows): row 1 holds 8 presets, row 2 holds 7 presets plus a final custom `<input type="color">` picker — 15 shared presets total (kept in sync with `TagManagementSettingsPanel`). The custom color is stored per tag (`setTagColor(tag, value)`), not shared; the custom swatch renders the current tag's own custom color when one is set, otherwise a rainbow gradient, and the hidden input defaults to the tag's current hex (or `#5c7cfa`). Clicking the already-active preset clears the tag's color (toggle, matching the settings panel), so no separate "none" swatch exists. All actions call the tag-management commands in `services/clipboard.ts` (`renameTag`, `setTagColor`) and then emit `tags-changed` with the same `TagsChangedPayload` contract the settings tag panel uses, so the route's existing `tags-changed` listener reconciles items, filters, and colors. Tag deletion stays in the settings tag panel; this dialog has no delete button. The dialog is a native `<dialog>` with `showModal()`, closed via Escape, backdrop click, or the close button; its name field is the title row (no separate header) so the modal stays compact.
+
+Main-route Escape order: bulk selection (capture phase), then the open tag edit dialog (which closes itself; the route returns early while `tagEditDialog` is set), then the detail panel (closed by `DetailPanel`), then an active `tagFilter` (cleared via `toggleTagFilter`), then window hide.
 
 ### `ImageFullscreenOverlay.svelte`
 

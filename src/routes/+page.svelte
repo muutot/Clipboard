@@ -6,6 +6,7 @@
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
+  import TagEditDialog from "$lib/components/TagEditDialog.svelte";
   import Toast from "$lib/components/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
@@ -179,6 +180,7 @@
   let sourceAppFilter = $state("");
   let tagFilter = $state<string | null>(null);
   let tagColors = $state<Record<string, string>>({});
+  let tagEditDialog = $state<string | null>(null);
   let sourceApps = $state<string[]>([]);
   let sourceAppSearch = $state("");
   let sourceAppDropdownOpen = $state(false);
@@ -1998,6 +2000,10 @@
     void invalidateActiveHistoryPagination();
   }
 
+  function openTagEdit(tag: string) {
+    tagEditDialog = tag;
+  }
+
   function resetHistoryScroll() {
     scrollTop = 0;
     if (historyListEl) historyListEl.scrollTop = 0;
@@ -2646,6 +2652,7 @@
 
     if (event.key === "Escape") {
       if (event.defaultPrevented || editingId || fullscreenFilePath) return;
+      if (tagEditDialog) return;
 
       const detailEditorTarget =
         editableTarget &&
@@ -2655,6 +2662,8 @@
 
       if (detailItem) {
         // DetailPanel handles its own Escape
+      } else if (tagFilter) {
+        toggleTagFilter(tagFilter);
       } else if ("__TAURI_INTERNALS__" in window) {
         getCurrentWindow()
           .hide()
@@ -3326,6 +3335,7 @@
                     onsavetags={saveTags}
                     {tagColors}
                     ontoggleTagFilter={toggleTagFilter}
+                    oneditTag={openTagEdit}
                     tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
                   />
                 </div>
@@ -3373,6 +3383,7 @@
                   onsavetags={saveTags}
                   {tagColors}
                   ontoggleTagFilter={toggleTagFilter}
+                  oneditTag={openTagEdit}
                   tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
                 />
               {/if}
@@ -3467,6 +3478,13 @@
 </main>
 
 <Toast />
+{#if tagEditDialog}
+  <TagEditDialog
+    tag={tagEditDialog}
+    color={tagColors[tagEditDialog] ?? ""}
+    onclose={() => (tagEditDialog = null)}
+  />
+{/if}
 {#if detailDisplayMode !== "split" || !detailItem}
   <DetailPanel
     item={detailItem}

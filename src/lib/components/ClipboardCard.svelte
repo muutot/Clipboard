@@ -99,6 +99,7 @@
     onheightchange?: (id: string, height: number, immediate?: boolean) => void;
     onsavetags?: (id: string, tags: string[]) => void;
     ontoggleTagFilter?: (tag: string) => void;
+    oneditTag?: (tag: string) => void;
     heightMeasurementKey?: string;
     tagAddSignal?: number;
     tagColors?: Record<string, string>;
@@ -157,6 +158,7 @@
     onheightchange,
     onsavetags,
     ontoggleTagFilter,
+    oneditTag,
     heightMeasurementKey,
     tagAddSignal = 0,
     tagColors = {},
@@ -650,6 +652,11 @@
             e.stopPropagation();
             ontoggleTagFilter?.(tag);
           }
+        }}
+        oncontextmenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          oneditTag?.(tag);
         }}
       >
         {tag}
