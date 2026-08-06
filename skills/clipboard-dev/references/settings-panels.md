@@ -21,7 +21,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 | Primary category | Secondary sections / implementation                                                                                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| General          | General, Window, Search, Items, Display → `GeneralSettingsPanel`                                                                      |
+| General          | General, Window, Search, Items → `GeneralSettingsPanel`                                                                               |
 | Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`        |
 | Capture          | Filter (ignored apps + max text capture size) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                        |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                 |

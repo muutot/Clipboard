@@ -22,7 +22,7 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
-    section?: "search" | "items" | "display" | "window" | "general";
+    section?: "search" | "items" | "window" | "general";
   }
 
   let { onclose, showHeader = true, section = "search" }: Props = $props();
@@ -522,128 +522,6 @@
           generalSettings.updateSetting("searchIndexSyncMode", v as "lazy" | "background")}
       />
     </section>
-  {:else if section === "display"}
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-        <div>
-          <strong>{_t("general.showSecondaryText")}</strong>
-          <p>{_t("general.showSecondaryTextDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.display.showSecondaryText}
-        onclick={() =>
-          generalSettings.updateSetting("display", {
-            ...s.display,
-            showSecondaryText: !s.display.showSecondaryText,
-          })}
-        aria-checked={s.display.showSecondaryText}
-        aria-label={_t("general.showSecondaryText")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.maxTextLines")}</strong>
-            <p>{_t("general.maxTextLinesDescription")}</p>
-          </div>
-          <span class="value-label">{s.display.maxTextLines} {_t("general.maxTextLinesUnit")}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="1"
-        max="12"
-        value={s.display.maxTextLines}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          const val = Number(input.value);
-          generalSettings.updateSetting("display", { ...s.display, maxTextLines: val });
-          updateSliderTrack(maxTextLinesEl);
-        }}
-        class="transparency-slider"
-        bind:this={maxTextLinesEl}
-      />
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-        <div>
-          <strong>{_t("general.detailDisplayMode")}</strong>
-          <p>{_t("general.detailDisplayModeDescription")}</p>
-        </div>
-      </div>
-      <CustomSelect
-        value={s.detailDisplayMode}
-        ariaLabel={_t("general.detailDisplayMode")}
-        options={[
-          { value: "overlay", label: _t("general.detailDisplayModeOverlay") },
-          { value: "split", label: _t("general.detailDisplayModeSplit") },
-        ]}
-        onchange={(v) =>
-          generalSettings.updateSetting("detailDisplayMode", v as "overlay" | "split")}
-      />
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="maximize" size={17} /></span>
-        <div>
-          <strong>{_t("general.desktopFullscreen")}</strong>
-          <p>{_t("general.desktopFullscreenDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.imageFullscreenMode === "desktop"}
-        onclick={() =>
-          generalSettings.updateSetting(
-            "imageFullscreenMode",
-            s.imageFullscreenMode === "desktop" ? "overlay" : "desktop",
-          )}
-        aria-checked={s.imageFullscreenMode === "desktop"}
-        aria-label={_t("general.desktopFullscreen")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-        <div class="heading-inline">
-          <strong>{_t("general.viewerBackdropOpacity")}</strong>
-          <span class="value-label">{s.viewerBackdropOpacity}%</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="100"
-        value={s.viewerBackdropOpacity}
-        oninput={(e) => {
-          generalSettings.updateSetting(
-            "viewerBackdropOpacity",
-            Number((e.target as HTMLInputElement).value),
-          );
-          updateSliderTrack(viewerOpacityEl);
-        }}
-        class="transparency-slider"
-        bind:this={viewerOpacityEl}
-      />
-    </section>
   {:else if section === "items"}
     <section class="setting-card toggle-card">
       <div class="setting-heading">
@@ -845,6 +723,58 @@
         }}
         class="transparency-slider"
         bind:this={loadToleranceEl}
+      />
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
+        <div>
+          <strong>{_t("general.showSecondaryText")}</strong>
+          <p>{_t("general.showSecondaryTextDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.display.showSecondaryText}
+        onclick={() =>
+          generalSettings.updateSetting("display", {
+            ...s.display,
+            showSecondaryText: !s.display.showSecondaryText,
+          })}
+        aria-checked={s.display.showSecondaryText}
+        aria-label={_t("general.showSecondaryText")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.maxTextLines")}</strong>
+            <p>{_t("general.maxTextLinesDescription")}</p>
+          </div>
+          <span class="value-label">{s.display.maxTextLines} {_t("general.maxTextLinesUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="12"
+        value={s.display.maxTextLines}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Number(input.value);
+          generalSettings.updateSetting("display", { ...s.display, maxTextLines: val });
+          updateSliderTrack(maxTextLinesEl);
+        }}
+        class="transparency-slider"
+        bind:this={maxTextLinesEl}
       />
     </section>
   {:else if section === "general"}
@@ -1061,6 +991,76 @@
       >
         <span class="toggle-knob"></span>
       </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+        <div>
+          <strong>{_t("general.detailDisplayMode")}</strong>
+          <p>{_t("general.detailDisplayModeDescription")}</p>
+        </div>
+      </div>
+      <CustomSelect
+        value={s.detailDisplayMode}
+        ariaLabel={_t("general.detailDisplayMode")}
+        options={[
+          { value: "overlay", label: _t("general.detailDisplayModeOverlay") },
+          { value: "split", label: _t("general.detailDisplayModeSplit") },
+        ]}
+        onchange={(v) =>
+          generalSettings.updateSetting("detailDisplayMode", v as "overlay" | "split")}
+      />
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="maximize" size={17} /></span>
+        <div>
+          <strong>{_t("general.desktopFullscreen")}</strong>
+          <p>{_t("general.desktopFullscreenDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.imageFullscreenMode === "desktop"}
+        onclick={() =>
+          generalSettings.updateSetting(
+            "imageFullscreenMode",
+            s.imageFullscreenMode === "desktop" ? "overlay" : "desktop",
+          )}
+        aria-checked={s.imageFullscreenMode === "desktop"}
+        aria-label={_t("general.desktopFullscreen")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+        <div class="heading-inline">
+          <strong>{_t("general.viewerBackdropOpacity")}</strong>
+          <span class="value-label">{s.viewerBackdropOpacity}%</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={s.viewerBackdropOpacity}
+        oninput={(e) => {
+          generalSettings.updateSetting(
+            "viewerBackdropOpacity",
+            Number((e.target as HTMLInputElement).value),
+          );
+          updateSliderTrack(viewerOpacityEl);
+        }}
+        class="transparency-slider"
+        bind:this={viewerOpacityEl}
+      />
     </section>
   {/if}
 

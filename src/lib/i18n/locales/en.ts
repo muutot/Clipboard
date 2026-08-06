@@ -86,17 +86,16 @@ const en: LocaleDefinition = {
     iconsTab: "Icons",
     generalSearchTab: "Search",
     generalItemsTab: "Items",
-    generalDisplayTab: "Display & Preview",
     generalGeneralTab: "General",
     generalWindowTab: "Window",
     generalSearchDescription:
       "Search suggestions, search history and result sort rules preferences",
     generalItemsDescription:
-      "Item action buttons, quick copy, copy-to-top, paste behavior and list loading settings",
-    generalDisplayDescription: "Card text display, image preview and detail viewing settings",
+      "Item action buttons, quick copy, copy-to-top, paste behavior, secondary text and list loading settings",
     generalGeneralDescription:
       "Language, launch at startup, system tray, title bar, recycle bin and settings window preferences",
-    generalWindowDescription: "Window appearance, acrylic/mica effect and window position settings",
+    generalWindowDescription:
+      "Window appearance, acrylic/mica effect, window position, image preview and detail display settings",
     keyboardItemTab: "Item Actions",
     keyboardQuickTab: "Quick Copy",
     keyboardSystemTab: "Global",
@@ -149,7 +148,7 @@ const en: LocaleDefinition = {
     directoryTreeTitle: "Directory Structure",
     directoryTreeDesc:
       "The search index is placed in the same directory as the database as derived data.",
-    iconCacheTitle: "App Icon Cache",
+    iconCacheTitle: "App Icons",
     iconCacheDesc: "Extracted icon files from source applications. Select and delete as needed.",
     manageIconCache: "Manage Icon Cache",
     loadingIcons: "Loading icon list…",

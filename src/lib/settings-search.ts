@@ -1,7 +1,6 @@
 export const SETTINGS_SECTIONS = [
   "general_search",
   "general_items",
-  "general_display",
   "general_window",
   "general_general",
   "compact",
@@ -77,7 +76,6 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "置顶",
     "操作按钮",
   ],
-  general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示"],
   general_window: [i18n("storage.generalTab"), i18n("storage.generalWindowTab"), "窗口"],
   general_general: [i18n("storage.generalTab"), i18n("storage.generalGeneralTab"), "语言", "通知"],
   compact: [
@@ -300,14 +298,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.desktop-fullscreen",
-    { section: "general_display" },
+    { section: "general_window" },
     i18n("general.desktopFullscreen"),
     i18n("general.desktopFullscreenDescription"),
     ["图片预览", "fullscreen"],
   ),
   entry(
     "general.viewer-backdrop-opacity",
-    { section: "general_display" },
+    { section: "general_window" },
     i18n("general.viewerBackdropOpacity"),
     i18n("general.viewerBackdropOpacityDescription"),
     ["蒙版", "backdrop"],
@@ -321,7 +319,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.detail-display-mode",
-    { section: "general_display" },
+    { section: "general_window" },
     i18n("general.detailDisplayMode"),
     i18n("general.detailDisplayModeDescription"),
     [
@@ -333,7 +331,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.show-secondary-text",
-    { section: "general_display" },
+    { section: "general_items" },
     i18n("general.showSecondaryText"),
     i18n("general.showSecondaryTextDescription"),
     ["辅助文字", "preview", "secondary"],
@@ -354,7 +352,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.max-text-lines",
-    { section: "general_display" },
+    { section: "general_items" },
     i18n("general.maxTextLines"),
     i18n("general.maxTextLinesDescription"),
     ["行数", "lines", "preview"],
@@ -915,8 +913,6 @@ export function resolveSettingsNavPath(
       return [translate("storage.generalTab"), translate("storage.generalSearchTab")];
     case "general_items":
       return [translate("storage.generalTab"), translate("storage.generalItemsTab")];
-    case "general_display":
-      return [translate("storage.generalTab"), translate("storage.generalDisplayTab")];
     case "general_window":
       return [translate("storage.generalTab"), translate("storage.generalWindowTab")];
     case "general_general":

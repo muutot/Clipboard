@@ -151,7 +151,6 @@
   let activeSection = $state<
     | "general_search"
     | "general_items"
-    | "general_display"
     | "general_window"
     | "general_general"
     | "compact"
@@ -195,11 +194,6 @@
         return {
           title: _t("storage.generalItemsTab"),
           desc: _t("storage.generalItemsDescription"),
-        };
-      case "general_display":
-        return {
-          title: _t("storage.generalDisplayTab"),
-          desc: _t("storage.generalDisplayDescription"),
         };
       case "general_window":
         return {
@@ -1430,7 +1424,6 @@
       <button
         class:active={activeSection === "general_search" ||
           activeSection === "general_items" ||
-          activeSection === "general_display" ||
           activeSection === "general_window" ||
           activeSection === "general_general"}
         type="button"
@@ -1673,7 +1666,7 @@
             {_t("statistics.memoryTab")}
           </button>
         </nav>
-      {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window" || activeSection === "general_general"}
+      {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_window" || activeSection === "general_general"}
         <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
           <button
             type="button"
@@ -1706,14 +1699,6 @@
             onclick={() => (activeSection = "general_items")}
           >
             {_t("storage.generalItemsTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "general_display"}
-            aria-current={activeSection === "general_display" ? "page" : undefined}
-            onclick={() => (activeSection = "general_display")}
-          >
-            {_t("storage.generalDisplayTab")}
           </button>
         </nav>
       {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
@@ -1820,18 +1805,16 @@
           </div>
         {/if}
       </div>
-    {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window" || activeSection === "general_general"}
+    {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_window" || activeSection === "general_general"}
       <GeneralSettingsPanel
         {onclose}
         section={activeSection === "general_search"
           ? "search"
           : activeSection === "general_items"
             ? "items"
-            : activeSection === "general_display"
-              ? "display"
-              : activeSection === "general_general"
-                ? "general"
-                : "window"}
+            : activeSection === "general_general"
+              ? "general"
+              : "window"}
         showHeader={false}
       />
     {:else if activeSection === "compact"}
