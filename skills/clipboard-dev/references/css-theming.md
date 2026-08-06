@@ -95,7 +95,7 @@ The optional color-icon mode (`general.colorIcons`) is an intentional fixed-pale
 | Variable                                                                           | Standard fallback/use                           |
 | ---------------------------------------------------------------------------------- | ----------------------------------------------- |
 | `--settings-page-title-size`                                                       | base + 4px; standalone panel `h2`               |
-| `--settings-heading-size`                                                          | card-title size; card/section heading           |
+| `--settings-heading-size`                                                          | base - 1px; card/section heading                |
 | `--settings-description-size`                                                      | secondary size; descriptions and breadcrumb     |
 | `--settings-note-size`                                                             | tiny size; notes/counts                         |
 | `--settings-control-size`                                                          | secondary size; buttons/inputs/select/list rows |
