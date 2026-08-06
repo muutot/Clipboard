@@ -2,6 +2,7 @@
   import { onDestroy, tick } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import Checkbox from "$lib/components/Checkbox.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import DatePicker from "$lib/components/DatePicker.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
@@ -1855,14 +1856,11 @@
                   <span class="icon-col-check">
                     {#if file.iconName}
                       <label class="row-check">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selectedIconFiles.has(file.iconName)}
                           onchange={() => toggleIconFile(file.iconName!)}
+                          size={14}
                         />
-                        <span class="check-mark"
-                          ><AppIcon name="check" size={12} strokeWidth={2.5} mono /></span
-                        >
                       </label>
                     {/if}
                   </span>
@@ -1904,21 +1902,17 @@
             </ul>
             <div class="icon-actions">
               <label class="icon-select-all">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selectableIcons.length > 0 &&
                     selectedIconFiles.size === selectableIcons.length}
                   disabled={selectableIcons.length === 0}
-                  onchange={(e) => {
-                    const checked = (e.target as HTMLInputElement).checked;
+                  onchange={(checked) => {
                     selectedIconFiles = checked
                       ? new Set(selectableIcons.map((f) => f.iconName as string))
                       : new Set();
                   }}
+                  size={14}
                 />
-                <span class="check-mark"
-                  ><AppIcon name="check" size={12} strokeWidth={2.5} mono /></span
-                >
                 <span>{_t("storage.selectAll")}</span>
               </label>
               <span class="icon-file-count">
@@ -2823,15 +2817,11 @@
                 <div class="export-option-row">
                   <span class="export-option-label">{_t("storage.exportFavorites")}</span>
                   <label class="export-check">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={exportIncludeFavorites}
-                      onchange={(e) =>
-                        (exportIncludeFavorites = (e.target as HTMLInputElement).checked)}
+                      onchange={(checked) => (exportIncludeFavorites = checked)}
+                      size={15}
                     />
-                    <span class="check-mark"
-                      ><AppIcon name="check" size={11} strokeWidth={2.5} mono /></span
-                    >
                     <span>{_t("storage.exportIncludeFavorites")}</span>
                   </label>
                 </div>
@@ -2840,14 +2830,11 @@
                   <div class="export-kind-checks">
                     {#each storageKinds as kindInfo (kindInfo.kind)}
                       <label class="export-check">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={exportContentTypes.has(kindInfo.kind)}
                           onchange={() => toggleExportContentType(kindInfo.kind)}
+                          size={15}
                         />
-                        <span class="check-mark"
-                          ><AppIcon name="check" size={11} strokeWidth={2.5} mono /></span
-                        >
                         <span>{_t(kindInfo.labelKey)}</span>
                       </label>
                     {/each}
@@ -3885,46 +3872,6 @@
     flex-shrink: 0;
   }
 
-  .icon-select-all input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-    margin: 0;
-  }
-
-  .icon-select-all .check-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    border: 1.5px solid var(--text-faint);
-    border-radius: 4px;
-    color: transparent;
-    background: transparent;
-    transition:
-      background 100ms ease,
-      border-color 100ms ease,
-      color 100ms ease;
-  }
-
-  .icon-select-all input:checked + .check-mark {
-    border-color: var(--selection-color);
-    background: var(--selection-color);
-    color: #fff;
-  }
-
-  .icon-select-all input:disabled + .check-mark {
-    opacity: 0.5;
-  }
-
-  .icon-select-all input:focus-visible + .check-mark {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
   .icon-file-count {
     font-size: 11px;
     line-height: 32px;
@@ -3991,42 +3938,6 @@
     flex-shrink: 0;
     cursor: pointer;
     user-select: none;
-  }
-
-  .row-check input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-    margin: 0;
-  }
-
-  .row-check .check-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    border: 1.5px solid var(--text-faint);
-    border-radius: 4px;
-    color: transparent;
-    background: transparent;
-    transition:
-      background 100ms ease,
-      border-color 100ms ease,
-      color 100ms ease;
-  }
-
-  .row-check input:checked + .check-mark {
-    border-color: var(--selection-color);
-    background: var(--selection-color);
-    color: #fff;
-  }
-
-  .row-check input:focus-visible + .check-mark {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
   }
 
   .icon-col-app {
@@ -4901,41 +4812,6 @@
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     user-select: none;
-  }
-
-  .export-check input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .export-check .check-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    border: 1.5px solid var(--text-faint);
-    border-radius: 4px;
-    color: transparent;
-    background: transparent;
-    transition:
-      background 100ms ease,
-      border-color 100ms ease,
-      color 100ms ease;
-  }
-
-  .export-check input:checked + .check-mark {
-    border-color: var(--selection-color);
-    background: var(--selection-color);
-    color: #fff;
-  }
-
-  .export-check input:focus-visible + .check-mark {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
   }
 
   .export-date-separator {

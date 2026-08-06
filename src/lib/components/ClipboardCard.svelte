@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import Checkbox from "$lib/components/Checkbox.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import type { ContextMenuItem } from "$lib/components/ContextMenu.svelte";
@@ -740,8 +741,7 @@
 
   {#if showCheckbox}
     <label class="card-checkbox">
-      <input type="checkbox" {checked} onchange={handleToggleSelect} onclick={stopPropagation} />
-      <span class="check-mark"><AppIcon name="check" size={14} strokeWidth={2.5} mono /></span>
+      <Checkbox {checked} onchange={handleToggleSelect} onclick={stopPropagation} size={20} />
     </label>
   {/if}
 
@@ -1087,37 +1087,8 @@
 
   .clip-card:hover .card-checkbox,
   .clip-card.selected .card-checkbox,
-  .clip-card .card-checkbox:has(input:checked) {
+  .clip-card.checked .card-checkbox {
     opacity: 1;
-  }
-
-  .card-checkbox input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .check-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: 1.5px solid var(--text-faint);
-    border-radius: 5px;
-    color: transparent;
-    background: transparent;
-    transition:
-      background 100ms ease,
-      border-color 100ms ease,
-      color 100ms ease;
-  }
-
-  .card-checkbox input:checked + .check-mark {
-    border-color: var(--selection-color);
-    background: var(--selection-color);
-    color: #fff;
   }
 
   .clip-card:hover,
