@@ -161,22 +161,6 @@ fn spawn_hotkey_thread_with_registrations(
     })
 }
 
-pub fn spawn_hotkey_thread(
-    hotkey_id: i32,
-    modifiers: u32,
-    vk: u32,
-    tx: mpsc::Sender<()>,
-) -> thread::JoinHandle<()> {
-    spawn_hotkey_thread_with_registrations(vec![(hotkey_id, modifiers, vk)], Vec::new(), tx)
-}
-
-pub fn spawn_hotkey_thread_with_bindings(
-    bindings: Vec<(u32, u32)>,
-    tx: mpsc::Sender<()>,
-) -> thread::JoinHandle<()> {
-    spawn_hotkey_thread_with_hotkeys(bindings, Vec::new(), tx)
-}
-
 pub fn spawn_hotkey_thread_with_hotkeys(
     bindings: Vec<(u32, u32)>,
     double_modifiers: Vec<Modifier>,
@@ -244,14 +228,6 @@ impl HotkeyManager {
         });
 
         self.handle = Some(handle);
-    }
-
-    pub fn restart(&mut self, modifiers: u32, vk: u32) {
-        self.restart_with_bindings(vec![(modifiers, vk)]);
-    }
-
-    pub fn restart_with_bindings(&mut self, bindings: Vec<(u32, u32)>) {
-        self.restart_with_hotkeys(bindings, Vec::new());
     }
 
     pub fn restart_with_hotkeys(
