@@ -122,9 +122,24 @@ if (isRegenerate) {
             .trim()
             .split(" ")[1];
           console.log(
-            `  Dropping commit ${shortSha} via rebase (onto ${parentSha.slice(0, 7)})...`,
+            `  Dropping commit ${shortSha} via filter-branch (preserving other commits' timestamps)...`,
           );
-          run(`git rebase --onto ${parentSha} ${tagCommit}`);
+          // skip_commit "$@" re-parents later commits past the dropped one while
+          // git commit-tree keeps author + committer dates of every surviving commit.
+          const filter = `if [ "$GIT_COMMIT" = "${tagCommit}" ]; then skip_commit "$@"; else git commit-tree "$@"; fi`;
+          run(`git filter-branch --force --commit-filter "${filter}" -- ${parentSha}..HEAD`, {
+            env: { ...process.env, FILTER_BRANCH_SQUELCH_WARNING: "1" },
+          });
+          try {
+            execSync(`git update-ref -d refs/original/refs/heads/${BRANCH}`, {
+              cwd: ROOT,
+              encoding: "utf-8",
+              stdio: "pipe",
+              shell: true,
+            });
+          } catch {
+            // refs/original ref already removed
+          }
         } else {
           console.log(
             `  Old release commit is not in the current branch (only on a remote ref); ` +

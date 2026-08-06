@@ -118,7 +118,7 @@ node scripts/release.mjs --regenerate <version>
 
 The script locates the old release commit by the local tag **or** by scanning history (including remote-tracking refs) for `bump version to <version>`, then:
 
-- if it is an ancestor of `HEAD`, drops it via `git rebase --onto` (preserving other commits' content and timestamps);
+- if it is an ancestor of `HEAD`, drops it via `git filter-branch --commit-filter` with `skip_commit "$@"` (this re-parents later commits past the dropped one while `git commit-tree` preserves every surviving commit's author and committer timestamps);
 - otherwise (old release commit exists only on a remote ref), notes that the forced push will drop it;
 - deletes the old tag and sets the forced-push flag.
 
