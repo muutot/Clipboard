@@ -1,6 +1,7 @@
 use super::*;
 use crate::content::resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION;
 use crate::domain::{ClipboardItem, ClipboardKind};
+use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use crate::storage::{ClipboardRepository, OcrRepository};
 
 #[cfg(test)]

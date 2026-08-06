@@ -38,10 +38,6 @@ pub mod platform_info;
 pub mod single_instance;
 pub mod ui;
 
-// infra module is deprecated — items migrated to autostart and single_instance
-#[allow(deprecated)]
-pub mod infra;
-
 // ---------------------------------------------------------------------------
 //  Re-exports so items remain at crate::platform::*
 // ---------------------------------------------------------------------------

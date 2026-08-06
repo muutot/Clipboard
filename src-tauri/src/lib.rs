@@ -45,8 +45,6 @@ use cli::LocalApiServer;
 use commands::clipboard::SearchResultCache;
 use config::{ConfigStore, SearchIndexSyncMode};
 use content::{self_trigger, ThumbnailWorker};
-#[allow(unused_imports)]
-use geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use keyboard::{KeyboardConfig, KeyboardManager};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceTracker, StartupMetrics, StartupTimer};
