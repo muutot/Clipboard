@@ -184,25 +184,25 @@
       case "general_search":
         return {
           breadcrumb: _t("general.eyebrow"),
-          title: _t("storage.basicTab"),
+          title: _t("storage.generalSearchTab"),
           desc: _t("storage.generalSearchDescription"),
         };
       case "general_items":
         return {
           breadcrumb: _t("general.eyebrow"),
-          title: _t("storage.basicTab"),
+          title: _t("storage.generalItemsTab"),
           desc: _t("storage.generalItemsDescription"),
         };
       case "general_display":
         return {
           breadcrumb: _t("general.eyebrow"),
-          title: _t("storage.basicTab"),
+          title: _t("storage.generalDisplayTab"),
           desc: _t("storage.generalDisplayDescription"),
         };
       case "general_window":
         return {
           breadcrumb: _t("general.eyebrow"),
-          title: _t("storage.basicTab"),
+          title: _t("storage.generalWindowTab"),
           desc: _t("storage.generalWindowDescription"),
         };
       case "compact":
@@ -360,10 +360,13 @@
     const settingsLabel = _t("toolbar.settings");
     switch (item.section) {
       case "general_search":
+        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalSearchTab")}`;
       case "general_items":
+        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalItemsTab")}`;
       case "general_display":
+        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalDisplayTab")}`;
       case "general_window":
-        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.basicTab")}`;
+        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalWindowTab")}`;
       case "compact":
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.compactTab")}`;
       case "font":

@@ -66,33 +66,17 @@ const entry = (
 ): SettingsSearchItemTemplate => ({ id, ...target, title, description, aliases });
 
 const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]> = {
-  general_search: [
-    i18n("storage.generalTab"),
-    i18n("storage.basicTab"),
-    i18n("storage.generalSearchTab"),
-    "搜索",
-  ],
+  general_search: [i18n("storage.generalTab"), i18n("storage.generalSearchTab"), "搜索"],
   general_items: [
     i18n("storage.generalTab"),
-    i18n("storage.basicTab"),
     i18n("storage.generalItemsTab"),
     "条目",
     "回收站",
     "置顶",
     "操作按钮",
   ],
-  general_display: [
-    i18n("storage.generalTab"),
-    i18n("storage.basicTab"),
-    i18n("storage.generalDisplayTab"),
-    "显示",
-  ],
-  general_window: [
-    i18n("storage.generalTab"),
-    i18n("storage.basicTab"),
-    i18n("storage.generalWindowTab"),
-    "窗口",
-  ],
+  general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示"],
+  general_window: [i18n("storage.generalTab"), i18n("storage.generalWindowTab"), "窗口"],
   compact: [
     i18n("storage.appearanceTab"),
     i18n("storage.compactTab"),
