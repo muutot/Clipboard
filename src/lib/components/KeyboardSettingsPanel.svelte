@@ -275,6 +275,20 @@
     return action.id;
   }
 
+  function settingsSearchIdForAction(action: SystemAction): string | null {
+    if (/^quickCopy\d+$/.test(action.id)) return "keyboard.quick-copy";
+    const map: Record<string, string> = {
+      copyItem: "keyboard.copy-item",
+      deleteItem: "keyboard.delete-item",
+      favoriteItem: "keyboard.favorite-item",
+      openDetail: "keyboard.open-detail",
+      selectAll: "keyboard.select-all",
+      quickPaste: "keyboard.quick-paste",
+      toggleWindow: "keyboard.toggle-window",
+    };
+    return map[action.id] ?? null;
+  }
+
   function actionDesc(action: SystemAction): string {
     if (action.descKey) {
       const m = action.id.match(/^quickCopy(\d+)$/);
@@ -454,7 +468,10 @@
 {:else if config}
   <div class="settings-scroll">
     {#each categoryActions as action}
-      <section class="setting-card toggle-card">
+      <section
+        class="setting-card toggle-card"
+        data-settings-search-id={settingsSearchIdForAction(action)}
+      >
         <div class="setting-heading">
           <span class="setting-icon"><AppIcon name={action.icon} size={17} /></span>
           <div>

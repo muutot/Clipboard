@@ -412,45 +412,40 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["圆角", "radius"],
   ),
 
-  entry("font.base", { section: "font" }, "界面基础", "列表标题、设置文字等主体内容的字体大小", [
-    "base font",
-    "基础字号",
-  ]),
+  entry(
+    "font.base",
+    { section: "font" },
+    i18n("general.fontSizeBaseLabel"),
+    i18n("general.fontSizeBaseDescription"),
+    ["界面基础", "base font", "基础字号"],
+  ),
   entry(
     "font.secondary",
     { section: "font" },
-    "描述文字",
-    "时间戳、来源名称、文件大小等描述性信息",
-    ["secondary font", "描述字号"],
+    i18n("general.fontSizeSecondaryLabel"),
+    i18n("general.fontSizeSecondaryDescription"),
+    ["描述文字", "secondary font", "描述字号"],
   ),
-  entry("font.tiny", { section: "font" }, "备注文字", "标签、标记、角标等最小号文字的字体大小", [
-    "tiny font",
-    "备注字号",
-  ]),
-  entry("font.card-title", { section: "font" }, "条目标题", "列表卡片上的标题文字大小", [
-    "card title font",
-    "标题字号",
-  ]),
+  entry(
+    "font.tiny",
+    { section: "font" },
+    i18n("general.fontSizeTinyLabel"),
+    i18n("general.fontSizeTinyDescription"),
+    ["备注文字", "tiny font", "备注字号"],
+  ),
+  entry(
+    "font.card-title",
+    { section: "font" },
+    i18n("general.fontSizeCardTitleLabel"),
+    i18n("general.fontSizeCardTitleDescription"),
+    ["条目标题", "card title font", "标题字号"],
+  ),
   entry(
     "font.card-preview",
     { section: "font" },
-    "条目辅助文字",
-    "列表卡片上的辅助预览或自定义标题首行文字",
-    ["card preview font", "辅助字号"],
-  ),
-  entry(
-    "font.max-text-lines",
-    { section: "font" },
-    "主界面文本行数",
-    "文本和链接条目最多显示的正文行数",
-    ["max text lines", "行高", "行数"],
-  ),
-  entry(
-    "font.show-secondary-text",
-    { section: "font" },
-    "显示辅助文字",
-    "列表条目下方的小字预览文本",
-    ["secondary text", "预览文字"],
+    i18n("general.fontSizeCardPreviewLabel"),
+    i18n("general.fontSizeCardPreviewDescription"),
+    ["条目辅助文字", "card preview font", "辅助字号"],
   ),
 
   entry(

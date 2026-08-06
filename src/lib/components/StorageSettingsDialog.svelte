@@ -401,9 +401,15 @@
   }
 
   function findSettingsElement(item: SettingsSearchItem): HTMLElement | null {
+    if (settingsContent) {
+      const byId = settingsContent.querySelector<HTMLElement>(
+        `[data-settings-search-id="${item.id}"]`,
+      );
+      if (byId) return byId;
+    }
     const title = normalizeSettingsSearch(item.title);
     const elements = currentSettingsElements();
-    return (
+    const match =
       elements.find((element) => {
         const heading = element.querySelector<HTMLElement>(
           "strong, .setting-label, .column-heading",
@@ -411,8 +417,11 @@
         return normalizeSettingsSearch(heading?.textContent ?? "") === title;
       }) ??
       elements.find((element) => settingsElementText(element).includes(title)) ??
-      null
-    );
+      null;
+    if (match) return match;
+    const header = settingsContent?.querySelector<HTMLElement>(".settings-section-header");
+    if (header && normalizeSettingsSearch(header.textContent ?? "").includes(title)) return header;
+    return null;
   }
 
   function highlightSettingsElement(element: HTMLElement): void {
@@ -428,6 +437,24 @@
     }, 1800);
   }
 
+  function waitForSettingsElement(
+    item: SettingsSearchItem,
+    timeout = 2000,
+  ): Promise<HTMLElement | null> {
+    const deadline = Date.now() + timeout;
+    return new Promise((resolve) => {
+      const poll = () => {
+        const element = findSettingsElement(item);
+        if (element || Date.now() >= deadline) {
+          resolve(element);
+          return;
+        }
+        setTimeout(poll, 60);
+      };
+      poll();
+    });
+  }
+
   async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void> {
     activeSection = item.section;
     if (item.statisticsTab) activeStatisticsTab = item.statisticsTab;
@@ -435,7 +462,7 @@
     await tick();
     await tick();
     updateSettingsItemCount();
-    const element = findSettingsElement(item);
+    const element = await waitForSettingsElement(item);
     if (element) highlightSettingsElement(element);
   }
 
@@ -1593,7 +1620,11 @@
         </div>
       </div>
       {#if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
-        <section class="setting-card toggle-card" style="margin-top:3px">
+        <section
+          class="setting-card toggle-card"
+          style="margin-top:3px"
+          data-settings-search-id="keyboard.config-file"
+        >
           <div class="setting-heading">
             <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
             <div>
@@ -1983,7 +2014,7 @@
           />
         </section>
 
-        <section class="setting-card setting-card-row">
+        <section class="setting-card setting-card-row" data-settings-search-id="ocr.model">
           <span class="setting-icon"><AppIcon name="download" size={17} /></span>
           <span class="setting-label">{_t("storage.ocrModelLabel")}</span>
           <CustomSelect
@@ -2214,7 +2245,10 @@
               >
             </section>
 
-            <section class="setting-card stats-metric-card">
+            <section
+              class="setting-card stats-metric-card"
+              data-settings-search-id="statistics.storage.database"
+            >
               <div class="setting-heading stats-metric-heading">
                 <span class="setting-icon"><AppIcon name="file" size={17} /></span>
                 <div class="stats-metric-copy">
@@ -2472,7 +2506,10 @@
             </section>
 
             {#if memoryDiagnostics.ocr}
-              <section class="setting-card stats-metric-card">
+              <section
+                class="setting-card stats-metric-card"
+                data-settings-search-id="statistics.memory.ocr-model"
+              >
                 <div class="setting-heading stats-metric-heading">
                   <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
                   <div class="stats-metric-copy">
@@ -2506,7 +2543,7 @@
       </div>
     {:else if activeSection === "about"}
       <div class="settings-scroll">
-        <section class="setting-card">
+        <section class="setting-card" data-settings-search-id="about.info">
           <div class="setting-heading">
             <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
             <div>
