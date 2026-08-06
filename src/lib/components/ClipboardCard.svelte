@@ -741,7 +741,7 @@
   {#if showCheckbox}
     <label class="card-checkbox">
       <input type="checkbox" {checked} onchange={handleToggleSelect} onclick={stopPropagation} />
-      <span class="check-mark"><AppIcon name="check" size={14} strokeWidth={2.5} /></span>
+      <span class="check-mark"><AppIcon name="check" size={14} strokeWidth={2.5} mono /></span>
     </label>
   {/if}
 

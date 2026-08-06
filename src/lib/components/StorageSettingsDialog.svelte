@@ -1861,7 +1861,7 @@
                           onchange={() => toggleIconFile(file.iconName!)}
                         />
                         <span class="check-mark"
-                          ><AppIcon name="check" size={12} strokeWidth={2.5} /></span
+                          ><AppIcon name="check" size={12} strokeWidth={2.5} mono /></span
                         >
                       </label>
                     {/if}
@@ -1916,7 +1916,9 @@
                       : new Set();
                   }}
                 />
-                <span class="check-mark"><AppIcon name="check" size={12} strokeWidth={2.5} /></span>
+                <span class="check-mark"
+                  ><AppIcon name="check" size={12} strokeWidth={2.5} mono /></span
+                >
                 <span>{_t("storage.selectAll")}</span>
               </label>
               <span class="icon-file-count">
@@ -2828,7 +2830,7 @@
                         (exportIncludeFavorites = (e.target as HTMLInputElement).checked)}
                     />
                     <span class="check-mark"
-                      ><AppIcon name="check" size={11} strokeWidth={2.5} /></span
+                      ><AppIcon name="check" size={11} strokeWidth={2.5} mono /></span
                     >
                     <span>{_t("storage.exportIncludeFavorites")}</span>
                   </label>
@@ -2844,7 +2846,7 @@
                           onchange={() => toggleExportContentType(kindInfo.kind)}
                         />
                         <span class="check-mark"
-                          ><AppIcon name="check" size={11} strokeWidth={2.5} /></span
+                          ><AppIcon name="check" size={11} strokeWidth={2.5} mono /></span
                         >
                         <span>{_t(kindInfo.labelKey)}</span>
                       </label>

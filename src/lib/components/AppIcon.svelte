@@ -7,14 +7,17 @@
     size?: number;
     strokeWidth?: number;
     filled?: boolean;
+    mono?: boolean;
   }
 
-  let { name, size = 18, strokeWidth = 1.8, filled = false }: Props = $props();
+  let { name, size = 18, strokeWidth = 1.8, filled = false, mono = false }: Props = $props();
 
   const iconColor = $derived(
-    $generalSettings.colorIcons
-      ? ($generalSettings.iconColors?.[name] ?? DEFAULT_ICON_COLORS[name])
-      : "currentColor",
+    mono
+      ? "currentColor"
+      : $generalSettings.colorIcons
+        ? ($generalSettings.iconColors?.[name] ?? DEFAULT_ICON_COLORS[name])
+        : "currentColor",
   );
 </script>
 
