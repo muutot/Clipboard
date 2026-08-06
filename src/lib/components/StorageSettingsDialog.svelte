@@ -48,7 +48,8 @@
     type ExportFormatInfo,
     type ImportFormatInfo,
   } from "$lib/services/storage";
-  import { checkForUpdate, type UpdateInfo } from "$lib/services/update";
+  import { checkForUpdate, getRelease, type UpdateInfo } from "$lib/services/update";
+  import UpdateDialog from "$lib/components/UpdateDialog.svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
@@ -734,6 +735,9 @@
   let checkingUpdate = $state(false);
   let updateResult = $state<UpdateInfo | null>(null);
   let updateError = $state("");
+  let showUpdateDialog = $state(false);
+  let dialogMode: "current" | "available" = $state("available");
+  let loadingRelease = $state(false);
 
   async function loadAppVersion(): Promise<void> {
     if (!isTauriRuntime()) return;
@@ -750,6 +754,20 @@
     }
   }
 
+  async function handleViewRelease(): Promise<void> {
+    if (!isTauriRuntime() || loadingRelease || !appVersion) return;
+    loadingRelease = true;
+    try {
+      updateResult = await getRelease(appVersion);
+      dialogMode = "current";
+      showUpdateDialog = true;
+    } catch (error) {
+      updateError = error instanceof Error ? error.message : String(error);
+    } finally {
+      loadingRelease = false;
+    }
+  }
+
   async function handleCheckUpdate(): Promise<void> {
     if (!isTauriRuntime() || checkingUpdate) return;
     checkingUpdate = true;
@@ -757,6 +775,10 @@
     updateError = "";
     try {
       updateResult = await checkForUpdate();
+      if (updateResult.updateAvailable) {
+        dialogMode = "available";
+        showUpdateDialog = true;
+      }
     } catch (error) {
       updateError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -2572,6 +2594,14 @@
             <button
               type="button"
               class="settings-action-btn"
+              disabled={!appVersion || loadingRelease}
+              onclick={handleViewRelease}
+            >
+              {loadingRelease ? _t("about.loadingReleaseNotes") : _t("about.releaseNotes")}
+            </button>
+            <button
+              type="button"
+              class="settings-action-btn"
               disabled={checkingUpdate}
               onclick={handleCheckUpdate}
             >
@@ -2619,40 +2649,7 @@
         </section>
 
         {#if updateResult}
-          {#if updateResult.updateAvailable}
-            <section class="setting-card">
-              <div class="toggle-card">
-                <div class="setting-heading">
-                  <span class="setting-icon"><AppIcon name="info" size={17} /></span>
-                  <div>
-                    <strong
-                      >{_t("about.updateAvailable", {
-                        version: updateResult.latestVersion,
-                      })}</strong
-                    >
-                    {#if updateResult.publishedAt}
-                      <p>
-                        {_t("about.releasedAt", {
-                          date: formatUpdateDate(updateResult.publishedAt),
-                        })}
-                      </p>
-                    {/if}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="settings-action-btn"
-                  onclick={() =>
-                    void invoke("open_external_url", { url: updateResult!.releaseUrl })}
-                >
-                  {_t("about.download")}
-                </button>
-              </div>
-              {#if updateResult.releaseNotes}
-                <pre class="about-release-notes">{updateResult.releaseNotes}</pre>
-              {/if}
-            </section>
-          {:else}
+          {#if !updateResult.updateAvailable}
             <div class="about-update-state" role="status">
               <AppIcon name="check" size={14} />
               <span>{_t("about.upToDate")}</span>
@@ -2663,6 +2660,13 @@
             <AppIcon name="x" size={14} />
             <span>{_t("about.checkFailed", { error: updateError })}</span>
           </div>
+        {/if}
+        {#if showUpdateDialog && updateResult}
+          <UpdateDialog
+            result={updateResult}
+            mode={dialogMode}
+            onclose={() => (showUpdateDialog = false)}
+          />
         {/if}
       </div>
     {:else}
@@ -4538,22 +4542,6 @@
     border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
     color: color-mix(in srgb, var(--danger-color) 75%, white);
     background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
-  }
-
-  .about-release-notes {
-    max-height: 180px;
-    margin: 10px 0 0;
-    padding: 9px 11px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-control-radius);
-    background: var(--input-bg);
-    color: var(--text-muted);
-    font: inherit;
-    font-size: var(--settings-description-size);
-    line-height: 1.5;
   }
 
   button {
