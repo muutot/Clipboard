@@ -237,8 +237,8 @@
         };
       case "tags":
         return {
-          title: _t("storage.tagsTab"),
-          desc: _t("storage.tagsDescription"),
+          title: _t("storage.tagsSectionTitle"),
+          desc: "",
         };
       case "storage_paths":
         return {
@@ -2566,7 +2566,7 @@
           </div>
         </section>
 
-        <section class="setting-card">
+        <section class="setting-card toggle-card">
           <div class="setting-heading">
             <span class="setting-icon"><AppIcon name="code" size={17} /></span>
             <div>
