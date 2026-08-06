@@ -78,8 +78,8 @@ export interface LocaleDefinition {
     appearanceTab: string;
     basicTab: string;
     tagsTab: string;
-    tagsSectionTitle: string;
     tagsDescription: string;
+    tagsSectionTitle: string;
     compactTab: string;
     fontTab: string;
     themeTab: string;
@@ -337,6 +337,11 @@ export interface LocaleDefinition {
     checkFailed: string;
     repoTitle: string;
     repoDesc: string;
+    viewDetails: string;
+    updateDialogTitle: string;
+    close: string;
+    releaseNotes: string;
+    loadingReleaseNotes: string;
   };
   keyboard: {
     settings: string;

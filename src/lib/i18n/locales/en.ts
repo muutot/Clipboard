@@ -78,9 +78,9 @@ const en: LocaleDefinition = {
     appearanceTab: "Appearance",
     basicTab: "Basic",
     tagsTab: "Tags",
-    tagsSectionTitle: "Manage all clipboard tags",
     tagsDescription:
       "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
+    tagsSectionTitle: "Manage all clipboard tags",
     compactTab: "Compact",
     fontTab: "Font",
     themeTab: "Theme",
@@ -375,6 +375,11 @@ const en: LocaleDefinition = {
     checkFailed: "Update check failed: {error}",
     repoTitle: "Source Repository",
     repoDesc: "View the source code on GitHub or GitCode",
+    viewDetails: "View Details",
+    updateDialogTitle: "Update Available",
+    close: "Close",
+    releaseNotes: "Release Notes",
+    loadingReleaseNotes: "Loading...",
   },
   keyboard: {
     settings: "Settings / Shortcuts",
