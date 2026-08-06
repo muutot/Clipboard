@@ -38,7 +38,7 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | `src-tauri/src/lib.rs` | Runtime composition and Tauri boundary; keep business logic in focused modules when practical      |
 | `config.rs`            | `conf/conf.json` schema, defaults, validation, and atomic persistence                              |
 | `domain/`              | Shared Rust clipboard and OCR domain types                                                         |
-| `storage/`             | SQLite connection/repositories, schema, storage paths, recovery/backups, optional pool module      |
+| `storage/`             | SQLite connection/repositories, schema, storage paths, recovery/backups, integrity repair helpers              |
 | `search/`              | Tantivy schema/query/index, manifest, outbox synchronization                                       |
 | `ocr/`                 | Engine trait, PP-OCR/Tesseract/no-op engines, models, restartable worker manager                   |
 | `content/`             | Detection/actions, hashing/self-trigger rules, file storage, metadata, thumbnails, text transforms |

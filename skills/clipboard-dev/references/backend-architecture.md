@@ -48,7 +48,7 @@ The implementation lives under `src-tauri/src/storage/`.
 
 ### Pool status
 
-`storage/pool.rs` contains a tested `DatabasePool` with one write connection and round-robin read connections, but the GUI runtime still manages `Database` directly and opens additional `Database` instances for workers. Do not claim the pool is integrated until `lib.rs` state and runtime read/write paths actually use it. The unchecked TODO remains evidence of that boundary.
+`storage/pool.rs` no longer contains a connection pool: the unused `DatabasePool`/`PooledConnection` types and the read-only/estimate helpers were removed as dead code. The file now holds only the live `Database::repair`/`RepairResult` integrity check and `Database::set_preview_path`. The GUI runtime and workers each manage `Database` directly; a shared pool is not part of the runtime path.
 
 ### Recovery and backups
 
