@@ -54,8 +54,8 @@ use platform::windows_hotkey::{
     shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys, HotkeyManager,
 };
 use platform::{
-    show_main_window, sync_autostart, ClipboardMonitor, GlobalShortcutManager, SingleInstanceError,
-    SingleInstanceGuard, SystemTray,
+    show_main_window, sync_autostart, ClipboardMonitor, SingleInstanceError, SingleInstanceGuard,
+    SystemTray,
 };
 use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
@@ -325,7 +325,6 @@ pub fn run() {
             let mut privacy_manager = PrivacyManager::new();
             privacy_manager.sync_with_config(&config);
             let mut clipboard_monitor = ClipboardMonitor::new();
-            let shortcut_manager = GlobalShortcutManager::new();
 
             // Auto-start clipboard monitoring in background
             let app_handle = app.handle().clone();
@@ -457,7 +456,6 @@ pub fn run() {
             app.manage(Mutex::new(search_sync_worker));
             app.manage(Mutex::new(privacy_manager));
             app.manage(Mutex::new(clipboard_monitor));
-            app.manage(Mutex::new(shortcut_manager));
             app.manage(ocr_worker);
             app.manage(Mutex::new(thumbnail_worker));
             app.manage(Mutex::new(cleanup_worker));

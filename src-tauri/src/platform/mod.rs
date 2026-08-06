@@ -35,7 +35,6 @@ pub mod autostart;
 pub mod dispatch;
 pub mod monitor;
 pub mod platform_info;
-pub mod shortcuts;
 pub mod single_instance;
 pub mod ui;
 
@@ -54,7 +53,6 @@ pub use platform_info::{
     current_capabilities, get_platform_info, runtime_info, ClipboardPlatform, ForegroundApp,
     Platform, PlatformCapabilities, PlatformInfo, RuntimeInfo,
 };
-pub use shortcuts::GlobalShortcutManager;
 pub use single_instance::{SingleInstanceError, SingleInstanceGuard};
 pub use ui::{
     apply_window_effect, apply_window_transparency, disk_space, show_main_window,
@@ -74,8 +72,6 @@ mod tests {
 
     use super::*;
     use crate::config::ConfigStore;
-    use crate::keyboard::ShortcutBinding;
-    use std::str::FromStr;
 
     #[test]
     fn platform_detect_returns_variant() {
@@ -131,18 +127,6 @@ mod tests {
         let mut monitor = ClipboardMonitor::new();
         monitor.set_ignored_apps(vec!["App1".to_owned(), "App2".to_owned()]);
         assert_eq!(monitor.ignored_applications.len(), 2);
-    }
-
-    #[test]
-    fn global_shortcut_manager_registers_and_unregisters() {
-        let mut manager = GlobalShortcutManager::new();
-        let binding = ShortcutBinding::from_str("Ctrl+V").unwrap();
-
-        manager.register("paste", &[binding]).unwrap();
-        assert_eq!(manager.shortcuts.len(), 1);
-
-        manager.unregister_all().unwrap();
-        assert!(manager.shortcuts.is_empty());
     }
 
     #[test]
