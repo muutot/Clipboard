@@ -553,6 +553,7 @@ pub fn run() {
             check_password_manager,
             get_privacy_status,
             check_for_update,
+            get_release,
             export_clipboard_items,
             export_to_file,
             import_clipboard_items,

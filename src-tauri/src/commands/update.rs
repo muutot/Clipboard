@@ -34,13 +34,24 @@ struct Release {
 }
 
 impl UpdateSource {
-    fn api_url(self) -> String {
+    fn latest_api_url(self) -> String {
         match self {
             Self::Github => {
                 "https://api.github.com/repos/muutot/Clipboard/releases/latest".to_owned()
             }
             Self::Gitcode => {
                 "https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/latest".to_owned()
+            }
+        }
+    }
+
+    fn tag_api_url(self, tag: &str) -> String {
+        match self {
+            Self::Github => {
+                format!("https://api.github.com/repos/muutot/Clipboard/releases/tags/{tag}")
+            }
+            Self::Gitcode => {
+                format!("https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/tags/{tag}")
             }
         }
     }
@@ -53,6 +64,27 @@ impl UpdateSource {
     }
 }
 
+async fn fetch_release(source: UpdateSource, url: String) -> Result<Release, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("clipboard-desktop")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("create client: {e}"))?;
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("request release: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("fetch release failed: {e}"))?;
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("read response: {e}"))?;
+    serde_json::from_str(&body).map_err(|e| format!("parse release: {e}"))
+}
+
 #[tauri::command]
 pub async fn check_for_update(
     config: tauri::State<'_, Mutex<ConfigStore>>,
@@ -61,25 +93,7 @@ pub async fn check_for_update(
         let guard = config.lock().map_err(|e| format!("config lock: {e}"))?;
         guard.update_source()
     };
-    let client = reqwest::Client::builder()
-        .user_agent("clipboard-desktop")
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("create client: {e}"))?;
-
-    let response = client
-        .get(source.api_url())
-        .send()
-        .await
-        .map_err(|e| format!("request latest release: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("check update failed: {e}"))?;
-    let body = response
-        .text()
-        .await
-        .map_err(|e| format!("read response: {e}"))?;
-    let release: Release =
-        serde_json::from_str(&body).map_err(|e| format!("parse release: {e}"))?;
+    let release = fetch_release(source, source.latest_api_url()).await?;
 
     let current_version = env!("CARGO_PKG_VERSION").to_owned();
     let latest_version = release.tag_name.trim_start_matches('v').to_owned();
@@ -89,6 +103,34 @@ pub async fn check_for_update(
         current_version,
         latest_version,
         update_available,
+        release_url: release.html_url.unwrap_or_else(|| source.release_page()),
+        release_title: release.name,
+        release_notes: release.body,
+        published_at: release.published_at.or(release.created_at),
+    })
+}
+
+#[tauri::command]
+pub async fn get_release(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    version: String,
+) -> Result<UpdateInfo, String> {
+    let source = {
+        let guard = config.lock().map_err(|e| format!("config lock: {e}"))?;
+        guard.update_source()
+    };
+    let tag = if version.starts_with('v') {
+        version
+    } else {
+        format!("v{version}")
+    };
+    let release = fetch_release(source, source.tag_api_url(&tag)).await?;
+
+    let current_version = env!("CARGO_PKG_VERSION").to_owned();
+    Ok(UpdateInfo {
+        current_version,
+        latest_version: release.tag_name.trim_start_matches('v').to_owned(),
+        update_available: false,
         release_url: release.html_url.unwrap_or_else(|| source.release_page()),
         release_title: release.name,
         release_notes: release.body,
