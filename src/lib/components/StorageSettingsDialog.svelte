@@ -237,8 +237,8 @@
         };
       case "tags":
         return {
-          title: _t("storage.tagsSectionTitle"),
-          desc: "",
+          title: _t("storage.tagsTab"),
+          desc: _t("storage.tagsDescription"),
         };
       case "storage_paths":
         return {
@@ -304,6 +304,7 @@
   const settingsSectionTitle = $derived(settingsSectionMeta?.title);
   const settingsSectionDescription = $derived(settingsSectionMeta?.desc);
 
+  let tagSearch = $state("");
   let settingsSearch = $state("");
   let settingsContent = $state<HTMLElement | null>(null);
   let settingsItemCount = $state(0);
@@ -1800,11 +1801,29 @@
           </button>
         </nav>
       {:else}
-        <div class="settings-subnav settings-subnav--single" aria-label={settingsSectionTitle}>
+        <div
+          class="settings-subnav settings-subnav--single"
+          class:settings-subnav--tags={activeSection === "tags"}
+          aria-label={settingsSectionTitle}
+        >
           <span class="settings-section-title">{settingsSectionTitle}</span>
+          {#if activeSection === "tags"}
+            <label class="settings-tag-search" aria-label={_t("tags.searchPlaceholder")}>
+              <AppIcon name="search" size={15} />
+              <input
+                type="search"
+                value={tagSearch}
+                placeholder={_t("tags.searchPlaceholder")}
+                aria-label={_t("tags.searchPlaceholder")}
+                oninput={(e) => (tagSearch = (e.currentTarget as HTMLInputElement).value)}
+              />
+            </label>
+          {/if}
         </div>
       {/if}
-      <p class="settings-section-description">{settingsSectionDescription}</p>
+      {#if settingsSectionDescription}
+        <p class="settings-section-description">{settingsSectionDescription}</p>
+      {/if}
     </section>
 
     {#if settingsSearchActive}
@@ -1959,7 +1978,12 @@
         </section>
       </div>
     {:else if activeSection === "tags"}
-      <TagManagementSettingsPanel {onclose} showHeader={false} />
+      <TagManagementSettingsPanel
+        {onclose}
+        showHeader={false}
+        {tagSearch}
+        ontagSearchChange={(v) => (tagSearch = v)}
+      />
     {:else if activeSection === "keyboard_item"}
       <KeyboardSettingsPanel
         {onclose}
@@ -2578,14 +2602,16 @@
             <button
               type="button"
               class="settings-action-btn"
-              onclick={() => invoke("open_external_url", { url: "https://github.com/MissUuu/Clipboard" })}
+              onclick={() =>
+                invoke("open_external_url", { url: "https://github.com/MissUuu/Clipboard" })}
             >
               GitHub
             </button>
             <button
               type="button"
               class="settings-action-btn"
-              onclick={() => invoke("open_external_url", { url: "https://gitcode.com/MissUuu/Clipboard" })}
+              onclick={() =>
+                invoke("open_external_url", { url: "https://gitcode.com/MissUuu/Clipboard" })}
             >
               GitCode
             </button>
@@ -3413,6 +3439,39 @@
   .settings-subnav--single {
     min-height: 28px;
     padding-top: 7px;
+  }
+
+  .settings-subnav--tags {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 0;
+    min-height: 0;
+  }
+
+  .settings-tag-search {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    width: 260px;
+    padding: 0 9px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    color: var(--text-faint);
+    background: var(--input-bg);
+  }
+
+  .settings-tag-search input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    color: var(--text-primary);
+    background: transparent;
+    font: inherit;
+    font-size: var(--settings-control-size);
   }
 
   .settings-section-title {
