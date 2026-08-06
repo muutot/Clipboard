@@ -13,6 +13,7 @@ use crate::privacy::PrivacyManager;
 pub struct CaptureState {
     pub paused: Arc<AtomicBool>,
     pub(crate) max_file_copy_size_bytes: Arc<AtomicU64>,
+    pub(crate) max_text_capture_bytes: Arc<AtomicU64>,
     pub(crate) ignored_apps: Arc<Mutex<Vec<String>>>,
     pub(crate) policy: Arc<CapturePolicy>,
     pub ingestion_guard: Arc<Mutex<()>>,
@@ -40,11 +41,13 @@ impl CaptureState {
         privacy: &PrivacyManager,
         ignored_apps: Vec<String>,
         max_file_copy_size_bytes: u64,
+        max_text_capture_bytes: u64,
     ) -> Self {
         let sensitive_patterns = privacy.sensitive_patterns.clone();
         Self {
             paused: Arc::new(AtomicBool::new(privacy.is_paused())),
             max_file_copy_size_bytes: Arc::new(AtomicU64::new(max_file_copy_size_bytes)),
+            max_text_capture_bytes: Arc::new(AtomicU64::new(max_text_capture_bytes)),
             ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
             policy: Arc::new(CapturePolicy {
                 sensitive_patterns: Arc::new(sensitive_patterns),
@@ -69,6 +72,14 @@ impl CaptureState {
 
     pub(crate) fn max_file_copy_size_bytes(&self) -> u64 {
         self.max_file_copy_size_bytes.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn set_max_text_capture_bytes(&self, value: u64) {
+        self.max_text_capture_bytes.store(value, Ordering::SeqCst);
+    }
+
+    pub(crate) fn max_text_capture_bytes(&self) -> u64 {
+        self.max_text_capture_bytes.load(Ordering::SeqCst)
     }
 
     pub(crate) fn set_ignored_apps(&self, apps: Vec<String>) -> Vec<String> {

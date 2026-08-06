@@ -102,6 +102,7 @@ pub struct GeneralConfig {
     pub search_page_size_limit: u32,
     pub search_index_sync_mode: String,
     pub update_source: String,
+    pub max_text_capture_bytes: u64,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -141,6 +142,7 @@ impl Default for GeneralConfig {
             search_page_size_limit: 500,
             search_index_sync_mode: "lazy".to_owned(),
             update_source: "gitcode".to_owned(),
+            max_text_capture_bytes: 500_000,
             extra: BTreeMap::new(),
         }
     }

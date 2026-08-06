@@ -11,7 +11,7 @@
     WindowEffect,
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
-  import { updateSliderTrack } from "$lib/utils/format";
+  import { formatBytes, updateSliderTrack } from "$lib/utils/format";
   import { onDestroy } from "svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -197,6 +197,7 @@
   let searchPageSizeEl = $state<HTMLInputElement | null>(null);
   let searchCacheSizeEl = $state<HTMLInputElement | null>(null);
   let loadToleranceEl = $state<HTMLInputElement | null>(null);
+  let maxTextCaptureSizeEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -211,6 +212,7 @@
     updateSliderTrack(searchPageSizeEl);
     updateSliderTrack(searchCacheSizeEl);
     updateSliderTrack(loadToleranceEl);
+    updateSliderTrack(maxTextCaptureSizeEl);
   });
 </script>
 
@@ -773,6 +775,33 @@
       >
         <span class="toggle-knob"></span>
       </button>
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.maxTextCaptureSize")}</strong>
+            <p>{_t("general.maxTextCaptureSizeDescription")}</p>
+          </div>
+          <span class="value-label">{formatBytes(s.maxTextCaptureBytes)}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="10000"
+        max="10000000"
+        step="10000"
+        value={s.maxTextCaptureBytes}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("maxTextCaptureBytes", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={maxTextCaptureSizeEl}
+      />
     </section>
 
     <section class="setting-card">

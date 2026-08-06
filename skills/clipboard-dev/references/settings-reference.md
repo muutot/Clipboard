@@ -62,6 +62,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `useRecycleBin`               | boolean                            | `true`      | —                                                                                |
 | `pasteCleaningEnabled`        | boolean                            | `false`     | —                                                                                |
 | `doubleClickPaste`            | boolean                            | `true`      | —                                                                                |
+| `maxTextCaptureBytes`         | number (bytes)                     | `500_000`   | 10000–10000000                                                                    |
 | `showToastNotifications`      | boolean                            | `true`      | —                                                                                |
 | `rememberWindowPosition`      | boolean                            | `false`     | —                                                                                |
 | `alwaysOnTop`                 | boolean                            | `false`     | —                                                                                |
@@ -108,6 +109,8 @@ History/storage/OCR/privacy/export settings are separate Rust config groups and 
 `search_index_sync_mode` is an explicit `GeneralConfig` member (`"lazy"`/`"background"`, default `"lazy"`) because the backend startup wiring and the search command read it for typed behavior. `ConfigStore::search_index_sync_mode()` returns `SearchIndexSyncMode`. Changing the mode only takes effect after restart: the `SearchSyncWorker` is created at startup when the mode is `background`.
 
 `update_source` is an explicit `GeneralConfig` member (`"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` in `config/types.rs`. `ConfigStore::update_source()` returns `UpdateSource`, and the About-panel `check_for_update` reads it per call, so switching the dropdown applies immediately without a restart.
+
+`max_text_capture_bytes` is an explicit `GeneralConfig` member (`u64` bytes, default `500_000`) because the capture loop reads it per iteration for typed behavior. `ConfigStore::max_text_capture_bytes()` clamps to 10000–10000000. At startup `CaptureState::new` receives the value into an `Arc<AtomicU64>`; `set_general_settings` also pushes the saved value into the capture state, so a slider change applies immediately without a restart. The capture loop caps plain text, HTML, and RTF captures at this limit; over-limit content is skipped.
 
 When backend startup, validation, or native behavior needs one of these fields, add a typed Rust field with a default and tests instead of parsing it opportunistically from `extra`.
 

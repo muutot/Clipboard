@@ -5,6 +5,7 @@ use tauri::{Emitter, Manager};
 use crate::config::{ConfigStore, GeneralConfig};
 use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use crate::platform::{sync_autostart, WindowManager};
+use crate::state::CaptureState;
 
 use super::{ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo};
 
@@ -25,6 +26,7 @@ pub fn get_general_settings(
 pub fn set_general_settings(
     app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    capture: tauri::State<'_, CaptureState>,
     settings: GeneralConfig,
 ) -> Result<GeneralConfig, String> {
     let saved = {
@@ -37,6 +39,7 @@ pub fn set_general_settings(
         config.general_settings().clone()
     };
 
+    capture.set_max_text_capture_bytes(saved.max_text_capture_bytes);
     let _ = app.emit("general-settings-changed", &saved);
     apply_window_transparency_to_main(&app, saved.window_transparency);
     apply_window_effect_to_main(&app, &saved.window_effect);

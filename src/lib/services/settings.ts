@@ -60,6 +60,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchSortRules: [{ field: "createdAt", direction: "desc" }],
   pageSizeLimit: 500,
   searchPageSizeLimit: 500,
+  maxTextCaptureBytes: 500000,
   searchCacheSize: 500,
   searchCacheEviction: "fifo",
   searchIndexSyncMode: "lazy",
@@ -471,6 +472,12 @@ function normalizeGeneralSettings(
     defaultSettings.searchPageSizeLimit,
     50,
     1000,
+  );
+  result.maxTextCaptureBytes = integerInRange(
+    source.maxTextCaptureBytes ?? fallback("maxTextCaptureBytes"),
+    defaultSettings.maxTextCaptureBytes,
+    10000,
+    10000000,
   );
   result.searchCacheSize = integerInRange(
     source.searchCacheSize ?? fallback("searchCacheSize"),

@@ -284,6 +284,13 @@ impl ConfigStore {
             .expect("UpdateSource::from_str is infallible")
     }
 
+    pub fn max_text_capture_bytes(&self) -> u64 {
+        self.config
+            .general
+            .max_text_capture_bytes
+            .clamp(10_000, 10_000_000)
+    }
+
     pub fn det_box_threshold(&self) -> f32 {
         self.config.ocr.det_box_threshold
     }

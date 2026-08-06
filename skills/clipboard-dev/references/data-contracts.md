@@ -12,7 +12,7 @@ Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSO
 | Frontend view type | `ClipboardItem` in the same file                                         | display-enriched item used by cards/routes                      |
 | Mapping            | `toClipboardItem` and `parseResourceMetadata` in `services/clipboard.ts` | raw payload → view state and metadata                           |
 
-Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional rich-text fragments for paste-by-format: `html_content`/`htmlContent` (the CF_HTML fragment on Windows or `public.html` on macOS) and `rtf_content`/`rtfContent` (the registered `Rich Text Format` payload on Windows; not yet captured on macOS/Linux). Both are capped at 500_000 bytes and `#[serde(default)]` so older records and imports stay compatible. `writeClipboardHtml(html, plainText?, rtf?)` writes `text/html` plus optional `text/plain` and `text/rtf`, so office suites that prefer RTF keep formatted paste. When fields change, update all four layers plus imports/exports and tests.
+Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")]`. `ClipboardKind` serializes as `text`, `link`, `image`, or `file`. Text records may also carry optional rich-text fragments for paste-by-format: `html_content`/`htmlContent` (the CF_HTML fragment on Windows or `public.html` on macOS) and `rtf_content`/`rtfContent` (the registered `Rich Text Format` payload on Windows; not yet captured on macOS/Linux). Both are capped at the configurable `maxTextCaptureBytes` (default 500_000; see `settings-reference.md`) and `#[serde(default)]` so older records and imports stay compatible. `writeClipboardHtml(html, plainText?, rtf?)` writes `text/html` plus optional `text/plain` and `text/rtf`, so office suites that prefer RTF keep formatted paste. When fields change, update all four layers plus imports/exports and tests.
 
 ### Active-history listing filters
 
@@ -68,6 +68,8 @@ The frontend `GeneralSettings` type/defaults/normalizer are richer than the expl
 `search_index_sync_mode` is an explicit `GeneralConfig` member (values `"lazy"`/`"background"`, default `"lazy"`) with a typed `SearchIndexSyncMode` enum in `config/types.rs`; unknown values parse as `Lazy`. It selects between lazy outbox draining inside `search_clipboard_items` and the startup-created `SearchSyncWorker`, and takes effect on restart.
 
 `update_source` is an explicit `GeneralConfig` member (values `"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` enum in `config/types.rs`; unknown values parse as `Gitcode`. The About-panel update check (`check_for_update` in `commands/update.rs`) reads `ConfigStore::update_source()` at call time to pick the latest-release API and release page URL, so the dropdown takes effect without a restart.
+
+`max_text_capture_bytes` is an explicit `GeneralConfig` member (`u64` bytes, default `500_000`); `ConfigStore::max_text_capture_bytes()` clamps to 10000–10000000. The capture loop reads the value per iteration from `CaptureState` (an `Arc<AtomicU64>` seeded at startup and pushed by `set_general_settings`), so it caps plain-text, HTML, and RTF captures live without a restart.
 
 ### Keyboard settings
 

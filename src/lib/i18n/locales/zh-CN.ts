@@ -658,6 +658,8 @@ const zhCN: LocaleDefinition = {
     doubleClickPaste: "双击条目直接粘贴",
     doubleClickPasteDescription:
       "开启后双击条目按原格式粘贴：有格式文本用原格式，纯文本、图片、文件直接粘贴；关闭则双击打开详情面板",
+    maxTextCaptureSize: "文本捕获大小上限",
+    maxTextCaptureSizeDescription: "纯文本、HTML 和 RTF 内容超过该大小时将不会被捕获保存",
     toastNotifications: "操作通知",
     toastNotificationsDescription: "复制、收藏、删除等操作完成后显示 Toast 提示",
     useSystemTitleBar: "使用系统标题栏",

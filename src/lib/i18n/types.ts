@@ -641,6 +641,8 @@ export interface LocaleDefinition {
     pasteCleaningDescription: string;
     doubleClickPaste: string;
     doubleClickPasteDescription: string;
+    maxTextCaptureSize: string;
+    maxTextCaptureSizeDescription: string;
     toastNotifications: string;
     toastNotificationsDescription: string;
     useSystemTitleBar: string;

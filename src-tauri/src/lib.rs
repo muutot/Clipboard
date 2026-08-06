@@ -338,6 +338,7 @@ pub fn run() {
                 &privacy_manager,
                 initial_ignored.clone(),
                 config.max_file_copy_size_bytes(),
+                config.max_text_capture_bytes(),
             );
             app.manage(capture_state.clone());
 

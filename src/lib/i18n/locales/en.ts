@@ -684,6 +684,9 @@ const en: LocaleDefinition = {
     doubleClickPaste: "Double-Click to Paste",
     doubleClickPasteDescription:
       "Double-click an item to paste it directly: formatted items paste with formatting, while plain text, images, and files paste as-is. Disable to open the detail panel on double-click instead",
+    maxTextCaptureSize: "Text Capture Size Limit",
+    maxTextCaptureSizeDescription:
+      "Plain text, HTML, and RTF content larger than this size is not captured",
     toastNotifications: "Action Notifications",
     toastNotificationsDescription:
       "Show Toast feedback after copy, favorite, delete, and other actions",

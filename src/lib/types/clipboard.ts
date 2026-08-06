@@ -215,6 +215,8 @@ export interface GeneralSettings {
   searchSortRules: SortRule[];
   pageSizeLimit: number;
   searchPageSizeLimit: number;
+  /** 纯文本/HTML/RTF 捕获大小上限（字节），超限的剪贴板内容不保存 */
+  maxTextCaptureBytes: number;
   searchCacheSize: number;
   searchCacheEviction: "fifo" | "lru";
   /** 搜索索引同步模式：'lazy' 搜索前排空 outbox | 'background' 后台 worker 实时同步 */

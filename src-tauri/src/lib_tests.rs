@@ -69,6 +69,7 @@ mod capture_tests {
             &PrivacyManager::new(),
             vec!["IgnoredApp".to_owned()],
             100 * 1024 * 1024,
+            500_000,
         )
     }
 
@@ -92,6 +93,16 @@ mod capture_tests {
         state.set_max_file_copy_size_bytes(8 * 1024 * 1024);
 
         assert_eq!(state.max_file_copy_size_bytes(), 8 * 1024 * 1024);
+    }
+
+    #[test]
+    fn text_capture_limit_updates_are_immediately_visible_to_capture() {
+        let state = capture_state();
+        assert_eq!(state.max_text_capture_bytes(), 500_000);
+
+        state.set_max_text_capture_bytes(2_000_000);
+
+        assert_eq!(state.max_text_capture_bytes(), 2_000_000);
     }
 
     #[test]
@@ -349,7 +360,7 @@ mod capture_tests {
     fn invalid_sensitive_patterns_are_excluded_during_initialization() {
         let mut privacy = PrivacyManager::new();
         privacy.sensitive_patterns = vec![regex_lite::Regex::new("secret").unwrap()];
-        let state = CaptureState::new(&privacy, Vec::new(), 100 * 1024 * 1024);
+        let state = CaptureState::new(&privacy, Vec::new(), 100 * 1024 * 1024, 500_000);
 
         assert_eq!(state.policy.sensitive_patterns.len(), 1);
         assert!(state.should_skip(Some("Notepad"), Some("a secret value")));

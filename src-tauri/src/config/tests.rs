@@ -41,6 +41,7 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["showSettingsCloseButton"], true);
     assert_eq!(saved["general"]["pageSizeLimit"], 500);
     assert_eq!(saved["general"]["searchPageSizeLimit"], 500);
+    assert_eq!(saved["general"]["maxTextCaptureBytes"], 500_000);
     fs::remove_dir_all(project).unwrap();
 }
 
@@ -63,6 +64,7 @@ fn persists_general_settings_as_one_configuration_group() {
     settings.show_settings_close_button = false;
     settings.window_effect = "acrylic".to_owned();
     settings.search_index_sync_mode = "background".to_owned();
+    settings.max_text_capture_bytes = 2_000_000;
 
     store.set_general_settings(settings.clone()).unwrap();
 

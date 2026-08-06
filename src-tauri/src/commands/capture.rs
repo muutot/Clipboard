@@ -408,10 +408,11 @@ pub(crate) fn run_capture_loop(
                 };
 
                 let text = platform::read_clipboard_text();
+                let max_text_capture_bytes = capture_state.max_text_capture_bytes() as usize;
                 let html = platform::read_clipboard_html()
-                    .filter(|html| !html.trim().is_empty() && html.len() <= 500_000);
+                    .filter(|html| !html.trim().is_empty() && html.len() <= max_text_capture_bytes);
                 let rtf = platform::read_clipboard_rtf()
-                    .filter(|rtf| !rtf.trim().is_empty() && rtf.len() <= 500_000);
+                    .filter(|rtf| !rtf.trim().is_empty() && rtf.len() <= max_text_capture_bytes);
                 let image_data = platform::read_clipboard_image();
                 let file_paths = platform::read_clipboard_file_paths();
 
@@ -636,7 +637,7 @@ pub(crate) fn run_capture_loop(
                     None => continue,
                 };
 
-                if text.is_empty() || text.len() > 500_000 {
+                if text.is_empty() || text.len() > max_text_capture_bytes {
                     continue;
                 }
 
