@@ -11,9 +11,10 @@
   interface Props {
     result: UpdateInfo;
     onclose: () => void;
+    mode?: "current" | "available";
   }
 
-  let { result, onclose }: Props = $props();
+  let { result, onclose, mode = "available" }: Props = $props();
 
   let dialog = $state<HTMLDialogElement | null>(null);
 
@@ -41,10 +42,14 @@
     }
   }}
 >
-  <div class="update-dialog-header">
-    <span class="update-dialog-icon"><AppIcon name="info" size={18} /></span>
+  <div class="update-dialog-header" class:update-dialog-header--current={mode === "current"}>
+    <span class="update-dialog-icon"
+      ><AppIcon name={mode === "current" ? "file" : "info"} size={18} /></span
+    >
     <div class="update-dialog-title">
-      <strong>{_t("about.updateDialogTitle")}</strong>
+      <strong
+        >{mode === "current" ? _t("about.releaseNotes") : _t("about.updateDialogTitle")}</strong
+      >
       <p class="update-dialog-version">
         v{result.latestVersion}
         {#if result.publishedAt}
@@ -72,15 +77,17 @@
     <button type="button" class="update-dialog-btn update-dialog-btn--secondary" onclick={onclose}>
       {_t("about.close")}
     </button>
-    <a
-      class="update-dialog-btn update-dialog-btn--primary"
-      href={result.releaseUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      onclick={onclose}
-    >
-      {_t("about.download")}
-    </a>
+    {#if mode === "available"}
+      <a
+        class="update-dialog-btn update-dialog-btn--primary"
+        href={result.releaseUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onclick={onclose}
+      >
+        {_t("about.download")}
+      </a>
+    {/if}
   </div>
 </dialog>
 
@@ -124,6 +131,11 @@
     border-radius: 8px;
     background: color-mix(in srgb, var(--info-color, #3e63dd) 14%, transparent);
     color: var(--info-color, #3e63dd);
+  }
+
+  .update-dialog-header--current .update-dialog-icon {
+    background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+    color: var(--text-muted);
   }
 
   .update-dialog-title {
