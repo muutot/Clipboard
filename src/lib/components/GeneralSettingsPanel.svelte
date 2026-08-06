@@ -754,6 +754,27 @@
       </button>
     </section>
 
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
+        <div>
+          <strong>{_t("general.doubleClickPaste")}</strong>
+          <p>{_t("general.doubleClickPasteDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.doubleClickPaste}
+        onclick={() => generalSettings.updateSetting("doubleClickPaste", !s.doubleClickPaste)}
+        aria-checked={s.doubleClickPaste}
+        aria-label={_t("general.doubleClickPaste")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="file" size={17} /></span>

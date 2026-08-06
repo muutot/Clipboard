@@ -190,6 +190,8 @@ export interface GeneralSettings {
   pinCopiedToTop: boolean;
   useRecycleBin: boolean;
   pasteCleaningEnabled: boolean;
+  /** 双击条目时直接粘贴（有格式按原格式、纯文本/图片/文件直接粘贴）；关闭则双击打开详情面板 */
+  doubleClickPaste: boolean;
   showToastNotifications: boolean;
   rememberWindowPosition: boolean;
   alwaysOnTop: boolean;

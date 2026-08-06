@@ -268,6 +268,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["清洗", "clean", "粘贴"],
   ),
   entry(
+    "general.double-click-paste",
+    { section: "general_items" },
+    i18n("general.doubleClickPaste"),
+    i18n("general.doubleClickPasteDescription"),
+    ["双击", "粘贴", "double click", "paste", "详情"],
+  ),
+  entry(
     "general.toast-notifications",
     { section: "general_window" },
     i18n("general.toastNotifications"),

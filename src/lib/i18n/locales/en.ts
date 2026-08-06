@@ -535,6 +535,12 @@ const en: LocaleDefinition = {
     cleanCopySuccess: "Copied cleaned text; no previous application was available",
     cleanPasteSuccess: "Pasted cleaned text",
     cleanPasteFailed: "Failed to restore the previous application and paste",
+    imageCopySuccess: "Copied image; no previous application was available",
+    imagePasteSuccess: "Pasted image",
+    imagePasteFailed: "Failed to restore the previous application and paste image",
+    fileCopySuccess: "Copied file; no previous application was available",
+    filePasteSuccess: "Pasted file",
+    filePasteFailed: "Failed to restore the previous application and paste file",
     duplicateSuccess: "Duplicated as new entry",
     saveFailed: "Save failed",
     restoreSuccess: "Restored {count} items",
@@ -675,6 +681,9 @@ const en: LocaleDefinition = {
     pasteCleaning: "Clean on Paste",
     pasteCleaningDescription:
       "Trim surrounding whitespace, collapse repeated whitespace, and remove URL tracking parameters before pasting",
+    doubleClickPaste: "Double-Click to Paste",
+    doubleClickPasteDescription:
+      "Double-click an item to paste it directly: formatted items paste with formatting, while plain text, images, and files paste as-is. Disable to open the detail panel on double-click instead",
     toastNotifications: "Action Notifications",
     toastNotificationsDescription:
       "Show Toast feedback after copy, favorite, delete, and other actions",

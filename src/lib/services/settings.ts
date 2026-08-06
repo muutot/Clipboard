@@ -39,6 +39,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   pinCopiedToTop: true,
   useRecycleBin: true,
   pasteCleaningEnabled: false,
+  doubleClickPaste: true,
   showToastNotifications: true,
   rememberWindowPosition: false,
   alwaysOnTop: false,
@@ -389,6 +390,10 @@ function normalizeGeneralSettings(
   result.pasteCleaningEnabled = booleanValue(
     source.pasteCleaningEnabled ?? fallback("pasteCleaningEnabled"),
     defaultSettings.pasteCleaningEnabled,
+  );
+  result.doubleClickPaste = booleanValue(
+    source.doubleClickPaste ?? fallback("doubleClickPaste"),
+    defaultSettings.doubleClickPaste,
   );
   result.showToastNotifications = booleanValue(
     source.showToastNotifications ?? fallback("showToastNotifications"),

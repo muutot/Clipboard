@@ -61,6 +61,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `pinCopiedToTop`              | boolean                            | `true`      | —                                                                                |
 | `useRecycleBin`               | boolean                            | `true`      | —                                                                                |
 | `pasteCleaningEnabled`        | boolean                            | `false`     | —                                                                                |
+| `doubleClickPaste`            | boolean                            | `true`      | —                                                                                |
 | `showToastNotifications`      | boolean                            | `true`      | —                                                                                |
 | `rememberWindowPosition`      | boolean                            | `false`     | —                                                                                |
 | `alwaysOnTop`                 | boolean                            | `false`     | —                                                                                |

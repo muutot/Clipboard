@@ -91,6 +91,8 @@
     onplainpaste: (id: string) => void;
     onformatpaste: (id: string) => void;
     oncleanpaste: (id: string) => void;
+    ondblclickpaste: (id: string) => void;
+    doubleClickPaste?: boolean;
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
@@ -147,6 +149,8 @@
     onplainpaste,
     onformatpaste,
     oncleanpaste,
+    ondblclickpaste,
+    doubleClickPaste = false,
     onsaveasnew,
     onrestore,
     onimagefullscreen,
@@ -396,6 +400,10 @@
 
   function handleDoubleClick(event: MouseEvent) {
     event.preventDefault();
+    if (doubleClickPaste) {
+      ondblclickpaste(item.id);
+      return;
+    }
     runCardAction("detail", event);
   }
 

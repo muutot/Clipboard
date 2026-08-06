@@ -65,6 +65,8 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 
 Paste paths (`plainPaste`, `formatPaste`, `cleanPaste`) live in the route. When `pasteCleaningEnabled` is set, plain/format paste run `transform_text` with `cleanPaste` first; format paste falls back to writing the cleaned plain text (instead of HTML) whenever cleaning changed the content, since URL/whitespace cleanup cannot be applied reliably inside markup.
 
+Double-click paste (`doubleClickPasteItem`, enabled by the `doubleClickPaste` setting which defaults on) also lives in the route: text/link items reuse `formatPaste` when the item has `htmlContent`, otherwise `plainPaste`; image items re-fetch the stored image via `convertFileSrc` and call `writeClipboardImage`; file items re-use the copy-item path (multi-file `textContent` JSON list joined by newlines, or the primary `resourcePath`). All four cases end in `pasteToPreviousApplication`. When `doubleClickPaste` is off, the card's double click falls back to `ondetail`.
+
 Events currently crossing windows/runtime include:
 
 - `clipboard-item-added`

@@ -494,6 +494,12 @@ export interface LocaleDefinition {
     cleanCopySuccess: string;
     cleanPasteSuccess: string;
     cleanPasteFailed: string;
+    imageCopySuccess: string;
+    imagePasteSuccess: string;
+    imagePasteFailed: string;
+    fileCopySuccess: string;
+    filePasteSuccess: string;
+    filePasteFailed: string;
     duplicateSuccess: string;
     saveFailed: string;
     restoreSuccess: string;
@@ -633,6 +639,8 @@ export interface LocaleDefinition {
     useRecycleBinDescription: string;
     pasteCleaning: string;
     pasteCleaningDescription: string;
+    doubleClickPaste: string;
+    doubleClickPasteDescription: string;
     toastNotifications: string;
     toastNotificationsDescription: string;
     useSystemTitleBar: string;

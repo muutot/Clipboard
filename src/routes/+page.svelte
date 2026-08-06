@@ -434,6 +434,7 @@
   const alwaysShowActions = $derived($generalSettings.cardActionsDisplay === "always");
   const quickCopyBadgeAlwaysVisible = $derived($generalSettings.quickCopyBadgeAlwaysVisible);
   const detailDisplayMode = $derived($generalSettings.detailDisplayMode);
+  const doubleClickPaste = $derived($generalSettings.doubleClickPaste);
 
   function estimatedCardHeight(item: ClipboardItem): number {
     if (compactMode && item.kind === "image") {
@@ -2155,6 +2156,65 @@
     );
   }
 
+  async function doubleClickPasteItem(id: string) {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+
+    if (item.kind === "text" || item.kind === "link") {
+      if (item.htmlContent) {
+        await formatPaste(id);
+      } else {
+        await plainPaste(id);
+      }
+      return;
+    }
+
+    if (item.kind === "image") {
+      await pasteToPreviousApplication(
+        item,
+        {
+          paste: "toast.imagePasteSuccess",
+          copy: "toast.imageCopySuccess",
+          failed: "toast.imagePasteFailed",
+        },
+        async () => {
+          const src = convertFileSrc((item.resourcePath ?? "").replace(/\\/g, "/"));
+          const response = await fetch(src);
+          const blob = await response.blob();
+          await writeClipboardImage(blob, item.resourcePath, item.contentHash);
+        },
+      );
+      return;
+    }
+
+    if (item.kind === "file") {
+      await pasteToPreviousApplication(
+        item,
+        {
+          paste: "toast.filePasteSuccess",
+          copy: "toast.fileCopySuccess",
+          failed: "toast.filePasteFailed",
+        },
+        async () => {
+          if (item.textContent && item.textContent.startsWith("[")) {
+            try {
+              const paths = JSON.parse(item.textContent) as string[];
+              if (paths.length > 1) {
+                await writeClipboardText(paths.join("\n"));
+                return;
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          if (item.resourcePath) {
+            await writeClipboardText(item.resourcePath);
+          }
+        },
+      );
+    }
+  }
+
   function duplicateItem(id: string) {
     invoke("duplicate_clipboard_item", { id })
       .then(() => {
@@ -3260,6 +3320,8 @@
                     onplainpaste={plainPaste}
                     onformatpaste={formatPaste}
                     oncleanpaste={cleanPaste}
+                    ondblclickpaste={doubleClickPasteItem}
+                    {doubleClickPaste}
                     onrestore={restoreItem}
                     onsavetags={saveTags}
                     {tagColors}
@@ -3305,6 +3367,8 @@
                   onplainpaste={plainPaste}
                   onformatpaste={formatPaste}
                   oncleanpaste={cleanPaste}
+                  ondblclickpaste={doubleClickPasteItem}
+                  {doubleClickPaste}
                   onrestore={restoreItem}
                   onsavetags={saveTags}
                   {tagColors}
