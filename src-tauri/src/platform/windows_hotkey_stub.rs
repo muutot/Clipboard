@@ -268,6 +268,15 @@ impl HotkeyManager {
         self.quick_paste_target.take()
     }
 
+    /// Records the current foreground window as the quick-paste target so the
+    /// main window can restore it when it is shown from the tray or another
+    /// entry point (the toggle hotkey path records it inside its own loop).
+    pub fn remember_foreground(&self) {
+        if let Some(window_handle) = foreground_window_handle() {
+            self.quick_paste_target.remember(window_handle);
+        }
+    }
+
     pub fn stop(&mut self) {
         stop_hotkey_thread();
         if let Some(handle) = self.handle.take() {
