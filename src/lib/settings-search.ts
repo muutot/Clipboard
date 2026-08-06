@@ -3,6 +3,7 @@ export const SETTINGS_SECTIONS = [
   "general_items",
   "general_display",
   "general_window",
+  "general_general",
   "compact",
   "font",
   "theme",
@@ -78,6 +79,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   ],
   general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示"],
   general_window: [i18n("storage.generalTab"), i18n("storage.generalWindowTab"), "窗口"],
+  general_general: [i18n("storage.generalTab"), i18n("storage.generalGeneralTab"), "语言", "通知"],
   compact: [
     i18n("storage.appearanceTab"),
     i18n("storage.compactTab"),
@@ -129,6 +131,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     i18n("storage.keyboardTab"),
     i18n("storage.keyboardSystemTab"),
     "快捷键",
+    "全局",
     "系统",
   ],
   ocr: [i18n("storage.ocrTitle"), "OCR", "文字识别"],
@@ -146,7 +149,7 @@ const STATISTICS_TAB_SEARCH_TEXT: Record<StatisticsTab, readonly SettingsSearchT
 export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate[] = [
   entry(
     "general.language",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.language"),
     i18n("general.languageDescription"),
     ["中文", "English", "locale"],
@@ -269,14 +272,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.max-text-capture-size",
-    { section: "general_items" },
+    { section: "capture" },
     i18n("general.maxTextCaptureSize"),
     i18n("general.maxTextCaptureSizeDescription"),
     ["捕获", "文本", "纯文本", "上限", "大小", "capture", "size", "limit"],
   ),
   entry(
     "general.toast-notifications",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.toastNotifications"),
     i18n("general.toastNotificationsDescription"),
     ["提示", "toast"],
@@ -290,7 +293,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.settings-close-button",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.showSettingsCloseButton"),
     i18n("general.showSettingsCloseButtonDescription"),
     ["关闭按钮", "Esc", "settings close"],
@@ -677,7 +680,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "keyboard.toggle-window",
     { section: "keyboard_system" },
     i18n("keyboard.toggleWindow"),
-    "设置唤起或隐藏主窗口的系统全局快捷键",
+    "设置唤起或隐藏主窗口的全局快捷键",
     ["Alt+V", "toggle", "热键"],
   ),
   entry(
@@ -916,6 +919,8 @@ export function resolveSettingsNavPath(
       return [translate("storage.generalTab"), translate("storage.generalDisplayTab")];
     case "general_window":
       return [translate("storage.generalTab"), translate("storage.generalWindowTab")];
+    case "general_general":
+      return [translate("storage.generalTab"), translate("storage.generalGeneralTab")];
     case "compact":
       return [translate("storage.appearanceTab"), translate("storage.compactTab")];
     case "font":

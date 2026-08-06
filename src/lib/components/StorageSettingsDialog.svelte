@@ -153,6 +153,7 @@
     | "general_items"
     | "general_display"
     | "general_window"
+    | "general_general"
     | "compact"
     | "font"
     | "theme"
@@ -169,7 +170,7 @@
     | "ocr"
     | "statistics"
     | "about"
-  >("general_window");
+  >("general_general");
   let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
   let keyboardResetToken = $state(0);
 
@@ -204,6 +205,11 @@
         return {
           title: _t("storage.generalWindowTab"),
           desc: _t("storage.generalWindowDescription"),
+        };
+      case "general_general":
+        return {
+          title: _t("storage.generalGeneralTab"),
+          desc: _t("storage.generalGeneralDescription"),
         };
       case "compact":
         return {
@@ -242,17 +248,17 @@
         };
       case "storage_paths":
         return {
-          title: _t("storage.dataStorage"),
+          title: _t("storage.storagePathsTab"),
           desc: _t("storage.storagePathsDescription"),
         };
       case "storage_limits":
         return {
-          title: _t("storage.dataStorage"),
+          title: _t("storage.storageLimitsTab"),
           desc: _t("storage.storageLimitsDescription"),
         };
       case "storage_tools":
         return {
-          title: _t("storage.dataStorage"),
+          title: _t("storage.storageToolsTab"),
           desc: _t("storage.storageToolsDescription"),
         };
       case "keyboard_item":
@@ -1425,9 +1431,10 @@
         class:active={activeSection === "general_search" ||
           activeSection === "general_items" ||
           activeSection === "general_display" ||
-          activeSection === "general_window"}
+          activeSection === "general_window" ||
+          activeSection === "general_general"}
         type="button"
-        onclick={() => (activeSection = "general_window")}
+        onclick={() => (activeSection = "general_general")}
       >
         <AppIcon name="sliders" size={16} />
         <span>{_t("storage.generalTab")}</span>
@@ -1666,8 +1673,16 @@
             {_t("statistics.memoryTab")}
           </button>
         </nav>
-      {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window"}
+      {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window" || activeSection === "general_general"}
         <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "general_general"}
+            aria-current={activeSection === "general_general" ? "page" : undefined}
+            onclick={() => (activeSection = "general_general")}
+          >
+            {_t("storage.generalGeneralTab")}
+          </button>
           <button
             type="button"
             class:active={activeSection === "general_window"}
@@ -1805,7 +1820,7 @@
           </div>
         {/if}
       </div>
-    {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window"}
+    {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_display" || activeSection === "general_window" || activeSection === "general_general"}
       <GeneralSettingsPanel
         {onclose}
         section={activeSection === "general_search"
@@ -1814,7 +1829,9 @@
             ? "items"
             : activeSection === "general_display"
               ? "display"
-              : "window"}
+              : activeSection === "general_general"
+                ? "general"
+                : "window"}
         showHeader={false}
       />
     {:else if activeSection === "compact"}

@@ -86,10 +86,12 @@ export interface LocaleDefinition {
     generalSearchTab: string;
     generalItemsTab: string;
     generalDisplayTab: string;
+    generalGeneralTab: string;
     generalWindowTab: string;
     generalSearchDescription: string;
     generalItemsDescription: string;
     generalDisplayDescription: string;
+    generalGeneralDescription: string;
     generalWindowDescription: string;
     keyboardItemTab: string;
     keyboardQuickTab: string;

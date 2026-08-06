@@ -10,6 +10,8 @@
   import { messages, resolvePath } from "$lib/i18n";
   import { convertFileSrc, invoke } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { generalSettings } from "$lib/services/settings";
+  import { formatBytes, updateSliderTrack } from "$lib/utils/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -29,6 +31,8 @@
 
   let { iconsDir = "", onclose, showHeader = true }: Props = $props();
   let settings = $state<ApplicationFilterSettings | null>(null);
+  let maxTextCaptureSizeEl = $state<HTMLInputElement | null>(null);
+  let captureSettings = $state($generalSettings);
   let availableSearch = $state("");
   let ignoredSearch = $state("");
   let selectedAvailable = $state<string[]>([]);
@@ -61,6 +65,17 @@
   onMount(() => {
     void loadSettings();
     void loadPrivacyStatus();
+  });
+
+  $effect(() => {
+    const unsub = generalSettings.subscribe((v) => {
+      captureSettings = v;
+    });
+    return unsub;
+  });
+
+  $effect(() => {
+    updateSliderTrack(maxTextCaptureSizeEl);
   });
 
   async function loadPrivacyStatus() {
@@ -188,6 +203,33 @@
   <div class="settings-state">{_t("capture.readingApps")}</div>
 {:else if settings}
   <div class="settings-scroll">
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.maxTextCaptureSize")}</strong>
+            <p>{_t("general.maxTextCaptureSizeDescription")}</p>
+          </div>
+          <span class="value-label">{formatBytes(captureSettings.maxTextCaptureBytes)}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="10000"
+        max="10000000"
+        step="10000"
+        value={captureSettings.maxTextCaptureBytes}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("maxTextCaptureBytes", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={maxTextCaptureSizeEl}
+      />
+    </section>
+
     <section class="setting-card toggle-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="pause" size={17} /></span>

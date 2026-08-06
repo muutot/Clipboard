@@ -11,7 +11,7 @@
     WindowEffect,
   } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
-  import { formatBytes, updateSliderTrack } from "$lib/utils/format";
+  import { updateSliderTrack } from "$lib/utils/format";
   import { onDestroy } from "svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -22,7 +22,7 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
-    section?: "search" | "items" | "display" | "window";
+    section?: "search" | "items" | "display" | "window" | "general";
   }
 
   let { onclose, showHeader = true, section = "search" }: Props = $props();
@@ -197,7 +197,6 @@
   let searchPageSizeEl = $state<HTMLInputElement | null>(null);
   let searchCacheSizeEl = $state<HTMLInputElement | null>(null);
   let loadToleranceEl = $state<HTMLInputElement | null>(null);
-  let maxTextCaptureSizeEl = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
     updateSliderTrack(transparencyEl);
@@ -212,7 +211,6 @@
     updateSliderTrack(searchPageSizeEl);
     updateSliderTrack(searchCacheSizeEl);
     updateSliderTrack(loadToleranceEl);
-    updateSliderTrack(maxTextCaptureSizeEl);
   });
 </script>
 
@@ -646,6 +644,100 @@
         bind:this={viewerOpacityEl}
       />
     </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.pageSize")}</strong>
+            <p>{_t("general.pageSizeDescription")}</p>
+          </div>
+          <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max={Math.min(s.pageSizeLimit, 300)}
+        step="50"
+        value={Math.min(s.display.pageSize, s.pageSizeLimit)}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Math.min(Number(input.value), s.pageSizeLimit);
+          generalSettings.updateSetting("display", {
+            ...s.display,
+            pageSize: val,
+          });
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={pageSizeEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.pageSizeLimit")}</strong>
+            <p>{_t("general.pageSizeLimitDescription")}</p>
+          </div>
+          <span class="value-label">{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="500"
+        max="6000"
+        step="100"
+        value={s.pageSizeLimit}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          const val = Number(input.value);
+          generalSettings.updateSetting("pageSizeLimit", val);
+          if (s.display.pageSize > val) {
+            generalSettings.updateSetting("display", { ...s.display, pageSize: val });
+          }
+          updateSliderTrack(input);
+          if (pageSizeRaf) cancelAnimationFrame(pageSizeRaf);
+          pageSizeRaf = requestAnimationFrame(() => {
+            pageSizeRaf = 0;
+            updateSliderTrack(pageSizeEl);
+          });
+        }}
+        class="transparency-slider"
+        bind:this={pageSizeLimitEl}
+      />
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+        <div class="heading-inline">
+          <div>
+            <strong>{_t("general.loadTolerance")}</strong>
+            <p>{_t("general.loadToleranceDescription")}</p>
+          </div>
+          <span class="value-label">{s.loadTolerance} {_t("general.loadToleranceUnit")}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="500"
+        step="50"
+        value={s.loadTolerance}
+        oninput={(event) => {
+          const input = event.target as HTMLInputElement;
+          generalSettings.updateSetting("loadTolerance", Number(input.value));
+          updateSliderTrack(input);
+        }}
+        class="transparency-slider"
+        bind:this={loadToleranceEl}
+      />
+    </section>
   {:else if section === "items"}
     <section class="setting-card toggle-card">
       <div class="setting-heading">
@@ -776,128 +868,7 @@
         <span class="toggle-knob"></span>
       </button>
     </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.maxTextCaptureSize")}</strong>
-            <p>{_t("general.maxTextCaptureSizeDescription")}</p>
-          </div>
-          <span class="value-label">{formatBytes(s.maxTextCaptureBytes)}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="10000"
-        max="10000000"
-        step="10000"
-        value={s.maxTextCaptureBytes}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("maxTextCaptureBytes", Number(input.value));
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={maxTextCaptureSizeEl}
-      />
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.pageSize")}</strong>
-            <p>{_t("general.pageSizeDescription")}</p>
-          </div>
-          <span class="value-label">{s.display.pageSize} {_t("general.pageSizeUnit")}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="50"
-        max={Math.min(s.pageSizeLimit, 300)}
-        step="50"
-        value={Math.min(s.display.pageSize, s.pageSizeLimit)}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          const val = Math.min(Number(input.value), s.pageSizeLimit);
-          generalSettings.updateSetting("display", {
-            ...s.display,
-            pageSize: val,
-          });
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={pageSizeEl}
-      />
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.pageSizeLimit")}</strong>
-            <p>{_t("general.pageSizeLimitDescription")}</p>
-          </div>
-          <span class="value-label">{s.pageSizeLimit} {_t("general.pageSizeLimitUnit")}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="500"
-        max="6000"
-        step="100"
-        value={s.pageSizeLimit}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          const val = Number(input.value);
-          generalSettings.updateSetting("pageSizeLimit", val);
-          if (s.display.pageSize > val) {
-            generalSettings.updateSetting("display", { ...s.display, pageSize: val });
-          }
-          updateSliderTrack(input);
-          if (pageSizeRaf) cancelAnimationFrame(pageSizeRaf);
-          pageSizeRaf = requestAnimationFrame(() => {
-            pageSizeRaf = 0;
-            updateSliderTrack(pageSizeEl);
-          });
-        }}
-        class="transparency-slider"
-        bind:this={pageSizeLimitEl}
-      />
-    </section>
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-        <div class="heading-inline">
-          <div>
-            <strong>{_t("general.loadTolerance")}</strong>
-            <p>{_t("general.loadToleranceDescription")}</p>
-          </div>
-          <span class="value-label">{s.loadTolerance} {_t("general.loadToleranceUnit")}</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="50"
-        max="500"
-        step="50"
-        value={s.loadTolerance}
-        oninput={(event) => {
-          const input = event.target as HTMLInputElement;
-          generalSettings.updateSetting("loadTolerance", Number(input.value));
-          updateSliderTrack(input);
-        }}
-        class="transparency-slider"
-        bind:this={loadToleranceEl}
-      />
-    </section>
-  {:else}
+  {:else if section === "general"}
     <section class="setting-card toggle-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="globe" size={17} /></span>
@@ -920,6 +891,50 @@
       </div>
     </section>
 
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="info" size={17} /></span>
+        <div>
+          <strong>{_t("general.toastNotifications")}</strong>
+          <p>{_t("general.toastNotificationsDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.showToastNotifications}
+        onclick={() =>
+          generalSettings.updateSetting("showToastNotifications", !s.showToastNotifications)}
+        aria-checked={s.showToastNotifications}
+        aria-label={_t("general.toastNotifications")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="x" size={17} /></span>
+        <div>
+          <strong>{_t("general.showSettingsCloseButton")}</strong>
+          <p>{_t("general.showSettingsCloseButtonDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.showSettingsCloseButton}
+        onclick={() =>
+          generalSettings.updateSetting("showSettingsCloseButton", !s.showSettingsCloseButton)}
+        aria-checked={s.showSettingsCloseButton}
+        aria-label={_t("general.showSettingsCloseButton")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+  {:else}
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
@@ -1028,28 +1043,6 @@
 
     <section class="setting-card toggle-card">
       <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="x" size={17} /></span>
-        <div>
-          <strong>{_t("general.showSettingsCloseButton")}</strong>
-          <p>{_t("general.showSettingsCloseButtonDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.showSettingsCloseButton}
-        onclick={() =>
-          generalSettings.updateSetting("showSettingsCloseButton", !s.showSettingsCloseButton)}
-        aria-checked={s.showSettingsCloseButton}
-        aria-label={_t("general.showSettingsCloseButton")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="pin" size={17} /></span>
         <div>
           <strong>{_t("general.rememberWindowPosition")}</strong>
@@ -1064,28 +1057,6 @@
           generalSettings.updateSetting("rememberWindowPosition", !s.rememberWindowPosition)}
         aria-checked={s.rememberWindowPosition}
         aria-label={_t("general.rememberWindowPosition")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="info" size={17} /></span>
-        <div>
-          <strong>{_t("general.toastNotifications")}</strong>
-          <p>{_t("general.toastNotificationsDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.showToastNotifications}
-        onclick={() =>
-          generalSettings.updateSetting("showToastNotifications", !s.showToastNotifications)}
-        aria-checked={s.showToastNotifications}
-        aria-label={_t("general.toastNotifications")}
         role="switch"
       >
         <span class="toggle-knob"></span>

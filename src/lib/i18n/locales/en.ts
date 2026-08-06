@@ -87,21 +87,24 @@ const en: LocaleDefinition = {
     generalSearchTab: "Search",
     generalItemsTab: "Items",
     generalDisplayTab: "Display & Preview",
-    generalWindowTab: "Window & General",
+    generalGeneralTab: "General",
+    generalWindowTab: "Window",
     generalSearchDescription:
       "Search suggestions, search history and result sort rules preferences",
     generalItemsDescription:
-      "Item action buttons, quick copy, copy-to-top, recycle bin and load count settings",
-    generalDisplayDescription: "Card text display, image preview and list loading settings",
+      "Item action buttons, quick copy, copy-to-top, recycle bin and paste behavior settings",
+    generalDisplayDescription:
+      "Card text display, image preview, list loading and detail viewing settings",
+    generalGeneralDescription: "Language, notification toasts and settings window preferences",
     generalWindowDescription:
-      "Window appearance, startup behavior, system integration and feedback settings",
+      "Window appearance, acrylic/mica effect, title bar and startup behavior settings",
     keyboardItemTab: "Item Actions",
     keyboardQuickTab: "Quick Copy",
-    keyboardSystemTab: "System",
+    keyboardSystemTab: "Global",
     keyboardItemDescription:
       "Shortcuts for copy, delete, favorite, edit, paste, select all and other item actions",
     keyboardQuickDescription: "Quick copy shortcuts for the first 9 list items, defaults Ctrl+1~9",
-    keyboardSystemDescription: "System-wide global shortcut for showing or hiding the main window",
+    keyboardSystemDescription: "Global shortcut for showing or hiding the main window",
     storagePathsTab: "Storage Paths",
     storageLimitsTab: "Limits & Cleanup",
     storageToolsTab: "Maintenance",

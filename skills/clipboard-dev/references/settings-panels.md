@@ -21,12 +21,12 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 | Primary category | Secondary sections / implementation                                                                                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| General          | Window, Search, Items, Display → `GeneralSettingsPanel`                                                                               |
+| General          | General, Window, Search, Items, Display → `GeneralSettingsPanel`                                                                      |
 | Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`        |
-| Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                                                |
+| Capture          | Filter (ignored apps + max text capture size) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                        |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                 |
 | Storage          | Paths, Limits, Tools (search index, database repair, import/export) → built into the parent                                           |
-| Keyboard         | Item, Quick, System → `KeyboardSettingsPanel` with category prop                                                                      |
+| Keyboard         | Item, Quick, Global → `KeyboardSettingsPanel` with category prop                                                                      |
 | OCR              | Single current section → built into the parent                                                                                        |
 | Statistics       | Storage, Performance, Memory → built into the parent                                                                                  |
 | About            | Version, executable-path location, configurable update source dropdown, and update check (`check_for_update`) → built into the parent |
