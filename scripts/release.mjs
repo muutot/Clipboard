@@ -11,7 +11,8 @@
  *   6. Push to origin (triggers CI/CD)
  *
  * Regenerate mode (--regenerate):
- *   Before normal flow, drops the old release commit + tag from history
+ *   Before normal flow, drops the old release commit + tag from history via
+ *   `git rebase --committer-date-is-author-date --onto <parent> <commit> <branch>`
  *   (preserving other commits' content and timestamps), then runs normal flow.
  *
  * Usage:
@@ -90,56 +91,123 @@ if (isRegenerate) {
     }
   };
 
+  const gitOutput = (cmd) => execSync(cmd, { cwd: ROOT, encoding: "utf-8", stdio: "pipe" }).trim();
+
+  const isCleanTree = () => {
+    try {
+      execSync("git diff --quiet", { cwd: ROOT, stdio: "pipe" });
+      execSync("git diff --cached --quiet", { cwd: ROOT, stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Find the old release commit for the target version: from the local tag, or by
   // scanning history (including remote-tracking refs) for the release message.
   let tagCommit = "";
-  if (localTag) {
-    tagCommit = execSync(`git rev-list -n 1 "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim();
-  }
+  if (localTag) tagCommit = gitOutput(`git rev-list -n 1 "${tagVer}"`);
   if (!tagCommit) {
-    const match = execSync(
-      `git log --all --format="%H %s" --grep="bump version to ${versionArg}" -n 1`,
-      { cwd: ROOT, encoding: "utf-8" },
-    ).trim();
+    const match = gitOutput(
+      `git log --exclude="refs/backup/*" --all --format="%H %s" --grep="bump version to ${versionArg}" -n 1`,
+    );
     if (match) tagCommit = match.split(" ")[0];
   }
 
   if (tagCommit) {
     const shortSha = tagCommit.slice(0, 7);
-    const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-    }).trim();
+    const commitMsg = gitOutput(`git log --format="%s" -1 "${tagCommit}"`);
 
     if (commitMsg.includes("chore[release]") || commitMsg.includes("bump version to")) {
       console.log(`\n[Regenerate] Found old release commit ${shortSha}: "${commitMsg}"`);
       if (!isDryRun) {
         if (isAncestorOfHead(tagCommit)) {
-          const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, {
-            cwd: ROOT,
-            encoding: "utf-8",
-          })
-            .trim()
-            .split(" ")[1];
-          console.log(
-            `  Dropping commit ${shortSha} via filter-branch (preserving other commits' timestamps)...`,
-          );
-          // skip_commit "$@" re-parents later commits past the dropped one while
-          // git commit-tree keeps author + committer dates of every surviving commit.
-          const filter = `if [ "$GIT_COMMIT" = "${tagCommit}" ]; then skip_commit "$@"; else git commit-tree "$@"; fi`;
-          run(`git filter-branch --force --commit-filter "${filter}" -- ${parentSha}..HEAD`, {
-            env: { ...process.env, FILTER_BRANCH_SQUELCH_WARNING: "1" },
-          });
+          let parentSha = "";
           try {
-            execSync(`git update-ref -d refs/original/refs/heads/${BRANCH}`, {
+            parentSha = gitOutput(`git rev-parse --verify --quiet "${tagCommit}^"`);
+          } catch {
+            // root commit — handled below
+          }
+          if (!parentSha) {
+            console.error(
+              `  ERROR: commit ${shortSha} is the root commit and cannot be removed this way.`,
+            );
+            exit(1);
+          }
+          if (!isCleanTree()) {
+            console.error(
+              "  ERROR: working tree is not clean. Commit or stash changes before regenerating.",
+            );
+            exit(1);
+          }
+
+          const tip = gitOutput(`git rev-parse ${BRANCH}`);
+          const backupRef = `refs/backup/pre-release-delete-${shortSha}`;
+          run(`git update-ref ${backupRef} ${tip}`);
+          console.log(
+            `  Backup of '${BRANCH}' saved at ${backupRef} (old tip ${tip.slice(0, 12)})`,
+          );
+
+          // Warn if any replayed commit has author date != committer date; the rebase
+          // would rewrite those committer timestamps to the author date.
+          const DATE_RE = /^(?:author|committer) .* (\d+) [+\-]\d{4}/gm;
+          let mismatch = 0;
+          for (const sha of gitOutput(`git rev-list "${tagCommit}..${tip}"`)
+            .split(/\r?\n/)
+            .filter(Boolean)) {
+            const matches = gitOutput(`git cat-file commit ${sha}`).match(DATE_RE) || [];
+            const ts = matches.map((m) => m.match(/(\d+) [+\-]\d{4}$/)[1]);
+            if (ts.length >= 2 && ts[0] !== ts[ts.length - 1]) mismatch++;
+          }
+          if (mismatch) {
+            console.warn(
+              `  WARNING: ${mismatch} commit(s) in the replayed range have author date != ` +
+                "committer date; their committer timestamps will be rewritten to the author date.",
+            );
+          } else {
+            console.log(
+              "  All replayed commits have author date == committer date: timestamps preserved exactly.",
+            );
+          }
+
+          // Standard single-commit removal: replay everything after the old release
+          // commit onto its parent. --committer-date-is-author-date keeps every
+          // surviving commit's original timestamp.
+          console.log(
+            `  Dropping commit ${shortSha} via rebase --committer-date-is-author-date (preserving timestamps)...`,
+          );
+          try {
+            execSync(
+              `git rebase --committer-date-is-author-date --onto ${parentSha} ${tagCommit} ${BRANCH}`,
+              { cwd: ROOT, encoding: "utf-8", stdio: "inherit", shell: true },
+            );
+          } catch {
+            try {
+              execSync(`git rebase --abort`, {
+                cwd: ROOT,
+                encoding: "utf-8",
+                stdio: "inherit",
+                shell: true,
+              });
+            } catch {
+              // no rebase in progress
+            }
+            execSync(`git update-ref refs/heads/${BRANCH} ${tip}`, {
               cwd: ROOT,
               encoding: "utf-8",
               stdio: "pipe",
-              shell: true,
             });
-          } catch {
-            // refs/original ref already removed
+            console.error(
+              `\n  ERROR: rebase failed (likely conflicts); '${BRANCH}' restored to its previous tip.`,
+            );
+            console.error(`  Restore if needed: git update-ref refs/heads/${BRANCH} ${backupRef}`);
+            exit(1);
           }
+
+          const newTip = gitOutput(`git rev-parse ${BRANCH}`);
+          console.log(
+            `  ✓ Dropped ${shortSha}: '${BRANCH}' ${tip.slice(0, 12)} → ${newTip.slice(0, 12)}`,
+          );
         } else {
           console.log(
             `  Old release commit is not in the current branch (only on a remote ref); ` +

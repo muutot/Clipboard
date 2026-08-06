@@ -118,11 +118,11 @@ node scripts/release.mjs --regenerate <version>
 
 The script locates the old release commit by the local tag **or** by scanning history (including remote-tracking refs) for `bump version to <version>`, then:
 
-- if it is an ancestor of `HEAD`, drops it via `git filter-branch --commit-filter` with `skip_commit "$@"` (this re-parents later commits past the dropped one while `git commit-tree` preserves every surviving commit's author and committer timestamps);
+- if it is an ancestor of `HEAD`, drops it with the standard single-commit removal `git rebase --committer-date-is-author-date --onto <parent> <commit> <branch>`, which replays later commits onto the old release commit's parent while `--committer-date-is-author-date` preserves every surviving commit's original timestamp. Before rewriting, it requires a clean working tree, backs the branch tip up to `refs/backup/pre-release-delete-<sha>`, warns when a replayed commit's author date differs from its committer date, and on failure aborts the rebase and restores the previous tip;
 - otherwise (old release commit exists only on a remote ref), notes that the forced push will drop it;
 - deletes the old tag and sets the forced-push flag.
 
-The normal flow then creates a fresh changelog, commit, and tag. Verify the deletion actually happened before Pass 1: `git log --oneline --all | findstr "bump version to <version>"` should show nothing, and the old tag should be gone.
+The normal flow then creates a fresh changelog, commit, and tag. Verify the deletion actually happened before Pass 1: `git log --oneline <branch> | findstr "bump version to <version>"` should show nothing, and the old tag should be gone. The pre-delete tip is kept as a recovery backup at `refs/backup/pre-release-delete-<sha>` (so the old release commit may still appear under `git log --all`); the script's own history scan excludes `refs/backup/*`, which is why re-running `--regenerate` for Pass 2 reports no old release commit.
 
 ### Dry run
 
