@@ -8,7 +8,7 @@
     type DiscoveredApplication,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
-  import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { generalSettings } from "$lib/services/settings";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
@@ -41,8 +41,6 @@
   let saving = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let privacyPaused = $state(false);
-  let privacyLoading = $state(true);
 
   const ignoredKeys = $derived(
     new Set((settings?.ignoredApplications ?? []).map(normalizeApplication)),
@@ -64,7 +62,6 @@
 
   onMount(() => {
     void loadSettings();
-    void loadPrivacyStatus();
   });
 
   $effect(() => {
@@ -77,40 +74,6 @@
   $effect(() => {
     updateSliderTrack(maxTextCaptureSizeEl);
   });
-
-  async function loadPrivacyStatus() {
-    if (!isTauriRuntime()) {
-      privacyLoading = false;
-      return;
-    }
-
-    try {
-      const status = await invoke<{ paused: boolean }>("get_privacy_status");
-      privacyPaused = status.paused;
-    } catch (error) {
-      console.error("Unable to load privacy status", error);
-    } finally {
-      privacyLoading = false;
-    }
-  }
-
-  async function togglePrivacyPause() {
-    if (!isTauriRuntime() || privacyLoading) return;
-    privacyLoading = true;
-    feedback = "";
-    feedbackSuccess = false;
-
-    try {
-      privacyPaused = await invoke<boolean>("toggle_privacy_pause");
-      feedback = _t(privacyPaused ? "capture.paused" : "capture.resumed");
-      feedbackSuccess = true;
-    } catch (error) {
-      console.error("Unable to toggle privacy pause", error);
-      feedback = error instanceof Error ? error.message : String(error);
-    } finally {
-      privacyLoading = false;
-    }
-  }
 
   async function loadSettings() {
     loading = true;
@@ -228,32 +191,6 @@
         class="transparency-slider"
         bind:this={maxTextCaptureSizeEl}
       />
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="pause" size={17} /></span>
-        <div>
-          <strong>{_t("capture.pauseTitle")}</strong>
-          <p>{_t("capture.pauseDescription")}</p>
-        </div>
-      </div>
-      <div class="pause-control">
-        <span class="pause-state">{_t(privacyPaused ? "capture.paused" : "capture.active")}</span>
-        <button
-          type="button"
-          class="toggle-switch"
-          class:active={!privacyPaused}
-          role="switch"
-          aria-checked={!privacyPaused}
-          aria-label={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
-          title={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
-          disabled={privacyLoading || !isTauriRuntime()}
-          onclick={togglePrivacyPause}
-        >
-          <span class="toggle-knob"></span>
-        </button>
-      </div>
     </section>
 
     <section class="filter-board">
@@ -467,54 +404,6 @@
     color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 1.45;
-  }
-
-  .pause-control {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 0 0 auto;
-  }
-
-  .pause-state {
-    color: var(--text-muted);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-  }
-
-  .toggle-switch {
-    position: relative;
-    width: 40px;
-    height: 22px;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    background: var(--input-bg);
-    transition: background 120ms ease;
-  }
-
-  .toggle-switch.active {
-    border-color: var(--selection-color);
-    background: color-mix(in srgb, var(--selection-color) 18%, transparent);
-  }
-
-  .toggle-switch:disabled {
-    opacity: 0.5;
-  }
-
-  .toggle-knob {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--text-faint);
-    transition: transform 120ms ease;
-  }
-
-  .toggle-switch.active .toggle-knob {
-    transform: translateX(18px);
-    background: var(--selection-color);
   }
 
   .filter-board {

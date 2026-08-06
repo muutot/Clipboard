@@ -100,15 +100,16 @@ Do not treat its long scoped style block as a copy template. Use `settings-share
 
 ### Child settings panels
 
-| Component                         | Focus                                                                         | Extra routing props                                                       |
-| --------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `GeneralSettingsPanel.svelte`     | General, window, search, item, and display preferences                        | `section`: `"search"`, `"items"`, `"display"`, `"window"`, or `"general"` |
-| `ThemeSettingsPanel.svelte`       | Dark/light/custom modes and named preset CRUD                                 | none beyond shell props                                                   |
-| `IconColorsSettingsPanel.svelte`  | Color-icon toggle and per-icon color grid                                     | none beyond shell props                                                   |
-| `FontSizeSettingsPanel.svelte`    | Interface and card font controls                                              | internal `interface`/`card` subview; emits `settings-font-changed`        |
-| `CompactSettingsPanel.svelte`     | Compact toggle and dimensions                                                 | relies entirely on shared CSS                                             |
-| `KeyboardSettingsPanel.svelte`    | Multiple shortcuts per action and recording                                   | `category`: `"item"`, `"quick"`, or `"system"`; `resetToken`              |
-| `IgnoredAppsSettingsPanel.svelte` | Capture pause, max text capture size, discovered apps, ignore list, app icons | optional `iconsDir`                                                       |
+| Component                         | Focus                                                   | Extra routing props                                                |
+| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `GeneralSettingsPanel.svelte`     | General, window, search, and item preferences           | `section`: `"search"`, `"items"`, `"window"`, or `"general"`       |
+| `ThemeSettingsPanel.svelte`       | Dark/light/custom modes and named preset CRUD           | none beyond shell props                                            |
+| `IconColorsSettingsPanel.svelte`  | Color-icon toggle and per-icon color grid               | none beyond shell props                                            |
+| `FontSizeSettingsPanel.svelte`    | Interface and card font controls                        | internal `interface`/`card` subview; emits `settings-font-changed` |
+| `CompactSettingsPanel.svelte`     | Compact toggle and app dimensions                       | relies entirely on shared CSS                                      |
+| `KeyboardSettingsPanel.svelte`    | Multiple shortcuts per action and recording             | `category`: `"item"`, `"quick"`, or `"system"`; `resetToken`       |
+| `RecordingSettingsPanel.svelte`   | Clipboard recording pause/resume toggle (capture group) | none beyond shell props                                            |
+| `IgnoredAppsSettingsPanel.svelte` | Discovered apps, ignore list, app icons                 | optional `iconsDir`                                                |
 
 Every child panel accepts `onclose` and optional `showHeader`. The parent must render it with `showHeader={false}` so headers are removed from the DOM rather than hidden across Svelte style scopes.
 

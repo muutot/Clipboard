@@ -7,6 +7,7 @@
   import DatePicker from "$lib/components/DatePicker.svelte";
   import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
   import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
+  import RecordingSettingsPanel from "$lib/components/RecordingSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
@@ -157,6 +158,7 @@
     | "font"
     | "theme"
     | "icons"
+    | "recording"
     | "capture"
     | "capture_icons"
     | "storage_paths"
@@ -224,6 +226,11 @@
         return {
           title: _t("storage.iconsTab"),
           desc: _t("general.iconColorsDescription"),
+        };
+      case "recording":
+        return {
+          title: _t("capture.pauseTitle"),
+          desc: _t("capture.pauseDescription"),
         };
       case "capture":
         return {
@@ -440,6 +447,9 @@
   let maxFileCopySize = $state(50 * 1024 * 1024);
   let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
   let maxFileCopyDisplay = $state(50);
+  let maxTextCaptureSize = $state(500 * 1024);
+  let maxTextCaptureSizeUnit = $state<"byte" | "KB" | "MB" | "GB">("KB");
+  let maxTextCaptureDisplay = $state(500);
   let imageStoragePath = $state("");
   let fileStoragePath = $state("");
   let resourceStorageRestartNeeded = $state(false);
@@ -471,6 +481,15 @@
   function changeFileSizeUnit(unit: "byte" | "KB" | "MB" | "GB") {
     maxFileCopySizeUnit = unit;
     maxFileCopyDisplay = toDisplaySize(maxFileCopySize, unit);
+  }
+
+  function updateMaxTextCaptureFromDisplay() {
+    maxTextCaptureSize = fromDisplaySize(maxTextCaptureDisplay, maxTextCaptureSizeUnit);
+  }
+
+  function changeTextCaptureUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    maxTextCaptureSizeUnit = unit;
+    maxTextCaptureDisplay = toDisplaySize(maxTextCaptureSize, unit);
   }
 
   function relativePath(absolute: string): string {
@@ -809,6 +828,15 @@
     updateSliderTrack(detScoreSlider);
     updateSliderTrack(detBoxSlider);
     updateSliderTrack(detUnclipSlider);
+  });
+
+  $effect(() => {
+    if (activeSection !== "storage_limits") return;
+    maxTextCaptureSize = $generalSettings.maxTextCaptureBytes;
+    maxTextCaptureDisplay = toDisplaySize(
+      $generalSettings.maxTextCaptureBytes,
+      maxTextCaptureSizeUnit,
+    );
   });
 
   $effect(() => {
@@ -1336,6 +1364,10 @@
     }
   }
 
+  function saveMaxTextCaptureSize() {
+    generalSettings.updateSetting("maxTextCaptureBytes", maxTextCaptureSize);
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (open && event.key === "Escape") {
       event.preventDefault();
@@ -1444,7 +1476,9 @@
         <span>{_t("storage.appearanceTab")}</span>
       </button>
       <button
-        class:active={activeSection === "capture" || activeSection === "capture_icons"}
+        class:active={activeSection === "recording" ||
+          activeSection === "capture" ||
+          activeSection === "capture_icons"}
         type="button"
         onclick={() => (activeSection = "capture")}
       >
@@ -1728,8 +1762,16 @@
             {_t("storage.keyboardSystemTab")}
           </button>
         </nav>
-      {:else if activeSection === "capture" || activeSection === "capture_icons"}
+      {:else if activeSection === "recording" || activeSection === "capture" || activeSection === "capture_icons"}
         <nav class="settings-subnav" aria-label={_t("storage.captureTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "recording"}
+            aria-current={activeSection === "recording" ? "page" : undefined}
+            onclick={() => (activeSection = "recording")}
+          >
+            {_t("capture.pauseTitle")}
+          </button>
           <button
             type="button"
             class:active={activeSection === "capture"}
@@ -1825,6 +1867,8 @@
       <ThemeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "icons"}
       <IconColorsSettingsPanel {onclose} showHeader={false} />
+    {:else if activeSection === "recording"}
+      <RecordingSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
     {:else if activeSection === "capture_icons"}
@@ -2935,6 +2979,29 @@
                   { value: "GB", label: "GB" },
                 ]}
                 onchange={(v) => changeFileSizeUnit(v as "byte" | "KB" | "MB" | "GB")}
+              />
+            </section>
+
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+              <span class="setting-label">{_t("general.maxTextCaptureSize")}</span>
+              <input
+                type="number"
+                bind:value={maxTextCaptureDisplay}
+                min="1"
+                oninput={updateMaxTextCaptureFromDisplay}
+                onchange={saveMaxTextCaptureSize}
+              />
+              <CustomSelect
+                className="unit-select"
+                value={maxTextCaptureSizeUnit}
+                options={[
+                  { value: "byte", label: "B" },
+                  { value: "KB", label: "KB" },
+                  { value: "MB", label: "MB" },
+                  { value: "GB", label: "GB" },
+                ]}
+                onchange={(v) => changeTextCaptureUnit(v as "byte" | "KB" | "MB" | "GB")}
               />
             </section>
 
@@ -4570,6 +4637,8 @@
   }
 
   .setting-card-row input {
+    height: 34px;
+    box-sizing: border-box;
     width: 100px;
     flex-shrink: 0;
     padding: 7px 10px;
