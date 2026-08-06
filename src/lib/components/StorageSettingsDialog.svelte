@@ -54,6 +54,7 @@
   import {
     filterSettingsSearchItems,
     normalizeSettingsSearch,
+    resolveSettingsNavPath,
     resolveSettingsSearchItems,
     type SettingsSearchItem,
   } from "$lib/settings-search";
@@ -183,109 +184,91 @@
     switch (activeSection) {
       case "general_search":
         return {
-          breadcrumb: _t("general.eyebrow"),
           title: _t("storage.generalSearchTab"),
           desc: _t("storage.generalSearchDescription"),
         };
       case "general_items":
         return {
-          breadcrumb: _t("general.eyebrow"),
           title: _t("storage.generalItemsTab"),
           desc: _t("storage.generalItemsDescription"),
         };
       case "general_display":
         return {
-          breadcrumb: _t("general.eyebrow"),
           title: _t("storage.generalDisplayTab"),
           desc: _t("storage.generalDisplayDescription"),
         };
       case "general_window":
         return {
-          breadcrumb: _t("general.eyebrow"),
           title: _t("storage.generalWindowTab"),
           desc: _t("storage.generalWindowDescription"),
         };
       case "compact":
         return {
-          breadcrumb: _t("storage.appearanceSettings"),
           title: _t("storage.compactTab"),
           desc: _t("compact.description"),
         };
       case "font":
         return {
-          breadcrumb: _t("storage.appearanceSettings"),
           title: _t("storage.fontTab"),
           desc: _t("general.fontSizeDescription"),
         };
       case "theme":
         return {
-          breadcrumb: _t("storage.appearanceSettings"),
           title: _t("storage.themeTab"),
           desc: _t("general.fontSizeDescription"),
         };
       case "capture":
         return {
-          breadcrumb: _t("capture.settings"),
           title: _t("capture.title"),
           desc: _t("capture.description"),
         };
       case "capture_icons":
         return {
-          breadcrumb: _t("capture.settings"),
           title: _t("storage.iconCacheTitle"),
           desc: _t("storage.iconCacheDesc"),
         };
       case "tags":
         return {
-          breadcrumb: _t("storage.tagsTab"),
           title: _t("storage.tagsTab"),
           desc: _t("storage.tagsDescription"),
         };
       case "storage_paths":
         return {
-          breadcrumb: _t("storage.settings"),
           title: _t("storage.dataStorage"),
           desc: _t("storage.storagePathsDescription"),
         };
       case "storage_limits":
         return {
-          breadcrumb: _t("storage.settings"),
           title: _t("storage.dataStorage"),
           desc: _t("storage.storageLimitsDescription"),
         };
       case "storage_tools":
         return {
-          breadcrumb: _t("storage.settings"),
           title: _t("storage.dataStorage"),
           desc: _t("storage.storageToolsDescription"),
         };
       case "keyboard_item":
         return {
-          breadcrumb: _t("keyboard.settings"),
           title: _t("keyboard.title"),
           desc: _t("storage.keyboardItemDescription"),
         };
       case "keyboard_quick":
         return {
-          breadcrumb: _t("keyboard.settings"),
           title: _t("keyboard.title"),
           desc: _t("storage.keyboardQuickDescription"),
         };
       case "keyboard_system":
         return {
-          breadcrumb: _t("keyboard.settings"),
           title: _t("keyboard.title"),
           desc: _t("storage.keyboardSystemDescription"),
         };
       case "ocr":
         return {
-          breadcrumb: _t("storage.ocrSettings"),
           title: _t("storage.ocrTitle"),
           desc: _t("storage.ocrDescription"),
         };
       case "statistics":
         return {
-          breadcrumb: _t("storage.statisticsSettings"),
           title:
             tab === "storage"
               ? _t("statistics.storageTab")
@@ -301,14 +284,15 @@
         };
       case "about":
         return {
-          breadcrumb: _t("about.title"),
           title: _t("about.tabLabel"),
           desc: _t("about.description"),
         };
     }
   });
 
-  const settingsBreadcrumb = $derived(settingsSectionMeta?.breadcrumb);
+  const settingsBreadcrumb = $derived(
+    resolveSettingsNavPath(_t, activeSection, activeStatisticsTab).join(" / "),
+  );
   const settingsSectionTitle = $derived(settingsSectionMeta?.title);
   const settingsSectionDescription = $derived(settingsSectionMeta?.desc);
 
@@ -357,50 +341,7 @@
   }
 
   function settingsSearchResultPath(item: SettingsSearchItem): string {
-    const settingsLabel = _t("toolbar.settings");
-    switch (item.section) {
-      case "general_search":
-        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalSearchTab")}`;
-      case "general_items":
-        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalItemsTab")}`;
-      case "general_display":
-        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalDisplayTab")}`;
-      case "general_window":
-        return `${settingsLabel} / ${_t("storage.generalTab")} / ${_t("storage.generalWindowTab")}`;
-      case "compact":
-        return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.compactTab")}`;
-      case "font":
-        return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.fontTab")}`;
-      case "theme":
-        return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.themeTab")}`;
-      case "capture":
-      case "capture_icons":
-        return `${settingsLabel} / ${_t("storage.captureTab")}`;
-      case "tags":
-        return `${settingsLabel} / ${_t("storage.tagsTab")}`;
-      case "storage_paths":
-      case "storage_limits":
-      case "storage_tools":
-        return `${settingsLabel} / ${_t("storage.storageTab")}`;
-      case "keyboard_item":
-      case "keyboard_quick":
-      case "keyboard_system":
-        return `${settingsLabel} / ${_t("storage.keyboardTab")}`;
-      case "ocr":
-        return `${settingsLabel} / OCR`;
-      case "statistics": {
-        const tab = item.statisticsTab ?? "storage";
-        const tabLabel =
-          tab === "storage"
-            ? _t("statistics.storageTab")
-            : tab === "performance"
-              ? _t("statistics.performanceTab")
-              : _t("statistics.memoryTab");
-        return `${settingsLabel} / ${_t("storage.statisticsTab")} / ${tabLabel}`;
-      }
-      case "about":
-        return `${settingsLabel} / ${_t("about.tabLabel")}`;
-    }
+    return resolveSettingsNavPath(_t, item.section, item.statisticsTab).join(" / ");
   }
 
   function findSettingsElement(item: SettingsSearchItem): HTMLElement | null {

@@ -886,6 +886,57 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
 ];
 
+export function resolveSettingsNavPath(
+  translate: SettingsSearchTranslate,
+  section: SettingsSection,
+  statisticsTab?: StatisticsTab,
+): string[] {
+  const root = translate("toolbar.settings");
+  switch (section) {
+    case "general_search":
+      return [root, translate("storage.generalTab"), translate("storage.generalSearchTab")];
+    case "general_items":
+      return [root, translate("storage.generalTab"), translate("storage.generalItemsTab")];
+    case "general_display":
+      return [root, translate("storage.generalTab"), translate("storage.generalDisplayTab")];
+    case "general_window":
+      return [root, translate("storage.generalTab"), translate("storage.generalWindowTab")];
+    case "compact":
+      return [root, translate("storage.appearanceTab"), translate("storage.compactTab")];
+    case "font":
+      return [root, translate("storage.appearanceTab"), translate("storage.fontTab")];
+    case "theme":
+      return [root, translate("storage.appearanceTab"), translate("storage.themeTab")];
+    case "capture":
+    case "capture_icons":
+      return [root, translate("storage.captureTab")];
+    case "storage_paths":
+    case "storage_limits":
+    case "storage_tools":
+      return [root, translate("storage.storageTab")];
+    case "keyboard_item":
+    case "keyboard_quick":
+    case "keyboard_system":
+      return [root, translate("storage.keyboardTab")];
+    case "tags":
+      return [root, translate("storage.tagsTab")];
+    case "ocr":
+      return [root, "OCR"];
+    case "statistics": {
+      const tab = statisticsTab ?? "storage";
+      const tabLabel =
+        tab === "storage"
+          ? translate("statistics.storageTab")
+          : tab === "performance"
+            ? translate("statistics.performanceTab")
+            : translate("statistics.memoryTab");
+      return [root, translate("storage.statisticsTab"), tabLabel];
+    }
+    case "about":
+      return [root, translate("about.tabLabel")];
+  }
+}
+
 export function normalizeSettingsSearch(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase();
 }
