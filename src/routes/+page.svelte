@@ -1429,7 +1429,7 @@
         title: "Settings",
         width: 760,
         height: 640,
-        minWidth: 560,
+        minWidth: 730,
         minHeight: 480,
         center: true,
         resizable: true,
@@ -3418,6 +3418,12 @@
             <AppIcon name="copy" size={14} />
             <span>{_t("bulk.copyN", { count: selectedIds.size })}</span>
           </button>
+          {#if selectedActiveCount > 0 && activeFilter !== "favorite"}
+            <button type="button" class="danger" onclick={bulkDelete}>
+              <AppIcon name="trash" size={14} />
+              <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
+            </button>
+          {/if}
           <button type="button" onclick={bulkFavorite}>
             <AppIcon name="star" size={14} />
             <span
@@ -3426,12 +3432,6 @@
                 : _t("bulk.favoriteN", { count: selectedIds.size })}</span
             >
           </button>
-          {#if selectedActiveCount > 0 && activeFilter !== "favorite"}
-            <button type="button" class="danger" onclick={bulkDelete}>
-              <AppIcon name="trash" size={14} />
-              <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
-            </button>
-          {/if}
           {#if selectedDeletedCount > 0}
             <button type="button" onclick={bulkRestore}>
               <AppIcon name="restore" size={14} />

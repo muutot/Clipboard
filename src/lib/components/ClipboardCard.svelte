@@ -906,23 +906,6 @@
               ><AppIcon name="scan" size={16} /></button
             >
           {/if}
-          <button
-            type="button"
-            class:active={item.favorite}
-            title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-            aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-            onclick={(event) => runCardAction("favorite", event)}
-            ><AppIcon name="star" size={16} filled={item.favorite} /></button
-          >
-          {#if item.deleted && onrestore}
-            <button
-              type="button"
-              title={_t("card.restore")}
-              aria-label={_t("card.restore")}
-              onclick={(event) => runCardAction("restore", event)}
-              ><AppIcon name="restore" size={16} /></button
-            >
-          {/if}
           {#if !item.favorite}
             <button
               type="button"
@@ -932,6 +915,23 @@
               ><AppIcon name="trash" size={16} /></button
             >
           {/if}
+          {#if item.deleted && onrestore}
+            <button
+              type="button"
+              title={_t("card.restore")}
+              aria-label={_t("card.restore")}
+              onclick={(event) => runCardAction("restore", event)}
+              ><AppIcon name="restore" size={16} /></button
+            >
+          {/if}
+          <button
+            type="button"
+            class:active={item.favorite}
+            title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+            aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
+            onclick={(event) => runCardAction("favorite", event)}
+            ><AppIcon name="star" size={16} filled={item.favorite} /></button
+          >
         </div>
         <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
           >{index < 9 ? `⌘${index + 1}` : `#${index + 1}`}</span
