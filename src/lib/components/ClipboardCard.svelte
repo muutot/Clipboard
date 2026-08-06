@@ -1032,7 +1032,7 @@
   }
 
   .clip-card.compact {
-    padding: var(--cpt, 6px) 14px var(--cpb, 4px);
+    padding: var(--cpt, 6px) 7px var(--cpb, 4px) 10px;
     border-radius: var(--cbr, 7px);
     margin-bottom: var(--cg, 5px);
     box-sizing: border-box;
@@ -1440,9 +1440,9 @@
   }
 
   .shortcut {
-    flex: 0 0 56px;
-    width: 56px;
-    margin-left: 8px;
+    flex: 0 0 38px;
+    width: 38px;
+    margin-left: 2px;
     text-align: right;
     overflow: hidden;
     color: var(--text-faint);
