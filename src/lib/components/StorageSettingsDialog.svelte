@@ -2545,32 +2545,12 @@
       </div>
     {:else if activeSection === "about"}
       <div class="settings-scroll">
-        <section class="setting-card" data-settings-search-id="about.info">
+        <section class="setting-card toggle-card" data-settings-search-id="about.info">
           <div class="setting-heading">
             <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
             <div>
               <strong>{_t("app.name")}</strong>
               <p>{_t("about.versionLabel", { version: appVersion })}</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="setting-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-            <div>
-              <strong>{_t("about.executablePathTitle")}</strong>
-              <p class="about-path">{appExecutablePath || _t("about.executablePathEmpty")}</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="setting-card toggle-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-            <div>
-              <strong>{_t("about.updateTitle")}</strong>
-              <p>{_t("about.updateDesc")}</p>
             </div>
           </div>
           <div class="about-update-controls">
@@ -2591,6 +2571,42 @@
               onclick={handleCheckUpdate}
             >
               {checkingUpdate ? _t("about.checking") : _t("about.checkUpdate")}
+            </button>
+          </div>
+        </section>
+
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+            <div>
+              <strong>{_t("about.executablePathTitle")}</strong>
+              <p class="about-path">{appExecutablePath || _t("about.executablePathEmpty")}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="setting-card">
+          <div class="setting-heading">
+            <span class="setting-icon"><AppIcon name="code" size={17} /></span>
+            <div>
+              <strong>{_t("about.repoTitle")}</strong>
+              <p>{_t("about.repoDesc")}</p>
+            </div>
+          </div>
+          <div class="about-update-controls">
+            <button
+              type="button"
+              class="settings-action-btn"
+              onclick={() => invoke("open_external_url", { url: "https://github.com/MissUuu/Clipboard" })}
+            >
+              GitHub
+            </button>
+            <button
+              type="button"
+              class="settings-action-btn"
+              onclick={() => invoke("open_external_url", { url: "https://gitcode.com/MissUuu/Clipboard" })}
+            >
+              GitCode
             </button>
           </div>
         </section>

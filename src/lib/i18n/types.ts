@@ -334,6 +334,8 @@ export interface LocaleDefinition {
     releasedAt: string;
     download: string;
     checkFailed: string;
+    repoTitle: string;
+    repoDesc: string;
   };
   keyboard: {
     settings: string;

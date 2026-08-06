@@ -351,6 +351,8 @@ const zhCN: LocaleDefinition = {
     releasedAt: "发布于 {date}",
     download: "前往下载",
     checkFailed: "检查更新失败：{error}",
+    repoTitle: "代码仓库",
+    repoDesc: "在 GitHub 或 GitCode 上查看源代码",
   },
   keyboard: {
     settings: "设置 / 快捷键",

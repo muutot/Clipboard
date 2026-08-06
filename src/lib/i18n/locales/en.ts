@@ -372,6 +372,8 @@ const en: LocaleDefinition = {
     releasedAt: "Released on {date}",
     download: "Go to Download",
     checkFailed: "Update check failed: {error}",
+    repoTitle: "Source Repository",
+    repoDesc: "View the source code on GitHub or GitCode",
   },
   keyboard: {
     settings: "Settings / Shortcuts",
