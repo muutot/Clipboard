@@ -22,9 +22,16 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
+    tagSearch?: string;
+    ontagSearchChange?: (value: string) => void;
   }
 
-  let { onclose, showHeader = true }: Props = $props();
+  let {
+    onclose,
+    showHeader = true,
+    tagSearch = "",
+    ontagSearchChange = () => {},
+  }: Props = $props();
 
   const presets = [
     "#e5484d",
@@ -49,6 +56,12 @@
   let feedback = $state<{ message: string; kind: "success" | "error" } | null>(null);
   let confirmDelete = $state<Record<string, boolean>>({});
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const filteredTags = $derived.by(() => {
+    const query = tagSearch.trim().toLowerCase();
+    if (!query) return tags;
+    return tags.filter((t) => t.name.toLowerCase().includes(query));
+  });
 
   onMount(() => {
     void load();
@@ -114,9 +127,23 @@
       <h2>{_t("tags.title")}</h2>
       <p>{_t("tags.description")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <div class="header-actions">
+      {#if !loading && tags.length > 0}
+        <label class="search-field">
+          <AppIcon name="search" size={15} />
+          <input
+            type="search"
+            value={tagSearch}
+            placeholder={_t("tags.searchPlaceholder")}
+            aria-label={_t("tags.searchPlaceholder")}
+            oninput={(e) => ontagSearchChange((e.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+      {/if}
+      <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
+        >×</button
+      >
+    </div>
   </header>
 {/if}
 
@@ -127,8 +154,12 @@
     <section class="setting-card">
       <p class="auto-save-note">{_t("tags.empty")}</p>
     </section>
+  {:else if filteredTags.length === 0}
+    <section class="setting-card">
+      <p class="auto-save-note">{_t("tags.noResults")}</p>
+    </section>
   {:else}
-    {#each tags as tag (tag.name)}
+    {#each filteredTags as tag (tag.name)}
       <section class="setting-card tag-row">
         <span
           class="tag-swatch"
@@ -206,6 +237,35 @@
 </div>
 
 <style>
+  .header-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .search-field {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 180px;
+    padding: 7px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-faint);
+    background: var(--input-bg);
+  }
+
+  .search-field input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    color: var(--text-primary);
+    background: transparent;
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  }
+
   .tag-row {
     display: flex;
     align-items: center;

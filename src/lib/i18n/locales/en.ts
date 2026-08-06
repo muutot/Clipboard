@@ -78,6 +78,7 @@ const en: LocaleDefinition = {
     appearanceTab: "Appearance",
     basicTab: "Basic",
     tagsTab: "Tags",
+    tagsSectionTitle: "Manage all clipboard tags",
     tagsDescription:
       "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
     compactTab: "Compact",
@@ -828,6 +829,7 @@ const en: LocaleDefinition = {
     memoryDescription: "Inspect the current process, WebView children, and system memory",
     totalRecords: "Total Records",
     byType: "By Content Type",
+    database: "Database",
     dbSize: "Database Size",
     indexSize: "Search Index Size",
     ocrTasks: "OCR Tasks",
@@ -927,7 +929,9 @@ const en: LocaleDefinition = {
     title: "Tags",
     description:
       "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
+    searchPlaceholder: "Search tags",
     empty: "No tags yet. Tags you add to item cards will appear here.",
+    noResults: "No matching tags",
     count: "Used on {count} items",
     editTitle: "Edit Tag",
     name: "Name",

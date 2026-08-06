@@ -78,6 +78,7 @@ export interface LocaleDefinition {
     appearanceTab: string;
     basicTab: string;
     tagsTab: string;
+    tagsSectionTitle: string;
     tagsDescription: string;
     compactTab: string;
     fontTab: string;
@@ -773,6 +774,7 @@ export interface LocaleDefinition {
     memoryDescription: string;
     totalRecords: string;
     byType: string;
+    database: string;
     dbSize: string;
     indexSize: string;
     ocrTasks: string;
@@ -870,7 +872,9 @@ export interface LocaleDefinition {
   tags: {
     title: string;
     description: string;
+    searchPlaceholder: string;
     empty: string;
+    noResults: string;
     count: string;
     editTitle: string;
     name: string;

@@ -237,8 +237,8 @@
         };
       case "tags":
         return {
-          title: _t("storage.tagsTab"),
-          desc: _t("storage.tagsDescription"),
+          title: _t("storage.tagsSectionTitle"),
+          desc: "",
         };
       case "storage_paths":
         return {

@@ -701,9 +701,9 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   entry(
     "tags.manage",
     { section: "tags" },
-    i18n("storage.tagsTab"),
+    i18n("storage.tagsSectionTitle"),
     i18n("storage.tagsDescription"),
-    [i18n("tags.title"), i18n("tags.colorNone"), "标签管理", "重命名", "删除", "颜色"],
+    [i18n("storage.tagsTab"), i18n("tags.title"), "标签管理", "重命名", "删除", "颜色"],
   ),
 
   entry(
