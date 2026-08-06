@@ -18,3 +18,11 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
 
   return invoke<UpdateInfo>("check_for_update");
 }
+
+export async function getRelease(version: string): Promise<UpdateInfo> {
+  if (!isTauriRuntime()) {
+    throw new Error("Release lookup is only available in the desktop app");
+  }
+
+  return invoke<UpdateInfo>("get_release", { version });
+}
