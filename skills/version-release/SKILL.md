@@ -110,13 +110,19 @@ Same two-pass flow applies.
 
 ### Regenerate mode
 
-Re-releases the current version by dropping the old release commit + tag from history first, then re-running the normal flow:
+Re-releases the current version. **The first step must delete the old release commit + tag for that version** before re-running the normal flow:
 
 ```
 node scripts/release.mjs --regenerate <version>
 ```
 
-Uses `git rebase --onto` to surgically remove the previous release commit (preserving other commits' content and timestamps) and deletes the old tag. The normal flow then creates a fresh changelog, commit, and tag.
+The script locates the old release commit by the local tag **or** by scanning history (including remote-tracking refs) for `bump version to <version>`, then:
+
+- if it is an ancestor of `HEAD`, drops it via `git rebase --onto` (preserving other commits' content and timestamps);
+- otherwise (old release commit exists only on a remote ref), notes that the forced push will drop it;
+- deletes the old tag and sets the forced-push flag.
+
+The normal flow then creates a fresh changelog, commit, and tag. Verify the deletion actually happened before Pass 1: `git log --oneline --all | findstr "bump version to <version>"` should show nothing, and the old tag should be gone.
 
 ### Dry run
 

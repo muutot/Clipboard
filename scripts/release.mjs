@@ -74,14 +74,37 @@ if (!versionArg) {
 let forcePush = false;
 if (isRegenerate) {
   const tagVer = `v${versionArg}`;
-  const tagExists =
+  const localTag =
     execSync(`git tag -l "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVer;
 
-  if (tagExists) {
-    const tagCommit = execSync(`git rev-list -n 1 "${tagVer}"`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-    }).trim();
+  const isAncestorOfHead = (sha) => {
+    try {
+      execSync(`git merge-base --is-ancestor "${sha}" HEAD`, {
+        cwd: ROOT,
+        encoding: "utf-8",
+        stdio: "pipe",
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Find the old release commit for the target version: from the local tag, or by
+  // scanning history (including remote-tracking refs) for the release message.
+  let tagCommit = "";
+  if (localTag) {
+    tagCommit = execSync(`git rev-list -n 1 "${tagVer}"`, { cwd: ROOT, encoding: "utf-8" }).trim();
+  }
+  if (!tagCommit) {
+    const match = execSync(
+      `git log --all --format="%H %s" --grep="bump version to ${versionArg}" -n 1`,
+      { cwd: ROOT, encoding: "utf-8" },
+    ).trim();
+    if (match) tagCommit = match.split(" ")[0];
+  }
+
+  if (tagCommit) {
     const shortSha = tagCommit.slice(0, 7);
     const commitMsg = execSync(`git log --format="%s" -1 "${tagCommit}"`, {
       cwd: ROOT,
@@ -91,21 +114,36 @@ if (isRegenerate) {
     if (commitMsg.includes("chore[release]") || commitMsg.includes("bump version to")) {
       console.log(`\n[Regenerate] Found old release commit ${shortSha}: "${commitMsg}"`);
       if (!isDryRun) {
-        const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, {
-          cwd: ROOT,
-          encoding: "utf-8",
-        })
-          .trim()
-          .split(" ")[1];
-        console.log(`  Dropping commit ${shortSha} via rebase (onto ${parentSha.slice(0, 7)})...`);
-        run(`git rebase --onto ${parentSha} ${tagCommit}`);
-        run(`git tag -d ${tagVer}`);
+        if (isAncestorOfHead(tagCommit)) {
+          const parentSha = execSync(`git rev-list --parents -n 1 "${tagCommit}"`, {
+            cwd: ROOT,
+            encoding: "utf-8",
+          })
+            .trim()
+            .split(" ")[1];
+          console.log(
+            `  Dropping commit ${shortSha} via rebase (onto ${parentSha.slice(0, 7)})...`,
+          );
+          run(`git rebase --onto ${parentSha} ${tagCommit}`);
+        } else {
+          console.log(
+            `  Old release commit is not in the current branch (only on a remote ref); ` +
+              `it will be dropped by the forced push.`,
+          );
+        }
+        if (localTag) {
+          run(`git tag -d ${tagVer}`);
+        }
         forcePush = true;
         console.log(`  ✓ Old release commit removed, tag ${tagVer} deleted\n`);
       } else {
         console.log(`  (would drop ${shortSha} and tag ${tagVer} in real run)\n`);
       }
     }
+  } else {
+    console.log(
+      `\n[Regenerate] No old release commit found for v${versionArg} — creating a fresh release.`,
+    );
   }
 }
 
