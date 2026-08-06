@@ -64,7 +64,7 @@ impl UpdateSource {
     }
 }
 
-async fn fetch_release(source: UpdateSource, url: String) -> Result<Release, String> {
+async fn fetch_release(url: String) -> Result<Release, String> {
     let client = reqwest::Client::builder()
         .user_agent("clipboard-desktop")
         .timeout(std::time::Duration::from_secs(10))
@@ -93,7 +93,7 @@ pub async fn check_for_update(
         let guard = config.lock().map_err(|e| format!("config lock: {e}"))?;
         guard.update_source()
     };
-    let release = fetch_release(source, source.latest_api_url()).await?;
+    let release = fetch_release(source.latest_api_url()).await?;
 
     let current_version = env!("CARGO_PKG_VERSION").to_owned();
     let latest_version = release.tag_name.trim_start_matches('v').to_owned();
@@ -124,7 +124,7 @@ pub async fn get_release(
     } else {
         format!("v{version}")
     };
-    let release = fetch_release(source, source.tag_api_url(&tag)).await?;
+    let release = fetch_release(source.tag_api_url(&tag)).await?;
 
     let current_version = env!("CARGO_PKG_VERSION").to_owned();
     Ok(UpdateInfo {
