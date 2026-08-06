@@ -48,11 +48,7 @@ pub mod infra;
 // ---------------------------------------------------------------------------
 
 pub use autostart::{decide_autostart_action, sync_autostart, AutostartAction};
-pub use dispatch::{
-    extract_app_icon, get_foreground_app, read_clipboard_file_paths, read_clipboard_html,
-    read_clipboard_image, read_clipboard_rtf, read_clipboard_text,
-    write_clipboard_text_with_self_trigger, PlatformAdapter,
-};
+pub use dispatch::{platform, PlatformClipboard};
 pub use monitor::ClipboardMonitor;
 pub use platform_info::{
     current_capabilities, get_platform_info, runtime_info, ClipboardPlatform, ForegroundApp,

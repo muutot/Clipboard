@@ -8,6 +8,48 @@ use std::time::Duration;
 #[cfg(target_os = "windows")]
 use crate::content::icon_key;
 
+pub struct WindowsPlatform;
+
+#[cfg(target_os = "windows")]
+impl crate::platform::PlatformClipboard for WindowsPlatform {
+    fn get_foreground_app(&self) -> crate::platform::ForegroundApp {
+        get_foreground_app()
+    }
+
+    fn read_clipboard_text(&self) -> Option<String> {
+        read_clipboard_text()
+    }
+
+    fn read_clipboard_html(&self) -> Option<String> {
+        read_clipboard_html()
+    }
+
+    fn read_clipboard_rtf(&self) -> Option<String> {
+        read_clipboard_rtf()
+    }
+
+    fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)> {
+        read_clipboard_image()
+    }
+
+    fn read_clipboard_file_paths(&self) -> Vec<String> {
+        read_clipboard_file_paths()
+    }
+
+    fn write_clipboard_text_with_self_trigger(&self, text: &str) -> Result<(), String> {
+        write_clipboard_text_with_self_trigger(text)
+    }
+
+    fn extract_app_icon(
+        &self,
+        icon_dir: &std::path::Path,
+        app_name: &str,
+        exe_path: &str,
+    ) -> Option<String> {
+        extract_app_icon(icon_dir, app_name, exe_path)
+    }
+}
+
 pub const CF_UNICODETEXT: u32 = 13;
 pub const CF_DIB: u32 = 8;
 pub const CF_DIBV5: u32 = 17;
@@ -1397,7 +1439,7 @@ impl WindowsClipboardMonitor {
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
 
-                    let current_text = crate::platform::read_clipboard_text();
+                    let current_text = crate::platform::platform().read_clipboard_text();
 
                     let changed = match (&last_text, &current_text) {
                         (Some(old), Some(new)) => old != new,

@@ -1,197 +1,74 @@
 use std::path::Path;
 
-use crate::keyboard::ShortcutBinding;
+use crate::platform::platform_info::ForegroundApp;
+#[cfg(target_os = "linux")]
+use crate::platform::platform_info::Platform;
 
+#[cfg(target_os = "linux")]
+use super::linux_wayland::LinuxWaylandPlatform;
+#[cfg(target_os = "linux")]
+use super::linux_x11::LinuxX11Platform;
+#[cfg(target_os = "macos")]
+use super::macos::MacPlatform;
 #[cfg(target_os = "windows")]
-use super::windows_clipboard;
-
-use super::platform_info::{ForegroundApp, Platform, PlatformCapabilities};
+use super::windows_clipboard::WindowsPlatform;
 
 // ---------------------------------------------------------------------------
-//  Platform dispatch clipboard functions
+//  PlatformClipboard trait — the per-platform clipboard contract
 // ---------------------------------------------------------------------------
 
-pub fn get_foreground_app() -> ForegroundApp {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::get_foreground_app();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::get_foreground_app();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return match Platform::detect() {
-            Platform::LinuxWayland => super::linux_wayland::get_foreground_app(),
-            _ => super::linux_x11::get_foreground_app(),
-        };
+/// The clipboard/app contract every platform must satisfy. Each platform
+/// implements it in its own adapter module and `platform()` returns the
+/// adapter active for the running target.
+///
+/// Unsupported rich-text capture keeps the documented defaults (`None`) until
+/// it is wired on a platform.
+pub trait PlatformClipboard {
+    fn get_foreground_app(&self) -> ForegroundApp;
+    fn read_clipboard_text(&self) -> Option<String>;
+    fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)>;
+    fn read_clipboard_file_paths(&self) -> Vec<String>;
+    fn write_clipboard_text_with_self_trigger(&self, text: &str) -> Result<(), String>;
+    fn extract_app_icon(&self, icon_dir: &Path, app_name: &str, exe_path: &str) -> Option<String>;
+
+    /// Reads the optional HTML fragment used for paste-by-format.
+    /// Windows: `HTML Format`/CF_HTML; macOS: `public.html`; Linux: not wired.
+    fn read_clipboard_html(&self) -> Option<String> {
+        None
     }
 
-    #[allow(unreachable_code)]
-    ForegroundApp::empty()
-}
-
-pub fn read_clipboard_text() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::read_clipboard_text();
+    /// Reads the optional RTF payload used for paste-by-format.
+    /// Windows: registered `Rich Text Format`; macOS/Linux: not wired.
+    fn read_clipboard_rtf(&self) -> Option<String> {
+        None
     }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::read_clipboard_text();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return match Platform::detect() {
-            Platform::LinuxWayland => super::linux_wayland::read_clipboard_text(),
-            _ => super::linux_x11::read_clipboard_text(),
-        };
-    }
-
-    #[allow(unreachable_code)]
-    None
-}
-
-pub fn read_clipboard_html() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::read_clipboard_html();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::read_clipboard_html();
-    }
-    // Linux clipboard targets are not wired for HTML capture yet; the plain-text
-    // path remains authoritative there.
-    #[allow(unreachable_code)]
-    None
-}
-
-pub fn read_clipboard_rtf() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::read_clipboard_rtf();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::read_clipboard_rtf();
-    }
-    // Linux clipboard targets are not wired for RTF capture yet; the plain-text
-    // path remains authoritative there.
-    #[allow(unreachable_code)]
-    None
-}
-
-pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::read_clipboard_image();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::read_clipboard_image();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return match Platform::detect() {
-            Platform::LinuxWayland => super::linux_wayland::read_clipboard_image(),
-            _ => super::linux_x11::read_clipboard_image(),
-        };
-    }
-
-    #[allow(unreachable_code)]
-    None
-}
-
-pub fn read_clipboard_file_paths() -> Vec<String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::read_clipboard_file_paths();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::read_clipboard_file_paths();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return match Platform::detect() {
-            Platform::LinuxWayland => super::linux_wayland::read_clipboard_file_paths(),
-            _ => super::linux_x11::read_clipboard_file_paths(),
-        };
-    }
-
-    #[allow(unreachable_code)]
-    {
-        Vec::new()
-    }
-}
-
-pub fn extract_app_icon(icon_dir: &Path, app_name: &str, exe_path: &str) -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::extract_app_icon(icon_dir, app_name, exe_path);
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::extract_app_icon(icon_dir, app_name, exe_path);
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return match Platform::detect() {
-            Platform::LinuxWayland => {
-                super::linux_wayland::extract_app_icon(icon_dir, app_name, exe_path)
-            }
-            _ => super::linux_x11::extract_app_icon(icon_dir, app_name, exe_path),
-        };
-    }
-
-    #[allow(unreachable_code)]
-    None
-}
-
-pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        return windows_clipboard::write_clipboard_text_with_self_trigger(text);
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return super::macos::write_clipboard_text_with_self_trigger(text);
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return match Platform::detect() {
-            Platform::LinuxWayland => {
-                super::linux_wayland::write_clipboard_text_with_self_trigger(text)
-            }
-            _ => super::linux_x11::write_clipboard_text_with_self_trigger(text),
-        };
-    }
-
-    #[allow(unreachable_code)]
-    Err("clipboard writing is not supported on this platform".to_owned())
 }
 
 // ---------------------------------------------------------------------------
-//  PlatformAdapter trait
+//  Active platform factory
 // ---------------------------------------------------------------------------
 
-pub trait PlatformAdapter: Send + Sync {
-    fn platform(&self) -> Platform;
-    fn capabilities(&self) -> PlatformCapabilities;
-    fn get_clipboard_text(&self) -> Option<String>;
-    fn get_clipboard_types(&self) -> Vec<String>;
-    fn register_global_shortcuts(
-        &mut self,
-        action_id: &str,
-        shortcuts: &[ShortcutBinding],
-    ) -> Result<(), String>;
-    fn unregister_all_shortcuts(&mut self) -> Result<(), String>;
-    fn set_ignored_applications(&mut self, apps: Vec<String>);
-    fn ignored_applications(&self) -> Vec<String>;
-    fn is_monitoring(&self) -> bool;
-    fn start_monitoring(&mut self) -> Result<(), String>;
-    fn stop_monitoring(&mut self) -> Result<(), String>;
-    fn platform_info(&self) -> String;
+/// Returns the platform adapter for the running target. The Linux variant
+/// picks the X11 or Wayland backend at runtime because the display server is
+/// only known after launch.
+pub fn platform() -> &'static dyn PlatformClipboard {
+    #[cfg(target_os = "windows")]
+    {
+        &WindowsPlatform
+    }
+    #[cfg(target_os = "macos")]
+    {
+        &MacPlatform
+    }
+    #[cfg(target_os = "linux")]
+    {
+        match Platform::detect() {
+            Platform::LinuxWayland => &LinuxWaylandPlatform,
+            _ => &LinuxX11Platform,
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        unreachable!("unsupported target OS")
+    }
 }

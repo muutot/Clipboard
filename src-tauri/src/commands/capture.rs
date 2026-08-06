@@ -393,7 +393,7 @@ pub(crate) fn run_capture_loop(
                     break;
                 }
 
-                let app_info = platform::get_foreground_app();
+                let app_info = platform::platform().get_foreground_app();
                 let source_app = foreground_app_name(&app_info);
                 if capture_state.should_skip(source_app.as_deref(), None) {
                     continue;
@@ -402,19 +402,25 @@ pub(crate) fn run_capture_loop(
                 // Extract and cache app icon
                 let icon_dir = storage_path.join("icons");
                 let icon_path = if let Some(source_name) = source_app.as_deref() {
-                    platform::extract_app_icon(&icon_dir, source_name, &app_info.exe_path)
+                    platform::platform().extract_app_icon(
+                        &icon_dir,
+                        source_name,
+                        &app_info.exe_path,
+                    )
                 } else {
                     None
                 };
 
-                let text = platform::read_clipboard_text();
+                let text = platform::platform().read_clipboard_text();
                 let max_text_capture_bytes = capture_state.max_text_capture_bytes() as usize;
-                let html = platform::read_clipboard_html()
+                let html = platform::platform()
+                    .read_clipboard_html()
                     .filter(|html| !html.trim().is_empty() && html.len() <= max_text_capture_bytes);
-                let rtf = platform::read_clipboard_rtf()
+                let rtf = platform::platform()
+                    .read_clipboard_rtf()
                     .filter(|rtf| !rtf.trim().is_empty() && rtf.len() <= max_text_capture_bytes);
-                let image_data = platform::read_clipboard_image();
-                let file_paths = platform::read_clipboard_file_paths();
+                let image_data = platform::platform().read_clipboard_image();
+                let file_paths = platform::platform().read_clipboard_file_paths();
 
                 if capture_state.should_skip(source_app.as_deref(), text.as_deref()) {
                     continue;

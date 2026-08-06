@@ -28,6 +28,40 @@ use std::{
 
 use crate::keyboard::ShortcutBinding;
 
+pub struct LinuxX11Platform;
+
+#[cfg(target_os = "linux")]
+impl crate::platform::PlatformClipboard for LinuxX11Platform {
+    fn get_foreground_app(&self) -> crate::platform::ForegroundApp {
+        get_foreground_app()
+    }
+
+    fn read_clipboard_text(&self) -> Option<String> {
+        read_clipboard_text()
+    }
+
+    fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)> {
+        read_clipboard_image()
+    }
+
+    fn read_clipboard_file_paths(&self) -> Vec<String> {
+        read_clipboard_file_paths()
+    }
+
+    fn write_clipboard_text_with_self_trigger(&self, text: &str) -> Result<(), String> {
+        write_clipboard_text_with_self_trigger(text)
+    }
+
+    fn extract_app_icon(
+        &self,
+        icon_dir: &std::path::Path,
+        app_name: &str,
+        exe_path: &str,
+    ) -> Option<String> {
+        extract_app_icon(icon_dir, app_name, exe_path)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
