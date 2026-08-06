@@ -1213,6 +1213,7 @@ mod tests {
         assert!(!status.is_empty());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn accessibility_permission_request_on_non_macos() {
         // Should succeed on non-macOS (stub returns Ok).
