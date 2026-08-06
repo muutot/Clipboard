@@ -57,6 +57,16 @@
     generalSettings.updateSetting("themeColors", { ...themeColors, [key]: cleaned });
   }
 
+  function resetToDark() {
+    themeColors = { ...DARK_THEME_COLORS };
+    generalSettings.updateSetting("themeColors", { ...DARK_THEME_COLORS });
+  }
+
+  function resetToLight() {
+    themeColors = { ...LIGHT_THEME_COLORS };
+    generalSettings.updateSetting("themeColors", { ...LIGHT_THEME_COLORS });
+  }
+
   const colorEntries: { key: keyof ThemeColors; label: string; desc: string }[] = [
     { key: "bg", label: _t("theme.bg"), desc: _t("theme.bgDescription") },
     { key: "settingsBg", label: _t("theme.settingsBg"), desc: _t("theme.settingsBgDescription") },
@@ -122,27 +132,55 @@
 
   const isReadonly = $derived(s.theme !== "custom");
 
-  const activePreset = $derived(
-    s.activePresetId ? (s.customPresets ?? []).find((p) => p.id === s.activePresetId) : undefined,
-  );
+  let editingId = $state<string | undefined>(undefined);
+  let editName = $state("");
+  let editInput = $state<HTMLInputElement | undefined>(undefined);
+  let adding = $state(false);
+  let newPresetName = $state("");
+  let addInput = $state<HTMLInputElement | undefined>(undefined);
 
-  const presetColorsDiffer = $derived(
-    activePreset
-      ? Object.keys(activePreset.colors).some(
-          (k) =>
-            themeColors[k as keyof ThemeColors] !== activePreset.colors[k as keyof ThemeColors],
-        )
-      : false,
-  );
+  $effect(() => {
+    if (editingId !== undefined) {
+      editInput?.focus();
+      editInput?.select();
+    }
+  });
 
-  const themeDropdownValue = $derived(
-    s.activePresetId && s.theme === "custom" ? s.activePresetId : s.theme,
-  );
+  $effect(() => {
+    if (adding) {
+      addInput?.focus();
+    }
+  });
 
-  let presetName = $state("");
+  function startRename(preset: ThemePreset) {
+    editingId = preset.id;
+    editName = preset.name;
+  }
 
-  function savePreset() {
-    const name = presetName.trim();
+  function commitRename() {
+    if (editingId) {
+      const name = editName.trim();
+      if (name) {
+        const presets = (s.customPresets ?? []).map((p) =>
+          p.id === editingId ? { ...p, name } : p,
+        );
+        generalSettings.updateSetting("customPresets", presets);
+        showFeedback(_t("theme.presetRenamed"), true);
+      }
+    }
+    editingId = undefined;
+    editName = "";
+  }
+
+  function cancelRename() {
+    editingId = undefined;
+    editName = "";
+  }
+
+  function saveNewPreset() {
+    const name = newPresetName.trim();
+    adding = false;
+    newPresetName = "";
     if (!name) return;
     const preset: ThemePreset = {
       id: crypto.randomUUID(),
@@ -152,17 +190,12 @@
     const presets = [...(s.customPresets ?? []), preset];
     generalSettings.updateSetting("customPresets", presets);
     generalSettings.updateSetting("activePresetId", preset.id);
-    presetName = "";
     showFeedback(_t("theme.presetSaved"), true);
   }
 
-  function updatePreset() {
-    if (!activePreset) return;
-    const presets = (s.customPresets ?? []).map((p) =>
-      p.id === activePreset.id ? { ...p, colors: { ...themeColors } } : p,
-    );
-    generalSettings.updateSetting("customPresets", presets);
-    showFeedback(_t("theme.presetUpdated"), true);
+  function cancelAdd() {
+    adding = false;
+    newPresetName = "";
   }
 
   function overwritePreset(preset: ThemePreset) {
@@ -214,24 +247,16 @@
       </div>
     </div>
     <CustomSelect
-      value={themeDropdownValue}
+      value={s.theme}
       ariaLabel={_t("theme.themeMode")}
       options={[
         { value: "dark", label: _t("theme.dark") },
         { value: "light", label: _t("theme.light") },
-        ...(activePreset ? [{ value: activePreset.id, label: activePreset.name }] : []),
         { value: "custom", label: _t("theme.custom") },
       ]}
       onchange={(val) => {
-        if (val === "dark" || val === "light") {
+        if (val === "dark" || val === "light" || val === "custom") {
           changeTheme(val);
-        } else if (val === "custom") {
-          changeTheme("custom");
-        } else if (activePreset && val === activePreset.id) {
-          return;
-        } else {
-          const preset = (s.customPresets ?? []).find((p) => p.id === val);
-          if (preset) applyPreset(preset);
         }
       }}
     />
@@ -241,70 +266,98 @@
     <p class="readonly-hint">{_t("theme.readonlyHint")}</p>
   {:else}
     <section class="setting-card preset-section">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="star" size={16} /></span>
-        <div>
-          <strong>{_t("theme.presets")}</strong>
-          <p>{_t("theme.presetsDescription")}</p>
+      <div class="preset-heading-row">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name="star" size={16} /></span>
+          <div>
+            <strong>{_t("theme.presets")}</strong>
+            <p>{_t("theme.presetsDescription")}</p>
+          </div>
         </div>
-      </div>
-      <div class="preset-save-row">
-        {#if activePreset && presetColorsDiffer}
-          <button class="preset-save-btn update-btn" type="button" onclick={updatePreset}>
-            {_t("theme.updatePreset")} "{activePreset.name}"
-          </button>
+        {#if (s.customPresets ?? []).length > 0}
+          <div class="preset-heading-actions">
+            <button class="preset-action-btn" type="button" onclick={resetToDark}>
+              {_t("theme.darkPreset")}
+            </button>
+            <button class="preset-action-btn" type="button" onclick={resetToLight}>
+              {_t("theme.lightPreset")}
+            </button>
+            <button class="preset-action-btn" type="button" onclick={() => (adding = true)}>
+              + {_t("theme.addPreset")}
+            </button>
+          </div>
         {/if}
-        <input
-          type="text"
-          class="preset-name-input"
-          placeholder={_t("theme.presetNamePlaceholder")}
-          bind:value={presetName}
-          onkeydown={(e) => e.key === "Enter" && savePreset()}
-        />
-        <button
-          class="preset-save-btn"
-          type="button"
-          disabled={!presetName.trim()}
-          onclick={savePreset}
-        >
-          {_t("theme.savePreset")}
-        </button>
       </div>
-      {#if (s.customPresets ?? []).length > 0}
-        <div class="preset-list">
-          {#each s.customPresets ?? [] as preset (preset.id)}
-            <div class="preset-row" class:active={s.activePresetId === preset.id}>
+      <div class="preset-list">
+        {#each s.customPresets ?? [] as preset (preset.id)}
+          <div class="preset-row" class:active={s.activePresetId === preset.id}>
+            {#if editingId === preset.id}
+              <input
+                type="text"
+                class="preset-name-input"
+                value={editName}
+                bind:this={editInput}
+                oninput={(e) => (editName = (e.target as HTMLInputElement).value)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  else if (e.key === "Escape") cancelRename();
+                }}
+                onblur={commitRename}
+              />
+            {:else}
               <span class="preset-row-name">
                 {#if s.activePresetId === preset.id}
                   <span class="preset-check">&#10003;</span>
                 {/if}
                 {preset.name}
               </span>
-              <span class="preset-row-actions">
-                <button
-                  class="preset-action-btn"
-                  type="button"
-                  onclick={() => overwritePreset(preset)}
-                >
-                  {_t("theme.overwritePreset")}
-                </button>
-                <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
-                  {_t("theme.applyPreset")}
-                </button>
-                <button
-                  class="preset-action-btn danger"
-                  type="button"
-                  onclick={() => deletePreset(preset.id)}
-                >
-                  {_t("theme.deletePreset")}
-                </button>
-              </span>
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <p class="preset-empty">{_t("theme.noPresets")}</p>
-      {/if}
+            {/if}
+            <span class="preset-row-actions">
+              <button class="preset-action-btn" type="button" onclick={() => startRename(preset)}>
+                {_t("theme.renamePreset")}
+              </button>
+              <button
+                class="preset-action-btn"
+                type="button"
+                onclick={() => overwritePreset(preset)}
+              >
+                {_t("theme.overwritePreset")}
+              </button>
+              <button class="preset-action-btn" type="button" onclick={() => applyPreset(preset)}>
+                {_t("theme.applyPreset")}
+              </button>
+              <button
+                class="preset-action-btn danger"
+                type="button"
+                onclick={() => deletePreset(preset.id)}
+              >
+                {_t("theme.deletePreset")}
+              </button>
+            </span>
+          </div>
+        {/each}
+        {#if adding}
+          <div class="preset-row">
+            <input
+              type="text"
+              class="preset-name-input"
+              value={newPresetName}
+              bind:this={addInput}
+              placeholder={_t("theme.presetNamePlaceholder")}
+              oninput={(e) => (newPresetName = (e.target as HTMLInputElement).value)}
+              onkeydown={(e) => {
+                if (e.key === "Enter") saveNewPreset();
+                else if (e.key === "Escape") cancelAdd();
+              }}
+              onblur={cancelAdd}
+            />
+          </div>
+        {:else if (s.customPresets ?? []).length === 0}
+          <button class="preset-add-row" type="button" onclick={() => (adding = true)}>
+            + {_t("theme.addPreset")}
+          </button>
+        {/if}
+      </div>
     </section>
 
     {#each colorEntries as entry}
@@ -416,54 +469,38 @@
     display: block;
   }
 
-  .preset-save-row {
+  .preset-heading-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .preset-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .preset-name-input {
     flex: 1;
     min-width: 0;
-    padding: 7px 10px;
+    padding: 5px 8px;
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius, 6px);
     background: var(--input-bg);
     color: var(--text-primary);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     outline: none;
-    transition: border-color 120ms ease;
   }
 
   .preset-name-input:focus {
     border-color: var(--text-faint);
   }
 
-  .preset-save-btn {
-    flex-shrink: 0;
-    padding: 7px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    background: var(--hover-bg);
-    color: var(--text-secondary);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    white-space: nowrap;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
-  }
-
-  .preset-save-btn:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-    border-color: var(--text-faint);
-  }
-
-  .preset-save-btn:disabled {
-    opacity: 0.45;
-    cursor: default;
+  .preset-name-input::placeholder {
+    color: var(--placeholder-color);
   }
 
   .preset-list {
@@ -481,6 +518,29 @@
     border: 1px solid var(--border-subtle);
     border-radius: 7px;
     background: var(--surface-bg);
+  }
+
+  .preset-add-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px dashed var(--border-color);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    transition:
+      color 100ms ease,
+      background 100ms ease;
+  }
+
+  .preset-add-row:hover {
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
   .preset-row-name {
@@ -524,13 +584,6 @@
     background: color-mix(in srgb, var(--danger-color) 10%, transparent);
   }
 
-  .preset-empty {
-    margin: 10px 0 0;
-    color: var(--text-faint);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-    text-align: center;
-  }
-
   .preset-row.active {
     border-color: color-mix(in srgb, var(--selection-color) 36%, transparent);
     background: color-mix(in srgb, var(--selection-color) 8%, var(--surface-bg));
@@ -540,9 +593,5 @@
     color: var(--selection-color);
     font-weight: 700;
     margin-right: 4px;
-  }
-
-  .update-btn {
-    flex-shrink: 0;
   }
 </style>
