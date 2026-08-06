@@ -375,7 +375,7 @@
         return `${settingsLabel} / ${_t("storage.appearanceTab")} / ${_t("storage.themeTab")}`;
       case "capture":
       case "capture_icons":
-        return `${settingsLabel} / ${_t("capture.title")}`;
+        return `${settingsLabel} / ${_t("storage.captureTab")}`;
       case "tags":
         return `${settingsLabel} / ${_t("storage.tagsTab")}`;
       case "storage_paths":
@@ -387,7 +387,7 @@
       case "keyboard_system":
         return `${settingsLabel} / ${_t("storage.keyboardTab")}`;
       case "ocr":
-        return `${settingsLabel} / ${_t("storage.ocrTitle")}`;
+        return `${settingsLabel} / OCR`;
       case "statistics": {
         const tab = item.statisticsTab ?? "storage";
         const tabLabel =
@@ -396,7 +396,7 @@
             : tab === "performance"
               ? _t("statistics.performanceTab")
               : _t("statistics.memoryTab");
-        return `${settingsLabel} / ${_t("statistics.title")} / ${tabLabel}`;
+        return `${settingsLabel} / ${_t("storage.statisticsTab")} / ${tabLabel}`;
       }
       case "about":
         return `${settingsLabel} / ${_t("about.tabLabel")}`;
