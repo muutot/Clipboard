@@ -66,6 +66,7 @@ impl SearchSynchronizer {
         Ok((changes, upserted, deleted))
     }
 
+    #[cfg(test)]
     fn process_single_batch(
         &self,
         repository: &impl SearchRepository,
@@ -94,39 +95,6 @@ impl SearchSynchronizer {
             deleted_documents,
             last_sequence: Some(last_sequence),
         })
-    }
-
-    pub fn sync_batch(
-        &self,
-        repository: &impl SearchRepository,
-        index: &impl SearchIndexSink,
-    ) -> Result<SearchSyncSummary, SearchError> {
-        self.process_single_batch(repository, index)
-    }
-
-    pub fn sync_bounded(
-        &self,
-        repository: &impl SearchRepository,
-        index: &impl SearchIndexSink,
-        max_batches: usize,
-    ) -> Result<SearchSyncSummary, SearchError> {
-        let mut total = SearchSyncSummary::default();
-
-        for _ in 0..max_batches {
-            let batch = self.sync_batch(repository, index)?;
-            total.processed_events += batch.processed_events;
-            total.upserted_documents += batch.upserted_documents;
-            total.deleted_documents += batch.deleted_documents;
-            if batch.last_sequence.is_some() {
-                total.last_sequence = batch.last_sequence;
-            }
-
-            if batch.processed_events < u64::from(self.batch_size) {
-                return Ok(total);
-            }
-        }
-
-        Ok(total)
     }
 
     pub fn sync_until_idle(
@@ -372,7 +340,7 @@ mod tests {
         let database = Database::open_in_memory().unwrap();
         database.save_item(&item("item", "待重试")).unwrap();
 
-        let result = SearchSynchronizer::default().sync_batch(&database, &FailingIndex);
+        let result = SearchSynchronizer::default().process_single_batch(&database, &FailingIndex);
 
         assert!(result.is_err());
         assert_eq!(database.read_search_outbox(100).unwrap().len(), 1);
