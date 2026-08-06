@@ -82,6 +82,7 @@ export interface LocaleDefinition {
     compactTab: string;
     fontTab: string;
     themeTab: string;
+    iconsTab: string;
     generalSearchTab: string;
     generalItemsTab: string;
     generalDisplayTab: string;
@@ -700,6 +701,11 @@ export interface LocaleDefinition {
     showSecondaryTextDescription: string;
     colorIcons: string;
     colorIconsDescription: string;
+    iconColors: string;
+    iconColorsDescription: string;
+    iconColorsDisabledHint: string;
+    iconColorsReset: string;
+    iconColorsResetAll: string;
     maxTextLines: string;
     maxTextLinesDescription: string;
     maxTextLinesUnit: string;

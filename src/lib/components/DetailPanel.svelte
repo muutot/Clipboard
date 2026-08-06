@@ -1,5 +1,6 @@
 <script lang="ts">
-  import AppIcon, { type IconName } from "$lib/components/AppIcon.svelte";
+  import AppIcon from "$lib/components/AppIcon.svelte";
+  import type { IconName } from "$lib/types/clipboard";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";

@@ -38,7 +38,7 @@
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
-  import type { IconName } from "$lib/components/AppIcon.svelte";
+  import type { IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { assets } from "$app/paths";
   import {

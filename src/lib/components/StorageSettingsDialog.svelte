@@ -10,6 +10,7 @@
   import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
   import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
   import ThemeSettingsPanel from "$lib/components/ThemeSettingsPanel.svelte";
+  import IconColorsSettingsPanel from "$lib/components/IconColorsSettingsPanel.svelte";
   import TagManagementSettingsPanel from "$lib/components/TagManagementSettingsPanel.svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { resetKeyboardConfig } from "$lib/services/keyboard";
@@ -154,6 +155,7 @@
     | "compact"
     | "font"
     | "theme"
+    | "icons"
     | "capture"
     | "capture_icons"
     | "storage_paths"
@@ -216,6 +218,11 @@
         return {
           title: _t("storage.themeTab"),
           desc: _t("general.fontSizeDescription"),
+        };
+      case "icons":
+        return {
+          title: _t("storage.iconsTab"),
+          desc: _t("general.iconColorsDescription"),
         };
       case "capture":
         return {
@@ -1427,7 +1434,8 @@
       <button
         class:active={activeSection === "compact" ||
           activeSection === "font" ||
-          activeSection === "theme"}
+          activeSection === "theme" ||
+          activeSection === "icons"}
         type="button"
         onclick={() => (activeSection = "theme")}
       >
@@ -1595,7 +1603,7 @@
           </div>
         </section>
       {/if}
-      {#if activeSection === "compact" || activeSection === "font" || activeSection === "theme"}
+      {#if activeSection === "compact" || activeSection === "font" || activeSection === "theme" || activeSection === "icons"}
         <nav class="settings-subnav" aria-label={_t("storage.appearanceTab")}>
           <button
             type="button"
@@ -1620,6 +1628,14 @@
             onclick={() => (activeSection = "compact")}
           >
             {_t("storage.compactTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "icons"}
+            aria-current={activeSection === "icons" ? "page" : undefined}
+            onclick={() => (activeSection = "icons")}
+          >
+            {_t("storage.iconsTab")}
           </button>
         </nav>
       {:else if activeSection === "statistics"}
@@ -1806,6 +1822,8 @@
       <FontSizeSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "theme"}
       <ThemeSettingsPanel {onclose} showHeader={false} />
+    {:else if activeSection === "icons"}
+      <IconColorsSettingsPanel {onclose} showHeader={false} />
     {:else if activeSection === "capture"}
       <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
     {:else if activeSection === "capture_icons"}

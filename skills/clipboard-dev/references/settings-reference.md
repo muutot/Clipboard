@@ -84,6 +84,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `searchIndexSyncMode`         | `"lazy"` or `"background"`         | `"lazy"`    | —                                                                                |
 | `updateSource`                | `"github"` or `"gitcode"`          | `"gitcode"` | —                                                                                |
 | `colorIcons`                  | boolean                            | `false`     | —                                                                                |
+| `iconColors`                  | `IconColors` map (hex strings)     | `{}`        | keys limited to `ICON_NAMES`; values must be `#rrggbb`/`#rrggbbaa`               |
 | `loadTolerance`               | number                             | `100`       | 50–500                                                                           |
 
 ## Theme and sort structures

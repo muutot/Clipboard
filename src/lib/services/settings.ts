@@ -13,7 +13,13 @@ import type {
   WindowConfig,
   WindowPosition,
 } from "$lib/types/clipboard";
-import { DARK_THEME_COLORS, LIGHT_THEME_COLORS } from "$lib/types/clipboard";
+import {
+  DARK_THEME_COLORS,
+  LIGHT_THEME_COLORS,
+  ICON_NAMES,
+  type IconColors,
+  type IconName,
+} from "$lib/types/clipboard";
 
 const STORAGE_KEY = "generalSettings";
 const LOCALE_STORAGE_KEY = "clipboard-locale";
@@ -66,6 +72,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchIndexSyncMode: "lazy",
   updateSource: "gitcode",
   colorIcons: false,
+  iconColors: {},
   loadTolerance: 100,
 };
 
@@ -82,6 +89,7 @@ function cloneDefaults(): GeneralSettings {
     fontSizes: { ...defaults.fontSizes },
     display: { ...defaults.display },
     themeColors: defaults.themeColors ? { ...defaults.themeColors } : undefined,
+    iconColors: defaults.iconColors ? { ...defaults.iconColors } : {},
     customPresets: defaults.customPresets.map((preset) => ({
       ...preset,
       colors: { ...preset.colors },
@@ -126,6 +134,17 @@ function normalizeThemeColors(source: unknown, fallback: ThemeColors): ThemeColo
     result[key] = validHexColor(src[key], (fallback as unknown as Record<string, string>)[key]);
   }
   return result as unknown as ThemeColors;
+}
+
+function normalizeIconColors(source: unknown, fallback: IconColors): IconColors {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return { ...fallback };
+  const src = source as Record<string, unknown>;
+  const result: IconColors = {};
+  for (const name of ICON_NAMES) {
+    const cleaned = validHexColor(src[name], "");
+    if (cleaned) result[name] = cleaned;
+  }
+  return result;
 }
 
 function normalizeCustomPresets(source: unknown): ThemePreset[] {
@@ -501,6 +520,10 @@ function normalizeGeneralSettings(
   result.colorIcons = booleanValue(
     source.colorIcons ?? fallback("colorIcons"),
     defaultSettings.colorIcons,
+  );
+  result.iconColors = normalizeIconColors(
+    source.iconColors ?? fallback("iconColors"),
+    fallback("iconColors") ?? {},
   );
   result.loadTolerance = integerInRange(
     source.loadTolerance ?? fallback("loadTolerance"),

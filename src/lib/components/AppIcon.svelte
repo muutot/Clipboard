@@ -1,55 +1,6 @@
 <script lang="ts">
   import { generalSettings } from "$lib/services/settings";
-
-  export type IconName =
-    | "grid"
-    | "text"
-    | "link"
-    | "image"
-    | "file"
-    | "star"
-    | "trash"
-    | "restore"
-    | "settings"
-    | "pin"
-    | "help"
-    | "copy"
-    | "download"
-    | "search"
-    | "clipboard"
-    | "keyboard"
-    | "filter"
-    | "mail"
-    | "phone"
-    | "globe"
-    | "palette"
-    | "check"
-    | "calendar"
-    | "x"
-    | "chevron-down"
-    | "chevron-left"
-    | "chevron-right"
-    | "eye"
-    | "edit"
-    | "code"
-    | "bar-chart"
-    | "sliders"
-    | "type"
-    | "copy-plus"
-    | "info"
-    | "clock"
-    | "mime"
-    | "maximize"
-    | "window-top"
-    | "ruler"
-    | "scan"
-    | "pause"
-    | "tag"
-    | "plus"
-    | "arrow-up"
-    | "arrow-down"
-    | "arrow-left"
-    | "arrow-right";
+  import { DEFAULT_ICON_COLORS, type IconName } from "$lib/types/clipboard";
 
   interface Props {
     name: IconName;
@@ -60,58 +11,11 @@
 
   let { name, size = 18, strokeWidth = 1.8, filled = false }: Props = $props();
 
-  const ICON_COLORS: Record<IconName, string> = {
-    grid: "#4aa8ff",
-    text: "#4aa8ff",
-    link: "#2cc3a3",
-    image: "#a06bff",
-    file: "#f0914a",
-    star: "#e2c05d",
-    trash: "#e85d5d",
-    restore: "#51b96b",
-    settings: "#8a8f98",
-    pin: "#e85d5d",
-    help: "#4aa8ff",
-    copy: "#4aa8ff",
-    download: "#4aa8ff",
-    search: "#4aa8ff",
-    clipboard: "#4aa8ff",
-    keyboard: "#a06bff",
-    filter: "#e2c05d",
-    mail: "#4aa8ff",
-    phone: "#51b96b",
-    globe: "#2cc3a3",
-    palette: "#ff6fa8",
-    check: "#51b96b",
-    calendar: "#4aa8ff",
-    x: "#8a8f98",
-    "chevron-down": "#8a8f98",
-    "chevron-left": "#8a8f98",
-    "chevron-right": "#8a8f98",
-    eye: "#4aa8ff",
-    edit: "#e2c05d",
-    code: "#51b96b",
-    "bar-chart": "#4aa8ff",
-    sliders: "#8a8f98",
-    type: "#4aa8ff",
-    "copy-plus": "#4aa8ff",
-    info: "#4aa8ff",
-    clock: "#4aa8ff",
-    mime: "#f0914a",
-    maximize: "#8a8f98",
-    "window-top": "#8a8f98",
-    ruler: "#4aa8ff",
-    scan: "#51b96b",
-    pause: "#e2c05d",
-    tag: "#a06bff",
-    plus: "#8a8f98",
-    "arrow-up": "#8a8f98",
-    "arrow-down": "#8a8f98",
-    "arrow-left": "#8a8f98",
-    "arrow-right": "#8a8f98",
-  };
-
-  const iconColor = $derived($generalSettings.colorIcons ? ICON_COLORS[name] : "currentColor");
+  const iconColor = $derived(
+    $generalSettings.colorIcons
+      ? ($generalSettings.iconColors?.[name] ?? DEFAULT_ICON_COLORS[name])
+      : "currentColor",
+  );
 </script>
 
 <svg

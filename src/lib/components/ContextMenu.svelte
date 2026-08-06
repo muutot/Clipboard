@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { IconName } from "$lib/components/AppIcon.svelte";
+  import type { IconName } from "$lib/types/clipboard";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
 

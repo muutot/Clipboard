@@ -22,7 +22,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | Primary category | Secondary sections / implementation                                                                                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | General          | Window, Search, Items, Display → `GeneralSettingsPanel`                                                                               |
-| Appearance       | Theme, Font, Compact → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`                                          |
+| Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`        |
 | Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                                                |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                 |
 | Storage          | Paths, Limits, Tools (search index, database repair, import/export) → built into the parent                                           |

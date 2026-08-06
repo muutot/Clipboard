@@ -73,7 +73,7 @@ Use these variables for reusable surfaces, text, borders, controls, and status s
 
 Literal colors are acceptable only for content-defined rendering where theme semantics are not the source of meaning, such as syntax token colors, media backdrops, forced-colors overrides, or intentionally fixed source/category tones. Those cases are niche and must be reviewed/documented rather than generalized.
 
-The optional color-icon mode (`general.colorIcons`) is an intentional fixed-palette exception: `AppIcon.svelte::ICON_COLORS` gives each icon a fixed hex color, which is applied only when the user enables the setting; the default remains `currentColor` so the approved monochrome language is preserved. See `niche_ui_style.md` for the review question on whether these tones should become semantic.
+The optional color-icon mode (`general.colorIcons`) is an intentional fixed-palette exception: the built-in palette `DEFAULT_ICON_COLORS` in `src/lib/types/clipboard.ts` gives each icon a fixed hex color, with optional per-icon overrides in `general.iconColors`. Colors are applied only when the user enables the setting; the default remains `currentColor` so the approved monochrome language is preserved. See `niche_ui_style.md` for the review question on whether these tones should become semantic.
 
 ## Global font and display variables
 

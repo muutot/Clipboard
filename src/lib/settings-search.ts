@@ -6,6 +6,7 @@ export const SETTINGS_SECTIONS = [
   "compact",
   "font",
   "theme",
+  "icons",
   "capture",
   "capture_icons",
   "storage_paths",
@@ -75,7 +76,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "置顶",
     "操作按钮",
   ],
-  general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示", "图标"],
+  general_display: [i18n("storage.generalTab"), i18n("storage.generalDisplayTab"), "显示"],
   general_window: [i18n("storage.generalTab"), i18n("storage.generalWindowTab"), "窗口"],
   compact: [
     i18n("storage.appearanceTab"),
@@ -85,6 +86,14 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   ],
   font: [i18n("storage.appearanceTab"), i18n("storage.fontTab"), i18n("general.fontSize"), "显示"],
   theme: [i18n("storage.appearanceTab"), i18n("storage.themeTab"), i18n("theme.title"), "配色"],
+  icons: [
+    i18n("storage.appearanceTab"),
+    i18n("storage.iconsTab"),
+    i18n("general.colorIcons"),
+    "图标",
+    "彩色",
+    "color",
+  ],
   capture: [i18n("capture.title"), i18n("capture.settings"), "采集"],
   capture_icons: [
     i18n("capture.title"),
@@ -328,10 +337,17 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.color-icons",
-    { section: "general_display" },
+    { section: "icons" },
     i18n("general.colorIcons"),
     i18n("general.colorIconsDescription"),
-    ["彩色", "彩色图标", "单色", "icons", "color"],
+    ["彩色", "彩色图标", "单色", "图标颜色", "icons", "color"],
+  ),
+  entry(
+    "general.icon-colors",
+    { section: "icons" },
+    i18n("general.iconColors"),
+    i18n("general.iconColorsDescription"),
+    ["图标颜色", "每图标", "icon colors", "palette", "color"],
   ),
   entry(
     "general.max-text-lines",
@@ -906,6 +922,8 @@ export function resolveSettingsNavPath(
       return [translate("storage.appearanceTab"), translate("storage.fontTab")];
     case "theme":
       return [translate("storage.appearanceTab"), translate("storage.themeTab")];
+    case "icons":
+      return [translate("storage.appearanceTab"), translate("storage.iconsTab")];
     case "capture":
     case "capture_icons":
       return [translate("storage.captureTab")];

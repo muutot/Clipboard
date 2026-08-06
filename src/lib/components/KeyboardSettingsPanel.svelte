@@ -1,7 +1,7 @@
 ﻿<script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import type { IconName } from "$lib/components/AppIcon.svelte";
+  import type { IconName } from "$lib/types/clipboard";
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,

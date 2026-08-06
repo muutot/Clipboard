@@ -1,6 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import type { IconName } from "$lib/components/AppIcon.svelte";
+  import type { IconName } from "$lib/types/clipboard";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import type { ContextMenuItem } from "$lib/components/ContextMenu.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
