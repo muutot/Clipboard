@@ -2603,7 +2603,7 @@
               type="button"
               class="settings-action-btn"
               onclick={() =>
-                invoke("open_external_url", { url: "https://github.com/MissUuu/Clipboard" })}
+                invoke("open_external_url", { url: "https://github.com/muutot/Clipboard" })}
             >
               GitHub
             </button>
@@ -2611,7 +2611,7 @@
               type="button"
               class="settings-action-btn"
               onclick={() =>
-                invoke("open_external_url", { url: "https://gitcode.com/MissUuu/Clipboard" })}
+                invoke("open_external_url", { url: "https://gitcode.com/m2u/Clipboard" })}
             >
               GitCode
             </button>
@@ -3968,6 +3968,10 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+  }
+
+  .about-update-controls :global(.settings-select) {
+    height: 34px;
   }
 
   .about-path {
