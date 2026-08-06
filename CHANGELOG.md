@@ -1,5 +1,201 @@
 # Changelog
 
+## 1.3.0 (2026-08-06)
+
+### ✨ Features
+
+- **settings**: add per-icon color customization under Appearance Icons (df82a025)
+- **icons**: add color icon mode with settings toggle (c74663ab)
+- **settings**: make text capture size limit configurable (e9ec0abd)
+- **tags**: add tag edit dialog with rename and per-tag color (72cdee54)
+- **clipboard**: capture and paste RTF formatted content (11e93177)
+- **clipboard**: add double-click to paste with settings toggle (eec30868)
+- **settings**: add icon cache manager with per-app replace and dedup view (9034b4c0)
+- **clipboard**: show #N position mark on every card with fixed right column (80efcaa9)
+- **context-menu**: add hover paste submenu and single-menu coordination (962cb40d)
+- **settings**: show program location in About panel (7e683bf8)
+- **update**: add configurable update source (GitHub/GitCode) (1e8770af)
+- **import**: cap PPaste entry size and harden datetime parsing (1e3bc782)
+- **history**: backend-paginated filtering for groups and filter axes (384e1d66)
+- **tags**: sync rename/delete/color changes to main window (5f893c0c)
+- **settings**: modernize transfer card with per-format import and DatePicker (63ea73df)
+- **storage**: add get_import_formats command with frontend wrapper (9d4c432c)
+- **settings**: add tag management panel and colored tag chips (b51dde5f)
+- **tags**: add tag registry and management commands (833ec0dc)
+- **settings**: align keyboard settings with implemented shortcuts (4fc71580)
+- **shortcuts**: add Ctrl+T shortcut to add a tag to the selected item (1528b8c5)
+- **tags**: add item tags stored in metadata_json with card and detail editing (dbf83608)
+- **import**: support importing PPaste .Pastebackup backups (13e89afd)
+
+### 🐛 Bug Fixes
+
+- **hotkey**: add remember_foreground to non-Windows stub (6eacbb75)
+- **icons**: keep checkbox checkmarks currentColor under color icon mode (ea66ab43)
+- **settings**: align search result paths with real nav labels (007df845)
+- **card**: align text card height estimate with trimmed preview (0a27444a)
+- **settings**: use real sub-tab labels in settings search paths (2e84e8f5)
+- **settings**: make search results locate target setting cards reliably (73631ca9)
+- **hotkey**: remove unnecessary isize cast flagged by clippy (065d0b3c)
+- **clipboard**: fix clean-paste text key and share one paste path (4cdd2743)
+- **quick-paste**: reliably restore target window and add dbg_log (56562b58)
+- **clipboard**: batch favorite toggles to unfavorite in favorites group and hides delete (6be9a2df)
+- **clipboard**: gate dib_to_png tests to windows target (e121afdb)
+- **viewer**: report save failure instead of opening the original file (eae37200)
+- **clipboard**: bound DIB decode against malformed headers (83966fd7)
+- **storage**: drop redundant search_outbox_sequence index (bd84568f)
+- **search**: reload reader after applying index changes (b2602b7c)
+- **storage**: don't rename a shared resource file on item rename (1aeb5277)
+- **capture**: recover from poisoned self-trigger guard lock (cf9743ef)
+- **clipboard**: bound CF_UNICODETEXT terminator scan to allocation size (d4c4e8b6)
+- **storage**: resurrect soft-deleted record when its content is re-copied (edd012af)
+- **settings**: deep-copy defaults so clones never share mutable containers (ed137353)
+- **viewer**: guard file detail index against stale selection (ac7a2853)
+- **settings**: add missing clear-history toast translations (5544087d)
+- **clipboard**: guard self-trigger registration so copy never aborts (e9e95a06)
+- **import**: skip non-portable PPaste file records with a note (3b93c61a)
+- **import**: read PPaste image files when zip uses backslash paths (5607102b)
+- **import**: show friendly message for missing PPaste image files (4bcf5bb1)
+- **import**: skip already-imported PPaste records instead of double-counting (fcaf9915)
+- **settings**: display arrow keys as ↑↓←→ glyphs in shortcut bindings (6d2e430e)
+- **settings**: split arrow shortcut entries and add Tab/Shift+Tab bindings (d6b5ec71)
+- **import**: warn when import exceeds the item limit instead of silently truncating (fd148f82)
+
+### 🚀 Performance
+
+- **storage**: index tags via derived item_tags junction table (ae7ce02d)
+- **storage**: rewrite source-app icon query without correlated subquery (d2626372)
+- **ocr**: use async file IO when downloading PP-OCR models (c78d331e)
+- **frontend**: use index map in non-virtual list rendering (4acb3c5b)
+
+### ♻️ Refactoring
+
+- **release**: drop old release commit via rebase instead of filter-branch (a8f31fce)
+- **components**: unify checkbox visuals into shared Checkbox component (f1411d27)
+- **settings**: drop redundant settings root from breadcrumb paths (19514e40)
+- **settings**: unify breadcrumb and search paths via one nav resolver (c88c8b05)
+- **import**: fix clippy lints in PPaste import (c55b2294)
+
+### 🎨 Styling
+
+- **cards**: shrink shortcut column so action buttons sit further right (5feb2115)
+- **docs**: apply prettier formatting to components.md (5dcb9009)
+- **dev**: apply formatting (56c92401)
+- **dev**: apply formatting (d4114fc3)
+- **tags**: collapse emitTagsChanged catch to one line (dbfb1c5b)
+- **dropdown**: align and truncate option labels, content-based popover widths (37e2fb5f)
+- **settings**: scale arrow glyphs with control font size capped at 15px (6af478b0)
+- **settings**: enlarge arrow glyphs in shortcut bindings (8dd92187)
+- **tags**: reveal tag remove button on hover (715b021e)
+
+### 📝 Documentation
+
+- **release**: add non-compiling pre-release check gate and RELEASE.md re-check (cf4094ba)
+
+### 🔧 Chores
+
+- **release**: drop old release commit via filter-branch preserving timestamps (b1922851)
+- **release**: regenerate always deletes old release commit first (a4454ea5)
+- **release**: align release name with tag (c8532e16)
+- **skills**: move skills to project root and register via skills.paths (78bf87d3)
+
+## 1.3.0 (2026-08-06)
+
+### ✨ Features
+
+- **settings**: add per-icon color customization under Appearance Icons (df82a025)
+- **icons**: add color icon mode with settings toggle (c74663ab)
+- **settings**: make text capture size limit configurable (e9ec0abd)
+- **tags**: add tag edit dialog with rename and per-tag color (72cdee54)
+- **clipboard**: capture and paste RTF formatted content (11e93177)
+- **clipboard**: add double-click to paste with settings toggle (eec30868)
+- **settings**: add icon cache manager with per-app replace and dedup view (9034b4c0)
+- **clipboard**: show #N position mark on every card with fixed right column (80efcaa9)
+- **context-menu**: add hover paste submenu and single-menu coordination (962cb40d)
+- **settings**: show program location in About panel (7e683bf8)
+- **update**: add configurable update source (GitHub/GitCode) (1e8770af)
+- **import**: cap PPaste entry size and harden datetime parsing (1e3bc782)
+- **history**: backend-paginated filtering for groups and filter axes (384e1d66)
+- **tags**: sync rename/delete/color changes to main window (5f893c0c)
+- **settings**: modernize transfer card with per-format import and DatePicker (63ea73df)
+- **storage**: add get_import_formats command with frontend wrapper (9d4c432c)
+- **settings**: add tag management panel and colored tag chips (b51dde5f)
+- **tags**: add tag registry and management commands (833ec0dc)
+- **settings**: align keyboard settings with implemented shortcuts (4fc71580)
+- **shortcuts**: add Ctrl+T shortcut to add a tag to the selected item (1528b8c5)
+- **tags**: add item tags stored in metadata_json with card and detail editing (dbf83608)
+- **import**: support importing PPaste .Pastebackup backups (13e89afd)
+
+### 🐛 Bug Fixes
+
+- **hotkey**: add remember_foreground to non-Windows stub (6eacbb75)
+- **icons**: keep checkbox checkmarks currentColor under color icon mode (ea66ab43)
+- **settings**: align search result paths with real nav labels (007df845)
+- **card**: align text card height estimate with trimmed preview (0a27444a)
+- **settings**: use real sub-tab labels in settings search paths (2e84e8f5)
+- **settings**: make search results locate target setting cards reliably (73631ca9)
+- **hotkey**: remove unnecessary isize cast flagged by clippy (065d0b3c)
+- **clipboard**: fix clean-paste text key and share one paste path (4cdd2743)
+- **quick-paste**: reliably restore target window and add dbg_log (56562b58)
+- **clipboard**: batch favorite toggles to unfavorite in favorites group and hides delete (6be9a2df)
+- **clipboard**: gate dib_to_png tests to windows target (e121afdb)
+- **viewer**: report save failure instead of opening the original file (eae37200)
+- **clipboard**: bound DIB decode against malformed headers (83966fd7)
+- **storage**: drop redundant search_outbox_sequence index (bd84568f)
+- **search**: reload reader after applying index changes (b2602b7c)
+- **storage**: don't rename a shared resource file on item rename (1aeb5277)
+- **capture**: recover from poisoned self-trigger guard lock (cf9743ef)
+- **clipboard**: bound CF_UNICODETEXT terminator scan to allocation size (d4c4e8b6)
+- **storage**: resurrect soft-deleted record when its content is re-copied (edd012af)
+- **settings**: deep-copy defaults so clones never share mutable containers (ed137353)
+- **viewer**: guard file detail index against stale selection (ac7a2853)
+- **settings**: add missing clear-history toast translations (5544087d)
+- **clipboard**: guard self-trigger registration so copy never aborts (e9e95a06)
+- **import**: skip non-portable PPaste file records with a note (3b93c61a)
+- **import**: read PPaste image files when zip uses backslash paths (5607102b)
+- **import**: show friendly message for missing PPaste image files (4bcf5bb1)
+- **import**: skip already-imported PPaste records instead of double-counting (fcaf9915)
+- **settings**: display arrow keys as ↑↓←→ glyphs in shortcut bindings (6d2e430e)
+- **settings**: split arrow shortcut entries and add Tab/Shift+Tab bindings (d6b5ec71)
+- **import**: warn when import exceeds the item limit instead of silently truncating (fd148f82)
+
+### 🚀 Performance
+
+- **storage**: index tags via derived item_tags junction table (ae7ce02d)
+- **storage**: rewrite source-app icon query without correlated subquery (d2626372)
+- **ocr**: use async file IO when downloading PP-OCR models (c78d331e)
+- **frontend**: use index map in non-virtual list rendering (4acb3c5b)
+
+### ♻️ Refactoring
+
+- **release**: drop old release commit via rebase instead of filter-branch (a8f31fce)
+- **components**: unify checkbox visuals into shared Checkbox component (f1411d27)
+- **settings**: drop redundant settings root from breadcrumb paths (19514e40)
+- **settings**: unify breadcrumb and search paths via one nav resolver (c88c8b05)
+- **import**: fix clippy lints in PPaste import (c55b2294)
+
+### 🎨 Styling
+
+- **cards**: shrink shortcut column so action buttons sit further right (5feb2115)
+- **docs**: apply prettier formatting to components.md (5dcb9009)
+- **dev**: apply formatting (56c92401)
+- **dev**: apply formatting (d4114fc3)
+- **tags**: collapse emitTagsChanged catch to one line (dbfb1c5b)
+- **dropdown**: align and truncate option labels, content-based popover widths (37e2fb5f)
+- **settings**: scale arrow glyphs with control font size capped at 15px (6af478b0)
+- **settings**: enlarge arrow glyphs in shortcut bindings (8dd92187)
+- **tags**: reveal tag remove button on hover (715b021e)
+
+### 📝 Documentation
+
+- **release**: add non-compiling pre-release check gate and RELEASE.md re-check (cf4094ba)
+
+### 🔧 Chores
+
+- **release**: drop old release commit via filter-branch preserving timestamps (b1922851)
+- **release**: regenerate always deletes old release commit first (a4454ea5)
+- **release**: align release name with tag (c8532e16)
+- **skills**: move skills to project root and register via skills.paths (78bf87d3)
+
 ## 1.2.0 (2026-08-04)
 
 ### ✨ Features
