@@ -644,6 +644,115 @@
         bind:this={viewerOpacityEl}
       />
     </section>
+  {:else if section === "items"}
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+        <div>
+          <strong>{_t("general.cardActionsDisplay")}</strong>
+          <p>{_t("general.cardActionsDisplayDescription")}</p>
+        </div>
+      </div>
+      <CustomSelect
+        value={s.cardActionsDisplay}
+        ariaLabel={_t("general.cardActionsDisplay")}
+        options={[
+          { value: "hover", label: _t("general.cardActionsHover") },
+          { value: "always", label: _t("general.cardActionsAlways") },
+        ]}
+        onchange={(v) =>
+          generalSettings.updateSetting("cardActionsDisplay", v as CardActionsDisplay)}
+      />
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
+        <div>
+          <strong>{_t("general.quickCopyBadge")}</strong>
+          <p>{_t("general.quickCopyBadgeDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.quickCopyBadgeAlwaysVisible}
+        onclick={() =>
+          generalSettings.updateSetting(
+            "quickCopyBadgeAlwaysVisible",
+            !s.quickCopyBadgeAlwaysVisible,
+          )}
+        aria-checked={s.quickCopyBadgeAlwaysVisible}
+        aria-label={_t("general.quickCopyBadge")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
+        <div>
+          <strong>{_t("general.pinCopiedToTop")}</strong>
+          <p>{_t("general.pinCopiedToTopDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.pinCopiedToTop}
+        onclick={() => generalSettings.updateSetting("pinCopiedToTop", !s.pinCopiedToTop)}
+        aria-checked={s.pinCopiedToTop}
+        aria-label={_t("general.pinCopiedToTop")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="scan" size={17} /></span>
+        <div>
+          <strong>{_t("general.pasteCleaning")}</strong>
+          <p>{_t("general.pasteCleaningDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.pasteCleaningEnabled}
+        onclick={() =>
+          generalSettings.updateSetting("pasteCleaningEnabled", !s.pasteCleaningEnabled)}
+        aria-checked={s.pasteCleaningEnabled}
+        aria-label={_t("general.pasteCleaning")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
+        <div>
+          <strong>{_t("general.doubleClickPaste")}</strong>
+          <p>{_t("general.doubleClickPasteDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.doubleClickPaste}
+        onclick={() => generalSettings.updateSetting("doubleClickPaste", !s.doubleClickPaste)}
+        aria-checked={s.doubleClickPaste}
+        aria-label={_t("general.doubleClickPaste")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
 
     <section class="setting-card">
       <div class="setting-heading">
@@ -738,136 +847,6 @@
         bind:this={loadToleranceEl}
       />
     </section>
-  {:else if section === "items"}
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-        <div>
-          <strong>{_t("general.cardActionsDisplay")}</strong>
-          <p>{_t("general.cardActionsDisplayDescription")}</p>
-        </div>
-      </div>
-      <CustomSelect
-        value={s.cardActionsDisplay}
-        ariaLabel={_t("general.cardActionsDisplay")}
-        options={[
-          { value: "hover", label: _t("general.cardActionsHover") },
-          { value: "always", label: _t("general.cardActionsAlways") },
-        ]}
-        onchange={(v) =>
-          generalSettings.updateSetting("cardActionsDisplay", v as CardActionsDisplay)}
-      />
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="copy" size={17} /></span>
-        <div>
-          <strong>{_t("general.quickCopyBadge")}</strong>
-          <p>{_t("general.quickCopyBadgeDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.quickCopyBadgeAlwaysVisible}
-        onclick={() =>
-          generalSettings.updateSetting(
-            "quickCopyBadgeAlwaysVisible",
-            !s.quickCopyBadgeAlwaysVisible,
-          )}
-        aria-checked={s.quickCopyBadgeAlwaysVisible}
-        aria-label={_t("general.quickCopyBadge")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-        <div>
-          <strong>{_t("general.pinCopiedToTop")}</strong>
-          <p>{_t("general.pinCopiedToTopDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.pinCopiedToTop}
-        onclick={() => generalSettings.updateSetting("pinCopiedToTop", !s.pinCopiedToTop)}
-        aria-checked={s.pinCopiedToTop}
-        aria-label={_t("general.pinCopiedToTop")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-        <div>
-          <strong>{_t("general.useRecycleBin")}</strong>
-          <p>{_t("general.useRecycleBinDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.useRecycleBin}
-        onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
-        aria-checked={s.useRecycleBin}
-        aria-label={_t("general.useRecycleBin")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="scan" size={17} /></span>
-        <div>
-          <strong>{_t("general.pasteCleaning")}</strong>
-          <p>{_t("general.pasteCleaningDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.pasteCleaningEnabled}
-        onclick={() =>
-          generalSettings.updateSetting("pasteCleaningEnabled", !s.pasteCleaningEnabled)}
-        aria-checked={s.pasteCleaningEnabled}
-        aria-label={_t("general.pasteCleaning")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="clipboard" size={17} /></span>
-        <div>
-          <strong>{_t("general.doubleClickPaste")}</strong>
-          <p>{_t("general.doubleClickPasteDescription")}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={s.doubleClickPaste}
-        onclick={() => generalSettings.updateSetting("doubleClickPaste", !s.doubleClickPaste)}
-        aria-checked={s.doubleClickPaste}
-        aria-label={_t("general.doubleClickPaste")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
   {:else if section === "general"}
     <section class="setting-card toggle-card">
       <div class="setting-heading">
@@ -933,45 +912,6 @@
       >
         <span class="toggle-knob"></span>
       </button>
-    </section>
-  {:else}
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
-        <div class="heading-inline">
-          <strong>{_t("general.windowTransparency")}</strong>
-          <span class="value-label">{s.windowTransparency}%</span>
-        </div>
-      </div>
-      <input
-        type="range"
-        min="60"
-        max="100"
-        value={s.windowTransparency}
-        oninput={handleTransparency}
-        class="transparency-slider"
-        bind:this={transparencyEl}
-      />
-    </section>
-
-    <section class="setting-card toggle-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
-        <div>
-          <strong>{_t("general.windowEffect")}</strong>
-          <p>{_t("general.windowEffectDescription")}</p>
-        </div>
-      </div>
-      <CustomSelect
-        value={s.windowEffect}
-        ariaLabel={_t("general.windowEffect")}
-        options={[
-          { value: "off", label: _t("general.windowEffectOff") },
-          { value: "acrylic", label: _t("general.windowEffectAcrylic") },
-          { value: "mica", label: _t("general.windowEffectMica") },
-        ]}
-        onchange={(v) => generalSettings.updateSetting("windowEffect", v as WindowEffect)}
-      />
     </section>
 
     <section class="setting-card toggle-card">
@@ -1039,6 +979,66 @@
       >
         <span class="toggle-knob"></span>
       </button>
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+        <div>
+          <strong>{_t("general.useRecycleBin")}</strong>
+          <p>{_t("general.useRecycleBinDescription")}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={s.useRecycleBin}
+        onclick={() => generalSettings.updateSetting("useRecycleBin", !s.useRecycleBin)}
+        aria-checked={s.useRecycleBin}
+        aria-label={_t("general.useRecycleBin")}
+        role="switch"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+  {:else}
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
+        <div class="heading-inline">
+          <strong>{_t("general.windowTransparency")}</strong>
+          <span class="value-label">{s.windowTransparency}%</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min="60"
+        max="100"
+        value={s.windowTransparency}
+        oninput={handleTransparency}
+        class="transparency-slider"
+        bind:this={transparencyEl}
+      />
+    </section>
+
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="sliders" size={17} /></span>
+        <div>
+          <strong>{_t("general.windowEffect")}</strong>
+          <p>{_t("general.windowEffectDescription")}</p>
+        </div>
+      </div>
+      <CustomSelect
+        value={s.windowEffect}
+        ariaLabel={_t("general.windowEffect")}
+        options={[
+          { value: "off", label: _t("general.windowEffectOff") },
+          { value: "acrylic", label: _t("general.windowEffectAcrylic") },
+          { value: "mica", label: _t("general.windowEffectMica") },
+        ]}
+        onchange={(v) => generalSettings.updateSetting("windowEffect", v as WindowEffect)}
+      />
     </section>
 
     <section class="setting-card toggle-card">

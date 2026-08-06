@@ -92,12 +92,11 @@ const en: LocaleDefinition = {
     generalSearchDescription:
       "Search suggestions, search history and result sort rules preferences",
     generalItemsDescription:
-      "Item action buttons, quick copy, copy-to-top, recycle bin and paste behavior settings",
-    generalDisplayDescription:
-      "Card text display, image preview, list loading and detail viewing settings",
-    generalGeneralDescription: "Language, notification toasts and settings window preferences",
-    generalWindowDescription:
-      "Window appearance, acrylic/mica effect, title bar and startup behavior settings",
+      "Item action buttons, quick copy, copy-to-top, paste behavior and list loading settings",
+    generalDisplayDescription: "Card text display, image preview and detail viewing settings",
+    generalGeneralDescription:
+      "Language, launch at startup, system tray, title bar, recycle bin and settings window preferences",
+    generalWindowDescription: "Window appearance, acrylic/mica effect and window position settings",
     keyboardItemTab: "Item Actions",
     keyboardQuickTab: "Quick Copy",
     keyboardSystemTab: "Global",

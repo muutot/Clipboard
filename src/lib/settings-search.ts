@@ -209,14 +209,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.launch-at-startup",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.launchAtStartup"),
     i18n("general.launchAtStartupDescription"),
     ["自动启动", "boot", "login"],
   ),
   entry(
     "general.close-to-tray",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.closeToTray"),
     i18n("general.closeToTrayDescription"),
     ["托盘", "tray"],
@@ -251,7 +251,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.recycle-bin",
-    { section: "general_items" },
+    { section: "general_general" },
     i18n("general.useRecycleBin"),
     i18n("general.useRecycleBinDescription"),
     ["删除", "trash"],
@@ -286,7 +286,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.system-title-bar",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.useSystemTitleBar"),
     i18n("general.useSystemTitleBarDescription"),
     ["标题栏", "titlebar"],
