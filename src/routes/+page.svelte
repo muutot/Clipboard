@@ -32,6 +32,7 @@
     writeClipboardText,
     writeClipboardHtml,
     getDisplayTitle,
+    getDisplayRemainingLines,
     type HistoryFilterArgs,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
@@ -46,6 +47,7 @@
     itemHeight,
     measureVisualLines,
     buildPositions,
+    trimTrailingBlankLines,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
@@ -468,7 +470,7 @@
     if (item.customTitle) {
       const bodyLines = showSecondaryText
         ? measureVisualLines(
-            item.textContent || item.preview || "",
+            trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
             $generalSettings.fontSizes.cardPreview,
             Math.max(1, effectiveContainerWidth - 26 - 76),
             maxTextLines,
@@ -476,12 +478,11 @@
         : 0;
       totalLines = 1 + bodyLines;
     } else {
-      const fullText = item.textContent || item.title || "";
-      const nl = fullText.indexOf("\n");
-      const bodyOnly = nl >= 0 ? fullText.slice(nl + 1) : "";
+      const previewText =
+        trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title);
       const bodyLines = showSecondaryText
         ? measureVisualLines(
-            bodyOnly,
+            getDisplayRemainingLines(previewText),
             $generalSettings.fontSizes.cardPreview,
             Math.max(1, effectiveContainerWidth - 26 - 76),
             maxTextLines,
