@@ -12,6 +12,16 @@ pub struct SyncChangeLogEntry {
     pub resource_path: Option<String>,
     pub preview_path: Option<String>,
     pub icon_path: Option<String>,
+    pub text_content: Option<String>,
+    pub html_content: Option<String>,
+    pub rtf_content: Option<String>,
+    pub metadata_json: Option<String>,
+    #[serde(default)]
+    pub is_favorite: bool,
+    pub source_app: Option<String>,
+    #[serde(default)]
+    pub size_bytes: i64,
+    pub last_used_at_ms: Option<i64>,
     pub created_at_ms: i64,
     pub modified_at_ms: i64,
     pub device_id: String,
@@ -126,7 +136,9 @@ impl Database {
             let mut statement = connection.prepare(
                 "SELECT sequence, item_id, operation, kind, title, content_hash,
                         resource_path, preview_path, icon_path, created_at_ms,
-                        modified_at_ms, device_id
+                        modified_at_ms, device_id,
+                        text_content, html_content, rtf_content, metadata_json,
+                        is_favorite, source_app, size_bytes, last_used_at_ms
                  FROM sync_changelog
                  WHERE synced = 0
                  ORDER BY sequence ASC
@@ -146,6 +158,14 @@ impl Database {
                     created_at_ms: row.get(9)?,
                     modified_at_ms: row.get(10)?,
                     device_id: row.get(11)?,
+                    text_content: row.get(12)?,
+                    html_content: row.get(13)?,
+                    rtf_content: row.get(14)?,
+                    metadata_json: row.get(15)?,
+                    is_favorite: row.get(16)?,
+                    source_app: row.get(17)?,
+                    size_bytes: row.get(18)?,
+                    last_used_at_ms: row.get(19)?,
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
@@ -331,17 +351,29 @@ impl Database {
                     "insert" => {
                         let _ = tx.execute(
                             "INSERT OR IGNORE INTO clipboard_items
-                             (id, kind, title, content_hash, resource_path, preview_path,
-                              icon_path, created_at_ms, modified_at_ms, size_bytes, deleted)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0)",
+                             (id, kind, title, text_content, html_content, rtf_content,
+                              content_hash, resource_path, preview_path, icon_path,
+                              metadata_json, is_favorite, source_app,
+                              size_bytes, last_used_at_ms,
+                              created_at_ms, modified_at_ms, deleted)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                                     ?11, ?12, ?13, ?14, ?15, ?16, ?17, 0)",
                             rusqlite::params![
                                 &entry.item_id,
                                 &entry.kind,
                                 &entry.title,
+                                &entry.text_content,
+                                &entry.html_content,
+                                &entry.rtf_content,
                                 &entry.content_hash,
                                 &entry.resource_path,
                                 &entry.preview_path,
                                 &entry.icon_path,
+                                &entry.metadata_json,
+                                &entry.is_favorite,
+                                &entry.source_app,
+                                &entry.size_bytes,
+                                &entry.last_used_at_ms,
                                 &entry.created_at_ms,
                                 &entry.modified_at_ms,
                             ],
@@ -353,19 +385,32 @@ impl Database {
                             if entry.modified_at_ms >= local_modified {
                                 let _ = tx.execute(
                                     "UPDATE clipboard_items
-                                     SET kind = ?2, title = ?3, content_hash = ?4,
-                                         resource_path = ?5, preview_path = ?6,
-                                         icon_path = ?7, modified_at_ms = ?8,
+                                     SET kind = ?2, title = ?3,
+                                         text_content = ?4, html_content = ?5,
+                                         rtf_content = ?6, content_hash = ?7,
+                                         resource_path = ?8, preview_path = ?9,
+                                         icon_path = ?10, metadata_json = ?11,
+                                         is_favorite = ?12, source_app = ?13,
+                                         size_bytes = ?14, last_used_at_ms = ?15,
+                                         modified_at_ms = ?16,
                                          deleted = 0
                                      WHERE id = ?1",
                                     rusqlite::params![
                                         &entry.item_id,
                                         &entry.kind,
                                         &entry.title,
+                                        &entry.text_content,
+                                        &entry.html_content,
+                                        &entry.rtf_content,
                                         &entry.content_hash,
                                         &entry.resource_path,
                                         &entry.preview_path,
                                         &entry.icon_path,
+                                        &entry.metadata_json,
+                                        &entry.is_favorite,
+                                        &entry.source_app,
+                                        &entry.size_bytes,
+                                        &entry.last_used_at_ms,
                                         &entry.modified_at_ms,
                                     ],
                                 );
@@ -374,17 +419,29 @@ impl Database {
                         } else {
                             let _ = tx.execute(
                                 "INSERT OR IGNORE INTO clipboard_items
-                                 (id, kind, title, content_hash, resource_path, preview_path,
-                                  icon_path, created_at_ms, modified_at_ms, size_bytes, deleted)
-                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0)",
+                                 (id, kind, title, text_content, html_content, rtf_content,
+                                  content_hash, resource_path, preview_path, icon_path,
+                                  metadata_json, is_favorite, source_app,
+                                  size_bytes, last_used_at_ms,
+                                  created_at_ms, modified_at_ms, deleted)
+                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                                         ?11, ?12, ?13, ?14, ?15, ?16, ?17, 0)",
                                 rusqlite::params![
                                     &entry.item_id,
                                     &entry.kind,
                                     &entry.title,
+                                    &entry.text_content,
+                                    &entry.html_content,
+                                    &entry.rtf_content,
                                     &entry.content_hash,
                                     &entry.resource_path,
                                     &entry.preview_path,
                                     &entry.icon_path,
+                                    &entry.metadata_json,
+                                    &entry.is_favorite,
+                                    &entry.source_app,
+                                    &entry.size_bytes,
+                                    &entry.last_used_at_ms,
                                     &entry.created_at_ms,
                                     &entry.modified_at_ms,
                                 ],
@@ -588,5 +645,43 @@ mod tests {
         assert!(result.integrity_ok);
 
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn unsynced_changelog_carries_text_content() {
+        let db_path = temporary_path("oplog-content");
+        let database = Database::open(&db_path).unwrap();
+        database.set_sync_device_id("test-device").unwrap();
+        database.save_item(&text_item("item", 100)).unwrap();
+
+        let entries = database.get_unsynced_changelog(10).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].operation, "insert");
+        assert_eq!(entries[0].text_content.as_deref(), Some("content-item"));
+        assert_eq!(entries[0].title, "record-item");
+        assert_eq!(entries[0].is_favorite, false);
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn apply_remote_oplog_restores_text_content() {
+        let db_path = temporary_path("oplog-apply");
+        let source = Database::open(&db_path).unwrap();
+        source.set_sync_device_id("test-device").unwrap();
+        source.save_item(&text_item("item", 100)).unwrap();
+        let entries = source.get_unsynced_changelog(10).unwrap();
+
+        let target_path = temporary_path("oplog-apply-target");
+        let target = Database::open(&target_path).unwrap();
+        let applied = target.apply_remote_oplog(&entries).unwrap();
+        assert_eq!(applied, 1);
+
+        let stored = target.get_item("item").unwrap().unwrap();
+        assert_eq!(stored.text_content.as_deref(), Some("content-item"));
+        assert_eq!(stored.title, "record-item");
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
     }
 }

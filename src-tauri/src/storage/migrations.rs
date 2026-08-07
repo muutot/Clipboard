@@ -127,6 +127,14 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             resource_path TEXT,
             preview_path TEXT,
             icon_path TEXT,
+            text_content TEXT,
+            html_content TEXT,
+            rtf_content TEXT,
+            metadata_json TEXT,
+            is_favorite INTEGER NOT NULL DEFAULT 0,
+            source_app TEXT,
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            last_used_at_ms INTEGER,
             created_at_ms INTEGER NOT NULL,
             modified_at_ms INTEGER NOT NULL DEFAULT 0,
             device_id TEXT NOT NULL DEFAULT '',
@@ -144,12 +152,16 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
-                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id)
+                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id,
+                 text_content, html_content, rtf_content, metadata_json,
+                 is_favorite, source_app, size_bytes, last_used_at_ms)
             VALUES
                 (NEW.id, 'insert', NEW.kind, NEW.title, NEW.content_hash,
                  NEW.resource_path, NEW.preview_path, NEW.icon_path,
                  NEW.created_at_ms, NEW.created_at_ms,
-                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'));
+                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'),
+                 NEW.text_content, NEW.html_content, NEW.rtf_content, NEW.metadata_json,
+                 NEW.is_favorite, NEW.source_app, NEW.size_bytes, NEW.last_used_at_ms);
         END;
 
         CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_update
@@ -167,7 +179,9 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
-                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id)
+                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id,
+                 text_content, html_content, rtf_content, metadata_json,
+                 is_favorite, source_app, size_bytes, last_used_at_ms)
             VALUES
                 (NEW.id,
                  CASE WHEN OLD.deleted = 0 AND NEW.deleted = 1 THEN 'delete'
@@ -177,7 +191,9 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                  NEW.resource_path, NEW.preview_path, NEW.icon_path,
                  NEW.created_at_ms,
                  COALESCE(NEW.modified_at_ms, strftime('%s', 'now') * 1000),
-                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'));
+                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'),
+                 NEW.text_content, NEW.html_content, NEW.rtf_content, NEW.metadata_json,
+                 NEW.is_favorite, NEW.source_app, NEW.size_bytes, NEW.last_used_at_ms);
         END;
 
         CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_delete
@@ -185,12 +201,16 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
-                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id)
+                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id,
+                 text_content, html_content, rtf_content, metadata_json,
+                 is_favorite, source_app, size_bytes, last_used_at_ms)
             VALUES
                 (OLD.id, 'delete', OLD.kind, OLD.title, OLD.content_hash,
                  OLD.resource_path, OLD.preview_path, OLD.icon_path,
                  OLD.created_at_ms, strftime('%s', 'now') * 1000,
-                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'));
+                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'),
+                 OLD.text_content, OLD.html_content, OLD.rtf_content, OLD.metadata_json,
+                 OLD.is_favorite, OLD.source_app, OLD.size_bytes, OLD.last_used_at_ms);
         END;
 
         -- Auto-set modified_at_ms on row update.
@@ -216,6 +236,24 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         "modified_at_ms",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    ensure_column(connection, "sync_changelog", "text_content", "TEXT")?;
+    ensure_column(connection, "sync_changelog", "html_content", "TEXT")?;
+    ensure_column(connection, "sync_changelog", "rtf_content", "TEXT")?;
+    ensure_column(connection, "sync_changelog", "metadata_json", "TEXT")?;
+    ensure_column(
+        connection,
+        "sync_changelog",
+        "is_favorite",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(connection, "sync_changelog", "source_app", "TEXT")?;
+    ensure_column(
+        connection,
+        "sync_changelog",
+        "size_bytes",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(connection, "sync_changelog", "last_used_at_ms", "INTEGER")?;
 
     // `search_outbox.sequence` is an INTEGER PRIMARY KEY, which already
     // creates an index on the column, so the redundant explicit index adds

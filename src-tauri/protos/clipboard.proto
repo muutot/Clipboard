@@ -48,6 +48,14 @@ message OplogEntry {
     int64 created_at_ms = 10;
     int64 modified_at_ms = 11;
     string device_id = 12;
+    optional string text_content = 13;
+    optional string html_content = 14;
+    optional string rtf_content = 15;
+    optional string metadata_json = 16;
+    bool is_favorite = 17;
+    optional string source_app = 18;
+    uint64 size_bytes = 19;
+    optional int64 last_used_at_ms = 20;
 }
 
 message Oplog {
