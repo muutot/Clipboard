@@ -1,0 +1,55 @@
+syntax = "proto3";
+package clipboard;
+
+enum Kind {
+    TEXT = 0;
+    LINK = 1;
+    IMAGE = 2;
+    FILE = 3;
+}
+
+message ClipboardItem {
+    string id = 1;
+    Kind kind = 2;
+    string title = 3;
+    optional string text_content = 4;
+    optional string html_content = 5;
+    optional string rtf_content = 6;
+    optional string resource_path = 7;
+    optional string preview_path = 8;
+    string content_hash = 9;
+    optional string source_app = 10;
+    optional string icon_path = 11;
+    uint64 size_bytes = 12;
+    int64 created_at_ms = 13;
+    optional int64 last_used_at_ms = 14;
+    bool is_favorite = 15;
+    optional string metadata_json = 16;
+}
+
+message Baseline {
+    uint32 format_version = 1;
+    int64 created_at_ms = 2;
+    string device_id = 3;
+    string app_version = 4;
+    repeated ClipboardItem items = 5;
+}
+
+message OplogEntry {
+    int64 sequence = 1;
+    string item_id = 2;
+    string operation = 3;
+    string kind = 4;
+    string title = 5;
+    string content_hash = 6;
+    optional string resource_path = 7;
+    optional string preview_path = 8;
+    optional string icon_path = 9;
+    int64 created_at_ms = 10;
+    int64 modified_at_ms = 11;
+    string device_id = 12;
+}
+
+message Oplog {
+    repeated OplogEntry entries = 1;
+}

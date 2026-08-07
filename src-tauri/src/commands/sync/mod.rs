@@ -317,10 +317,12 @@ fn sync_upload_webdav(
                         guard.sync_config().username.as_deref(),
                         guard.sync_config().password.as_deref(),
                     ) {
-                        if let Ok(mut old_entries) =
-                            serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                                &String::from_utf8_lossy(&data),
-                            )
+                        if let Ok(mut old_entries) = crate::sync::proto::deserialize_oplog(&data)
+                            .or_else(|_| {
+                                serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
+                                    &String::from_utf8_lossy(&data),
+                                )
+                            })
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
@@ -333,13 +335,13 @@ fn sync_upload_webdav(
             }
         }
 
-        let new_json = serde_json::to_vec_pretty(&all_entries).map_err(|e| e.to_string())?;
-        bytes_uploaded += new_json.len() as u64;
+        let new_data = crate::sync::proto::serialize_oplog(&all_entries)?;
+        bytes_uploaded += new_data.len() as u64;
         sync::upload_to_webdav(
             endpoint,
             remote_path,
             &filename,
-            new_json,
+            new_data,
             guard.sync_config().username.as_deref(),
             guard.sync_config().password.as_deref(),
         )?;
@@ -372,18 +374,16 @@ fn sync_upload_webdav(
             Ok(data) => {
                 bytes_downloaded += data.len() as u64;
                 let remote_entries: Vec<crate::storage::SyncChangeLogEntry> =
-                    match bincode::decode_from_slice(&data, bincode::config::standard()) {
-                        Ok((entries, _)) => entries,
-                        Err(_) => match serde_json::from_slice(&data) {
-                            Ok(entries) => entries,
-                            Err(e) => {
-                                println!("[sync] failed to parse {}: {}", entry.name, e);
-                                continue;
-                            }
-                        },
+                    match crate::sync::proto::deserialize_oplog(&data)
+                        .or_else(|_| serde_json::from_str(&String::from_utf8_lossy(&data)))
+                    {
+                        Ok(e) => e,
+                        Err(e) => {
+                            println!("[sync] failed to parse {}: {}", entry.name, e);
+                            continue;
+                        }
                     };
-                let count = remote_entries.len() as u64;
-                downloaded_entries += count;
+                downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => applied_entries += applied,
                     Err(e) => println!("[sync] apply error: {}", e),
@@ -518,10 +518,12 @@ fn sync_upload_s3(
                         &access_key,
                         &secret_key,
                     ) {
-                        if let Ok(mut old_entries) =
-                            serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                                &String::from_utf8_lossy(&data),
-                            )
+                        if let Ok(mut old_entries) = crate::sync::proto::deserialize_oplog(&data)
+                            .or_else(|_| {
+                                serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
+                                    &String::from_utf8_lossy(&data),
+                                )
+                            })
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
@@ -534,14 +536,14 @@ fn sync_upload_s3(
             }
         }
 
-        let new_json = serde_json::to_vec_pretty(&all_entries).map_err(|e| e.to_string())?;
-        bytes_uploaded += new_json.len() as u64;
+        let new_data = crate::sync::proto::serialize_oplog(&all_entries)?;
+        bytes_uploaded += new_data.len() as u64;
         sync::upload_to_s3(
             endpoint,
             &region,
             &bucket,
             &s3_key(&filename),
-            new_json,
+            new_data,
             &access_key,
             &secret_key,
         )?;
@@ -575,18 +577,16 @@ fn sync_upload_s3(
             Ok(data) => {
                 bytes_downloaded += data.len() as u64;
                 let remote_entries: Vec<crate::storage::SyncChangeLogEntry> =
-                    match bincode::decode_from_slice(&data, bincode::config::standard()) {
-                        Ok((entries, _)) => entries,
-                        Err(_) => match serde_json::from_slice(&data) {
-                            Ok(entries) => entries,
-                            Err(e) => {
-                                println!("[sync] failed to parse {}: {}", entry.name, e);
-                                continue;
-                            }
-                        },
+                    match crate::sync::proto::deserialize_oplog(&data)
+                        .or_else(|_| serde_json::from_str(&String::from_utf8_lossy(&data)))
+                    {
+                        Ok(e) => e,
+                        Err(e) => {
+                            println!("[sync] failed to parse {}: {}", entry.name, e);
+                            continue;
+                        }
                     };
-                let count = remote_entries.len() as u64;
-                downloaded_entries += count;
+                downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => applied_entries += applied,
                     Err(e) => println!("[sync] apply error: {}", e),

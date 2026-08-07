@@ -91,13 +91,14 @@ pub fn create_baseline_backup(
         .map_err(|e| format!("failed to export items: {e}"))?;
 
     let now_ms = now_ms();
+    let device_id = get_device_id();
 
     let manifest = BackupManifest {
         format_version: SUPPORTED_FORMAT_VERSION,
         backup_type: "baseline".to_string(),
         created_at_ms: now_ms,
         base_sync_ms: None,
-        device_id: get_device_id(),
+        device_id: device_id.clone(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count: items.len(),
         resource_count: 0,
@@ -119,12 +120,12 @@ pub fn create_baseline_backup(
     zip.write_all(&manifest_json).map_err(|e| e.to_string())?;
 
     let opts: SimpleFileOptions = SimpleFileOptions::default();
-    zip.start_file("baseline.bin", opts)
+    zip.start_file("baseline.pb", opts)
         .map_err(|e| e.to_string())?;
-    let items_bin = bincode::encode_to_vec(&items, bincode::config::standard())
+    let items_proto = crate::sync::proto::serialize_baseline(&items, &device_id)
         .map_err(|e| format!("failed to serialize baseline: {e}"))?;
     use std::io::Write;
-    zip.write_all(&items_bin).map_err(|e| e.to_string())?;
+    zip.write_all(&items_proto).map_err(|e| e.to_string())?;
 
     zip.finish().map_err(|e| e.to_string())?;
 
@@ -174,7 +175,7 @@ pub fn create_oplog_backup(
 
     let now_ms = now_ms();
 
-    let oplog_bin = bincode::encode_to_vec(&entries, bincode::config::standard())
+    let oplog_proto = crate::sync::proto::serialize_oplog(&entries)
         .map_err(|e| format!("failed to serialize oplog: {e}"))?;
 
     let manifest = BackupManifest {
@@ -191,7 +192,7 @@ pub fn create_oplog_backup(
         oplog_entries: entries.len() as u64,
     };
 
-    write_backup_archive_with_oplog(paths, &manifest, &oplog_bin, output_path)?;
+    write_backup_archive_with_oplog(paths, &manifest, &oplog_proto, output_path)?;
 
     Ok(manifest)
 }
@@ -229,10 +230,10 @@ fn write_backup_archive(
 fn write_backup_archive_with_oplog(
     paths: &StoragePaths,
     manifest: &BackupManifest,
-    oplog_data: &[u8],
+    oplog_proto: &[u8],
     output_path: &Path,
 ) -> Result<(), String> {
-    write_backup_archive_internal(paths, manifest, Some(oplog_data), output_path, false)
+    write_backup_archive_internal(paths, manifest, Some(oplog_proto), output_path, false)
 }
 
 fn write_backup_archive_internal(
@@ -265,9 +266,8 @@ fn write_backup_archive_internal(
 
     if let Some(oplog) = oplog_data {
         let opts: SimpleFileOptions = SimpleFileOptions::default();
-        zip.start_file("oplog.bin", opts)
+        zip.start_file("oplog.pb", opts)
             .map_err(|e| e.to_string())?;
-        use std::io::Write;
         zip.write_all(oplog).map_err(|e| e.to_string())?;
     }
 
@@ -435,38 +435,21 @@ pub fn read_manifest_from_backup(backup_path: &Path) -> Result<BackupManifest, S
     serde_json::from_str(&json).map_err(|e| format!("invalid manifest: {e}"))
 }
 
-/// Reads baseline items from a downloaded baseline backup zip.
-/// Supports both bincode (.bin) and legacy JSON (.json) formats.
+/// Reads baseline items from a downloaded baseline backup zip (protobuf format).
 pub fn read_baseline_items(
     backup_path: &Path,
 ) -> Result<Vec<crate::domain::ClipboardItem>, String> {
     let file = File::open(backup_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-
-    // Try bincode format first
-    if let Ok(mut items_file) = archive.by_name("baseline.bin") {
-        let mut data = Vec::new();
-        use std::io::Read;
-        items_file
-            .read_to_end(&mut data)
-            .map_err(|e| e.to_string())?;
-        if let Ok((items, _)) = bincode::decode_from_slice::<Vec<crate::domain::ClipboardItem>, _>(
-            &data,
-            bincode::config::standard(),
-        ) {
-            return Ok(items);
-        }
-    }
-
-    // Fallback to JSON format
     let mut items_file = archive
-        .by_name("baseline.json")
-        .map_err(|_| "baseline missing baseline data".to_string())?;
-    let mut json = String::new();
+        .by_name("baseline.pb")
+        .map_err(|_| "baseline missing baseline.pb".to_string())?;
+    let mut data = Vec::new();
+    use std::io::Read;
     items_file
-        .read_to_string(&mut json)
+        .read_to_end(&mut data)
         .map_err(|e| e.to_string())?;
-    serde_json::from_str(&json).map_err(|e| format!("invalid baseline: {e}"))
+    crate::sync::proto::deserialize_baseline(&data)
 }
 
 // Re-export for backward compatibility
