@@ -439,6 +439,26 @@ impl ConfigStore {
         self.save()
     }
 
+    pub fn s3_region(&self) -> String {
+        self.config
+            .sync
+            .s3_region
+            .clone()
+            .unwrap_or_else(|| "us-east-1".to_string())
+    }
+
+    pub fn s3_bucket(&self) -> Option<String> {
+        self.config.sync.s3_bucket.clone()
+    }
+
+    pub fn s3_access_key(&self) -> Option<String> {
+        self.config.sync.s3_access_key.clone()
+    }
+
+    pub fn s3_secret_key(&self) -> Option<String> {
+        self.config.sync.s3_secret_key.clone()
+    }
+
     pub fn update_sync_status(
         &mut self,
         status: &str,

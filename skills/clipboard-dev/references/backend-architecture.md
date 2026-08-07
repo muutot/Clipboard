@@ -56,6 +56,15 @@ The implementation lives under `src-tauri/src/storage/`.
 
 A persistence change must preserve atomic config writes, SQLite recovery, backup refresh, and the ability to rebuild derived data.
 
+## Sync and remote backup
+
+`src-tauri/src/sync/` owns cross-device synchronization and remote backup:
+
+- `backup.rs` builds a baseline ZIP (`baseline-{device_id}-{timestamp}.zip`) from the clipboard database via `create_baseline_backup`, reads it back with `read_baseline_items`, and produces a `BackupManifest` through `read_manifest_from_backup`. `create_oplog_backup`/`mark_oplog_synced`/`purge_oplog`/`count_unsynced` manage the outbox so only unsynced changes are uploaded next run.
+- `webdav.rs` and `s3.rs` are the two remote transports, exposed through `sync::upload_to_webdav`, `download_from_webdav`, `list_webdav_files`, `delete_from_webdav`, `test_webdav_connection` (and the S3 analogues). S3 uses plain REST requests against `https://{bucket}.{endpoint}` (compatible with S3-compatible object stores); the region/bucket/access key/secret key come from `ConfigStore` (`s3_region()` defaults to `us-east-1`).
+- Oplog files are serialized with bincode v2 (`bincode::decode_from_slice`); readers fall back to JSON so files written by earlier builds stay readable. Rollover merges parse existing remote oplogs as JSON (`serde_json::from_str::<Vec<SyncChangeLogEntry>>`).
+- `commands/sync/mod.rs` orchestrates: first sync downloads or uploads the baseline, then merges/rolls over remote oplogs, applies remote entries via `database.apply_remote_oplog`, and prunes old remote oplog files. `sync_download_backup` fetches a remote backup file for local restore; `verify_backup_file` validates its manifest.
+
 ## Storage paths and ownership
 
 `src-tauri/src/storage/paths.rs` owns resource-root resolution and validation.

@@ -77,6 +77,12 @@ The frontend `GeneralSettings` type/defaults/normalizer are richer than the expl
 
 `src-tauri/src/keyboard/config.rs` and `KeyboardManager` own `<project>/conf/keyboard.json`. Each action maps to an array of shortcut strings. Do not merge keyboard configuration into `GeneralSettings` or `conf.json`.
 
+### Sync settings
+
+`SyncConfig` in `config/types.rs` is a member of `AppConfig.sync` (`#[serde(default, rename_all = "camelCase")]`), with `SyncProvider` enum (`off`/`webdav`/`s3`, serialized lowercase). It holds provider, endpoint, remote path, username/password, the S3 fields (`s3_region`, `s3_bucket`, `s3_access_key`, `s3_secret_key`), timestamps/status, and the sync policy numbers (auto-sync interval, max remote oplog files, rollover limits, max image/file bytes). Secret keys are write-only: `get_sync_config` returns `hasS3SecretKey` (and `hasPassword`), never the raw secret.
+
+`set_sync_config` accepts `provider`, `endpoint`, `remotePath`, `username`, `password`, `autoSync`, `autoSyncIntervalSecs`, `maxRemoteOplogFiles`, `oplogRolloverEntries`, `oplogRolloverSizeBytes`, `maxSyncImageBytes`, `maxSyncFileBytes`, `s3Region`, `s3Bucket`, `s3AccessKey`, `s3SecretKey` (all optional where applicable); `password`/`s3SecretKey` fall back to the previously stored value when omitted so the UI never needs to send secrets back. `test_sync_connection` takes the same provider/endpoint/remote-path/credential inputs and returns a serialized `WebDavTestResult`/`S3TestResult` JSON string. See `commands/sync/mod.rs` and the `sync/` module in `backend-architecture.md` for transport behavior and oplog serialization.
+
 ## Tauri command contract
 
 Commands are registered in `src-tauri/src/lib.rs` with `tauri::generate_handler!`. Frontend wrappers live primarily under `src/lib/services/`.

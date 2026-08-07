@@ -116,6 +116,24 @@ History/storage/OCR/privacy/export settings are separate Rust config groups and 
 
 When backend startup, validation, or native behavior needs one of these fields, add a typed Rust field with a default and tests instead of parsing it opportunistically from `extra`.
 
+## Sync settings
+
+| Field                         | Type             | Default           | Range        | Description                                   |
+| ----------------------------- | ---------------- | ----------------- | ------------ | --------------------------------------------- |
+| `sync.autoSync`               | `bool`           | `false`           | boolean      | Enable auto-sync on clipboard change          |
+| `sync.autoSyncIntervalSecs`   | `u64`            | `300`             | 10–86400     | Auto-sync interval in seconds                 |
+| `sync.maxRemoteOplogFiles`    | `u32`            | `10`              | 3–100        | Max oplog files to keep remotely              |
+| `sync.oplogRolloverEntries`   | `u32`            | `100`             | 10–10000     | Max entries per oplog file before rollover    |
+| `sync.oplogRolloverSizeBytes` | `u32`            | `51200`           | 1024–1048576 | Max bytes per oplog file before rollover      |
+| `sync.maxSyncImageBytes`      | `u64`            | `5242880` (5MB)   | 0–           | Max image size to sync (0=disabled)           |
+| `sync.maxSyncFileBytes`       | `u64`            | `10485760` (10MB) | 0–           | Max file size to sync (0=disabled)            |
+| `sync.s3Region`               | `Option<String>` | `None`            | —            | S3 region (defaults to `us-east-1` on use)    |
+| `sync.s3Bucket`               | `Option<String>` | `None`            | —            | S3 bucket name                                |
+| `sync.s3AccessKey`            | `Option<String>` | `None`            | —            | S3 access key                                 |
+| `sync.s3SecretKey`            | `Option<String>` | `None`            | —            | S3 secret key (write-only; `hasS3SecretKey` flag returned) |
+| `sync.lastSyncMs`             | `Option<i64>`    | `None`            | —            | Last successful sync timestamp (auto-managed) |
+| `sync.lastSyncStatus`         | `Option<String>` | `None`            | —            | Last sync status (auto-managed)               |
+
 ## Settings update checklist
 
 1. Change the TypeScript interface and related unions.
