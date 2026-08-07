@@ -131,7 +131,8 @@ When backend startup, validation, or native behavior needs one of these fields, 
 | `sync.s3Bucket`               | `Option<String>` | `None`            | —            | S3 bucket name                                |
 | `sync.s3AccessKey`            | `Option<String>` | `None`            | —            | S3 access key                                 |
 | `sync.s3SecretKey`            | `Option<String>` | `None`            | —            | S3 secret key (write-only; `hasS3SecretKey` flag returned) |
-| `sync.lastSyncMs`             | `Option<i64>`    | `None`            | —            | Last successful sync timestamp (auto-managed) |
+| `sync.syncPassword`           | `Option<String>` | `None`            | —            | Optional password encrypting remote baseline/oplog payloads (write-only; `hasSyncPassword` flag returned) |
+| `sync.lastSyncMs`             | `Option<i64>`    | `None`            | —            | Last successful sync timestamp (auto-managed)             |
 | `sync.lastSyncStatus`         | `Option<String>` | `None`            | —            | Last sync status (auto-managed)               |
 
 ## Settings update checklist

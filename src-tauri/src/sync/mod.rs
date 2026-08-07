@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod crypto;
 pub mod proto;
 pub mod s3;
 pub mod webdav;

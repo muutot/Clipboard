@@ -27,8 +27,8 @@ rusqlite = { version = "0.40.1", features = ["bundled"] }
 tantivy = "0.26.1"
 regex-lite = "0.1"
 base64 = "0.23"
-sha2 = "0.11"
-md-5 = "0.11"
+sha2 = "0.10"
+md-5 = "0.10"
 urlencoding = "2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
 ctrlc = "3"
@@ -44,6 +44,10 @@ hex = "0.4.3"
 zip = "2"
 walkdir = "2"
 chrono = "0.4"
+hmac = "0.12"
+aes-gcm = "0.10"
+pbkdf2 = "0.11"
+rand = "0.9"
 bincode = { version = "2", features = ["serde"] }
 
 # Dev-profile tuning so `tauri dev` rebuilds are fast:
@@ -56,3 +60,19 @@ split-debuginfo = "unpacked"
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# CI profile: same debug symbols as dev, but dependencies stay at opt-level 0
+# so clippy/test runs compile as fast as possible in GitHub Actions.
+[profile.ci]
+inherits = "dev"
+
+[profile.ci.package."*"]
+opt-level = 0
+
+# Release profile tuned for maximum runtime performance (not build speed).
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

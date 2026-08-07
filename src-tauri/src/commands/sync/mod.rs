@@ -20,6 +20,7 @@ pub struct SyncConfigInfo {
     s3_bucket: Option<String>,
     s3_access_key: Option<String>,
     has_s3_secret_key: bool,
+    has_sync_password: bool,
     last_sync_ms: Option<i64>,
     last_sync_status: Option<String>,
     unsynced_count: u64,
@@ -61,6 +62,7 @@ pub fn get_sync_config(
         s3_bucket: sync.s3_bucket,
         s3_access_key: sync.s3_access_key,
         has_s3_secret_key: sync.s3_secret_key.is_some(),
+        has_sync_password: sync.sync_password.is_some(),
         last_sync_ms: sync.last_sync_ms,
         last_sync_status: sync.last_sync_status,
         unsynced_count: unsynced,
@@ -86,6 +88,7 @@ pub fn set_sync_config(
     s3_bucket: Option<String>,
     s3_access_key: Option<String>,
     s3_secret_key: Option<String>,
+    sync_password: Option<String>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<(), String> {
     let mut guard = config
@@ -119,6 +122,7 @@ pub fn set_sync_config(
         s3_bucket,
         s3_access_key,
         s3_secret_key,
+        sync_password,
         ..Default::default()
     };
 
@@ -261,6 +265,7 @@ fn sync_upload_webdav(
                 guard.sync_config().username.as_deref(),
                 guard.sync_config().password.as_deref(),
             )?;
+            let data = decrypt_if_configured(data, guard)?;
             bytes_downloaded += data.len() as u64;
             let baseline_path = temp_dir.join(&baseline.name);
             std::fs::write(&baseline_path, &data).map_err(|e| e.to_string())?;
@@ -276,6 +281,7 @@ fn sync_upload_webdav(
         let baseline_path = temp_dir.join(&filename);
         let manifest = sync::create_baseline_backup(database, &baseline_path)?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
+        let data = encrypt_if_configured(data, guard)?;
         bytes_uploaded += data.len() as u64;
         sync::upload_to_webdav(
             endpoint,
@@ -317,6 +323,7 @@ fn sync_upload_webdav(
                         guard.sync_config().username.as_deref(),
                         guard.sync_config().password.as_deref(),
                     ) {
+                        let data = decrypt_if_configured(data, guard)?;
                         if let Ok(mut old_entries) = crate::sync::proto::deserialize_oplog(&data)
                             .or_else(|_| {
                                 serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
@@ -336,6 +343,7 @@ fn sync_upload_webdav(
         }
 
         let new_data = crate::sync::proto::serialize_oplog(&all_entries)?;
+        let new_data = encrypt_if_configured(new_data, guard)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_webdav(
             endpoint,
@@ -372,6 +380,7 @@ fn sync_upload_webdav(
             guard.sync_config().password.as_deref(),
         ) {
             Ok(data) => {
+                let data = decrypt_if_configured(data, guard)?;
                 bytes_downloaded += data.len() as u64;
                 let remote_entries: Vec<crate::storage::SyncChangeLogEntry> =
                     match crate::sync::proto::deserialize_oplog(&data)
@@ -460,6 +469,7 @@ fn sync_upload_s3(
                 &access_key,
                 &secret_key,
             )?;
+            let data = decrypt_if_configured(data, guard)?;
             bytes_downloaded += data.len() as u64;
             let baseline_path = temp_dir.join(&baseline.name);
             std::fs::write(&baseline_path, &data).map_err(|e| e.to_string())?;
@@ -475,6 +485,7 @@ fn sync_upload_s3(
         let baseline_path = temp_dir.join(&filename);
         let manifest = sync::create_baseline_backup(database, &baseline_path)?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
+        let data = encrypt_if_configured(data, guard)?;
         bytes_uploaded += data.len() as u64;
         sync::upload_to_s3(
             endpoint,
@@ -518,6 +529,7 @@ fn sync_upload_s3(
                         &access_key,
                         &secret_key,
                     ) {
+                        let data = decrypt_if_configured(data, guard)?;
                         if let Ok(mut old_entries) = crate::sync::proto::deserialize_oplog(&data)
                             .or_else(|_| {
                                 serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
@@ -537,6 +549,7 @@ fn sync_upload_s3(
         }
 
         let new_data = crate::sync::proto::serialize_oplog(&all_entries)?;
+        let new_data = encrypt_if_configured(new_data, guard)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_s3(
             endpoint,
@@ -575,6 +588,7 @@ fn sync_upload_s3(
             &secret_key,
         ) {
             Ok(data) => {
+                let data = decrypt_if_configured(data, guard)?;
                 bytes_downloaded += data.len() as u64;
                 let remote_entries: Vec<crate::storage::SyncChangeLogEntry> =
                     match crate::sync::proto::deserialize_oplog(&data)
@@ -813,6 +827,8 @@ pub fn sync_download_backup(
         _ => return Err("unsupported provider".to_string()),
     };
 
+    let data = decrypt_if_configured(data, &guard)?;
+
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
     let target = temp_dir.join(&filename);
@@ -824,4 +840,22 @@ pub fn sync_download_backup(
 #[tauri::command]
 pub fn verify_backup_file(path: PathBuf) -> Result<sync::BackupManifest, String> {
     sync::read_manifest_from_backup(&path)
+}
+
+fn get_sync_password(guard: &ConfigStore) -> Option<String> {
+    guard.sync_config().sync_password.clone()
+}
+
+fn encrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, String> {
+    match get_sync_password(guard) {
+        Some(pwd) if !pwd.is_empty() => sync::crypto::encrypt(&data, &pwd),
+        _ => Ok(data),
+    }
+}
+
+fn decrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, String> {
+    match get_sync_password(guard) {
+        Some(pwd) if !pwd.is_empty() => sync::crypto::decrypt(&data, &pwd).or(Ok(data)),
+        _ => Ok(data),
+    }
 }

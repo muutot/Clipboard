@@ -381,6 +381,7 @@ pub struct SyncConfig {
     pub s3_bucket: Option<String>,
     pub s3_access_key: Option<String>,
     pub s3_secret_key: Option<String>,
+    pub sync_password: Option<String>,
     pub last_sync_ms: Option<i64>,
     pub last_sync_status: Option<String>,
     pub auto_sync: bool,
