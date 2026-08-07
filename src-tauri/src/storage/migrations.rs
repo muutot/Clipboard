@@ -159,7 +159,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                 (NEW.id, 'insert', NEW.kind, NEW.title, NEW.content_hash,
                  NEW.resource_path, NEW.preview_path, NEW.icon_path,
                  NEW.created_at_ms, NEW.created_at_ms,
-                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'),
+                 COALESCE((SELECT value FROM sync_metadata WHERE key = 'device_id'), 'unknown'),
                  NEW.text_content, NEW.html_content, NEW.rtf_content, NEW.metadata_json,
                  NEW.is_favorite, NEW.source_app, NEW.size_bytes, NEW.last_used_at_ms);
         END;
@@ -191,7 +191,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                  NEW.resource_path, NEW.preview_path, NEW.icon_path,
                  NEW.created_at_ms,
                  COALESCE(NEW.modified_at_ms, strftime('%s', 'now') * 1000),
-                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'),
+                 COALESCE((SELECT value FROM sync_metadata WHERE key = 'device_id'), 'unknown'),
                  NEW.text_content, NEW.html_content, NEW.rtf_content, NEW.metadata_json,
                  NEW.is_favorite, NEW.source_app, NEW.size_bytes, NEW.last_used_at_ms);
         END;
@@ -208,7 +208,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                 (OLD.id, 'delete', OLD.kind, OLD.title, OLD.content_hash,
                  OLD.resource_path, OLD.preview_path, OLD.icon_path,
                  OLD.created_at_ms, strftime('%s', 'now') * 1000,
-                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'),
+                 COALESCE((SELECT value FROM sync_metadata WHERE key = 'device_id'), 'unknown'),
                  OLD.text_content, OLD.html_content, OLD.rtf_content, OLD.metadata_json,
                  OLD.is_favorite, OLD.source_app, OLD.size_bytes, OLD.last_used_at_ms);
         END;
