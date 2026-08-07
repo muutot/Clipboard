@@ -60,6 +60,14 @@ impl crate::platform::PlatformClipboard for LinuxX11Platform {
     ) -> Option<String> {
         extract_app_icon(icon_dir, app_name, exe_path)
     }
+
+    fn read_clipboard_html(&self) -> Option<String> {
+        read_clipboard_html()
+    }
+
+    fn read_clipboard_rtf(&self) -> Option<String> {
+        read_clipboard_rtf()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -835,7 +843,52 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     None
 }
 
-/// Reads file paths – not supported via simple command-line tools on X11.
+/// Reads the HTML fragment from the CLIPBOARD selection via xclip.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_html() -> Option<String> {
+    if let Ok(output) = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-t", "text/html", "-out"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8(output.stdout).ok()?;
+            if text.trim().is_empty() {
+                return None;
+            }
+            return Some(text);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_html() -> Option<String> {
+    None
+}
+
+/// Reads the RTF payload from the CLIPBOARD selection via xclip.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_rtf() -> Option<String> {
+    if let Ok(output) = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-t", "text/rtf", "-out"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8(output.stdout).ok()?;
+            if text.trim().is_empty() {
+                return None;
+            }
+            return Some(text);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_rtf() -> Option<String> {
+    None
+}
+
 #[cfg(target_os = "linux")]
 pub fn read_clipboard_file_paths() -> Vec<String> {
     vec![]

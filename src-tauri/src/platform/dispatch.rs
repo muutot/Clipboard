@@ -32,13 +32,13 @@ pub trait PlatformClipboard {
     fn extract_app_icon(&self, icon_dir: &Path, app_name: &str, exe_path: &str) -> Option<String>;
 
     /// Reads the optional HTML fragment used for paste-by-format.
-    /// Windows: `HTML Format`/CF_HTML; macOS: `public.html`; Linux: not wired.
+    /// Windows: `HTML Format`/CF_HTML; macOS: `public.html`; Linux: `text/html`.
     fn read_clipboard_html(&self) -> Option<String> {
         None
     }
 
     /// Reads the optional RTF payload used for paste-by-format.
-    /// Windows: registered `Rich Text Format`; macOS/Linux: not wired.
+    /// Windows: registered `Rich Text Format`; macOS: not wired; Linux: `text/rtf`.
     fn read_clipboard_rtf(&self) -> Option<String> {
         None
     }

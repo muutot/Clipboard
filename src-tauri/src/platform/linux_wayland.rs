@@ -103,6 +103,14 @@ impl crate::platform::PlatformClipboard for LinuxWaylandPlatform {
     ) -> Option<String> {
         extract_app_icon(icon_dir, app_name, exe_path)
     }
+
+    fn read_clipboard_html(&self) -> Option<String> {
+        read_clipboard_html()
+    }
+
+    fn read_clipboard_rtf(&self) -> Option<String> {
+        read_clipboard_rtf()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -880,6 +888,52 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
+    None
+}
+
+/// Reads the HTML fragment from the Wayland clipboard via wl-paste.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_html() -> Option<String> {
+    if let Ok(output) = std::process::Command::new("wl-paste")
+        .args(["--type", "text/html"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8(output.stdout).ok()?;
+            if text.trim().is_empty() {
+                return None;
+            }
+            return Some(text);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_html() -> Option<String> {
+    None
+}
+
+/// Reads the RTF payload from the Wayland clipboard via wl-paste.
+#[cfg(target_os = "linux")]
+pub fn read_clipboard_rtf() -> Option<String> {
+    if let Ok(output) = std::process::Command::new("wl-paste")
+        .args(["--type", "text/rtf"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8(output.stdout).ok()?;
+            if text.trim().is_empty() {
+                return None;
+            }
+            return Some(text);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn read_clipboard_rtf() -> Option<String> {
     None
 }
 
