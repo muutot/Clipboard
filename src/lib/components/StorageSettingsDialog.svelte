@@ -3436,8 +3436,9 @@
                     </div>
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncEndpoint")}</label>
+                    <label for="sync-endpoint">{_t("storage.syncEndpoint")}</label>
                     <input
+                      id="sync-endpoint"
                       type="url"
                       bind:value={syncEndpoint}
                       placeholder="https://dav.example.com/remote.php/dav/"
@@ -3445,8 +3446,9 @@
                     />
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncRemotePath")}</label>
+                    <label for="sync-remote-path">{_t("storage.syncRemotePath")}</label>
                     <input
+                      id="sync-remote-path"
                       type="text"
                       bind:value={syncRemotePath}
                       placeholder="clipboard-backup"
@@ -3454,8 +3456,9 @@
                     />
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncUsername")}</label>
+                    <label for="sync-username">{_t("storage.syncUsername")}</label>
                     <input
+                      id="sync-username"
                       type="text"
                       bind:value={syncUsername}
                       placeholder=""
@@ -3463,8 +3466,9 @@
                     />
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncPassword")}</label>
+                    <label for="sync-password">{_t("storage.syncPassword")}</label>
                     <input
+                      id="sync-password"
                       type="password"
                       bind:value={syncPassword}
                       placeholder=""
@@ -3498,8 +3502,9 @@
                     </div>
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncS3Region")}</label>
+                    <label for="sync-s3-region">{_t("storage.syncS3Region")}</label>
                     <input
+                      id="sync-s3-region"
                       type="text"
                       bind:value={syncS3Region}
                       placeholder="us-east-1"
@@ -3507,8 +3512,9 @@
                     />
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncS3Bucket")}</label>
+                    <label for="sync-s3-bucket">{_t("storage.syncS3Bucket")}</label>
                     <input
+                      id="sync-s3-bucket"
                       type="text"
                       bind:value={syncS3Bucket}
                       placeholder="my-clipboard-backup"
@@ -3516,8 +3522,9 @@
                     />
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncS3AccessKey")}</label>
+                    <label for="sync-s3-access-key">{_t("storage.syncS3AccessKey")}</label>
                     <input
+                      id="sync-s3-access-key"
                       type="text"
                       bind:value={syncS3AccessKey}
                       placeholder=""
@@ -3525,8 +3532,9 @@
                     />
                   </div>
                   <div class="setting-row">
-                    <label>{_t("storage.syncS3SecretKey")}</label>
+                    <label for="sync-s3-secret-key">{_t("storage.syncS3SecretKey")}</label>
                     <input
+                      id="sync-s3-secret-key"
                       type="password"
                       bind:value={syncS3SecretKey}
                       placeholder=""
