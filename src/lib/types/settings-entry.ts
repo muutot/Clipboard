@@ -89,8 +89,23 @@ export interface TextEntryConfig {
   placeholder?: string;
   maxlength?: number;
   variant?: "row" | "card";
+  actionLabel?: string | (() => string);
+  actionVisible?: () => boolean;
+  onaction?: () => void;
   onblur?: () => void;
   onchange?: () => void;
+}
+
+export interface CustomEntryConfig {
+  type: "custom";
+  id?: string;
+  icon?: IconName;
+  label: string;
+  desc?: string;
+  variant?: "toggle" | "column";
+  actionLabel?: string | (() => string);
+  actionVisible?: () => boolean;
+  onaction?: () => void;
 }
 
 export interface HeadingEntryConfig {
@@ -111,4 +126,5 @@ export type SettingEntryConfig =
   | ToggleEntryConfig
   | SelectEntryConfig
   | TextEntryConfig
-  | HeadingEntryConfig;
+  | HeadingEntryConfig
+  | CustomEntryConfig;

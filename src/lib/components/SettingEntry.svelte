@@ -2,14 +2,16 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import type { SettingEntryConfig, SizeUnit } from "$lib/types/settings-entry";
-  import { sliderPercentage } from "$lib/utils/format";
-  import { SIZE_UNIT_OPTIONS } from "$lib/utils/size";
+import { sliderPercentage } from "$lib/utils/format";
+import { SIZE_UNIT_OPTIONS } from "$lib/utils/size";
+import type { Snippet } from "svelte";
 
   interface Props {
     config: SettingEntryConfig;
+    children?: Snippet;
   }
 
-  let { config }: Props = $props();
+  let { config, children }: Props = $props();
 
   function resolveBound(value: number | (() => number)): number {
     return typeof value === "function" ? value() : value;
@@ -26,6 +28,10 @@
 
   function handleRangeInput(event: Event, set: (v: number) => void) {
     set(Number((event.currentTarget as HTMLInputElement).value));
+  }
+
+  function resolveActionLabel(label: string | (() => string)): string {
+    return typeof label === "function" ? label() : label;
   }
 </script>
 
@@ -188,6 +194,14 @@
             <strong>{config.label}</strong>
             {#if config.desc}<p>{config.desc}</p>{/if}
           </div>
+          {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
+            <button
+              type="button"
+              class="settings-action-btn"
+              onclick={config.onaction}
+              >{resolveActionLabel(config.actionLabel)}</button
+            >
+          {/if}
         </div>
       </div>
       <input
@@ -246,6 +260,47 @@
       onchange={(v) => config.setUnit(v as SizeUnit)}
     />
   </section>
+{:else if config.type === "custom"}
+  {#if (config.variant ?? "toggle") === "toggle"}
+    <section class="setting-card toggle-card" data-settings-search-id={config.id ?? undefined}>
+      <div class="setting-heading">
+        {#if config.icon}
+          <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+        {/if}
+        <div>
+          <strong>{config.label}</strong>
+          {#if config.desc}<p>{config.desc}</p>{/if}
+        </div>
+      </div>
+      {@render children?.()}
+    </section>
+  {:else}
+    <section
+      class="setting-card setting-card-custom-column"
+      data-settings-search-id={config.id ?? undefined}
+    >
+      <div class="setting-heading">
+        {#if config.icon}
+          <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+        {/if}
+        <div class="heading-inline">
+          <div>
+            <strong>{config.label}</strong>
+            {#if config.desc}<p>{config.desc}</p>{/if}
+          </div>
+          {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
+            <button
+              type="button"
+              class="settings-action-btn"
+              onclick={config.onaction}
+              >{resolveActionLabel(config.actionLabel)}</button
+            >
+          {/if}
+        </div>
+      </div>
+      {@render children?.()}
+    </section>
+  {/if}
 {:else}
   {#if (config.variant ?? "row") === "card"}
     <section class="setting-card" data-settings-search-id={config.id ?? undefined}>
@@ -301,6 +356,12 @@
     align-items: center;
     gap: 10px;
     padding: 10px 13px;
+  }
+
+  .setting-card-custom-column {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .setting-card-row .setting-icon {
