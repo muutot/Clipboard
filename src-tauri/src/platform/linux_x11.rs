@@ -889,8 +889,27 @@ pub fn read_clipboard_rtf() -> Option<String> {
     None
 }
 
+/// Reads file paths from the CLIPBOARD selection via xclip (text/uri-list).
 #[cfg(target_os = "linux")]
 pub fn read_clipboard_file_paths() -> Vec<String> {
+    if let Ok(output) = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-t", "text/uri-list", "-out"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8(output.stdout).unwrap_or_default();
+            return text
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') {
+                        return None;
+                    }
+                    line.strip_prefix("file://").map(|p| p.to_owned())
+                })
+                .collect();
+        }
+    }
     vec![]
 }
 
