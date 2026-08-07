@@ -72,6 +72,19 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
 
         CREATE TRIGGER IF NOT EXISTS clipboard_items_search_update
         AFTER UPDATE ON clipboard_items
+        WHEN OLD.kind != NEW.kind
+          OR OLD.title != NEW.title
+          OR OLD.text_content IS NOT NEW.text_content
+          OR OLD.html_content IS NOT NEW.html_content
+          OR OLD.rtf_content IS NOT NEW.rtf_content
+          OR OLD.resource_path IS NOT NEW.resource_path
+          OR OLD.preview_path IS NOT NEW.preview_path
+          OR OLD.icon_path IS NOT NEW.icon_path
+          OR OLD.source_app IS NOT NEW.source_app
+          OR OLD.is_favorite != NEW.is_favorite
+          OR OLD.metadata_json IS NOT NEW.metadata_json
+          OR OLD.created_at_ms != NEW.created_at_ms
+          OR OLD.deleted != NEW.deleted
         BEGIN
             INSERT INTO search_outbox (item_id, operation, created_at_ms)
             VALUES (NEW.id, CASE WHEN NEW.deleted = 1 THEN 'delete' ELSE 'upsert' END, NEW.created_at_ms);
