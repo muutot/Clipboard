@@ -104,7 +104,102 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         CREATE TABLE IF NOT EXISTS tags (
             name TEXT PRIMARY KEY NOT NULL,
             color TEXT NOT NULL DEFAULT ''
-        );",
+        );
+
+        -- Sync metadata: stores the local device identifier.
+        -- Triggers read this to populate sync_changelog.device_id.
+        CREATE TABLE IF NOT EXISTS sync_metadata (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL DEFAULT ''
+        );
+
+        -- Operation log for multi-device sync. Records every insert/update/delete
+        -- on clipboard_items so devices can exchange changes.
+        -- `modified_at_ms` + `device_id` enable conflict resolution (last-write-wins).
+        -- `sequence` provides total ordering within a device.
+        CREATE TABLE IF NOT EXISTS sync_changelog (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL,
+            operation TEXT NOT NULL CHECK (operation IN ('insert', 'update', 'delete')),
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            content_hash TEXT NOT NULL DEFAULT '',
+            resource_path TEXT,
+            preview_path TEXT,
+            icon_path TEXT,
+            created_at_ms INTEGER NOT NULL,
+            modified_at_ms INTEGER NOT NULL DEFAULT 0,
+            device_id TEXT NOT NULL DEFAULT '',
+            synced INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS sync_changelog_synced_seq_idx
+            ON sync_changelog (synced, sequence);
+        CREATE INDEX IF NOT EXISTS sync_changelog_created_idx
+            ON sync_changelog (created_at_ms);
+
+        -- Triggers to populate sync_changelog on every data mutation.
+        -- device_id is read from sync_metadata (set at startup by the app).
+        CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_insert
+        AFTER INSERT ON clipboard_items
+        BEGIN
+            INSERT INTO sync_changelog
+                (item_id, operation, kind, title, content_hash, resource_path,
+                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id)
+            VALUES
+                (NEW.id, 'insert', NEW.kind, NEW.title, NEW.content_hash,
+                 NEW.resource_path, NEW.preview_path, NEW.icon_path,
+                 NEW.created_at_ms, NEW.created_at_ms,
+                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'));
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_update
+        AFTER UPDATE ON clipboard_items
+        WHEN OLD.title != NEW.title
+          OR OLD.text_content IS NOT NEW.text_content
+          OR OLD.html_content IS NOT NEW.html_content
+          OR OLD.rtf_content IS NOT NEW.rtf_content
+          OR OLD.resource_path IS NOT NEW.resource_path
+          OR OLD.preview_path IS NOT NEW.preview_path
+          OR OLD.icon_path IS NOT NEW.icon_path
+          OR OLD.is_favorite != NEW.is_favorite
+          OR OLD.deleted != NEW.deleted
+          OR OLD.metadata_json IS NOT NEW.metadata_json
+        BEGIN
+            INSERT INTO sync_changelog
+                (item_id, operation, kind, title, content_hash, resource_path,
+                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id)
+            VALUES
+                (NEW.id,
+                 CASE WHEN OLD.deleted = 0 AND NEW.deleted = 1 THEN 'delete'
+                      WHEN OLD.deleted = 1 AND NEW.deleted = 0 THEN 'insert'
+                      ELSE 'update' END,
+                 NEW.kind, NEW.title, NEW.content_hash,
+                 NEW.resource_path, NEW.preview_path, NEW.icon_path,
+                 NEW.created_at_ms,
+                 COALESCE(NEW.modified_at_ms, strftime('%s', 'now') * 1000),
+                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'));
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_delete
+        AFTER DELETE ON clipboard_items
+        BEGIN
+            INSERT INTO sync_changelog
+                (item_id, operation, kind, title, content_hash, resource_path,
+                 preview_path, icon_path, created_at_ms, modified_at_ms, device_id)
+            VALUES
+                (OLD.id, 'delete', OLD.kind, OLD.title, OLD.content_hash,
+                 OLD.resource_path, OLD.preview_path, OLD.icon_path,
+                 OLD.created_at_ms, strftime('%s', 'now') * 1000,
+                 (SELECT COALESCE(value, 'unknown') FROM sync_metadata WHERE key = 'device_id'));
+        END;
+
+        -- Auto-set modified_at_ms on row update.
+        CREATE TRIGGER IF NOT EXISTS clipboard_items_set_modified
+        AFTER UPDATE ON clipboard_items
+        BEGIN
+            UPDATE clipboard_items SET modified_at_ms = strftime('%s', 'now') * 1000
+            WHERE id = NEW.id AND (modified_at_ms IS NULL OR modified_at_ms < strftime('%s', 'now') * 1000 - 1000);
+        END;",
     )?;
 
     ensure_item_tags_table(connection)?;
@@ -114,6 +209,13 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
     // separate idempotent ALTER is required for upgrades.
     ensure_column(connection, "clipboard_items", "html_content", "TEXT")?;
     ensure_column(connection, "clipboard_items", "rtf_content", "TEXT")?;
+    ensure_column(connection, "clipboard_items", "modified_at_ms", "INTEGER")?;
+    ensure_column(
+        connection,
+        "sync_changelog",
+        "modified_at_ms",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
 
     // `search_outbox.sequence` is an INTEGER PRIMARY KEY, which already
     // creates an index on the column, so the redundant explicit index adds

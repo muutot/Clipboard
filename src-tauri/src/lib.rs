@@ -17,6 +17,7 @@ use commands::clipboard::*;
 use commands::config::*;
 use commands::export::*;
 use commands::ocr::*;
+use commands::sync::*;
 use commands::system::*;
 use commands::update::*;
 pub mod config;
@@ -34,6 +35,7 @@ pub mod search;
 pub mod shutdown;
 pub mod state;
 pub mod storage;
+pub mod sync;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -263,6 +265,15 @@ pub fn run() {
             }
 
             database.requeue_interrupted_ocr()?;
+
+            // Initialize sync device identifier for multi-device oplog sync.
+            let device_id = get_sync_device_id();
+            if let Err(e) = database.set_sync_device_id(&device_id) {
+                eprintln!("[sync] failed to set device_id: {e}");
+            } else {
+                eprintln!("[sync] device_id = {device_id}");
+            }
+
             let db_open_duration = startup_timer.finish_segment();
 
             let search_index = Arc::new(SearchIndex::open(&paths.search_index)?);
@@ -610,7 +621,14 @@ pub fn run() {
             repair_database,
             validate_search_index,
             cleanup_storage_files,
-            restart_app
+            restart_app,
+            get_sync_config,
+            set_sync_config,
+            test_sync_connection,
+            sync_upload_backup,
+            sync_list_remote_backups,
+            sync_download_backup,
+            verify_backup_file
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -620,6 +638,16 @@ pub fn run() {
             stop_runtime_services(app_handle);
         }
     });
+}
+
+fn get_sync_device_id() -> String {
+    if let Ok(hostname) = std::env::var("COMPUTERNAME") {
+        return hostname.to_lowercase();
+    }
+    if let Ok(hostname) = std::env::var("HOSTNAME") {
+        return hostname.to_lowercase();
+    }
+    "unknown".to_string()
 }
 
 #[cfg(test)]

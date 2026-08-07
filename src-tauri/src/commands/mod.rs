@@ -7,5 +7,6 @@ pub mod export;
 pub mod files;
 pub mod ocr;
 pub mod signal;
+pub mod sync;
 pub mod system;
 pub mod update;

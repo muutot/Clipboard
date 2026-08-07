@@ -12,7 +12,7 @@ pub use database::Database;
 pub use error::StorageError;
 pub use ocr_repository::OcrRepository;
 pub use paths::{StoragePaths, RESOURCE_ROOT_MARKER};
-pub use pool::RepairResult;
+pub use pool::{RepairResult, SyncChangeLogEntry};
 pub use recovery::{
     backup_path, quarantine_search_index, recover_database_if_needed, refresh_database_backup,
     DatabaseRecoveryReport,

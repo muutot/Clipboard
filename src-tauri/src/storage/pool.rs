@@ -1,4 +1,21 @@
-use super::{Database, StorageError};
+use super::{Database, StorageError, StorageFileReferences};
+use crate::domain::ClipboardItem;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)]
+pub struct SyncChangeLogEntry {
+    pub sequence: i64,
+    pub item_id: String,
+    pub operation: String,
+    pub kind: String,
+    pub title: String,
+    pub content_hash: String,
+    pub resource_path: Option<String>,
+    pub preview_path: Option<String>,
+    pub icon_path: Option<String>,
+    pub created_at_ms: i64,
+    pub modified_at_ms: i64,
+    pub device_id: String,
+}
 
 impl Database {
     pub fn set_preview_path(
@@ -12,6 +29,460 @@ impl Database {
                 rusqlite::params![item_id, preview_path],
             )?;
             Ok(affected > 0)
+        })
+    }
+
+    pub fn checkpoint(&self) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+            Ok(())
+        })
+    }
+
+    pub fn list_item_ids_since(&self, since_ms: i64) -> Result<Vec<String>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT id FROM clipboard_items WHERE created_at_ms > ?1 ORDER BY created_at_ms ASC",
+            )?;
+            let rows = statement.query_map([since_ms], |row| row.get::<_, String>(0))?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
+        })
+    }
+
+    pub fn list_storage_file_references_for_items(
+        &self,
+        item_ids: &[String],
+    ) -> Result<StorageFileReferences, StorageError> {
+        self.with_connection(|connection| {
+            let mut paths = StorageFileReferences::default();
+            if item_ids.is_empty() {
+                return Ok(paths);
+            }
+
+            let placeholders = item_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT resource_path, preview_path, icon_path
+                 FROM clipboard_items
+                 WHERE id IN ({placeholders})
+                   AND (resource_path IS NOT NULL OR preview_path IS NOT NULL OR icon_path IS NOT NULL)",
+            );
+            let mut params: Vec<&dyn rusqlite::ToSql> = Vec::new();
+            for id in item_ids {
+                params.push(id as &dyn rusqlite::ToSql);
+            }
+            let mut statement = connection.prepare(&sql)?;
+            let rows = statement.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (resource, preview, icon) = row?;
+                if let Some(p) = resource {
+                    if !p.trim().is_empty() {
+                        paths.resource_paths.push(p);
+                    }
+                }
+                if let Some(p) = preview {
+                    if !p.trim().is_empty() {
+                        paths.preview_paths.push(p);
+                    }
+                }
+                if let Some(p) = icon {
+                    if !p.trim().is_empty() {
+                        paths.icon_paths.push(p);
+                    }
+                }
+            }
+
+            let sql_files = format!(
+                "SELECT text_content FROM clipboard_items
+                 WHERE id IN ({placeholders}) AND kind = 'file' AND text_content IS NOT NULL",
+            );
+            let mut statement_files = connection.prepare(&sql_files)?;
+            let file_rows = statement_files.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                row.get::<_, String>(0)
+            })?;
+            for stored_paths in file_rows {
+                if let Ok(stored_paths) = serde_json::from_str::<Vec<String>>(&stored_paths?) {
+                    paths.resource_paths.extend(
+                        stored_paths.into_iter().filter(|p| !p.trim().is_empty()),
+                    );
+                }
+            }
+
+            Ok(paths)
+        })
+    }
+
+    /// Returns all unsynced changelog entries up to `limit` rows, ordered by sequence.
+    pub fn get_unsynced_changelog(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<SyncChangeLogEntry>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT sequence, item_id, operation, kind, title, content_hash,
+                        resource_path, preview_path, icon_path, created_at_ms,
+                        modified_at_ms, device_id
+                 FROM sync_changelog
+                 WHERE synced = 0
+                 ORDER BY sequence ASC
+                 LIMIT ?1",
+            )?;
+            let rows = statement.query_map([limit as i64], |row| {
+                Ok(SyncChangeLogEntry {
+                    sequence: row.get(0)?,
+                    item_id: row.get(1)?,
+                    operation: row.get(2)?,
+                    kind: row.get(3)?,
+                    title: row.get(4)?,
+                    content_hash: row.get(5)?,
+                    resource_path: row.get(6)?,
+                    preview_path: row.get(7)?,
+                    icon_path: row.get(8)?,
+                    created_at_ms: row.get(9)?,
+                    modified_at_ms: row.get(10)?,
+                    device_id: row.get(11)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
+        })
+    }
+
+    /// Marks changelog entries as synced (up to and including `max_sequence`).
+    pub fn mark_changelog_synced(&self, max_sequence: i64) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let affected = connection.execute(
+                "UPDATE sync_changelog SET synced = 1 WHERE sequence <= ?1 AND synced = 0",
+                [max_sequence],
+            )?;
+            Ok(affected as u64)
+        })
+    }
+
+    /// Returns the count of unsynced changelog entries.
+    pub fn count_unsynced_changelog(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM sync_changelog WHERE synced = 0",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count as u64)
+        })
+    }
+
+    /// Sets the device identifier in sync_metadata.
+    /// Called once at startup. All trigger-generated changelog entries
+    /// will use this value.
+    pub fn set_sync_device_id(&self, device_id: &str) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('device_id', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = ?1",
+                [device_id],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Gets the device identifier from sync_metadata.
+    pub fn get_sync_device_id(&self) -> Result<String, StorageError> {
+        self.with_connection(|connection| {
+            let id: String = connection.query_row(
+                "SELECT value FROM sync_metadata WHERE key = 'device_id'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(id)
+        })
+    }
+
+    /// Exports all active (non-deleted) items for baseline creation.
+    pub fn export_active_items(&self) -> Result<Vec<ClipboardItem>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT id, kind, title, text_content, html_content, rtf_content,
+                        resource_path, preview_path, content_hash, source_app,
+                        icon_path, size_bytes, created_at_ms, last_used_at_ms,
+                        is_favorite, metadata_json, deleted, deleted_at_ms, modified_at_ms
+                 FROM clipboard_items
+                 WHERE deleted = 0
+                 ORDER BY created_at_ms ASC",
+            )?;
+            let rows = statement.query_map([], |row| {
+                use crate::domain::ClipboardKind;
+                let kind_str: String = row.get(1)?;
+                let kind = match kind_str.as_str() {
+                    "text" => ClipboardKind::Text,
+                    "link" => ClipboardKind::Link,
+                    "image" => ClipboardKind::Image,
+                    "file" => ClipboardKind::File,
+                    _ => ClipboardKind::Text,
+                };
+                Ok(ClipboardItem {
+                    id: row.get(0)?,
+                    kind,
+                    title: row.get(2)?,
+                    text_content: row.get(3)?,
+                    html_content: row.get(4)?,
+                    rtf_content: row.get(5)?,
+                    resource_path: row.get(6)?,
+                    preview_path: row.get(7)?,
+                    content_hash: row.get(8)?,
+                    source_app: row.get(9)?,
+                    icon_path: row.get(10)?,
+                    size_bytes: row.get::<_, i64>(11)? as u64,
+                    created_at_ms: row.get(12)?,
+                    last_used_at_ms: row.get(13)?,
+                    is_favorite: row.get(14)?,
+                    metadata_json: row.get(15)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
+        })
+    }
+
+    /// Imports baseline items (upsert by id).
+    /// Used when restoring from a baseline on a new device.
+    pub fn import_baseline_items(&self, items: &[ClipboardItem]) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let tx = connection.transaction()?;
+            let mut imported = 0u64;
+            for item in items {
+                let kind_str = match item.kind {
+                    crate::domain::ClipboardKind::Text => "text",
+                    crate::domain::ClipboardKind::Link => "link",
+                    crate::domain::ClipboardKind::Image => "image",
+                    crate::domain::ClipboardKind::File => "file",
+                };
+                tx.execute(
+                    "INSERT INTO clipboard_items
+                     (id, kind, title, text_content, html_content, rtf_content,
+                      resource_path, preview_path, content_hash, source_app,
+                      icon_path, size_bytes, created_at_ms, last_used_at_ms,
+                      is_favorite, metadata_json, deleted, modified_at_ms)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                             ?11, ?12, ?13, ?14, ?15, ?16, 0, ?17)
+                     ON CONFLICT(id) DO UPDATE SET
+                        kind = excluded.kind,
+                        title = excluded.title,
+                        text_content = excluded.text_content,
+                        html_content = excluded.html_content,
+                        rtf_content = excluded.rtf_content,
+                        resource_path = excluded.resource_path,
+                        preview_path = excluded.preview_path,
+                        content_hash = excluded.content_hash,
+                        source_app = excluded.source_app,
+                        icon_path = excluded.icon_path,
+                        size_bytes = excluded.size_bytes,
+                        last_used_at_ms = excluded.last_used_at_ms,
+                        is_favorite = excluded.is_favorite,
+                        metadata_json = excluded.metadata_json,
+                        modified_at_ms = excluded.modified_at_ms",
+                    rusqlite::params![
+                        &item.id,
+                        kind_str,
+                        &item.title,
+                        &item.text_content,
+                        &item.html_content,
+                        &item.rtf_content,
+                        &item.resource_path,
+                        &item.preview_path,
+                        &item.content_hash,
+                        &item.source_app,
+                        &item.icon_path,
+                        &(item.size_bytes as i64),
+                        &item.created_at_ms,
+                        &item.last_used_at_ms,
+                        &item.is_favorite,
+                        &item.metadata_json,
+                        &item.created_at_ms,
+                    ],
+                )?;
+                imported += 1;
+            }
+            tx.commit()?;
+            Ok(imported)
+        })
+    }
+
+    /// Applies a batch of remote oplog entries to the local database.
+    /// Uses last-modified-wins conflict resolution.
+    /// Returns the number of entries successfully applied.
+    pub fn apply_remote_oplog(&self, entries: &[SyncChangeLogEntry]) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let tx = connection.transaction()?;
+            let mut applied = 0u64;
+
+            for entry in entries {
+                let existing_modified: Option<i64> = tx
+                    .query_row(
+                        "SELECT modified_at_ms FROM clipboard_items WHERE id = ?1",
+                        [&entry.item_id],
+                        |row| row.get(0),
+                    )
+                    .ok();
+
+                match entry.operation.as_str() {
+                    "insert" => {
+                        let _ = tx.execute(
+                            "INSERT OR IGNORE INTO clipboard_items
+                             (id, kind, title, content_hash, resource_path, preview_path,
+                              icon_path, created_at_ms, modified_at_ms, size_bytes, deleted)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0)",
+                            rusqlite::params![
+                                &entry.item_id,
+                                &entry.kind,
+                                &entry.title,
+                                &entry.content_hash,
+                                &entry.resource_path,
+                                &entry.preview_path,
+                                &entry.icon_path,
+                                &entry.created_at_ms,
+                                &entry.modified_at_ms,
+                            ],
+                        );
+                        applied += 1;
+                    }
+                    "update" => {
+                        if let Some(local_modified) = existing_modified {
+                            if entry.modified_at_ms >= local_modified {
+                                let _ = tx.execute(
+                                    "UPDATE clipboard_items
+                                     SET kind = ?2, title = ?3, content_hash = ?4,
+                                         resource_path = ?5, preview_path = ?6,
+                                         icon_path = ?7, modified_at_ms = ?8,
+                                         deleted = 0
+                                     WHERE id = ?1",
+                                    rusqlite::params![
+                                        &entry.item_id,
+                                        &entry.kind,
+                                        &entry.title,
+                                        &entry.content_hash,
+                                        &entry.resource_path,
+                                        &entry.preview_path,
+                                        &entry.icon_path,
+                                        &entry.modified_at_ms,
+                                    ],
+                                );
+                                applied += 1;
+                            }
+                        } else {
+                            let _ = tx.execute(
+                                "INSERT OR IGNORE INTO clipboard_items
+                                 (id, kind, title, content_hash, resource_path, preview_path,
+                                  icon_path, created_at_ms, modified_at_ms, size_bytes, deleted)
+                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0)",
+                                rusqlite::params![
+                                    &entry.item_id,
+                                    &entry.kind,
+                                    &entry.title,
+                                    &entry.content_hash,
+                                    &entry.resource_path,
+                                    &entry.preview_path,
+                                    &entry.icon_path,
+                                    &entry.created_at_ms,
+                                    &entry.modified_at_ms,
+                                ],
+                            );
+                            applied += 1;
+                        }
+                    }
+                    "delete" => {
+                        let _ = tx.execute(
+                            "UPDATE clipboard_items SET deleted = 1, deleted_at_ms = ?2
+                             WHERE id = ?1 AND COALESCE(modified_at_ms, 0) <= ?3",
+                            rusqlite::params![
+                                &entry.item_id,
+                                &entry.modified_at_ms,
+                                &entry.modified_at_ms,
+                            ],
+                        );
+                        applied += 1;
+                    }
+                    _ => {}
+                }
+            }
+
+            tx.commit()?;
+            Ok(applied)
+        })
+    }
+
+    /// Purges old synced entries beyond the most recent N for housekeeping.
+    pub fn purge_synced_changelog(&self, keep_recent: i64) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let affected = connection.execute(
+                "DELETE FROM sync_changelog
+                 WHERE synced = 1
+                   AND sequence <= (SELECT COALESCE(MAX(sequence) - ?1, 0) FROM sync_changelog)",
+                [keep_recent],
+            )?;
+            Ok(affected as u64)
+        })
+    }
+
+    pub fn count_active_items(&self) -> Result<usize, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count as usize)
+        })
+    }
+
+    pub fn list_storage_file_references(&self) -> Result<StorageFileReferences, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT 'resource', resource_path
+                 FROM clipboard_items
+                 WHERE resource_path IS NOT NULL
+                 UNION ALL
+                 SELECT 'preview', preview_path
+                 FROM clipboard_items
+                 WHERE preview_path IS NOT NULL
+                 UNION ALL
+                 SELECT 'icon', icon_path
+                 FROM clipboard_items
+                 WHERE icon_path IS NOT NULL",
+            )?;
+            let references = statement.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            let mut paths = StorageFileReferences::default();
+            for reference in references {
+                let (kind, path) = reference?;
+                match kind.as_str() {
+                    "resource" => paths.resource_paths.push(path),
+                    "preview" => paths.preview_paths.push(path),
+                    "icon" => paths.icon_paths.push(path),
+                    _ => {}
+                }
+            }
+
+            let mut file_paths = connection.prepare(
+                "SELECT text_content
+                 FROM clipboard_items
+                 WHERE kind = 'file'
+                   AND text_content IS NOT NULL",
+            )?;
+            let file_paths = file_paths.query_map([], |row| row.get::<_, String>(0))?;
+            for stored_paths in file_paths {
+                if let Ok(stored_paths) = serde_json::from_str::<Vec<String>>(&stored_paths?) {
+                    paths.resource_paths.extend(
+                        stored_paths
+                            .into_iter()
+                            .filter(|path| !path.trim().is_empty()),
+                    );
+                }
+            }
+            Ok(paths)
         })
     }
 
@@ -54,7 +525,8 @@ mod tests {
     use std::path::PathBuf;
     use std::time::SystemTime;
 
-    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::domain::ClipboardItem;
+    use crate::domain::ClipboardKind;
 
     use super::Database;
     use crate::storage::ClipboardRepository;

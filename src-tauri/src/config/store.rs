@@ -347,6 +347,108 @@ impl ConfigStore {
         self.save()
     }
 
+    pub fn sync_config(&self) -> SyncConfig {
+        self.config.sync.clone()
+    }
+
+    pub fn set_sync_config(&mut self, sync: SyncConfig) -> Result<(), StorageError> {
+        let previous = self.config.sync.clone();
+        self.config.sync = sync;
+        if let Err(error) = self.save() {
+            self.config.sync = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub fn auto_sync(&self) -> bool {
+        self.config.sync.auto_sync
+    }
+
+    pub fn set_auto_sync(&mut self, enabled: bool) -> Result<(), StorageError> {
+        self.config.sync.auto_sync = enabled;
+        self.save()
+    }
+
+    pub fn auto_sync_interval_secs(&self) -> u64 {
+        self.config.sync.auto_sync_interval_secs.max(10)
+    }
+
+    pub fn set_auto_sync_interval_secs(&mut self, value: u64) -> Result<(), StorageError> {
+        self.config.sync.auto_sync_interval_secs = value.clamp(10, 86400);
+        self.save()
+    }
+
+    pub fn max_remote_oplog_files(&self) -> u32 {
+        if self.config.sync.max_remote_oplog_files == 0 {
+            10
+        } else {
+            self.config.sync.max_remote_oplog_files.clamp(3, 100)
+        }
+    }
+
+    pub fn set_max_remote_oplog_files(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.sync.max_remote_oplog_files = value.clamp(3, 100);
+        self.save()
+    }
+
+    pub fn oplog_rollover_entries(&self) -> u32 {
+        if self.config.sync.oplog_rollover_entries == 0 {
+            100
+        } else {
+            self.config.sync.oplog_rollover_entries.clamp(10, 10000)
+        }
+    }
+
+    pub fn set_oplog_rollover_entries(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.sync.oplog_rollover_entries = value.clamp(10, 10000);
+        self.save()
+    }
+
+    pub fn oplog_rollover_size_bytes(&self) -> u32 {
+        if self.config.sync.oplog_rollover_size_bytes == 0 {
+            51200
+        } else {
+            self.config
+                .sync
+                .oplog_rollover_size_bytes
+                .clamp(1024, 1048576)
+        }
+    }
+
+    pub fn set_oplog_rollover_size_bytes(&mut self, value: u32) -> Result<(), StorageError> {
+        self.config.sync.oplog_rollover_size_bytes = value.clamp(1024, 1048576);
+        self.save()
+    }
+
+    pub fn max_sync_image_bytes(&self) -> u64 {
+        self.config.sync.max_sync_image_bytes
+    }
+
+    pub fn set_max_sync_image_bytes(&mut self, value: u64) -> Result<(), StorageError> {
+        self.config.sync.max_sync_image_bytes = value;
+        self.save()
+    }
+
+    pub fn max_sync_file_bytes(&self) -> u64 {
+        self.config.sync.max_sync_file_bytes
+    }
+
+    pub fn set_max_sync_file_bytes(&mut self, value: u64) -> Result<(), StorageError> {
+        self.config.sync.max_sync_file_bytes = value;
+        self.save()
+    }
+
+    pub fn update_sync_status(
+        &mut self,
+        status: &str,
+        timestamp_ms: i64,
+    ) -> Result<(), StorageError> {
+        self.config.sync.last_sync_ms = Some(timestamp_ms);
+        self.config.sync.last_sync_status = Some(status.to_string());
+        self.save()
+    }
+
     fn save(&self) -> Result<(), StorageError> {
         let mut value = serde_json::to_value(&self.config)?;
         if !self.general_settings_present {

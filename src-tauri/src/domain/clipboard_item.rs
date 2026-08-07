@@ -1,7 +1,19 @@
 use serde::{Deserialize, Serialize};
 
 /// Clipboard content categories shared by storage, platform adapters and the UI.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum ClipboardKind {
     Text,
@@ -12,7 +24,7 @@ pub enum ClipboardKind {
 
 /// The stable, storage-facing representation of one clipboard history entry.
 /// Large binary payloads are stored outside SQLite and referenced by path.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipboardItem {
     pub id: String,

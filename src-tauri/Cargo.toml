@@ -18,6 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 serde = { version = "1", features = ["derive"] }
@@ -36,8 +37,11 @@ tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 window-vibrancy = "0.6"
 oar-ocr = { version = "0.8", features = ["download-binaries", "auto-download"] }
-reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls", "blocking"] }
 tokio = { version = "1", features = ["fs", "io-util"] }
 ort = "=2.0.0-rc.12"
 hex = "0.4.3"
 zip = "2"
+walkdir = "2"
+chrono = "0.4"
+bincode = { version = "2", features = ["serde"] }

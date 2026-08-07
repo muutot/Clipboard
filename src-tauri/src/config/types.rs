@@ -19,6 +19,7 @@ pub struct AppConfig {
     pub general: GeneralConfig,
     pub export: ExportConfig,
     pub ocr: OcrConfig,
+    pub sync: SyncConfig,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -366,6 +367,36 @@ pub struct ExportConfig {
     pub schedule_auto_export: Option<String>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SyncConfig {
+    pub provider: SyncProvider,
+    pub endpoint: Option<String>,
+    pub remote_path: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub last_sync_ms: Option<i64>,
+    pub last_sync_status: Option<String>,
+    pub auto_sync: bool,
+    pub auto_sync_interval_secs: u64,
+    pub max_remote_oplog_files: u32,
+    pub oplog_rollover_entries: u32,
+    pub oplog_rollover_size_bytes: u32,
+    pub max_sync_image_bytes: u64,
+    pub max_sync_file_bytes: u64,
+    #[serde(flatten)]
+    pub(crate) extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncProvider {
+    #[default]
+    Off,
+    Webdav,
+    S3,
 }
 
 #[derive(Debug)]
