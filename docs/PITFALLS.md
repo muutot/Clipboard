@@ -183,6 +183,29 @@ _t("status.recordCount", { count: items.length })
 
 标签以 `clipboard_items.metadata_json['tags']` 为唯一数据源，`item_tags` 联结表仅面向活跃行镜像标签，用于标签过滤与计数走索引。任何写标签的路径（`set_tags`、`rename_tag`、`delete_tag`）都必须在同一事务内同步 `item_tags`；删除 item 由外键 `ON DELETE CASCADE` 自动清理。若新增写 `metadata_json` 标签的逻辑，务必同时维护 `item_tags`，避免二者失步。
 
+### 触发器内部对同表的嵌套 UPDATE 会再次触发其他 AFTER 触发器
+
+`clipboard_items_set_modified` 在 `AFTER UPDATE` 内对同一表执行 `UPDATE clipboard_items SET modified_at_ms = ...`，该嵌套 UPDATE 会让所有同表无 WHEN 守卫的 AFTER 触发器（如 `clipboard_items_search_update`）再触发一次，产生重复的搜索/同步事件。
+
+```sql
+-- BUG: 无 WHEN 守卫，set_modified 的嵌套 UPDATE 会重复插入 search_outbox
+CREATE TRIGGER clipboard_items_search_update
+AFTER UPDATE ON clipboard_items
+BEGIN
+    INSERT INTO search_outbox ...;
+END;
+
+-- FIX: 用 WHEN 守卫排除 modified_at_ms 这类维护列
+CREATE TRIGGER clipboard_items_search_update
+AFTER UPDATE ON clipboard_items
+WHEN OLD.title != NEW.title OR OLD.text_content IS NOT NEW.text_content OR ...
+BEGIN
+    INSERT INTO search_outbox ...;
+END;
+```
+
+新增/修改同表 AFTER 触发器时，必须带上 WHEN 守卫，明确列出真正影响该触发器语义的列（如 `sync_update` 已按 title/text/content 等列守卫），否则会与 `set_modified` 的嵌套 UPDATE 组合出重复事件。递归触发器 pragma（`PRAGMA recursive_triggers`）默认关闭，但这只限制同表递归，不能替代 WHEN 守卫。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：
