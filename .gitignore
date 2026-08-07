@@ -28,3 +28,6 @@ export
 # JVM
 hs_err_pid*
 
+# Local reports (untracked)
+style.md
+
