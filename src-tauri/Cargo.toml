@@ -45,3 +45,14 @@ zip = "2"
 walkdir = "2"
 chrono = "0.4"
 bincode = { version = "2", features = ["serde"] }
+
+# Dev-profile tuning so `tauri dev` rebuilds are fast:
+# - dependencies are built once at opt-level 2 and cached; only the local
+#   crate is rebuilt incrementally (debug, opt-level 0) on every change.
+# - unpacked split debug info keeps MSVC PDB handling fast.
+[profile.dev]
+incremental = true
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+opt-level = 2
