@@ -1,0 +1,443 @@
+<script lang="ts">
+  import AppIcon from "$lib/components/AppIcon.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
+  import type { SettingEntryConfig, SizeUnit } from "$lib/types/settings-entry";
+  import { sliderPercentage } from "$lib/utils/format";
+  import { SIZE_UNIT_OPTIONS } from "$lib/utils/size";
+
+  interface Props {
+    config: SettingEntryConfig;
+  }
+
+  let { config }: Props = $props();
+
+  function resolveBound(value: number | (() => number)): number {
+    return typeof value === "function" ? value() : value;
+  }
+
+  function handleNumberInput(event: Event, set: (v: number) => void) {
+    const el = event.currentTarget as HTMLInputElement;
+    const raw = el.value;
+    if (raw === "") return;
+    const value = Number(raw);
+    if (Number.isNaN(value)) return;
+    set(value);
+  }
+
+  function handleRangeInput(event: Event, set: (v: number) => void) {
+    set(Number((event.currentTarget as HTMLInputElement).value));
+  }
+</script>
+
+{#if config.type === "heading"}
+  <section class="setting-card" data-settings-search-id={config.id ?? undefined}>
+    <div class="setting-heading">
+      {#if config.icon}
+        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+      {/if}
+      <div>
+        <strong>{config.label}</strong>
+        {#if config.desc}<p>{config.desc}</p>{/if}
+      </div>
+      {#if config.actionLabel}
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={config.actionDisabled}
+          onclick={config.onaction}
+        >
+          {config.actionLabel}
+        </button>
+      {/if}
+    </div>
+  </section>
+{:else if config.type === "slider"}
+  <section class="setting-card" data-settings-search-id={config.id ?? undefined}>
+    <div class="setting-heading">
+      {#if config.icon}
+        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+      {/if}
+      <div class="heading-inline">
+        <div>
+          <strong>{config.label}</strong>
+          {#if config.desc}<p>{config.desc}</p>{/if}
+        </div>
+        <span class="value-label">{config.get()}{config.suffix}</span>
+      </div>
+    </div>
+    <input
+      type="range"
+      class="transparency-slider"
+      min={resolveBound(config.min)}
+      max={resolveBound(config.max)}
+      step={config.step}
+      value={config.get()}
+      style:--slider-pct={sliderPercentage(
+        config.get(),
+        resolveBound(config.min),
+        resolveBound(config.max),
+      )}
+      aria-label={config.label}
+      oninput={(e) => {
+        handleRangeInput(e, config.set);
+        config.oninput?.();
+      }}
+    />
+  </section>
+{:else if config.type === "toggle"}
+  {#if (config.variant ?? "card") === "card"}
+    <section class="setting-card toggle-card" data-settings-search-id={config.id ?? undefined}>
+      <div class="setting-heading">
+        {#if config.icon}
+          <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+        {/if}
+        <div>
+          <strong>{config.label}</strong>
+          {#if config.desc}<p>{config.desc}</p>{/if}
+        </div>
+      </div>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={config.get()}
+        onclick={() => {
+          config.set(!config.get());
+          config.onchange?.();
+        }}
+        aria-checked={config.get()}
+        aria-label={config.label}
+        role="switch"
+        disabled={config.disabled?.()}
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+  {:else}
+    <section class="setting-card setting-card-row" data-settings-search-id={config.id ?? undefined}>
+      {#if config.icon}
+        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+      {/if}
+      <span class="setting-label">{config.label}</span>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={config.get()}
+        onclick={() => {
+          config.set(!config.get());
+          config.onchange?.();
+        }}
+        aria-checked={config.get()}
+        aria-label={config.label}
+        role="switch"
+        disabled={config.disabled?.()}
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+  {/if}
+{:else if config.type === "select"}
+  {#if (config.variant ?? "card") === "card"}
+    <section class="setting-card toggle-card" data-settings-search-id={config.id ?? undefined}>
+      <div class="setting-heading">
+        {#if config.icon}
+          <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+        {/if}
+        <div>
+          <strong>{config.label}</strong>
+          {#if config.desc}<p>{config.desc}</p>{/if}
+        </div>
+      </div>
+      <CustomSelect
+        value={config.get()}
+        options={config.options}
+        ariaLabel={config.ariaLabel ?? config.label}
+        disabled={config.disabled}
+        onchange={(v) => {
+          config.set(v);
+          config.onchange?.();
+        }}
+      />
+    </section>
+  {:else}
+    <section class="setting-card setting-card-row" data-settings-search-id={config.id ?? undefined}>
+      {#if config.icon}
+        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+      {/if}
+      <span class="setting-label">{config.label}</span>
+      <CustomSelect
+        value={config.get()}
+        options={config.options}
+        ariaLabel={config.ariaLabel ?? config.label}
+        disabled={config.disabled}
+        onchange={(v) => {
+          config.set(v);
+          config.onchange?.();
+        }}
+      />
+    </section>
+  {/if}
+{:else if config.type === "text"}
+  {#if (config.variant ?? "card") === "card"}
+    <section class="setting-card" data-settings-search-id={config.id ?? undefined}>
+      <div class="setting-heading">
+        {#if config.icon}
+          <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+        {/if}
+        <div class="heading-inline">
+          <div>
+            <strong>{config.label}</strong>
+            {#if config.desc}<p>{config.desc}</p>{/if}
+          </div>
+        </div>
+      </div>
+      <input
+        type={config.inputType ?? "text"}
+        class="settings-text-input"
+        value={config.get()}
+        maxlength={config.maxlength}
+        placeholder={config.placeholder}
+        aria-label={config.label}
+        oninput={(e) => config.set((e.currentTarget as HTMLInputElement).value)}
+        onchange={config.onchange}
+        onblur={config.onblur}
+      />
+    </section>
+  {:else}
+    <section class="setting-card setting-card-row" data-settings-search-id={config.id ?? undefined}>
+      {#if config.icon}
+        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+      {/if}
+      <span class="setting-label">{config.label}</span>
+      <input
+        type={config.inputType ?? "text"}
+        value={config.get()}
+        maxlength={config.maxlength}
+        placeholder={config.placeholder}
+        aria-label={config.label}
+        style="flex:1;min-width:0"
+        oninput={(e) => config.set((e.currentTarget as HTMLInputElement).value)}
+        onchange={config.onchange}
+        onblur={config.onblur}
+      />
+    </section>
+  {/if}
+{:else if config.type === "size"}
+  <section class="setting-card setting-card-row" data-settings-search-id={config.id ?? undefined}>
+    {#if config.icon}
+      <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+    {/if}
+    <span class="setting-label">{config.label}</span>
+    <input
+      type="number"
+      value={config.get()}
+      min={config.min}
+      aria-label={config.label}
+      oninput={(e) => {
+        handleNumberInput(e, config.set);
+        config.oninput?.();
+      }}
+      onchange={config.onchange}
+    />
+    <CustomSelect
+      className="unit-select"
+      value={config.getUnit()}
+      options={SIZE_UNIT_OPTIONS}
+      ariaLabel={config.label}
+      onchange={(v) => config.setUnit(v as SizeUnit)}
+    />
+  </section>
+{:else}
+  {#if (config.variant ?? "row") === "card"}
+    <section class="setting-card" data-settings-search-id={config.id ?? undefined}>
+      <div class="setting-heading">
+        {#if config.icon}
+          <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+        {/if}
+        <div class="heading-inline">
+          <div>
+            <strong>{config.label}</strong>
+            {#if config.desc}<p>{config.desc}</p>{/if}
+          </div>
+          {#if config.suffix}<span class="value-label">{config.get()}{config.suffix}</span>{/if}
+        </div>
+      </div>
+      <input
+        type="number"
+        value={config.get()}
+        min={config.min}
+        max={config.max}
+        step={config.step}
+        aria-label={config.label}
+        oninput={(e) => handleNumberInput(e, config.set)}
+        onchange={config.onchange}
+        onblur={config.onblur}
+      />
+    </section>
+  {:else}
+    <section class="setting-card setting-card-row" data-settings-search-id={config.id ?? undefined}>
+      {#if config.icon}
+        <span class="setting-icon"><AppIcon name={config.icon} size={17} /></span>
+      {/if}
+      <span class="setting-label">{config.label}</span>
+      <input
+        type="number"
+        value={config.get()}
+        min={config.min}
+        max={config.max}
+        step={config.step}
+        aria-label={config.label}
+        oninput={(e) => handleNumberInput(e, config.set)}
+        onchange={config.onchange}
+        onblur={config.onblur}
+      />
+      {#if config.suffix}<span class="number-suffix">{config.suffix}</span>{/if}
+    </section>
+  {/if}
+{/if}
+
+<style>
+  .setting-card-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 13px;
+  }
+
+  .setting-card-row .setting-icon {
+    flex-shrink: 0;
+  }
+
+  .setting-label {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: var(--settings-heading-size);
+    font-weight: 560;
+  }
+
+  .setting-card-row input {
+    height: 34px;
+    box-sizing: border-box;
+    width: 100px;
+    flex-shrink: 0;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font: inherit;
+    font-size: var(--settings-control-size);
+    text-align: right;
+    outline: none;
+    transition: border-color 120ms ease;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .setting-card-row input::-webkit-outer-spin-button,
+  .setting-card-row input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .setting-card-row input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .setting-card-row button:not(.toggle-switch) {
+    height: 34px;
+    box-sizing: border-box;
+    padding: 5px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
+  }
+
+  .setting-card-row button:hover {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+  }
+
+  .setting-card-row button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  :global(.setting-card-row .settings-select) {
+    height: 34px;
+    box-sizing: border-box;
+  }
+
+  .number-suffix {
+    color: var(--text-muted);
+    font-size: var(--settings-description-size);
+    flex-shrink: 0;
+  }
+
+  :global(.unit-select) {
+    width: 64px;
+  }
+
+  :global(.unit-select .settings-select) {
+    justify-content: center;
+    padding-right: 10px;
+    text-align: center;
+  }
+
+  .settings-text-input {
+    width: 100%;
+    margin-top: 12px;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+
+  .settings-text-input::placeholder {
+    color: var(--placeholder-color);
+  }
+
+  .settings-text-input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .settings-action-btn {
+    height: 34px;
+    box-sizing: border-box;
+    padding: 5px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+    font: inherit;
+    font-size: var(--settings-control-size);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
+  }
+
+  .settings-action-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .settings-action-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+</style>
