@@ -855,12 +855,34 @@
     );
   });
 
+  async function refreshStorageStats() {
+    try {
+      status = await getStorageStatus();
+      await loadStorageKindStats();
+    } catch (error) {
+      console.error("Unable to refresh storage statistics", error);
+    }
+    void loadPerformanceMetrics();
+  }
+
   $effect(() => {
     if (open) {
       void loadStatus();
       void loadExportFormats();
       void loadImportFormats();
       void loadAppVersion();
+      let unlistenAdd: (() => void) | undefined;
+      let unlistenInvalidated: (() => void) | undefined;
+      listen("clipboard-item-added", () => void refreshStorageStats()).then((unlisten) => {
+        unlistenAdd = unlisten;
+      });
+      listen("clipboard-history-invalidated", () => void refreshStorageStats()).then((unlisten) => {
+        unlistenInvalidated = unlisten;
+      });
+      return () => {
+        unlistenAdd?.();
+        unlistenInvalidated?.();
+      };
     }
   });
 

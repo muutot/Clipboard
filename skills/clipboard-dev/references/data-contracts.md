@@ -95,17 +95,17 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 
 ## Event contract
 
-| Event                           | Producer                                                                   | Consumer/purpose                                                   |
-| ------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `clipboard-item-added`          | capture/write backend                                                      | main route inserts or replaces the saved record                    |
-| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`)       | main route removes IDs and resets affected pagination/search state |
-| `general-settings-changed`      | authoritative config save                                                  | settings stores in other WebviewWindows                            |
-| `settings-font-changed`         | font panel                                                                 | main route live font/display synchronization                       |
-| `tags-changed`                  | tag management panel, or main-window `TagEditDialog` (rename/delete/color) | main route refreshes tag colors and rewrites item tags/filter      |
-| `tray-open-settings`            | tray backend                                                               | main route opens settings                                          |
-| `viewer:open`                   | detail panel                                                               | dedicated viewer window                                            |
-| `ppocr-download-progress`       | OCR installer                                                              | settings UI download progress                                      |
-| `privacy-pause-changed`         | tray pause toggle                                                          | settings `GeneralSettingsPanel` refreshes recording pause state    |
+| Event                           | Producer                                                                   | Consumer/purpose                                                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `clipboard-item-added`          | capture/write backend                                                      | main route inserts or replaces the saved record; settings window refreshes storage stats                                               |
+| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`)       | main route removes IDs and resets affected pagination/search state; settings window refreshes storage stats                            |
+| `general-settings-changed`      | authoritative config save                                                  | settings stores in other WebviewWindows                                                                                                |
+| `settings-font-changed`         | font panel                                                                 | main route live font/display synchronization                                                                                           |
+| `tags-changed`                  | tag management panel, or main-window `TagEditDialog` (rename/delete/color) | main route refreshes tag colors and rewrites item tags/filter; settings tag panel refreshes its list (skipping self-originated events) |
+| `tray-open-settings`            | tray backend                                                               | main route opens settings                                                                                                              |
+| `viewer:open`                   | detail panel                                                               | dedicated viewer window                                                                                                                |
+| `ppocr-download-progress`       | OCR installer                                                              | settings UI download progress                                                                                                          |
+| `privacy-pause-changed`         | tray pause toggle, or `toggle_privacy_pause` command                       | settings `GeneralSettingsPanel` and tray menu item refresh recording pause state                                                       |
 
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function.
 

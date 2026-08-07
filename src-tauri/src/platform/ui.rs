@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Runtime,
+    AppHandle, Emitter, Listener, Manager, Runtime,
 };
 
 use crate::config::ConfigStore;
@@ -110,6 +110,12 @@ impl SystemTray {
         if let Some(icon) = app.default_window_icon() {
             builder = builder.icon(icon.clone());
         }
+
+        let pause_item_for_listener = Arc::clone(&pause_item);
+        app.listen("privacy-pause-changed", move |event| {
+            let paused = serde_json::from_str::<bool>(event.payload()).unwrap_or(false);
+            let _ = pause_item_for_listener.set_checked(!paused);
+        });
 
         builder
             .build(app)

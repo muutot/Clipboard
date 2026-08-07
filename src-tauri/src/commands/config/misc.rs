@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::config::ConfigStore;
 use crate::keyboard::{KeyboardConfig, KeyboardManager};
@@ -21,6 +21,7 @@ pub fn get_runtime_info() -> RuntimeInfo {
 
 #[tauri::command]
 pub fn toggle_privacy_pause(
+    app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
     capture: tauri::State<'_, CaptureState>,
@@ -39,6 +40,8 @@ pub fn toggle_privacy_pause(
         .map_err(|e| e.to_string())?;
 
     capture.set_paused(paused);
+
+    let _ = app.emit("privacy-pause-changed", paused);
 
     Ok(paused)
 }

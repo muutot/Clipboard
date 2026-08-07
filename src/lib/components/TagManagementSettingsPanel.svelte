@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
@@ -10,13 +10,22 @@
     setTagColor,
     type TagInfo,
   } from "$lib/services/clipboard";
-  import { emit } from "@tauri-apps/api/event";
+  import { emit, listen } from "@tauri-apps/api/event";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
+  let suppressTagsChangedReload = false;
+
   function emitTagsChanged(payload: TagsChangedPayload) {
-    emit("tags-changed", payload).catch((err) => console.warn("tags-changed emit failed:", err));
+    suppressTagsChangedReload = true;
+    emit("tags-changed", payload)
+      .catch((err) => console.warn("tags-changed emit failed:", err))
+      .finally(() => {
+        setTimeout(() => {
+          suppressTagsChangedReload = false;
+        }, 0);
+      });
   }
 
   interface Props {
@@ -63,8 +72,20 @@
     return tags.filter((t) => t.name.toLowerCase().includes(query));
   });
 
+  let unlistenTagsChanged: (() => void) | undefined;
+
   onMount(() => {
     void load();
+    listen<TagsChangedPayload>("tags-changed", () => {
+      if (suppressTagsChangedReload) return;
+      void load();
+    }).then((unlisten) => {
+      unlistenTagsChanged = unlisten;
+    });
+  });
+
+  onDestroy(() => {
+    unlistenTagsChanged?.();
   });
 
   async function load() {
