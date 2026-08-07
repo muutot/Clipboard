@@ -105,7 +105,7 @@ export interface ThemeColors {
 export const DARK_THEME_COLORS: ThemeColors = {
   bg: "#111111",
   settingsBg: "#1b1b1b",
-  accent: "#ff5050",
+  accent: "#2576f8",
   textPrimary: "#f5f5f5",
   textMuted: "#999999",
   border: "#3a3a3a",
@@ -128,7 +128,7 @@ export const DARK_THEME_COLORS: ThemeColors = {
 export const LIGHT_THEME_COLORS: ThemeColors = {
   bg: "#f5f5f5",
   settingsBg: "#ebebeb",
-  accent: "#e04040",
+  accent: "#1a6ae8",
   textPrimary: "#1a1a1a",
   textMuted: "#666666",
   border: "#cccccc",
