@@ -1,8 +1,8 @@
 ﻿<script lang="ts">
-  import AppIcon from "$lib/components/AppIcon.svelte";
+  import SettingEntry from "$lib/components/SettingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
-  import { sliderPercentage } from "$lib/utils/format";
+  import type { SettingEntryConfig } from "$lib/types/settings-entry";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -22,70 +22,113 @@
     return unsub;
   });
 
-  function sliderHandler(key: keyof typeof s) {
-    return (event: Event) => {
-      const val = Number((event.target as HTMLInputElement).value);
-      generalSettings.updateSetting(key, val);
-    };
-  }
-
-  const compactSliders = [
+  const compactEntries: SettingEntryConfig[] = [
     {
-      key: "compactPaddingTop" as const,
-      icon: "sliders" as const,
-      label: "compact.paddingTop",
-      min: 0,
-      max: 20,
+      type: "toggle",
+      icon: "grid",
+      label: _t("general.compactMode"),
+      desc: _t("general.compactModeDescription"),
+      get: () => s.compactMode,
+      set: (v) => generalSettings.updateSetting("compactMode", v),
     },
     {
-      key: "compactPaddingBottom" as const,
-      icon: "sliders" as const,
-      label: "compact.paddingBottom",
+      type: "slider",
+      icon: "sliders",
+      label: _t("compact.paddingTop"),
+      desc: _t("compact.paddingTopDescription"),
+      get: () => s.compactPaddingTop,
+      set: (v) => generalSettings.updateSetting("compactPaddingTop", v),
       min: 0,
       max: 20,
+      suffix: "px",
     },
-    { key: "compactCardGap" as const, icon: "ruler", label: "compact.cardGap", min: 0, max: 20 },
     {
-      key: "compactTextHeight" as const,
+      type: "slider",
+      icon: "sliders",
+      label: _t("compact.paddingBottom"),
+      desc: _t("compact.paddingBottomDescription"),
+      get: () => s.compactPaddingBottom,
+      set: (v) => generalSettings.updateSetting("compactPaddingBottom", v),
+      min: 0,
+      max: 20,
+      suffix: "px",
+    },
+    {
+      type: "slider",
+      icon: "ruler",
+      label: _t("compact.cardGap"),
+      desc: _t("compact.cardGapDescription"),
+      get: () => s.compactCardGap,
+      set: (v) => generalSettings.updateSetting("compactCardGap", v),
+      min: 0,
+      max: 20,
+      suffix: "px",
+    },
+    {
+      type: "slider",
       icon: "text",
-      label: "compact.shortTextHeight",
+      label: _t("compact.shortTextHeight"),
+      desc: _t("compact.shortTextHeightDescription"),
+      get: () => s.compactTextHeight,
+      set: (v) => generalSettings.updateSetting("compactTextHeight", v),
       min: 36,
       max: 90,
+      suffix: "px",
     },
     {
-      key: "compactTallTextHeight" as const,
+      type: "slider",
       icon: "text",
-      label: "compact.tallTextHeight",
+      label: _t("compact.tallTextHeight"),
+      desc: _t("compact.tallTextHeightDescription"),
+      get: () => s.compactTallTextHeight,
+      set: (v) => generalSettings.updateSetting("compactTallTextHeight", v),
       min: 44,
       max: 100,
+      suffix: "px",
     },
     {
-      key: "compactImageHeight" as const,
+      type: "slider",
       icon: "image",
-      label: "compact.imageHeight",
+      label: _t("compact.imageHeight"),
+      desc: _t("compact.imageHeightDescription"),
+      get: () => s.compactImageHeight,
+      set: (v) => generalSettings.updateSetting("compactImageHeight", v),
       min: 64,
       max: 200,
+      suffix: "px",
     },
     {
-      key: "compactSearchHeight" as const,
+      type: "slider",
       icon: "search",
-      label: "compact.searchHeight",
+      label: _t("compact.searchHeight"),
+      desc: _t("compact.searchHeightDescription"),
+      get: () => s.compactSearchHeight,
+      set: (v) => generalSettings.updateSetting("compactSearchHeight", v),
       min: 28,
       max: 56,
+      suffix: "px",
     },
     {
-      key: "compactSearchFontSize" as const,
+      type: "slider",
       icon: "type",
-      label: "compact.searchFontSize",
+      label: _t("compact.searchFontSize"),
+      desc: _t("compact.searchFontSizeDescription"),
+      get: () => s.compactSearchFontSize,
+      set: (v) => generalSettings.updateSetting("compactSearchFontSize", v),
       min: 10,
       max: 24,
+      suffix: "px",
     },
     {
-      key: "compactCardBorderRadius" as const,
+      type: "slider",
       icon: "grid",
-      label: "compact.cardBorderRadius",
+      label: _t("compact.cardBorderRadius"),
+      desc: _t("compact.cardBorderRadiusDescription"),
+      get: () => s.compactCardBorderRadius,
+      set: (v) => generalSettings.updateSetting("compactCardBorderRadius", v),
       min: 0,
       max: 20,
+      suffix: "px",
     },
   ];
 </script>
@@ -104,50 +147,11 @@
 {/if}
 
 <div class="settings-scroll">
-  <section class="setting-card toggle-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="grid" size={17} /></span>
-      <div>
-        <strong>{_t("general.compactMode")}</strong>
-        <p>{_t("general.compactModeDescription")}</p>
-      </div>
-    </div>
-    <button
-      type="button"
-      class="toggle-switch"
-      class:active={s.compactMode}
-      onclick={() => generalSettings.updateSetting("compactMode", !s.compactMode)}
-      aria-checked={s.compactMode}
-      aria-label={_t("general.compactMode")}
-      role="switch"
-    >
-      <span class="toggle-knob"></span>
-    </button>
-  </section>
+  <SettingEntry config={compactEntries[0]} />
 
   {#if s.compactMode}
-    {#each compactSliders as slider}
-      <section class="setting-card">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name={slider.icon as any} size={17} /></span>
-          <div class="heading-inline">
-            <div>
-              <strong>{_t(slider.label)}</strong>
-              <p>{_t(`${slider.label}Description`)}</p>
-            </div>
-            <span class="value-label">{s[slider.key]}px</span>
-          </div>
-        </div>
-        <input
-          type="range"
-          min={slider.min}
-          max={slider.max}
-          value={s[slider.key] as number}
-          oninput={sliderHandler(slider.key)}
-          class="transparency-slider"
-          style:--slider-pct={sliderPercentage(s[slider.key] as number, slider.min, slider.max)}
-        />
-      </section>
+    {#each compactEntries.slice(1) as config}
+      <SettingEntry {config} />
     {/each}
   {/if}
 
