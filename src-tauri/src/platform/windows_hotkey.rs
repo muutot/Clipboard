@@ -582,38 +582,19 @@ pub fn restore_window_and_paste(window_handle: isize) -> Result<(), String> {
     }
 
     if window_handle == 0 || unsafe { IsWindow(window_handle) } == 0 {
-        crate::dbg_log(&format!(
-            "restore: window unavailable handle=0x{window_handle:X} IsWindow={}",
-            unsafe { IsWindow(window_handle) }
-        ));
         return Err("the previous foreground window is no longer available".to_owned());
     }
 
     unsafe {
         let iconic = IsIconic(window_handle);
-        crate::dbg_log(&format!(
-            "restore: prior fg=0x{:X} iconic={}",
-            GetForegroundWindow(),
-            iconic
-        ));
         if iconic != 0 {
             ShowWindow(window_handle, SW_RESTORE);
         }
         BringWindowToTop(window_handle);
-        let set_ok = SetForegroundWindow(window_handle);
-        crate::dbg_log(&format!(
-            "restore: SetForegroundWindow ret={} then fg=0x{:X}",
-            set_ok,
-            GetForegroundWindow()
-        ));
+        SetForegroundWindow(window_handle);
     }
 
     thread::sleep(QUICK_PASTE_FOCUS_DELAY);
-    let fg = unsafe { GetForegroundWindow() };
-    crate::dbg_log(&format!(
-        "restore: after delay fg=0x{fg:X} target=0x{window_handle:X} equal={}",
-        fg == window_handle
-    ));
     if unsafe { GetForegroundWindow() } != window_handle {
         return Err("failed to restore the previous foreground window".to_owned());
     }
