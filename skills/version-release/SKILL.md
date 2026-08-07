@@ -19,13 +19,17 @@ Start this skill when the user says any of:
 
 ### Pre-release Check Gate
 
-Before any version bump or release (including `--regenerate`), apply the non-compiling release gate **to the final tree**, and commit any formatting-only changes **as a separate, prior `🎨 style` commit**.
+Before any version bump or release (including `--regenerate`), apply the release gate **to the final tree**, and commit any formatting-only changes **as a separate, prior `🎨 style` commit**.
 
-Run only (`format` + `check` + lint; **not** `test`/`build`):
+Run (`format` + `check` + lint + the extreme-release build; **not** `test`):
 
 1. `npm run format:check` — prettier (`format:prettier:check`) + rustfmt (`format:rust:check`)
 2. `npm run check` — svelte-check type checking
 3. `npm run lint:rust` — cargo clippy `-D warnings`
+4. Extreme-release build — verify the exact GitHub-release configuration (fat LTO, opt-level 3, codegen-units 1) compiles and links:
+   ```powershell
+   $env:CARGO_PROFILE_RELEASE_LTO="true"; $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1"; $env:CARGO_PROFILE_RELEASE_OPT_LEVEL="3"; cargo build --profile release --manifest-path src-tauri/Cargo.toml
+   ```
 
 If any diffs appear, apply them (`npm run format:prettier` / `npm run format:rust`), then re-run the gate. Commit all formatting-only changes in a **single** `🎨 style[...]: apply formatting` commit **before** the release commit.
 

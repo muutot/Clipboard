@@ -77,6 +77,17 @@ npm run verify
 
 Run the narrowest relevant checks during implementation. Run `npm run verify` at integration milestones or before a commit whose scope crosses frontend and backend. If an environment prevents a required runtime, visual, platform, packaging, or performance check, report the missing evidence and leave the corresponding TODO unverified.
 
+The pre-release gate additionally runs the extreme-release build (see `skills/version-release/SKILL.md`); the local build profile itself stays fast.
+
+## Local build and run model
+
+Build profiles in `src-tauri/Cargo.toml` are split so local builds are fast and storage-light, and only the GitHub Actions release build applies extreme runtime optimization:
+
+- `npm run tauri dev` — local dev run. `[profile.dev]` keeps dependencies unoptimized (opt-level 0, no debug symbols) with `incremental` + `split-debuginfo = "unpacked"`, so the cached target is reused and rebuilds are as fast as possible.
+- `npm run tauri build` — local packaging. `[profile.release]` is likewise tuned for build speed and minimal cache (opt-level 0, `codegen-units = 256`, no debug info, `incremental = false`).
+- GitHub Actions release — the only place extreme runtime optimization is enabled. `.github/workflows/release.yml` sets `CARGO_PROFILE_RELEASE_LTO=true`, `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1`, `CARGO_PROFILE_RELEASE_OPT_LEVEL=3` plus `RUSTFLAGS` (`target-cpu=x86-64-v3` on Windows/Linux, `native` on macOS, `-fuse-ld=mold` on Linux). Local builds are unaffected.
+- CI checks (`ci.yml`, release `verify`) build with `--profile ci` (deps at opt-level 0) and use `sccache`, mold on Linux, and `cargo-nextest` for tests.
+
 ## Commit message format
 
 Follow the gitmoji convention established by the earliest ~70 commits of this repository:
