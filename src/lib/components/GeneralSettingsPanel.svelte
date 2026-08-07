@@ -1250,7 +1250,7 @@
     outline: 2px solid var(--accent) !important;
     outline-offset: 2px;
     border-radius: 6px;
-    background: rgba(74, 168, 255, 0.15);
+    background: color-mix(in srgb, var(--selection-color) 15%, transparent);
   }
 
   .sort-grip {

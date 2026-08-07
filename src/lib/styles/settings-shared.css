@@ -260,7 +260,7 @@ header p {
   border: 0;
   color: var(--text-secondary);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   white-space: nowrap;
   cursor: pointer;
 }

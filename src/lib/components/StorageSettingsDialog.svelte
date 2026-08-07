@@ -3347,7 +3347,7 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--accent-color, #746dff);
+    background: var(--accent);
     transition: width 200ms ease;
   }
 
@@ -4052,7 +4052,7 @@
   }
 
   .icon-file-item:hover {
-    background: var(--row-hover);
+    background: var(--hover-bg);
   }
 
   .icon-col-check {
