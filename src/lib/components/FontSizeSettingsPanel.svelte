@@ -87,8 +87,8 @@
       "info",
       _t("general.fontSizeCardPreviewLabel"),
       _t("general.fontSizeCardPreviewDescription"),
-8,
-       16,
+      8,
+      16,
     ),
   ]);
   $effect(() => {

@@ -2,9 +2,9 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import type { SettingEntryConfig, SizeUnit } from "$lib/types/settings-entry";
-import { sliderPercentage } from "$lib/utils/format";
-import { SIZE_UNIT_OPTIONS } from "$lib/utils/size";
-import type { Snippet } from "svelte";
+  import { sliderPercentage } from "$lib/utils/format";
+  import { SIZE_UNIT_OPTIONS } from "$lib/utils/size";
+  import type { Snippet } from "svelte";
 
   interface Props {
     config: SettingEntryConfig;
@@ -195,10 +195,7 @@ import type { Snippet } from "svelte";
             {#if config.desc}<p>{config.desc}</p>{/if}
           </div>
           {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
-            <button
-              type="button"
-              class="settings-action-btn"
-              onclick={config.onaction}
+            <button type="button" class="settings-action-btn" onclick={config.onaction}
               >{resolveActionLabel(config.actionLabel)}</button
             >
           {/if}
@@ -289,10 +286,7 @@ import type { Snippet } from "svelte";
             {#if config.desc}<p>{config.desc}</p>{/if}
           </div>
           {#if config.actionLabel && (!config.actionVisible || config.actionVisible())}
-            <button
-              type="button"
-              class="settings-action-btn"
-              onclick={config.onaction}
+            <button type="button" class="settings-action-btn" onclick={config.onaction}
               >{resolveActionLabel(config.actionLabel)}</button
             >
           {/if}
