@@ -319,6 +319,7 @@ export interface LocaleDefinition {
   about: {
     title: string;
     tabLabel: string;
+    sectionTitle: string;
     description: string;
     versionLabel: string;
     executablePathTitle: string;

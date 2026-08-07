@@ -622,7 +622,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "更新来源",
     "source",
   ]),
-  entry("about.info", { section: "about" }, i18n("about.title"), i18n("about.description"), [
+  entry("about.info", { section: "about" }, i18n("about.sectionTitle"), i18n("about.description"), [
     "版本",
     "version",
     "关于",

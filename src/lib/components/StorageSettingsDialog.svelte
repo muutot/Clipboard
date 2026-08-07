@@ -293,8 +293,8 @@
         };
       case "about":
         return {
-          title: _t("about.tabLabel"),
-          desc: _t("about.description"),
+          title: _t("about.sectionTitle"),
+          desc: "",
         };
     }
   });

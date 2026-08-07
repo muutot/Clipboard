@@ -357,6 +357,7 @@ const en: LocaleDefinition = {
   about: {
     title: "About",
     tabLabel: "About",
+    sectionTitle: "App version and update checks",
     description: "App version and update checks",
     versionLabel: "Current version v{version}",
     executablePathTitle: "Program Location",

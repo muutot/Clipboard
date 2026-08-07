@@ -336,6 +336,7 @@ const zhCN: LocaleDefinition = {
   about: {
     title: "关于",
     tabLabel: "关于",
+    sectionTitle: "应用版本信息与更新检查",
     description: "应用版本信息与更新检查",
     versionLabel: "当前版本 v{version}",
     executablePathTitle: "程序位置",
