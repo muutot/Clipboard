@@ -508,6 +508,33 @@
     maxTextCaptureDisplay = toDisplaySize(maxTextCaptureSize, unit);
   }
 
+  function updateSyncRolloverFromDisplay() {
+    syncRolloverBytes = fromDisplaySize(syncRolloverDisplay, syncRolloverUnit);
+  }
+
+  function changeSyncRolloverUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    syncRolloverUnit = unit;
+    syncRolloverDisplay = toDisplaySize(syncRolloverBytes, unit);
+  }
+
+  function updateSyncMaxImageFromDisplay() {
+    syncMaxImageBytes = fromDisplaySize(syncMaxImageDisplay, syncMaxImageUnit);
+  }
+
+  function changeSyncMaxImageUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    syncMaxImageUnit = unit;
+    syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, unit);
+  }
+
+  function updateSyncMaxFileFromDisplay() {
+    syncMaxFileBytes = fromDisplaySize(syncMaxFileDisplay, syncMaxFileUnit);
+  }
+
+  function changeSyncMaxFileUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    syncMaxFileUnit = unit;
+    syncMaxFileDisplay = toDisplaySize(syncMaxFileBytes, unit);
+  }
+
   function relativePath(absolute: string): string {
     if (!status) return absolute;
     const bases = [status.dataDirectoryPath, status.storagePath, status.projectPath];
@@ -778,8 +805,14 @@
   let syncMaxOplogFiles = $state(10);
   let syncRolloverEntries = $state(100);
   let syncRolloverBytes = $state(51200);
+  let syncRolloverUnit = $state<"byte" | "KB" | "MB" | "GB">("KB");
+  let syncRolloverDisplay = $state(50);
   let syncMaxImageBytes = $state(5242880);
+  let syncMaxImageUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
+  let syncMaxImageDisplay = $state(5);
   let syncMaxFileBytes = $state(10485760);
+  let syncMaxFileUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
+  let syncMaxFileDisplay = $state(10);
   let syncS3Region = $state("");
   let syncS3Bucket = $state("");
   let syncS3AccessKey = $state("");
@@ -803,8 +836,11 @@
       syncMaxOplogFiles = cfg.maxRemoteOplogFiles ?? 10;
       syncRolloverEntries = cfg.oplogRolloverEntries ?? 100;
       syncRolloverBytes = cfg.oplogRolloverSizeBytes ?? 51200;
+      syncRolloverDisplay = toDisplaySize(syncRolloverBytes, syncRolloverUnit);
       syncMaxImageBytes = cfg.maxSyncImageBytes ?? 5242880;
+      syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, syncMaxImageUnit);
       syncMaxFileBytes = cfg.maxSyncFileBytes ?? 10485760;
+      syncMaxFileDisplay = toDisplaySize(syncMaxFileBytes, syncMaxFileUnit);
       syncS3Region = cfg.s3Region ?? "";
       syncS3Bucket = cfg.s3Bucket ?? "";
       syncS3AccessKey = cfg.s3AccessKey ?? "";
@@ -3632,12 +3668,22 @@
               <span class="setting-label">{_t("storage.syncRolloverBytes")}</span>
               <input
                 type="number"
-                bind:value={syncRolloverBytes}
-                min="1024"
-                max="1048576"
-                onblur={saveSyncSettings}
+                bind:value={syncRolloverDisplay}
+                min="1"
+                oninput={updateSyncRolloverFromDisplay}
+                onchange={saveSyncSettings}
               />
-              <span class="number-suffix">{_t("storage.syncBytesUnit")}</span>
+              <CustomSelect
+                className="unit-select"
+                value={syncRolloverUnit}
+                options={[
+                  { value: "byte", label: "B" },
+                  { value: "KB", label: "KB" },
+                  { value: "MB", label: "MB" },
+                  { value: "GB", label: "GB" },
+                ]}
+                onchange={(v) => changeSyncRolloverUnit(v as "byte" | "KB" | "MB" | "GB")}
+              />
             </section>
 
             <section class="setting-card setting-card-row">
@@ -3645,12 +3691,22 @@
               <span class="setting-label">{_t("storage.syncMaxImageBytes")}</span>
               <input
                 type="number"
-                bind:value={syncMaxImageBytes}
+                bind:value={syncMaxImageDisplay}
                 min="0"
-                max="1073741824"
-                onblur={saveSyncSettings}
+                oninput={updateSyncMaxImageFromDisplay}
+                onchange={saveSyncSettings}
               />
-              <span class="number-suffix">{_t("storage.syncBytesUnit")}</span>
+              <CustomSelect
+                className="unit-select"
+                value={syncMaxImageUnit}
+                options={[
+                  { value: "byte", label: "B" },
+                  { value: "KB", label: "KB" },
+                  { value: "MB", label: "MB" },
+                  { value: "GB", label: "GB" },
+                ]}
+                onchange={(v) => changeSyncMaxImageUnit(v as "byte" | "KB" | "MB" | "GB")}
+              />
             </section>
 
             <section class="setting-card setting-card-row">
@@ -3658,12 +3714,22 @@
               <span class="setting-label">{_t("storage.syncMaxFileBytes")}</span>
               <input
                 type="number"
-                bind:value={syncMaxFileBytes}
+                bind:value={syncMaxFileDisplay}
                 min="0"
-                max="1073741824"
-                onblur={saveSyncSettings}
+                oninput={updateSyncMaxFileFromDisplay}
+                onchange={saveSyncSettings}
               />
-              <span class="number-suffix">{_t("storage.syncBytesUnit")}</span>
+              <CustomSelect
+                className="unit-select"
+                value={syncMaxFileUnit}
+                options={[
+                  { value: "byte", label: "B" },
+                  { value: "KB", label: "KB" },
+                  { value: "MB", label: "MB" },
+                  { value: "GB", label: "GB" },
+                ]}
+                onchange={(v) => changeSyncMaxFileUnit(v as "byte" | "KB" | "MB" | "GB")}
+              />
             </section>
 
             <section class="setting-card setting-card-row">

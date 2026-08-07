@@ -153,7 +153,6 @@ const zhCN: LocaleDefinition = {
     syncMaxFileBytes: "文件最大字节",
     syncMaxFiles: "远程保留文件数",
     syncEntriesUnit: "条",
-    syncBytesUnit: "字节",
     syncFilesUnit: "个",
     syncSecondsUnit: "秒",
     syncEncryption: "加密密码",

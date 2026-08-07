@@ -153,7 +153,6 @@ export interface LocaleDefinition {
     syncMaxFileBytes: string;
     syncMaxFiles: string;
     syncEntriesUnit: string;
-    syncBytesUnit: string;
     syncFilesUnit: string;
     syncSecondsUnit: string;
     syncEncryption: string;

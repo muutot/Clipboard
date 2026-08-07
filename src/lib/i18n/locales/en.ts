@@ -161,7 +161,6 @@ const en: LocaleDefinition = {
     syncMaxFileBytes: "Max File Bytes",
     syncMaxFiles: "Max Remote Files",
     syncEntriesUnit: "entries",
-    syncBytesUnit: "bytes",
     syncFilesUnit: "files",
     syncSecondsUnit: "sec",
     syncEncryption: "Encryption Password",
