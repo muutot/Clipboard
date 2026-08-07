@@ -66,6 +66,14 @@
   let confirmDelete = $state<Record<string, boolean>>({});
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
+  let colorPopover = $state<string | null>(null);
+  let colorTriggerEl = $state<HTMLButtonElement | null>(null);
+  let colorPopoverEl = $state<HTMLDivElement | null>(null);
+  let popoverTop = $state(0);
+  let popoverLeft = $state(0);
+
+  const currentTag = $derived(tags.find((t) => t.name === colorPopover) ?? null);
+
   const filteredTags = $derived.by(() => {
     const query = tagSearch.trim().toLowerCase();
     if (!query) return tags;
@@ -103,6 +111,7 @@
 
   async function pickColor(tag: TagInfo, color: string) {
     const next = tag.color === color ? "" : color;
+    colorPopover = null;
     const ok = await setTagColor(tag.name, next);
     if (ok) {
       const index = tags.findIndex((t) => t.name === tag.name);
@@ -111,6 +120,51 @@
       emitTagsChanged({});
     }
   }
+
+  function toggleColorPopover(name: string, event: MouseEvent) {
+    if (colorPopover === name) {
+      colorPopover = null;
+      return;
+    }
+    colorPopover = name;
+    colorTriggerEl = event.currentTarget as HTMLButtonElement;
+  }
+
+  function positionColorPopover() {
+    if (!colorPopover || !colorTriggerEl || !colorPopoverEl) return;
+    const rect = colorTriggerEl.getBoundingClientRect();
+    const popHeight = colorPopoverEl.offsetHeight;
+    const popWidth = colorPopoverEl.offsetWidth;
+    const gap = 4;
+    const topBelow = rect.bottom + gap;
+    const topAbove = rect.top - gap - popHeight;
+    const fitsBelow = topBelow + popHeight <= window.innerHeight - 8;
+    const fitsAbove = topAbove >= 8;
+    popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
+    popoverLeft = Math.max(8, Math.min(rect.left, window.innerWidth - 8 - popWidth));
+  }
+
+  function onColorScroll(e: Event) {
+    if (colorPopoverEl && e.target instanceof Node && colorPopoverEl.contains(e.target)) return;
+    colorPopover = null;
+  }
+
+  function onColorKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") colorPopover = null;
+  }
+
+  $effect(() => {
+    if (!colorPopover) return;
+    positionColorPopover();
+    window.addEventListener("resize", positionColorPopover);
+    window.addEventListener("scroll", onColorScroll, true);
+    window.addEventListener("keydown", onColorKeydown, true);
+    return () => {
+      window.removeEventListener("resize", positionColorPopover);
+      window.removeEventListener("scroll", onColorScroll, true);
+      window.removeEventListener("keydown", onColorKeydown, true);
+    };
+  });
 
   async function commitRename(tag: TagInfo, draft: string) {
     const name = draft.trim();
@@ -182,62 +236,31 @@
   {:else}
     {#each filteredTags as tag (tag.name)}
       <section class="setting-card tag-row">
-        <span
-          class="tag-swatch"
+        <button
+          type="button"
+          class="tag-color-trigger"
           style={tag.color ? `--tag-accent: ${tag.color}` : undefined}
-          aria-hidden="true"
-        ></span>
-        <div class="tag-fields">
-          <input
-            class="tag-name-input"
-            value={tag.name}
-            aria-label={_t("tags.renamePlaceholder")}
-            onblur={(e) => commitRename(tag, (e.currentTarget as HTMLInputElement).value)}
-            onkeydown={(e) => {
-              if (e.key === "Enter") {
-                (e.currentTarget as HTMLInputElement).blur();
-              } else if (e.key === "Escape") {
-                load();
-              }
-            }}
-          />
-          <span class="tag-count">{_t("tags.count", { count: tag.count })}</span>
-        </div>
-        <div class="tag-colors" aria-label={_t("tags.title")}>
-          <button
-            type="button"
-            class="tag-swatch-option"
-            class:active={!tag.color}
-            title={_t("tags.colorNone")}
-            aria-label={_t("tags.colorNone")}
-            onclick={() => pickColor(tag, "")}
-          ></button>
-          {#each presets as color (color)}
-            <button
-              type="button"
-              class="tag-swatch-option"
-              class:active={tag.color === color}
-              style={`--swatch: ${color}`}
-              aria-label={color}
-              title={color}
-              onclick={() => pickColor(tag, color)}
-            ></button>
-          {/each}
-          <label
-            class="tag-swatch-option tag-swatch-custom"
-            class:active={tag.color !== "" && !presets.includes(tag.color)}
-            style={tag.color && !presets.includes(tag.color) ? `--swatch: ${tag.color}` : undefined}
-            title={_t("tags.customColor")}
-            aria-label={_t("tags.customColor")}
-          >
-            <input
-              type="color"
-              value={/^#[0-9a-fA-F]{6}$/.test(tag.color) ? tag.color : "#5c7cfa"}
-              onchange={(e) => pickColor(tag, e.currentTarget.value)}
-            />
-            <AppIcon name="palette" size={12} />
-          </label>
-        </div>
+          aria-haspopup="dialog"
+          aria-expanded={colorPopover === tag.name}
+          aria-label={_t("tags.color")}
+          title={_t("tags.color")}
+          onclick={(e) => toggleColorPopover(tag.name, e)}
+        ></button>
+        <input
+          class="tag-name-input"
+          value={tag.name}
+          aria-label={_t("tags.renamePlaceholder")}
+          onblur={(e) => commitRename(tag, (e.currentTarget as HTMLInputElement).value)}
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              (e.currentTarget as HTMLInputElement).blur();
+            } else if (e.key === "Escape") {
+              load();
+            }
+          }}
+        />
+        <span class="tag-sep" aria-hidden="true"></span>
+        <span class="tag-count">{_t("tags.count", { count: tag.count })}</span>
         <button
           type="button"
           class="tag-delete"
@@ -248,6 +271,51 @@
         </button>
       </section>
     {/each}
+
+    {#if colorPopover && currentTag}
+      <div
+        class="tag-color-popover popover-surface"
+        role="group"
+        aria-label={_t("tags.color")}
+        style="top: {popoverTop}px; left: {popoverLeft}px;"
+        bind:this={colorPopoverEl}
+      >
+        <div
+          class="custom-select-backdrop"
+          onclick={() => (colorPopover = null)}
+          aria-hidden="true"
+        ></div>
+        <div class="tag-color-grid">
+          {#each presets as color (color)}
+            <button
+              type="button"
+              class="tag-swatch-option"
+              class:active={currentTag.color === color}
+              style={`--swatch: ${color}`}
+              aria-label={color}
+              title={color}
+              onclick={() => pickColor(currentTag, color)}
+            ></button>
+          {/each}
+          <label
+            class="tag-swatch-option tag-swatch-custom"
+            class:active={currentTag.color !== "" && !presets.includes(currentTag.color)}
+            style={currentTag.color && !presets.includes(currentTag.color)
+              ? `--swatch: ${currentTag.color}`
+              : undefined}
+            title={_t("tags.customColor")}
+            aria-label={_t("tags.customColor")}
+          >
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(currentTag.color) ? currentTag.color : "#5c7cfa"}
+              onchange={(e) => pickColor(currentTag, e.currentTarget.value)}
+            />
+            <AppIcon name="palette" size={12} />
+          </label>
+        </div>
+      </div>
+    {/if}
   {/if}
 
   {#if feedback}
@@ -290,28 +358,33 @@
   .tag-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    min-width: 0;
   }
 
-  .tag-swatch {
-    width: 14px;
-    height: 14px;
+  .tag-color-trigger {
     flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    padding: 0;
     border: 1px solid var(--border-color);
     border-radius: 50%;
     background: color-mix(in srgb, var(--tag-accent) 45%, var(--surface-bg));
+    cursor: pointer;
   }
 
-  .tag-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
+  .tag-color-trigger:hover {
+    box-shadow: 0 0 0 2px var(--hover-bg);
+  }
+
+  .tag-color-trigger[aria-expanded="true"] {
+    outline: 2px solid var(--text-faint);
+    outline-offset: 1px;
   }
 
   .tag-name-input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 4px 8px;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -319,6 +392,13 @@
     background: transparent;
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .tag-sep {
+    flex-shrink: 0;
+    width: 1px;
+    height: 14px;
+    background: var(--border-subtle);
   }
 
   .tag-name-input:hover {
@@ -332,20 +412,28 @@
   }
 
   .tag-count {
+    flex-shrink: 0;
     font-size: 11px;
     color: var(--text-faint);
+    white-space: nowrap;
   }
 
-  .tag-colors {
-    display: flex;
+  .tag-color-popover {
+    position: fixed;
+    padding: 10px;
+  }
+
+  .tag-color-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
     gap: 6px;
-    flex-wrap: wrap;
+    justify-items: center;
     align-items: center;
   }
 
-  .tag-swatch-option {
-    width: 18px;
-    height: 18px;
+  .tag-color-grid .tag-swatch-option {
+    width: 20px;
+    height: 20px;
     padding: 0;
     border: 1px solid var(--border-color);
     border-radius: 50%;
@@ -353,11 +441,11 @@
     cursor: pointer;
   }
 
-  .tag-swatch-option[style*="--swatch"] {
+  .tag-color-grid .tag-swatch-option[style*="--swatch"] {
     background: var(--swatch);
   }
 
-  .tag-swatch-custom {
+  .tag-color-grid .tag-swatch-custom {
     position: relative;
     overflow: hidden;
     display: inline-flex;
@@ -377,7 +465,7 @@
     );
   }
 
-  .tag-swatch-custom input {
+  .tag-color-grid .tag-swatch-custom input {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -388,11 +476,11 @@
     cursor: pointer;
   }
 
-  .tag-swatch-custom.active {
+  .tag-color-grid .tag-swatch-custom.active {
     color: var(--text-primary);
   }
 
-  .tag-swatch-option.active {
+  .tag-color-grid .tag-swatch-option.active {
     outline: 2px solid var(--text-primary);
     outline-offset: 1px;
   }
