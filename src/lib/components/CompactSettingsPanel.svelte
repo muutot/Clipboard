@@ -22,7 +22,7 @@
     return unsub;
   });
 
-  const compactEntries: SettingEntryConfig[] = [
+  const compactEntries: SettingEntryConfig[] = $derived([
     {
       type: "toggle",
       icon: "grid",
@@ -130,7 +130,7 @@
       max: 20,
       suffix: "px",
     },
-  ];
+  ]);
 </script>
 
 {#if showHeader}

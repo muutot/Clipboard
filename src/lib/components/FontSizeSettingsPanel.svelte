@@ -46,7 +46,7 @@
     };
   }
 
-  const interfaceSliders: SettingEntryConfig[] = [
+  const interfaceSliders: SettingEntryConfig[] = $derived([
     sliderEntry(
       "base",
       "type",
@@ -71,9 +71,9 @@
       8,
       13,
     ),
-  ];
+  ]);
 
-  const cardSliders: SettingEntryConfig[] = [
+  const cardSliders: SettingEntryConfig[] = $derived([
     sliderEntry(
       "cardTitle",
       "text",
@@ -87,10 +87,10 @@
       "info",
       _t("general.fontSizeCardPreviewLabel"),
       _t("general.fontSizeCardPreviewDescription"),
-      8,
-      16,
+8,
+       16,
     ),
-  ];
+  ]);
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
       s = v;
