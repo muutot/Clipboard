@@ -197,6 +197,9 @@ export const ICON_NAMES = [
   "arrow-down",
   "arrow-left",
   "arrow-right",
+  "cloud",
+  "upload",
+  "lock",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -209,6 +212,7 @@ export const DEFAULT_ICON_COLORS: Record<IconName, string> = {
   link: "#2cc3a3",
   image: "#a06bff",
   file: "#f0914a",
+  lock: "#8a8f98",
   star: "#e2c05d",
   trash: "#e85d5d",
   restore: "#51b96b",
@@ -252,6 +256,8 @@ export const DEFAULT_ICON_COLORS: Record<IconName, string> = {
   "arrow-down": "#8a8f98",
   "arrow-left": "#8a8f98",
   "arrow-right": "#8a8f98",
+  cloud: "#4aa8ff",
+  upload: "#4aa8ff",
 };
 
 export type SearchSuggestionMode = "off" | "panel" | "inline";

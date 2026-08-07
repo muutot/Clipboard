@@ -12,6 +12,8 @@ export const SETTINGS_SECTIONS = [
   "storage_paths",
   "storage_limits",
   "storage_tools",
+  "sync_cloud",
+  "sync_advanced",
   "keyboard_item",
   "keyboard_quick",
   "keyboard_system",
@@ -125,6 +127,18 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "维护",
     "工具",
   ],
+  sync_cloud: [
+    i18n("storage.syncCloudTab"),
+    i18n("storage.syncTab"),
+    i18n("storage.syncTitle"),
+    "云端",
+    "连接",
+    "webdav",
+    "backup",
+    "加密",
+    "密码",
+  ],
+  sync_advanced: [i18n("storage.syncAdvancedTab"), "高级设置", "滚动", "阈值", "资源限制"],
   keyboard_item: [i18n("storage.keyboardTab"), i18n("storage.keyboardItemTab"), "快捷键", "條目"],
   keyboard_quick: [
     i18n("storage.keyboardTab"),
@@ -938,7 +952,10 @@ export function resolveSettingsNavPath(
     case "storage_paths":
     case "storage_limits":
     case "storage_tools":
-      return [translate("storage.storageTab")];
+      return [translate("storage.storageToolsTab")];
+    case "sync_cloud":
+    case "sync_advanced":
+      return [translate("storage.syncTab")];
     case "keyboard_item":
     case "keyboard_quick":
     case "keyboard_system":

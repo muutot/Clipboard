@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { onDestroy, tick } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
@@ -45,8 +45,15 @@
     getExportFormats,
     getImportFormats,
     importFromFile,
+    getSyncConfig,
+    setSyncConfig,
+    testSyncConnection,
+    syncUploadBackup,
+    syncListRemoteBackups,
+    syncDownloadBackup,
     type ExportFormatInfo,
     type ImportFormatInfo,
+    type SyncConfig,
   } from "$lib/services/storage";
   import { checkForUpdate, getRelease, type UpdateInfo } from "$lib/services/update";
   import UpdateDialog from "$lib/components/UpdateDialog.svelte";
@@ -148,6 +155,12 @@
       return () => clearTimeout(t);
     }
   });
+
+  $effect(() => {
+    if ((activeSection === "sync_cloud" || activeSection === "sync_advanced") && open) {
+      void loadSyncConfig();
+    }
+  });
   let restartNeeded = $state(false);
   let activeSection = $state<
     | "general_search"
@@ -163,6 +176,8 @@
     | "storage_paths"
     | "storage_limits"
     | "storage_tools"
+    | "sync_cloud"
+    | "sync_advanced"
     | "keyboard_item"
     | "keyboard_quick"
     | "keyboard_system"
@@ -255,6 +270,12 @@
         return {
           title: _t("storage.storageToolsTab"),
           desc: _t("storage.storageToolsDescription"),
+        };
+      case "sync_cloud":
+      case "sync_advanced":
+        return {
+          title: _t("storage.syncTitle"),
+          desc: _t("storage.syncDescription"),
         };
       case "keyboard_item":
         return {
@@ -515,7 +536,7 @@
   let repairLoading = $state(false);
 
   function formatMaybeBytes(bytes: number | null | undefined): string {
-    return bytes == null ? "—" : formatBytes(bytes);
+    return bytes == null ? "��" : formatBytes(bytes);
   }
 
   function storageKindLabel(kind: StorageKind): string {
@@ -738,6 +759,196 @@
   let showUpdateDialog = $state(false);
   let dialogMode: "current" | "available" = $state("available");
   let loadingRelease = $state(false);
+
+  let syncProvider = $state("off");
+  let syncEndpoint = $state("");
+  let syncRemotePath = $state("");
+  let syncUsername = $state("");
+  let syncPassword = $state("");
+  let syncTesting = $state(false);
+  let syncTestResult = $state<{ success: boolean; message: string } | null>(null);
+  let syncing = $state(false);
+  let syncLastMs = $state<number | null>(null);
+  let syncStatus = $state<string | null>(null);
+  let syncListing = $state(false);
+  let syncDownloading = $state(false);
+  let syncUnsyncedCount = $state(0);
+  let syncAutoSync = $state(false);
+  let syncAutoInterval = $state(300);
+  let syncMaxOplogFiles = $state(10);
+  let syncRolloverEntries = $state(100);
+  let syncRolloverBytes = $state(51200);
+  let syncMaxImageBytes = $state(5242880);
+  let syncMaxFileBytes = $state(10485760);
+  let syncS3Region = $state("");
+  let syncS3Bucket = $state("");
+  let syncS3AccessKey = $state("");
+  let syncS3SecretKey = $state("");
+  let syncEncryptPassword = $state("");
+  let syncBackups = $state<Array<{ name: string; sizeBytes: number | null }>>([]);
+
+  async function loadSyncConfig() {
+    if (!isTauriRuntime()) return;
+    try {
+      const cfg: SyncConfig = await getSyncConfig();
+      syncProvider = cfg.provider;
+      syncEndpoint = cfg.endpoint ?? "";
+      syncRemotePath = cfg.remotePath ?? "";
+      syncUsername = cfg.username ?? "";
+      syncLastMs = cfg.lastSyncMs ?? null;
+      syncStatus = cfg.lastSyncStatus ?? null;
+      syncUnsyncedCount = cfg.unsyncedCount ?? 0;
+      syncAutoSync = cfg.autoSync ?? false;
+      syncAutoInterval = cfg.autoSyncIntervalSecs ?? 300;
+      syncMaxOplogFiles = cfg.maxRemoteOplogFiles ?? 10;
+      syncRolloverEntries = cfg.oplogRolloverEntries ?? 100;
+      syncRolloverBytes = cfg.oplogRolloverSizeBytes ?? 51200;
+      syncMaxImageBytes = cfg.maxSyncImageBytes ?? 5242880;
+      syncMaxFileBytes = cfg.maxSyncFileBytes ?? 10485760;
+      syncS3Region = cfg.s3Region ?? "";
+      syncS3Bucket = cfg.s3Bucket ?? "";
+      syncS3AccessKey = cfg.s3AccessKey ?? "";
+      syncEncryptPassword = "";
+    } catch (e) {
+      console.error("Failed to load sync config", e);
+    }
+  }
+
+  async function saveSyncSettings() {
+    if (!isTauriRuntime()) return;
+    try {
+      await setSyncConfig(
+        syncProvider,
+        syncEndpoint || null,
+        syncRemotePath || null,
+        syncUsername || null,
+        syncPassword || null,
+        syncAutoSync,
+        syncAutoInterval,
+        syncMaxOplogFiles,
+        syncRolloverEntries,
+        syncRolloverBytes,
+        syncMaxImageBytes,
+        syncMaxFileBytes,
+        syncS3Region || null,
+        syncS3Bucket || null,
+        syncS3AccessKey || null,
+        syncS3SecretKey || null,
+        syncEncryptPassword || null,
+      );
+    } catch (e) {
+      console.error("Failed to save sync settings", e);
+    }
+  }
+
+  async function saveSyncConfig() {
+    if (!isTauriRuntime()) return;
+    try {
+      await setSyncConfig(
+        syncProvider,
+        syncEndpoint || null,
+        syncRemotePath || null,
+        syncUsername || null,
+        syncPassword || null,
+        syncAutoSync,
+        syncAutoInterval,
+        syncMaxOplogFiles,
+        syncRolloverEntries,
+        syncRolloverBytes,
+        syncMaxImageBytes,
+        syncMaxFileBytes,
+        syncS3Region || null,
+        syncS3Bucket || null,
+        syncS3AccessKey || null,
+        syncS3SecretKey || null,
+        syncEncryptPassword || null,
+      );
+    } catch (e) {
+      console.error("Failed to save sync config", e);
+    }
+  }
+
+  async function handleTestConnection() {
+    if (!isTauriRuntime() || syncTesting) return;
+    syncTesting = true;
+    syncTestResult = null;
+    try {
+      const resultStr = await testSyncConnection(
+        syncProvider,
+        syncEndpoint,
+        syncRemotePath || null,
+        syncUsername || null,
+        syncPassword || null,
+        syncS3Region || null,
+        syncS3Bucket || null,
+        syncS3AccessKey || null,
+        syncS3SecretKey || null,
+      );
+      const result = JSON.parse(resultStr);
+      syncTestResult = { success: result.success, message: result.message };
+    } catch (e) {
+      syncTestResult = { success: false, message: String(e) };
+    } finally {
+      syncTesting = false;
+    }
+  }
+
+  async function handleSyncUpload() {
+    if (!isTauriRuntime() || syncing) return;
+    syncing = true;
+    feedback = "";
+    try {
+      const result = await syncUploadBackup();
+      if (result.backupType === "noop") {
+        feedback = "û����������Ҫͬ��";
+        feedbackSuccess = true;
+      } else {
+        const typeLabel = result.backupType === "oplog" ? "����" : "ȫ��";
+        feedback = `${typeLabel}ͬ���ɹ�: ${result.itemsSynced} ����¼, ${result.resourcesSynced} ����Դ, ${(result.bytesUploaded / 1024).toFixed(1)} KB`;
+        feedbackSuccess = true;
+      }
+      syncLastMs = Date.now();
+      syncStatus = "success";
+    } catch (e) {
+      feedback = _t("storage.syncUploadFailed") + `: ${String(e)}`;
+      feedbackSuccess = false;
+      syncStatus = "failed";
+    } finally {
+      syncing = false;
+    }
+  }
+
+  async function handleListBackups() {
+    if (!isTauriRuntime() || syncListing) return;
+    syncListing = true;
+    try {
+      const entries = await syncListRemoteBackups();
+      syncBackups = entries
+        .filter((e) => !e.isDirectory && e.name.endsWith(".zip"))
+        .map((e) => ({ name: e.name, sizeBytes: e.sizeBytes }));
+    } catch (e) {
+      console.error("Failed to list backups", e);
+      syncBackups = [];
+    } finally {
+      syncListing = false;
+    }
+  }
+
+  async function handleDownloadBackup(filename: string) {
+    if (!isTauriRuntime() || syncDownloading) return;
+    syncDownloading = true;
+    feedback = "";
+    try {
+      const path = await syncDownloadBackup(filename);
+      feedback = _t("storage.syncDownloadSuccess") + `: ${path}`;
+      feedbackSuccess = true;
+    } catch (e) {
+      feedback = _t("storage.syncDownloadFailed") + `: ${String(e)}`;
+      feedbackSuccess = false;
+    } finally {
+      syncDownloading = false;
+    }
+  }
 
   async function loadAppVersion(): Promise<void> {
     if (!isTauriRuntime()) return;
@@ -1484,7 +1695,7 @@
             type="button"
             class="settings-search-clear"
             aria-label={_t("storage.clearSettingsSearch")}
-            onclick={clearSettingsSearch}>×</button
+            onclick={clearSettingsSearch}>��</button
           >
         {/if}
       </div>
@@ -1530,6 +1741,14 @@
       >
         <AppIcon name="file" size={16} />
         <span>{_t("storage.storageTab")}</span>
+      </button>
+      <button
+        class:active={activeSection === "sync_cloud" || activeSection === "sync_advanced"}
+        type="button"
+        onclick={() => (activeSection = "sync_cloud")}
+      >
+        <AppIcon name="cloud" size={16} />
+        <span>{_t("storage.syncTab")}</span>
       </button>
       <button
         class:active={activeSection === "keyboard_item" ||
@@ -1844,6 +2063,25 @@
             {_t("storage.storageToolsTab")}
           </button>
         </nav>
+      {:else if activeSection === "sync_cloud" || activeSection === "sync_advanced"}
+        <nav class="settings-subnav" aria-label={_t("storage.syncTab")}>
+          <button
+            type="button"
+            class:active={activeSection === "sync_cloud"}
+            aria-current={activeSection === "sync_cloud" ? "page" : undefined}
+            onclick={() => (activeSection = "sync_cloud")}
+          >
+            {_t("storage.syncCloudTab")}
+          </button>
+          <button
+            type="button"
+            class:active={activeSection === "sync_advanced"}
+            aria-current={activeSection === "sync_advanced" ? "page" : undefined}
+            onclick={() => (activeSection = "sync_advanced")}
+          >
+            {_t("storage.syncAdvancedTab")}
+          </button>
+        </nav>
       {:else}
         <div
           class="settings-subnav settings-subnav--single"
@@ -2075,15 +2313,15 @@
             options={[
               {
                 value: "tiny",
-                label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ✓" : ""}`,
+                label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ?" : ""}`,
               },
               {
                 value: "small",
-                label: `small (~30MB)${installedVariants.includes("small") ? " ✓" : ""}`,
+                label: `small (~30MB)${installedVariants.includes("small") ? " ?" : ""}`,
               },
               {
                 value: "medium",
-                label: `medium (~135MB)${installedVariants.includes("medium") ? " ✓" : ""}`,
+                label: `medium (~135MB)${installedVariants.includes("medium") ? " ?" : ""}`,
               },
             ]}
             onchange={(v) => (modelVariant = v as string)}
@@ -2568,13 +2806,13 @@
                     <p>
                       {memoryDiagnostics.ocr.engine} / {memoryDiagnostics.ocr.modelVariant}
                       {memoryDiagnostics.ocr.loaded
-                        ? ` · ${_t("statistics.ocrEngineAvailable")}`
-                        : ` · ${_t("storage.ocrModelNotInstalled")}`}
+                        ? ` �� ${_t("statistics.ocrEngineAvailable")}`
+                        : ` �� ${_t("storage.ocrModelNotInstalled")}`}
                     </p>
                   </div>
                 </div>
                 <span class="stats-metric-value"
-                  >{formatBytes(memoryDiagnostics.ocr.modelBytes)} · {memoryDiagnostics.ocr
+                  >{formatBytes(memoryDiagnostics.ocr.modelBytes)} �� {memoryDiagnostics.ocr
                     .modelFileCount}
                   {_t("storage.ocrModelFileCount")}</span
                 >
@@ -2940,7 +3178,7 @@
                     onchange={(v) => (exportDateFrom = v)}
                     ariaLabel={_t("storage.exportDateFrom")}
                   />
-                  <span class="export-date-separator">–</span>
+                  <span class="export-date-separator">�C</span>
                   <DatePicker
                     value={exportDateTo}
                     onchange={(v) => (exportDateTo = v)}
@@ -3074,7 +3312,7 @@
                               count: storageKindStats[entry.kind].itemCount,
                               size: formatBytes(storageKindStats[entry.kind].sizeBytes),
                             })
-                          : "—"}
+                          : "��"}
                       </span>
                     </div>
                     <button
@@ -3113,6 +3351,325 @@
                 <code>{repairResult.integrityMessage}</code>
               </div>
             {/if}
+          {/if}
+          {#if activeSection === "sync_cloud"}
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
+              <span class="setting-label">{_t("storage.syncProvider")}</span>
+              <CustomSelect
+                value={syncProvider}
+                ariaLabel={_t("storage.syncProvider")}
+                options={[
+                  { value: "off", label: _t("storage.syncProviderOff") },
+                  { value: "webdav", label: _t("storage.syncProviderWebdav") },
+                  { value: "s3", label: _t("storage.syncProviderS3") },
+                ]}
+                onchange={(v) => (syncProvider = v as string)}
+              />
+            </section>
+
+            {#if syncProvider !== "off"}
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
+                  <div style="flex:1">
+                    <strong>{_t("storage.syncNow")}</strong>
+                    <p
+                      style="margin:2px 0 0;font-size:var(--settings-description-size,var(--font-size-secondary,11px));color:var(--text-muted)"
+                    >
+                      {_t("storage.syncPendingCount", { count: syncUnsyncedCount })}{#if syncLastMs}
+                        | {_t("storage.syncLastTime", {
+                          time: new Date(syncLastMs).toLocaleString(),
+                        })}{/if}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="settings-action-btn"
+                    disabled={syncing || syncTesting}
+                    onclick={handleSyncUpload}
+                  >
+                    {syncing ? _t("storage.syncing") : _t("storage.syncNow")}
+                  </button>
+                </div>
+              </section>
+
+              <section class="setting-card setting-card-row">
+                <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
+                <span class="setting-label">{_t("storage.syncAutoSync")}</span>
+                <button
+                  type="button"
+                  class="toggle-switch"
+                  class:active={syncAutoSync}
+                  onclick={() => {
+                    syncAutoSync = !syncAutoSync;
+                    void saveSyncSettings();
+                  }}
+                  aria-checked={syncAutoSync}
+                  aria-label={_t("storage.syncAutoSyncEnable")}
+                  role="switch"
+                >
+                  <span class="toggle-knob"></span>
+                </button>
+              </section>
+              {#if syncAutoSync}
+                <section class="setting-card setting-card-row">
+                  <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+                  <span class="setting-label">{_t("storage.syncAutoInterval")}</span>
+                  <input
+                    type="number"
+                    bind:value={syncAutoInterval}
+                    min="10"
+                    max="3600"
+                    onblur={saveSyncSettings}
+                  />
+                  <span class="number-suffix">{_t("storage.syncSecondsUnit")}</span>
+                </section>
+              {/if}
+
+              {#if syncProvider === "webdav"}
+                <section class="setting-card">
+                  <div class="setting-heading">
+                    <span class="setting-icon"><AppIcon name="globe" size={17} /></span>
+                    <div>
+                      <strong>{_t("storage.syncEndpoint")}</strong>
+                    </div>
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncEndpoint")}</label>
+                    <input
+                      type="url"
+                      bind:value={syncEndpoint}
+                      placeholder="https://dav.example.com/remote.php/dav/"
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncRemotePath")}</label>
+                    <input
+                      type="text"
+                      bind:value={syncRemotePath}
+                      placeholder="clipboard-backup"
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncUsername")}</label>
+                    <input
+                      type="text"
+                      bind:value={syncUsername}
+                      placeholder=""
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncPassword")}</label>
+                    <input
+                      type="password"
+                      bind:value={syncPassword}
+                      placeholder=""
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row setting-actions-row">
+                    <button
+                      type="button"
+                      class="settings-action-btn"
+                      disabled={syncTesting || syncing}
+                      onclick={handleTestConnection}
+                    >
+                      {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
+                    </button>
+                    {#if syncTestResult}
+                      <span class="sync-last-info">
+                        {syncTestResult.message}
+                      </span>
+                    {/if}
+                  </div>
+                </section>
+              {/if}
+
+              {#if syncProvider === "s3"}
+                <section class="setting-card">
+                  <div class="setting-heading">
+                    <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
+                    <div>
+                      <strong>{_t("storage.syncS3Title")}</strong>
+                    </div>
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncS3Region")}</label>
+                    <input
+                      type="text"
+                      bind:value={syncS3Region}
+                      placeholder="us-east-1"
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncS3Bucket")}</label>
+                    <input
+                      type="text"
+                      bind:value={syncS3Bucket}
+                      placeholder="my-clipboard-backup"
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncS3AccessKey")}</label>
+                    <input
+                      type="text"
+                      bind:value={syncS3AccessKey}
+                      placeholder=""
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row">
+                    <label>{_t("storage.syncS3SecretKey")}</label>
+                    <input
+                      type="password"
+                      bind:value={syncS3SecretKey}
+                      placeholder=""
+                      onblur={saveSyncConfig}
+                    />
+                  </div>
+                  <div class="setting-row setting-actions-row">
+                    <button
+                      type="button"
+                      class="settings-action-btn"
+                      disabled={syncTesting || syncing}
+                      onclick={handleTestConnection}
+                    >
+                      {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
+                    </button>
+                    {#if syncTestResult}
+                      <span class="sync-last-info">
+                        {syncTestResult.message}
+                      </span>
+                    {/if}
+                  </div>
+                </section>
+              {/if}
+
+              <section class="setting-card setting-card-row">
+                <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
+                <span class="setting-label">{_t("storage.syncEncryption")}</span>
+                <input
+                  type="password"
+                  bind:value={syncEncryptPassword}
+                  placeholder={_t("storage.syncEncryptionPlaceholder")}
+                  onblur={saveSyncSettings}
+                  style="flex:1;min-width:0"
+                />
+              </section>
+
+              <section class="setting-card">
+                <div class="setting-heading">
+                  <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+                  <div style="flex:1">
+                    <strong>{_t("storage.syncBackupList")}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    class="settings-action-btn"
+                    disabled={syncListing || syncDownloading}
+                    onclick={handleListBackups}
+                  >
+                    {_t("storage.syncRefreshList")}
+                  </button>
+                </div>
+                {#if syncBackups.length > 0}
+                  <div class="storage-kind-delete-list">
+                    {#each syncBackups as backup (backup.name)}
+                      <div class="storage-kind-delete-row">
+                        <span class="storage-kind-icon"><AppIcon name="file" size={15} /></span>
+                        <div class="storage-kind-delete-copy">
+                          <strong>{backup.name}</strong>
+                          {#if backup.sizeBytes != null}
+                            <span>{formatBytes(backup.sizeBytes)}</span>
+                          {/if}
+                        </div>
+                        <button
+                          type="button"
+                          class="settings-action-btn"
+                          disabled={syncDownloading}
+                          onclick={() => handleDownloadBackup(backup.name)}
+                        >
+                          {_t("storage.syncDownload")}
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </section>
+            {/if}
+          {/if}
+
+          {#if activeSection === "sync_advanced"}
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <span class="setting-label">{_t("storage.syncRolloverEntries")}</span>
+              <input
+                type="number"
+                bind:value={syncRolloverEntries}
+                min="10"
+                max="10000"
+                onblur={saveSyncSettings}
+              />
+              <span class="number-suffix">{_t("storage.syncEntriesUnit")}</span>
+            </section>
+
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <span class="setting-label">{_t("storage.syncRolloverBytes")}</span>
+              <input
+                type="number"
+                bind:value={syncRolloverBytes}
+                min="1024"
+                max="1048576"
+                onblur={saveSyncSettings}
+              />
+              <span class="number-suffix">{_t("storage.syncBytesUnit")}</span>
+            </section>
+
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="image" size={17} /></span>
+              <span class="setting-label">{_t("storage.syncMaxImageBytes")}</span>
+              <input
+                type="number"
+                bind:value={syncMaxImageBytes}
+                min="0"
+                max="1073741824"
+                onblur={saveSyncSettings}
+              />
+              <span class="number-suffix">{_t("storage.syncBytesUnit")}</span>
+            </section>
+
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+              <span class="setting-label">{_t("storage.syncMaxFileBytes")}</span>
+              <input
+                type="number"
+                bind:value={syncMaxFileBytes}
+                min="0"
+                max="1073741824"
+                onblur={saveSyncSettings}
+              />
+              <span class="number-suffix">{_t("storage.syncBytesUnit")}</span>
+            </section>
+
+            <section class="setting-card setting-card-row">
+              <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+              <span class="setting-label">{_t("storage.syncMaxFiles")}</span>
+              <input
+                type="number"
+                bind:value={syncMaxOplogFiles}
+                min="3"
+                max="100"
+                onblur={saveSyncSettings}
+              />
+              <span class="number-suffix">{_t("storage.syncFilesUnit")}</span>
+            </section>
           {/if}
 
           <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
@@ -4731,7 +5288,7 @@
     margin: 0;
   }
 
-  .setting-card-row button {
+  .setting-card-row button:not(.toggle-switch) {
     height: 34px;
     box-sizing: border-box;
     padding: 5px 12px;
@@ -4905,6 +5462,15 @@
 
   .transfer-limit-warning button {
     flex-shrink: 0;
+  }
+
+  .sync-last-info {
+    color: var(--text-muted);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  }
+
+  .setting-actions-row {
+    margin-top: 10px;
   }
 
   .export-options {

@@ -211,5 +211,14 @@
   {:else if name === "arrow-right"}
     <path d="M5 12h14" />
     <path d="m13 6 6 6-6 6" />
+  {:else if name === "cloud"}
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+  {:else if name === "upload"}
+    <path d="M12 16V4" />
+    <path d="m7 9 5-5 5 5" />
+    <path d="M5 20h14" />
+  {:else if name === "lock"}
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
   {/if}
 </svg>
