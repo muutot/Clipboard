@@ -87,6 +87,7 @@ impl SystemTray {
                     if let Ok(mut privacy) = app.state::<Mutex<PrivacyManager>>().lock() {
                         privacy.toggle_pause();
                     }
+                    let _ = app.emit("privacy-pause-changed", paused);
                 } else if event.id() == Self::QUIT_MENU_ID {
                     app.exit(0);
                 } else if event.id() == Self::RESTART_MENU_ID {

@@ -105,6 +105,7 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 | `tray-open-settings`            | tray backend                                                               | main route opens settings                                          |
 | `viewer:open`                   | detail panel                                                               | dedicated viewer window                                            |
 | `ppocr-download-progress`       | OCR installer                                                              | settings UI download progress                                      |
+| `privacy-pause-changed`         | tray pause toggle                                                          | settings `GeneralSettingsPanel` refreshes recording pause state    |
 
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function.
 

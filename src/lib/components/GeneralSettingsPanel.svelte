@@ -14,6 +14,7 @@
   import { updateSliderTrack } from "$lib/utils/format";
   import { onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { isTauriRuntime } from "$lib/services/runtime";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -45,6 +46,7 @@
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let pageSizeRaf = 0;
   let stopPointerDrag: (() => void) | undefined;
+  let unlistenPrivacyPause: (() => void) | undefined;
 
   const ALL_SORT_FIELDS: SortRule["field"][] = [
     "createdAt",
@@ -160,6 +162,7 @@
     stopPointerDrag?.();
     if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
     if (pageSizeRaf) cancelAnimationFrame(pageSizeRaf);
+    unlistenPrivacyPause?.();
   });
 
   function changeLanguage(lang: Locale) {
@@ -173,6 +176,13 @@
 
   onMount(() => {
     void loadPrivacyStatus();
+    if (isTauriRuntime()) {
+      listen<boolean>("privacy-pause-changed", (event) => {
+        privacyPaused = event.payload;
+      }).then((unlisten) => {
+        unlistenPrivacyPause = unlisten;
+      });
+    }
   });
 
   async function loadPrivacyStatus() {
