@@ -40,6 +40,9 @@ jobs:
   rust:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +52,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -57,7 +60,15 @@ jobs:
           sudo apt update
           sudo apt install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libssl-dev libgtk-3-dev \
-            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold
+
+      - name: Configure linker (Linux)
+        if: runner.os == 'Linux'
+        run: echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          env-cache-key: RUSTFLAGS
 
       - name: Check formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -65,5 +76,10 @@ jobs:
       - name: Clippy
         run: cargo clippy -j 1 --profile ci --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
+      - name: Install nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       - name: Test
-        run: cargo test -j 1 --profile ci --manifest-path src-tauri/Cargo.toml
+        run: cargo nextest run --cargo-profile ci --manifest-path src-tauri/Cargo.toml

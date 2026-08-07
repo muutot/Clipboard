@@ -50,16 +50,17 @@ pbkdf2 = "0.11"
 rand = "0.9"
 bincode = { version = "2", features = ["serde"] }
 
-# Dev-profile tuning so `tauri dev` rebuilds are fast:
-# - dependencies are built once at opt-level 2 and cached; only the local
-#   crate is rebuilt incrementally (debug, opt-level 0) on every change.
-# - unpacked split debug info keeps MSVC PDB handling fast.
+# Dev-profile tuning for the fastest possible local `tauri dev` builds:
+# - dependencies stay unoptimized (opt-level 0) with no debug symbols, so the
+#   existing cached artifacts are reused and compile/link is as fast as possible.
+# - unpacked split debug info keeps MSVC PDB handling fast (local crate only).
 [profile.dev]
 incremental = true
 split-debuginfo = "unpacked"
 
 [profile.dev.package."*"]
-opt-level = 2
+opt-level = 0
+debug = false
 
 # CI profile: same debug symbols as dev, but dependencies stay at opt-level 0
 # so clippy/test runs compile as fast as possible in GitHub Actions.
@@ -69,10 +70,14 @@ inherits = "dev"
 [profile.ci.package."*"]
 opt-level = 0
 
-# Release profile tuned for maximum runtime performance (not build speed).
+# Release profile for local `tauri build`: like dev, extreme build speed with
+# minimal storage. No debug info, no incremental cache, unoptimized objects.
+# The GitHub Actions release job overrides these via CARGO_PROFILE_RELEASE_*
+# env vars to enable extreme runtime optimization (see release.yml).
 [profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+opt-level = 0
+codegen-units = 256
 panic = "abort"
 strip = true
+debug = false
+incremental = false
