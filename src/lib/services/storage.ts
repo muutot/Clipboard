@@ -446,11 +446,12 @@ export async function testSyncConnection(
 }
 
 export interface SyncUploadResult {
-  filename: string;
-  backupType: string;
-  itemsSynced: number;
-  resourcesSynced: number;
+  uploadedEntries: number;
+  downloadedEntries: number;
+  appliedEntries: number;
+  deletedRemoteFiles: number;
   bytesUploaded: number;
+  bytesDownloaded: number;
 }
 
 export async function syncUploadBackup(): Promise<SyncUploadResult> {

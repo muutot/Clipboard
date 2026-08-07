@@ -123,6 +123,8 @@ export interface LocaleDefinition {
     syncing: string;
     syncUploadSuccess: string;
     syncUploadFailed: string;
+    syncNoChanges: string;
+    syncUploadSummary: string;
     syncDownload: string;
     syncDownloading: string;
     syncDownloadSuccess: string;

@@ -123,6 +123,9 @@ const zhCN: LocaleDefinition = {
     syncing: "备份中…",
     syncUploadSuccess: "备份上传成功",
     syncUploadFailed: "备份上传失败",
+    syncNoChanges: "没有需要同步的变更",
+    syncUploadSummary:
+      "同步完成: 上传 {uploaded} 条, 下载 {downloaded} 条, 应用 {applied} 条, 上 {bytesUp} KB / 下 {bytesDown} KB",
     syncDownload: "下载备份",
     syncDownloading: "下载中…",
     syncDownloadSuccess: "下载成功",

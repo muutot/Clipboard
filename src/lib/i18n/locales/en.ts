@@ -131,6 +131,9 @@ const en: LocaleDefinition = {
     syncing: "Backing up...",
     syncUploadSuccess: "Backup uploaded successfully",
     syncUploadFailed: "Backup upload failed",
+    syncNoChanges: "No changes to sync",
+    syncUploadSummary:
+      "Sync complete: {uploaded} entries uploaded, {downloaded} downloaded, {applied} applied, {bytesUp} KB up / {bytesDown} KB down",
     syncDownload: "Download Backup",
     syncDownloading: "Downloading...",
     syncDownloadSuccess: "Download successful",

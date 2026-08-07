@@ -935,12 +935,21 @@
     feedback = "";
     try {
       const result = await syncUploadBackup();
-      if (result.backupType === "noop") {
-        feedback = "û����������Ҫͬ��";
+      if (
+        result.uploadedEntries === 0 &&
+        result.downloadedEntries === 0 &&
+        result.deletedRemoteFiles === 0
+      ) {
+        feedback = _t("storage.syncNoChanges");
         feedbackSuccess = true;
       } else {
-        const typeLabel = result.backupType === "oplog" ? "����" : "ȫ��";
-        feedback = `${typeLabel}ͬ���ɹ�: ${result.itemsSynced} ����¼, ${result.resourcesSynced} ����Դ, ${(result.bytesUploaded / 1024).toFixed(1)} KB`;
+        feedback = _t("storage.syncUploadSummary", {
+          uploaded: String(result.uploadedEntries),
+          downloaded: String(result.downloadedEntries),
+          applied: String(result.appliedEntries),
+          bytesUp: (result.bytesUploaded / 1024).toFixed(1),
+          bytesDown: (result.bytesDownloaded / 1024).toFixed(1),
+        });
         feedbackSuccess = true;
       }
       syncLastMs = Date.now();
