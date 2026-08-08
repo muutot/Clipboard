@@ -1702,7 +1702,10 @@
   }
 
   function openDetail(id: string) {
-    const item = items.find((i) => i.id === id);
+    const item =
+      items.find((i) => i.id === id) ??
+      indexedItems?.find((i) => i.id === id) ??
+      searchCache.find((i) => i.id === id);
     if (item) detailItem = item;
   }
 
