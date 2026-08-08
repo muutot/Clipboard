@@ -8,6 +8,12 @@ use crate::config::{ConfigStore, SyncConfig};
 use crate::storage::Database;
 use crate::storage::StoragePaths;
 use crate::sync;
+
+/// Serializes sync runs. The manual `sync_upload_backup` command and the
+/// auto-sync worker share the same merge/apply logic, which is not reentrant;
+/// a `try_lock` in each entry point prevents concurrent runs from
+/// interleaving oplog merge/apply/cleanup.
+static SYNC_RUN_LOCK: Mutex<()> = Mutex::new(());
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConfigInfo {
@@ -227,6 +233,13 @@ pub fn sync_upload_backup(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<SyncUploadResult, String> {
+    // Fail fast instead of queueing: a concurrent sync (manual command racing
+    // with the auto-sync worker) would interleave the non-reentrant
+    // merge/apply/cleanup logic.
+    let _run_guard = SYNC_RUN_LOCK
+        .try_lock()
+        .map_err(|_| "sync already in progress".to_owned())?;
+
     // Snapshot the config, then release the lock before any network I/O so a
     // slow sync does not block other config access.
     let settings = {
