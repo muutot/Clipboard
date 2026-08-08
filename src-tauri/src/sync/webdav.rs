@@ -21,23 +21,26 @@ pub struct WebDavTestResult {
     pub status_code: Option<u16>,
 }
 
-fn build_client(username: Option<&str>, password: Option<&str>) -> Result<Client, String> {
-    let mut builder = Client::builder().timeout(Duration::from_secs(30));
+/// A shared HTTP client. Built once, then reused for every WebDAV call so each
+/// request does not pay connection/header setup overhead. Auth is attached
+/// per-request via `basic_auth`, since credentials vary between operations.
+fn shared_client() -> Result<Client, String> {
+    static CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+    Ok(CLIENT
+        .get_or_init(|| {
+            Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .expect("failed to build WebDAV client")
+        })
+        .clone())
+}
 
-    if let (Some(user), Some(pass)) = (username, password) {
-        let auth = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            format!("{user}:{pass}").as_bytes(),
-        );
-        builder = builder.default_headers(reqwest::header::HeaderMap::from_iter([(
-            reqwest::header::AUTHORIZATION,
-            reqwest::header::HeaderValue::from_str(&format!("Basic {auth}")).unwrap(),
-        )]));
+fn auth<'a>(user: Option<&'a str>, pass: Option<&'a str>) -> Option<(&'a str, Option<&'a str>)> {
+    match (user, pass) {
+        (Some(u), Some(p)) => Some((u, Some(p))),
+        _ => None,
     }
-
-    builder
-        .build()
-        .map_err(|e| format!("failed to build HTTP client: {e}"))
 }
 
 fn join_webdav_url(base: &str, path: &str) -> String {
@@ -57,7 +60,7 @@ pub fn test_webdav_connection(
     username: Option<&str>,
     password: Option<&str>,
 ) -> WebDavTestResult {
-    let client = match build_client(username, password) {
+    let client = match shared_client() {
         Ok(c) => c,
         Err(e) => {
             return WebDavTestResult {
@@ -74,12 +77,15 @@ pub fn test_webdav_connection(
   <D:prop><D:resourcetype/></D:prop>
 </D:propfind>"#;
 
-    match client
+    let mut request = client
         .request(reqwest::Method::from_bytes(b"PROPFIND").unwrap(), &url)
         .header("Depth", "1")
-        .body(body.to_string())
-        .send()
-    {
+        .body(body.to_string());
+    if let Some((u, p)) = auth(username, password) {
+        request = request.basic_auth(u, p);
+    }
+
+    match request.send() {
         Ok(resp) => {
             let status = resp.status();
             if status.is_success() || status == StatusCode::from_u16(207).unwrap() {
@@ -119,17 +125,18 @@ pub fn upload_to_webdav(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<(), String> {
-    let client = build_client(username, password)?;
+    let client = shared_client()?;
     let url = join_webdav_url(
         endpoint,
         &format!("{}/{}", remote_path.trim_start_matches('/'), filename),
     );
 
-    let resp = client
-        .put(&url)
-        .body(data)
-        .send()
-        .map_err(|e| format!("upload failed: {e}"))?;
+    let mut request = client.put(&url).body(data);
+    if let Some((u, p)) = auth(username, password) {
+        request = request.basic_auth(u, p);
+    }
+
+    let resp = request.send().map_err(|e| format!("upload failed: {e}"))?;
 
     if resp.status().is_success() || resp.status() == StatusCode::CREATED {
         Ok(())
@@ -154,14 +161,18 @@ pub fn download_from_webdav(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    let client = build_client(username, password)?;
+    let client = shared_client()?;
     let url = join_webdav_url(
         endpoint,
         &format!("{}/{}", remote_path.trim_start_matches('/'), filename),
     );
 
-    let resp = client
-        .get(&url)
+    let mut request = client.get(&url);
+    if let Some((u, p)) = auth(username, password) {
+        request = request.basic_auth(u, p);
+    }
+
+    let resp = request
         .send()
         .map_err(|e| format!("download failed: {e}"))?;
 
@@ -180,16 +191,18 @@ pub fn delete_from_webdav(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<(), String> {
-    let client = build_client(username, password)?;
+    let client = shared_client()?;
     let url = join_webdav_url(
         endpoint,
         &format!("{}/{}", remote_path.trim_start_matches('/'), filename),
     );
 
-    let resp = client
-        .delete(&url)
-        .send()
-        .map_err(|e| format!("delete failed: {e}"))?;
+    let mut request = client.delete(&url);
+    if let Some((u, p)) = auth(username, password) {
+        request = request.basic_auth(u, p);
+    }
+
+    let resp = request.send().map_err(|e| format!("delete failed: {e}"))?;
 
     if resp.status().is_success() || resp.status() == StatusCode::NOT_FOUND {
         Ok(())
@@ -205,19 +218,22 @@ pub fn list_webdav_files(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<Vec<WebDavEntry>, String> {
-    let client = build_client(username, password)?;
+    let client = shared_client()?;
     let url = join_webdav_url(endpoint, remote_path.unwrap_or(""));
     let body = r#"<?xml version="1.0" encoding="utf-8" ?>
 <D:propfind xmlns:D="DAV:">
   <D:allprop/>
 </D:propfind>"#;
 
-    let resp = client
+    let mut request = client
         .request(reqwest::Method::from_bytes(b"PROPFIND").unwrap(), &url)
         .header("Depth", "1")
-        .body(body.to_string())
-        .send()
-        .map_err(|e| format!("list failed: {e}"))?;
+        .body(body.to_string());
+    if let Some((u, p)) = auth(username, password) {
+        request = request.basic_auth(u, p);
+    }
+
+    let resp = request.send().map_err(|e| format!("list failed: {e}"))?;
 
     let status = resp.status();
     if !status.is_success() && status != StatusCode::from_u16(207).unwrap() {
