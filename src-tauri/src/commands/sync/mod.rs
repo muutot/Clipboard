@@ -928,7 +928,17 @@ fn encrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, 
 
 fn decrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, String> {
     match get_sync_password(guard) {
-        Some(pwd) if !pwd.is_empty() => sync::crypto::decrypt(&data, &pwd).or(Ok(data)),
+        Some(pwd) if !pwd.is_empty() => match sync::crypto::decrypt(&data, &pwd) {
+            Ok(decrypted) => Ok(decrypted),
+            Err(e) => {
+                // Keep the documented fallback (remote files uploaded before a
+                // sync password was set, or a changed password, leave bytes
+                // unreadable), but surface the failure instead of silently
+                // skipping the payload downstream.
+                println!("[sync] warning: {e}; falling back to raw payload bytes");
+                Ok(data)
+            }
+        },
         _ => Ok(data),
     }
 }
