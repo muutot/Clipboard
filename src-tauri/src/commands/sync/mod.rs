@@ -367,6 +367,7 @@ fn sync_upload_webdav(
     let local_entries =
         filter_entries_by_resource_size(local_entries, max_image_bytes, max_file_bytes, paths);
 
+    let mut written_filename: String = String::new();
     let uploaded_entries = if !local_entries.is_empty() {
         let (mut all_entries, mut all_resources) =
             sync::collect_entry_resources(local_entries, paths);
@@ -425,6 +426,7 @@ fn sync_upload_webdav(
         let max_seq = all_entries.iter().map(|e| e.sequence).max().unwrap_or(0);
         let _ = database.mark_changelog_synced(max_seq);
         let _ = database.purge_synced_changelog(1000);
+        written_filename = filename;
         all_entries.len() as u64
     } else {
         0
@@ -494,7 +496,7 @@ fn sync_upload_webdav(
         remote_path,
         &settings.username,
         &settings.password,
-        device_id,
+        &written_filename,
         max_files,
     )?;
 
@@ -599,6 +601,7 @@ fn sync_upload_s3(
     let local_entries =
         filter_entries_by_resource_size(local_entries, max_image_bytes, max_file_bytes, paths);
 
+    let mut written_filename: String = String::new();
     let uploaded_entries = if !local_entries.is_empty() {
         let (mut all_entries, mut all_resources) =
             sync::collect_entry_resources(local_entries, paths);
@@ -659,6 +662,7 @@ fn sync_upload_s3(
         let max_seq = all_entries.iter().map(|e| e.sequence).max().unwrap_or(0);
         let _ = database.mark_changelog_synced(max_seq);
         let _ = database.purge_synced_changelog(1000);
+        written_filename = filename;
         all_entries.len() as u64
     } else {
         0
@@ -731,7 +735,7 @@ fn sync_upload_s3(
         &access_key,
         &secret_key,
         prefix,
-        device_id,
+        &written_filename,
         max_files,
     )?;
 
@@ -771,7 +775,7 @@ fn cleanup_old_s3_oplogs(
     access_key: &str,
     secret_key: &str,
     prefix: Option<&str>,
-    device_id: &str,
+    keep_name: &str,
     max_files: usize,
 ) -> Result<u64, String> {
     let entries = sync::list_s3_objects(endpoint, region, bucket, prefix, access_key, secret_key)?;
@@ -786,16 +790,17 @@ fn cleanup_old_s3_oplogs(
     if oplog_files.len() > max_files {
         let to_delete = oplog_files.len() - max_files;
         for (name, _) in &oplog_files[..to_delete] {
-            if !name.contains(device_id) {
-                // list_s3_objects returns the basename only; re-prepend the
-                // remote_path prefix so the delete targets the real object key.
-                let key = match prefix {
-                    Some(p) if !p.is_empty() => format!("{p}/{name}"),
-                    _ => name.clone(),
-                };
-                sync::delete_from_s3(endpoint, region, bucket, &key, access_key, secret_key)?;
-                deleted += 1;
+            if name == keep_name {
+                continue;
             }
+            // list_s3_objects returns the basename only; re-prepend the
+            // remote_path prefix so the delete targets the real object key.
+            let key = match prefix {
+                Some(p) if !p.is_empty() => format!("{p}/{name}"),
+                _ => name.clone(),
+            };
+            sync::delete_from_s3(endpoint, region, bucket, &key, access_key, secret_key)?;
+            deleted += 1;
         }
     }
     Ok(deleted)
@@ -847,7 +852,7 @@ fn cleanup_old_remote_oplogs(
     remote_path: &str,
     username: &Option<String>,
     password: &Option<String>,
-    device_id: &str,
+    keep_name: &str,
     max_files: usize,
 ) -> Result<u64, String> {
     let entries = sync::list_webdav_files(
@@ -869,16 +874,17 @@ fn cleanup_old_remote_oplogs(
     if oplog_files.len() > max_files {
         let to_delete = oplog_files.len() - max_files;
         for (name, _) in &oplog_files[..to_delete] {
-            if !name.contains(device_id) {
-                let _ = sync::delete_from_webdav(
-                    endpoint,
-                    remote_path,
-                    name,
-                    username.as_deref(),
-                    password.as_deref(),
-                );
-                deleted += 1;
+            if name == keep_name {
+                continue;
             }
+            let _ = sync::delete_from_webdav(
+                endpoint,
+                remote_path,
+                name,
+                username.as_deref(),
+                password.as_deref(),
+            );
+            deleted += 1;
         }
     }
 
