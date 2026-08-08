@@ -38,12 +38,32 @@ export function applyWindowEffectToDocument(effect: WindowEffect): void {
   }
 }
 
+/**
+ * Applies the configured window transparency as a CSS factor only to the
+ * backdrop surfaces. When the window transparency also dims the text by design
+ * (native layered alpha active), the CSS factor is kept at full opacity so the
+ * translucency is not applied twice.
+ */
+export function applyWindowOpacityToDocument(transparency: number, affectsText: boolean): void {
+  if (typeof document === "undefined") return;
+  if (!isTauriRuntime()) return;
+  if (getCurrentWindow().label !== "main") return;
+  const opacity = Math.max(0.6, Math.min(1, transparency / 100));
+  const root = document.documentElement;
+  if (affectsText) {
+    root.style.removeProperty("--window-opacity");
+  } else {
+    root.style.setProperty("--window-opacity", opacity.toFixed(2));
+  }
+}
+
 export function applyGeneralSettingsToDocument(settings: GeneralSettings): void {
   if (typeof document === "undefined") return;
 
   applyFontSizesToDocument(settings.fontSizes, settings.display);
   applyThemeColors(settings.themeColors);
   applyWindowEffectToDocument(settings.windowEffect);
+  applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
 }
 
 export function syncCompactShellClass(compactMode: boolean): void {

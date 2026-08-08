@@ -78,19 +78,24 @@ body {
   min-width: 320px;
   min-height: 480px;
   background:
-    radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06), transparent 38%), var(--bg-app);
+    radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06), transparent 38%),
+    color-mix(in srgb, var(--bg-app) calc(var(--window-opacity, 1) * 100%), transparent);
 }
 
 html[data-window-effect="acrylic"] body,
 html[data-window-effect="mica"] body {
   background:
     radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06), transparent 38%),
-    color-mix(in srgb, var(--bg-app) 42%, transparent);
+    color-mix(in srgb, var(--bg-app) calc(var(--window-opacity, 1) * 42%), transparent);
 }
 
 html[data-window-effect="acrylic"] .app-shell,
 html[data-window-effect="mica"] .app-shell {
-  background: color-mix(in srgb, var(--bg-settings) 42%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-settings) calc(var(--window-opacity, 1) * 42%),
+    transparent
+  );
 }
 
 button,

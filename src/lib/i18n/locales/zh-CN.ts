@@ -700,6 +700,9 @@ const zhCN: LocaleDefinition = {
     fontSizeCardPreviewDescription: "列表卡片上条目预览正文的字体大小",
     windowTransparency: "窗口透明度",
     windowTransparencyDescription: "调整后立即应用到窗口",
+    windowOpacityAffectsText: "文字随透明度变化",
+    windowOpacityAffectsTextDescription:
+      "开启后文字会随窗口透明度一并变淡；关闭时文字保持完全不透明",
     windowEffect: "毛玻璃效果",
     windowEffectDescription: "为窗口添加半透明模糊背景，需搭配窗口透明度使用",
     windowEffectOff: "关闭",

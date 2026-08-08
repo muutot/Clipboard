@@ -3526,7 +3526,11 @@
     overflow: hidden;
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    background: color-mix(in srgb, var(--bg-settings) 98.5%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--bg-settings) calc(var(--window-opacity, 1) * 98.5%),
+      transparent
+    );
   }
 
   .app-shell.split-detail {

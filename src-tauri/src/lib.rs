@@ -454,7 +454,11 @@ pub fn run() {
                 };
 
             let launch_at_startup = config.launch_at_startup();
-            let startup_transparency = config.general_settings().window_transparency;
+            let startup_transparency = if config.general_settings().window_opacity_affects_text {
+                config.general_settings().window_transparency
+            } else {
+                100
+            };
             let startup_window_effect = config.general_settings().window_effect.clone();
             app.manage(Mutex::new(config));
             app.manage(paths);

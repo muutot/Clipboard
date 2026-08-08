@@ -31,6 +31,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   display: { showSecondaryText: true, maxTextLines: 3, pageSize: 100, searchPageSize: 100 },
   windowTransparency: 95,
   windowEffect: "off",
+  windowOpacityAffectsText: false,
   compactMode: false,
   compactPaddingTop: 6,
   compactPaddingBottom: 4,
@@ -335,6 +336,10 @@ function normalizeGeneralSettings(
   result.windowEffect = validWindowEffect(
     source.windowEffect ?? fallback("windowEffect"),
     defaultSettings.windowEffect,
+  );
+  result.windowOpacityAffectsText = booleanValue(
+    source.windowOpacityAffectsText ?? fallback("windowOpacityAffectsText"),
+    defaultSettings.windowOpacityAffectsText,
   );
   result.compactMode = booleanValue(
     source.compactMode ?? fallback("compactMode"),

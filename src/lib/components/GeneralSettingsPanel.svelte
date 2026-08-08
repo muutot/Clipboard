@@ -558,6 +558,14 @@
     },
     {
       type: "toggle",
+      icon: "eye",
+      label: _t("general.windowOpacityAffectsText"),
+      desc: _t("general.windowOpacityAffectsTextDescription"),
+      get: () => s.windowOpacityAffectsText,
+      set: (v) => generalSettings.updateSetting("windowOpacityAffectsText", v),
+    },
+    {
+      type: "toggle",
       icon: "pin",
       label: _t("general.rememberWindowPosition"),
       desc: _t("general.rememberWindowPositionDescription"),

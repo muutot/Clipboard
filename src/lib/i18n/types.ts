@@ -683,6 +683,8 @@ export interface LocaleDefinition {
     fontSizeCardPreviewDescription: string;
     windowTransparency: string;
     windowTransparencyDescription: string;
+    windowOpacityAffectsText: string;
+    windowOpacityAffectsTextDescription: string;
     windowEffect: string;
     windowEffectDescription: string;
     windowEffectOff: string;

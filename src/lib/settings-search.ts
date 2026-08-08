@@ -255,6 +255,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["毛玻璃", "玻璃", "acrylic", "mica", "frosted", "blur"],
   ),
   entry(
+    "general.window-opacity-text",
+    { section: "general_window" },
+    i18n("general.windowOpacityAffectsText"),
+    i18n("general.windowOpacityAffectsTextDescription"),
+    ["文字", "text", "opacity"],
+  ),
+  entry(
     "general.compact-mode",
     { section: "compact" },
     i18n("general.compactMode"),

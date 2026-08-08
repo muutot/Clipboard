@@ -41,7 +41,11 @@ pub fn set_general_settings(
 
     capture.set_max_text_capture_bytes(saved.max_text_capture_bytes);
     let _ = app.emit("general-settings-changed", &saved);
-    apply_window_transparency_to_main(&app, saved.window_transparency);
+    if saved.window_opacity_affects_text {
+        apply_window_transparency_to_main(&app, saved.window_transparency);
+    } else {
+        apply_window_transparency_to_main(&app, 100);
+    }
     apply_window_effect_to_main(&app, &saved.window_effect);
     Ok(saved)
 }

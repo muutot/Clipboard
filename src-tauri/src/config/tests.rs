@@ -33,6 +33,7 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["display"]["maxTextLines"], 3);
     assert_eq!(saved["general"]["windowTransparency"], 95);
     assert_eq!(saved["general"]["windowEffect"], "off");
+    assert_eq!(saved["general"]["windowOpacityAffectsText"], false);
     assert_eq!(saved["general"]["compactMode"], false);
     assert_eq!(saved["general"]["showToastNotifications"], true);
     assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
@@ -63,6 +64,7 @@ fn persists_general_settings_as_one_configuration_group() {
     settings.search_history_enabled = true;
     settings.show_settings_close_button = false;
     settings.window_effect = "acrylic".to_owned();
+    settings.window_opacity_affects_text = true;
     settings.search_index_sync_mode = "background".to_owned();
     settings.max_text_capture_bytes = 2_000_000;
 

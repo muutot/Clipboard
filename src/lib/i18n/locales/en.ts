@@ -726,6 +726,9 @@ const en: LocaleDefinition = {
     fontSizeCardPreviewDescription: "Font size for item preview content on list cards",
     windowTransparency: "Window Transparency",
     windowTransparencyDescription: "Applied to the window immediately",
+    windowOpacityAffectsText: "Text Depends on Transparency",
+    windowOpacityAffectsTextDescription:
+      "When enabled, text fades together with the window opacity; when disabled, text stays fully opaque",
     windowEffect: "Frosted Glass",
     windowEffectDescription: "Adds a translucent blurred backdrop to the window",
     windowEffectOff: "Off",

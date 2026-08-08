@@ -58,6 +58,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `language`                    | `"zh-CN"` or `"en"`                | `"zh-CN"`   | —                                                                                |
 | `windowTransparency`          | number                             | `95`        | 60–100                                                                           |
 | `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`  | `"off"`     | —                                                                                |
+| `windowOpacityAffectsText`    | boolean                            | `false`     | —                                                                                |
 | `pinCopiedToTop`              | boolean                            | `true`      | —                                                                                |
 | `useRecycleBin`               | boolean                            | `true`      | —                                                                                |
 | `pasteCleaningEnabled`        | boolean                            | `false`     | —                                                                                |
