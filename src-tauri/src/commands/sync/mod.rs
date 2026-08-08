@@ -463,14 +463,6 @@ fn sync_upload_s3(
     let remote_objects =
         sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?;
 
-    let s3_key = |name: &str| {
-        if remote_path.is_empty() {
-            name.to_string()
-        } else {
-            format!("{remote_path}/{name}")
-        }
-    };
-
     let remote_baseline = remote_objects
         .iter()
         .find(|e| !e.is_directory && e.name.starts_with("baseline-") && e.name.ends_with(".zip"));
@@ -482,7 +474,7 @@ fn sync_upload_s3(
                 endpoint,
                 &region,
                 &bucket,
-                &s3_key(&baseline.name),
+                &s3_object_key(remote_path, &baseline.name),
                 &access_key,
                 &secret_key,
             )?;
@@ -508,7 +500,7 @@ fn sync_upload_s3(
             endpoint,
             &region,
             &bucket,
-            &s3_key(&filename),
+            &s3_object_key(remote_path, &filename),
             data,
             &access_key,
             &secret_key,
@@ -543,7 +535,7 @@ fn sync_upload_s3(
                         endpoint,
                         &region,
                         &bucket,
-                        &s3_key(&existing.name),
+                        &s3_object_key(remote_path, &existing.name),
                         &access_key,
                         &secret_key,
                     ) {
@@ -578,7 +570,7 @@ fn sync_upload_s3(
             endpoint,
             &region,
             &bucket,
-            &s3_key(&filename),
+            &s3_object_key(remote_path, &filename),
             new_data,
             &access_key,
             &secret_key,
@@ -606,7 +598,7 @@ fn sync_upload_s3(
             endpoint,
             &region,
             &bucket,
-            &s3_key(&entry.name),
+            &s3_object_key(remote_path, &entry.name),
             &access_key,
             &secret_key,
         ) {
@@ -667,6 +659,15 @@ fn sync_upload_s3(
     })
 }
 
+fn s3_object_key(remote_path: &str, name: &str) -> String {
+    let remote_path = remote_path.trim_matches('/');
+    if remote_path.is_empty() {
+        name.to_string()
+    } else {
+        format!("{remote_path}/{name}")
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn cleanup_old_s3_oplogs(
     endpoint: &str,
@@ -691,8 +692,13 @@ fn cleanup_old_s3_oplogs(
         let to_delete = oplog_files.len() - max_files;
         for (name, _) in &oplog_files[..to_delete] {
             if !name.contains(device_id) {
-                let _ =
-                    sync::delete_from_s3(endpoint, region, bucket, name, access_key, secret_key);
+                // list_s3_objects returns the basename only; re-prepend the
+                // remote_path prefix so the delete targets the real object key.
+                let key = match prefix {
+                    Some(p) if !p.is_empty() => format!("{p}/{name}"),
+                    _ => name.clone(),
+                };
+                sync::delete_from_s3(endpoint, region, bucket, &key, access_key, secret_key)?;
                 deleted += 1;
             }
         }
@@ -892,5 +898,42 @@ fn decrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, 
     match get_sync_password(guard) {
         Some(pwd) if !pwd.is_empty() => sync::crypto::decrypt(&data, &pwd).or(Ok(data)),
         _ => Ok(data),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn s3_object_key_without_remote_path_keeps_basename() {
+        assert_eq!(
+            s3_object_key("", "oplog-dev-20260808.json"),
+            "oplog-dev-20260808.json"
+        );
+    }
+
+    #[test]
+    fn s3_object_key_with_remote_path_prepends_prefix() {
+        assert_eq!(
+            s3_object_key("backups", "oplog-dev-20260808.json"),
+            "backups/oplog-dev-20260808.json"
+        );
+    }
+
+    #[test]
+    fn s3_object_key_with_trailing_slash_avoids_double_separator() {
+        assert_eq!(
+            s3_object_key("backups/", "oplog-dev-20260808.json"),
+            "backups/oplog-dev-20260808.json"
+        );
+    }
+
+    #[test]
+    fn s3_object_key_with_leading_and_trailing_slash_is_normalized() {
+        assert_eq!(
+            s3_object_key("/backups/", "oplog-dev-20260808.json"),
+            "backups/oplog-dev-20260808.json"
+        );
     }
 }

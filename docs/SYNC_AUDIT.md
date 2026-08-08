@@ -10,7 +10,7 @@
 | 2 | 图片/文件资源从不真正传输（serialize_oplog 只传元数据，create_oplog_backup 未接入同步流程） | ✅ 完成 | `924085c`（内嵌 OplogResource） |
 | 3 | 前端/后端 SyncUploadResult 字段完全不匹配（uploadedEntries vs itemsSynced） | ✅ 完成 | `c287d07` |
 | 4 | S3 是伪实现（Authorization 为 `AWS key:placeholder`，无 SigV4，_region 被忽略，仅虚拟主机式 URL） | ✅ 完成 | `201ecbd`（SigV4 + 端点解析 + path-style） |
-| 5 | S3 oplog 清理删错 key：list_s3_objects 返回去前缀短名，delete 未重新拼 remote_path/ 前缀，且 `let _ =` 静默失败 | ⏳ 待办 | 见下方 | 
+| 5 | S3 oplog 清理删错 key：list_s3_objects 返回去前缀短名，delete 未重新拼 remote_path/ 前缀，且 `let _ =` 静默失败 | ✅ 完成 | 见下方 | 
 | 6 | 应用远程 oplog/导入基线触发本地 trigger，造成回声广播（收到的条目又生成 unsynced changelog 再广播回远端） | ⏳ 待办 | 见下方 |
 
 ## 高
@@ -39,6 +39,7 @@
 - `src-tauri/src/sync/s3.rs:519`：`parse_s3_list_response` 用 `key.split('/').next_back()` 只保留最后一段（去前缀）。
 - 配了 `remotePath` 时，真实对象 key 是 `{remotePath}/{name}`，短名删除会命中根路径的错误对象；`let _ =` 让错误完全静默。
 - 对比：WebDAV 的 `cleanup_old_remote_oplogs`（mod.rs:782）把 `name` 传给 `delete_from_webdav(endpoint, remote_path, name, ...)`，由 webdav.rs 内部拼接路径，是正确的。
+- ✅ 修复：提取 `s3_object_key(remote_path, name)`（trim 斜杠，空则取原名），`sync_upload_s3` 与 `cleanup_old_s3_oplogs` 共用；cleanup 删除前用 prefix 重拼完整 key，`let _ =` 改为 `?` 传播错误。新增 4 个单测。
 
 ## #6 证据
 
