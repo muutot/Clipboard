@@ -748,13 +748,7 @@ fn filter_entries_by_resource_size(
 }
 
 fn get_device_id() -> String {
-    if let Ok(hostname) = std::env::var("COMPUTERNAME") {
-        return hostname.to_lowercase();
-    }
-    if let Ok(hostname) = std::env::var("HOSTNAME") {
-        return hostname.to_lowercase();
-    }
-    "unknown".to_string()
+    sync::device_id()
 }
 
 fn cleanup_old_remote_oplogs(

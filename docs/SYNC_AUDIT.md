@@ -28,7 +28,7 @@
 | #   | 问题                                                                                    | 状态                        | 证据 / 提交 |
 | --- | --------------------------------------------------------------------------------------- | --------------------------- | ----------- |
 | 12  | 每个网络调用重建 reqwest Client（webdav.rs:24）                                         | ⏳ 待办（s3 已用 OnceLock） | 见下方      |
-| 13  | 两份 get_device_id 重复且回退值不一致（backup.rs:"unknown-device" vs mod.rs:"unknown"） | ⏳ 待办                     | 见下方      |
+| 13  | 两份 get_device_id 重复且回退值不一致（backup.rs:"unknown-device" vs mod.rs:"unknown"） | ✅ 完成                     | 见下方      |
 | 14  | 文件名 .json 后缀实际是 bincode，仅靠 fallback 兼容，语义混乱                           | ⏳ 待办                     | 见下方      |
 | 15  | 同步导入/应用后不广播 clipboard-history-invalidated，主界面可能不刷新                   | ⏳ 待办                     | 见下方      |
 | 16  | 同步无并发锁，手动+未来自动同步并发时合并逻辑存在竞争                                   | ⏳ 待办                     | 见下方      |
@@ -77,6 +77,7 @@
 
 - `src-tauri/src/commands/sync/mod.rs:744-752`：`get_device_id` 回退 `"unknown"`。
 - `src-tauri/src/sync/backup.rs:408-415`：另一份 `get_device_id` 回退 `"unknown-device"`。
+- ✅ 修复：合并为 `sync::device_id()`（`sync/mod.rs`），回退统一为 `"unknown"`；backup.rs 与 commands/sync/mod.rs 均改为调用共享实现，删除重复定义。新增回退单测。
 
 ## #15 证据
 

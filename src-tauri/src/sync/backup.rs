@@ -62,7 +62,7 @@ pub fn create_backup(
         backup_type: "full".to_string(),
         created_at_ms: now_ms,
         base_sync_ms: None,
-        device_id: get_device_id(),
+        device_id: crate::sync::device_id(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count,
         resource_count: resources.len(),
@@ -91,7 +91,7 @@ pub fn create_baseline_backup(
         .map_err(|e| format!("failed to export items: {e}"))?;
 
     let now_ms = now_ms();
-    let device_id = get_device_id();
+    let device_id = crate::sync::device_id();
 
     let manifest = BackupManifest {
         format_version: SUPPORTED_FORMAT_VERSION,
@@ -153,7 +153,7 @@ pub fn create_oplog_backup(
             backup_type: "noop".to_string(),
             created_at_ms: now_ms(),
             base_sync_ms: None,
-            device_id: get_device_id(),
+            device_id: crate::sync::device_id(),
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             item_count: 0,
             resource_count: 0,
@@ -183,7 +183,7 @@ pub fn create_oplog_backup(
         backup_type: "oplog".to_string(),
         created_at_ms: now_ms,
         base_sync_ms: None,
-        device_id: get_device_id(),
+        device_id: crate::sync::device_id(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count: entries.len(),
         resource_count: resources.len(),
@@ -403,16 +403,6 @@ fn insert_resolved(path_str: &str, bases: &[&Path], set: &mut HashSet<PathBuf>) 
             set.insert(joined.canonicalize().unwrap_or(joined));
         }
     }
-}
-
-fn get_device_id() -> String {
-    if let Ok(hostname) = std::env::var("COMPUTERNAME") {
-        return hostname.to_lowercase();
-    }
-    if let Ok(hostname) = std::env::var("HOSTNAME") {
-        return hostname.to_lowercase();
-    }
-    "unknown-device".to_string()
 }
 
 fn now_ms() -> i64 {
