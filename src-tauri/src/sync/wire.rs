@@ -1,65 +1,12 @@
 //! Bincode v2 wire encoding for sync payloads (`Baseline`, `Oplog` envelopes).
 //! Despite its historical name, the on-wire format is bincode, not protobuf.
 //!
-//! Field evolution follows the append-only + envelope-versioning rules in
-//! `skills/clipboard-dev/references/data-contracts.md`: never change a field's
-//! type in place; when the layout changes, add a new envelope and keep the
-//! older structs so `deserialize_*` can fall back newest-first.
+//! There is exactly one on-wire layout per envelope — no V1/V2 legacy forms.
+//! Resources may be embedded inline (`bytes: Some`) or reference the remote
+//! pool (`bytes: None`). Field evolution is append-only; see the wire rules in
+//! `skills/clipboard-dev/references/data-contracts.md`.
 
 use crate::domain::ClipboardItem;
-
-// ---------------------------------------------------------------------------
-// Legacy envelopes (only used to decode data written by older versions).
-// ---------------------------------------------------------------------------
-
-/// Legacy baseline envelope written before inline resources shipped.
-/// Kept separate from the resource-carrying envelopes so older bincode files
-/// (items only) still decode via the V1 fallback path.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct BaselineV1 {
-    pub format_version: u32,
-    pub created_at_ms: i64,
-    pub device_id: String,
-    pub app_version: String,
-    pub items: Vec<ClipboardItem>,
-}
-
-/// Legacy baseline envelope carrying inline resource bytes alongside items.
-/// Superseded by `Baseline` (pool-aware); kept so files written after inline
-/// resources shipped (before pooling) still read.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct BaselineV2 {
-    pub format_version: u32,
-    pub created_at_ms: i64,
-    pub device_id: String,
-    pub app_version: String,
-    pub items: Vec<ClipboardItem>,
-    pub resources: Vec<LegacyResource>,
-}
-
-/// Legacy oplog envelope (entries only), written before inline resources.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct Oplog {
-    pub entries: Vec<crate::storage::SyncChangeLogEntry>,
-}
-
-/// Legacy oplog envelope carrying inline resource bytes.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct OplogV2 {
-    pub entries: Vec<crate::storage::SyncChangeLogEntry>,
-    pub resources: Vec<LegacyResource>,
-}
-
-/// A resource file carried inline with a payload (`bytes` always present).
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct LegacyResource {
-    pub rel_path: String,
-    pub bytes: Vec<u8>,
-}
-
-// ---------------------------------------------------------------------------
-// Current envelopes (resource bytes optional so pool references are possible).
-// ---------------------------------------------------------------------------
 
 /// Baseline envelope. Each resource may be embedded inline (`bytes: Some`) so a
 /// fresh device can materialize it without touching the remote pool, or
@@ -89,7 +36,7 @@ pub struct OplogResource {
 
 /// Oplog envelope carrying resource references alongside changelog entries.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct OplogV3 {
+pub struct Oplog {
     pub entries: Vec<crate::storage::SyncChangeLogEntry>,
     pub resources: Vec<OplogResource>,
 }
@@ -100,7 +47,7 @@ pub fn serialize_baseline_with_resources(
     device_id: &str,
 ) -> Result<Vec<u8>, String> {
     let baseline = Baseline {
-        format_version: 3,
+        format_version: 1,
         created_at_ms: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -122,30 +69,10 @@ pub fn serialize_baseline(items: &[ClipboardItem], device_id: &str) -> Result<Ve
 pub fn deserialize_baseline_with_resources(
     data: &[u8],
 ) -> Result<(Vec<ClipboardItem>, Vec<OplogResource>), String> {
-    // Try current (V3, resources may reference the pool) first, then fall back
-    // to V2 (inline-only resources) and finally the legacy items-only V1.
-    if let Ok((baseline, _)) =
-        bincode::decode_from_slice::<Baseline, _>(data, bincode::config::standard())
-    {
-        return Ok((baseline.items, baseline.resources));
-    }
-    if let Ok((baseline, _)) =
-        bincode::decode_from_slice::<BaselineV2, _>(data, bincode::config::standard())
-    {
-        let resources = baseline
-            .resources
-            .into_iter()
-            .map(|r| OplogResource {
-                rel_path: r.rel_path,
-                bytes: Some(r.bytes),
-            })
-            .collect();
-        return Ok((baseline.items, resources));
-    }
-    let (legacy, _): (BaselineV1, _) =
+    let (baseline, _): (Baseline, _) =
         bincode::decode_from_slice(data, bincode::config::standard())
             .map_err(|e| format!("failed to deserialize baseline: {e}"))?;
-    Ok((legacy.items, Vec::new()))
+    Ok((baseline.items, baseline.resources))
 }
 
 pub fn deserialize_baseline(data: &[u8]) -> Result<Vec<ClipboardItem>, String> {
@@ -208,7 +135,7 @@ pub fn serialize_oplog_with_resources(
     entries: &[crate::storage::SyncChangeLogEntry],
     resources: &[OplogResource],
 ) -> Result<Vec<u8>, String> {
-    let oplog = OplogV3 {
+    let oplog = Oplog {
         entries: entries.to_vec(),
         resources: resources.to_vec(),
     };
@@ -224,28 +151,9 @@ pub fn deserialize_oplog(data: &[u8]) -> Result<Vec<crate::storage::SyncChangeLo
 pub fn deserialize_oplog_with_resources(
     data: &[u8],
 ) -> Result<(Vec<crate::storage::SyncChangeLogEntry>, Vec<OplogResource>), String> {
-    // Try current (V3) first, then V2 (inline resources) and V1 (entries only).
-    if let Ok((oplog, _)) =
-        bincode::decode_from_slice::<OplogV3, _>(data, bincode::config::standard())
-    {
-        return Ok((oplog.entries, oplog.resources));
-    }
-    if let Ok((oplog, _)) =
-        bincode::decode_from_slice::<OplogV2, _>(data, bincode::config::standard())
-    {
-        let resources = oplog
-            .resources
-            .into_iter()
-            .map(|r| OplogResource {
-                rel_path: r.rel_path,
-                bytes: Some(r.bytes),
-            })
-            .collect();
-        return Ok((oplog.entries, resources));
-    }
     let (oplog, _): (Oplog, _) = bincode::decode_from_slice(data, bincode::config::standard())
         .map_err(|e| format!("failed to deserialize oplog: {e}"))?;
-    Ok((oplog.entries, Vec::new()))
+    Ok((oplog.entries, oplog.resources))
 }
 
 #[cfg(test)]
@@ -285,7 +193,9 @@ mod tests {
             rel_path: "image/abc.png".to_string(),
             bytes: Some(vec![0x89, 0x50, 0x4e, 0x47]),
         };
-        let data = serialize_oplog_with_resources(&[sample_entry()], &[resource.clone()]).unwrap();
+        let data =
+            serialize_oplog_with_resources(&[sample_entry()], std::slice::from_ref(&resource))
+                .unwrap();
         let (entries, resources) = deserialize_oplog_with_resources(&data).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].item_id, "img_abc");
@@ -302,7 +212,9 @@ mod tests {
             rel_path: "image/abc.png".to_string(),
             bytes: None,
         };
-        let data = serialize_oplog_with_resources(&[sample_entry()], &[resource.clone()]).unwrap();
+        let data =
+            serialize_oplog_with_resources(&[sample_entry()], std::slice::from_ref(&resource))
+                .unwrap();
         let (entries, resources) = deserialize_oplog_with_resources(&data).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(resources.len(), 1);
@@ -319,46 +231,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_v1_oplog_without_resources_decodes() {
-        // Simulate a file written before inline resources shipped: a V1 Oplog
-        // envelope (entries only) must still decode through the fallback path.
-        let legacy = Oplog {
-            entries: vec![sample_entry()],
-        };
-        let data = bincode::encode_to_vec(legacy, bincode::config::standard()).unwrap();
-        let (entries, resources) = deserialize_oplog_with_resources(&data).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].item_id, "img_abc");
-        assert!(resources.is_empty());
-    }
-
-    #[test]
-    fn legacy_v2_oplog_with_inline_resources_decodes() {
-        // Simulate a file written between inline resources and pooling: its
-        // resources carry `Vec<u8>` bytes, which must come back as `Some`.
-        let legacy = OplogV2 {
-            entries: vec![sample_entry()],
-            resources: vec![LegacyResource {
-                rel_path: "image/abc.png".to_string(),
-                bytes: vec![0x89, 0x50, 0x4e, 0x47],
-            }],
-        };
-        let data = bincode::encode_to_vec(legacy, bincode::config::standard()).unwrap();
-        let (entries, resources) = deserialize_oplog_with_resources(&data).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(resources.len(), 1);
-        assert_eq!(resources[0].rel_path, "image/abc.png");
-        assert_eq!(resources[0].bytes, Some(vec![0x89, 0x50, 0x4e, 0x47]));
-    }
-
-    #[test]
     fn baseline_with_resources_round_trips() {
         let resource = OplogResource {
             rel_path: "image/abc.png".to_string(),
             bytes: Some(vec![0x89, 0x50, 0x4e, 0x47]),
         };
         let items = vec![sample_item()];
-        let data = serialize_baseline_with_resources(&items, &[resource.clone()], "dev-a").unwrap();
+        let data =
+            serialize_baseline_with_resources(&items, std::slice::from_ref(&resource), "dev-a")
+                .unwrap();
         let (stored_items, stored_resources) = deserialize_baseline_with_resources(&data).unwrap();
         assert_eq!(stored_items.len(), 1);
         assert_eq!(stored_items[0].id, "img_abc");
@@ -374,51 +255,14 @@ mod tests {
             bytes: None,
         };
         let items = vec![sample_item()];
-        let data = serialize_baseline_with_resources(&items, &[resource.clone()], "dev-a").unwrap();
+        let data =
+            serialize_baseline_with_resources(&items, std::slice::from_ref(&resource), "dev-a")
+                .unwrap();
         let (stored_items, stored_resources) = deserialize_baseline_with_resources(&data).unwrap();
         assert_eq!(stored_items.len(), 1);
         assert_eq!(stored_resources.len(), 1);
         assert_eq!(stored_resources[0].rel_path, "file/a.pdf");
         assert!(stored_resources[0].bytes.is_none());
-    }
-
-    #[test]
-    fn legacy_v1_baseline_without_resources_decodes() {
-        // A V1 baseline envelope (items only) must still decode through the
-        // fallback path and yield no resources.
-        let legacy = BaselineV1 {
-            format_version: 1,
-            created_at_ms: 100,
-            device_id: "dev-a".to_string(),
-            app_version: "test".to_string(),
-            items: vec![sample_item()],
-        };
-        let data = bincode::encode_to_vec(legacy, bincode::config::standard()).unwrap();
-        let (items, resources) = deserialize_baseline_with_resources(&data).unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].id, "img_abc");
-        assert!(resources.is_empty());
-    }
-
-    #[test]
-    fn legacy_v2_baseline_with_inline_resources_decodes() {
-        let legacy = BaselineV2 {
-            format_version: 2,
-            created_at_ms: 100,
-            device_id: "dev-a".to_string(),
-            app_version: "test".to_string(),
-            items: vec![sample_item()],
-            resources: vec![LegacyResource {
-                rel_path: "image/abc.png".to_string(),
-                bytes: vec![0x89, 0x50, 0x4e, 0x47],
-            }],
-        };
-        let data = bincode::encode_to_vec(legacy, bincode::config::standard()).unwrap();
-        let (items, resources) = deserialize_baseline_with_resources(&data).unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(resources.len(), 1);
-        assert_eq!(resources[0].rel_path, "image/abc.png");
-        assert_eq!(resources[0].bytes, Some(vec![0x89, 0x50, 0x4e, 0x47]));
     }
 
     fn sample_item() -> ClipboardItem {
