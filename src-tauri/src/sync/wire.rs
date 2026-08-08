@@ -1,3 +1,6 @@
+//! Bincode v2 wire encoding for sync payloads (`Baseline`, `Oplog` envelopes).
+//! Despite its historical name, the on-wire format is bincode, not protobuf.
+
 use crate::domain::ClipboardItem;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]

@@ -415,7 +415,7 @@ fn sync_upload_webdav(
                     ) {
                         let data = decrypt_if_configured(data, settings)?;
                         if let Ok((mut old_entries, old_resources)) =
-                            crate::sync::proto::deserialize_oplog_with_resources(&data)
+                            crate::sync::wire::deserialize_oplog_with_resources(&data)
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
@@ -430,7 +430,7 @@ fn sync_upload_webdav(
         }
 
         let new_data =
-            crate::sync::proto::serialize_oplog_with_resources(&all_entries, &all_resources)?;
+            crate::sync::wire::serialize_oplog_with_resources(&all_entries, &all_resources)?;
         let new_data = encrypt_if_configured(new_data, settings)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_webdav(
@@ -482,8 +482,8 @@ fn sync_upload_webdav(
                 bytes_downloaded += data.len() as u64;
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
-                    Vec<crate::sync::proto::OplogResource>,
-                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data) {
+                    Vec<crate::sync::wire::OplogResource>,
+                ) = match crate::sync::wire::deserialize_oplog_with_resources(&data) {
                     Ok(e) => e,
                     Err(e) => {
                         println!("[sync] failed to parse {}: {}", entry.name, e);
@@ -651,7 +651,7 @@ fn sync_upload_s3(
                     ) {
                         let data = decrypt_if_configured(data, settings)?;
                         if let Ok((mut old_entries, old_resources)) =
-                            crate::sync::proto::deserialize_oplog_with_resources(&data)
+                            crate::sync::wire::deserialize_oplog_with_resources(&data)
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
@@ -666,7 +666,7 @@ fn sync_upload_s3(
         }
 
         let new_data =
-            crate::sync::proto::serialize_oplog_with_resources(&all_entries, &all_resources)?;
+            crate::sync::wire::serialize_oplog_with_resources(&all_entries, &all_resources)?;
         let new_data = encrypt_if_configured(new_data, settings)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_s3(
@@ -720,8 +720,8 @@ fn sync_upload_s3(
                 bytes_downloaded += data.len() as u64;
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
-                    Vec<crate::sync::proto::OplogResource>,
-                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data) {
+                    Vec<crate::sync::wire::OplogResource>,
+                ) = match crate::sync::wire::deserialize_oplog_with_resources(&data) {
                     Ok(e) => e,
                     Err(e) => {
                         println!("[sync] failed to parse {}: {}", entry.name, e);

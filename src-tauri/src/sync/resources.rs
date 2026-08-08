@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use super::proto::OplogResource;
+use super::wire::OplogResource;
 use crate::storage::{StoragePaths, SyncChangeLogEntry};
 
 /// Rewrites absolute resource paths on `entries` to portable wire form

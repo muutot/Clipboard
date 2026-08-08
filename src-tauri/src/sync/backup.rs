@@ -120,12 +120,12 @@ pub fn create_baseline_backup(
     zip.write_all(&manifest_json).map_err(|e| e.to_string())?;
 
     let opts: SimpleFileOptions = SimpleFileOptions::default();
-    zip.start_file("baseline.pb", opts)
+    zip.start_file("baseline.bin", opts)
         .map_err(|e| e.to_string())?;
-    let items_proto = crate::sync::proto::serialize_baseline(&items, &device_id)
+    let items_wire = crate::sync::wire::serialize_baseline(&items, &device_id)
         .map_err(|e| format!("failed to serialize baseline: {e}"))?;
     use std::io::Write;
-    zip.write_all(&items_proto).map_err(|e| e.to_string())?;
+    zip.write_all(&items_wire).map_err(|e| e.to_string())?;
 
     zip.finish().map_err(|e| e.to_string())?;
 
@@ -175,7 +175,7 @@ pub fn create_oplog_backup(
 
     let now_ms = now_ms();
 
-    let oplog_proto = crate::sync::proto::serialize_oplog(&entries)
+    let oplog_wire = crate::sync::wire::serialize_oplog(&entries)
         .map_err(|e| format!("failed to serialize oplog: {e}"))?;
 
     let manifest = BackupManifest {
@@ -192,7 +192,7 @@ pub fn create_oplog_backup(
         oplog_entries: entries.len() as u64,
     };
 
-    write_backup_archive_with_oplog(paths, &manifest, &oplog_proto, output_path)?;
+    write_backup_archive_with_oplog(paths, &manifest, &oplog_wire, output_path)?;
 
     Ok(manifest)
 }
@@ -230,10 +230,10 @@ fn write_backup_archive(
 fn write_backup_archive_with_oplog(
     paths: &StoragePaths,
     manifest: &BackupManifest,
-    oplog_proto: &[u8],
+    oplog_wire: &[u8],
     output_path: &Path,
 ) -> Result<(), String> {
-    write_backup_archive_internal(paths, manifest, Some(oplog_proto), output_path, false)
+    write_backup_archive_internal(paths, manifest, Some(oplog_wire), output_path, false)
 }
 
 fn write_backup_archive_internal(
@@ -266,7 +266,7 @@ fn write_backup_archive_internal(
 
     if let Some(oplog) = oplog_data {
         let opts: SimpleFileOptions = SimpleFileOptions::default();
-        zip.start_file("oplog.pb", opts)
+        zip.start_file("oplog.bin", opts)
             .map_err(|e| e.to_string())?;
         zip.write_all(oplog).map_err(|e| e.to_string())?;
     }
@@ -425,21 +425,21 @@ pub fn read_manifest_from_backup(backup_path: &Path) -> Result<BackupManifest, S
     serde_json::from_str(&json).map_err(|e| format!("invalid manifest: {e}"))
 }
 
-/// Reads baseline items from a downloaded baseline backup zip (protobuf format).
+/// Reads baseline items from a downloaded baseline backup zip (bincode format).
 pub fn read_baseline_items(
     backup_path: &Path,
 ) -> Result<Vec<crate::domain::ClipboardItem>, String> {
     let file = File::open(backup_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     let mut items_file = archive
-        .by_name("baseline.pb")
-        .map_err(|_| "baseline missing baseline.pb".to_string())?;
+        .by_name("baseline.bin")
+        .map_err(|_| "baseline missing baseline.bin".to_string())?;
     let mut data = Vec::new();
     use std::io::Read;
     items_file
         .read_to_end(&mut data)
         .map_err(|e| e.to_string())?;
-    crate::sync::proto::deserialize_baseline(&data)
+    crate::sync::wire::deserialize_baseline(&data)
 }
 
 // Re-export for backward compatibility
