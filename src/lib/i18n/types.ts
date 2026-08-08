@@ -889,8 +889,13 @@ export interface LocaleDefinition {
     presetApplied: string;
     presetUpdated: string;
     presetDeleted: string;
+    presetRenamed: string;
     noPresets: string;
     updatePreset: string;
+    darkPreset: string;
+    lightPreset: string;
+    addPreset: string;
+    renamePreset: string;
     bg: string;
     bgDescription: string;
     settingsBg: string;
