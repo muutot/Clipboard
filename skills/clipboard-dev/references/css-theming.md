@@ -46,28 +46,28 @@ Do not broadly restyle the main page as part of a settings task. Inspect it to b
 
 The current `ThemeColors` interface has 20 semantic values:
 
-| CSS variable          | ThemeColors key    | Purpose                           |
-| --------------------- | ------------------ | --------------------------------- |
-| `--bg-app`            | `bg`               | application/body background       |
-| `--bg-settings`       | `settingsBg`       | main/settings shell background    |
-| `--accent`            | `accent`           | product/focus accent              |
-| `--text-primary`      | `textPrimary`      | primary content                   |
-| `--text-secondary`    | `textSecondary`    | secondary content                 |
-| `--text-muted`        | `textMuted`        | descriptions/metadata             |
-| `--text-faint`        | `textFaint`        | lowest-emphasis text/icons        |
-| `--placeholder-color` | `placeholderColor` | placeholders                      |
-| `--border-color`      | `border`           | regular borders                   |
-| `--border-subtle`     | `borderSubtle`     | dividers/quiet borders            |
-| `--card-bg`           | `cardBg`           | card/elevated controls            |
-| `--surface-bg`        | `surfaceBg`        | popovers/panels                   |
-| `--statusbar-bg`      | `statusBarBg`      | footer/status bar                 |
-| `--hover-bg`          | `hoverBg`          | hover and quiet selected surfaces |
-| `--input-bg`          | `inputBg`          | inputs and inset surfaces         |
-| `--selection-color`   | `selectionColor`   | selection/current state           |
-| `--success-color`     | `successColor`     | successful state                  |
-| `--danger-color`      | `dangerColor`      | destructive/error state           |
-| `--warning-color`     | `warningColor`     | caution/favorite emphasis         |
-| `--scrollbar-color`   | `scrollbarColor`   | scroll thumb                      |
+| CSS variable          | ThemeColors key    | Purpose                                           |
+| --------------------- | ------------------ | ------------------------------------------------- |
+| `--bg-app`            | `bg`               | application/body and main-window shell background |
+| `--bg-settings`       | `settingsBg`       | settings window shell background                  |
+| `--accent`            | `accent`           | product/focus accent                              |
+| `--text-primary`      | `textPrimary`      | primary content                                   |
+| `--text-secondary`    | `textSecondary`    | secondary content                                 |
+| `--text-muted`        | `textMuted`        | descriptions/metadata                             |
+| `--text-faint`        | `textFaint`        | lowest-emphasis text/icons                        |
+| `--placeholder-color` | `placeholderColor` | placeholders                                      |
+| `--border-color`      | `border`           | regular borders                                   |
+| `--border-subtle`     | `borderSubtle`     | dividers/quiet borders                            |
+| `--card-bg`           | `cardBg`           | card/elevated controls                            |
+| `--surface-bg`        | `surfaceBg`        | popovers/panels                                   |
+| `--statusbar-bg`      | `statusBarBg`      | footer/status bar                                 |
+| `--hover-bg`          | `hoverBg`          | hover and quiet selected surfaces                 |
+| `--input-bg`          | `inputBg`          | inputs and inset surfaces                         |
+| `--selection-color`   | `selectionColor`   | selection/current state                           |
+| `--success-color`     | `successColor`     | successful state                                  |
+| `--danger-color`      | `dangerColor`      | destructive/error state                           |
+| `--warning-color`     | `warningColor`     | caution/favorite emphasis                         |
+| `--scrollbar-color`   | `scrollbarColor`   | scroll thumb                                      |
 
 Use these variables for reusable surfaces, text, borders, controls, and status states. Derive translucency with `color-mix` instead of inventing parallel shades.
 

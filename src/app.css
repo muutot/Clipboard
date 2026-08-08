@@ -90,7 +90,7 @@ html[data-window-effect="mica"] body {
 
 html[data-window-effect="acrylic"] .app-shell,
 html[data-window-effect="mica"] .app-shell {
-  background: color-mix(in srgb, var(--bg-settings) var(--window-opacity-glass, 42%), transparent);
+  background: color-mix(in srgb, var(--bg-app) var(--window-opacity-glass, 42%), transparent);
 }
 
 button,
