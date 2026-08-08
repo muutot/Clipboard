@@ -93,7 +93,7 @@ The sync payloads are **bincode v2**, which is a positionally-encoded format wit
 - **Append-only fields.** New fields must be added at the **end** of the struct and typed `Option<T>` (or carry a bincode default) so data written without them still decodes. Never insert or reorder fields in the middle; never change an existing field's type (`i64`→`u64`, `String`→`Vec<u8>` break decoding).
 - **Envelope versioning.** When the layout changes, define a new envelope struct (e.g. `OplogV3`), keep the previous versions' structs, and make `deserialize_oplog_with_resources` try versions newest-first (`V3` → `V2` → `V1`) exactly like the existing `V2`/`V1` fallback. `Baseline` additionally carries a `format_version: u32` field for branching.
 - **Coordinated upgrades.** Because bincode readers cannot skip unknown fields, a protocol change requires all syncing clients to upgrade together. There is no cross-version coexistence; if old + new clients must read the same remote data simultaneously, switch the wire format to protobuf (unknown-field skipping) instead of extending bincode.
-- **Do not trust `protos/clipboard.proto`.** That file is a stale, documentation-only sketch written in protobuf syntax; the runtime format is bincode and the file's field set can drift. Treat `src-tauri/src/sync/proto.rs` and the tests in it as authoritative.
+- **`protos/clipboard.proto` is documentation only.** It is a human-readable sketch in protobuf syntax; the runtime format is bincode (nothing reads the file). Keep its field order/types in sync with the Rust structs when they change, and treat `src-tauri/src/sync/proto.rs` and the tests in it as authoritative.
 
 ## Tauri command contract
 

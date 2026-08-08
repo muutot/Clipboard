@@ -1,3 +1,23 @@
+// Documentation-only schema for the Clipboard Desktop sync wire format.
+//
+// IMPORTANT: The actual on-wire encoding is bincode v2 (`bincode::Encode`/
+// `bincode::Decode` in `src-tauri/src/sync/proto.rs`), NOT protobuf. This file
+// is a human-readable sketch written in proto3 syntax so the field set stays
+// reviewable; nothing at runtime reads it. Treat `src-tauri/src/sync/proto.rs`
+// and the tests there as authoritative.
+//
+// Because bincode is a positional encoding (no field names or tags), the
+// declaration order and types below must exactly match the Rust structs:
+//   - `ClipboardItem`        -> `src-tauri/src/domain/clipboard_item.rs`
+//   - `SyncChangeLogEntry`   -> `src-tauri/src/storage/pool.rs`
+//   - `Baseline`/`Oplog`/`OplogResource`/`OplogV2` -> `src-tauri/src/sync/proto.rs`
+//   - `ClipboardKind`        -> `src-tauri/src/domain/clipboard_item.rs`
+// Field numbers 1..N are documentation tags only; they are not serialized.
+//
+// Evolution rules: append new fields at the end as `optional`, never reorder,
+// and introduce a new envelope version (e.g. `OplogV3`) with newest-first
+// decode fallback. All clients must upgrade together; bincode cannot skip
+// unknown fields. See data-contracts.md "Sync wire-format evolution rules".
 syntax = "proto3";
 package clipboard;
 
@@ -28,34 +48,34 @@ message ClipboardItem {
 }
 
 message Baseline {
-    uint32 format_version = 1;
+    uint32 format_version = 1;  // always 1 today; bump on layout change
     int64 created_at_ms = 2;
     string device_id = 3;
-    string app_version = 4;
+    string app_version = 4;     // CARGO_PKG_VERSION at write time
     repeated ClipboardItem items = 5;
 }
 
 message OplogEntry {
     int64 sequence = 1;
     string item_id = 2;
-    string operation = 3;
-    string kind = 4;
+    string operation = 3;   // insert / update / delete
+    string kind = 4;        // textual kind string (text/link/image/file)
     string title = 5;
     string content_hash = 6;
     optional string resource_path = 7;
     optional string preview_path = 8;
     optional string icon_path = 9;
-    int64 created_at_ms = 10;
-    int64 modified_at_ms = 11;
-    string device_id = 12;
-    optional string text_content = 13;
-    optional string html_content = 14;
-    optional string rtf_content = 15;
-    optional string metadata_json = 16;
-    bool is_favorite = 17;
-    optional string source_app = 18;
-    uint64 size_bytes = 19;
-    optional int64 last_used_at_ms = 20;
+    optional string text_content = 10;
+    optional string html_content = 11;
+    optional string rtf_content = 12;
+    optional string metadata_json = 13;
+    bool is_favorite = 14;
+    optional string source_app = 15;
+    int64 size_bytes = 16;
+    optional int64 last_used_at_ms = 17;
+    int64 created_at_ms = 18;
+    int64 modified_at_ms = 19;
+    string device_id = 20;  // source device
 }
 
 message OplogResource {
@@ -64,11 +84,17 @@ message OplogResource {
     bytes bytes = 2;
 }
 
+// Legacy envelope, entries only. Written before inline resources shipped;
+// kept solely so `deserialize_oplog_with_resources` can decode old files
+// (V1 fallback). New writers always emit OplogV2.
 message Oplog {
     repeated OplogEntry entries = 1;
-    // Inline resource bytes so receivers can materialize images/files/
-    // previews/icons regardless of their local storage layout. V2 envelope;
-    // writers produce entries+resources, readers fall back to the V1 layout
-    // (entries only) for files written before inline resources shipped.
+}
+
+// Current envelope: entries plus inline resource bytes so receivers can
+// materialize images/files/previews/icons regardless of their local storage
+// layout, then apply_remote_oplog.
+message OplogV2 {
+    repeated OplogEntry entries = 1;
     repeated OplogResource resources = 2;
 }
