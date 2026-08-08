@@ -103,7 +103,7 @@ export interface ThemeColors {
 }
 
 export const DARK_THEME_COLORS: ThemeColors = {
-  bg: "#111111",
+  bg: "#1b1b1b",
   settingsBg: "#1b1b1b",
   accent: "#2576f8",
   textPrimary: "#f5f5f5",
