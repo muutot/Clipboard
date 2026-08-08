@@ -768,7 +768,7 @@ mod tests {
         assert_eq!(entries[0].operation, "insert");
         assert_eq!(entries[0].text_content.as_deref(), Some("content-item"));
         assert_eq!(entries[0].title, "record-item");
-        assert_eq!(entries[0].is_favorite, false);
+        assert!(!entries[0].is_favorite);
 
         let _ = std::fs::remove_file(&db_path);
     }
