@@ -31,7 +31,7 @@
 | 13  | 两份 get_device_id 重复且回退值不一致（backup.rs:"unknown-device" vs mod.rs:"unknown"） | ✅ 完成                  | 见下方      |
 | 14  | 文件名 .json 后缀实际是 bincode，仅靠 fallback 兼容，语义混乱                           | ⏳ 待办                  | 见下方      |
 | 15  | 同步导入/应用后不广播 clipboard-history-invalidated，主界面可能不刷新                   | ✅ 完成                  | 见下方      |
-| 16  | 同步无并发锁，手动+未来自动同步并发时合并逻辑存在竞争                                   | ✅ 完成 | 见下方      |
+| 16  | 同步无并发锁，手动+未来自动同步并发时合并逻辑存在竞争                                   | ✅ 完成                  | 见下方      |
 
 ## #5 证据
 
