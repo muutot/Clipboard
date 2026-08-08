@@ -20,9 +20,13 @@ pub fn device_id() -> String {
 
 pub use backup::{
     count_unsynced, create_baseline_backup, create_oplog_backup, mark_oplog_synced, purge_oplog,
-    read_baseline_items, read_manifest_from_backup, BackupManifest, ResourceEntry,
+    read_baseline_items, read_baseline_with_resources, read_manifest_from_backup,
+    write_baseline_zip, BackupManifest, ResourceEntry,
 };
-pub use resources::{collect_entry_resources, materialize_resources, rewrite_to_local};
+pub use resources::{
+    collect_entry_resources, collect_item_resources, materialize_resources,
+    rewrite_item_paths_to_local, rewrite_to_local,
+};
 pub use s3::{
     delete_from_s3, download_from_s3, list_s3_objects, test_s3_connection, upload_to_s3, S3Entry,
     S3TestResult,
@@ -32,7 +36,8 @@ pub use webdav::{
     upload_to_webdav, WebDavEntry, WebDavTestResult,
 };
 pub use wire::{
-    deserialize_oplog, deserialize_oplog_with_resources, serialize_oplog,
+    deserialize_baseline_with_resources, deserialize_oplog, deserialize_oplog_with_resources,
+    merge_baselines, serialize_baseline_with_resources, serialize_oplog,
     serialize_oplog_with_resources, OplogResource,
 };
 

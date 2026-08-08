@@ -11,6 +11,140 @@ use crate::storage::{StoragePaths, SyncChangeLogEntry};
 /// Files that cannot be read (missing, unreadable) have their reference
 /// cleared so the receiver never gets a dangling path. Resources are deduped
 /// by wire path so a file shared by several entries is transferred once.
+pub fn collect_item_resources(
+    items: &[crate::domain::ClipboardItem],
+    paths: &StoragePaths,
+) -> (Vec<crate::domain::ClipboardItem>, Vec<OplogResource>) {
+    use crate::domain::ClipboardKind;
+
+    let mut seen = HashSet::new();
+    let mut resources: Vec<OplogResource> = Vec::new();
+
+    let items = items
+        .iter()
+        .cloned()
+        .map(|mut item| {
+            match item.kind {
+                ClipboardKind::Image => {
+                    if let Some(abs) = item.resource_path.take() {
+                        if let Some((wire, bytes)) = resource_bytes(&abs, paths) {
+                            if seen.insert(wire.clone()) {
+                                resources.push(OplogResource {
+                                    rel_path: wire.clone(),
+                                    bytes,
+                                });
+                            }
+                            item.resource_path = Some(wire);
+                        }
+                    }
+                    if let Some(abs) = item.preview_path.take() {
+                        if let Some((wire, bytes)) = resource_bytes(&abs, paths) {
+                            if seen.insert(wire.clone()) {
+                                resources.push(OplogResource {
+                                    rel_path: wire.clone(),
+                                    bytes,
+                                });
+                            }
+                            item.preview_path = Some(wire);
+                        }
+                    }
+                }
+                ClipboardKind::File => {
+                    if let Some(abs) = item.resource_path.take() {
+                        if let Some((wire, bytes)) = resource_bytes(&abs, paths) {
+                            if seen.insert(wire.clone()) {
+                                resources.push(OplogResource {
+                                    rel_path: wire.clone(),
+                                    bytes,
+                                });
+                            }
+                            item.resource_path = Some(wire);
+                        }
+                    }
+                    if let Some(json) = item.text_content.take() {
+                        if let Ok(stored_paths) = serde_json::from_str::<Vec<String>>(&json) {
+                            let mut wires = Vec::new();
+                            for abs in stored_paths {
+                                if let Some((wire, bytes)) = resource_bytes(&abs, paths) {
+                                    if seen.insert(wire.clone()) {
+                                        resources.push(OplogResource {
+                                            rel_path: wire.clone(),
+                                            bytes,
+                                        });
+                                    }
+                                    wires.push(wire);
+                                }
+                            }
+                            item.text_content = serde_json::to_string(&wires).ok();
+                        } else {
+                            item.text_content = Some(json);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            if let Some(icon) = item.icon_path.take() {
+                let wire = format!("icon/{}", icon.replace('\\', "/"));
+                let path = paths.storage.join("icons").join(&icon);
+                if let Ok(bytes) = std::fs::read(&path) {
+                    if seen.insert(wire.clone()) {
+                        resources.push(OplogResource {
+                            rel_path: wire.clone(),
+                            bytes,
+                        });
+                    }
+                }
+                item.icon_path = Some(wire);
+            }
+            item
+        })
+        .collect();
+
+    (items, resources)
+}
+
+/// Converts wire-form paths on `items` (from a downloaded baseline or merged
+/// payload) back to local absolute paths so they point at this device's
+/// storage. Fields that are not wire form are left untouched.
+pub fn rewrite_item_paths_to_local(
+    items: &mut [crate::domain::ClipboardItem],
+    paths: &StoragePaths,
+) {
+    use crate::domain::ClipboardKind;
+
+    for item in items {
+        match item.kind {
+            ClipboardKind::Image => {
+                if let Some(wire) = item.resource_path.take() {
+                    item.resource_path = wire_to_abs(&wire, paths).or(Some(wire));
+                }
+                if let Some(wire) = item.preview_path.take() {
+                    item.preview_path = wire_to_abs(&wire, paths).or(Some(wire));
+                }
+            }
+            ClipboardKind::File => {
+                if let Some(wire) = item.resource_path.take() {
+                    item.resource_path = wire_to_abs(&wire, paths).or(Some(wire));
+                }
+                if let Some(json) = item.text_content.take() {
+                    if let Ok(wires) = serde_json::from_str::<Vec<String>>(&json) {
+                        let abs = wires
+                            .into_iter()
+                            .map(|wire| wire_to_abs(&wire, paths).unwrap_or(wire))
+                            .collect::<Vec<_>>();
+                        item.text_content = serde_json::to_string(&abs).ok();
+                    } else {
+                        item.text_content = Some(json);
+                    }
+                }
+            }
+            _ => {}
+        }
+        if let Some(wire) = item.icon_path.take() {
+            item.icon_path = wire_to_icon(&wire).or(Some(wire));
+        }
+    }
+}
 pub fn collect_entry_resources(
     entries: Vec<SyncChangeLogEntry>,
     paths: &StoragePaths,

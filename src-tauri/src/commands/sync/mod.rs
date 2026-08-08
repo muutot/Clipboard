@@ -339,27 +339,75 @@ fn sync_upload_webdav(
         settings.password.as_deref(),
     )?;
 
-    let remote_baseline = remote_files
+    let remote_baselines: Vec<_> = remote_files
         .iter()
-        .find(|e| !e.is_directory && e.name.starts_with("baseline-") && e.name.ends_with(".zip"));
+        .filter(|e| !e.is_directory && e.name.starts_with("baseline-") && e.name.ends_with(".zip"))
+        .collect();
 
-    if let Some(baseline) = remote_baseline {
+    if !remote_baselines.is_empty() {
         if !has_prior_sync {
-            println!("[sync] downloading remote baseline: {}", baseline.name);
-            let data = sync::download_from_webdav(
-                endpoint,
-                remote_path,
-                &baseline.name,
-                settings.username.as_deref(),
-                settings.password.as_deref(),
-            )?;
-            let data = decrypt_if_configured(data, settings)?;
-            bytes_downloaded += data.len() as u64;
-            let baseline_path = temp_dir.join(&baseline.name);
-            std::fs::write(&baseline_path, &data).map_err(|e| e.to_string())?;
-            let items = sync::read_baseline_items(&baseline_path)?;
+            // First sync: remote baselines may be several disjoint full
+            // snapshots produced by concurrent first syncs of separate devices
+            // (no common root, like unrelated histories). Import every one,
+            // merged into a superset, so no device's data is dropped.
+            let mut merged_payloads: Vec<Vec<u8>> = Vec::new();
+            for baseline in &remote_baselines {
+                println!("[sync] downloading remote baseline: {}", baseline.name);
+                let data = sync::download_from_webdav(
+                    endpoint,
+                    remote_path,
+                    &baseline.name,
+                    settings.username.as_deref(),
+                    settings.password.as_deref(),
+                )?;
+                let data = decrypt_if_configured(data, settings)?;
+                bytes_downloaded += data.len() as u64;
+                merged_payloads.push(data);
+            }
+            let (mut merged_items, merged_resources) = sync::merge_baselines(&merged_payloads)?;
+
+            // Self-heal: collapse the redundant disjoint baselines into one
+            // superset baseline so the remote converges back to a single source
+            // of truth. Done before import so the local copies stay valid.
+            if remote_baselines.len() > 1 {
+                let filename = format!("baseline-{device_id}-{timestamp}.zip");
+                let merged_path = temp_dir.join(&filename);
+                sync::write_baseline_zip(
+                    &merged_path,
+                    &merged_items,
+                    &merged_resources,
+                    device_id,
+                )?;
+                let data = std::fs::read(&merged_path).map_err(|e| e.to_string())?;
+                let data = encrypt_if_configured(data, settings)?;
+                bytes_uploaded += data.len() as u64;
+                sync::upload_to_webdav(
+                    endpoint,
+                    remote_path,
+                    &filename,
+                    data,
+                    settings.username.as_deref(),
+                    settings.password.as_deref(),
+                )?;
+                for baseline in &remote_baselines {
+                    let _ = sync::delete_from_webdav(
+                        endpoint,
+                        remote_path,
+                        &baseline.name,
+                        settings.username.as_deref(),
+                        settings.password.as_deref(),
+                    );
+                }
+                println!(
+                    "[sync] consolidated {} baselines into one",
+                    remote_baselines.len()
+                );
+            }
+
+            sync::materialize_resources(&merged_resources, paths)?;
+            sync::rewrite_item_paths_to_local(&mut merged_items, paths);
             let imported = database
-                .import_baseline_items(&items)
+                .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
             println!("[sync] baseline imported: {} items", imported);
             applied_remote = true;
@@ -368,7 +416,7 @@ fn sync_upload_webdav(
         println!("[sync] no remote baseline found, uploading local baseline");
         let filename = format!("baseline-{device_id}-{timestamp}.zip");
         let baseline_path = temp_dir.join(&filename);
-        let manifest = sync::create_baseline_backup(database, &baseline_path)?;
+        let manifest = sync::create_baseline_backup(database, paths, &baseline_path)?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
         let data = encrypt_if_configured(data, settings)?;
         bytes_uploaded += data.len() as u64;
@@ -572,28 +620,78 @@ fn sync_upload_s3(
     let remote_objects =
         sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?;
 
-    let remote_baseline = remote_objects
+    let remote_baselines: Vec<_> = remote_objects
         .iter()
-        .find(|e| !e.is_directory && e.name.starts_with("baseline-") && e.name.ends_with(".zip"));
+        .filter(|e| !e.is_directory && e.name.starts_with("baseline-") && e.name.ends_with(".zip"))
+        .collect();
 
-    if let Some(baseline) = remote_baseline {
+    if !remote_baselines.is_empty() {
         if !has_prior_sync {
-            println!("[sync] downloading S3 baseline: {}", baseline.name);
-            let data = sync::download_from_s3(
-                endpoint,
-                &region,
-                &bucket,
-                &s3_object_key(remote_path, &baseline.name),
-                &access_key,
-                &secret_key,
-            )?;
-            let data = decrypt_if_configured(data, settings)?;
-            bytes_downloaded += data.len() as u64;
-            let baseline_path = temp_dir.join(&baseline.name);
-            std::fs::write(&baseline_path, &data).map_err(|e| e.to_string())?;
-            let items = sync::read_baseline_items(&baseline_path)?;
+            // First sync: remote baselines may be several disjoint full
+            // snapshots produced by concurrent first syncs of separate devices
+            // (no common root, like unrelated histories). Import every one,
+            // merged into a superset, so no device's data is dropped.
+            let mut merged_payloads: Vec<Vec<u8>> = Vec::new();
+            for baseline in &remote_baselines {
+                println!("[sync] downloading S3 baseline: {}", baseline.name);
+                let data = sync::download_from_s3(
+                    endpoint,
+                    &region,
+                    &bucket,
+                    &s3_object_key(remote_path, &baseline.name),
+                    &access_key,
+                    &secret_key,
+                )?;
+                let data = decrypt_if_configured(data, settings)?;
+                bytes_downloaded += data.len() as u64;
+                merged_payloads.push(data);
+            }
+            let (mut merged_items, merged_resources) = sync::merge_baselines(&merged_payloads)?;
+
+            // Self-heal: collapse the redundant disjoint baselines into one
+            // superset baseline so the remote converges back to a single source
+            // of truth.
+            if remote_baselines.len() > 1 {
+                let filename = format!("baseline-{device_id}-{timestamp}.zip");
+                let merged_path = temp_dir.join(&filename);
+                sync::write_baseline_zip(
+                    &merged_path,
+                    &merged_items,
+                    &merged_resources,
+                    device_id,
+                )?;
+                let data = std::fs::read(&merged_path).map_err(|e| e.to_string())?;
+                let data = encrypt_if_configured(data, settings)?;
+                bytes_uploaded += data.len() as u64;
+                sync::upload_to_s3(
+                    endpoint,
+                    &region,
+                    &bucket,
+                    &s3_object_key(remote_path, &filename),
+                    data,
+                    &access_key,
+                    &secret_key,
+                )?;
+                for baseline in &remote_baselines {
+                    let _ = sync::delete_from_s3(
+                        endpoint,
+                        &region,
+                        &bucket,
+                        &s3_object_key(remote_path, &baseline.name),
+                        &access_key,
+                        &secret_key,
+                    );
+                }
+                println!(
+                    "[sync] consolidated {} baselines into one",
+                    remote_baselines.len()
+                );
+            }
+
+            sync::materialize_resources(&merged_resources, paths)?;
+            sync::rewrite_item_paths_to_local(&mut merged_items, paths);
             let imported = database
-                .import_baseline_items(&items)
+                .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
             println!("[sync] baseline imported: {} items", imported);
             applied_remote = true;
@@ -602,7 +700,7 @@ fn sync_upload_s3(
         println!("[sync] no remote baseline found, uploading local baseline to S3");
         let filename = format!("baseline-{device_id}-{timestamp}.zip");
         let baseline_path = temp_dir.join(&filename);
-        let manifest = sync::create_baseline_backup(database, &baseline_path)?;
+        let manifest = sync::create_baseline_backup(database, paths, &baseline_path)?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
         let data = encrypt_if_configured(data, settings)?;
         bytes_uploaded += data.len() as u64;

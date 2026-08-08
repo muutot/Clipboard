@@ -80,8 +80,12 @@ pub fn create_backup(
 /// This is the "anchor" for a new oplog chain. It's much smaller than a full
 /// backup because it doesn't include any images/files — those come through
 /// oplog entries as they're created.
+/// Creates a full baseline package containing every active item serialized in
+/// bincode (with inline resources so the package is self-sufficient on a new
+/// device) plus a JSON manifest.
 pub fn create_baseline_backup(
     database: &Database,
+    paths: &StoragePaths,
     output_path: &Path,
 ) -> Result<BackupManifest, String> {
     database.checkpoint().map_err(|e| e.to_string())?;
@@ -89,7 +93,7 @@ pub fn create_baseline_backup(
     let items = database
         .export_active_items()
         .map_err(|e| format!("failed to export items: {e}"))?;
-
+    let (items, resources) = crate::sync::resources::collect_item_resources(&items, paths);
     let now_ms = now_ms();
     let device_id = crate::sync::device_id();
 
@@ -101,8 +105,8 @@ pub fn create_baseline_backup(
         device_id: device_id.clone(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count: items.len(),
-        resource_count: 0,
-        total_resource_bytes: 0,
+        resource_count: resources.len(),
+        total_resource_bytes: resources.iter().map(|r| r.bytes.len() as u64).sum(),
         resources: Vec::new(),
         oplog_entries: 0,
     };
@@ -122,8 +126,58 @@ pub fn create_baseline_backup(
     let opts: SimpleFileOptions = SimpleFileOptions::default();
     zip.start_file("baseline.bin", opts)
         .map_err(|e| e.to_string())?;
-    let items_wire = crate::sync::wire::serialize_baseline(&items, &device_id)
-        .map_err(|e| format!("failed to serialize baseline: {e}"))?;
+    let items_wire =
+        crate::sync::wire::serialize_baseline_with_resources(&items, &resources, &device_id)
+            .map_err(|e| format!("failed to serialize baseline: {e}"))?;
+    use std::io::Write;
+    zip.write_all(&items_wire).map_err(|e| e.to_string())?;
+
+    zip.finish().map_err(|e| e.to_string())?;
+
+    Ok(manifest)
+}
+
+/// Writes a baseline zip from already-serialized (wire-form) items and inline
+/// resources. Used when consolidating multiple remote baselines into one.
+pub fn write_baseline_zip(
+    output_path: &Path,
+    items: &[crate::domain::ClipboardItem],
+    resources: &[crate::sync::wire::OplogResource],
+    device_id: &str,
+) -> Result<BackupManifest, String> {
+    let now_ms = now_ms();
+    let manifest = BackupManifest {
+        format_version: SUPPORTED_FORMAT_VERSION,
+        backup_type: "baseline".to_string(),
+        created_at_ms: now_ms,
+        base_sync_ms: None,
+        device_id: device_id.to_string(),
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        item_count: items.len(),
+        resource_count: resources.len(),
+        total_resource_bytes: resources.iter().map(|r| r.bytes.len() as u64).sum(),
+        resources: Vec::new(),
+        oplog_entries: 0,
+    };
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let file = File::create(output_path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(file);
+
+    let opts: SimpleFileOptions = SimpleFileOptions::default();
+    zip.start_file("manifest.json", opts)
+        .map_err(|e| e.to_string())?;
+    let manifest_json = serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?;
+    zip.write_all(&manifest_json).map_err(|e| e.to_string())?;
+
+    let opts: SimpleFileOptions = SimpleFileOptions::default();
+    zip.start_file("baseline.bin", opts)
+        .map_err(|e| e.to_string())?;
+    let items_wire =
+        crate::sync::wire::serialize_baseline_with_resources(items, resources, device_id)
+            .map_err(|e| format!("failed to serialize baseline: {e}"))?;
     use std::io::Write;
     zip.write_all(&items_wire).map_err(|e| e.to_string())?;
 
@@ -425,10 +479,17 @@ pub fn read_manifest_from_backup(backup_path: &Path) -> Result<BackupManifest, S
     serde_json::from_str(&json).map_err(|e| format!("invalid manifest: {e}"))
 }
 
-/// Reads baseline items from a downloaded baseline backup zip (bincode format).
-pub fn read_baseline_items(
+/// Reads baseline items and embedded resources from a downloaded baseline
+/// backup zip (bincode format).
+pub fn read_baseline_with_resources(
     backup_path: &Path,
-) -> Result<Vec<crate::domain::ClipboardItem>, String> {
+) -> Result<
+    (
+        Vec<crate::domain::ClipboardItem>,
+        Vec<crate::sync::wire::OplogResource>,
+    ),
+    String,
+> {
     let file = File::open(backup_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     let mut items_file = archive
@@ -439,7 +500,14 @@ pub fn read_baseline_items(
     items_file
         .read_to_end(&mut data)
         .map_err(|e| e.to_string())?;
-    crate::sync::wire::deserialize_baseline(&data)
+    crate::sync::wire::deserialize_baseline_with_resources(&data)
+}
+
+/// Reads baseline items from a downloaded baseline backup zip (bincode format).
+pub fn read_baseline_items(
+    backup_path: &Path,
+) -> Result<Vec<crate::domain::ClipboardItem>, String> {
+    read_baseline_with_resources(backup_path).map(|(items, _)| items)
 }
 
 // Re-export for backward compatibility
