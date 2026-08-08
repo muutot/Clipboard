@@ -7,7 +7,6 @@ use crate::config::{ConfigStore, SyncConfig};
 use crate::storage::Database;
 use crate::storage::StoragePaths;
 use crate::sync;
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConfigInfo {
@@ -305,7 +304,8 @@ fn sync_upload_webdav(
         filter_entries_by_resource_size(local_entries, max_image_bytes, max_file_bytes, paths);
 
     let uploaded_entries = if !local_entries.is_empty() {
-        let mut all_entries = local_entries;
+        let (mut all_entries, mut all_resources) =
+            sync::collect_entry_resources(local_entries, paths);
         let mut filename = format!("oplog-{device_id}-{timestamp}.json");
 
         if let Some(existing) = remote_files.iter().find(|e| {
@@ -324,17 +324,21 @@ fn sync_upload_webdav(
                         guard.sync_config().password.as_deref(),
                     ) {
                         let data = decrypt_if_configured(data, guard)?;
-                        if let Ok(mut old_entries) = crate::sync::proto::deserialize_oplog(&data)
-                            .or_else(|_| {
-                                serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                                    &String::from_utf8_lossy(&data),
-                                )
-                            })
+                        if let Ok((mut old_entries, old_resources)) =
+                            crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
+                                |_| {
+                                    serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
+                                        &String::from_utf8_lossy(&data),
+                                    )
+                                    .map(|entries| (entries, Vec::new()))
+                                },
+                            )
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
                                 old_entries.append(&mut all_entries);
                                 all_entries = old_entries;
+                                all_resources.extend(old_resources);
                             }
                         }
                     }
@@ -342,7 +346,8 @@ fn sync_upload_webdav(
             }
         }
 
-        let new_data = crate::sync::proto::serialize_oplog(&all_entries)?;
+        let new_data =
+            crate::sync::proto::serialize_oplog_with_resources(&all_entries, &all_resources)?;
         let new_data = encrypt_if_configured(new_data, guard)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_webdav(
@@ -382,16 +387,28 @@ fn sync_upload_webdav(
             Ok(data) => {
                 let data = decrypt_if_configured(data, guard)?;
                 bytes_downloaded += data.len() as u64;
-                let remote_entries: Vec<crate::storage::SyncChangeLogEntry> =
-                    match crate::sync::proto::deserialize_oplog(&data)
-                        .or_else(|_| serde_json::from_str(&String::from_utf8_lossy(&data)))
-                    {
-                        Ok(e) => e,
-                        Err(e) => {
-                            println!("[sync] failed to parse {}: {}", entry.name, e);
-                            continue;
-                        }
-                    };
+                let (mut remote_entries, resources): (
+                    Vec<crate::storage::SyncChangeLogEntry>,
+                    Vec<crate::sync::proto::OplogResource>,
+                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
+                    |_| {
+                        serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
+                            &String::from_utf8_lossy(&data),
+                        )
+                        .map(|entries| (entries, Vec::new()))
+                    },
+                ) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        println!("[sync] failed to parse {}: {}", entry.name, e);
+                        continue;
+                    }
+                };
+                if let Err(e) = sync::materialize_resources(&resources, paths) {
+                    println!("[sync] failed to materialize {}: {}", entry.name, e);
+                    continue;
+                }
+                sync::rewrite_to_local(&mut remote_entries, paths);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => applied_entries += applied,
@@ -510,7 +527,8 @@ fn sync_upload_s3(
         filter_entries_by_resource_size(local_entries, max_image_bytes, max_file_bytes, paths);
 
     let uploaded_entries = if !local_entries.is_empty() {
-        let mut all_entries = local_entries;
+        let (mut all_entries, mut all_resources) =
+            sync::collect_entry_resources(local_entries, paths);
         let mut filename = format!("oplog-{device_id}-{timestamp}.json");
 
         if let Some(existing) = remote_objects.iter().find(|e| {
@@ -530,17 +548,21 @@ fn sync_upload_s3(
                         &secret_key,
                     ) {
                         let data = decrypt_if_configured(data, guard)?;
-                        if let Ok(mut old_entries) = crate::sync::proto::deserialize_oplog(&data)
-                            .or_else(|_| {
-                                serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                                    &String::from_utf8_lossy(&data),
-                                )
-                            })
+                        if let Ok((mut old_entries, old_resources)) =
+                            crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
+                                |_| {
+                                    serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
+                                        &String::from_utf8_lossy(&data),
+                                    )
+                                    .map(|entries| (entries, Vec::new()))
+                                },
+                            )
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
                                 old_entries.append(&mut all_entries);
                                 all_entries = old_entries;
+                                all_resources.extend(old_resources);
                             }
                         }
                     }
@@ -548,7 +570,8 @@ fn sync_upload_s3(
             }
         }
 
-        let new_data = crate::sync::proto::serialize_oplog(&all_entries)?;
+        let new_data =
+            crate::sync::proto::serialize_oplog_with_resources(&all_entries, &all_resources)?;
         let new_data = encrypt_if_configured(new_data, guard)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_s3(
@@ -590,16 +613,28 @@ fn sync_upload_s3(
             Ok(data) => {
                 let data = decrypt_if_configured(data, guard)?;
                 bytes_downloaded += data.len() as u64;
-                let remote_entries: Vec<crate::storage::SyncChangeLogEntry> =
-                    match crate::sync::proto::deserialize_oplog(&data)
-                        .or_else(|_| serde_json::from_str(&String::from_utf8_lossy(&data)))
-                    {
-                        Ok(e) => e,
-                        Err(e) => {
-                            println!("[sync] failed to parse {}: {}", entry.name, e);
-                            continue;
-                        }
-                    };
+                let (mut remote_entries, resources): (
+                    Vec<crate::storage::SyncChangeLogEntry>,
+                    Vec<crate::sync::proto::OplogResource>,
+                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
+                    |_| {
+                        serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
+                            &String::from_utf8_lossy(&data),
+                        )
+                        .map(|entries| (entries, Vec::new()))
+                    },
+                ) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        println!("[sync] failed to parse {}: {}", entry.name, e);
+                        continue;
+                    }
+                };
+                if let Err(e) = sync::materialize_resources(&resources, paths) {
+                    println!("[sync] failed to materialize {}: {}", entry.name, e);
+                    continue;
+                }
+                sync::rewrite_to_local(&mut remote_entries, paths);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => applied_entries += applied,

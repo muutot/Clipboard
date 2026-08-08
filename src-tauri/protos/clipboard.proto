@@ -58,6 +58,17 @@ message OplogEntry {
     optional int64 last_used_at_ms = 20;
 }
 
+message OplogResource {
+    // Portable `category/relative` path (image/, file/, preview/, icon/).
+    string rel_path = 1;
+    bytes bytes = 2;
+}
+
 message Oplog {
     repeated OplogEntry entries = 1;
+    // Inline resource bytes so receivers can materialize images/files/
+    // previews/icons regardless of their local storage layout. V2 envelope;
+    // writers produce entries+resources, readers fall back to the V1 layout
+    // (entries only) for files written before inline resources shipped.
+    repeated OplogResource resources = 2;
 }
