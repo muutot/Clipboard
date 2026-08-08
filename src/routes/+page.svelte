@@ -772,7 +772,7 @@
         selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
         if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
         if (detailItem && removedIds.has(detailItem.id)) detailItem = null;
-        if (removedIds.size > 0) invalidateActiveHistoryPagination();
+        invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
       },
     );
