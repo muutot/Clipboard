@@ -434,6 +434,11 @@ fn sync_upload_webdav(
 
     let mut downloaded_entries: u64 = 0;
     let mut applied_entries: u64 = 0;
+    let watermark = database
+        .get_sync_applied_oplog_watermark()
+        .map_err(|e| e.to_string())?
+        .unwrap_or(0);
+    let mut max_applied_mtime = watermark;
 
     for entry in &remote_files {
         if entry.is_directory || !entry.name.starts_with("oplog-") || !entry.name.ends_with(".json")
@@ -442,6 +447,11 @@ fn sync_upload_webdav(
         }
         if entry.name.contains(device_id) {
             continue;
+        }
+        if let Some(mtime) = entry.modified_ms {
+            if mtime <= watermark {
+                continue;
+            }
         }
         match sync::download_from_webdav(
             endpoint,
@@ -481,6 +491,9 @@ fn sync_upload_webdav(
                         applied_entries += applied;
                         if applied > 0 {
                             applied_remote = true;
+                            if let Some(mtime) = entry.modified_ms {
+                                max_applied_mtime = max_applied_mtime.max(mtime);
+                            }
                         }
                     }
                     Err(e) => println!("[sync] apply error: {}", e),
@@ -488,6 +501,10 @@ fn sync_upload_webdav(
             }
             Err(e) => println!("[sync] download error for {}: {}", entry.name, e),
         }
+    }
+
+    if max_applied_mtime > watermark {
+        let _ = database.set_sync_applied_oplog_watermark(max_applied_mtime);
     }
 
     let max_files = settings.max_remote_oplog_files;
@@ -670,6 +687,11 @@ fn sync_upload_s3(
 
     let mut downloaded_entries: u64 = 0;
     let mut applied_entries: u64 = 0;
+    let watermark = database
+        .get_sync_applied_oplog_watermark()
+        .map_err(|e| e.to_string())?
+        .unwrap_or(0);
+    let mut max_applied_mtime = watermark;
 
     for entry in &remote_objects {
         if entry.is_directory || !entry.name.starts_with("oplog-") || !entry.name.ends_with(".json")
@@ -678,6 +700,11 @@ fn sync_upload_s3(
         }
         if entry.name.contains(device_id) {
             continue;
+        }
+        if let Some(mtime) = entry.modified_ms {
+            if mtime <= watermark {
+                continue;
+            }
         }
         match sync::download_from_s3(
             endpoint,
@@ -718,6 +745,9 @@ fn sync_upload_s3(
                         applied_entries += applied;
                         if applied > 0 {
                             applied_remote = true;
+                            if let Some(mtime) = entry.modified_ms {
+                                max_applied_mtime = max_applied_mtime.max(mtime);
+                            }
                         }
                     }
                     Err(e) => println!("[sync] apply error: {}", e),
@@ -725,6 +755,10 @@ fn sync_upload_s3(
             }
             Err(e) => println!("[sync] download error for {}: {}", entry.name, e),
         }
+    }
+
+    if max_applied_mtime > watermark {
+        let _ = database.set_sync_applied_oplog_watermark(max_applied_mtime);
     }
 
     let max_files = settings.max_remote_oplog_files;

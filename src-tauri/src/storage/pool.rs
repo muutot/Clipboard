@@ -1,3 +1,5 @@
+use rusqlite::OptionalExtension;
+
 use super::{Database, StorageError, StorageFileReferences};
 use crate::domain::ClipboardItem;
 
@@ -218,6 +220,34 @@ impl Database {
                 |row| row.get(0),
             )?;
             Ok(id)
+        })
+    }
+
+    /// Highest `modified_ms` among remote oplog files already applied. Files
+    /// whose mtime is strictly lower than this watermark are skipped on the next
+    /// sync, so previously-applied oplogs are not downloaded/parsed again.
+    pub fn get_sync_applied_oplog_watermark(&self) -> Result<Option<i64>, StorageError> {
+        self.with_connection(|connection| {
+            let value: Option<String> = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'sync_applied_oplog_watermark_ms'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            Ok(value.and_then(|v| v.parse::<i64>().ok()))
+        })
+    }
+
+    /// Persists the applied-remote-oplog watermark.
+    pub fn set_sync_applied_oplog_watermark(&self, modified_ms: i64) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('sync_applied_oplog_watermark_ms', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = ?1",
+                [modified_ms.to_string()],
+            )?;
+            Ok(())
         })
     }
 
@@ -779,5 +809,21 @@ mod tests {
 
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn sync_applied_oplog_watermark_round_trip() {
+        let db_path = temporary_path("oplog-watermark");
+        let db = Database::open(&db_path).unwrap();
+
+        assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), None);
+
+        db.set_sync_applied_oplog_watermark(123456).unwrap();
+        assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), Some(123456));
+
+        db.set_sync_applied_oplog_watermark(654321).unwrap();
+        assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), Some(654321));
+
+        let _ = std::fs::remove_file(&db_path);
     }
 }

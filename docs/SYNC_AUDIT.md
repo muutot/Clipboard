@@ -18,7 +18,7 @@
 | #   | 问题                                                                                               | 状态    | 证据 / 提交 |
 | --- | -------------------------------------------------------------------------------------------------- | ------- | ----------- |
 | 7   | auto_sync 是完全的死配置：有 UI 开关和 store 方法，但没有后台 worker/timer 调用 sync_upload_backup | ⏳ 待办 | 见下方      |
-| 8   | 每次同步全量重放远端所有其他设备的 oplog，无已应用水位线，带宽/CPU 膨胀                            | ⏳ 待办 | 见下方      |
+| 8   | 每次同步全量重放远端所有其他设备的 oplog，无已应用水位线，带宽/CPU 膨胀                            | ✅ 完成 | 见下方      |
 | 9   | cleanup 只删其他设备的文件，本设备多轮 rollover 的旧 oplog 永不清理，远端无限增长                  | ✅ 完成 | 见下方      |
 | 10  | ConfigStore 锁贯穿整个网络同步，命令是阻塞同步调用，慢网络阻塞其他配置访问                         | ✅ 完成 | 见下方      |
 | 11  | 解密失败静默回退原始字节，改密码后旧文件按密文解析失败被跳过，无明确报错                           | ✅ 完成 | 见下方      |
@@ -54,6 +54,11 @@
 - `src-tauri/src/commands/sync/mod.rs:176`：`sync_upload_backup` 仅作为 `#[tauri::command]` 注册（lib.rs:632），没有后台 worker 周期性调用它。
 - UI 开关：`StorageSettingsDialog.svelte:3439`。
 - 全库搜索无任何 worker 调 `sync_upload_backup`。
+
+## #8 证据
+
+- 每个同步周期，webdav 与 s3 的下载循环（`sync_upload_webdav`/`sync_upload_s3`）都无差别下载、解密、解析远端所有其他设备的 oplog 文件，即使内容早已在上一轮应用过；随远端 oplog 数量线性增长，带宽/CPU 膨胀。
+- ✅ 修复：`sync_metadata` 新增键 `sync_applied_oplog_watermark_ms`，`Database::get/set_sync_applied_oplog_watermark`（pool.rs:229/243）持久化「已成功应用远端 oplog 的最大 `modified_ms`」；两个下载循环开头读水位线，`entry.modified_ms <= watermark` 的文件直接跳过（无 mtime 的文件不跳过，保守处理），每成功应用一个文件用其 mtime 滚动 `max_applied_mtime`，循环结束后写回。新增回环单测。
 
 ## #9 证据
 
