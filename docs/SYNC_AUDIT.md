@@ -20,7 +20,7 @@
 | 7   | auto_sync 是完全的死配置：有 UI 开关和 store 方法，但没有后台 worker/timer 调用 sync_upload_backup | ⏳ 待办 | 见下方      |
 | 8   | 每次同步全量重放远端所有其他设备的 oplog，无已应用水位线，带宽/CPU 膨胀                            | ⏳ 待办 | 见下方      |
 | 9   | cleanup 只删其他设备的文件，本设备多轮 rollover 的旧 oplog 永不清理，远端无限增长                  | ⏳ 待办 | 见下方      |
-| 10  | ConfigStore 锁贯穿整个网络同步，命令是阻塞同步调用，慢网络阻塞其他配置访问                         | ⏳ 待办 | 见下方      |
+| 10  | ConfigStore 锁贯穿整个网络同步，命令是阻塞同步调用，慢网络阻塞其他配置访问                         | ✅ 完成 | 见下方      |
 | 11  | 解密失败静默回退原始字节，改密码后旧文件按密文解析失败被跳过，无明确报错                           | ✅ 完成 | 见下方      |
 
 ## 低 / 优化
@@ -63,6 +63,7 @@
 
 - `src-tauri/src/commands/sync/mod.rs:181-183`：`config.lock()` 在 `sync_upload_backup` 开头取得，贯穿整个 `sync_upload_webdav`/`sync_upload_s3` 的网络 I/O，直到末尾（line 224-226 还写 status）才释放。
 - 违背 `backend-architecture.md` 的锁纪律：配置锁应只覆盖读取配置的短临界区。
+- ✅ 修复：新增 `SyncSettings` 快照结构（`sync_upload_backup`/`sync_list_remote_backups`/`sync_download_backup` 在锁内一次性采集全部同步相关配置后即释放锁）；`sync_upload_webdav`/`sync_upload_s3`/`encrypt_if_configured`/`decrypt_if_configured`/`resolve_s3_config` 改为读快照，不再持有锁；仅在成功后重新取锁写 `update_sync_status`。删除不再使用的 `max_remote_oplog_files(config)`。
 
 ## #11 证据
 

@@ -37,6 +37,52 @@ pub struct SyncUploadResult {
     pub bytes_downloaded: u64,
 }
 
+/// Immutable snapshot of every sync-relevant config value, captured once under
+/// the `ConfigStore` lock so network operations never hold that lock.
+#[derive(Debug, Clone)]
+struct SyncSettings {
+    provider: crate::config::SyncProvider,
+    endpoint: Option<String>,
+    remote_path: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+    s3_region: String,
+    s3_bucket: Option<String>,
+    s3_access_key: Option<String>,
+    s3_secret_key: Option<String>,
+    sync_password: Option<String>,
+    last_sync_ms: Option<i64>,
+    max_remote_oplog_files: usize,
+    oplog_rollover_entries: usize,
+    oplog_rollover_size_bytes: usize,
+    max_sync_image_bytes: u64,
+    max_sync_file_bytes: u64,
+}
+
+impl SyncSettings {
+    fn from_config(config: &ConfigStore) -> Self {
+        let sync = config.sync_config();
+        Self {
+            provider: sync.provider,
+            endpoint: sync.endpoint.clone(),
+            remote_path: sync.remote_path.clone(),
+            username: sync.username.clone(),
+            password: sync.password.clone(),
+            s3_region: config.s3_region(),
+            s3_bucket: config.s3_bucket(),
+            s3_access_key: config.s3_access_key(),
+            s3_secret_key: config.s3_secret_key(),
+            sync_password: sync.sync_password.clone(),
+            last_sync_ms: sync.last_sync_ms,
+            max_remote_oplog_files: config.max_remote_oplog_files() as usize,
+            oplog_rollover_entries: config.oplog_rollover_entries() as usize,
+            oplog_rollover_size_bytes: config.oplog_rollover_size_bytes() as usize,
+            max_sync_image_bytes: config.max_sync_image_bytes(),
+            max_sync_file_bytes: config.max_sync_file_bytes(),
+        }
+    }
+}
+
 #[tauri::command]
 pub fn get_sync_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
@@ -129,12 +175,13 @@ pub fn set_sync_config(
     guard.set_sync_config(sync).map_err(|e| e.to_string())
 }
 
-fn resolve_s3_config(guard: &ConfigStore) -> (String, String, String, String) {
-    let region = guard.s3_region();
-    let bucket = guard.s3_bucket().unwrap_or_default();
-    let access_key = guard.s3_access_key().unwrap_or_default();
-    let secret_key = guard.s3_secret_key().unwrap_or_default();
-    (region, bucket, access_key, secret_key)
+fn resolve_s3_config(settings: &SyncSettings) -> (String, String, String, String) {
+    (
+        settings.s3_region.clone(),
+        settings.s3_bucket.clone().unwrap_or_default(),
+        settings.s3_access_key.clone().unwrap_or_default(),
+        settings.s3_secret_key.clone().unwrap_or_default(),
+    )
 }
 
 #[tauri::command]
@@ -180,13 +227,20 @@ pub fn sync_upload_backup(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<SyncUploadResult, String> {
-    let mut guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    let sync = guard.sync_config();
+    // Snapshot the config, then release the lock before any network I/O so a
+    // slow sync does not block other config access.
+    let settings = {
+        let guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        SyncSettings::from_config(&guard)
+    };
 
-    let endpoint = sync.endpoint.ok_or("sync endpoint not configured")?;
-    let remote_path = sync.remote_path.unwrap_or_default();
+    let endpoint = settings
+        .endpoint
+        .clone()
+        .ok_or("sync endpoint not configured")?;
+    let remote_path = settings.remote_path.clone().unwrap_or_default();
     let device_id = get_device_id();
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
@@ -194,11 +248,11 @@ pub fn sync_upload_backup(
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
 
-    let provider = sync.provider;
+    let provider = settings.provider;
     let result = match provider {
         crate::config::SyncProvider::Webdav => sync_upload_webdav(
             &app,
-            &guard,
+            &settings,
             &database,
             &paths,
             &endpoint,
@@ -209,7 +263,7 @@ pub fn sync_upload_backup(
         ),
         crate::config::SyncProvider::S3 => sync_upload_s3(
             &app,
-            &guard,
+            &settings,
             &database,
             &paths,
             &endpoint,
@@ -226,6 +280,9 @@ pub fn sync_upload_backup(
         .unwrap_or_default()
         .as_millis() as i64;
     if result.is_ok() {
+        let mut guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
         let _ = guard.update_sync_status("success", now_ms);
     }
 
@@ -235,7 +292,7 @@ pub fn sync_upload_backup(
 #[allow(clippy::too_many_arguments)]
 fn sync_upload_webdav(
     app: &tauri::AppHandle,
-    guard: &ConfigStore,
+    settings: &SyncSettings,
     database: &Database,
     paths: &crate::storage::StoragePaths,
     endpoint: &str,
@@ -248,12 +305,12 @@ fn sync_upload_webdav(
     let mut bytes_downloaded: u64 = 0;
     let mut applied_remote = false;
 
-    let has_prior_sync = guard.sync_config().last_sync_ms.is_some();
+    let has_prior_sync = settings.last_sync_ms.is_some();
     let remote_files = sync::list_webdav_files(
         endpoint,
         Some(remote_path),
-        guard.sync_config().username.as_deref(),
-        guard.sync_config().password.as_deref(),
+        settings.username.as_deref(),
+        settings.password.as_deref(),
     )?;
 
     let remote_baseline = remote_files
@@ -267,10 +324,10 @@ fn sync_upload_webdav(
                 endpoint,
                 remote_path,
                 &baseline.name,
-                guard.sync_config().username.as_deref(),
-                guard.sync_config().password.as_deref(),
+                settings.username.as_deref(),
+                settings.password.as_deref(),
             )?;
-            let data = decrypt_if_configured(data, guard)?;
+            let data = decrypt_if_configured(data, settings)?;
             bytes_downloaded += data.len() as u64;
             let baseline_path = temp_dir.join(&baseline.name);
             std::fs::write(&baseline_path, &data).map_err(|e| e.to_string())?;
@@ -287,23 +344,23 @@ fn sync_upload_webdav(
         let baseline_path = temp_dir.join(&filename);
         let manifest = sync::create_baseline_backup(database, &baseline_path)?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
-        let data = encrypt_if_configured(data, guard)?;
+        let data = encrypt_if_configured(data, settings)?;
         bytes_uploaded += data.len() as u64;
         sync::upload_to_webdav(
             endpoint,
             remote_path,
             &filename,
             data,
-            guard.sync_config().username.as_deref(),
-            guard.sync_config().password.as_deref(),
+            settings.username.as_deref(),
+            settings.password.as_deref(),
         )?;
         println!("[sync] baseline uploaded: {} items", manifest.item_count);
     }
 
-    let rollover_entries = guard.oplog_rollover_entries() as usize;
-    let rollover_bytes = guard.oplog_rollover_size_bytes() as usize;
-    let max_image_bytes = guard.max_sync_image_bytes();
-    let max_file_bytes = guard.max_sync_file_bytes();
+    let rollover_entries = settings.oplog_rollover_entries;
+    let rollover_bytes = settings.oplog_rollover_size_bytes;
+    let max_image_bytes = settings.max_sync_image_bytes;
+    let max_file_bytes = settings.max_sync_file_bytes;
     let local_entries = database
         .get_unsynced_changelog(rollover_entries)
         .map_err(|e| e.to_string())?;
@@ -327,10 +384,10 @@ fn sync_upload_webdav(
                         endpoint,
                         remote_path,
                         &existing.name,
-                        guard.sync_config().username.as_deref(),
-                        guard.sync_config().password.as_deref(),
+                        settings.username.as_deref(),
+                        settings.password.as_deref(),
                     ) {
-                        let data = decrypt_if_configured(data, guard)?;
+                        let data = decrypt_if_configured(data, settings)?;
                         if let Ok((mut old_entries, old_resources)) =
                             crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
                                 |_| {
@@ -355,15 +412,15 @@ fn sync_upload_webdav(
 
         let new_data =
             crate::sync::proto::serialize_oplog_with_resources(&all_entries, &all_resources)?;
-        let new_data = encrypt_if_configured(new_data, guard)?;
+        let new_data = encrypt_if_configured(new_data, settings)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_webdav(
             endpoint,
             remote_path,
             &filename,
             new_data,
-            guard.sync_config().username.as_deref(),
-            guard.sync_config().password.as_deref(),
+            settings.username.as_deref(),
+            settings.password.as_deref(),
         )?;
         let max_seq = all_entries.iter().map(|e| e.sequence).max().unwrap_or(0);
         let _ = database.mark_changelog_synced(max_seq);
@@ -388,11 +445,11 @@ fn sync_upload_webdav(
             endpoint,
             remote_path,
             &entry.name,
-            guard.sync_config().username.as_deref(),
-            guard.sync_config().password.as_deref(),
+            settings.username.as_deref(),
+            settings.password.as_deref(),
         ) {
             Ok(data) => {
-                let data = decrypt_if_configured(data, guard)?;
+                let data = decrypt_if_configured(data, settings)?;
                 bytes_downloaded += data.len() as u64;
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
@@ -431,12 +488,12 @@ fn sync_upload_webdav(
         }
     }
 
-    let max_files = max_remote_oplog_files(guard);
+    let max_files = settings.max_remote_oplog_files;
     let deleted_remote_files = cleanup_old_remote_oplogs(
         endpoint,
         remote_path,
-        &guard.sync_config().username,
-        &guard.sync_config().password,
+        &settings.username,
+        &settings.password,
         device_id,
         max_files,
     )?;
@@ -463,7 +520,7 @@ fn sync_upload_webdav(
 #[allow(clippy::too_many_arguments)]
 fn sync_upload_s3(
     app: &tauri::AppHandle,
-    guard: &ConfigStore,
+    settings: &SyncSettings,
     database: &Database,
     paths: &crate::storage::StoragePaths,
     endpoint: &str,
@@ -472,7 +529,7 @@ fn sync_upload_s3(
     timestamp: &str,
     temp_dir: &std::path::Path,
 ) -> Result<SyncUploadResult, String> {
-    let (region, bucket, access_key, secret_key) = resolve_s3_config(guard);
+    let (region, bucket, access_key, secret_key) = resolve_s3_config(settings);
     let mut bytes_uploaded: u64 = 0;
     let mut bytes_downloaded: u64 = 0;
     let mut applied_remote = false;
@@ -482,7 +539,7 @@ fn sync_upload_s3(
     } else {
         Some(remote_path)
     };
-    let has_prior_sync = guard.sync_config().last_sync_ms.is_some();
+    let has_prior_sync = settings.last_sync_ms.is_some();
     let remote_objects =
         sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?;
 
@@ -501,7 +558,7 @@ fn sync_upload_s3(
                 &access_key,
                 &secret_key,
             )?;
-            let data = decrypt_if_configured(data, guard)?;
+            let data = decrypt_if_configured(data, settings)?;
             bytes_downloaded += data.len() as u64;
             let baseline_path = temp_dir.join(&baseline.name);
             std::fs::write(&baseline_path, &data).map_err(|e| e.to_string())?;
@@ -518,7 +575,7 @@ fn sync_upload_s3(
         let baseline_path = temp_dir.join(&filename);
         let manifest = sync::create_baseline_backup(database, &baseline_path)?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
-        let data = encrypt_if_configured(data, guard)?;
+        let data = encrypt_if_configured(data, settings)?;
         bytes_uploaded += data.len() as u64;
         sync::upload_to_s3(
             endpoint,
@@ -532,10 +589,10 @@ fn sync_upload_s3(
         println!("[sync] baseline uploaded: {} items", manifest.item_count);
     }
 
-    let rollover_entries = guard.oplog_rollover_entries() as usize;
-    let rollover_bytes = guard.oplog_rollover_size_bytes() as usize;
-    let max_image_bytes = guard.max_sync_image_bytes();
-    let max_file_bytes = guard.max_sync_file_bytes();
+    let rollover_entries = settings.oplog_rollover_entries;
+    let rollover_bytes = settings.oplog_rollover_size_bytes;
+    let max_image_bytes = settings.max_sync_image_bytes;
+    let max_file_bytes = settings.max_sync_file_bytes;
     let local_entries = database
         .get_unsynced_changelog(rollover_entries)
         .map_err(|e| e.to_string())?;
@@ -563,7 +620,7 @@ fn sync_upload_s3(
                         &access_key,
                         &secret_key,
                     ) {
-                        let data = decrypt_if_configured(data, guard)?;
+                        let data = decrypt_if_configured(data, settings)?;
                         if let Ok((mut old_entries, old_resources)) =
                             crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
                                 |_| {
@@ -588,7 +645,7 @@ fn sync_upload_s3(
 
         let new_data =
             crate::sync::proto::serialize_oplog_with_resources(&all_entries, &all_resources)?;
-        let new_data = encrypt_if_configured(new_data, guard)?;
+        let new_data = encrypt_if_configured(new_data, settings)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_s3(
             endpoint,
@@ -627,7 +684,7 @@ fn sync_upload_s3(
             &secret_key,
         ) {
             Ok(data) => {
-                let data = decrypt_if_configured(data, guard)?;
+                let data = decrypt_if_configured(data, settings)?;
                 bytes_downloaded += data.len() as u64;
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
@@ -666,7 +723,7 @@ fn sync_upload_s3(
         }
     }
 
-    let max_files = max_remote_oplog_files(guard);
+    let max_files = settings.max_remote_oplog_files;
     let deleted_remote_files = cleanup_old_s3_oplogs(
         endpoint,
         &region,
@@ -742,10 +799,6 @@ fn cleanup_old_s3_oplogs(
         }
     }
     Ok(deleted)
-}
-
-fn max_remote_oplog_files(config: &ConfigStore) -> usize {
-    config.max_remote_oplog_files() as usize
 }
 
 /// Filters oplog entries by resource size threshold.
@@ -836,23 +889,28 @@ fn cleanup_old_remote_oplogs(
 pub fn sync_list_remote_backups(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<String, String> {
-    let guard = config.lock().map_err(|_| "lock poisoned".to_owned())?;
-    let sync = guard.sync_config();
-    let endpoint = sync.endpoint.ok_or("sync endpoint not configured")?;
+    let settings = {
+        let guard = config.lock().map_err(|_| "lock poisoned".to_owned())?;
+        SyncSettings::from_config(&guard)
+    };
+    let endpoint = settings
+        .endpoint
+        .clone()
+        .ok_or("sync endpoint not configured")?;
 
-    match sync.provider {
+    match settings.provider {
         crate::config::SyncProvider::Webdav => {
             let files = sync::list_webdav_files(
                 &endpoint,
-                sync.remote_path.as_deref(),
-                sync.username.as_deref(),
-                sync.password.as_deref(),
+                settings.remote_path.as_deref(),
+                settings.username.as_deref(),
+                settings.password.as_deref(),
             )?;
             serde_json::to_string(&files).map_err(|e| e.to_string())
         }
         crate::config::SyncProvider::S3 => {
-            let (region, bucket, access_key, secret_key) = resolve_s3_config(&guard);
-            let prefix = sync.remote_path.as_deref();
+            let (region, bucket, access_key, secret_key) = resolve_s3_config(&settings);
+            let prefix = settings.remote_path.as_deref();
             let files = sync::list_s3_objects(
                 &endpoint,
                 &region,
@@ -872,24 +930,29 @@ pub fn sync_download_backup(
     filename: String,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<PathBuf, String> {
-    let guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    let sync = guard.sync_config();
+    let settings = {
+        let guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        SyncSettings::from_config(&guard)
+    };
 
-    let endpoint = sync.endpoint.ok_or("sync endpoint not configured")?;
-    let remote_path = sync.remote_path.unwrap_or_default();
+    let endpoint = settings
+        .endpoint
+        .clone()
+        .ok_or("sync endpoint not configured")?;
+    let remote_path = settings.remote_path.clone().unwrap_or_default();
 
-    let data = match sync.provider {
+    let data = match settings.provider {
         crate::config::SyncProvider::Webdav => sync::download_from_webdav(
             &endpoint,
             &remote_path,
             &filename,
-            sync.username.as_deref(),
-            sync.password.as_deref(),
+            settings.username.as_deref(),
+            settings.password.as_deref(),
         )?,
         crate::config::SyncProvider::S3 => {
-            let (region, bucket, access_key, secret_key) = resolve_s3_config(&guard);
+            let (region, bucket, access_key, secret_key) = resolve_s3_config(&settings);
             let key = if remote_path.is_empty() {
                 filename.clone()
             } else {
@@ -900,7 +963,7 @@ pub fn sync_download_backup(
         _ => return Err("unsupported provider".to_string()),
     };
 
-    let data = decrypt_if_configured(data, &guard)?;
+    let data = decrypt_if_configured(data, &settings)?;
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
@@ -915,19 +978,19 @@ pub fn verify_backup_file(path: PathBuf) -> Result<sync::BackupManifest, String>
     sync::read_manifest_from_backup(&path)
 }
 
-fn get_sync_password(guard: &ConfigStore) -> Option<String> {
-    guard.sync_config().sync_password.clone()
+fn get_sync_password(settings: &SyncSettings) -> Option<String> {
+    settings.sync_password.clone()
 }
 
-fn encrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, String> {
-    match get_sync_password(guard) {
+fn encrypt_if_configured(data: Vec<u8>, settings: &SyncSettings) -> Result<Vec<u8>, String> {
+    match get_sync_password(settings) {
         Some(pwd) if !pwd.is_empty() => sync::crypto::encrypt(&data, &pwd),
         _ => Ok(data),
     }
 }
 
-fn decrypt_if_configured(data: Vec<u8>, guard: &ConfigStore) -> Result<Vec<u8>, String> {
-    match get_sync_password(guard) {
+fn decrypt_if_configured(data: Vec<u8>, settings: &SyncSettings) -> Result<Vec<u8>, String> {
+    match get_sync_password(settings) {
         Some(pwd) if !pwd.is_empty() => match sync::crypto::decrypt(&data, &pwd) {
             Ok(decrypted) => Ok(decrypted),
             Err(e) => {
