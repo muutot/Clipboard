@@ -85,12 +85,12 @@ html[data-window-effect="acrylic"] body,
 html[data-window-effect="mica"] body {
   background:
     radial-gradient(circle at 50% -20%, rgba(255, 255, 255, 0.06), transparent 38%),
-    color-mix(in srgb, var(--bg-app) 60%, transparent);
+    color-mix(in srgb, var(--bg-app) 42%, transparent);
 }
 
 html[data-window-effect="acrylic"] .app-shell,
 html[data-window-effect="mica"] .app-shell {
-  background: color-mix(in srgb, var(--bg-settings) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-settings) 42%, transparent);
 }
 
 button,
