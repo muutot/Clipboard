@@ -3,17 +3,22 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::Emitter;
+use tauri::Manager;
 
 use crate::config::{ConfigStore, SyncConfig};
 use crate::storage::Database;
 use crate::storage::StoragePaths;
 use crate::sync;
 
+mod auto;
+
 /// Serializes sync runs. The manual `sync_upload_backup` command and the
 /// auto-sync worker share the same merge/apply logic, which is not reentrant;
 /// a `try_lock` in each entry point prevents concurrent runs from
 /// interleaving oplog merge/apply/cleanup.
 static SYNC_RUN_LOCK: Mutex<()> = Mutex::new(());
+
+pub(crate) use auto::AutoSyncWorker;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConfigInfo {
@@ -227,12 +232,20 @@ pub fn test_sync_connection(
 }
 
 #[tauri::command]
-pub fn sync_upload_backup(
-    app: tauri::AppHandle,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    database: tauri::State<'_, Database>,
-    paths: tauri::State<'_, StoragePaths>,
-) -> Result<SyncUploadResult, String> {
+pub fn sync_upload_backup(app: tauri::AppHandle) -> Result<SyncUploadResult, String> {
+    // Resolve the managed states through the handle so the same path is shared
+    // with the auto-sync worker (which only holds an `AppHandle`).
+    run_sync(&app)
+}
+
+/// Runs one full sync (upload + download + apply + cleanup) using the managed
+/// config/database/paths states resolved from `app`. The manual command and the
+/// auto-sync worker both enter here.
+fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
+    let config = app.state::<Mutex<ConfigStore>>();
+    let database = app.state::<Database>();
+    let paths = app.state::<StoragePaths>();
+
     // Fail fast instead of queueing: a concurrent sync (manual command racing
     // with the auto-sync worker) would interleave the non-reentrant
     // merge/apply/cleanup logic.
@@ -264,7 +277,7 @@ pub fn sync_upload_backup(
     let provider = settings.provider;
     let result = match provider {
         crate::config::SyncProvider::Webdav => sync_upload_webdav(
-            &app,
+            app,
             &settings,
             &database,
             &paths,
@@ -275,7 +288,7 @@ pub fn sync_upload_backup(
             &temp_dir,
         ),
         crate::config::SyncProvider::S3 => sync_upload_s3(
-            &app,
+            app,
             &settings,
             &database,
             &paths,

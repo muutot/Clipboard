@@ -17,7 +17,7 @@
 
 | #   | 问题                                                                                               | 状态    | 证据 / 提交 |
 | --- | -------------------------------------------------------------------------------------------------- | ------- | ----------- |
-| 7   | auto_sync 是完全的死配置：有 UI 开关和 store 方法，但没有后台 worker/timer 调用 sync_upload_backup | ⏳ 待办 | 见下方      |
+| 7   | auto_sync 是完全的死配置：有 UI 开关和 store 方法，但没有后台 worker/timer 调用 sync_upload_backup | ✅ 完成 | 见下方      |
 | 8   | 每次同步全量重放远端所有其他设备的 oplog，无已应用水位线，带宽/CPU 膨胀                            | ✅ 完成 | 见下方      |
 | 9   | cleanup 只删其他设备的文件，本设备多轮 rollover 的旧 oplog 永不清理，远端无限增长                  | ✅ 完成 | 见下方      |
 | 10  | ConfigStore 锁贯穿整个网络同步，命令是阻塞同步调用，慢网络阻塞其他配置访问                         | ✅ 完成 | 见下方      |
@@ -54,6 +54,7 @@
 - `src-tauri/src/commands/sync/mod.rs:176`：`sync_upload_backup` 仅作为 `#[tauri::command]` 注册（lib.rs:632），没有后台 worker 周期性调用它。
 - UI 开关：`StorageSettingsDialog.svelte:3439`。
 - 全库搜索无任何 worker 调 `sync_upload_backup`。
+- ✅ 修复：新增 `commands/sync/auto.rs` `AutoSyncWorker`（仿 `SearchSyncWorker` 模式：stop_flag + join handle + Drop 停止），在 `lib.rs` setup 启动并 manage 为 `Mutex<Option<AutoSyncWorker>>`。worker 每秒重读受管 `ConfigStore` 的 `auto_sync()`/`auto_sync_interval_secs()`（设置改动无需重启即生效），启用且距上次尝试超过间隔时调用 `run_sync`。命令体重构为 `run_sync(&AppHandle)`（从 handle 解析受管状态），命令与 worker 共用同一入口，`SYNC_RUN_LOCK` 保证与手动同步串行。
 
 ## #8 证据
 

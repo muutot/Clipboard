@@ -478,6 +478,22 @@ pub fn run() {
             app.manage(Mutex::new(cleanup_worker));
             app.manage(Mutex::new(LocalApiServer::new(0)));
 
+            // Background auto-sync worker. It re-reads `auto_sync` and
+            // `auto_sync_interval_secs` from the managed config each tick, so
+            // toggling the setting in the UI takes effect without a restart.
+            let auto_sync_worker = match commands::sync::AutoSyncWorker::start(app.handle().clone())
+            {
+                Ok(worker) => {
+                    eprintln!("[auto-sync] background worker started");
+                    Some(worker)
+                }
+                Err(error) => {
+                    eprintln!("[auto-sync] failed to start background worker: {error}");
+                    None
+                }
+            };
+            app.manage(Mutex::new(auto_sync_worker));
+
             if let Err(error) = sync_autostart(app.handle(), launch_at_startup) {
                 eprintln!("[autostart] failed to synchronize startup registration: {error}");
             }
