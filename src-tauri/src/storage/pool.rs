@@ -349,7 +349,8 @@ impl Database {
                         last_used_at_ms = excluded.last_used_at_ms,
                         is_favorite = excluded.is_favorite,
                         metadata_json = excluded.metadata_json,
-                        modified_at_ms = excluded.modified_at_ms",
+                        modified_at_ms = excluded.modified_at_ms
+                     WHERE excluded.modified_at_ms >= clipboard_items.modified_at_ms",
                     rusqlite::params![
                         &item.id,
                         kind_str,
@@ -808,6 +809,52 @@ mod tests {
         assert_eq!(echo[0].item_id, "local");
 
         let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn import_baseline_does_not_overwrite_newer_local_entries() {
+        // Same content hash on two devices yields the same deterministic id
+        // (e.g. img_{hash}). The local device edited/favorited the item after
+        // capture, so its modified_at_ms is newer than the baseline snapshot
+        // (baseline stores modified_at_ms = created_at_ms). Importing the
+        // baseline must not clobber the newer local edit.
+        let source_path = temporary_path("baseline-lmw-source");
+        let source = Database::open(&source_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        let mut item = text_item("img_abc", 100);
+        item.title = "baseline-title".to_string(); // stale remote snapshot
+        item.is_favorite = false;
+        source.save_item(&item).unwrap();
+        let items = source.export_active_items().unwrap();
+        assert_eq!(items.len(), 1);
+
+        let target_path = temporary_path("baseline-lmw-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        let local_item = text_item("img_abc", 100);
+        target.save_item(&local_item).unwrap();
+
+        // A genuine local edit after capture: favorited. The set_modified
+        // trigger bumps modified_at_ms to now, far newer than baseline's
+        // created_at_ms snapshot (100).
+        target.set_favorite("img_abc", true).unwrap();
+        assert!(target.get_item("img_abc").unwrap().unwrap().is_favorite);
+
+        let imported = target.import_baseline_items(&items).unwrap();
+        assert_eq!(imported, 1);
+
+        let local = target.get_item("img_abc").unwrap().unwrap();
+        assert!(
+            local.is_favorite,
+            "baseline must not overwrite a newer local edit"
+        );
+        assert_eq!(
+            local.title, "record-img_abc",
+            "local title survives stale baseline"
+        );
+
+        let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&target_path);
     }
 
