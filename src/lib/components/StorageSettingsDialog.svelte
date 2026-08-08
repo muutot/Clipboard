@@ -51,6 +51,7 @@
     syncUploadBackup,
     syncListRemoteBackups,
     syncDownloadBackup,
+    syncCompactRemote,
     type ExportFormatInfo,
     type ImportFormatInfo,
     type SyncConfig,
@@ -799,6 +800,8 @@
   let syncStatus = $state<string | null>(null);
   let syncListing = $state(false);
   let syncDownloading = $state(false);
+  let syncCompacting = $state(false);
+  let syncCompactionSuggested = $state(false);
   let syncUnsyncedCount = $state(0);
   let syncAutoSync = $state(false);
   let syncAutoInterval = $state(300);
@@ -832,6 +835,7 @@
       syncStatus = cfg.lastSyncStatus ?? null;
       syncUnsyncedCount = cfg.unsyncedCount ?? 0;
       syncAutoSync = cfg.autoSync ?? false;
+      syncCompactionSuggested = cfg.compactionSuggested ?? false;
       syncAutoInterval = cfg.autoSyncIntervalSecs ?? 300;
       syncMaxOplogFiles = cfg.maxRemoteOplogFiles ?? 10;
       syncRolloverEntries = cfg.oplogRolloverEntries ?? 100;
@@ -960,6 +964,29 @@
       syncStatus = "failed";
     } finally {
       syncing = false;
+    }
+  }
+
+  async function handleCompactRemote() {
+    if (!isTauriRuntime() || syncCompacting || syncing) return;
+    syncCompacting = true;
+    feedback = "";
+    try {
+      const result = await syncCompactRemote();
+      feedback = _t("storage.syncCompactSummary", {
+        deleted: String(result.deletedRemoteFiles),
+        bytesUp: (result.bytesUploaded / 1024).toFixed(1),
+      });
+      feedbackSuccess = true;
+      syncCompactionSuggested = false;
+      syncLastMs = Date.now();
+      syncStatus = "success";
+    } catch (e) {
+      feedback = _t("storage.syncCompactFailed") + `: ${String(e)}`;
+      feedbackSuccess = false;
+      syncStatus = "failed";
+    } finally {
+      syncCompacting = false;
     }
   }
 
@@ -3438,6 +3465,30 @@
                   </button>
                 </div>
               </section>
+
+              {#if syncCompactionSuggested}
+                <section class="setting-card">
+                  <div class="setting-heading">
+                    <span class="setting-icon"><AppIcon name="layers" size={17} /></span>
+                    <div style="flex:1">
+                      <strong>{_t("storage.syncCompactTitle")}</strong>
+                      <p
+                        style="margin:2px 0 0;font-size:var(--settings-description-size,var(--font-size-secondary,11px));color:var(--text-muted)"
+                      >
+                        {_t("storage.syncCompactDesc")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="settings-action-btn"
+                      disabled={syncCompacting || syncing || syncTesting}
+                      onclick={handleCompactRemote}
+                    >
+                      {syncCompacting ? _t("storage.syncCompacting") : _t("storage.syncCompactNow")}
+                    </button>
+                  </div>
+                </section>
+              {/if}
 
               <section class="setting-card setting-card-row">
                 <span class="setting-icon"><AppIcon name="settings" size={17} /></span>

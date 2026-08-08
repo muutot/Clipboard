@@ -251,6 +251,64 @@ impl Database {
         })
     }
 
+    /// Number of oplog files observed on the remote during the last sync. Used
+    /// by the UI to suggest a manual compaction before the retention cleanup
+    /// starts discarding old oplogs.
+    pub fn get_sync_remote_oplog_count(&self) -> Result<Option<u64>, StorageError> {
+        self.with_connection(|connection| {
+            let value: Option<String> = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'sync_remote_oplog_count'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            Ok(value.and_then(|v| v.parse::<u64>().ok()))
+        })
+    }
+
+    /// Persists the remote oplog count observed during the last sync.
+    pub fn set_sync_remote_oplog_count(&self, count: u64) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('sync_remote_oplog_count', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = ?1",
+                [count.to_string()],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Latest modified time of the newest remote baseline file observed during
+    /// the last sync, used to suggest compaction when the snapshot is old.
+    pub fn get_sync_remote_baseline_modified_ms(&self) -> Result<Option<i64>, StorageError> {
+        self.with_connection(|connection| {
+            let value: Option<String> = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'sync_remote_baseline_modified_ms'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            Ok(value.and_then(|v| v.parse::<i64>().ok()))
+        })
+    }
+
+    /// Persists the latest remote baseline mtime observed during the last sync.
+    pub fn set_sync_remote_baseline_modified_ms(
+        &self,
+        modified_ms: i64,
+    ) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('sync_remote_baseline_modified_ms', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = ?1",
+                [modified_ms.to_string()],
+            )?;
+            Ok(())
+        })
+    }
+
     /// Sets the changelog-suppression flag so the sync_changelog triggers stay
     /// quiet while remote data is being applied. The flag is written and cleared
     /// inside the caller's transaction, so a rollback reverts it too (no stale
@@ -870,6 +928,28 @@ mod tests {
 
         db.set_sync_applied_oplog_watermark(654321).unwrap();
         assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), Some(654321));
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn sync_remote_compaction_stats_round_trip() {
+        let db_path = temporary_path("compaction-stats");
+        let db = Database::open(&db_path).unwrap();
+
+        assert_eq!(db.get_sync_remote_oplog_count().unwrap(), None);
+        assert_eq!(db.get_sync_remote_baseline_modified_ms().unwrap(), None);
+
+        db.set_sync_remote_oplog_count(11).unwrap();
+        db.set_sync_remote_baseline_modified_ms(123456789).unwrap();
+        assert_eq!(db.get_sync_remote_oplog_count().unwrap(), Some(11));
+        assert_eq!(
+            db.get_sync_remote_baseline_modified_ms().unwrap(),
+            Some(123456789)
+        );
+
+        db.set_sync_remote_oplog_count(0).unwrap();
+        assert_eq!(db.get_sync_remote_oplog_count().unwrap(), Some(0));
 
         let _ = std::fs::remove_file(&db_path);
     }

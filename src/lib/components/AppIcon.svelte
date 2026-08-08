@@ -220,5 +220,9 @@
   {:else if name === "lock"}
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  {:else if name === "layers"}
+    <path d="m12 2 9 4.9-9 4.9-9-4.9z" />
+    <path d="M3 12.5 12 17l9-4.5" />
+    <path d="M3 17.5 12 22l9-4.5" />
   {/if}
 </svg>

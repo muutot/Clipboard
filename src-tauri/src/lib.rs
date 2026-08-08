@@ -654,6 +654,7 @@ pub fn run() {
             sync_upload_backup,
             sync_list_remote_backups,
             sync_download_backup,
+            sync_compact_remote,
             verify_backup_file
         ])
         .build(tauri::generate_context!())

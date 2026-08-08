@@ -200,6 +200,7 @@ export const ICON_NAMES = [
   "cloud",
   "upload",
   "lock",
+  "layers",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -258,6 +259,7 @@ export const DEFAULT_ICON_COLORS: Record<IconName, string> = {
   "arrow-right": "#8a8f98",
   cloud: "#4aa8ff",
   upload: "#4aa8ff",
+  layers: "#4aa8ff",
 };
 
 export type SearchSuggestionMode = "off" | "panel" | "inline";

@@ -142,6 +142,14 @@ const en: LocaleDefinition = {
     syncNeverSynced: "Never synced",
     syncPendingCount: "{count} pending",
     syncLastTime: "Last: {time}",
+    syncCompactTitle: "Sync Data Compression",
+    syncCompactDesc:
+      "Remote history has grown large. Compressing rebuilds a full snapshot and removes old snapshots and oplogs.",
+    syncCompactNow: "Compress Now",
+    syncCompacting: "Compressing...",
+    syncCompactSummary:
+      "Compression complete: {deleted} remote files removed, {bytesUp} KB uploaded",
+    syncCompactFailed: "Compression failed",
     syncStatusSuccess: "Success",
     syncStatusFailed: "Failed",
     syncBackupList: "Remote Backups",

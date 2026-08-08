@@ -325,6 +325,7 @@ export interface SyncConfig {
   oplogRolloverSizeBytes: number;
   maxSyncImageBytes: number;
   maxSyncFileBytes: number;
+  compactionSuggested: boolean;
 }
 
 export interface WebDavTestResult {
@@ -372,6 +373,7 @@ export async function getSyncConfig(): Promise<SyncConfig> {
       s3Bucket: null,
       s3AccessKey: null,
       hasS3SecretKey: false,
+      compactionSuggested: false,
     };
   }
   return invoke<SyncConfig>("get_sync_config");
@@ -467,6 +469,11 @@ export async function syncListRemoteBackups(): Promise<WebDavEntry[]> {
 export async function syncDownloadBackup(filename: string): Promise<string> {
   if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
   return invoke<string>("sync_download_backup", { filename });
+}
+
+export async function syncCompactRemote(): Promise<SyncUploadResult> {
+  if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
+  return invoke<SyncUploadResult>("sync_compact_remote");
 }
 
 export async function verifyBackupFile(path: string): Promise<BackupManifest> {

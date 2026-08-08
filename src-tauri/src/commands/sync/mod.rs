@@ -35,6 +35,7 @@ pub struct SyncConfigInfo {
     last_sync_ms: Option<i64>,
     last_sync_status: Option<String>,
     unsynced_count: u64,
+    compaction_suggested: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -104,6 +105,24 @@ pub fn get_sync_config(
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
     let sync = guard.sync_config();
     let unsynced = database.count_unsynced_changelog().unwrap_or(0);
+    let remote_oplog_count = database.get_sync_remote_oplog_count().unwrap_or(None);
+    let remote_baseline_ms = database
+        .get_sync_remote_baseline_modified_ms()
+        .unwrap_or(None);
+    let max_files = guard.max_remote_oplog_files() as u64;
+    let compaction_suggested = match remote_oplog_count {
+        Some(count) if count >= max_files => true,
+        _ => match remote_baseline_ms {
+            Some(ms) => {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as i64;
+                now_ms.saturating_sub(ms) >= 30 * 24 * 60 * 60 * 1000
+            }
+            None => false,
+        },
+    };
     Ok(SyncConfigInfo {
         provider: match sync.provider {
             crate::config::SyncProvider::Off => "off",
@@ -123,6 +142,7 @@ pub fn get_sync_config(
         last_sync_ms: sync.last_sync_ms,
         last_sync_status: sync.last_sync_status,
         unsynced_count: unsynced,
+        compaction_suggested,
     })
 }
 
@@ -338,6 +358,7 @@ fn sync_upload_webdav(
         settings.username.as_deref(),
         settings.password.as_deref(),
     )?;
+    record_remote_stats(database, &remote_files);
 
     let remote_baselines: Vec<_> = remote_files
         .iter()
@@ -619,6 +640,7 @@ fn sync_upload_s3(
     let has_prior_sync = settings.last_sync_ms.is_some();
     let remote_objects =
         sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?;
+    record_remote_stats(database, &remote_objects);
 
     let remote_baselines: Vec<_> = remote_objects
         .iter()
@@ -973,6 +995,58 @@ fn get_device_id() -> String {
     sync::device_id()
 }
 
+/// Common shape shared by the WebDAV and S3 remote-listing entries so the
+/// sync/compaction helpers can treat both providers uniformly.
+trait RemoteFileLike {
+    fn name(&self) -> &str;
+    fn is_directory(&self) -> bool;
+    fn modified_ms(&self) -> Option<i64>;
+}
+
+impl RemoteFileLike for sync::WebDavEntry {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn is_directory(&self) -> bool {
+        self.is_directory
+    }
+    fn modified_ms(&self) -> Option<i64> {
+        self.modified_ms
+    }
+}
+
+impl RemoteFileLike for sync::S3Entry {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn is_directory(&self) -> bool {
+        self.is_directory
+    }
+    fn modified_ms(&self) -> Option<i64> {
+        self.modified_ms
+    }
+}
+
+/// Records the remote file layout observed during a sync so `get_sync_config`
+/// can suggest a manual compaction without an extra network round-trip.
+fn record_remote_stats<T: RemoteFileLike>(database: &Database, remote_files: &[T]) {
+    let oplog_count = remote_files
+        .iter()
+        .filter(|e| !e.is_directory() && e.name().starts_with("oplog-"))
+        .count() as u64;
+    let baseline_ms = remote_files
+        .iter()
+        .filter(|e| {
+            !e.is_directory() && e.name().starts_with("baseline-") && e.name().ends_with(".zip")
+        })
+        .filter_map(RemoteFileLike::modified_ms)
+        .max();
+    let _ = database.set_sync_remote_oplog_count(oplog_count);
+    if let Some(ms) = baseline_ms {
+        let _ = database.set_sync_remote_baseline_modified_ms(ms);
+    }
+}
+
 fn cleanup_old_remote_oplogs(
     endpoint: &str,
     remote_path: &str,
@@ -1108,6 +1182,226 @@ pub fn sync_download_backup(
 #[tauri::command]
 pub fn verify_backup_file(path: PathBuf) -> Result<sync::BackupManifest, String> {
     sync::read_manifest_from_backup(&path)
+}
+
+/// Compacts the remote sync history: refreshes the baseline snapshot from the
+/// local database (which is a superset of the remote after the pre-flight sync)
+/// and then removes every older baseline plus the older oplogs that are fully
+/// covered by the fresh snapshot. Manual only; no scheduled/automatic path.
+#[tauri::command]
+pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, String> {
+    // 1. Run a full sync first so the local DB reflects every remote change.
+    let preflight = run_sync(&app)?;
+
+    // 2. Compact: the run-task lock is re-acquired now that run_sync (which
+    // holds it internally) has finished.
+    let config = app.state::<Mutex<ConfigStore>>();
+    let database = app.state::<Database>();
+    let paths = app.state::<StoragePaths>();
+
+    let _run_guard = SYNC_RUN_LOCK
+        .try_lock()
+        .map_err(|_| "sync already in progress".to_owned())?;
+
+    let settings = {
+        let guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        SyncSettings::from_config(&guard)
+    };
+
+    let endpoint = settings
+        .endpoint
+        .clone()
+        .ok_or("sync endpoint not configured")?;
+    let remote_path = settings.remote_path.clone().unwrap_or_default();
+    let device_id = get_device_id();
+
+    let temp_dir = std::env::temp_dir().join("clipboard-sync");
+    std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+
+    let (baseline_bytes, deleted) = match settings.provider {
+        crate::config::SyncProvider::Webdav => compact_webdav(
+            &settings,
+            &database,
+            &paths,
+            &endpoint,
+            &remote_path,
+            &device_id,
+            &timestamp,
+            &temp_dir,
+        )?,
+        crate::config::SyncProvider::S3 => compact_s3(
+            &settings,
+            &database,
+            &paths,
+            &endpoint,
+            &remote_path,
+            &device_id,
+            &timestamp,
+            &temp_dir,
+        )?,
+        _ => return Err("unsupported provider".to_string()),
+    };
+
+    Ok(SyncUploadResult {
+        uploaded_entries: preflight.uploaded_entries,
+        downloaded_entries: preflight.downloaded_entries,
+        applied_entries: preflight.applied_entries,
+        deleted_remote_files: preflight.deleted_remote_files + deleted,
+        bytes_uploaded: preflight.bytes_uploaded + baseline_bytes,
+        bytes_downloaded: preflight.bytes_downloaded,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compact_webdav(
+    settings: &SyncSettings,
+    database: &Database,
+    paths: &crate::storage::StoragePaths,
+    endpoint: &str,
+    remote_path: &str,
+    device_id: &str,
+    timestamp: &str,
+    temp_dir: &std::path::Path,
+) -> Result<(u64, u64), String> {
+    let username = settings.username.as_deref();
+    let password = settings.password.as_deref();
+
+    let filename = format!("baseline-{device_id}-{timestamp}.zip");
+    let baseline_path = temp_dir.join(&filename);
+    sync::create_baseline_backup(database, paths, &baseline_path)?;
+    let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
+    let data = encrypt_if_configured(data, settings)?;
+    sync::upload_to_webdav(endpoint, remote_path, &filename, data, username, password)?;
+
+    // Delete older baselines (the fresh one above now covers their data).
+    let mut deleted = 0u64;
+    for entry in sync::list_webdav_files(endpoint, Some(remote_path), username, password)? {
+        if entry.is_directory {
+            continue;
+        }
+        if !(entry.name.starts_with("baseline-") && entry.name.ends_with(".zip"))
+            || entry.name == filename
+        {
+            continue;
+        }
+        if sync::delete_from_webdav(endpoint, remote_path, &entry.name, username, password).is_ok()
+        {
+            deleted += 1;
+        }
+    }
+
+    // Trim oplogs to the retention ceiling. Files dropped here are fully
+    // covered by the freshly written baseline.
+    let oplog_deleted = cleanup_old_remote_oplogs(
+        endpoint,
+        remote_path,
+        &settings.username,
+        &settings.password,
+        "",
+        settings.max_remote_oplog_files,
+    )?;
+    deleted += oplog_deleted;
+
+    let baseline_bytes = std::fs::metadata(&baseline_path)
+        .map(|m| m.len())
+        .unwrap_or(0) as u64;
+
+    // Re-record the post-compaction layout so `get_sync_config` stops flagging
+    // `compaction_suggested` on the next open (no extra round-trip otherwise).
+    if let Ok(files) = sync::list_webdav_files(endpoint, Some(remote_path), username, password) {
+        record_remote_stats(database, &files);
+    }
+
+    Ok((baseline_bytes, deleted))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compact_s3(
+    settings: &SyncSettings,
+    database: &Database,
+    paths: &crate::storage::StoragePaths,
+    endpoint: &str,
+    remote_path: &str,
+    device_id: &str,
+    timestamp: &str,
+    temp_dir: &std::path::Path,
+) -> Result<(u64, u64), String> {
+    let (region, bucket, access_key, secret_key) = resolve_s3_config(settings);
+    let prefix = if remote_path.is_empty() {
+        None
+    } else {
+        Some(remote_path)
+    };
+
+    let filename = format!("baseline-{device_id}-{timestamp}.zip");
+    let baseline_path = temp_dir.join(&filename);
+    sync::create_baseline_backup(database, paths, &baseline_path)?;
+    let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
+    let data = encrypt_if_configured(data, settings)?;
+    sync::upload_to_s3(
+        endpoint,
+        &region,
+        &bucket,
+        &s3_object_key(remote_path, &filename),
+        data,
+        &access_key,
+        &secret_key,
+    )?;
+
+    let mut deleted = 0u64;
+    for entry in
+        sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?
+    {
+        if entry.is_directory {
+            continue;
+        }
+        if !(entry.name.starts_with("baseline-") && entry.name.ends_with(".zip"))
+            || entry.name == filename
+        {
+            continue;
+        }
+        if sync::delete_from_s3(
+            endpoint,
+            &region,
+            &bucket,
+            &s3_object_key(remote_path, &entry.name),
+            &access_key,
+            &secret_key,
+        )
+        .is_ok()
+        {
+            deleted += 1;
+        }
+    }
+
+    let oplog_deleted = cleanup_old_s3_oplogs(
+        endpoint,
+        &region,
+        &bucket,
+        &access_key,
+        &secret_key,
+        prefix,
+        "",
+        settings.max_remote_oplog_files,
+    )?;
+    deleted += oplog_deleted;
+
+    // Re-record the post-compaction layout so `get_sync_config` stops flagging
+    // `compaction_suggested` on the next open (no extra round-trip otherwise).
+    if let Ok(objects) =
+        sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)
+    {
+        record_remote_stats(database, &objects);
+    }
+
+    let baseline_bytes = std::fs::metadata(&baseline_path)
+        .map(|m| m.len())
+        .unwrap_or(0) as u64;
+    Ok((baseline_bytes, deleted))
 }
 
 fn get_sync_password(settings: &SyncSettings) -> Option<String> {
