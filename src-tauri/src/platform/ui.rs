@@ -182,8 +182,9 @@ pub fn window_transparency_alpha(percent: u8) -> u8 {
 }
 
 /// Applies the configured window transparency to a native window using the
-/// Win32 layered-window alpha channel. Full opacity removes the layered
-/// style again so the compositor fast path stays active.
+/// Win32 layered-window alpha channel. A value of 100 maps to alpha byte 255
+/// while the layered style is retained so per-pixel translucent pixels keep
+/// compositing over the desktop (the application window is `transparent`).
 #[cfg(target_os = "windows")]
 pub fn apply_window_transparency(window_handle: isize, percent: u8) -> Result<(), String> {
     extern "system" {
@@ -203,10 +204,6 @@ pub fn apply_window_transparency(window_handle: isize, percent: u8) -> Result<()
     let percent = percent.clamp(60, 100);
     unsafe {
         let ex_style = GetWindowLongW(window_handle, GWL_EXSTYLE);
-        if percent >= 100 {
-            SetWindowLongW(window_handle, GWL_EXSTYLE, ex_style & !WS_EX_LAYERED);
-            return Ok(());
-        }
         SetWindowLongW(window_handle, GWL_EXSTYLE, ex_style | WS_EX_LAYERED);
         if SetLayeredWindowAttributes(
             window_handle,
