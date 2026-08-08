@@ -31,7 +31,7 @@
       "devCsp": "default-src 'self' asset: http://asset.localhost https://asset.localhost; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' http://localhost:1420 asset: http://asset.localhost https://asset.localhost; style-src 'self' 'unsafe-inline' http://localhost:1420 asset: http://asset.localhost https://asset.localhost; img-src 'self' http://localhost:1420 asset: http://asset.localhost https://asset.localhost data: blob:; font-src 'self' asset: http://asset.localhost https://asset.localhost data:; media-src 'self' asset: http://asset.localhost https://asset.localhost blob:; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420 asset: http://asset.localhost https://asset.localhost; worker-src 'self' blob:",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$EXE/**", "$RESOURCE/**", "$APPDATA/**", "$APPLOCALDATA/**"]
+        "scope": ["$EXE/**", "$RESOURCE/**", "$APPDATA/**", "$APPLOCALDATA/**", "**"]
       }
     }
   },
