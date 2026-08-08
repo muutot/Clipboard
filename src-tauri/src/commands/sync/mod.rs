@@ -397,12 +397,11 @@ fn sync_upload_webdav(
     let uploaded_entries = if !local_entries.is_empty() {
         let (mut all_entries, mut all_resources) =
             sync::collect_entry_resources(local_entries, paths);
-        let mut filename = format!("oplog-{device_id}-{timestamp}.json");
+        let mut filename = format!("oplog-{device_id}-{timestamp}");
 
         if let Some(existing) = remote_files.iter().find(|e| {
             !e.is_directory
                 && e.name.starts_with(&format!("oplog-{device_id}-"))
-                && e.name.ends_with(".json")
                 && !e.name.contains(timestamp)
         }) {
             if let Some(size) = existing.size_bytes {
@@ -416,14 +415,7 @@ fn sync_upload_webdav(
                     ) {
                         let data = decrypt_if_configured(data, settings)?;
                         if let Ok((mut old_entries, old_resources)) =
-                            crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
-                                |_| {
-                                    serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                                        &String::from_utf8_lossy(&data),
-                                    )
-                                    .map(|entries| (entries, Vec::new()))
-                                },
-                            )
+                            crate::sync::proto::deserialize_oplog_with_resources(&data)
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
@@ -467,8 +459,7 @@ fn sync_upload_webdav(
     let mut max_applied_mtime = watermark;
 
     for entry in &remote_files {
-        if entry.is_directory || !entry.name.starts_with("oplog-") || !entry.name.ends_with(".json")
-        {
+        if entry.is_directory || !entry.name.starts_with("oplog-") {
             continue;
         }
         if entry.name.contains(device_id) {
@@ -492,14 +483,7 @@ fn sync_upload_webdav(
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
                     Vec<crate::sync::proto::OplogResource>,
-                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
-                    |_| {
-                        serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                            &String::from_utf8_lossy(&data),
-                        )
-                        .map(|entries| (entries, Vec::new()))
-                    },
-                ) {
+                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data) {
                     Ok(e) => e,
                     Err(e) => {
                         println!("[sync] failed to parse {}: {}", entry.name, e);
@@ -648,12 +632,11 @@ fn sync_upload_s3(
     let uploaded_entries = if !local_entries.is_empty() {
         let (mut all_entries, mut all_resources) =
             sync::collect_entry_resources(local_entries, paths);
-        let mut filename = format!("oplog-{device_id}-{timestamp}.json");
+        let mut filename = format!("oplog-{device_id}-{timestamp}");
 
         if let Some(existing) = remote_objects.iter().find(|e| {
             !e.is_directory
                 && e.name.starts_with(&format!("oplog-{device_id}-"))
-                && e.name.ends_with(".json")
                 && !e.name.contains(timestamp)
         }) {
             if let Some(size) = existing.size_bytes {
@@ -668,14 +651,7 @@ fn sync_upload_s3(
                     ) {
                         let data = decrypt_if_configured(data, settings)?;
                         if let Ok((mut old_entries, old_resources)) =
-                            crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
-                                |_| {
-                                    serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                                        &String::from_utf8_lossy(&data),
-                                    )
-                                    .map(|entries| (entries, Vec::new()))
-                                },
-                            )
+                            crate::sync::proto::deserialize_oplog_with_resources(&data)
                         {
                             if old_entries.len() < rollover_entries {
                                 filename = existing.name.clone();
@@ -720,8 +696,7 @@ fn sync_upload_s3(
     let mut max_applied_mtime = watermark;
 
     for entry in &remote_objects {
-        if entry.is_directory || !entry.name.starts_with("oplog-") || !entry.name.ends_with(".json")
-        {
+        if entry.is_directory || !entry.name.starts_with("oplog-") {
             continue;
         }
         if entry.name.contains(device_id) {
@@ -746,14 +721,7 @@ fn sync_upload_s3(
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
                     Vec<crate::sync::proto::OplogResource>,
-                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data).or_else(
-                    |_| {
-                        serde_json::from_str::<Vec<crate::storage::SyncChangeLogEntry>>(
-                            &String::from_utf8_lossy(&data),
-                        )
-                        .map(|entries| (entries, Vec::new()))
-                    },
-                ) {
+                ) = match crate::sync::proto::deserialize_oplog_with_resources(&data) {
                     Ok(e) => e,
                     Err(e) => {
                         println!("[sync] failed to parse {}: {}", entry.name, e);
@@ -841,7 +809,7 @@ fn cleanup_old_s3_oplogs(
     let entries = sync::list_s3_objects(endpoint, region, bucket, prefix, access_key, secret_key)?;
     let mut oplog_files: Vec<(String, Option<i64>)> = entries
         .iter()
-        .filter(|e| !e.is_directory && e.name.starts_with("oplog-") && e.name.ends_with(".json"))
+        .filter(|e| !e.is_directory && e.name.starts_with("oplog-"))
         .map(|e| (e.name.clone(), e.modified_ms))
         .collect();
     oplog_files.sort_by_key(|a| a.1);
@@ -924,7 +892,7 @@ fn cleanup_old_remote_oplogs(
 
     let mut oplog_files: Vec<(String, Option<i64>)> = entries
         .iter()
-        .filter(|e| !e.is_directory && e.name.starts_with("oplog-") && e.name.ends_with(".json"))
+        .filter(|e| !e.is_directory && e.name.starts_with("oplog-"))
         .map(|e| (e.name.clone(), e.modified_ms))
         .collect();
 
@@ -1079,32 +1047,32 @@ mod tests {
     #[test]
     fn s3_object_key_without_remote_path_keeps_basename() {
         assert_eq!(
-            s3_object_key("", "oplog-dev-20260808.json"),
-            "oplog-dev-20260808.json"
+            s3_object_key("", "oplog-dev-20260808"),
+            "oplog-dev-20260808"
         );
     }
 
     #[test]
     fn s3_object_key_with_remote_path_prepends_prefix() {
         assert_eq!(
-            s3_object_key("backups", "oplog-dev-20260808.json"),
-            "backups/oplog-dev-20260808.json"
+            s3_object_key("backups", "oplog-dev-20260808"),
+            "backups/oplog-dev-20260808"
         );
     }
 
     #[test]
     fn s3_object_key_with_trailing_slash_avoids_double_separator() {
         assert_eq!(
-            s3_object_key("backups/", "oplog-dev-20260808.json"),
-            "backups/oplog-dev-20260808.json"
+            s3_object_key("backups/", "oplog-dev-20260808"),
+            "backups/oplog-dev-20260808"
         );
     }
 
     #[test]
     fn s3_object_key_with_leading_and_trailing_slash_is_normalized() {
         assert_eq!(
-            s3_object_key("/backups/", "oplog-dev-20260808.json"),
-            "backups/oplog-dev-20260808.json"
+            s3_object_key("/backups/", "oplog-dev-20260808"),
+            "backups/oplog-dev-20260808"
         );
     }
 }

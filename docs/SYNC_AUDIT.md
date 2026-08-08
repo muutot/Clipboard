@@ -103,4 +103,4 @@
 ## #14 证据
 
 - 远端 oplog 文件名是 `oplog-{device_id}-{timestamp}.json`，但载荷是 bincode（`serialize_oplog_with_resources`），仅靠读取时 JSON 回退兼容老文件，`.json` 后缀具误导性。
-- ✅ 修复：`data-contracts.md` 明确记载 `.json` 后缀只是历史遗留的过滤约定（下载/清理循环以 `ends_with(".json")` 筛选），不代表线上格式；bincode 才是实际载荷。纯文档澄清，不改行为。
+- ✅ 修复：彻底移除 oplog 的 JSON 回退解析（webdav/s3 下载循环与 rollover 合并的 `serde_json::from_str` fallback 全部删除），oplog 文件名去掉 `.json` 后缀（`oplog-{device_id}-{timestamp}` 无扩展名），下载/清理过滤逻辑同步改为仅 `starts_with("oplog-")`。基线仍为真实 zip（`.zip` + 内嵌 `baseline.pb` 与 `manifest.json`，属真实格式不误导）。`test_sync_connection`/`sync_list_remote_backups` 返回给前端的 JSON 字符串是 IPC 契约，不属于 wire 格式，保留。
