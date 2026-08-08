@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::Serialize;
+use tauri::Emitter;
 
 use crate::config::{ConfigStore, SyncConfig};
 use crate::storage::Database;
@@ -174,6 +175,7 @@ pub fn test_sync_connection(
 
 #[tauri::command]
 pub fn sync_upload_backup(
+    app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
@@ -195,6 +197,7 @@ pub fn sync_upload_backup(
     let provider = sync.provider;
     let result = match provider {
         crate::config::SyncProvider::Webdav => sync_upload_webdav(
+            &app,
             &guard,
             &database,
             &paths,
@@ -205,6 +208,7 @@ pub fn sync_upload_backup(
             &temp_dir,
         ),
         crate::config::SyncProvider::S3 => sync_upload_s3(
+            &app,
             &guard,
             &database,
             &paths,
@@ -230,6 +234,7 @@ pub fn sync_upload_backup(
 
 #[allow(clippy::too_many_arguments)]
 fn sync_upload_webdav(
+    app: &tauri::AppHandle,
     guard: &ConfigStore,
     database: &Database,
     paths: &crate::storage::StoragePaths,
@@ -241,6 +246,7 @@ fn sync_upload_webdav(
 ) -> Result<SyncUploadResult, String> {
     let mut bytes_uploaded: u64 = 0;
     let mut bytes_downloaded: u64 = 0;
+    let mut applied_remote = false;
 
     let has_prior_sync = guard.sync_config().last_sync_ms.is_some();
     let remote_files = sync::list_webdav_files(
@@ -273,6 +279,7 @@ fn sync_upload_webdav(
                 .import_baseline_items(&items)
                 .map_err(|e| e.to_string())?;
             println!("[sync] baseline imported: {} items", imported);
+            applied_remote = true;
         }
     } else if !has_prior_sync {
         println!("[sync] no remote baseline found, uploading local baseline");
@@ -411,7 +418,12 @@ fn sync_upload_webdav(
                 sync::rewrite_to_local(&mut remote_entries, paths);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
-                    Ok(applied) => applied_entries += applied,
+                    Ok(applied) => {
+                        applied_entries += applied;
+                        if applied > 0 {
+                            applied_remote = true;
+                        }
+                    }
                     Err(e) => println!("[sync] apply error: {}", e),
                 }
             }
@@ -429,6 +441,15 @@ fn sync_upload_webdav(
         max_files,
     )?;
 
+    if applied_remote {
+        let _ = app.emit(
+            "clipboard-history-invalidated",
+            crate::commands::clipboard::ClipboardHistoryInvalidated {
+                deleted_ids: Vec::new(),
+            },
+        );
+    }
+
     Ok(SyncUploadResult {
         uploaded_entries,
         downloaded_entries,
@@ -441,6 +462,7 @@ fn sync_upload_webdav(
 
 #[allow(clippy::too_many_arguments)]
 fn sync_upload_s3(
+    app: &tauri::AppHandle,
     guard: &ConfigStore,
     database: &Database,
     paths: &crate::storage::StoragePaths,
@@ -453,6 +475,7 @@ fn sync_upload_s3(
     let (region, bucket, access_key, secret_key) = resolve_s3_config(guard);
     let mut bytes_uploaded: u64 = 0;
     let mut bytes_downloaded: u64 = 0;
+    let mut applied_remote = false;
 
     let prefix: Option<&str> = if remote_path.is_empty() {
         None
@@ -487,6 +510,7 @@ fn sync_upload_s3(
                 .import_baseline_items(&items)
                 .map_err(|e| e.to_string())?;
             println!("[sync] baseline imported: {} items", imported);
+            applied_remote = true;
         }
     } else if !has_prior_sync {
         println!("[sync] no remote baseline found, uploading local baseline to S3");
@@ -629,7 +653,12 @@ fn sync_upload_s3(
                 sync::rewrite_to_local(&mut remote_entries, paths);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
-                    Ok(applied) => applied_entries += applied,
+                    Ok(applied) => {
+                        applied_entries += applied;
+                        if applied > 0 {
+                            applied_remote = true;
+                        }
+                    }
                     Err(e) => println!("[sync] apply error: {}", e),
                 }
             }
@@ -648,6 +677,15 @@ fn sync_upload_s3(
         device_id,
         max_files,
     )?;
+
+    if applied_remote {
+        let _ = app.emit(
+            "clipboard-history-invalidated",
+            crate::commands::clipboard::ClipboardHistoryInvalidated {
+                deleted_ids: Vec::new(),
+            },
+        );
+    }
 
     Ok(SyncUploadResult {
         uploaded_entries,
