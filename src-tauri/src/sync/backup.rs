@@ -83,17 +83,26 @@ pub fn create_backup(
 /// Creates a full baseline package containing every active item serialized in
 /// bincode (with inline resources so the package is self-sufficient on a new
 /// device) plus a JSON manifest.
+///
+/// When `pool` is provided, each collected resource is first uploaded to the
+/// remote pool (`resources/<rel_path>`) if not already known there, and
+/// already-pooled resources are written into the baseline as plain pool
+/// references (`bytes: None`) instead of inline copies.
 pub fn create_baseline_backup(
     database: &Database,
     paths: &StoragePaths,
     output_path: &Path,
+    pool: Option<&dyn crate::sync::PoolStorage>,
 ) -> Result<BackupManifest, String> {
     database.checkpoint().map_err(|e| e.to_string())?;
 
     let items = database
         .export_active_items()
         .map_err(|e| format!("failed to export items: {e}"))?;
-    let (items, resources) = crate::sync::resources::collect_item_resources(&items, paths);
+    let (items, mut resources) = crate::sync::collect_item_resources(&items, paths);
+    if let Some(pool) = pool {
+        crate::sync::prepare_pool_refs(paths, &mut resources, pool);
+    }
     let now_ms = now_ms();
     let device_id = crate::sync::device_id();
 
@@ -106,7 +115,10 @@ pub fn create_baseline_backup(
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count: items.len(),
         resource_count: resources.len(),
-        total_resource_bytes: resources.iter().map(|r| r.bytes.len() as u64).sum(),
+        total_resource_bytes: resources
+            .iter()
+            .map(|r| r.bytes.as_ref().map_or(0, |b| b.len() as u64))
+            .sum(),
         resources: Vec::new(),
         oplog_entries: 0,
     };
@@ -155,7 +167,10 @@ pub fn write_baseline_zip(
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count: items.len(),
         resource_count: resources.len(),
-        total_resource_bytes: resources.iter().map(|r| r.bytes.len() as u64).sum(),
+        total_resource_bytes: resources
+            .iter()
+            .map(|r| r.bytes.as_ref().map_or(0, |b| b.len() as u64))
+            .sum(),
         resources: Vec::new(),
         oplog_entries: 0,
     };

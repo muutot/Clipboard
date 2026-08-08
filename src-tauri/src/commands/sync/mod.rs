@@ -9,6 +9,7 @@ use crate::config::{ConfigStore, SyncConfig};
 use crate::storage::Database;
 use crate::storage::StoragePaths;
 use crate::sync;
+use crate::sync::PoolStorage;
 
 mod auto;
 
@@ -215,6 +216,86 @@ fn resolve_s3_config(settings: &SyncSettings) -> (String, String, String, String
     )
 }
 
+/// WebDAV-backed remote resource pool. Objects live at
+/// `<remote_path>/resources/<rel_path>` and use the same per-payload sync
+/// password when encryption is configured.
+struct WebDavPool<'a> {
+    endpoint: &'a str,
+    remote_path: &'a str,
+    username: Option<&'a str>,
+    password: Option<&'a str>,
+    settings: &'a SyncSettings,
+}
+
+impl sync::PoolStorage for WebDavPool<'_> {
+    fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
+        let object = sync::pool_object_path(rel_path);
+        let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
+        sync::upload_to_webdav(
+            self.endpoint,
+            self.remote_path,
+            &object,
+            data,
+            self.username,
+            self.password,
+        )
+    }
+    fn download(&self, rel_path: &str) -> Result<Vec<u8>, String> {
+        let object = sync::pool_object_path(rel_path);
+        let data = sync::download_from_webdav(
+            self.endpoint,
+            self.remote_path,
+            &object,
+            self.username,
+            self.password,
+        )?;
+        decrypt_if_configured(data, self.settings)
+    }
+}
+
+/// S3-backed pool of remote resources. Objects live at
+/// `<remote_path>/resources/<rel_path>` (or `resources/<rel_path>` when no
+/// remote path is configured) and are encrypted when a sync password is set.
+struct S3Pool<'a> {
+    endpoint: &'a str,
+    region: &'a str,
+    bucket: &'a str,
+    access_key: &'a str,
+    secret_key: &'a str,
+    remote_path: &'a str,
+    settings: &'a SyncSettings,
+}
+
+impl sync::PoolStorage for S3Pool<'_> {
+    fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
+        let object = sync::pool_object_path(rel_path);
+        let key = s3_object_key(self.remote_path, &object);
+        let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
+        sync::upload_to_s3(
+            self.endpoint,
+            self.region,
+            self.bucket,
+            &key,
+            data,
+            self.access_key,
+            self.secret_key,
+        )
+    }
+    fn download(&self, rel_path: &str) -> Result<Vec<u8>, String> {
+        let object = sync::pool_object_path(rel_path);
+        let key = s3_object_key(self.remote_path, &object);
+        let data = sync::download_from_s3(
+            self.endpoint,
+            self.region,
+            self.bucket,
+            &key,
+            self.access_key,
+            self.secret_key,
+        )?;
+        decrypt_if_configured(data, self.settings)
+    }
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn test_sync_connection(
@@ -351,6 +432,14 @@ fn sync_upload_webdav(
     let mut bytes_downloaded: u64 = 0;
     let mut applied_remote = false;
 
+    let pool = WebDavPool {
+        endpoint,
+        remote_path,
+        username: settings.username.as_deref(),
+        password: settings.password.as_deref(),
+        settings,
+    };
+
     let has_prior_sync = settings.last_sync_ms.is_some();
     let remote_files = sync::list_webdav_files(
         endpoint,
@@ -387,16 +476,20 @@ fn sync_upload_webdav(
             }
             let (mut merged_items, merged_resources) = sync::merge_baselines(&merged_payloads)?;
 
+            sync::absorb_pool_paths(paths, &merged_resources);
+
             // Self-heal: collapse the redundant disjoint baselines into one
             // superset baseline so the remote converges back to a single source
             // of truth. Done before import so the local copies stay valid.
             if remote_baselines.len() > 1 {
+                let mut pooled_resources = merged_resources.clone();
+                sync::prepare_pool_refs(paths, &mut pooled_resources, &pool);
                 let filename = format!("baseline-{device_id}-{timestamp}.zip");
                 let merged_path = temp_dir.join(&filename);
                 sync::write_baseline_zip(
                     &merged_path,
                     &merged_items,
-                    &merged_resources,
+                    &pooled_resources,
                     device_id,
                 )?;
                 let data = std::fs::read(&merged_path).map_err(|e| e.to_string())?;
@@ -425,7 +518,7 @@ fn sync_upload_webdav(
                 );
             }
 
-            sync::materialize_resources(&merged_resources, paths)?;
+            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))?;
             sync::rewrite_item_paths_to_local(&mut merged_items, paths);
             let imported = database
                 .import_baseline_items(&merged_items)
@@ -437,7 +530,7 @@ fn sync_upload_webdav(
         println!("[sync] no remote baseline found, uploading local baseline");
         let filename = format!("baseline-{device_id}-{timestamp}.zip");
         let baseline_path = temp_dir.join(&filename);
-        let manifest = sync::create_baseline_backup(database, paths, &baseline_path)?;
+        let manifest = sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
         let data = encrypt_if_configured(data, settings)?;
         bytes_uploaded += data.len() as u64;
@@ -559,7 +652,9 @@ fn sync_upload_webdav(
                         continue;
                     }
                 };
-                if let Err(e) = sync::materialize_resources(&resources, paths) {
+                if let Err(e) =
+                    sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
+                {
                     println!("[sync] failed to materialize {}: {}", entry.name, e);
                     continue;
                 }
@@ -632,6 +727,16 @@ fn sync_upload_s3(
     let mut bytes_downloaded: u64 = 0;
     let mut applied_remote = false;
 
+    let pool = S3Pool {
+        endpoint,
+        region: &region,
+        bucket: &bucket,
+        access_key: &access_key,
+        secret_key: &secret_key,
+        remote_path,
+        settings,
+    };
+
     let prefix: Option<&str> = if remote_path.is_empty() {
         None
     } else {
@@ -670,16 +775,20 @@ fn sync_upload_s3(
             }
             let (mut merged_items, merged_resources) = sync::merge_baselines(&merged_payloads)?;
 
+            sync::absorb_pool_paths(paths, &merged_resources);
+
             // Self-heal: collapse the redundant disjoint baselines into one
             // superset baseline so the remote converges back to a single source
             // of truth.
             if remote_baselines.len() > 1 {
+                let mut pooled_resources = merged_resources.clone();
+                sync::prepare_pool_refs(paths, &mut pooled_resources, &pool);
                 let filename = format!("baseline-{device_id}-{timestamp}.zip");
                 let merged_path = temp_dir.join(&filename);
                 sync::write_baseline_zip(
                     &merged_path,
                     &merged_items,
-                    &merged_resources,
+                    &pooled_resources,
                     device_id,
                 )?;
                 let data = std::fs::read(&merged_path).map_err(|e| e.to_string())?;
@@ -710,7 +819,7 @@ fn sync_upload_s3(
                 );
             }
 
-            sync::materialize_resources(&merged_resources, paths)?;
+            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))?;
             sync::rewrite_item_paths_to_local(&mut merged_items, paths);
             let imported = database
                 .import_baseline_items(&merged_items)
@@ -722,7 +831,7 @@ fn sync_upload_s3(
         println!("[sync] no remote baseline found, uploading local baseline to S3");
         let filename = format!("baseline-{device_id}-{timestamp}.zip");
         let baseline_path = temp_dir.join(&filename);
-        let manifest = sync::create_baseline_backup(database, paths, &baseline_path)?;
+        let manifest = sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
         let data = encrypt_if_configured(data, settings)?;
         bytes_uploaded += data.len() as u64;
@@ -848,7 +957,9 @@ fn sync_upload_s3(
                         continue;
                     }
                 };
-                if let Err(e) = sync::materialize_resources(&resources, paths) {
+                if let Err(e) =
+                    sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
+                {
                     println!("[sync] failed to materialize {}: {}", entry.name, e);
                     continue;
                 }
@@ -1270,9 +1381,17 @@ fn compact_webdav(
     let username = settings.username.as_deref();
     let password = settings.password.as_deref();
 
+    let pool = WebDavPool {
+        endpoint,
+        remote_path,
+        username,
+        password,
+        settings,
+    };
+
     let filename = format!("baseline-{device_id}-{timestamp}.zip");
     let baseline_path = temp_dir.join(&filename);
-    sync::create_baseline_backup(database, paths, &baseline_path)?;
+    sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
     let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
     let data = encrypt_if_configured(data, settings)?;
     sync::upload_to_webdav(endpoint, remote_path, &filename, data, username, password)?;
@@ -1337,9 +1456,19 @@ fn compact_s3(
         Some(remote_path)
     };
 
+    let pool = S3Pool {
+        endpoint,
+        region: &region,
+        bucket: &bucket,
+        access_key: &access_key,
+        secret_key: &secret_key,
+        remote_path,
+        settings,
+    };
+
     let filename = format!("baseline-{device_id}-{timestamp}.zip");
     let baseline_path = temp_dir.join(&filename);
-    sync::create_baseline_backup(database, paths, &baseline_path)?;
+    sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
     let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
     let data = encrypt_if_configured(data, settings)?;
     sync::upload_to_s3(

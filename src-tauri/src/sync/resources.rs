@@ -4,6 +4,10 @@ use std::path::{Path, PathBuf};
 use super::wire::OplogResource;
 use crate::storage::{StoragePaths, SyncChangeLogEntry};
 
+/// Fetch callback used to download a pooled resource (`bytes: None`) from the
+/// remote pool when materializing a payload on a device that lacks the file.
+pub type PoolFetcher<'a> = dyn Fn(&str) -> Result<Vec<u8>, String> + 'a;
+
 /// Rewrites absolute resource paths on `entries` to portable wire form
 /// (`image/<rel>`, `file/<rel>`, `preview/<rel>`, `icon/<name>`) and collects
 /// the referenced file bytes into inline `OplogResource`s.
@@ -31,7 +35,7 @@ pub fn collect_item_resources(
                             if seen.insert(wire.clone()) {
                                 resources.push(OplogResource {
                                     rel_path: wire.clone(),
-                                    bytes,
+                                    bytes: Some(bytes),
                                 });
                             }
                             item.resource_path = Some(wire);
@@ -42,7 +46,7 @@ pub fn collect_item_resources(
                             if seen.insert(wire.clone()) {
                                 resources.push(OplogResource {
                                     rel_path: wire.clone(),
-                                    bytes,
+                                    bytes: Some(bytes),
                                 });
                             }
                             item.preview_path = Some(wire);
@@ -55,7 +59,7 @@ pub fn collect_item_resources(
                             if seen.insert(wire.clone()) {
                                 resources.push(OplogResource {
                                     rel_path: wire.clone(),
-                                    bytes,
+                                    bytes: Some(bytes),
                                 });
                             }
                             item.resource_path = Some(wire);
@@ -69,7 +73,7 @@ pub fn collect_item_resources(
                                     if seen.insert(wire.clone()) {
                                         resources.push(OplogResource {
                                             rel_path: wire.clone(),
-                                            bytes,
+                                            bytes: Some(bytes),
                                         });
                                     }
                                     wires.push(wire);
@@ -90,7 +94,7 @@ pub fn collect_item_resources(
                     if seen.insert(wire.clone()) {
                         resources.push(OplogResource {
                             rel_path: wire.clone(),
-                            bytes,
+                            bytes: Some(bytes),
                         });
                     }
                 }
@@ -162,7 +166,7 @@ pub fn collect_entry_resources(
                             if seen.insert(wire.clone()) {
                                 resources.push(OplogResource {
                                     rel_path: wire.clone(),
-                                    bytes,
+                                    bytes: Some(bytes),
                                 });
                             }
                             entry.resource_path = Some(wire);
@@ -173,7 +177,7 @@ pub fn collect_entry_resources(
                             if seen.insert(wire.clone()) {
                                 resources.push(OplogResource {
                                     rel_path: wire.clone(),
-                                    bytes,
+                                    bytes: Some(bytes),
                                 });
                             }
                             entry.preview_path = Some(wire);
@@ -186,7 +190,7 @@ pub fn collect_entry_resources(
                             if seen.insert(wire.clone()) {
                                 resources.push(OplogResource {
                                     rel_path: wire.clone(),
-                                    bytes,
+                                    bytes: Some(bytes),
                                 });
                             }
                             entry.resource_path = Some(wire);
@@ -200,7 +204,7 @@ pub fn collect_entry_resources(
                                     if seen.insert(wire.clone()) {
                                         resources.push(OplogResource {
                                             rel_path: wire.clone(),
-                                            bytes,
+                                            bytes: Some(bytes),
                                         });
                                     }
                                     wires.push(wire);
@@ -221,7 +225,7 @@ pub fn collect_entry_resources(
                     if seen.insert(wire.clone()) {
                         resources.push(OplogResource {
                             rel_path: wire.clone(),
-                            bytes,
+                            bytes: Some(bytes),
                         });
                     }
                 }
@@ -236,9 +240,16 @@ pub fn collect_entry_resources(
 
 /// Writes inline resource bytes back into the local storage subdirectories
 /// according to their wire category.
+///
+/// Resources that reference the remote pool (`bytes: None`) are skipped unless
+/// a `fetch` callback is supplied, in which case the missing file is downloaded
+/// from the pool (`resources/<rel_path>`) before it is written. This keeps
+/// pool-backed payloads materializable on a fresh device without duplicating
+/// every file into the payload itself.
 pub fn materialize_resources(
     resources: &[OplogResource],
     paths: &StoragePaths,
+    fetch_pool: Option<&PoolFetcher>,
 ) -> Result<(), String> {
     for resource in resources {
         let Some((category, rel)) = resource.rel_path.split_once('/') else {
@@ -252,10 +263,23 @@ pub fn materialize_resources(
             _ => continue,
         };
         let target = base.join(rel);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        if let Some(bytes) = &resource.bytes {
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&target, bytes).map_err(|e| e.to_string())?;
+            continue;
         }
-        std::fs::write(&target, &resource.bytes).map_err(|e| e.to_string())?;
+        if let Some(fetch) = fetch_pool {
+            if target.exists() {
+                continue;
+            }
+            let bytes = fetch(&resource.rel_path)?;
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&target, bytes).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -403,7 +427,7 @@ mod tests {
         let (entries, resources) = collect_entry_resources(vec![entry], &paths);
         assert_eq!(resources.len(), 1, "preview equals resource: deduped");
         assert_eq!(resources[0].rel_path, "image/abc.png");
-        assert_eq!(resources[0].bytes, b"image-bytes");
+        assert_eq!(resources[0].bytes, Some(b"image-bytes".to_vec()));
         assert_eq!(entries[0].resource_path.as_deref(), Some("image/abc.png"));
         assert_eq!(entries[0].preview_path.as_deref(), Some("image/abc.png"));
 
@@ -465,7 +489,7 @@ mod tests {
         rewrite_to_local(&mut downloaded, &paths);
         assert_eq!(downloaded[0].icon_path.as_deref(), Some("browser.png"));
 
-        materialize_resources(&resources, &paths).unwrap();
+        materialize_resources(&resources, &paths, None).unwrap();
         assert_eq!(
             std::fs::read(icons.join("browser.png")).unwrap(),
             b"icon-bytes"
@@ -478,18 +502,18 @@ mod tests {
         let resources = vec![
             OplogResource {
                 rel_path: "image/a.png".to_string(),
-                bytes: b"i".to_vec(),
+                bytes: Some(b"i".to_vec()),
             },
             OplogResource {
                 rel_path: "preview/a.jpg".to_string(),
-                bytes: b"p".to_vec(),
+                bytes: Some(b"p".to_vec()),
             },
             OplogResource {
                 rel_path: "file/a.pdf".to_string(),
-                bytes: b"f".to_vec(),
+                bytes: Some(b"f".to_vec()),
             },
         ];
-        materialize_resources(&resources, &paths).unwrap();
+        materialize_resources(&resources, &paths, None).unwrap();
         assert_eq!(std::fs::read(paths.images.join("a.png")).unwrap(), b"i");
         assert_eq!(std::fs::read(paths.previews.join("a.jpg")).unwrap(), b"p");
         assert_eq!(std::fs::read(paths.files.join("a.pdf")).unwrap(), b"f");
@@ -504,5 +528,61 @@ mod tests {
         let (entries, resources) = collect_entry_resources(vec![entry], &paths);
         assert!(resources.is_empty());
         assert!(entries[0].resource_path.is_none());
+    }
+
+    #[test]
+    fn pool_reference_is_fetched_through_callback() {
+        let paths = temporary_storage("pool-fetch");
+        let resources = vec![OplogResource {
+            rel_path: "image/from-pool.png".to_string(),
+            bytes: None,
+        }];
+
+        materialize_resources(
+            &resources,
+            &paths,
+            Some(&|rel: &str| {
+                assert_eq!(rel, "image/from-pool.png");
+                Ok(b"pool-bytes".to_vec())
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(paths.images.join("from-pool.png")).unwrap(),
+            b"pool-bytes"
+        );
+    }
+
+    #[test]
+    fn pool_reference_without_callback_is_skipped() {
+        let paths = temporary_storage("pool-skip");
+        let resources = vec![OplogResource {
+            rel_path: "image/from-pool.png".to_string(),
+            bytes: None,
+        }];
+
+        materialize_resources(&resources, &paths, None).unwrap();
+        assert!(!paths.images.join("from-pool.png").exists());
+    }
+
+    #[test]
+    fn pool_reference_existing_file_is_not_refetched() {
+        let paths = temporary_storage("pool-existing");
+        std::fs::write(paths.images.join("already.png"), b"local").unwrap();
+        let resources = vec![OplogResource {
+            rel_path: "image/already.png".to_string(),
+            bytes: None,
+        }];
+
+        materialize_resources(
+            &resources,
+            &paths,
+            Some(&|_| panic!("existing file must not be re-downloaded")),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(paths.images.join("already.png")).unwrap(),
+            b"local"
+        );
     }
 }

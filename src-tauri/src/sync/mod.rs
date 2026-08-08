@@ -1,5 +1,6 @@
 pub mod backup;
 pub mod crypto;
+pub mod pool;
 pub mod resources;
 pub mod s3;
 pub mod webdav;
@@ -22,6 +23,10 @@ pub use backup::{
     count_unsynced, create_baseline_backup, create_oplog_backup, mark_oplog_synced, purge_oplog,
     read_baseline_items, read_baseline_with_resources, read_manifest_from_backup,
     write_baseline_zip, BackupManifest, ResourceEntry,
+};
+pub use pool::{
+    absorb_pool_paths, ensure_pool_uploads, load_pool_manifest, mark_pool_references,
+    pool_object_path, prepare_pool_refs, PoolStorage,
 };
 pub use resources::{
     collect_entry_resources, collect_item_resources, materialize_resources,
