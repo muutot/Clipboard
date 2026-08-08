@@ -289,7 +289,7 @@ export interface GeneralSettings {
   display: DisplaySettings;
   windowTransparency: number;
   windowEffect: WindowEffect;
-  /** 文字是否随窗口透明度/毛玻璃一并变透明；关闭时文字保持完全不透明 */
+  /** 文字是否随窗口不透明度/毛玻璃一并变透明；关闭时文字保持完全不透明 */
   windowOpacityAffectsText: boolean;
   compactMode: boolean;
   compactPaddingTop: number;
