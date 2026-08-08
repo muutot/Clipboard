@@ -43,8 +43,6 @@ pub fn set_general_settings(
     let _ = app.emit("general-settings-changed", &saved);
     if saved.window_opacity_affects_text {
         apply_window_transparency_to_main(&app, saved.window_transparency);
-    } else {
-        apply_window_transparency_to_main(&app, 100);
     }
     apply_window_effect_to_main(&app, &saved.window_effect);
     Ok(saved)

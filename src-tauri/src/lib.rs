@@ -454,11 +454,15 @@ pub fn run() {
                 };
 
             let launch_at_startup = config.launch_at_startup();
-            let startup_transparency = if config.general_settings().window_opacity_affects_text {
-                config.general_settings().window_transparency
-            } else {
-                100
-            };
+            // The native layered alpha fades the whole window including text, so
+            // it must only be applied when text is meant to follow the window
+            // transparency. Otherwise the window stays in its per-pixel
+            // transparent state and the CSS backdrop translucency composites
+            // over the desktop.
+            let startup_transparency = config
+                .general_settings()
+                .window_opacity_affects_text
+                .then(|| config.general_settings().window_transparency);
             let startup_window_effect = config.general_settings().window_effect.clone();
             app.manage(Mutex::new(config));
             app.manage(paths);
@@ -526,7 +530,9 @@ pub fn run() {
             app.manage(Mutex::new(keyboard));
             app.manage(Mutex::new(hotkey_manager));
 
-            apply_window_transparency_to_main(app.handle(), startup_transparency);
+            if let Some(transparency) = startup_transparency {
+                apply_window_transparency_to_main(app.handle(), transparency);
+            }
             apply_window_effect_to_main(app.handle(), &startup_window_effect);
 
             Ok(())
