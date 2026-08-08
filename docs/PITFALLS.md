@@ -206,6 +206,25 @@ END;
 
 新增/修改同表 AFTER 触发器时，必须带上 WHEN 守卫，明确列出真正影响该触发器语义的列（如 `sync_update` 已按 title/text/content 等列守卫），否则会与 `set_modified` 的嵌套 UPDATE 组合出重复事件。递归触发器 pragma（`PRAGMA recursive_triggers`）默认关闭，但这只限制同表递归，不能替代 WHEN 守卫。
 
+### 应用远端数据时，同步触发器会把收到的条目再广播回去（回声）
+
+`clipboard_items_sync_*` 触发器对任何 `clipboard_items` 写入都生成一条 `sync_changelog`。如果 `apply_remote_oplog` / `import_baseline_items` 走裸 SQL 写入，接收到的条目会以本机 `device_id` 再次入 changelog，下次同步又广播回远端（导入 1 万条基线就回传 1 万条）。
+
+```sql
+-- FIX: 触发器带 WHEN 守卫，读取 sync_metadata 的抑制标记
+CREATE TRIGGER clipboard_items_sync_insert
+AFTER INSERT ON clipboard_items
+WHEN NOT EXISTS (
+    SELECT 1 FROM sync_metadata
+    WHERE key = 'sync_suppress_changelog' AND value = '1'
+)
+BEGIN
+    INSERT INTO sync_changelog ...;
+END;
+```
+
+写入远端数据的代码路径（`apply_remote_oplog`、`import_baseline_items`）必须在**同一事务内**先置 `sync_suppress_changelog=1`、提交前再置回 `0`（`Database::set_changelog_suppressed`）。因为标记随事务回滚而回滚，崩溃也不会残留永久抑制。注意：这三个同步触发器每次打开库都会 `DROP` + `CREATE`（见 `migrations.rs`），因此老库也会在下次打开时获得新守卫；搜索触发器不读该标记，接收到的条目仍需进 `search_outbox` 以便索引。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：

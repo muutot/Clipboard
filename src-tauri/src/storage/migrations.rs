@@ -160,8 +160,18 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
 
         -- Triggers to populate sync_changelog on every data mutation.
         -- device_id is read from sync_metadata (set at startup by the app).
+        -- The WHEN guard suppresses echo when remote oplog/baseline data is
+        -- being applied locally (sync_metadata key 'sync_suppress_changelog'),
+        -- so received entries are not re-broadcast back to the remote.
+        -- The triggers are dropped and recreated on every open so databases
+        -- created before the guard was added are upgraded in place.
+        DROP TRIGGER IF EXISTS clipboard_items_sync_insert;
         CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_insert
         AFTER INSERT ON clipboard_items
+        WHEN NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
@@ -177,9 +187,15 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                  NEW.is_favorite, NEW.source_app, NEW.size_bytes, NEW.last_used_at_ms);
         END;
 
+        DROP TRIGGER IF EXISTS clipboard_items_sync_update;
         CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_update
         AFTER UPDATE ON clipboard_items
-        WHEN OLD.title != NEW.title
+        WHEN NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
+        AND (
+            OLD.title != NEW.title
           OR OLD.text_content IS NOT NEW.text_content
           OR OLD.html_content IS NOT NEW.html_content
           OR OLD.rtf_content IS NOT NEW.rtf_content
@@ -189,6 +205,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
           OR OLD.is_favorite != NEW.is_favorite
           OR OLD.deleted != NEW.deleted
           OR OLD.metadata_json IS NOT NEW.metadata_json
+        )
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
@@ -209,8 +226,13 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                  NEW.is_favorite, NEW.source_app, NEW.size_bytes, NEW.last_used_at_ms);
         END;
 
+        DROP TRIGGER IF EXISTS clipboard_items_sync_delete;
         CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_delete
         AFTER DELETE ON clipboard_items
+        WHEN NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,

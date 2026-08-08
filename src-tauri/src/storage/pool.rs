@@ -221,6 +221,22 @@ impl Database {
         })
     }
 
+    /// Sets the changelog-suppression flag so the sync_changelog triggers stay
+    /// quiet while remote data is being applied. The flag is written and cleared
+    /// inside the caller's transaction, so a rollback reverts it too (no stale
+    /// suppression after a failed apply).
+    fn set_changelog_suppressed(
+        tx: &rusqlite::Transaction<'_>,
+        suppressed: bool,
+    ) -> Result<(), StorageError> {
+        tx.execute(
+            "INSERT INTO sync_metadata (key, value) VALUES ('sync_suppress_changelog', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = ?1",
+            [if suppressed { "1" } else { "0" }],
+        )?;
+        Ok(())
+    }
+
     /// Exports all active (non-deleted) items for baseline creation.
     pub fn export_active_items(&self) -> Result<Vec<ClipboardItem>, StorageError> {
         self.with_connection(|connection| {
@@ -271,6 +287,7 @@ impl Database {
     pub fn import_baseline_items(&self, items: &[ClipboardItem]) -> Result<u64, StorageError> {
         self.with_connection(|connection| {
             let tx = connection.transaction()?;
+            Self::set_changelog_suppressed(&tx, true)?;
             let mut imported = 0u64;
             for item in items {
                 let kind_str = match item.kind {
@@ -325,6 +342,7 @@ impl Database {
                 )?;
                 imported += 1;
             }
+            Self::set_changelog_suppressed(&tx, false)?;
             tx.commit()?;
             Ok(imported)
         })
@@ -336,6 +354,7 @@ impl Database {
     pub fn apply_remote_oplog(&self, entries: &[SyncChangeLogEntry]) -> Result<u64, StorageError> {
         self.with_connection(|connection| {
             let tx = connection.transaction()?;
+            Self::set_changelog_suppressed(&tx, true)?;
             let mut applied = 0u64;
 
             for entry in entries {
@@ -465,6 +484,7 @@ impl Database {
                 }
             }
 
+            Self::set_changelog_suppressed(&tx, false)?;
             tx.commit()?;
             Ok(applied)
         })
@@ -680,6 +700,82 @@ mod tests {
         let stored = target.get_item("item").unwrap().unwrap();
         assert_eq!(stored.text_content.as_deref(), Some("content-item"));
         assert_eq!(stored.title, "record-item");
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn apply_remote_oplog_does_not_echo_back_to_changelog() {
+        let db_path = temporary_path("oplog-echo-source");
+        let source = Database::open(&db_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source.save_item(&text_item("item", 100)).unwrap();
+        let entries = source.get_unsynced_changelog(10).unwrap();
+
+        let target_path = temporary_path("oplog-echo-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        let applied = target.apply_remote_oplog(&entries).unwrap();
+        assert_eq!(applied, 1);
+
+        // Received entries must not be re-queued as local unsynced changes.
+        let echo = target.get_unsynced_changelog(10).unwrap();
+        assert_eq!(
+            echo.len(),
+            0,
+            "applied remote entries echoed into local changelog"
+        );
+        let stored = target.get_item("item").unwrap().unwrap();
+        assert_eq!(stored.text_content.as_deref(), Some("content-item"));
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn import_baseline_does_not_echo_back_to_changelog() {
+        let db_path = temporary_path("baseline-echo");
+        let source = Database::open(&db_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source.save_item(&text_item("item", 100)).unwrap();
+        let items = source.export_active_items().unwrap();
+
+        let target_path = temporary_path("baseline-echo-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        let imported = target.import_baseline_items(&items).unwrap();
+        assert_eq!(imported, 1);
+
+        let echo = target.get_unsynced_changelog(10).unwrap();
+        assert_eq!(
+            echo.len(),
+            0,
+            "imported baseline entries echoed into local changelog"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn local_saves_still_queued_after_remote_apply() {
+        let db_path = temporary_path("post-apply-local");
+        let source = Database::open(&db_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source.save_item(&text_item("remote", 100)).unwrap();
+        let entries = source.get_unsynced_changelog(10).unwrap();
+
+        let target_path = temporary_path("post-apply-local-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        target.apply_remote_oplog(&entries).unwrap();
+        target.save_item(&text_item("local", 200)).unwrap();
+
+        // A genuine local mutation after apply must still be queued.
+        let echo = target.get_unsynced_changelog(10).unwrap();
+        assert_eq!(echo.len(), 1);
+        assert_eq!(echo[0].item_id, "local");
 
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_file(&target_path);
