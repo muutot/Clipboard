@@ -23,7 +23,7 @@
         "maximizable": false,
         "decorations": false,
         "transparent": true,
-        "backgroundColor": "#111111"
+        "backgroundColor": "#00000000"
       }
     ],
     "security": {

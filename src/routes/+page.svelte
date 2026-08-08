@@ -3528,7 +3528,7 @@
     color: var(--text-primary);
     background: color-mix(
       in srgb,
-      var(--bg-settings) calc(var(--window-opacity, 1) * 98.5%),
+      var(--bg-settings) var(--window-opacity-shell, 98.5%),
       transparent
     );
   }
