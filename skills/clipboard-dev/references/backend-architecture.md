@@ -46,6 +46,8 @@ The implementation lives under `src-tauri/src/storage/`.
 
 `Database` wraps a rusqlite connection configured for foreign keys, WAL, normal synchronous mode, memory temp storage, cache, and mmap. Repository traits/implementations cover clipboard, OCR, search-outbox, and sync-state behavior. `Database::from_connection` creates the schema and then ensures `sync_metadata.device_id` is a persisted UUID before returning the database, so every later trigger-generated changelog row has a stable local identity.
 
+`storage/sync_v3.rs` is the new compact local replication contract, currently dormant until the v3 command orchestrator calls `Database::enable_sync_v3`. Activation preserves clipboard rows but resets legacy sync-only state, assigns deterministic `(modified_at_ms, sync_writer_device_id)` versions, and enables guarded v3 triggers. Those triggers append only small id/version outbox rows and maintain a separate winning tombstone per deleted id; snapshot/outbox export batch-loads current rows and coalesces repeated ids instead of storing a second full copy of the 100,000-row dataset. The legacy changelog and old modified-time triggers stop writing once v3 is enabled.
+
 ### Pool status
 
 `storage/pool.rs` no longer contains a connection pool: the unused `DatabasePool`/`PooledConnection` types and the read-only/estimate helpers were removed as dead code. Despite its historical filename, it now holds live auxiliary database operations including repair/checkpoint, file-reference lookup, sync changelog/state, and sync device identity. The GUI runtime and workers each manage `Database` directly; a shared connection pool is not part of the runtime path.

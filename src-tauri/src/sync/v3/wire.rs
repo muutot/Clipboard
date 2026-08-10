@@ -95,7 +95,7 @@ pub struct EncodedObject {
     pub uncompressed_size_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct RecordVersion {
     pub modified_at_ms: i64,
     pub writer_device_id: String,

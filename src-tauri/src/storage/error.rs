@@ -43,6 +43,7 @@ pub enum StorageError {
     OcrRegenerationInProgress(String),
     InvalidSearchOperation(String),
     InvalidSyncOperation(String),
+    InvalidSyncState(String),
     InvalidKeyboardAction(String),
     InvalidShortcut(String),
     ShortcutConflict {
@@ -148,6 +149,9 @@ impl fmt::Display for StorageError {
             }
             Self::InvalidSyncOperation(operation) => {
                 write!(formatter, "unknown sync operation: {operation}")
+            }
+            Self::InvalidSyncState(message) => {
+                write!(formatter, "invalid sync state: {message}")
             }
             Self::InvalidKeyboardAction(action) => {
                 write!(formatter, "invalid keyboard action name: {action}")

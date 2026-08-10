@@ -22,6 +22,8 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             is_favorite INTEGER NOT NULL DEFAULT 0 CHECK (is_favorite IN (0, 1)),
             deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
             deleted_at_ms INTEGER,
+            modified_at_ms INTEGER,
+            sync_writer_device_id TEXT NOT NULL DEFAULT '',
             metadata_json TEXT DEFAULT '{}',
             UNIQUE (kind, content_hash)
         );
@@ -204,6 +206,10 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             SELECT 1 FROM sync_metadata
             WHERE key = 'sync_suppress_changelog' AND value = '1'
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
+        )
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
@@ -225,6 +231,10 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         WHEN NOT EXISTS (
             SELECT 1 FROM sync_metadata
             WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
         )
         AND (
             OLD.title != NEW.title
@@ -265,6 +275,10 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             SELECT 1 FROM sync_metadata
             WHERE key = 'sync_suppress_changelog' AND value = '1'
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
+        )
         BEGIN
             INSERT INTO sync_changelog
                 (item_id, operation, kind, title, content_hash, resource_path,
@@ -290,6 +304,10 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             SELECT 1 FROM sync_metadata
             WHERE key = 'sync_suppress_changelog' AND value = '1'
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
+        )
         BEGIN
             UPDATE clipboard_items SET modified_at_ms = strftime('%s', 'now') * 1000
             WHERE id = NEW.id AND (modified_at_ms IS NULL OR modified_at_ms < strftime('%s', 'now') * 1000 - 1000);
@@ -304,6 +322,12 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
     ensure_column(connection, "clipboard_items", "html_content", "TEXT")?;
     ensure_column(connection, "clipboard_items", "rtf_content", "TEXT")?;
     ensure_column(connection, "clipboard_items", "modified_at_ms", "INTEGER")?;
+    ensure_column(
+        connection,
+        "clipboard_items",
+        "sync_writer_device_id",
+        "TEXT NOT NULL DEFAULT ''",
+    )?;
     ensure_column(
         connection,
         "sync_changelog",
@@ -336,6 +360,233 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
     // every open and for fresh databases.
     connection.execute_batch("DROP INDEX IF EXISTS search_outbox_sequence_idx;")?;
 
+    create_sync_v3_schema(connection)?;
+
+    Ok(())
+}
+
+fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS sync_v3_outbox (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL,
+            operation TEXT NOT NULL CHECK (operation IN ('upsert', 'delete')),
+            kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
+            content_hash TEXT NOT NULL DEFAULT '',
+            modified_at_ms INTEGER NOT NULL,
+            writer_device_id TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS sync_v3_outbox_item_sequence_idx
+            ON sync_v3_outbox (item_id, sequence DESC);
+
+        CREATE TABLE IF NOT EXISTS sync_v3_tombstones (
+            item_id TEXT PRIMARY KEY NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
+            content_hash TEXT NOT NULL DEFAULT '',
+            deleted_at_ms INTEGER NOT NULL,
+            modified_at_ms INTEGER NOT NULL,
+            writer_device_id TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS sync_v3_tombstones_version_idx
+            ON sync_v3_tombstones (modified_at_ms, writer_device_id);
+
+        CREATE TABLE IF NOT EXISTS sync_v3_remote_state (
+            remote_scope TEXT PRIMARY KEY NOT NULL,
+            epoch TEXT NOT NULL,
+            snapshot_key TEXT,
+            snapshot_sha256 TEXT,
+            snapshot_sequence INTEGER NOT NULL DEFAULT 0,
+            published_sequence INTEGER NOT NULL DEFAULT 0,
+            last_segment_key TEXT,
+            legacy_cleaned INTEGER NOT NULL DEFAULT 0 CHECK (legacy_cleaned IN (0, 1)),
+            initialized INTEGER NOT NULL DEFAULT 0 CHECK (initialized IN (0, 1)),
+            updated_at_ms INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS sync_v3_cursors (
+            remote_scope TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            epoch TEXT NOT NULL,
+            sequence INTEGER NOT NULL DEFAULT 0,
+            snapshot_sha256 TEXT,
+            last_segment_key TEXT,
+            updated_at_ms INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (remote_scope, device_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sync_v3_remote_resources (
+            remote_scope TEXT NOT NULL,
+            object_key TEXT NOT NULL,
+            sha256 TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            confirmed_at_ms INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (remote_scope, object_key)
+        );
+
+        DROP TRIGGER IF EXISTS clipboard_items_sync_v3_insert;
+        CREATE TRIGGER clipboard_items_sync_v3_insert
+        AFTER INSERT ON clipboard_items
+        WHEN EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
+        BEGIN
+            UPDATE clipboard_items
+               SET modified_at_ms = MAX(
+                       CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                       COALESCE(NEW.modified_at_ms, NEW.created_at_ms, 0),
+                       COALESCE((
+                           SELECT modified_at_ms + 1
+                           FROM sync_v3_tombstones
+                           WHERE item_id = NEW.id
+                       ), 0)
+                   ),
+                   sync_writer_device_id = COALESCE((
+                       SELECT value FROM sync_metadata WHERE key = 'device_id'
+                   ), '')
+             WHERE id = NEW.id;
+
+            INSERT INTO sync_v3_outbox
+                (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
+            SELECT id, 'upsert', kind, content_hash,
+                   COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
+              FROM clipboard_items
+             WHERE id = NEW.id;
+
+            DELETE FROM sync_v3_tombstones WHERE item_id = NEW.id;
+        END;
+
+        DROP TRIGGER IF EXISTS clipboard_items_sync_v3_update;
+        CREATE TRIGGER clipboard_items_sync_v3_update
+        AFTER UPDATE ON clipboard_items
+        WHEN EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
+        AND (
+               OLD.kind != NEW.kind
+            OR OLD.title != NEW.title
+            OR OLD.text_content IS NOT NEW.text_content
+            OR OLD.html_content IS NOT NEW.html_content
+            OR OLD.rtf_content IS NOT NEW.rtf_content
+            OR OLD.resource_path IS NOT NEW.resource_path
+            OR OLD.preview_path IS NOT NEW.preview_path
+            OR OLD.content_hash != NEW.content_hash
+            OR OLD.source_app IS NOT NEW.source_app
+            OR OLD.icon_path IS NOT NEW.icon_path
+            OR OLD.size_bytes != NEW.size_bytes
+            OR OLD.created_at_ms != NEW.created_at_ms
+            OR OLD.last_used_at_ms IS NOT NEW.last_used_at_ms
+            OR OLD.is_favorite != NEW.is_favorite
+            OR OLD.deleted != NEW.deleted
+            OR OLD.deleted_at_ms IS NOT NEW.deleted_at_ms
+            OR OLD.metadata_json IS NOT NEW.metadata_json
+        )
+        BEGIN
+            UPDATE clipboard_items
+               SET modified_at_ms = MAX(
+                       CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                       COALESCE(OLD.modified_at_ms, OLD.created_at_ms, 0) + 1,
+                       COALESCE(NEW.modified_at_ms, NEW.created_at_ms, 0)
+                   ),
+                   sync_writer_device_id = COALESCE((
+                       SELECT value FROM sync_metadata WHERE key = 'device_id'
+                   ), '')
+             WHERE id = NEW.id;
+
+            INSERT INTO sync_v3_outbox
+                (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
+            SELECT id, CASE WHEN deleted = 1 THEN 'delete' ELSE 'upsert' END,
+                   kind, content_hash, COALESCE(modified_at_ms, created_at_ms),
+                   sync_writer_device_id
+              FROM clipboard_items
+             WHERE id = NEW.id;
+
+            INSERT INTO sync_v3_tombstones
+                (item_id, kind, content_hash, deleted_at_ms, modified_at_ms, writer_device_id)
+            SELECT id, kind, content_hash,
+                   COALESCE(deleted_at_ms, modified_at_ms, created_at_ms),
+                   COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
+              FROM clipboard_items
+             WHERE id = NEW.id AND deleted = 1
+            ON CONFLICT(item_id) DO UPDATE SET
+                kind = excluded.kind,
+                content_hash = excluded.content_hash,
+                deleted_at_ms = excluded.deleted_at_ms,
+                modified_at_ms = excluded.modified_at_ms,
+                writer_device_id = excluded.writer_device_id
+            WHERE excluded.modified_at_ms > sync_v3_tombstones.modified_at_ms
+               OR (excluded.modified_at_ms = sync_v3_tombstones.modified_at_ms
+                   AND excluded.writer_device_id > sync_v3_tombstones.writer_device_id);
+
+            DELETE FROM sync_v3_tombstones
+             WHERE item_id = NEW.id AND NEW.deleted = 0;
+        END;
+
+        DROP TRIGGER IF EXISTS clipboard_items_sync_v3_delete;
+        CREATE TRIGGER clipboard_items_sync_v3_delete
+        AFTER DELETE ON clipboard_items
+        WHEN EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_v3_enabled' AND value = '1'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
+        BEGIN
+            INSERT INTO sync_v3_tombstones
+                (item_id, kind, content_hash, deleted_at_ms, modified_at_ms, writer_device_id)
+            VALUES (
+                OLD.id,
+                OLD.kind,
+                OLD.content_hash,
+                CASE WHEN OLD.deleted = 1
+                     THEN COALESCE(OLD.deleted_at_ms, OLD.modified_at_ms, OLD.created_at_ms)
+                     ELSE MAX(
+                         CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                         COALESCE(OLD.modified_at_ms, OLD.created_at_ms, 0) + 1
+                     )
+                END,
+                CASE WHEN OLD.deleted = 1
+                     THEN COALESCE(OLD.modified_at_ms, OLD.created_at_ms)
+                     ELSE MAX(
+                         CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                         COALESCE(OLD.modified_at_ms, OLD.created_at_ms, 0) + 1
+                     )
+                END,
+                CASE WHEN OLD.deleted = 1 AND OLD.sync_writer_device_id != ''
+                     THEN OLD.sync_writer_device_id
+                     ELSE COALESCE((
+                         SELECT value FROM sync_metadata WHERE key = 'device_id'
+                     ), '')
+                END
+            )
+            ON CONFLICT(item_id) DO UPDATE SET
+                kind = excluded.kind,
+                content_hash = excluded.content_hash,
+                deleted_at_ms = excluded.deleted_at_ms,
+                modified_at_ms = excluded.modified_at_ms,
+                writer_device_id = excluded.writer_device_id
+            WHERE excluded.modified_at_ms > sync_v3_tombstones.modified_at_ms
+               OR (excluded.modified_at_ms = sync_v3_tombstones.modified_at_ms
+                   AND excluded.writer_device_id > sync_v3_tombstones.writer_device_id);
+
+            INSERT INTO sync_v3_outbox
+                (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
+            SELECT item_id, 'delete', kind, content_hash, modified_at_ms, writer_device_id
+              FROM sync_v3_tombstones
+             WHERE item_id = OLD.id;
+        END;",
+    )?;
     Ok(())
 }
 

@@ -7,6 +7,7 @@ mod pool;
 mod recovery;
 mod repository;
 mod search_repository;
+mod sync_v3;
 
 pub use database::Database;
 pub use error::StorageError;
@@ -22,3 +23,4 @@ pub use repository::{
     StorageFileReferences, TagInfo, TextItemUpdate,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};
+pub use sync_v3::{SyncV3OutboxBatch, SyncV3Snapshot};
