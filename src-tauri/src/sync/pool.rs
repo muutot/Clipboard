@@ -20,6 +20,7 @@ use std::collections::HashSet;
 use std::fs;
 
 use crate::storage::StoragePaths;
+use crate::sync::resources::{validate_resource_bytes, validate_resource_wire_path};
 use crate::sync::wire::OplogResource;
 
 /// Remote folder that holds standalone resource objects.
@@ -52,6 +53,7 @@ pub fn load_pool_manifest(paths: &StoragePaths, remote_scope: &str) -> HashSet<S
     serde_json::from_slice::<Vec<String>>(&content)
         .unwrap_or_default()
         .into_iter()
+        .filter(|rel_path| validate_resource_wire_path(rel_path).is_ok())
         .collect()
 }
 
@@ -61,6 +63,9 @@ pub fn save_pool_manifest(
     remote_scope: &str,
     manifest: &HashSet<String>,
 ) -> Result<(), String> {
+    for rel_path in manifest {
+        validate_resource_wire_path(rel_path)?;
+    }
     let path = manifest_path(paths, remote_scope);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -92,6 +97,9 @@ pub fn absorb_pool_paths(
         if resource.bytes.is_some() {
             continue;
         }
+        if validate_resource_wire_path(&resource.rel_path).is_err() {
+            continue;
+        }
         if manifest.insert(resource.rel_path.clone()) {
             changed = true;
         }
@@ -117,12 +125,26 @@ pub fn ensure_pool_uploads(
     let mut changed = false;
     let mut uploaded = 0;
     for resource in resources.iter_mut() {
-        if manifest.contains(&resource.rel_path) {
+        if let Err(error) = validate_resource_wire_path(&resource.rel_path) {
+            println!(
+                "[pool] refusing invalid resource path {:?}: {error}",
+                resource.rel_path
+            );
             continue;
         }
         let Some(bytes) = resource.bytes.clone() else {
             continue;
         };
+        if let Err(error) = validate_resource_bytes(&resource.rel_path, &bytes) {
+            println!(
+                "[pool] refusing invalid resource bytes for {:?}: {error}",
+                resource.rel_path
+            );
+            continue;
+        }
+        if manifest.contains(&resource.rel_path) {
+            continue;
+        }
         match pool.upload(&resource.rel_path, &bytes) {
             Ok(()) => {
                 if manifest.insert(resource.rel_path.clone()) {
@@ -149,8 +171,12 @@ pub fn ensure_pool_uploads(
 /// payload stays self-sufficient for its first occurrence.
 pub fn mark_pool_references(resources: &mut [OplogResource], known_pool: &HashSet<String>) {
     for resource in resources {
-        if resource.bytes.is_some() && known_pool.contains(&resource.rel_path) {
-            resource.bytes = None;
+        if let Some(bytes) = resource.bytes.as_deref() {
+            if known_pool.contains(&resource.rel_path)
+                && validate_resource_bytes(&resource.rel_path, bytes).is_ok()
+            {
+                resource.bytes = None;
+            }
         }
     }
 }
@@ -171,9 +197,11 @@ pub fn prepare_pool_refs(
     uploaded
 }
 
-/// Remote object path for a pooled resource (`resources/<rel_path>`).
-pub fn pool_object_path(rel_path: &str) -> String {
-    format!("{POOL_DIR}/{rel_path}")
+/// Remote object path for a validated pooled resource
+/// (`resources/<rel_path>`).
+pub fn pool_object_path(rel_path: &str) -> Result<String, String> {
+    validate_resource_wire_path(rel_path)?;
+    Ok(format!("{POOL_DIR}/{rel_path}"))
 }
 
 /// Local cache file path for the pool manifest. Exposed for tests only.
@@ -215,6 +243,24 @@ mod tests {
     fn missing_manifest_yields_empty_set() {
         let paths = temporary_storage("missing");
         assert!(load_pool_manifest(&paths, "remote-a").is_empty());
+    }
+
+    #[test]
+    fn manifest_rejects_and_filters_invalid_wire_paths() {
+        let paths = temporary_storage("manifest-invalid");
+        let mut invalid = HashSet::new();
+        invalid.insert("image/../../escape.bin".to_string());
+        assert!(save_pool_manifest(&paths, "remote-a", &invalid).is_err());
+
+        let raw = serde_json::to_vec(&vec![
+            "image/safe.png".to_string(),
+            "image/../../escape.bin".to_string(),
+            "icon/nested/escape.png".to_string(),
+        ])
+        .unwrap();
+        fs::write(pool_manifest_file(&paths, "remote-a"), raw).unwrap();
+        let loaded = load_pool_manifest(&paths, "remote-a");
+        assert_eq!(loaded, HashSet::from(["image/safe.png".to_string()]));
     }
 
     #[test]
@@ -320,6 +366,20 @@ mod tests {
     }
 
     #[test]
+    fn ensure_uploads_refuses_invalid_paths() {
+        let paths = temporary_storage("ensure-invalid");
+        let pool = MemoryPool::new();
+        let mut resources = vec![OplogResource {
+            rel_path: "image/../../escape.bin".to_string(),
+            bytes: Some(b"escape".to_vec()),
+        }];
+
+        assert_eq!(ensure_pool_uploads(&paths, &mut resources, &pool), 0);
+        assert!(pool.objects.lock().unwrap().is_empty());
+        assert!(load_pool_manifest(&paths, pool.scope_key()).is_empty());
+    }
+
+    #[test]
     fn mark_references_after_ensure_downgrades() {
         let paths = temporary_storage("mark-after-ensure");
         let pool = MemoryPool::new();
@@ -344,16 +404,25 @@ mod tests {
                 rel_path: "image/inline.png".to_string(),
                 bytes: Some(b"x".to_vec()),
             },
+            OplogResource {
+                rel_path: "image/../../escape.png".to_string(),
+                bytes: None,
+            },
         ];
         let pool = MemoryPool::new();
         absorb_pool_paths(&paths, &resources, &pool);
         let manifest = load_pool_manifest(&paths, pool.scope_key());
         assert!(manifest.contains("image/pooled.png"));
         assert!(!manifest.contains("image/inline.png"));
+        assert!(!manifest.contains("image/../../escape.png"));
     }
 
     #[test]
     fn pool_object_path_uses_resources_prefix() {
-        assert_eq!(pool_object_path("image/abc.png"), "resources/image/abc.png");
+        assert_eq!(
+            pool_object_path("image/abc.png").unwrap(),
+            "resources/image/abc.png"
+        );
+        assert!(pool_object_path("image/../../escape.png").is_err());
     }
 }

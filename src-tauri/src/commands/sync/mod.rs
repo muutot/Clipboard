@@ -311,7 +311,7 @@ impl sync::PoolStorage for WebDavPool<'_> {
     }
 
     fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
-        let object = sync::pool_object_path(rel_path);
+        let object = sync::pool_object_path(rel_path)?;
         let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
         sync::upload_to_webdav(
             self.endpoint,
@@ -323,7 +323,7 @@ impl sync::PoolStorage for WebDavPool<'_> {
         )
     }
     fn download(&self, rel_path: &str) -> Result<Vec<u8>, String> {
-        let object = sync::pool_object_path(rel_path);
+        let object = sync::pool_object_path(rel_path)?;
         let data = sync::download_from_webdav(
             self.endpoint,
             self.remote_path,
@@ -355,7 +355,7 @@ impl sync::PoolStorage for S3Pool<'_> {
     }
 
     fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
-        let object = sync::pool_object_path(rel_path);
+        let object = sync::pool_object_path(rel_path)?;
         let key = s3_object_key(self.remote_path, &object);
         let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
         sync::upload_to_s3(
@@ -369,7 +369,7 @@ impl sync::PoolStorage for S3Pool<'_> {
         )
     }
     fn download(&self, rel_path: &str) -> Result<Vec<u8>, String> {
-        let object = sync::pool_object_path(rel_path);
+        let object = sync::pool_object_path(rel_path)?;
         let key = s3_object_key(self.remote_path, &object);
         let data = sync::download_from_s3(
             self.endpoint,
@@ -577,11 +577,20 @@ fn sync_upload_webdav(
             }
             let (mut merged_items, merged_resources) =
                 sync::merge_baseline_archives(&merged_payloads)?;
+            let baseline_names = remote_baselines
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
 
+            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))
+                .map_err(|error| {
+                    format!("failed to materialize remote baselines [{baseline_names}]: {error}")
+                })?;
+            sync::rewrite_item_paths_to_local(&mut merged_items, paths).map_err(|error| {
+                format!("failed to rewrite remote baselines [{baseline_names}]: {error}")
+            })?;
             sync::absorb_pool_paths(paths, &merged_resources, &pool);
-
-            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))?;
-            sync::rewrite_item_paths_to_local(&mut merged_items, paths);
             let imported = database
                 .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
@@ -689,13 +698,14 @@ fn sync_upload_webdav(
                         continue;
                     }
                 };
-                if let Err(e) =
-                    sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
-                {
-                    println!("[sync] failed to materialize {}: {}", entry.name, e);
-                    continue;
-                }
-                sync::rewrite_to_local(&mut remote_entries, paths);
+                sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
+                    .map_err(|error| {
+                        format!("failed to materialize remote oplog {}: {error}", entry.name)
+                    })?;
+                sync::rewrite_to_local(&mut remote_entries, paths).map_err(|error| {
+                    format!("failed to rewrite remote oplog {}: {error}", entry.name)
+                })?;
+                sync::absorb_pool_paths(paths, &resources, &pool);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => {
@@ -811,11 +821,20 @@ fn sync_upload_s3(
             }
             let (mut merged_items, merged_resources) =
                 sync::merge_baseline_archives(&merged_payloads)?;
+            let baseline_names = remote_baselines
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
 
+            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))
+                .map_err(|error| {
+                    format!("failed to materialize remote baselines [{baseline_names}]: {error}")
+                })?;
+            sync::rewrite_item_paths_to_local(&mut merged_items, paths).map_err(|error| {
+                format!("failed to rewrite remote baselines [{baseline_names}]: {error}")
+            })?;
             sync::absorb_pool_paths(paths, &merged_resources, &pool);
-
-            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))?;
-            sync::rewrite_item_paths_to_local(&mut merged_items, paths);
             let imported = database
                 .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
@@ -926,13 +945,14 @@ fn sync_upload_s3(
                         continue;
                     }
                 };
-                if let Err(e) =
-                    sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
-                {
-                    println!("[sync] failed to materialize {}: {}", entry.name, e);
-                    continue;
-                }
-                sync::rewrite_to_local(&mut remote_entries, paths);
+                sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
+                    .map_err(|error| {
+                        format!("failed to materialize remote oplog {}: {error}", entry.name)
+                    })?;
+                sync::rewrite_to_local(&mut remote_entries, paths).map_err(|error| {
+                    format!("failed to rewrite remote oplog {}: {error}", entry.name)
+                })?;
+                sync::absorb_pool_paths(paths, &resources, &pool);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => {
