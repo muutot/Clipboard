@@ -10,7 +10,6 @@ use crate::config::{ConfigStore, SyncConfig};
 use crate::storage::Database;
 use crate::storage::StoragePaths;
 use crate::sync;
-use crate::sync::PoolStorage;
 
 mod auto;
 
@@ -284,102 +283,184 @@ pub fn set_sync_config(
     guard.set_sync_config(sync).map_err(|e| e.to_string())
 }
 
-fn resolve_s3_config(settings: &SyncSettings) -> (String, String, String, String) {
-    (
-        settings.s3_region.clone(),
-        settings.s3_bucket.clone().unwrap_or_default(),
-        settings.s3_access_key.clone().unwrap_or_default(),
-        settings.s3_secret_key.clone().unwrap_or_default(),
-    )
+/// Provider-neutral remote operations. The sync state machine consumes this
+/// contract; WebDAV/S3 differences stay inside `ConfiguredRemoteStore`.
+trait RemoteStore {
+    fn remote_scope(&self) -> &str;
+    fn settings(&self) -> &SyncSettings;
+    fn list_objects(&self) -> Result<Vec<RemoteBackupEntry>, String>;
+    fn upload_raw(&self, name: &str, data: Vec<u8>) -> Result<(), String>;
+    fn download_raw(&self, name: &str) -> Result<Vec<u8>, String>;
+
+    fn upload_payload(&self, name: &str, plaintext: Vec<u8>) -> Result<u64, String> {
+        let data = encrypt_if_configured(plaintext, self.settings())?;
+        let uploaded_bytes = data.len() as u64;
+        self.upload_raw(name, data)?;
+        Ok(uploaded_bytes)
+    }
+
+    fn download_payload(&self, name: &str) -> Result<Vec<u8>, String> {
+        decrypt_if_configured(self.download_raw(name)?, self.settings())
+    }
 }
 
-/// WebDAV-backed remote resource pool. Objects live at
-/// `<remote_path>/resources/<rel_path>` and use the same per-payload sync
-/// password when encryption is configured.
-struct WebDavPool<'a> {
-    endpoint: &'a str,
-    remote_path: &'a str,
-    username: Option<&'a str>,
-    password: Option<&'a str>,
-    remote_scope: &'a str,
-    settings: &'a SyncSettings,
-}
-
-impl sync::PoolStorage for WebDavPool<'_> {
+impl<T: RemoteStore> sync::PoolStorage for T {
     fn scope_key(&self) -> &str {
-        self.remote_scope
+        self.remote_scope()
     }
 
     fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
         let object = sync::pool_object_path(rel_path)?;
-        let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
-        sync::upload_to_webdav(
-            self.endpoint,
-            self.remote_path,
-            &object,
-            data,
-            self.username,
-            self.password,
-        )
+        self.upload_payload(&object, bytes.to_vec()).map(|_| ())
     }
+
     fn download(&self, rel_path: &str) -> Result<Vec<u8>, String> {
         let object = sync::pool_object_path(rel_path)?;
-        let data = sync::download_from_webdav(
-            self.endpoint,
-            self.remote_path,
-            &object,
-            self.username,
-            self.password,
-        )?;
-        decrypt_if_configured(data, self.settings)
+        self.download_payload(&object)
     }
 }
 
-/// S3-backed pool of remote resources. Objects live at
-/// `<remote_path>/resources/<rel_path>` (or `resources/<rel_path>` when no
-/// remote path is configured) and are encrypted when a sync password is set.
-struct S3Pool<'a> {
-    endpoint: &'a str,
-    region: &'a str,
-    bucket: &'a str,
-    access_key: &'a str,
-    secret_key: &'a str,
-    remote_path: &'a str,
-    remote_scope: &'a str,
-    settings: &'a SyncSettings,
+enum RemoteBackend<'a> {
+    WebDav {
+        endpoint: &'a str,
+        remote_path: &'a str,
+        username: Option<&'a str>,
+        password: Option<&'a str>,
+    },
+    S3 {
+        endpoint: &'a str,
+        remote_path: &'a str,
+        region: &'a str,
+        bucket: &'a str,
+        access_key: &'a str,
+        secret_key: &'a str,
+    },
 }
 
-impl sync::PoolStorage for S3Pool<'_> {
-    fn scope_key(&self) -> &str {
+struct ConfiguredRemoteStore<'a> {
+    settings: &'a SyncSettings,
+    remote_scope: &'a str,
+    backend: RemoteBackend<'a>,
+}
+
+impl<'a> ConfiguredRemoteStore<'a> {
+    fn new(
+        settings: &'a SyncSettings,
+        endpoint: &'a str,
+        remote_path: &'a str,
+        remote_scope: &'a str,
+    ) -> Result<Self, String> {
+        let backend = match settings.provider {
+            crate::config::SyncProvider::Webdav => RemoteBackend::WebDav {
+                endpoint,
+                remote_path,
+                username: settings.username.as_deref(),
+                password: settings.password.as_deref(),
+            },
+            crate::config::SyncProvider::S3 => RemoteBackend::S3 {
+                endpoint,
+                remote_path,
+                region: &settings.s3_region,
+                bucket: settings.s3_bucket.as_deref().unwrap_or_default(),
+                access_key: settings.s3_access_key.as_deref().unwrap_or_default(),
+                secret_key: settings.s3_secret_key.as_deref().unwrap_or_default(),
+            },
+            crate::config::SyncProvider::Off => {
+                return Err("sync provider is disabled".to_string());
+            }
+        };
+        Ok(Self {
+            settings,
+            remote_scope,
+            backend,
+        })
+    }
+}
+
+impl RemoteStore for ConfiguredRemoteStore<'_> {
+    fn remote_scope(&self) -> &str {
         self.remote_scope
     }
 
-    fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
-        let object = sync::pool_object_path(rel_path)?;
-        let key = s3_object_key(self.remote_path, &object);
-        let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
-        sync::upload_to_s3(
-            self.endpoint,
-            self.region,
-            self.bucket,
-            &key,
-            data,
-            self.access_key,
-            self.secret_key,
-        )
+    fn settings(&self) -> &SyncSettings {
+        self.settings
     }
-    fn download(&self, rel_path: &str) -> Result<Vec<u8>, String> {
-        let object = sync::pool_object_path(rel_path)?;
-        let key = s3_object_key(self.remote_path, &object);
-        let data = sync::download_from_s3(
-            self.endpoint,
-            self.region,
-            self.bucket,
-            &key,
-            self.access_key,
-            self.secret_key,
-        )?;
-        decrypt_if_configured(data, self.settings)
+
+    fn list_objects(&self) -> Result<Vec<RemoteBackupEntry>, String> {
+        match &self.backend {
+            RemoteBackend::WebDav {
+                endpoint,
+                remote_path,
+                username,
+                password,
+            } => sync::list_webdav_files(endpoint, Some(remote_path), *username, *password)
+                .map(|entries| entries.into_iter().map(RemoteBackupEntry::from).collect()),
+            RemoteBackend::S3 {
+                endpoint,
+                remote_path,
+                region,
+                bucket,
+                access_key,
+                secret_key,
+            } => {
+                let prefix = (!remote_path.is_empty()).then_some(*remote_path);
+                sync::list_s3_objects(endpoint, region, bucket, prefix, access_key, secret_key)
+                    .map(|entries| entries.into_iter().map(RemoteBackupEntry::from).collect())
+            }
+        }
+    }
+
+    fn upload_raw(&self, name: &str, data: Vec<u8>) -> Result<(), String> {
+        match &self.backend {
+            RemoteBackend::WebDav {
+                endpoint,
+                remote_path,
+                username,
+                password,
+            } => sync::upload_to_webdav(endpoint, remote_path, name, data, *username, *password),
+            RemoteBackend::S3 {
+                endpoint,
+                remote_path,
+                region,
+                bucket,
+                access_key,
+                secret_key,
+            } => sync::upload_to_s3(
+                endpoint,
+                region,
+                bucket,
+                &s3_object_key(remote_path, name),
+                data,
+                access_key,
+                secret_key,
+            ),
+        }
+    }
+
+    fn download_raw(&self, name: &str) -> Result<Vec<u8>, String> {
+        match &self.backend {
+            RemoteBackend::WebDav {
+                endpoint,
+                remote_path,
+                username,
+                password,
+            } => sync::download_from_webdav(endpoint, remote_path, name, *username, *password),
+            RemoteBackend::S3 {
+                endpoint,
+                remote_path,
+                region,
+                bucket,
+                access_key,
+                secret_key,
+            } => sync::download_from_s3(
+                endpoint,
+                region,
+                bucket,
+                &s3_object_key(remote_path, name),
+                access_key,
+                secret_key,
+            ),
+        }
     }
 }
 
@@ -467,36 +548,17 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
 
-    let provider = settings.provider;
-    let result = match provider {
-        crate::config::SyncProvider::Webdav => sync_upload_webdav(
-            app,
-            &settings,
-            &database,
-            &paths,
-            &endpoint,
-            &remote_path,
-            &remote_scope,
-            &device_id,
-            &local_device_ids,
-            &timestamp,
-            &temp_dir,
-        ),
-        crate::config::SyncProvider::S3 => sync_upload_s3(
-            app,
-            &settings,
-            &database,
-            &paths,
-            &endpoint,
-            &remote_path,
-            &remote_scope,
-            &device_id,
-            &local_device_ids,
-            &timestamp,
-            &temp_dir,
-        ),
-        _ => Err("unsupported provider".to_string()),
-    };
+    let remote = ConfiguredRemoteStore::new(&settings, &endpoint, &remote_path, &remote_scope)?;
+    let result = sync_with_remote_store(
+        app,
+        &database,
+        &paths,
+        &remote,
+        &device_id,
+        &local_device_ids,
+        &timestamp,
+        &temp_dir,
+    );
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -513,14 +575,11 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn sync_upload_webdav(
+fn sync_with_remote_store<R: RemoteStore>(
     app: &tauri::AppHandle,
-    settings: &SyncSettings,
     database: &Database,
     paths: &crate::storage::StoragePaths,
-    endpoint: &str,
-    remote_path: &str,
-    remote_scope: &str,
+    remote: &R,
     device_id: &str,
     local_device_ids: &[String],
     timestamp: &str,
@@ -529,25 +588,13 @@ fn sync_upload_webdav(
     let mut bytes_uploaded: u64 = 0;
     let mut bytes_downloaded: u64 = 0;
     let mut applied_remote = false;
-
-    let pool = WebDavPool {
-        endpoint,
-        remote_path,
-        username: settings.username.as_deref(),
-        password: settings.password.as_deref(),
-        remote_scope,
-        settings,
-    };
+    let remote_scope = remote.remote_scope();
+    let settings = remote.settings();
 
     let has_prior_sync = database
         .is_sync_remote_initialized(remote_scope)
         .map_err(|e| e.to_string())?;
-    let remote_files = sync::list_webdav_files(
-        endpoint,
-        Some(remote_path),
-        settings.username.as_deref(),
-        settings.password.as_deref(),
-    )?;
+    let remote_files = remote.list_objects()?;
     record_remote_stats(database, remote_scope, &remote_files);
 
     let remote_baselines: Vec<_> = remote_files
@@ -564,14 +611,7 @@ fn sync_upload_webdav(
             let mut merged_payloads: Vec<Vec<u8>> = Vec::new();
             for baseline in &remote_baselines {
                 println!("[sync] downloading remote baseline: {}", baseline.name);
-                let data = sync::download_from_webdav(
-                    endpoint,
-                    remote_path,
-                    &baseline.name,
-                    settings.username.as_deref(),
-                    settings.password.as_deref(),
-                )?;
-                let data = decrypt_if_configured(data, settings)?;
+                let data = remote.download_payload(&baseline.name)?;
                 bytes_downloaded += data.len() as u64;
                 merged_payloads.push(data);
             }
@@ -583,14 +623,18 @@ fn sync_upload_webdav(
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))
-                .map_err(|error| {
-                    format!("failed to materialize remote baselines [{baseline_names}]: {error}")
-                })?;
+            sync::materialize_resources(
+                &merged_resources,
+                paths,
+                Some(&|rel| sync::PoolStorage::download(remote, rel)),
+            )
+            .map_err(|error| {
+                format!("failed to materialize remote baselines [{baseline_names}]: {error}")
+            })?;
             sync::rewrite_item_paths_to_local(&mut merged_items, paths).map_err(|error| {
                 format!("failed to rewrite remote baselines [{baseline_names}]: {error}")
             })?;
-            sync::absorb_pool_paths(paths, &merged_resources, &pool);
+            sync::absorb_pool_paths(paths, &merged_resources, remote);
             let imported = database
                 .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
@@ -604,18 +648,9 @@ fn sync_upload_webdav(
         println!("[sync] no remote baseline found, uploading local baseline");
         let filename = format!("baseline-{device_id}-{timestamp}.zip");
         let baseline_path = temp_dir.join(&filename);
-        let manifest = sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
+        let manifest = sync::create_baseline_backup(database, paths, &baseline_path, Some(remote))?;
         let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
-        let data = encrypt_if_configured(data, settings)?;
-        bytes_uploaded += data.len() as u64;
-        sync::upload_to_webdav(
-            endpoint,
-            remote_path,
-            &filename,
-            data,
-            settings.username.as_deref(),
-            settings.password.as_deref(),
-        )?;
+        bytes_uploaded += remote.upload_payload(&filename, data)?;
         println!("[sync] baseline uploaded: {} items", manifest.item_count);
         database
             .set_sync_remote_baseline_modified_ms(remote_scope, Some(current_time_ms()))
@@ -639,16 +674,7 @@ fn sync_upload_webdav(
         let plaintext =
             crate::sync::wire::serialize_oplog_with_resources(&all_entries, &all_resources)?;
         let filename = immutable_oplog_filename(device_id, &all_entries, &plaintext);
-        let new_data = encrypt_if_configured(plaintext, settings)?;
-        bytes_uploaded += new_data.len() as u64;
-        sync::upload_to_webdav(
-            endpoint,
-            remote_path,
-            &filename,
-            new_data,
-            settings.username.as_deref(),
-            settings.password.as_deref(),
-        )?;
+        bytes_uploaded += remote.upload_payload(&filename, plaintext)?;
         let max_seq = all_entries.iter().map(|e| e.sequence).max().unwrap_or(0);
         let _ = database.mark_changelog_synced(max_seq);
         let _ = database.purge_synced_changelog(1000);
@@ -678,15 +704,8 @@ fn sync_upload_webdav(
         }) {
             continue;
         }
-        match sync::download_from_webdav(
-            endpoint,
-            remote_path,
-            &entry.name,
-            settings.username.as_deref(),
-            settings.password.as_deref(),
-        ) {
+        match remote.download_payload(&entry.name) {
             Ok(data) => {
-                let data = decrypt_if_configured(data, settings)?;
                 bytes_downloaded += data.len() as u64;
                 let (mut remote_entries, resources): (
                     Vec<crate::storage::SyncChangeLogEntry>,
@@ -698,261 +717,18 @@ fn sync_upload_webdav(
                         continue;
                     }
                 };
-                sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
-                    .map_err(|error| {
-                        format!("failed to materialize remote oplog {}: {error}", entry.name)
-                    })?;
-                sync::rewrite_to_local(&mut remote_entries, paths).map_err(|error| {
-                    format!("failed to rewrite remote oplog {}: {error}", entry.name)
-                })?;
-                sync::absorb_pool_paths(paths, &resources, &pool);
-                downloaded_entries += remote_entries.len() as u64;
-                match database.apply_remote_oplog(&remote_entries) {
-                    Ok(applied) => {
-                        applied_entries += applied;
-                        if let Some(revision) = revision.as_deref() {
-                            database
-                                .mark_sync_remote_oplog_applied(remote_scope, &entry.name, revision)
-                                .map_err(|e| e.to_string())?;
-                            applied_objects.insert(entry.name.clone(), revision.to_string());
-                        }
-                        if applied > 0 {
-                            applied_remote = true;
-                        }
-                    }
-                    Err(error) => {
-                        return Err(format!(
-                            "failed to apply remote oplog {}: {error}",
-                            entry.name
-                        ));
-                    }
-                }
-            }
-            Err(e) => println!("[sync] download error for {}: {}", entry.name, e),
-        }
-    }
-
-    if applied_remote {
-        let _ = app.emit(
-            "clipboard-history-invalidated",
-            crate::commands::clipboard::ClipboardHistoryInvalidated {
-                deleted_ids: Vec::new(),
-            },
-        );
-    }
-
-    Ok(SyncUploadResult {
-        uploaded_entries,
-        downloaded_entries,
-        applied_entries,
-        deleted_remote_files: 0,
-        bytes_uploaded,
-        bytes_downloaded,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn sync_upload_s3(
-    app: &tauri::AppHandle,
-    settings: &SyncSettings,
-    database: &Database,
-    paths: &crate::storage::StoragePaths,
-    endpoint: &str,
-    remote_path: &str,
-    remote_scope: &str,
-    device_id: &str,
-    local_device_ids: &[String],
-    timestamp: &str,
-    temp_dir: &std::path::Path,
-) -> Result<SyncUploadResult, String> {
-    let (region, bucket, access_key, secret_key) = resolve_s3_config(settings);
-    let mut bytes_uploaded: u64 = 0;
-    let mut bytes_downloaded: u64 = 0;
-    let mut applied_remote = false;
-
-    let pool = S3Pool {
-        endpoint,
-        region: &region,
-        bucket: &bucket,
-        access_key: &access_key,
-        secret_key: &secret_key,
-        remote_path,
-        remote_scope,
-        settings,
-    };
-
-    let prefix: Option<&str> = if remote_path.is_empty() {
-        None
-    } else {
-        Some(remote_path)
-    };
-    let has_prior_sync = database
-        .is_sync_remote_initialized(remote_scope)
-        .map_err(|e| e.to_string())?;
-    let remote_objects =
-        sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?;
-    record_remote_stats(database, remote_scope, &remote_objects);
-
-    let remote_baselines: Vec<_> = remote_objects
-        .iter()
-        .filter(|e| !e.is_directory && e.name.starts_with("baseline-") && e.name.ends_with(".zip"))
-        .collect();
-
-    if !remote_baselines.is_empty() {
-        if !has_prior_sync {
-            // First sync: remote baselines may be several disjoint full
-            // snapshots produced by concurrent first syncs of separate devices
-            // (no common root, like unrelated histories). Import every one,
-            // merged into a superset, so no device's data is dropped.
-            let mut merged_payloads: Vec<Vec<u8>> = Vec::new();
-            for baseline in &remote_baselines {
-                println!("[sync] downloading S3 baseline: {}", baseline.name);
-                let data = sync::download_from_s3(
-                    endpoint,
-                    &region,
-                    &bucket,
-                    &s3_object_key(remote_path, &baseline.name),
-                    &access_key,
-                    &secret_key,
-                )?;
-                let data = decrypt_if_configured(data, settings)?;
-                bytes_downloaded += data.len() as u64;
-                merged_payloads.push(data);
-            }
-            let (mut merged_items, merged_resources) =
-                sync::merge_baseline_archives(&merged_payloads)?;
-            let baseline_names = remote_baselines
-                .iter()
-                .map(|entry| entry.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            sync::materialize_resources(&merged_resources, paths, Some(&|rel| pool.download(rel)))
+                sync::materialize_resources(
+                    &resources,
+                    paths,
+                    Some(&|rel| sync::PoolStorage::download(remote, rel)),
+                )
                 .map_err(|error| {
-                    format!("failed to materialize remote baselines [{baseline_names}]: {error}")
+                    format!("failed to materialize remote oplog {}: {error}", entry.name)
                 })?;
-            sync::rewrite_item_paths_to_local(&mut merged_items, paths).map_err(|error| {
-                format!("failed to rewrite remote baselines [{baseline_names}]: {error}")
-            })?;
-            sync::absorb_pool_paths(paths, &merged_resources, &pool);
-            let imported = database
-                .import_baseline_items(&merged_items)
-                .map_err(|e| e.to_string())?;
-            println!("[sync] baseline imported: {} items", imported);
-            database
-                .mark_sync_remote_initialized(remote_scope)
-                .map_err(|e| e.to_string())?;
-            applied_remote = true;
-        }
-    } else if !has_prior_sync {
-        println!("[sync] no remote baseline found, uploading local baseline to S3");
-        let filename = format!("baseline-{device_id}-{timestamp}.zip");
-        let baseline_path = temp_dir.join(&filename);
-        let manifest = sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
-        let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
-        let data = encrypt_if_configured(data, settings)?;
-        bytes_uploaded += data.len() as u64;
-        sync::upload_to_s3(
-            endpoint,
-            &region,
-            &bucket,
-            &s3_object_key(remote_path, &filename),
-            data,
-            &access_key,
-            &secret_key,
-        )?;
-        println!("[sync] baseline uploaded: {} items", manifest.item_count);
-        database
-            .set_sync_remote_baseline_modified_ms(remote_scope, Some(current_time_ms()))
-            .map_err(|e| e.to_string())?;
-        database
-            .mark_sync_remote_initialized(remote_scope)
-            .map_err(|e| e.to_string())?;
-    }
-
-    let rollover_entries = settings.oplog_rollover_entries;
-    let max_image_bytes = settings.max_sync_image_bytes;
-    let max_file_bytes = settings.max_sync_file_bytes;
-    let local_entries = database
-        .get_unsynced_changelog(rollover_entries)
-        .map_err(|e| e.to_string())?;
-    let local_entries =
-        filter_entries_by_resource_size(local_entries, max_image_bytes, max_file_bytes, paths);
-
-    let uploaded_entries = if !local_entries.is_empty() {
-        let (all_entries, all_resources) = sync::collect_entry_resources(local_entries, paths);
-        let plaintext =
-            crate::sync::wire::serialize_oplog_with_resources(&all_entries, &all_resources)?;
-        let filename = immutable_oplog_filename(device_id, &all_entries, &plaintext);
-        let new_data = encrypt_if_configured(plaintext, settings)?;
-        bytes_uploaded += new_data.len() as u64;
-        sync::upload_to_s3(
-            endpoint,
-            &region,
-            &bucket,
-            &s3_object_key(remote_path, &filename),
-            new_data,
-            &access_key,
-            &secret_key,
-        )?;
-        let max_seq = all_entries.iter().map(|e| e.sequence).max().unwrap_or(0);
-        let _ = database.mark_changelog_synced(max_seq);
-        let _ = database.purge_synced_changelog(1000);
-        all_entries.len() as u64
-    } else {
-        0
-    };
-
-    let mut downloaded_entries: u64 = 0;
-    let mut applied_entries: u64 = 0;
-    let mut applied_objects = database
-        .get_applied_sync_remote_oplogs(remote_scope)
-        .map_err(|e| e.to_string())?;
-
-    for entry in &remote_objects {
-        if entry.is_directory || !entry.name.starts_with("oplog-") {
-            continue;
-        }
-        if is_local_oplog_name(&entry.name, local_device_ids) {
-            continue;
-        }
-        let revision = remote_oplog_revision(entry);
-        if revision.as_ref().is_some_and(|revision| {
-            applied_objects
-                .get(&entry.name)
-                .is_some_and(|applied| applied == revision)
-        }) {
-            continue;
-        }
-        match sync::download_from_s3(
-            endpoint,
-            &region,
-            &bucket,
-            &s3_object_key(remote_path, &entry.name),
-            &access_key,
-            &secret_key,
-        ) {
-            Ok(data) => {
-                let data = decrypt_if_configured(data, settings)?;
-                bytes_downloaded += data.len() as u64;
-                let (mut remote_entries, resources): (
-                    Vec<crate::storage::SyncChangeLogEntry>,
-                    Vec<crate::sync::wire::OplogResource>,
-                ) = match crate::sync::wire::deserialize_oplog_with_resources(&data) {
-                    Ok(e) => e,
-                    Err(e) => {
-                        println!("[sync] failed to parse {}: {}", entry.name, e);
-                        continue;
-                    }
-                };
-                sync::materialize_resources(&resources, paths, Some(&|rel| pool.download(rel)))
-                    .map_err(|error| {
-                        format!("failed to materialize remote oplog {}: {error}", entry.name)
-                    })?;
                 sync::rewrite_to_local(&mut remote_entries, paths).map_err(|error| {
                     format!("failed to rewrite remote oplog {}: {error}", entry.name)
                 })?;
-                sync::absorb_pool_paths(paths, &resources, &pool);
+                sync::absorb_pool_paths(paths, &resources, remote);
                 downloaded_entries += remote_entries.len() as u64;
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => {
@@ -1083,41 +859,9 @@ fn is_local_oplog_name(name: &str, local_device_ids: &[String]) -> bool {
         .any(|device_id| name.starts_with(&format!("oplog-{device_id}-")))
 }
 
-/// Common shape shared by the WebDAV and S3 remote-listing entries so sync and
-/// snapshot-refresh helpers can treat both providers uniformly.
-trait RemoteFileLike {
-    fn name(&self) -> &str;
-    fn is_directory(&self) -> bool;
-    fn modified_ms(&self) -> Option<i64>;
-}
-
-impl RemoteFileLike for sync::WebDavEntry {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn is_directory(&self) -> bool {
-        self.is_directory
-    }
-    fn modified_ms(&self) -> Option<i64> {
-        self.modified_ms
-    }
-}
-
-impl RemoteFileLike for sync::S3Entry {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn is_directory(&self) -> bool {
-        self.is_directory
-    }
-    fn modified_ms(&self) -> Option<i64> {
-        self.modified_ms
-    }
-}
-
-fn remote_oplog_revision<T: RemoteFileLike>(entry: &T) -> Option<String> {
-    if is_immutable_oplog_filename(entry.name()) {
-        return Some(format!("immutable:{}", entry.name()));
+fn remote_oplog_revision(entry: &RemoteBackupEntry) -> Option<String> {
+    if is_immutable_oplog_filename(&entry.name) {
+        return Some(format!("immutable:{}", entry.name));
     }
     // Legacy clients may overwrite an existing timestamp-named object. Its
     // provider mtime can be coarse or preserved, so no metadata-only revision
@@ -1151,21 +895,23 @@ fn snapshot_refresh_suggested(
 /// Records the remote file layout observed during a sync so `get_sync_config`
 /// can suggest a non-destructive snapshot refresh without an extra network
 /// round-trip. Oplog count is observation only; it never triggers deletion.
-fn record_remote_stats<T: RemoteFileLike>(
+fn record_remote_stats(
     database: &Database,
     remote_scope: &str,
-    remote_files: &[T],
+    remote_files: &[RemoteBackupEntry],
 ) {
     let oplog_count = remote_files
         .iter()
-        .filter(|e| !e.is_directory() && e.name().starts_with("oplog-"))
+        .filter(|entry| !entry.is_directory && entry.name.starts_with("oplog-"))
         .count() as u64;
     let baseline_ms = remote_files
         .iter()
-        .filter(|e| {
-            !e.is_directory() && e.name().starts_with("baseline-") && e.name().ends_with(".zip")
+        .filter(|entry| {
+            !entry.is_directory
+                && entry.name.starts_with("baseline-")
+                && entry.name.ends_with(".zip")
         })
-        .filter_map(RemoteFileLike::modified_ms)
+        .filter_map(|entry| entry.modified_ms)
         .max();
     let _ = database.set_sync_remote_oplog_count(remote_scope, oplog_count);
     let _ = database.set_sync_remote_baseline_modified_ms(remote_scope, baseline_ms);
@@ -1183,32 +929,9 @@ pub fn sync_list_remote_backups(
         .endpoint
         .clone()
         .ok_or("sync endpoint not configured")?;
-
-    match settings.provider {
-        crate::config::SyncProvider::Webdav => {
-            let files = sync::list_webdav_files(
-                &endpoint,
-                settings.remote_path.as_deref(),
-                settings.username.as_deref(),
-                settings.password.as_deref(),
-            )?;
-            Ok(files.into_iter().map(RemoteBackupEntry::from).collect())
-        }
-        crate::config::SyncProvider::S3 => {
-            let (region, bucket, access_key, secret_key) = resolve_s3_config(&settings);
-            let prefix = settings.remote_path.as_deref();
-            let files = sync::list_s3_objects(
-                &endpoint,
-                &region,
-                &bucket,
-                prefix,
-                &access_key,
-                &secret_key,
-            )?;
-            Ok(files.into_iter().map(RemoteBackupEntry::from).collect())
-        }
-        _ => Err("unsupported provider".to_string()),
-    }
+    let remote_path = settings.remote_path.clone().unwrap_or_default();
+    let remote_scope = settings.remote_scope_id()?;
+    ConfiguredRemoteStore::new(&settings, &endpoint, &remote_path, &remote_scope)?.list_objects()
 }
 
 #[tauri::command]
@@ -1228,28 +951,9 @@ pub fn sync_download_backup(
         .clone()
         .ok_or("sync endpoint not configured")?;
     let remote_path = settings.remote_path.clone().unwrap_or_default();
-
-    let data = match settings.provider {
-        crate::config::SyncProvider::Webdav => sync::download_from_webdav(
-            &endpoint,
-            &remote_path,
-            &filename,
-            settings.username.as_deref(),
-            settings.password.as_deref(),
-        )?,
-        crate::config::SyncProvider::S3 => {
-            let (region, bucket, access_key, secret_key) = resolve_s3_config(&settings);
-            let key = if remote_path.is_empty() {
-                filename.clone()
-            } else {
-                format!("{remote_path}/{filename}")
-            };
-            sync::download_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key)?
-        }
-        _ => return Err("unsupported provider".to_string()),
-    };
-
-    let data = decrypt_if_configured(data, &settings)?;
+    let remote_scope = settings.remote_scope_id()?;
+    let remote = ConfiguredRemoteStore::new(&settings, &endpoint, &remote_path, &remote_scope)?;
+    let data = remote.download_payload(&filename)?;
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
@@ -1303,31 +1007,10 @@ pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, St
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
 
-    let baseline_bytes = match settings.provider {
-        crate::config::SyncProvider::Webdav => refresh_webdav_snapshot(
-            &settings,
-            &database,
-            &paths,
-            &endpoint,
-            &remote_path,
-            &remote_scope,
-            &device_id,
-            &timestamp,
-            &temp_dir,
-        )?,
-        crate::config::SyncProvider::S3 => refresh_s3_snapshot(
-            &settings,
-            &database,
-            &paths,
-            &endpoint,
-            &remote_path,
-            &remote_scope,
-            &device_id,
-            &timestamp,
-            &temp_dir,
-        )?,
-        _ => return Err("unsupported provider".to_string()),
-    };
+    let remote = ConfiguredRemoteStore::new(&settings, &endpoint, &remote_path, &remote_scope)?;
+    let baseline_bytes = refresh_remote_snapshot(
+        &remote, &database, &paths, &device_id, &timestamp, &temp_dir,
+    )?;
 
     Ok(SyncUploadResult {
         uploaded_entries: preflight.uploaded_entries,
@@ -1339,86 +1022,21 @@ pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, St
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn refresh_webdav_snapshot(
-    settings: &SyncSettings,
+fn refresh_remote_snapshot<R: RemoteStore>(
+    remote: &R,
     database: &Database,
     paths: &crate::storage::StoragePaths,
-    endpoint: &str,
-    remote_path: &str,
-    remote_scope: &str,
     device_id: &str,
     timestamp: &str,
     temp_dir: &std::path::Path,
 ) -> Result<u64, String> {
-    let username = settings.username.as_deref();
-    let password = settings.password.as_deref();
-
-    let pool = WebDavPool {
-        endpoint,
-        remote_path,
-        username,
-        password,
-        remote_scope,
-        settings,
-    };
-
     let filename = format!("baseline-{device_id}-{timestamp}.zip");
     let baseline_path = temp_dir.join(&filename);
-    sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
+    sync::create_baseline_backup(database, paths, &baseline_path, Some(remote))?;
     let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
-    let data = encrypt_if_configured(data, settings)?;
-    let baseline_bytes = data.len() as u64;
-    sync::upload_to_webdav(endpoint, remote_path, &filename, data, username, password)?;
+    let baseline_bytes = remote.upload_payload(&filename, data)?;
     database
-        .set_sync_remote_baseline_modified_ms(remote_scope, Some(current_time_ms()))
-        .map_err(|e| e.to_string())?;
-
-    Ok(baseline_bytes)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn refresh_s3_snapshot(
-    settings: &SyncSettings,
-    database: &Database,
-    paths: &crate::storage::StoragePaths,
-    endpoint: &str,
-    remote_path: &str,
-    remote_scope: &str,
-    device_id: &str,
-    timestamp: &str,
-    temp_dir: &std::path::Path,
-) -> Result<u64, String> {
-    let (region, bucket, access_key, secret_key) = resolve_s3_config(settings);
-
-    let pool = S3Pool {
-        endpoint,
-        region: &region,
-        bucket: &bucket,
-        access_key: &access_key,
-        secret_key: &secret_key,
-        remote_path,
-        remote_scope,
-        settings,
-    };
-
-    let filename = format!("baseline-{device_id}-{timestamp}.zip");
-    let baseline_path = temp_dir.join(&filename);
-    sync::create_baseline_backup(database, paths, &baseline_path, Some(&pool))?;
-    let data = std::fs::read(&baseline_path).map_err(|e| e.to_string())?;
-    let data = encrypt_if_configured(data, settings)?;
-    let baseline_bytes = data.len() as u64;
-    sync::upload_to_s3(
-        endpoint,
-        &region,
-        &bucket,
-        &s3_object_key(remote_path, &filename),
-        data,
-        &access_key,
-        &secret_key,
-    )?;
-    database
-        .set_sync_remote_baseline_modified_ms(remote_scope, Some(current_time_ms()))
+        .set_sync_remote_baseline_modified_ms(remote.remote_scope(), Some(current_time_ms()))
         .map_err(|e| e.to_string())?;
 
     Ok(baseline_bytes)
@@ -1499,6 +1117,50 @@ mod tests {
         }
     }
 
+    struct MemoryRemoteStore {
+        settings: SyncSettings,
+        objects: Mutex<std::collections::HashMap<String, Vec<u8>>>,
+    }
+
+    impl MemoryRemoteStore {
+        fn new(sync_password: Option<&str>) -> Self {
+            let mut settings = webdav_settings("https://example.test", "clipboard");
+            settings.sync_password = sync_password.map(str::to_string);
+            Self {
+                settings,
+                objects: Mutex::new(std::collections::HashMap::new()),
+            }
+        }
+    }
+
+    impl RemoteStore for MemoryRemoteStore {
+        fn remote_scope(&self) -> &str {
+            "memory-remote"
+        }
+
+        fn settings(&self) -> &SyncSettings {
+            &self.settings
+        }
+
+        fn list_objects(&self) -> Result<Vec<RemoteBackupEntry>, String> {
+            Ok(Vec::new())
+        }
+
+        fn upload_raw(&self, name: &str, data: Vec<u8>) -> Result<(), String> {
+            self.objects.lock().unwrap().insert(name.to_string(), data);
+            Ok(())
+        }
+
+        fn download_raw(&self, name: &str) -> Result<Vec<u8>, String> {
+            self.objects
+                .lock()
+                .unwrap()
+                .get(name)
+                .cloned()
+                .ok_or_else(|| format!("missing {name}"))
+        }
+    }
+
     #[test]
     fn remote_scope_is_stable_but_isolates_different_paths() {
         let first = webdav_settings("https://dav.example.test/", "/clipboard/");
@@ -1512,6 +1174,39 @@ mod tests {
         assert_ne!(
             first.remote_scope_id().unwrap(),
             other.remote_scope_id().unwrap()
+        );
+    }
+
+    #[test]
+    fn remote_store_shares_payload_encryption_and_pool_object_handling() {
+        let remote = MemoryRemoteStore::new(Some("secret"));
+
+        let uploaded = remote
+            .upload_payload("baseline.zip", b"baseline".to_vec())
+            .unwrap();
+        let encrypted = remote
+            .objects
+            .lock()
+            .unwrap()
+            .get("baseline.zip")
+            .cloned()
+            .unwrap();
+        assert_eq!(uploaded, encrypted.len() as u64);
+        assert_ne!(encrypted, b"baseline");
+        assert_eq!(
+            remote.download_payload("baseline.zip").unwrap(),
+            b"baseline"
+        );
+
+        sync::PoolStorage::upload(&remote, "image/a.png", b"image").unwrap();
+        assert!(remote
+            .objects
+            .lock()
+            .unwrap()
+            .contains_key("resources/image/a.png"));
+        assert_eq!(
+            sync::PoolStorage::download(&remote, "image/a.png").unwrap(),
+            b"image"
         );
     }
 
@@ -1533,7 +1228,7 @@ mod tests {
 
     #[test]
     fn legacy_mutable_oplogs_are_never_skipped_by_metadata() {
-        let immutable = sync::WebDavEntry {
+        let immutable = RemoteBackupEntry {
             name: immutable_oplog_filename("device-a", &[sample_sync_entry(1)], b"payload"),
             is_directory: false,
             size_bytes: None,
@@ -1543,7 +1238,7 @@ mod tests {
             .unwrap()
             .starts_with("immutable:"));
 
-        let legacy = sync::WebDavEntry {
+        let legacy = RemoteBackupEntry {
             name: "oplog-device-a-20260810_120000".to_string(),
             is_directory: false,
             size_bytes: Some(20),
