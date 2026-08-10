@@ -34,6 +34,8 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
+`StorageSettingsDialog.svelte::SETTINGS_NAV_GROUP_DEFINITIONS` is the shell navigation source of truth. It defines category order/icons, default targets, secondary-tab order, translated labels, and section title/description keys; the sidebar and secondary row render from that descriptor. Reuse the exported `SettingsSection` and `StatisticsTab` types from `settings-search.ts`, and update the descriptor plus settings-search metadata together when a section is added, renamed, or moved.
+
 ## Approved shell hierarchy
 
 Use one parent-owned hierarchy:

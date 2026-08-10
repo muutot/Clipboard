@@ -92,6 +92,7 @@ This is the settings shell and an integration hotspot. It owns:
 
 - modal versus standalone sizing;
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
+- the typed `SETTINGS_NAV_GROUP_DEFINITIONS` descriptor that drives primary buttons, secondary tabs, active-group matching, and section title/description metadata; section state reuses `SettingsSection`/`StatisticsTab` from `settings-search.ts` rather than declaring a parallel union;
 - composition of child settings panels with `showHeader={false}`;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
 - sync provider/policy configuration, manual sync, remote-backup listing/download, and the conditional non-destructive snapshot-refresh action;

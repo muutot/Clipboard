@@ -60,6 +60,7 @@
   import UpdateDialog from "$lib/components/UpdateDialog.svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import { messages, resolvePath } from "$lib/i18n";
+  import type { IconName } from "$lib/types/clipboard";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
   import { endOfDay, startOfDay } from "$lib/utils/date-query";
   import {
@@ -67,7 +68,9 @@
     normalizeSettingsSearch,
     resolveSettingsNavPath,
     resolveSettingsSearchItems,
+    type SettingsSection,
     type SettingsSearchItem,
+    type StatisticsTab,
   } from "$lib/settings-search";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -78,6 +81,245 @@
     onclose: () => void;
     standalone?: boolean;
   }
+
+  type SettingsNavGroupId =
+    | "general"
+    | "appearance"
+    | "capture"
+    | "storage"
+    | "sync"
+    | "keyboard"
+    | "tags"
+    | "ocr"
+    | "statistics"
+    | "about";
+
+  interface SettingsNavTargetDefinition {
+    section: SettingsSection;
+    statisticsTab?: StatisticsTab;
+    labelKey: string;
+    titleKey?: string;
+    descriptionKey?: string;
+  }
+
+  interface SettingsNavGroupDefinition {
+    id: SettingsNavGroupId;
+    icon: IconName;
+    labelKey: string;
+    displayLabel?: string;
+    ariaLabelKey?: string;
+    preserveTabOnPrimary?: boolean;
+    tabs: readonly SettingsNavTargetDefinition[];
+  }
+
+  interface SettingsNavTarget {
+    section: SettingsSection;
+    statisticsTab?: StatisticsTab;
+    label: string;
+    title: string;
+    description: string;
+  }
+
+  interface SettingsNavGroup {
+    id: SettingsNavGroupId;
+    icon: IconName;
+    label: string;
+    ariaLabel: string;
+    preserveTabOnPrimary: boolean;
+    tabs: SettingsNavTarget[];
+  }
+
+  const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition[] = [
+    {
+      id: "general",
+      icon: "sliders",
+      labelKey: "storage.generalTab",
+      tabs: [
+        {
+          section: "general_general",
+          labelKey: "storage.generalGeneralTab",
+          descriptionKey: "storage.generalGeneralDescription",
+        },
+        {
+          section: "general_window",
+          labelKey: "storage.generalWindowTab",
+          descriptionKey: "storage.generalWindowDescription",
+        },
+        {
+          section: "general_search",
+          labelKey: "storage.generalSearchTab",
+          descriptionKey: "storage.generalSearchDescription",
+        },
+        {
+          section: "general_items",
+          labelKey: "storage.generalItemsTab",
+          descriptionKey: "storage.generalItemsDescription",
+        },
+      ],
+    },
+    {
+      id: "appearance",
+      icon: "palette",
+      labelKey: "storage.appearanceTab",
+      tabs: [
+        {
+          section: "theme",
+          labelKey: "storage.themeTab",
+          descriptionKey: "general.fontSizeDescription",
+        },
+        {
+          section: "font",
+          labelKey: "storage.fontTab",
+          descriptionKey: "general.fontSizeDescription",
+        },
+        {
+          section: "compact",
+          labelKey: "storage.compactTab",
+          descriptionKey: "compact.description",
+        },
+        {
+          section: "icons",
+          labelKey: "storage.iconsTab",
+          descriptionKey: "general.iconColorsDescription",
+        },
+      ],
+    },
+    {
+      id: "capture",
+      icon: "filter",
+      labelKey: "storage.captureTab",
+      tabs: [
+        {
+          section: "capture",
+          labelKey: "capture.title",
+          descriptionKey: "capture.description",
+        },
+        {
+          section: "capture_icons",
+          labelKey: "storage.iconCacheTitle",
+          descriptionKey: "storage.iconCacheDesc",
+        },
+      ],
+    },
+    {
+      id: "storage",
+      icon: "file",
+      labelKey: "storage.storageTab",
+      tabs: [
+        {
+          section: "storage_paths",
+          labelKey: "storage.storagePathsTab",
+          descriptionKey: "storage.storagePathsDescription",
+        },
+        {
+          section: "storage_limits",
+          labelKey: "storage.storageLimitsTab",
+          descriptionKey: "storage.storageLimitsDescription",
+        },
+        {
+          section: "storage_tools",
+          labelKey: "storage.storageToolsTab",
+          descriptionKey: "storage.storageToolsDescription",
+        },
+      ],
+    },
+    {
+      id: "sync",
+      icon: "cloud",
+      labelKey: "storage.syncTab",
+      tabs: [
+        {
+          section: "sync_cloud",
+          labelKey: "storage.syncCloudTab",
+          titleKey: "storage.syncTitle",
+          descriptionKey: "storage.syncDescription",
+        },
+        {
+          section: "sync_advanced",
+          labelKey: "storage.syncAdvancedTab",
+          titleKey: "storage.syncTitle",
+          descriptionKey: "storage.syncDescription",
+        },
+      ],
+    },
+    {
+      id: "keyboard",
+      icon: "keyboard",
+      labelKey: "storage.keyboardTab",
+      tabs: [
+        {
+          section: "keyboard_item",
+          labelKey: "storage.keyboardItemTab",
+          titleKey: "keyboard.title",
+          descriptionKey: "storage.keyboardItemDescription",
+        },
+        {
+          section: "keyboard_quick",
+          labelKey: "storage.keyboardQuickTab",
+          titleKey: "keyboard.title",
+          descriptionKey: "storage.keyboardQuickDescription",
+        },
+        {
+          section: "keyboard_system",
+          labelKey: "storage.keyboardSystemTab",
+          titleKey: "keyboard.title",
+          descriptionKey: "storage.keyboardSystemDescription",
+        },
+      ],
+    },
+    {
+      id: "tags",
+      icon: "tag",
+      labelKey: "storage.tagsTab",
+      tabs: [{ section: "tags", labelKey: "storage.tagsSectionTitle" }],
+    },
+    {
+      id: "ocr",
+      icon: "eye",
+      labelKey: "storage.ocrTitle",
+      displayLabel: "OCR",
+      tabs: [
+        {
+          section: "ocr",
+          labelKey: "storage.ocrTitle",
+          descriptionKey: "storage.ocrDescription",
+        },
+      ],
+    },
+    {
+      id: "statistics",
+      icon: "bar-chart",
+      labelKey: "storage.statisticsTab",
+      ariaLabelKey: "statistics.title",
+      preserveTabOnPrimary: true,
+      tabs: [
+        {
+          section: "statistics",
+          statisticsTab: "storage",
+          labelKey: "statistics.storageTab",
+          descriptionKey: "statistics.storageDescription",
+        },
+        {
+          section: "statistics",
+          statisticsTab: "performance",
+          labelKey: "statistics.performanceTab",
+          descriptionKey: "statistics.performanceDescription",
+        },
+        {
+          section: "statistics",
+          statisticsTab: "memory",
+          labelKey: "statistics.memoryTab",
+          descriptionKey: "statistics.memoryDescription",
+        },
+      ],
+    },
+    {
+      id: "about",
+      icon: "info",
+      labelKey: "about.tabLabel",
+      tabs: [{ section: "about", labelKey: "about.sectionTitle" }],
+    },
+  ];
 
   let { open, onclose, standalone = false }: Props = $props();
   let status = $state<StorageStatus | null>(null);
@@ -163,31 +405,8 @@
     }
   });
   let restartNeeded = $state(false);
-  let activeSection = $state<
-    | "general_search"
-    | "general_items"
-    | "general_window"
-    | "general_general"
-    | "compact"
-    | "font"
-    | "theme"
-    | "icons"
-    | "capture"
-    | "capture_icons"
-    | "storage_paths"
-    | "storage_limits"
-    | "storage_tools"
-    | "sync_cloud"
-    | "sync_advanced"
-    | "keyboard_item"
-    | "keyboard_quick"
-    | "keyboard_system"
-    | "tags"
-    | "ocr"
-    | "statistics"
-    | "about"
-  >("general_general");
-  let activeStatisticsTab = $state<"storage" | "performance" | "memory">("storage");
+  let activeSection = $state<SettingsSection>("general_general");
+  let activeStatisticsTab = $state<StatisticsTab>("storage");
   let keyboardResetToken = $state(0);
 
   async function handleResetKeyboard() {
@@ -199,127 +418,58 @@
     }
   }
 
-  const settingsSectionMeta = $derived.by(() => {
-    const tab = activeStatisticsTab;
-    switch (activeSection) {
-      case "general_search":
-        return {
-          title: _t("storage.generalSearchTab"),
-          desc: _t("storage.generalSearchDescription"),
-        };
-      case "general_items":
-        return {
-          title: _t("storage.generalItemsTab"),
-          desc: _t("storage.generalItemsDescription"),
-        };
-      case "general_window":
-        return {
-          title: _t("storage.generalWindowTab"),
-          desc: _t("storage.generalWindowDescription"),
-        };
-      case "general_general":
-        return {
-          title: _t("storage.generalGeneralTab"),
-          desc: _t("storage.generalGeneralDescription"),
-        };
-      case "compact":
-        return {
-          title: _t("storage.compactTab"),
-          desc: _t("compact.description"),
-        };
-      case "font":
-        return {
-          title: _t("storage.fontTab"),
-          desc: _t("general.fontSizeDescription"),
-        };
-      case "theme":
-        return {
-          title: _t("storage.themeTab"),
-          desc: _t("general.fontSizeDescription"),
-        };
-      case "icons":
-        return {
-          title: _t("storage.iconsTab"),
-          desc: _t("general.iconColorsDescription"),
-        };
-      case "capture":
-        return {
-          title: _t("capture.title"),
-          desc: _t("capture.description"),
-        };
-      case "capture_icons":
-        return {
-          title: _t("storage.iconCacheTitle"),
-          desc: _t("storage.iconCacheDesc"),
-        };
-      case "tags":
-        return {
-          title: _t("storage.tagsSectionTitle"),
-          desc: "",
-        };
-      case "storage_paths":
-        return {
-          title: _t("storage.storagePathsTab"),
-          desc: _t("storage.storagePathsDescription"),
-        };
-      case "storage_limits":
-        return {
-          title: _t("storage.storageLimitsTab"),
-          desc: _t("storage.storageLimitsDescription"),
-        };
-      case "storage_tools":
-        return {
-          title: _t("storage.storageToolsTab"),
-          desc: _t("storage.storageToolsDescription"),
-        };
-      case "sync_cloud":
-      case "sync_advanced":
-        return {
-          title: _t("storage.syncTitle"),
-          desc: _t("storage.syncDescription"),
-        };
-      case "keyboard_item":
-        return {
-          title: _t("keyboard.title"),
-          desc: _t("storage.keyboardItemDescription"),
-        };
-      case "keyboard_quick":
-        return {
-          title: _t("keyboard.title"),
-          desc: _t("storage.keyboardQuickDescription"),
-        };
-      case "keyboard_system":
-        return {
-          title: _t("keyboard.title"),
-          desc: _t("storage.keyboardSystemDescription"),
-        };
-      case "ocr":
-        return {
-          title: _t("storage.ocrTitle"),
-          desc: _t("storage.ocrDescription"),
-        };
-      case "statistics":
-        return {
-          title:
-            tab === "storage"
-              ? _t("statistics.storageTab")
-              : tab === "performance"
-                ? _t("statistics.performanceTab")
-                : _t("statistics.memoryTab"),
-          desc:
-            tab === "storage"
-              ? _t("statistics.storageDescription")
-              : tab === "performance"
-                ? _t("statistics.performanceDescription")
-                : _t("statistics.memoryDescription"),
-        };
-      case "about":
-        return {
-          title: _t("about.sectionTitle"),
-          desc: "",
-        };
+  const settingsNavGroups = $derived.by((): SettingsNavGroup[] =>
+    SETTINGS_NAV_GROUP_DEFINITIONS.map((group) => ({
+      id: group.id,
+      icon: group.icon,
+      label: group.displayLabel ?? _t(group.labelKey),
+      ariaLabel: _t(group.ariaLabelKey ?? group.labelKey),
+      preserveTabOnPrimary: group.preserveTabOnPrimary ?? false,
+      tabs: group.tabs.map((tab) => ({
+        section: tab.section,
+        statisticsTab: tab.statisticsTab,
+        label: _t(tab.labelKey),
+        title: _t(tab.titleKey ?? tab.labelKey),
+        description: tab.descriptionKey ? _t(tab.descriptionKey) : "",
+      })),
+    })),
+  );
+
+  function isSettingsNavTargetActive(target: SettingsNavTarget): boolean {
+    return (
+      activeSection === target.section &&
+      (target.statisticsTab === undefined || activeStatisticsTab === target.statisticsTab)
+    );
+  }
+
+  function activateSettingsNavTarget(target: SettingsNavTarget): void {
+    activeSection = target.section;
+    if (target.statisticsTab !== undefined) activeStatisticsTab = target.statisticsTab;
+  }
+
+  function activateSettingsNavGroup(group: SettingsNavGroup): void {
+    const target = group.tabs[0];
+    if (group.preserveTabOnPrimary) {
+      activeSection = target.section;
+      return;
     }
-  });
+    activateSettingsNavTarget(target);
+  }
+
+  const activeSettingsNavGroup = $derived.by(() =>
+    settingsNavGroups.find((group) => group.tabs.some(isSettingsNavTargetActive)),
+  );
+  const activeSettingsNavTarget = $derived.by(() =>
+    activeSettingsNavGroup?.tabs.find(isSettingsNavTargetActive),
+  );
+  const settingsSectionMeta = $derived(
+    activeSettingsNavTarget
+      ? {
+          title: activeSettingsNavTarget.title,
+          desc: activeSettingsNavTarget.description,
+        }
+      : undefined,
+  );
 
   const settingsBreadcrumb = $derived(
     resolveSettingsNavPath(_t, activeSection, activeStatisticsTab).join(" / "),
@@ -1815,96 +1965,16 @@
     </div>
 
     <nav class="settings-primary-nav" aria-label={_t("storage.navAriaLabel")}>
-      <button
-        class:active={activeSection === "general_search" ||
-          activeSection === "general_items" ||
-          activeSection === "general_window" ||
-          activeSection === "general_general"}
-        type="button"
-        onclick={() => (activeSection = "general_general")}
-      >
-        <AppIcon name="sliders" size={16} />
-        <span>{_t("storage.generalTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "compact" ||
-          activeSection === "font" ||
-          activeSection === "theme" ||
-          activeSection === "icons"}
-        type="button"
-        onclick={() => (activeSection = "theme")}
-      >
-        <AppIcon name="palette" size={16} />
-        <span>{_t("storage.appearanceTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "capture" || activeSection === "capture_icons"}
-        type="button"
-        onclick={() => (activeSection = "capture")}
-      >
-        <AppIcon name="filter" size={16} />
-        <span>{_t("storage.captureTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "storage_paths" ||
-          activeSection === "storage_limits" ||
-          activeSection === "storage_tools"}
-        type="button"
-        onclick={() => (activeSection = "storage_paths")}
-      >
-        <AppIcon name="file" size={16} />
-        <span>{_t("storage.storageTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "sync_cloud" || activeSection === "sync_advanced"}
-        type="button"
-        onclick={() => (activeSection = "sync_cloud")}
-      >
-        <AppIcon name="cloud" size={16} />
-        <span>{_t("storage.syncTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "keyboard_item" ||
-          activeSection === "keyboard_quick" ||
-          activeSection === "keyboard_system"}
-        type="button"
-        onclick={() => (activeSection = "keyboard_item")}
-      >
-        <AppIcon name="keyboard" size={16} />
-        <span>{_t("storage.keyboardTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "tags"}
-        type="button"
-        onclick={() => (activeSection = "tags")}
-      >
-        <AppIcon name="tag" size={16} />
-        <span>{_t("storage.tagsTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "ocr"}
-        type="button"
-        onclick={() => (activeSection = "ocr")}
-      >
-        <AppIcon name="eye" size={16} />
-        <span>OCR</span>
-      </button>
-      <button
-        class:active={activeSection === "statistics"}
-        type="button"
-        onclick={() => (activeSection = "statistics")}
-      >
-        <AppIcon name="bar-chart" size={16} />
-        <span>{_t("storage.statisticsTab")}</span>
-      </button>
-      <button
-        class:active={activeSection === "about"}
-        type="button"
-        onclick={() => (activeSection = "about")}
-      >
-        <AppIcon name="info" size={16} />
-        <span>{_t("about.tabLabel")}</span>
-      </button>
+      {#each settingsNavGroups as group (group.id)}
+        <button
+          class:active={group.tabs.some(isSettingsNavTargetActive)}
+          type="button"
+          onclick={() => activateSettingsNavGroup(group)}
+        >
+          <AppIcon name={group.icon} size={16} />
+          <span>{group.label}</span>
+        </button>
+      {/each}
     </nav>
 
     <div class="sidebar-foot">
@@ -1974,7 +2044,7 @@
           {/if}
         </div>
       </div>
-      {#if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
+      {#if activeSettingsNavGroup?.id === "keyboard"}
         <section
           class="setting-card toggle-card"
           style="margin-top:3px"
@@ -2006,194 +2076,18 @@
           </div>
         </section>
       {/if}
-      {#if activeSection === "compact" || activeSection === "font" || activeSection === "theme" || activeSection === "icons"}
-        <nav class="settings-subnav" aria-label={_t("storage.appearanceTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "theme"}
-            aria-current={activeSection === "theme" ? "page" : undefined}
-            onclick={() => (activeSection = "theme")}
-          >
-            {_t("storage.themeTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "font"}
-            aria-current={activeSection === "font" ? "page" : undefined}
-            onclick={() => (activeSection = "font")}
-          >
-            {_t("storage.fontTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "compact"}
-            aria-current={activeSection === "compact" ? "page" : undefined}
-            onclick={() => (activeSection = "compact")}
-          >
-            {_t("storage.compactTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "icons"}
-            aria-current={activeSection === "icons" ? "page" : undefined}
-            onclick={() => (activeSection = "icons")}
-          >
-            {_t("storage.iconsTab")}
-          </button>
-        </nav>
-      {:else if activeSection === "statistics"}
-        <nav class="settings-subnav" aria-label={_t("statistics.title")}>
-          <button
-            type="button"
-            class:active={activeStatisticsTab === "storage"}
-            aria-current={activeStatisticsTab === "storage" ? "page" : undefined}
-            onclick={() => (activeStatisticsTab = "storage")}
-          >
-            {_t("statistics.storageTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeStatisticsTab === "performance"}
-            aria-current={activeStatisticsTab === "performance" ? "page" : undefined}
-            onclick={() => (activeStatisticsTab = "performance")}
-          >
-            {_t("statistics.performanceTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeStatisticsTab === "memory"}
-            aria-current={activeStatisticsTab === "memory" ? "page" : undefined}
-            onclick={() => (activeStatisticsTab = "memory")}
-          >
-            {_t("statistics.memoryTab")}
-          </button>
-        </nav>
-      {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_window" || activeSection === "general_general"}
-        <nav class="settings-subnav" aria-label={_t("storage.generalTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "general_general"}
-            aria-current={activeSection === "general_general" ? "page" : undefined}
-            onclick={() => (activeSection = "general_general")}
-          >
-            {_t("storage.generalGeneralTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "general_window"}
-            aria-current={activeSection === "general_window" ? "page" : undefined}
-            onclick={() => (activeSection = "general_window")}
-          >
-            {_t("storage.generalWindowTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "general_search"}
-            aria-current={activeSection === "general_search" ? "page" : undefined}
-            onclick={() => (activeSection = "general_search")}
-          >
-            {_t("storage.generalSearchTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "general_items"}
-            aria-current={activeSection === "general_items" ? "page" : undefined}
-            onclick={() => (activeSection = "general_items")}
-          >
-            {_t("storage.generalItemsTab")}
-          </button>
-        </nav>
-      {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
-        <nav class="settings-subnav" aria-label={_t("storage.keyboardTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "keyboard_item"}
-            aria-current={activeSection === "keyboard_item" ? "page" : undefined}
-            onclick={() => (activeSection = "keyboard_item")}
-          >
-            {_t("storage.keyboardItemTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "keyboard_quick"}
-            aria-current={activeSection === "keyboard_quick" ? "page" : undefined}
-            onclick={() => (activeSection = "keyboard_quick")}
-          >
-            {_t("storage.keyboardQuickTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "keyboard_system"}
-            aria-current={activeSection === "keyboard_system" ? "page" : undefined}
-            onclick={() => (activeSection = "keyboard_system")}
-          >
-            {_t("storage.keyboardSystemTab")}
-          </button>
-        </nav>
-      {:else if activeSection === "capture" || activeSection === "capture_icons"}
-        <nav class="settings-subnav" aria-label={_t("storage.captureTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "capture"}
-            aria-current={activeSection === "capture" ? "page" : undefined}
-            onclick={() => (activeSection = "capture")}
-          >
-            {_t("capture.title")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "capture_icons"}
-            aria-current={activeSection === "capture_icons" ? "page" : undefined}
-            onclick={() => (activeSection = "capture_icons")}
-          >
-            {_t("storage.iconCacheTitle")}
-          </button>
-        </nav>
-      {:else if activeSection === "storage_paths" || activeSection === "storage_limits" || activeSection === "storage_tools"}
-        <nav class="settings-subnav" aria-label={_t("storage.storageTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "storage_paths"}
-            aria-current={activeSection === "storage_paths" ? "page" : undefined}
-            onclick={() => (activeSection = "storage_paths")}
-          >
-            {_t("storage.storagePathsTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "storage_limits"}
-            aria-current={activeSection === "storage_limits" ? "page" : undefined}
-            onclick={() => (activeSection = "storage_limits")}
-          >
-            {_t("storage.storageLimitsTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "storage_tools"}
-            aria-current={activeSection === "storage_tools" ? "page" : undefined}
-            onclick={() => (activeSection = "storage_tools")}
-          >
-            {_t("storage.storageToolsTab")}
-          </button>
-        </nav>
-      {:else if activeSection === "sync_cloud" || activeSection === "sync_advanced"}
-        <nav class="settings-subnav" aria-label={_t("storage.syncTab")}>
-          <button
-            type="button"
-            class:active={activeSection === "sync_cloud"}
-            aria-current={activeSection === "sync_cloud" ? "page" : undefined}
-            onclick={() => (activeSection = "sync_cloud")}
-          >
-            {_t("storage.syncCloudTab")}
-          </button>
-          <button
-            type="button"
-            class:active={activeSection === "sync_advanced"}
-            aria-current={activeSection === "sync_advanced" ? "page" : undefined}
-            onclick={() => (activeSection = "sync_advanced")}
-          >
-            {_t("storage.syncAdvancedTab")}
-          </button>
+      {#if activeSettingsNavGroup && activeSettingsNavGroup.tabs.length > 1}
+        <nav class="settings-subnav" aria-label={activeSettingsNavGroup.ariaLabel}>
+          {#each activeSettingsNavGroup.tabs as tab (`${tab.section}:${tab.statisticsTab ?? ""}`)}
+            <button
+              type="button"
+              class:active={isSettingsNavTargetActive(tab)}
+              aria-current={isSettingsNavTargetActive(tab) ? "page" : undefined}
+              onclick={() => activateSettingsNavTarget(tab)}
+            >
+              {tab.label}
+            </button>
+          {/each}
         </nav>
       {:else}
         <div
