@@ -411,35 +411,74 @@ pub fn list_s3_objects(
     access_key: &str,
     secret_key: &str,
 ) -> Result<Vec<S3Entry>, String> {
+    list_s3_objects_after(
+        endpoint, region, bucket, prefix, None, access_key, secret_key,
+    )
+}
+
+/// Lists every object below `prefix`, optionally beginning strictly after a
+/// known object key. S3 caps one ListObjectsV2 response at 1000 keys, so the
+/// continuation token must be followed until the server reports a complete
+/// page set.
+pub fn list_s3_objects_after(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    prefix: Option<&str>,
+    start_after: Option<&str>,
+    access_key: &str,
+    secret_key: &str,
+) -> Result<Vec<S3Entry>, String> {
     let client = shared_client()?;
     let (scheme, host) = parse_endpoint(endpoint);
-    let query = match prefix {
-        Some(p) if !p.is_empty() => format!("list-type=2&prefix={}", percent_encode(p)),
-        _ => "list-type=2".to_string(),
-    };
-    let req = S3Request {
-        method: "GET",
-        scheme: &scheme,
-        endpoint_host: &host,
-        bucket,
-        key: "",
-        query: Some(query),
-        payload: None,
-        access_key,
-        secret_key,
-        region,
-        extra_headers: &[],
-    };
-    let resp = signed_request(&client, &req)?
-        .send()
-        .map_err(|e| format!("list failed: {e}"))?;
+    let mut entries = Vec::new();
+    let mut continuation_token: Option<String> = None;
 
-    if !resp.status().is_success() {
-        return Err(err_from_response(resp, "list"));
+    loop {
+        let query = build_list_query(
+            prefix,
+            continuation_token
+                .is_none()
+                .then_some(start_after)
+                .flatten(),
+            continuation_token.as_deref(),
+        );
+        let req = S3Request {
+            method: "GET",
+            scheme: &scheme,
+            endpoint_host: &host,
+            bucket,
+            key: "",
+            query: Some(query),
+            payload: None,
+            access_key,
+            secret_key,
+            region,
+            extra_headers: &[],
+        };
+        let resp = signed_request(&client, &req)?
+            .send()
+            .map_err(|e| format!("list failed: {e}"))?;
+
+        if !resp.status().is_success() {
+            return Err(err_from_response(resp, "list"));
+        }
+
+        let xml = resp.text().map_err(|e| e.to_string())?;
+        let page = parse_s3_list_page(&xml);
+        entries.extend(page.entries);
+        if !page.is_truncated {
+            return Ok(entries);
+        }
+
+        let next = page.next_continuation_token.ok_or_else(|| {
+            "S3 returned a truncated object listing without a continuation token".to_string()
+        })?;
+        if continuation_token.as_deref() == Some(next.as_str()) {
+            return Err("S3 repeated an object-list continuation token".to_string());
+        }
+        continuation_token = Some(next);
     }
-
-    let xml = resp.text().map_err(|e| e.to_string())?;
-    Ok(parse_s3_list_response(&xml))
 }
 
 pub fn delete_from_s3(
@@ -489,6 +528,28 @@ fn percent_encode(input: &str) -> String {
         .collect()
 }
 
+fn build_list_query(
+    prefix: Option<&str>,
+    start_after: Option<&str>,
+    continuation_token: Option<&str>,
+) -> String {
+    let mut parameters = vec![("list-type", "2")];
+    if let Some(token) = continuation_token.filter(|value| !value.is_empty()) {
+        parameters.push(("continuation-token", token));
+    } else if let Some(start_after) = start_after.filter(|value| !value.is_empty()) {
+        parameters.push(("start-after", start_after));
+    }
+    if let Some(prefix) = prefix.filter(|value| !value.is_empty()) {
+        parameters.push(("prefix", prefix));
+    }
+    parameters.sort_unstable_by_key(|(name, _)| *name);
+    parameters
+        .into_iter()
+        .map(|(name, value)| format!("{name}={}", percent_encode(value)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 fn simple_md5_hex(data: &[u8]) -> String {
     use md5::{Digest, Md5};
     let mut hasher = Md5::new();
@@ -496,7 +557,13 @@ fn simple_md5_hex(data: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn parse_s3_list_response(xml: &str) -> Vec<S3Entry> {
+struct S3ListPage {
+    entries: Vec<S3Entry>,
+    is_truncated: bool,
+    next_continuation_token: Option<String>,
+}
+
+fn parse_s3_list_page(xml: &str) -> S3ListPage {
     let mut entries = Vec::new();
     let mut search_start = 0;
 
@@ -506,7 +573,7 @@ fn parse_s3_list_response(xml: &str) -> Vec<S3Entry> {
         let end = block.find("</Contents>").unwrap_or(block.len());
         let block = &block[..end];
 
-        let key = extract_tag(block, "Key").unwrap_or_default();
+        let key = decode_xml_text(extract_tag(block, "Key").unwrap_or_default());
         let size = extract_tag(block, "Size").and_then(|s| s.parse::<u64>().ok());
         let modified = extract_tag(block, "LastModified").and_then(|s| {
             chrono::DateTime::parse_from_rfc3339(s)
@@ -516,7 +583,7 @@ fn parse_s3_list_response(xml: &str) -> Vec<S3Entry> {
 
         if !key.is_empty() {
             entries.push(S3Entry {
-                name: key.split('/').next_back().unwrap_or(key).to_string(),
+                name: key.split('/').next_back().unwrap_or(&key).to_string(),
                 is_directory: false,
                 size_bytes: size,
                 modified_ms: modified,
@@ -527,7 +594,23 @@ fn parse_s3_list_response(xml: &str) -> Vec<S3Entry> {
         }
     }
 
-    entries
+    S3ListPage {
+        entries,
+        is_truncated: extract_tag(xml, "IsTruncated")
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("true")),
+        next_continuation_token: extract_tag(xml, "NextContinuationToken")
+            .map(decode_xml_text)
+            .filter(|value| !value.is_empty()),
+    }
+}
+
+fn decode_xml_text(value: &str) -> String {
+    value
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
 }
 
 fn extract_tag<'a>(block: &'a str, tag: &str) -> Option<&'a str> {
@@ -626,7 +709,47 @@ mod tests {
 
     #[test]
     fn list_query_uses_percent_encoded_prefix() {
-        let q = format!("list-type=2&prefix={}", percent_encode("clipboard-backup/"));
+        let q = build_list_query(Some("clipboard-backup/"), None, None);
         assert_eq!(q, "list-type=2&prefix=clipboard-backup%2F");
+    }
+
+    #[test]
+    fn paginated_list_query_is_canonical_and_uses_only_one_cursor() {
+        assert_eq!(
+            build_list_query(
+                Some("v3/segments/device-a/"),
+                Some("v3/segments/device-a/0002"),
+                None,
+            ),
+            "list-type=2&prefix=v3%2Fsegments%2Fdevice-a%2F&start-after=v3%2Fsegments%2Fdevice-a%2F0002"
+        );
+        assert_eq!(
+            build_list_query(
+                Some("v3/segments/device-a/"),
+                Some("ignored"),
+                Some("next+/="),
+            ),
+            "continuation-token=next%2B%2F%3D&list-type=2&prefix=v3%2Fsegments%2Fdevice-a%2F"
+        );
+    }
+
+    #[test]
+    fn list_page_exposes_continuation_and_decodes_object_names() {
+        let page = parse_s3_list_page(
+            r#"<ListBucketResult>
+                <IsTruncated>true</IsTruncated>
+                <NextContinuationToken>next&amp;token</NextContinuationToken>
+                <Contents>
+                    <Key>v3/heads/device&amp;a.bin</Key>
+                    <LastModified>2026-08-10T12:00:00Z</LastModified>
+                    <Size>42</Size>
+                </Contents>
+            </ListBucketResult>"#,
+        );
+        assert!(page.is_truncated);
+        assert_eq!(page.next_continuation_token.as_deref(), Some("next&token"));
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].name, "device&a.bin");
+        assert_eq!(page.entries[0].size_bytes, Some(42));
     }
 }
