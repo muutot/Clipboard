@@ -126,6 +126,26 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             value TEXT NOT NULL DEFAULT ''
         );
 
+        -- Provider/endpoint/path-scoped sync state. Keeping remote state out of
+        -- the global sync_metadata namespace prevents one remote from causing
+        -- another remote's baseline or oplogs to be skipped.
+        CREATE TABLE IF NOT EXISTS sync_remote_state (
+            remote_scope TEXT NOT NULL,
+            state_key TEXT NOT NULL,
+            value TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (remote_scope, state_key)
+        );
+
+        -- Applied remote oplog object revisions. Oplogs are immutable for new
+        -- clients; legacy mutable names are deliberately re-read every sync.
+        CREATE TABLE IF NOT EXISTS sync_applied_oplogs (
+            remote_scope TEXT NOT NULL,
+            object_name TEXT NOT NULL,
+            revision TEXT NOT NULL,
+            applied_at_ms INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (remote_scope, object_name)
+        );
+
         -- Operation log for multi-device sync. Records every insert/update/delete
         -- on clipboard_items so devices can exchange changes.
         -- `modified_at_ms` + `device_id` enable conflict resolution (last-write-wins).

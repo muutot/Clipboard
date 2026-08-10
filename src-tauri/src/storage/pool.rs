@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rusqlite::OptionalExtension;
 
 use super::{Database, StorageError, StorageFileReferences};
@@ -223,90 +225,144 @@ impl Database {
         })
     }
 
-    /// Highest `modified_ms` among remote oplog files already applied. Files
-    /// whose mtime is strictly lower than this watermark are skipped on the next
-    /// sync, so previously-applied oplogs are not downloaded/parsed again.
-    pub fn get_sync_applied_oplog_watermark(&self) -> Result<Option<i64>, StorageError> {
+    fn get_sync_remote_state(
+        &self,
+        remote_scope: &str,
+        state_key: &str,
+    ) -> Result<Option<String>, StorageError> {
         self.with_connection(|connection| {
-            let value: Option<String> = connection
+            connection
                 .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'sync_applied_oplog_watermark_ms'",
-                    [],
+                    "SELECT value FROM sync_remote_state
+                     WHERE remote_scope = ?1 AND state_key = ?2",
+                    rusqlite::params![remote_scope, state_key],
                     |row| row.get(0),
                 )
-                .optional()?;
-            Ok(value.and_then(|v| v.parse::<i64>().ok()))
+                .optional()
+                .map_err(Into::into)
         })
     }
 
-    /// Persists the applied-remote-oplog watermark.
-    pub fn set_sync_applied_oplog_watermark(&self, modified_ms: i64) -> Result<(), StorageError> {
+    fn set_sync_remote_state(
+        &self,
+        remote_scope: &str,
+        state_key: &str,
+        value: Option<&str>,
+    ) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            if let Some(value) = value {
+                connection.execute(
+                    "INSERT INTO sync_remote_state (remote_scope, state_key, value)
+                     VALUES (?1, ?2, ?3)
+                     ON CONFLICT(remote_scope, state_key) DO UPDATE SET value = excluded.value",
+                    rusqlite::params![remote_scope, state_key, value],
+                )?;
+            } else {
+                connection.execute(
+                    "DELETE FROM sync_remote_state
+                     WHERE remote_scope = ?1 AND state_key = ?2",
+                    rusqlite::params![remote_scope, state_key],
+                )?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Whether this database has completed baseline initialization against the
+    /// given provider/endpoint/path scope.
+    pub fn is_sync_remote_initialized(&self, remote_scope: &str) -> Result<bool, StorageError> {
+        Ok(self
+            .get_sync_remote_state(remote_scope, "initialized")?
+            .is_some_and(|value| value == "1"))
+    }
+
+    /// Marks baseline initialization complete for one remote scope.
+    pub fn mark_sync_remote_initialized(&self, remote_scope: &str) -> Result<(), StorageError> {
+        self.set_sync_remote_state(remote_scope, "initialized", Some("1"))
+    }
+
+    /// Returns the object revision ledger for one remote scope.
+    pub fn get_applied_sync_remote_oplogs(
+        &self,
+        remote_scope: &str,
+    ) -> Result<HashMap<String, String>, StorageError> {
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT object_name, revision FROM sync_applied_oplogs
+                 WHERE remote_scope = ?1",
+            )?;
+            let rows = statement.query_map([remote_scope], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            rows.collect::<Result<HashMap<_, _>, _>>()
+                .map_err(Into::into)
+        })
+    }
+
+    /// Records one successfully processed remote object revision.
+    pub fn mark_sync_remote_oplog_applied(
+        &self,
+        remote_scope: &str,
+        object_name: &str,
+        revision: &str,
+    ) -> Result<(), StorageError> {
         self.with_connection(|connection| {
             connection.execute(
-                "INSERT INTO sync_metadata (key, value) VALUES ('sync_applied_oplog_watermark_ms', ?1)
-                 ON CONFLICT(key) DO UPDATE SET value = ?1",
-                [modified_ms.to_string()],
+                "INSERT INTO sync_applied_oplogs
+                    (remote_scope, object_name, revision, applied_at_ms)
+                 VALUES (?1, ?2, ?3, strftime('%s', 'now') * 1000)
+                 ON CONFLICT(remote_scope, object_name) DO UPDATE SET
+                    revision = excluded.revision,
+                    applied_at_ms = excluded.applied_at_ms",
+                rusqlite::params![remote_scope, object_name, revision],
             )?;
             Ok(())
         })
     }
 
     /// Number of oplog files observed on the remote during the last sync. Used
-    /// by the UI to suggest a manual compaction before the retention cleanup
-    /// starts discarding old oplogs.
-    pub fn get_sync_remote_oplog_count(&self) -> Result<Option<u64>, StorageError> {
-        self.with_connection(|connection| {
-            let value: Option<String> = connection
-                .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'sync_remote_oplog_count'",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            Ok(value.and_then(|v| v.parse::<u64>().ok()))
-        })
+    /// by the UI to suggest maintenance for that same remote scope.
+    pub fn get_sync_remote_oplog_count(
+        &self,
+        remote_scope: &str,
+    ) -> Result<Option<u64>, StorageError> {
+        Ok(self
+            .get_sync_remote_state(remote_scope, "remote_oplog_count")?
+            .and_then(|value| value.parse::<u64>().ok()))
     }
 
     /// Persists the remote oplog count observed during the last sync.
-    pub fn set_sync_remote_oplog_count(&self, count: u64) -> Result<(), StorageError> {
-        self.with_connection(|connection| {
-            connection.execute(
-                "INSERT INTO sync_metadata (key, value) VALUES ('sync_remote_oplog_count', ?1)
-                 ON CONFLICT(key) DO UPDATE SET value = ?1",
-                [count.to_string()],
-            )?;
-            Ok(())
-        })
+    pub fn set_sync_remote_oplog_count(
+        &self,
+        remote_scope: &str,
+        count: u64,
+    ) -> Result<(), StorageError> {
+        self.set_sync_remote_state(remote_scope, "remote_oplog_count", Some(&count.to_string()))
     }
 
     /// Latest modified time of the newest remote baseline file observed during
     /// the last sync, used to suggest compaction when the snapshot is old.
-    pub fn get_sync_remote_baseline_modified_ms(&self) -> Result<Option<i64>, StorageError> {
-        self.with_connection(|connection| {
-            let value: Option<String> = connection
-                .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'sync_remote_baseline_modified_ms'",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            Ok(value.and_then(|v| v.parse::<i64>().ok()))
-        })
+    pub fn get_sync_remote_baseline_modified_ms(
+        &self,
+        remote_scope: &str,
+    ) -> Result<Option<i64>, StorageError> {
+        Ok(self
+            .get_sync_remote_state(remote_scope, "remote_baseline_modified_ms")?
+            .and_then(|value| value.parse::<i64>().ok()))
     }
 
     /// Persists the latest remote baseline mtime observed during the last sync.
     pub fn set_sync_remote_baseline_modified_ms(
         &self,
-        modified_ms: i64,
+        remote_scope: &str,
+        modified_ms: Option<i64>,
     ) -> Result<(), StorageError> {
-        self.with_connection(|connection| {
-            connection.execute(
-                "INSERT INTO sync_metadata (key, value) VALUES ('sync_remote_baseline_modified_ms', ?1)
-                 ON CONFLICT(key) DO UPDATE SET value = ?1",
-                [modified_ms.to_string()],
-            )?;
-            Ok(())
-        })
+        let value = modified_ms.map(|value| value.to_string());
+        self.set_sync_remote_state(
+            remote_scope,
+            "remote_baseline_modified_ms",
+            value.as_deref(),
+        )
     }
 
     /// Sets the changelog-suppression flag so the sync_changelog triggers stay
@@ -917,39 +973,75 @@ mod tests {
     }
 
     #[test]
-    fn sync_applied_oplog_watermark_round_trip() {
-        let db_path = temporary_path("oplog-watermark");
+    fn applied_remote_oplogs_are_isolated_by_scope_and_revision() {
+        let db_path = temporary_path("applied-oplog-ledger");
         let db = Database::open(&db_path).unwrap();
 
-        assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), None);
+        assert!(db
+            .get_applied_sync_remote_oplogs("remote-a")
+            .unwrap()
+            .is_empty());
 
-        db.set_sync_applied_oplog_watermark(123456).unwrap();
-        assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), Some(123456));
+        db.mark_sync_remote_oplog_applied("remote-a", "oplog-device-a", "mtime:1:size:10")
+            .unwrap();
+        let remote_a = db.get_applied_sync_remote_oplogs("remote-a").unwrap();
+        assert_eq!(
+            remote_a.get("oplog-device-a").map(String::as_str),
+            Some("mtime:1:size:10")
+        );
+        assert!(db
+            .get_applied_sync_remote_oplogs("remote-b")
+            .unwrap()
+            .is_empty());
 
-        db.set_sync_applied_oplog_watermark(654321).unwrap();
-        assert_eq!(db.get_sync_applied_oplog_watermark().unwrap(), Some(654321));
+        db.mark_sync_remote_oplog_applied("remote-a", "oplog-device-a", "mtime:2:size:20")
+            .unwrap();
+        let remote_a = db.get_applied_sync_remote_oplogs("remote-a").unwrap();
+        assert_eq!(
+            remote_a.get("oplog-device-a").map(String::as_str),
+            Some("mtime:2:size:20")
+        );
 
         let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]
-    fn sync_remote_compaction_stats_round_trip() {
-        let db_path = temporary_path("compaction-stats");
+    fn sync_remote_state_is_isolated_by_scope() {
+        let db_path = temporary_path("remote-state");
         let db = Database::open(&db_path).unwrap();
 
-        assert_eq!(db.get_sync_remote_oplog_count().unwrap(), None);
-        assert_eq!(db.get_sync_remote_baseline_modified_ms().unwrap(), None);
-
-        db.set_sync_remote_oplog_count(11).unwrap();
-        db.set_sync_remote_baseline_modified_ms(123456789).unwrap();
-        assert_eq!(db.get_sync_remote_oplog_count().unwrap(), Some(11));
+        assert!(!db.is_sync_remote_initialized("remote-a").unwrap());
+        assert!(!db.is_sync_remote_initialized("remote-b").unwrap());
+        assert_eq!(db.get_sync_remote_oplog_count("remote-a").unwrap(), None);
         assert_eq!(
-            db.get_sync_remote_baseline_modified_ms().unwrap(),
-            Some(123456789)
+            db.get_sync_remote_baseline_modified_ms("remote-a").unwrap(),
+            None
         );
 
-        db.set_sync_remote_oplog_count(0).unwrap();
-        assert_eq!(db.get_sync_remote_oplog_count().unwrap(), Some(0));
+        db.mark_sync_remote_initialized("remote-a").unwrap();
+        db.set_sync_remote_oplog_count("remote-a", 11).unwrap();
+        db.set_sync_remote_baseline_modified_ms("remote-a", Some(123456789))
+            .unwrap();
+        assert!(db.is_sync_remote_initialized("remote-a").unwrap());
+        assert!(!db.is_sync_remote_initialized("remote-b").unwrap());
+        assert_eq!(
+            db.get_sync_remote_oplog_count("remote-a").unwrap(),
+            Some(11)
+        );
+        assert_eq!(
+            db.get_sync_remote_baseline_modified_ms("remote-a").unwrap(),
+            Some(123456789)
+        );
+        assert_eq!(db.get_sync_remote_oplog_count("remote-b").unwrap(), None);
+
+        db.set_sync_remote_oplog_count("remote-a", 0).unwrap();
+        db.set_sync_remote_baseline_modified_ms("remote-a", None)
+            .unwrap();
+        assert_eq!(db.get_sync_remote_oplog_count("remote-a").unwrap(), Some(0));
+        assert_eq!(
+            db.get_sync_remote_baseline_modified_ms("remote-a").unwrap(),
+            None
+        );
 
         let _ = std::fs::remove_file(&db_path);
     }

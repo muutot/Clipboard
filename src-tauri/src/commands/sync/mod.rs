@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -102,10 +103,8 @@ struct SyncSettings {
     s3_access_key: Option<String>,
     s3_secret_key: Option<String>,
     sync_password: Option<String>,
-    last_sync_ms: Option<i64>,
     max_remote_oplog_files: usize,
     oplog_rollover_entries: usize,
-    oplog_rollover_size_bytes: usize,
     max_sync_image_bytes: u64,
     max_sync_file_bytes: u64,
 }
@@ -124,13 +123,42 @@ impl SyncSettings {
             s3_access_key: config.s3_access_key(),
             s3_secret_key: config.s3_secret_key(),
             sync_password: sync.sync_password.clone(),
-            last_sync_ms: sync.last_sync_ms,
             max_remote_oplog_files: config.max_remote_oplog_files() as usize,
             oplog_rollover_entries: config.oplog_rollover_entries() as usize,
-            oplog_rollover_size_bytes: config.oplog_rollover_size_bytes() as usize,
             max_sync_image_bytes: config.max_sync_image_bytes(),
             max_sync_file_bytes: config.max_sync_file_bytes(),
         }
+    }
+
+    fn remote_scope_id(&self) -> Result<String, String> {
+        let endpoint = self
+            .endpoint
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "sync endpoint not configured".to_string())?
+            .trim_end_matches('/');
+        let remote_path = self
+            .remote_path
+            .as_deref()
+            .unwrap_or_default()
+            .trim_matches('/');
+        let identity = match self.provider {
+            crate::config::SyncProvider::Webdav => format!(
+                "webdav\n{endpoint}\n{remote_path}\n{}",
+                self.username.as_deref().unwrap_or_default()
+            ),
+            crate::config::SyncProvider::S3 => format!(
+                "s3\n{endpoint}\n{remote_path}\n{}\n{}\n{}",
+                self.s3_region,
+                self.s3_bucket.as_deref().unwrap_or_default(),
+                self.s3_access_key.as_deref().unwrap_or_default()
+            ),
+            crate::config::SyncProvider::Off => {
+                return Err("sync provider is disabled".to_string());
+            }
+        };
+        Ok(hex::encode(Sha256::digest(identity.as_bytes())))
     }
 }
 
@@ -142,6 +170,8 @@ pub fn get_sync_config(
     let guard = config
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let settings = SyncSettings::from_config(&guard);
+    let remote_scope = settings.remote_scope_id().ok();
     let sync = guard.sync_config();
     let auto_sync = guard.auto_sync();
     let auto_sync_interval_secs = guard.auto_sync_interval_secs();
@@ -151,10 +181,14 @@ pub fn get_sync_config(
     let max_sync_image_bytes = guard.max_sync_image_bytes();
     let max_sync_file_bytes = guard.max_sync_file_bytes();
     let unsynced = database.count_unsynced_changelog().unwrap_or(0);
-    let remote_oplog_count = database.get_sync_remote_oplog_count().unwrap_or(None);
-    let remote_baseline_ms = database
-        .get_sync_remote_baseline_modified_ms()
-        .unwrap_or(None);
+    let remote_oplog_count = remote_scope
+        .as_deref()
+        .and_then(|scope| database.get_sync_remote_oplog_count(scope).unwrap_or(None));
+    let remote_baseline_ms = remote_scope.as_deref().and_then(|scope| {
+        database
+            .get_sync_remote_baseline_modified_ms(scope)
+            .unwrap_or(None)
+    });
     let max_files = guard.max_remote_oplog_files() as u64;
     let compaction_suggested = match remote_oplog_count {
         Some(count) if count >= max_files => true,
@@ -280,10 +314,15 @@ struct WebDavPool<'a> {
     remote_path: &'a str,
     username: Option<&'a str>,
     password: Option<&'a str>,
+    remote_scope: &'a str,
     settings: &'a SyncSettings,
 }
 
 impl sync::PoolStorage for WebDavPool<'_> {
+    fn scope_key(&self) -> &str {
+        self.remote_scope
+    }
+
     fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
         let object = sync::pool_object_path(rel_path);
         let data = encrypt_if_configured(bytes.to_vec(), self.settings)?;
@@ -319,10 +358,15 @@ struct S3Pool<'a> {
     access_key: &'a str,
     secret_key: &'a str,
     remote_path: &'a str,
+    remote_scope: &'a str,
     settings: &'a SyncSettings,
 }
 
 impl sync::PoolStorage for S3Pool<'_> {
+    fn scope_key(&self) -> &str {
+        self.remote_scope
+    }
+
     fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
         let object = sync::pool_object_path(rel_path);
         let key = s3_object_key(self.remote_path, &object);
@@ -424,6 +468,7 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
         .clone()
         .ok_or("sync endpoint not configured")?;
     let remote_path = settings.remote_path.clone().unwrap_or_default();
+    let remote_scope = settings.remote_scope_id()?;
     let device_id = get_device_id();
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
@@ -440,6 +485,7 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
             &paths,
             &endpoint,
             &remote_path,
+            &remote_scope,
             &device_id,
             &timestamp,
             &temp_dir,
@@ -451,6 +497,7 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
             &paths,
             &endpoint,
             &remote_path,
+            &remote_scope,
             &device_id,
             &timestamp,
             &temp_dir,
@@ -480,6 +527,7 @@ fn sync_upload_webdav(
     paths: &crate::storage::StoragePaths,
     endpoint: &str,
     remote_path: &str,
+    remote_scope: &str,
     device_id: &str,
     timestamp: &str,
     temp_dir: &std::path::Path,
@@ -493,17 +541,20 @@ fn sync_upload_webdav(
         remote_path,
         username: settings.username.as_deref(),
         password: settings.password.as_deref(),
+        remote_scope,
         settings,
     };
 
-    let has_prior_sync = settings.last_sync_ms.is_some();
+    let has_prior_sync = database
+        .is_sync_remote_initialized(remote_scope)
+        .map_err(|e| e.to_string())?;
     let remote_files = sync::list_webdav_files(
         endpoint,
         Some(remote_path),
         settings.username.as_deref(),
         settings.password.as_deref(),
     )?;
-    record_remote_stats(database, &remote_files);
+    record_remote_stats(database, remote_scope, &remote_files);
 
     let remote_baselines: Vec<_> = remote_files
         .iter()
@@ -533,7 +584,7 @@ fn sync_upload_webdav(
             let (mut merged_items, merged_resources) =
                 sync::merge_baseline_archives(&merged_payloads)?;
 
-            sync::absorb_pool_paths(paths, &merged_resources);
+            sync::absorb_pool_paths(paths, &merged_resources, &pool);
 
             // Self-heal: collapse the redundant disjoint baselines into one
             // superset baseline so the remote converges back to a single source
@@ -581,6 +632,9 @@ fn sync_upload_webdav(
                 .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
             println!("[sync] baseline imported: {} items", imported);
+            database
+                .mark_sync_remote_initialized(remote_scope)
+                .map_err(|e| e.to_string())?;
             applied_remote = true;
         }
     } else if !has_prior_sync {
@@ -600,10 +654,12 @@ fn sync_upload_webdav(
             settings.password.as_deref(),
         )?;
         println!("[sync] baseline uploaded: {} items", manifest.item_count);
+        database
+            .mark_sync_remote_initialized(remote_scope)
+            .map_err(|e| e.to_string())?;
     }
 
     let rollover_entries = settings.oplog_rollover_entries;
-    let rollover_bytes = settings.oplog_rollover_size_bytes;
     let max_image_bytes = settings.max_sync_image_bytes;
     let max_file_bytes = settings.max_sync_file_bytes;
     let local_entries = database
@@ -614,43 +670,11 @@ fn sync_upload_webdav(
 
     let mut written_filename: String = String::new();
     let uploaded_entries = if !local_entries.is_empty() {
-        let (mut all_entries, mut all_resources) =
-            sync::collect_entry_resources(local_entries, paths);
-        let mut filename = format!("oplog-{device_id}-{timestamp}");
-
-        if let Some(existing) = remote_files.iter().find(|e| {
-            !e.is_directory
-                && e.name.starts_with(&format!("oplog-{device_id}-"))
-                && !e.name.contains(timestamp)
-        }) {
-            if let Some(size) = existing.size_bytes {
-                if size < rollover_bytes as u64 {
-                    if let Ok(data) = sync::download_from_webdav(
-                        endpoint,
-                        remote_path,
-                        &existing.name,
-                        settings.username.as_deref(),
-                        settings.password.as_deref(),
-                    ) {
-                        let data = decrypt_if_configured(data, settings)?;
-                        if let Ok((mut old_entries, old_resources)) =
-                            crate::sync::wire::deserialize_oplog_with_resources(&data)
-                        {
-                            if old_entries.len() < rollover_entries {
-                                filename = existing.name.clone();
-                                old_entries.append(&mut all_entries);
-                                all_entries = old_entries;
-                                all_resources.extend(old_resources);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let new_data =
+        let (all_entries, all_resources) = sync::collect_entry_resources(local_entries, paths);
+        let plaintext =
             crate::sync::wire::serialize_oplog_with_resources(&all_entries, &all_resources)?;
-        let new_data = encrypt_if_configured(new_data, settings)?;
+        let filename = immutable_oplog_filename(device_id, &all_entries, &plaintext);
+        let new_data = encrypt_if_configured(plaintext, settings)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_webdav(
             endpoint,
@@ -671,23 +695,24 @@ fn sync_upload_webdav(
 
     let mut downloaded_entries: u64 = 0;
     let mut applied_entries: u64 = 0;
-    let watermark = database
-        .get_sync_applied_oplog_watermark()
-        .map_err(|e| e.to_string())?
-        .unwrap_or(0);
-    let mut max_applied_mtime = watermark;
+    let mut applied_objects = database
+        .get_applied_sync_remote_oplogs(remote_scope)
+        .map_err(|e| e.to_string())?;
 
     for entry in &remote_files {
         if entry.is_directory || !entry.name.starts_with("oplog-") {
             continue;
         }
-        if entry.name.contains(device_id) {
+        if entry.name.starts_with(&format!("oplog-{device_id}-")) {
             continue;
         }
-        if let Some(mtime) = entry.modified_ms {
-            if mtime <= watermark {
-                continue;
-            }
+        let revision = remote_oplog_revision(entry);
+        if revision.as_ref().is_some_and(|revision| {
+            applied_objects
+                .get(&entry.name)
+                .is_some_and(|applied| applied == revision)
+        }) {
+            continue;
         }
         match sync::download_from_webdav(
             endpoint,
@@ -720,11 +745,14 @@ fn sync_upload_webdav(
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => {
                         applied_entries += applied;
+                        if let Some(revision) = revision.as_deref() {
+                            database
+                                .mark_sync_remote_oplog_applied(remote_scope, &entry.name, revision)
+                                .map_err(|e| e.to_string())?;
+                            applied_objects.insert(entry.name.clone(), revision.to_string());
+                        }
                         if applied > 0 {
                             applied_remote = true;
-                            if let Some(mtime) = entry.modified_ms {
-                                max_applied_mtime = max_applied_mtime.max(mtime);
-                            }
                         }
                     }
                     Err(e) => println!("[sync] apply error: {}", e),
@@ -732,10 +760,6 @@ fn sync_upload_webdav(
             }
             Err(e) => println!("[sync] download error for {}: {}", entry.name, e),
         }
-    }
-
-    if max_applied_mtime > watermark {
-        let _ = database.set_sync_applied_oplog_watermark(max_applied_mtime);
     }
 
     let max_files = settings.max_remote_oplog_files;
@@ -775,6 +799,7 @@ fn sync_upload_s3(
     paths: &crate::storage::StoragePaths,
     endpoint: &str,
     remote_path: &str,
+    remote_scope: &str,
     device_id: &str,
     timestamp: &str,
     temp_dir: &std::path::Path,
@@ -791,6 +816,7 @@ fn sync_upload_s3(
         access_key: &access_key,
         secret_key: &secret_key,
         remote_path,
+        remote_scope,
         settings,
     };
 
@@ -799,10 +825,12 @@ fn sync_upload_s3(
     } else {
         Some(remote_path)
     };
-    let has_prior_sync = settings.last_sync_ms.is_some();
+    let has_prior_sync = database
+        .is_sync_remote_initialized(remote_scope)
+        .map_err(|e| e.to_string())?;
     let remote_objects =
         sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)?;
-    record_remote_stats(database, &remote_objects);
+    record_remote_stats(database, remote_scope, &remote_objects);
 
     let remote_baselines: Vec<_> = remote_objects
         .iter()
@@ -833,7 +861,7 @@ fn sync_upload_s3(
             let (mut merged_items, merged_resources) =
                 sync::merge_baseline_archives(&merged_payloads)?;
 
-            sync::absorb_pool_paths(paths, &merged_resources);
+            sync::absorb_pool_paths(paths, &merged_resources, &pool);
 
             // Self-heal: collapse the redundant disjoint baselines into one
             // superset baseline so the remote converges back to a single source
@@ -883,6 +911,9 @@ fn sync_upload_s3(
                 .import_baseline_items(&merged_items)
                 .map_err(|e| e.to_string())?;
             println!("[sync] baseline imported: {} items", imported);
+            database
+                .mark_sync_remote_initialized(remote_scope)
+                .map_err(|e| e.to_string())?;
             applied_remote = true;
         }
     } else if !has_prior_sync {
@@ -903,10 +934,12 @@ fn sync_upload_s3(
             &secret_key,
         )?;
         println!("[sync] baseline uploaded: {} items", manifest.item_count);
+        database
+            .mark_sync_remote_initialized(remote_scope)
+            .map_err(|e| e.to_string())?;
     }
 
     let rollover_entries = settings.oplog_rollover_entries;
-    let rollover_bytes = settings.oplog_rollover_size_bytes;
     let max_image_bytes = settings.max_sync_image_bytes;
     let max_file_bytes = settings.max_sync_file_bytes;
     let local_entries = database
@@ -917,44 +950,11 @@ fn sync_upload_s3(
 
     let mut written_filename: String = String::new();
     let uploaded_entries = if !local_entries.is_empty() {
-        let (mut all_entries, mut all_resources) =
-            sync::collect_entry_resources(local_entries, paths);
-        let mut filename = format!("oplog-{device_id}-{timestamp}");
-
-        if let Some(existing) = remote_objects.iter().find(|e| {
-            !e.is_directory
-                && e.name.starts_with(&format!("oplog-{device_id}-"))
-                && !e.name.contains(timestamp)
-        }) {
-            if let Some(size) = existing.size_bytes {
-                if size < rollover_bytes as u64 {
-                    if let Ok(data) = sync::download_from_s3(
-                        endpoint,
-                        &region,
-                        &bucket,
-                        &s3_object_key(remote_path, &existing.name),
-                        &access_key,
-                        &secret_key,
-                    ) {
-                        let data = decrypt_if_configured(data, settings)?;
-                        if let Ok((mut old_entries, old_resources)) =
-                            crate::sync::wire::deserialize_oplog_with_resources(&data)
-                        {
-                            if old_entries.len() < rollover_entries {
-                                filename = existing.name.clone();
-                                old_entries.append(&mut all_entries);
-                                all_entries = old_entries;
-                                all_resources.extend(old_resources);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let new_data =
+        let (all_entries, all_resources) = sync::collect_entry_resources(local_entries, paths);
+        let plaintext =
             crate::sync::wire::serialize_oplog_with_resources(&all_entries, &all_resources)?;
-        let new_data = encrypt_if_configured(new_data, settings)?;
+        let filename = immutable_oplog_filename(device_id, &all_entries, &plaintext);
+        let new_data = encrypt_if_configured(plaintext, settings)?;
         bytes_uploaded += new_data.len() as u64;
         sync::upload_to_s3(
             endpoint,
@@ -976,23 +976,24 @@ fn sync_upload_s3(
 
     let mut downloaded_entries: u64 = 0;
     let mut applied_entries: u64 = 0;
-    let watermark = database
-        .get_sync_applied_oplog_watermark()
-        .map_err(|e| e.to_string())?
-        .unwrap_or(0);
-    let mut max_applied_mtime = watermark;
+    let mut applied_objects = database
+        .get_applied_sync_remote_oplogs(remote_scope)
+        .map_err(|e| e.to_string())?;
 
     for entry in &remote_objects {
         if entry.is_directory || !entry.name.starts_with("oplog-") {
             continue;
         }
-        if entry.name.contains(device_id) {
+        if entry.name.starts_with(&format!("oplog-{device_id}-")) {
             continue;
         }
-        if let Some(mtime) = entry.modified_ms {
-            if mtime <= watermark {
-                continue;
-            }
+        let revision = remote_oplog_revision(entry);
+        if revision.as_ref().is_some_and(|revision| {
+            applied_objects
+                .get(&entry.name)
+                .is_some_and(|applied| applied == revision)
+        }) {
+            continue;
         }
         match sync::download_from_s3(
             endpoint,
@@ -1026,11 +1027,14 @@ fn sync_upload_s3(
                 match database.apply_remote_oplog(&remote_entries) {
                     Ok(applied) => {
                         applied_entries += applied;
+                        if let Some(revision) = revision.as_deref() {
+                            database
+                                .mark_sync_remote_oplog_applied(remote_scope, &entry.name, revision)
+                                .map_err(|e| e.to_string())?;
+                            applied_objects.insert(entry.name.clone(), revision.to_string());
+                        }
                         if applied > 0 {
                             applied_remote = true;
-                            if let Some(mtime) = entry.modified_ms {
-                                max_applied_mtime = max_applied_mtime.max(mtime);
-                            }
                         }
                     }
                     Err(e) => println!("[sync] apply error: {}", e),
@@ -1038,10 +1042,6 @@ fn sync_upload_s3(
             }
             Err(e) => println!("[sync] download error for {}: {}", entry.name, e),
         }
-    }
-
-    if max_applied_mtime > watermark {
-        let _ = database.set_sync_applied_oplog_watermark(max_applied_mtime);
     }
 
     let max_files = settings.max_remote_oplog_files;
@@ -1082,6 +1082,39 @@ fn s3_object_key(remote_path: &str, name: &str) -> String {
     } else {
         format!("{remote_path}/{name}")
     }
+}
+
+fn immutable_oplog_filename(
+    device_id: &str,
+    entries: &[crate::storage::SyncChangeLogEntry],
+    plaintext: &[u8],
+) -> String {
+    let first_sequence = entries.first().map_or(0, |entry| entry.sequence);
+    let last_sequence = entries.last().map_or(0, |entry| entry.sequence);
+    let digest = Sha256::digest(plaintext);
+    let content_id = hex::encode(digest);
+    format!("oplog-{device_id}-s{first_sequence}-e{last_sequence}-{content_id}")
+}
+
+fn is_immutable_oplog_filename(name: &str) -> bool {
+    let mut parts = name.rsplitn(4, '-');
+    let Some(content_id) = parts.next() else {
+        return false;
+    };
+    let Some(last_sequence) = parts.next().and_then(|part| part.strip_prefix('e')) else {
+        return false;
+    };
+    let Some(first_sequence) = parts.next().and_then(|part| part.strip_prefix('s')) else {
+        return false;
+    };
+    let Some(prefix) = parts.next() else {
+        return false;
+    };
+    prefix.starts_with("oplog-")
+        && first_sequence.parse::<i64>().is_ok()
+        && last_sequence.parse::<i64>().is_ok()
+        && content_id.len() == 64
+        && content_id.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1196,9 +1229,23 @@ impl RemoteFileLike for sync::S3Entry {
     }
 }
 
+fn remote_oplog_revision<T: RemoteFileLike>(entry: &T) -> Option<String> {
+    if is_immutable_oplog_filename(entry.name()) {
+        return Some(format!("immutable:{}", entry.name()));
+    }
+    // Legacy clients may overwrite an existing timestamp-named object. Its
+    // provider mtime can be coarse or preserved, so no metadata-only revision
+    // is safe enough to skip it; always download legacy names again.
+    None
+}
+
 /// Records the remote file layout observed during a sync so `get_sync_config`
 /// can suggest a manual compaction without an extra network round-trip.
-fn record_remote_stats<T: RemoteFileLike>(database: &Database, remote_files: &[T]) {
+fn record_remote_stats<T: RemoteFileLike>(
+    database: &Database,
+    remote_scope: &str,
+    remote_files: &[T],
+) {
     let oplog_count = remote_files
         .iter()
         .filter(|e| !e.is_directory() && e.name().starts_with("oplog-"))
@@ -1210,10 +1257,8 @@ fn record_remote_stats<T: RemoteFileLike>(database: &Database, remote_files: &[T
         })
         .filter_map(RemoteFileLike::modified_ms)
         .max();
-    let _ = database.set_sync_remote_oplog_count(oplog_count);
-    if let Some(ms) = baseline_ms {
-        let _ = database.set_sync_remote_baseline_modified_ms(ms);
-    }
+    let _ = database.set_sync_remote_oplog_count(remote_scope, oplog_count);
+    let _ = database.set_sync_remote_baseline_modified_ms(remote_scope, baseline_ms);
 }
 
 fn cleanup_old_remote_oplogs(
@@ -1384,6 +1429,7 @@ pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, St
         .clone()
         .ok_or("sync endpoint not configured")?;
     let remote_path = settings.remote_path.clone().unwrap_or_default();
+    let remote_scope = settings.remote_scope_id()?;
     let device_id = get_device_id();
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
@@ -1398,6 +1444,7 @@ pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, St
             &paths,
             &endpoint,
             &remote_path,
+            &remote_scope,
             &device_id,
             &timestamp,
             &temp_dir,
@@ -1408,6 +1455,7 @@ pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, St
             &paths,
             &endpoint,
             &remote_path,
+            &remote_scope,
             &device_id,
             &timestamp,
             &temp_dir,
@@ -1432,6 +1480,7 @@ fn compact_webdav(
     paths: &crate::storage::StoragePaths,
     endpoint: &str,
     remote_path: &str,
+    remote_scope: &str,
     device_id: &str,
     timestamp: &str,
     temp_dir: &std::path::Path,
@@ -1444,6 +1493,7 @@ fn compact_webdav(
         remote_path,
         username,
         password,
+        remote_scope,
         settings,
     };
 
@@ -1490,7 +1540,7 @@ fn compact_webdav(
     // Re-record the post-compaction layout so `get_sync_config` stops flagging
     // `compaction_suggested` on the next open (no extra round-trip otherwise).
     if let Ok(files) = sync::list_webdav_files(endpoint, Some(remote_path), username, password) {
-        record_remote_stats(database, &files);
+        record_remote_stats(database, remote_scope, &files);
     }
 
     Ok((baseline_bytes, deleted))
@@ -1503,6 +1553,7 @@ fn compact_s3(
     paths: &crate::storage::StoragePaths,
     endpoint: &str,
     remote_path: &str,
+    remote_scope: &str,
     device_id: &str,
     timestamp: &str,
     temp_dir: &std::path::Path,
@@ -1521,6 +1572,7 @@ fn compact_s3(
         access_key: &access_key,
         secret_key: &secret_key,
         remote_path,
+        remote_scope,
         settings,
     };
 
@@ -1582,7 +1634,7 @@ fn compact_s3(
     if let Ok(objects) =
         sync::list_s3_objects(endpoint, &region, &bucket, prefix, &access_key, &secret_key)
     {
-        record_remote_stats(database, &objects);
+        record_remote_stats(database, remote_scope, &objects);
     }
 
     let baseline_bytes = std::fs::metadata(&baseline_path)
@@ -1622,6 +1674,103 @@ fn decrypt_if_configured(data: Vec<u8>, settings: &SyncSettings) -> Result<Vec<u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn webdav_settings(endpoint: &str, remote_path: &str) -> SyncSettings {
+        SyncSettings {
+            provider: crate::config::SyncProvider::Webdav,
+            endpoint: Some(endpoint.to_string()),
+            remote_path: Some(remote_path.to_string()),
+            username: Some("user".to_string()),
+            password: None,
+            s3_region: "us-east-1".to_string(),
+            s3_bucket: None,
+            s3_access_key: None,
+            s3_secret_key: None,
+            sync_password: None,
+            max_remote_oplog_files: 10,
+            oplog_rollover_entries: 100,
+            max_sync_image_bytes: 5_242_880,
+            max_sync_file_bytes: 10_485_760,
+        }
+    }
+
+    fn sample_sync_entry(sequence: i64) -> crate::storage::SyncChangeLogEntry {
+        crate::storage::SyncChangeLogEntry {
+            sequence,
+            item_id: format!("item-{sequence}"),
+            operation: "insert".to_string(),
+            kind: "text".to_string(),
+            title: "title".to_string(),
+            content_hash: format!("hash-{sequence}"),
+            resource_path: None,
+            preview_path: None,
+            icon_path: None,
+            text_content: Some("text".to_string()),
+            html_content: None,
+            rtf_content: None,
+            metadata_json: None,
+            is_favorite: false,
+            source_app: None,
+            size_bytes: 0,
+            last_used_at_ms: None,
+            created_at_ms: 100,
+            modified_at_ms: 100,
+            device_id: "device".to_string(),
+        }
+    }
+
+    #[test]
+    fn remote_scope_is_stable_but_isolates_different_paths() {
+        let first = webdav_settings("https://dav.example.test/", "/clipboard/");
+        let equivalent = webdav_settings("https://dav.example.test", "clipboard");
+        let other = webdav_settings("https://dav.example.test", "other");
+
+        assert_eq!(
+            first.remote_scope_id().unwrap(),
+            equivalent.remote_scope_id().unwrap()
+        );
+        assert_ne!(
+            first.remote_scope_id().unwrap(),
+            other.remote_scope_id().unwrap()
+        );
+    }
+
+    #[test]
+    fn immutable_oplog_names_include_sequence_range_and_content_id() {
+        let entries = vec![sample_sync_entry(4), sample_sync_entry(9)];
+        let first = immutable_oplog_filename("device-a", &entries, b"payload");
+        let same = immutable_oplog_filename("device-a", &entries, b"payload");
+        let changed = immutable_oplog_filename("device-a", &entries, b"changed");
+
+        assert_eq!(first, same);
+        assert_ne!(first, changed);
+        assert!(first.starts_with("oplog-device-a-s4-e9-"));
+        assert!(is_immutable_oplog_filename(&first));
+        assert!(!is_immutable_oplog_filename(
+            "oplog-device-a-20260810_120000"
+        ));
+    }
+
+    #[test]
+    fn legacy_mutable_oplogs_are_never_skipped_by_metadata() {
+        let immutable = sync::WebDavEntry {
+            name: immutable_oplog_filename("device-a", &[sample_sync_entry(1)], b"payload"),
+            is_directory: false,
+            size_bytes: None,
+            modified_ms: None,
+        };
+        assert!(remote_oplog_revision(&immutable)
+            .unwrap()
+            .starts_with("immutable:"));
+
+        let legacy = sync::WebDavEntry {
+            name: "oplog-device-a-20260810_120000".to_string(),
+            is_directory: false,
+            size_bytes: Some(20),
+            modified_ms: Some(10),
+        };
+        assert_eq!(remote_oplog_revision(&legacy), None);
+    }
 
     #[test]
     fn omitted_write_only_secret_keeps_the_stored_value() {

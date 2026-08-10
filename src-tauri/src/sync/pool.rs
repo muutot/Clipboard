@@ -7,14 +7,14 @@
 //! every file, so rebuilding the index never re-uploads resources that the pool
 //! already holds.
 //!
-//! `PoolManifest` is a per-device, on-disk cache of which `rel_path`s this
-//! device knows exist in the remote pool. It is updated when a file is
-//! successfully uploaded to the pool and when a payload that explicitly
-//! references a pooled resource is downloaded, so the same device's compaction
-//! can downgrade inline resources to plain pool references without a network
-//! round-trip. The manifest is only ever consulted for optimization; payloads
-//! keep their inline `bytes` for every resource that is not yet confirmed in
-//! the pool, so a downgrade never loses data.
+//! `PoolManifest` is a per-device, per-remote on-disk cache of which `rel_path`s
+//! this device knows exist in that scoped remote pool. It is updated when a
+//! file is successfully uploaded to the pool and when a payload that explicitly
+//! references a pooled resource is downloaded, so later snapshots can downgrade
+//! inline resources to plain pool references without a network round-trip. The
+//! manifest is only ever consulted for optimization; payloads keep their inline
+//! `bytes` for every resource not confirmed in the same pool, so switching
+//! remotes cannot create dangling references.
 
 use std::collections::HashSet;
 use std::fs;
@@ -28,20 +28,24 @@ pub const POOL_DIR: &str = "resources";
 /// A resource pool transport. Each provider backs objects at
 /// `resources/<rel_path>` and applies its own encryption when configured.
 pub trait PoolStorage {
+    /// Stable provider/endpoint/path scope used to isolate the local manifest.
+    fn scope_key(&self) -> &str;
     /// Uploads the plaintext resource bytes to the pool object.
     fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String>;
     /// Downloads the plaintext resource bytes from the pool object.
     fn download(&self, rel_path: &str) -> Result<Vec<u8>, String>;
 }
 
-fn manifest_path(paths: &StoragePaths) -> std::path::PathBuf {
-    paths.data_directory.join("sync-pool-manifest.json")
+fn manifest_path(paths: &StoragePaths, remote_scope: &str) -> std::path::PathBuf {
+    paths
+        .data_directory
+        .join(format!("sync-pool-manifest-{remote_scope}.json"))
 }
 
 /// Loads the persisted pool manifest (rel_paths known to exist remotely).
 /// Missing or unreadable manifests yield an empty set.
-pub fn load_pool_manifest(paths: &StoragePaths) -> HashSet<String> {
-    let path = manifest_path(paths);
+pub fn load_pool_manifest(paths: &StoragePaths, remote_scope: &str) -> HashSet<String> {
+    let path = manifest_path(paths, remote_scope);
     let Ok(content) = fs::read(&path) else {
         return HashSet::new();
     };
@@ -52,8 +56,12 @@ pub fn load_pool_manifest(paths: &StoragePaths) -> HashSet<String> {
 }
 
 /// Persists the pool manifest to disk.
-pub fn save_pool_manifest(paths: &StoragePaths, manifest: &HashSet<String>) -> Result<(), String> {
-    let path = manifest_path(paths);
+pub fn save_pool_manifest(
+    paths: &StoragePaths,
+    remote_scope: &str,
+    manifest: &HashSet<String>,
+) -> Result<(), String> {
+    let path = manifest_path(paths, remote_scope);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -70,11 +78,15 @@ pub fn save_pool_manifest(paths: &StoragePaths, manifest: &HashSet<String>) -> R
 /// non-pooling sender embeds them without a standalone pool object, so claiming
 /// them would let a later compaction emit a dangling reference. Best-effort;
 /// manifest write failures are ignored.
-pub fn absorb_pool_paths(paths: &StoragePaths, resources: &[OplogResource]) {
+pub fn absorb_pool_paths(
+    paths: &StoragePaths,
+    resources: &[OplogResource],
+    pool: &dyn PoolStorage,
+) {
     if resources.is_empty() {
         return;
     }
-    let mut manifest = load_pool_manifest(paths);
+    let mut manifest = load_pool_manifest(paths, pool.scope_key());
     let mut changed = false;
     for resource in resources {
         if resource.bytes.is_some() {
@@ -85,7 +97,7 @@ pub fn absorb_pool_paths(paths: &StoragePaths, resources: &[OplogResource]) {
         }
     }
     if changed {
-        let _ = save_pool_manifest(paths, &manifest);
+        let _ = save_pool_manifest(paths, pool.scope_key(), &manifest);
     }
 }
 
@@ -101,7 +113,7 @@ pub fn ensure_pool_uploads(
     resources: &mut [OplogResource],
     pool: &dyn PoolStorage,
 ) -> usize {
-    let mut manifest = load_pool_manifest(paths);
+    let mut manifest = load_pool_manifest(paths, pool.scope_key());
     let mut changed = false;
     let mut uploaded = 0;
     for resource in resources.iter_mut() {
@@ -127,7 +139,7 @@ pub fn ensure_pool_uploads(
         }
     }
     if changed {
-        let _ = save_pool_manifest(paths, &manifest);
+        let _ = save_pool_manifest(paths, pool.scope_key(), &manifest);
     }
     uploaded
 }
@@ -153,7 +165,7 @@ pub fn prepare_pool_refs(
     resources: &mut [OplogResource],
     pool: &dyn PoolStorage,
 ) -> usize {
-    let known_before = load_pool_manifest(paths);
+    let known_before = load_pool_manifest(paths, pool.scope_key());
     let uploaded = ensure_pool_uploads(paths, resources, pool);
     mark_pool_references(resources, &known_before);
     uploaded
@@ -165,8 +177,8 @@ pub fn pool_object_path(rel_path: &str) -> String {
 }
 
 /// Local cache file path for the pool manifest. Exposed for tests only.
-pub fn pool_manifest_file(paths: &StoragePaths) -> std::path::PathBuf {
-    manifest_path(paths)
+pub fn pool_manifest_file(paths: &StoragePaths, remote_scope: &str) -> std::path::PathBuf {
+    manifest_path(paths, remote_scope)
 }
 
 #[cfg(test)]
@@ -190,18 +202,19 @@ mod tests {
         manifest.insert("image/a.png".to_string());
         manifest.insert("file/b.pdf".to_string());
 
-        save_pool_manifest(&paths, &manifest).unwrap();
-        let loaded = load_pool_manifest(&paths);
+        save_pool_manifest(&paths, "remote-a", &manifest).unwrap();
+        let loaded = load_pool_manifest(&paths, "remote-a");
         assert_eq!(loaded, manifest);
+        assert!(load_pool_manifest(&paths, "remote-b").is_empty());
 
-        save_pool_manifest(&paths, &HashSet::new()).unwrap();
-        assert!(load_pool_manifest(&paths).is_empty());
+        save_pool_manifest(&paths, "remote-a", &HashSet::new()).unwrap();
+        assert!(load_pool_manifest(&paths, "remote-a").is_empty());
     }
 
     #[test]
     fn missing_manifest_yields_empty_set() {
         let paths = temporary_storage("missing");
-        assert!(load_pool_manifest(&paths).is_empty());
+        assert!(load_pool_manifest(&paths, "remote-a").is_empty());
     }
 
     #[test]
@@ -240,6 +253,10 @@ mod tests {
     }
 
     impl PoolStorage for MemoryPool {
+        fn scope_key(&self) -> &str {
+            "test-remote"
+        }
+
         fn upload(&self, rel_path: &str, bytes: &[u8]) -> Result<(), String> {
             if self.fail_uploads {
                 return Err("upload failed".to_string());
@@ -309,7 +326,7 @@ mod tests {
         let mut resources = inline_resources();
         ensure_pool_uploads(&paths, &mut resources, &pool);
 
-        let known = load_pool_manifest(&paths);
+        let known = load_pool_manifest(&paths, pool.scope_key());
         mark_pool_references(&mut resources, &known);
         assert!(resources[0].bytes.is_none());
         assert!(resources[1].bytes.is_none());
@@ -328,8 +345,9 @@ mod tests {
                 bytes: Some(b"x".to_vec()),
             },
         ];
-        absorb_pool_paths(&paths, &resources);
-        let manifest = load_pool_manifest(&paths);
+        let pool = MemoryPool::new();
+        absorb_pool_paths(&paths, &resources, &pool);
+        let manifest = load_pool_manifest(&paths, pool.scope_key());
         assert!(manifest.contains("image/pooled.png"));
         assert!(!manifest.contains("image/inline.png"));
     }
