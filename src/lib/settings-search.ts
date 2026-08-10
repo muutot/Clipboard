@@ -1,33 +1,12 @@
-export const SETTINGS_SECTIONS = [
-  "general_search",
-  "general_items",
-  "general_window",
-  "general_general",
-  "compact",
-  "font",
-  "theme",
-  "icons",
-  "capture",
-  "capture_icons",
-  "storage_paths",
-  "storage_limits",
-  "storage_tools",
-  "sync_cloud",
-  "sync_advanced",
-  "keyboard_item",
-  "keyboard_quick",
-  "keyboard_system",
-  "tags",
-  "ocr",
-  "statistics",
-  "about",
-] as const;
+import type { SettingsSection, StatisticsTab } from "$lib/settings-navigation";
 
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
-
-export const STATISTICS_TABS = ["storage", "performance", "memory"] as const;
-
-export type StatisticsTab = (typeof STATISTICS_TABS)[number];
+export {
+  SETTINGS_SECTIONS,
+  STATISTICS_TABS,
+  resolveSettingsNavPath,
+  type SettingsSection,
+  type StatisticsTab,
+} from "$lib/settings-navigation";
 
 export interface SettingsSearchTarget {
   section: SettingsSection;
@@ -930,61 +909,6 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["model memory", "模型占用"],
   ),
 ];
-
-export function resolveSettingsNavPath(
-  translate: SettingsSearchTranslate,
-  section: SettingsSection,
-  statisticsTab?: StatisticsTab,
-): string[] {
-  switch (section) {
-    case "general_search":
-      return [translate("storage.generalTab"), translate("storage.generalSearchTab")];
-    case "general_items":
-      return [translate("storage.generalTab"), translate("storage.generalItemsTab")];
-    case "general_window":
-      return [translate("storage.generalTab"), translate("storage.generalWindowTab")];
-    case "general_general":
-      return [translate("storage.generalTab"), translate("storage.generalGeneralTab")];
-    case "compact":
-      return [translate("storage.appearanceTab"), translate("storage.compactTab")];
-    case "font":
-      return [translate("storage.appearanceTab"), translate("storage.fontTab")];
-    case "theme":
-      return [translate("storage.appearanceTab"), translate("storage.themeTab")];
-    case "icons":
-      return [translate("storage.appearanceTab"), translate("storage.iconsTab")];
-    case "capture":
-    case "capture_icons":
-      return [translate("storage.captureTab")];
-    case "storage_paths":
-    case "storage_limits":
-    case "storage_tools":
-      return [translate("storage.storageToolsTab")];
-    case "sync_cloud":
-    case "sync_advanced":
-      return [translate("storage.syncTab")];
-    case "keyboard_item":
-    case "keyboard_quick":
-    case "keyboard_system":
-      return [translate("storage.keyboardTab")];
-    case "tags":
-      return [translate("storage.tagsTab")];
-    case "ocr":
-      return ["OCR"];
-    case "statistics": {
-      const tab = statisticsTab ?? "storage";
-      const tabLabel =
-        tab === "storage"
-          ? translate("statistics.storageTab")
-          : tab === "performance"
-            ? translate("statistics.performanceTab")
-            : translate("statistics.memoryTab");
-      return [translate("storage.statisticsTab"), tabLabel];
-    }
-    case "about":
-      return [translate("about.tabLabel")];
-  }
-}
 
 export function normalizeSettingsSearch(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase();

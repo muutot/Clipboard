@@ -92,7 +92,7 @@ This is the settings shell and an integration hotspot. It owns:
 
 - modal versus standalone sizing;
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
-- the typed `SETTINGS_NAV_GROUP_DEFINITIONS` descriptor that drives primary buttons, secondary tabs, active-group matching, and section title/description metadata; section state reuses `SettingsSection`/`StatisticsTab` from `settings-search.ts` rather than declaring a parallel union;
+- the typed `settings-navigation.ts::SETTINGS_NAV_GROUP_DEFINITIONS` descriptor that drives primary buttons, secondary tabs, active-group matching, section title/description metadata, and breadcrumb resolution; section state reuses its `SettingsSection`/`StatisticsTab` types rather than declaring a parallel union;
 - composition of child settings panels with `showHeader={false}`;
 - eager loading of the default `GeneralSettingsPanel`; compact/font/theme/icon-color/ignored-app/tag/keyboard panels are dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;

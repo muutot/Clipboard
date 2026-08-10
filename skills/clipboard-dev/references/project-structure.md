@@ -26,7 +26,8 @@ SvelteKit runs as a static SPA: `src/routes/+layout.ts` disables SSR and awaits 
 | `src/lib/types/`                     | Frontend contracts for clipboard, settings, runtime, and memory diagnostics                                |
 | `src/lib/utils/`                     | Date query, keyboard target checks, theme application, time formatting, virtual-scroll calculations        |
 | `src/lib/i18n/`                      | Locale store, typed message shape, English and Simplified Chinese dictionaries                             |
-| `src/lib/settings-search.ts`         | Search index/metadata for settings items and navigation targets                                            |
+| `src/lib/settings-navigation.ts`     | Canonical settings sections, category/tab descriptors, icons, titles/descriptions, and breadcrumb paths    |
+| `src/lib/settings-search.ts`         | Search index/metadata for setting cards and their typed navigation targets                                 |
 | `src/lib/data/demo-items.ts`         | Browser-preview fallback data; not proof of desktop persistence behavior                                   |
 
 Read `components.md` and `services.md` for ownership and change gates inside those directories.

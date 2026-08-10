@@ -34,7 +34,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
-`StorageSettingsDialog.svelte::SETTINGS_NAV_GROUP_DEFINITIONS` is the shell navigation source of truth. It defines category order/icons, default targets, secondary-tab order, translated labels, and section title/description keys; the sidebar and secondary row render from that descriptor. Reuse the exported `SettingsSection` and `StatisticsTab` types from `settings-search.ts`, and update the descriptor plus settings-search metadata together when a section is added, renamed, or moved.
+`src/lib/settings-navigation.ts::SETTINGS_NAV_GROUP_DEFINITIONS` is the shell navigation source of truth. It defines section/statistics-tab types, category order/icons, default targets, secondary-tab order, translated labels, section title/description keys, and breadcrumb behavior; the sidebar, secondary row, and settings-search paths resolve from that module. Update the descriptor plus settings-search item metadata together when a section is added, renamed, or moved.
 
 ## Approved shell hierarchy
 
@@ -154,7 +154,7 @@ Do not wrap the range input merely for styling. Initialize/update `--slider-pct`
 
 ## Settings search
 
-`src/lib/settings-search.ts` is the navigation/search metadata for settings. When adding, renaming, or moving a setting card:
+`src/lib/settings-search.ts` owns searchable setting-card metadata and targets; `src/lib/settings-navigation.ts` owns the target types and navigation paths. When adding, renaming, or moving a setting card:
 
 1. update the panel and translations;
 2. update settings-search metadata/section routing;
