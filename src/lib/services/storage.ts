@@ -315,6 +315,7 @@ export interface SyncConfig {
   s3Bucket: string | null;
   s3AccessKey: string | null;
   hasS3SecretKey: boolean;
+  hasSyncPassword: boolean;
   lastSyncMs: number | null;
   lastSyncStatus: string | null;
   unsyncedCount: number;
@@ -334,7 +335,7 @@ export interface WebDavTestResult {
   statusCode: number | null;
 }
 
-export interface WebDavEntry {
+export interface RemoteBackupEntry {
   name: string;
   isDirectory: boolean;
   sizeBytes: number | null;
@@ -373,6 +374,7 @@ export async function getSyncConfig(): Promise<SyncConfig> {
       s3Bucket: null,
       s3AccessKey: null,
       hasS3SecretKey: false,
+      hasSyncPassword: false,
       compactionSuggested: false,
     };
   }
@@ -461,9 +463,9 @@ export async function syncUploadBackup(): Promise<SyncUploadResult> {
   return invoke<SyncUploadResult>("sync_upload_backup");
 }
 
-export async function syncListRemoteBackups(): Promise<WebDavEntry[]> {
+export async function syncListRemoteBackups(): Promise<RemoteBackupEntry[]> {
   if (!isTauriRuntime()) return [];
-  return invoke<WebDavEntry[]>("sync_list_remote_backups");
+  return invoke<RemoteBackupEntry[]>("sync_list_remote_backups");
 }
 
 export async function syncDownloadBackup(filename: string): Promise<string> {

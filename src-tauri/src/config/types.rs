@@ -371,7 +371,7 @@ pub struct ExportConfig {
     extra: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SyncConfig {
     pub provider: SyncProvider,
@@ -395,6 +395,33 @@ pub struct SyncConfig {
     pub max_sync_file_bytes: u64,
     #[serde(flatten)]
     pub(crate) extra: BTreeMap<String, Value>,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            provider: SyncProvider::Off,
+            endpoint: None,
+            remote_path: None,
+            username: None,
+            password: None,
+            s3_region: None,
+            s3_bucket: None,
+            s3_access_key: None,
+            s3_secret_key: None,
+            sync_password: None,
+            last_sync_ms: None,
+            last_sync_status: None,
+            auto_sync: false,
+            auto_sync_interval_secs: 300,
+            max_remote_oplog_files: 10,
+            oplog_rollover_entries: 100,
+            oplog_rollover_size_bytes: 51_200,
+            max_sync_image_bytes: 5_242_880,
+            max_sync_file_bytes: 10_485_760,
+            extra: BTreeMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -119,6 +119,8 @@ When backend startup, validation, or native behavior needs one of these fields, 
 
 ## Sync settings
 
+These defaults come from `SyncConfig::default` and are also the values serialized for a fresh `conf.json`; `get_sync_config` returns the complete effective policy so the settings UI does not have to reconstruct missing backend fields.
+
 | Field                         | Type             | Default           | Range        | Description                                                                                               |
 | ----------------------------- | ---------------- | ----------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
 | `sync.autoSync`               | `bool`           | `false`           | boolean      | Enable auto-sync on clipboard change                                                                      |

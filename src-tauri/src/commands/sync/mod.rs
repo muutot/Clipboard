@@ -36,7 +36,45 @@ pub struct SyncConfigInfo {
     last_sync_ms: Option<i64>,
     last_sync_status: Option<String>,
     unsynced_count: u64,
+    auto_sync: bool,
+    auto_sync_interval_secs: u64,
+    max_remote_oplog_files: u32,
+    oplog_rollover_entries: u32,
+    oplog_rollover_size_bytes: u32,
+    max_sync_image_bytes: u64,
+    max_sync_file_bytes: u64,
     compaction_suggested: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteBackupEntry {
+    name: String,
+    is_directory: bool,
+    size_bytes: Option<u64>,
+    modified_ms: Option<i64>,
+}
+
+impl From<sync::WebDavEntry> for RemoteBackupEntry {
+    fn from(entry: sync::WebDavEntry) -> Self {
+        Self {
+            name: entry.name,
+            is_directory: entry.is_directory,
+            size_bytes: entry.size_bytes,
+            modified_ms: entry.modified_ms,
+        }
+    }
+}
+
+impl From<sync::S3Entry> for RemoteBackupEntry {
+    fn from(entry: sync::S3Entry) -> Self {
+        Self {
+            name: entry.name,
+            is_directory: entry.is_directory,
+            size_bytes: entry.size_bytes,
+            modified_ms: entry.modified_ms,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -105,6 +143,13 @@ pub fn get_sync_config(
         .lock()
         .map_err(|_| "configuration lock is poisoned".to_owned())?;
     let sync = guard.sync_config();
+    let auto_sync = guard.auto_sync();
+    let auto_sync_interval_secs = guard.auto_sync_interval_secs();
+    let max_remote_oplog_files = guard.max_remote_oplog_files();
+    let oplog_rollover_entries = guard.oplog_rollover_entries();
+    let oplog_rollover_size_bytes = guard.oplog_rollover_size_bytes();
+    let max_sync_image_bytes = guard.max_sync_image_bytes();
+    let max_sync_file_bytes = guard.max_sync_file_bytes();
     let unsynced = database.count_unsynced_changelog().unwrap_or(0);
     let remote_oplog_count = database.get_sync_remote_oplog_count().unwrap_or(None);
     let remote_baseline_ms = database
@@ -143,8 +188,19 @@ pub fn get_sync_config(
         last_sync_ms: sync.last_sync_ms,
         last_sync_status: sync.last_sync_status,
         unsynced_count: unsynced,
+        auto_sync,
+        auto_sync_interval_secs,
+        max_remote_oplog_files,
+        oplog_rollover_entries,
+        oplog_rollover_size_bytes,
+        max_sync_image_bytes,
+        max_sync_file_bytes,
         compaction_suggested,
     })
+}
+
+fn retain_secret(candidate: Option<String>, previous: Option<String>) -> Option<String> {
+    candidate.or(previous)
 }
 
 #[tauri::command]
@@ -186,7 +242,7 @@ pub fn set_sync_config(
         endpoint,
         remote_path,
         username,
-        password: password.or(prev.password),
+        password: retain_secret(password, prev.password),
         last_sync_ms: prev.last_sync_ms,
         last_sync_status: prev.last_sync_status,
         auto_sync,
@@ -199,8 +255,8 @@ pub fn set_sync_config(
         s3_region,
         s3_bucket,
         s3_access_key,
-        s3_secret_key,
-        sync_password,
+        s3_secret_key: retain_secret(s3_secret_key, prev.s3_secret_key),
+        sync_password: retain_secret(sync_password, prev.sync_password),
         ..Default::default()
     };
 
@@ -1207,7 +1263,7 @@ fn cleanup_old_remote_oplogs(
 #[tauri::command]
 pub fn sync_list_remote_backups(
     config: tauri::State<'_, Mutex<ConfigStore>>,
-) -> Result<String, String> {
+) -> Result<Vec<RemoteBackupEntry>, String> {
     let settings = {
         let guard = config.lock().map_err(|_| "lock poisoned".to_owned())?;
         SyncSettings::from_config(&guard)
@@ -1225,7 +1281,7 @@ pub fn sync_list_remote_backups(
                 settings.username.as_deref(),
                 settings.password.as_deref(),
             )?;
-            serde_json::to_string(&files).map_err(|e| e.to_string())
+            Ok(files.into_iter().map(RemoteBackupEntry::from).collect())
         }
         crate::config::SyncProvider::S3 => {
             let (region, bucket, access_key, secret_key) = resolve_s3_config(&settings);
@@ -1238,7 +1294,7 @@ pub fn sync_list_remote_backups(
                 &access_key,
                 &secret_key,
             )?;
-            serde_json::to_string(&files).map_err(|e| e.to_string())
+            Ok(files.into_iter().map(RemoteBackupEntry::from).collect())
         }
         _ => Err("unsupported provider".to_string()),
     }
@@ -1566,6 +1622,69 @@ fn decrypt_if_configured(data: Vec<u8>, settings: &SyncSettings) -> Result<Vec<u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn omitted_write_only_secret_keeps_the_stored_value() {
+        assert_eq!(
+            retain_secret(None, Some("stored".to_string())),
+            Some("stored".to_string())
+        );
+        assert_eq!(
+            retain_secret(Some("replacement".to_string()), Some("stored".to_string())),
+            Some("replacement".to_string())
+        );
+    }
+
+    #[test]
+    fn sync_config_info_serializes_policy_fields() {
+        let value = serde_json::to_value(SyncConfigInfo {
+            provider: "off".to_string(),
+            endpoint: None,
+            remote_path: None,
+            username: None,
+            has_password: false,
+            s3_region: None,
+            s3_bucket: None,
+            s3_access_key: None,
+            has_s3_secret_key: false,
+            has_sync_password: false,
+            last_sync_ms: None,
+            last_sync_status: None,
+            unsynced_count: 0,
+            auto_sync: true,
+            auto_sync_interval_secs: 300,
+            max_remote_oplog_files: 10,
+            oplog_rollover_entries: 100,
+            oplog_rollover_size_bytes: 51_200,
+            max_sync_image_bytes: 5_242_880,
+            max_sync_file_bytes: 10_485_760,
+            compaction_suggested: false,
+        })
+        .unwrap();
+
+        assert_eq!(value["autoSync"], true);
+        assert_eq!(value["autoSyncIntervalSecs"], 300);
+        assert_eq!(value["maxRemoteOplogFiles"], 10);
+        assert_eq!(value["oplogRolloverEntries"], 100);
+        assert_eq!(value["oplogRolloverSizeBytes"], 51_200);
+        assert_eq!(value["maxSyncImageBytes"], 5_242_880);
+        assert_eq!(value["maxSyncFileBytes"], 10_485_760);
+    }
+
+    #[test]
+    fn remote_backup_entries_serialize_as_a_direct_array() {
+        let value = serde_json::to_value(vec![RemoteBackupEntry {
+            name: "baseline.zip".to_string(),
+            is_directory: false,
+            size_bytes: Some(42),
+            modified_ms: Some(100),
+        }])
+        .unwrap();
+
+        assert!(value.is_array());
+        assert_eq!(value[0]["name"], "baseline.zip");
+        assert_eq!(value[0]["isDirectory"], false);
+    }
 
     #[test]
     fn s3_object_key_without_remote_path_keeps_basename() {

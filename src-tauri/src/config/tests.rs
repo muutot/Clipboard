@@ -351,6 +351,55 @@ fn persists_export_settings() {
 }
 
 #[test]
+fn sync_settings_use_documented_defaults() {
+    let project = temporary_test_directory("sync-defaults");
+    let store = ConfigStore::load(&project).unwrap();
+    let sync = store.sync_config();
+
+    assert!(!sync.auto_sync);
+    assert_eq!(sync.auto_sync_interval_secs, 300);
+    assert_eq!(sync.max_remote_oplog_files, 10);
+    assert_eq!(sync.oplog_rollover_entries, 100);
+    assert_eq!(sync.oplog_rollover_size_bytes, 51_200);
+    assert_eq!(sync.max_sync_image_bytes, 5_242_880);
+    assert_eq!(sync.max_sync_file_bytes, 10_485_760);
+
+    let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+    assert_eq!(saved["sync"]["autoSyncIntervalSecs"], 300);
+    assert_eq!(saved["sync"]["maxSyncImageBytes"], 5_242_880);
+    assert_eq!(saved["sync"]["maxSyncFileBytes"], 10_485_760);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn legacy_sync_settings_without_policy_fields_use_defaults() {
+    let project = temporary_test_directory("legacy-sync-defaults");
+    let config_directory = project.join("conf");
+    fs::create_dir_all(&config_directory).unwrap();
+    fs::write(
+        config_directory.join("conf.json"),
+        serde_json::to_vec_pretty(&json!({
+            "sync": {
+                "provider": "off"
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let sync = ConfigStore::load(&project).unwrap().sync_config();
+    assert_eq!(sync.auto_sync_interval_secs, 300);
+    assert_eq!(sync.max_remote_oplog_files, 10);
+    assert_eq!(sync.oplog_rollover_entries, 100);
+    assert_eq!(sync.oplog_rollover_size_bytes, 51_200);
+    assert_eq!(sync.max_sync_image_bytes, 5_242_880);
+    assert_eq!(sync.max_sync_file_bytes, 10_485_760);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn search_index_sync_mode_defaults_to_lazy_and_round_trips() {
     let project = temporary_test_directory("search-sync-mode");
     let mut store = ConfigStore::load(&project).unwrap();
