@@ -24,6 +24,16 @@ impl ResourceCategory {
             Self::Icon => "icon",
         }
     }
+
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "image" => Ok(Self::Image),
+            "file" => Ok(Self::File),
+            "preview" => Ok(Self::Preview),
+            "icon" => Ok(Self::Icon),
+            _ => Err("resource key has an unknown category".to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +43,13 @@ pub struct ParsedSegmentKey {
     pub first_sequence: u64,
     pub last_sequence: u64,
     pub sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedResourceKey {
+    pub category: ResourceCategory,
+    pub sha256: String,
+    pub extension: String,
 }
 
 fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
@@ -194,6 +211,35 @@ pub fn resource_object_key(
     ))
 }
 
+pub fn parse_resource_key(key: &str) -> Result<ParsedResourceKey, String> {
+    if key.contains('\\') || key.starts_with('/') || key.bytes().any(|byte| byte.is_ascii_control())
+    {
+        return Err("resource key contains unsafe characters".to_string());
+    }
+    let components: Vec<&str> = key.split('/').collect();
+    if components.len() != 4
+        || components[0] != V1_ROOT
+        || components[1] != "resources"
+        || components.iter().any(|component| component.is_empty())
+    {
+        return Err("resource key has an invalid layout".to_string());
+    }
+    let category = ResourceCategory::parse(components[2])?;
+    let (stem, extension) = components[3]
+        .rsplit_once('.')
+        .ok_or_else(|| "resource key is missing its extension".to_string())?;
+    let sha256 = stem
+        .strip_prefix("sha256-")
+        .ok_or_else(|| "resource key is missing its SHA-256 prefix".to_string())?;
+    validate_digest(sha256)?;
+    validate_extension(extension)?;
+    Ok(ParsedResourceKey {
+        category,
+        sha256: sha256.to_string(),
+        extension: extension.to_string(),
+    })
+}
+
 /// Selects only objects emitted by the discarded sync implementation.
 /// The configured remote prefix is stripped by the caller before this check.
 pub fn obsolete_object_candidate(relative_key: &str) -> bool {
@@ -250,6 +296,22 @@ mod tests {
             resource_object_key(ResourceCategory::Image, &DIGEST.to_uppercase(), "png").is_err()
         );
         assert!(resource_object_key(ResourceCategory::Image, DIGEST, "tar.gz").is_err());
+    }
+
+    #[test]
+    fn resource_keys_round_trip_and_reject_noncanonical_paths() {
+        let key = resource_object_key(ResourceCategory::File, DIGEST, "bin").unwrap();
+        assert_eq!(
+            parse_resource_key(&key).unwrap(),
+            ParsedResourceKey {
+                category: ResourceCategory::File,
+                sha256: DIGEST.to_string(),
+                extension: "bin".to_string(),
+            }
+        );
+        assert!(parse_resource_key("v1/resources/unknown/sha256-a.bin").is_err());
+        assert!(parse_resource_key(&format!("v1/resources/file/../sha256-{DIGEST}.bin")).is_err());
+        assert!(parse_resource_key(&format!("v1/resources/file/sha256-{}.BIN", DIGEST)).is_err());
     }
 
     #[test]

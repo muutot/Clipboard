@@ -1,8 +1,8 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, path::Path};
 
 use crate::sync::s3::{
-    delete_from_s3, get_s3_object, list_s3_objects_after, put_s3_object, S3PutCondition,
-    S3PutOutcome,
+    delete_from_s3, get_s3_object, get_s3_object_to_file, head_s3_object, list_s3_objects_after,
+    put_s3_file, put_s3_object, S3PutCondition, S3PutOutcome,
 };
 
 use super::layout::obsolete_object_candidate;
@@ -19,6 +19,19 @@ pub struct ObjectInfo {
 pub struct DownloadedObject {
     pub bytes: Vec<u8>,
     /// Raw HTTP ETag value, including quotes when supplied by the store.
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjectMetadata {
+    pub size_bytes: Option<u64>,
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DownloadedFile {
+    pub size_bytes: u64,
+    pub sha256: String,
     pub etag: Option<String>,
 }
 
@@ -41,8 +54,23 @@ pub trait ObjectStore {
     /// Lists keys relative to this store's configured remote scope.
     fn list(&self, prefix: &str, start_after: Option<&str>) -> Result<Vec<ObjectInfo>, String>;
     fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String>;
+    fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String>;
+    fn get_to_file(
+        &self,
+        key: &str,
+        destination: &Path,
+        max_bytes: u64,
+    ) -> Result<Option<DownloadedFile>, String>;
     fn put(&self, key: &str, bytes: Vec<u8>, condition: PutCondition)
         -> Result<PutOutcome, String>;
+    fn put_file(
+        &self,
+        key: &str,
+        path: &Path,
+        sha256: &str,
+        size_bytes: u64,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, String>;
     fn delete(&self, key: &str) -> Result<(), String>;
 }
 
@@ -192,6 +220,50 @@ impl ObjectStore for S3ObjectStore {
         })
     }
 
+    fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+        let full_key = self.full_object_key(key)?;
+        head_s3_object(
+            &self.endpoint,
+            &self.region,
+            &self.bucket,
+            &full_key,
+            &self.access_key,
+            &self.secret_key,
+        )
+        .map(|metadata| {
+            metadata.map(|metadata| ObjectMetadata {
+                size_bytes: metadata.size_bytes,
+                etag: metadata.etag,
+            })
+        })
+    }
+
+    fn get_to_file(
+        &self,
+        key: &str,
+        destination: &Path,
+        max_bytes: u64,
+    ) -> Result<Option<DownloadedFile>, String> {
+        let full_key = self.full_object_key(key)?;
+        get_s3_object_to_file(
+            &self.endpoint,
+            &self.region,
+            &self.bucket,
+            &full_key,
+            destination,
+            max_bytes,
+            &self.access_key,
+            &self.secret_key,
+        )
+        .map(|download| {
+            download.map(|download| DownloadedFile {
+                size_bytes: download.size_bytes,
+                sha256: download.sha256,
+                etag: download.etag,
+            })
+        })
+    }
+
     fn put(
         &self,
         key: &str,
@@ -210,6 +282,38 @@ impl ObjectStore for S3ObjectStore {
             &self.bucket,
             &full_key,
             bytes,
+            &self.access_key,
+            &self.secret_key,
+            condition,
+        )
+        .map(|outcome| match outcome {
+            S3PutOutcome::Stored { etag } => PutOutcome::Stored { etag },
+            S3PutOutcome::PreconditionFailed => PutOutcome::PreconditionFailed,
+        })
+    }
+
+    fn put_file(
+        &self,
+        key: &str,
+        path: &Path,
+        sha256: &str,
+        size_bytes: u64,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, String> {
+        let full_key = self.full_object_key(key)?;
+        let condition = match condition {
+            PutCondition::Unconditional => S3PutCondition::Unconditional,
+            PutCondition::IfAbsent => S3PutCondition::IfAbsent,
+            PutCondition::IfMatch(etag) => S3PutCondition::IfMatch(etag),
+        };
+        put_s3_file(
+            &self.endpoint,
+            &self.region,
+            &self.bucket,
+            &full_key,
+            path,
+            sha256,
+            size_bytes,
             &self.access_key,
             &self.secret_key,
             condition,
@@ -365,6 +469,39 @@ mod tests {
                 }))
         }
 
+        fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+            Ok(self.objects.borrow().get(key).map(|bytes| ObjectMetadata {
+                size_bytes: Some(bytes.len() as u64),
+                etag: Some(Self::etag(bytes)),
+            }))
+        }
+
+        fn get_to_file(
+            &self,
+            key: &str,
+            destination: &Path,
+            max_bytes: u64,
+        ) -> Result<Option<DownloadedFile>, String> {
+            let Some(bytes) = self.objects.borrow().get(key).cloned() else {
+                return Ok(None);
+            };
+            if bytes.len() as u64 > max_bytes {
+                return Err("memory object exceeds download limit".to_string());
+            }
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(destination)
+                .map_err(|error| error.to_string())?;
+            use std::io::Write;
+            file.write_all(&bytes).map_err(|error| error.to_string())?;
+            Ok(Some(DownloadedFile {
+                size_bytes: bytes.len() as u64,
+                sha256: hex::encode(Sha256::digest(&bytes)),
+                etag: Some(Self::etag(&bytes)),
+            }))
+        }
+
         fn put(
             &self,
             key: &str,
@@ -386,6 +523,21 @@ mod tests {
             let etag = Self::etag(&bytes);
             objects.insert(key.to_string(), bytes);
             Ok(PutOutcome::Stored { etag: Some(etag) })
+        }
+
+        fn put_file(
+            &self,
+            key: &str,
+            path: &Path,
+            sha256: &str,
+            size_bytes: u64,
+            condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+            if bytes.len() as u64 != size_bytes || hex::encode(Sha256::digest(&bytes)) != sha256 {
+                return Err("memory file fingerprint mismatch".to_string());
+            }
+            self.put(key, bytes, condition)
         }
 
         fn delete(&self, key: &str) -> Result<(), String> {
