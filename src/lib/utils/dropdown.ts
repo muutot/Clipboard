@@ -1,5 +1,46 @@
 const ELLIPSIS = "\u2026";
 
+type PopoverAnchorRect = Pick<DOMRect, "bottom" | "left" | "right" | "top">;
+
+interface FixedPopoverPositionOptions {
+  align?: "start" | "end";
+  gap?: number;
+  viewportPadding?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+}
+
+export interface FixedPopoverPosition {
+  top: number;
+  left: number;
+}
+
+export function resolveFixedPopoverPosition(
+  anchor: PopoverAnchorRect,
+  popoverWidth: number,
+  popoverHeight: number,
+  options: FixedPopoverPositionOptions = {},
+): FixedPopoverPosition {
+  const {
+    align = "start",
+    gap = 4,
+    viewportPadding = 8,
+    viewportWidth = window.innerWidth,
+    viewportHeight = window.innerHeight,
+  } = options;
+  const topBelow = anchor.bottom + gap;
+  const topAbove = anchor.top - gap - popoverHeight;
+  const fitsBelow = topBelow + popoverHeight <= viewportHeight - viewportPadding;
+  const fitsAbove = topAbove >= viewportPadding;
+  const desiredLeft = align === "end" ? anchor.right - popoverWidth : anchor.left;
+  const maxLeft = viewportWidth - viewportPadding - popoverWidth;
+
+  return {
+    top: fitsBelow || !fitsAbove ? topBelow : topAbove,
+    left: Math.max(viewportPadding, Math.min(desiredLeft, maxLeft)),
+  };
+}
+
 export function alignDropdownOptionText(container: HTMLElement): void {
   let anyOverflow = false;
   for (const button of container.querySelectorAll<HTMLElement>("button")) {

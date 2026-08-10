@@ -3,6 +3,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import TagColorPicker from "$lib/components/TagColorPicker.svelte";
   import { messages, resolvePath } from "$lib/i18n";
+  import { resolveFixedPopoverPosition } from "$lib/utils/dropdown";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
   import {
     deleteTag,
@@ -116,15 +117,13 @@
   function positionColorPopover() {
     if (!colorPopover || !colorTriggerEl || !colorPopoverEl) return;
     const rect = colorTriggerEl.getBoundingClientRect();
-    const popHeight = colorPopoverEl.offsetHeight;
-    const popWidth = colorPopoverEl.offsetWidth;
-    const gap = 4;
-    const topBelow = rect.bottom + gap;
-    const topAbove = rect.top - gap - popHeight;
-    const fitsBelow = topBelow + popHeight <= window.innerHeight - 8;
-    const fitsAbove = topAbove >= 8;
-    popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
-    popoverLeft = Math.max(8, Math.min(rect.left, window.innerWidth - 8 - popWidth));
+    const position = resolveFixedPopoverPosition(
+      rect,
+      colorPopoverEl.offsetWidth,
+      colorPopoverEl.offsetHeight,
+    );
+    popoverTop = position.top;
+    popoverLeft = position.left;
   }
 
   function onColorScroll(e: Event) {

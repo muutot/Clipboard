@@ -1,6 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import { alignDropdownOptionText } from "$lib/utils/dropdown";
+  import { alignDropdownOptionText, resolveFixedPopoverPosition } from "$lib/utils/dropdown";
 
   export interface CustomSelectOption {
     value: string | number;
@@ -44,19 +44,13 @@
   function positionPopover() {
     if (!open || !triggerEl || !popoverEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const popHeight = popoverEl.offsetHeight;
-    const gap = 4;
-    const topBelow = rect.bottom + gap;
-    const topAbove = rect.top - gap - popHeight;
-    const fitsBelow = topBelow + popHeight <= window.innerHeight - 8;
-    const fitsAbove = topAbove >= 8;
-    popoverTop = fitsBelow || !fitsAbove ? topBelow : topAbove;
     const targetWidth = Math.max(rect.width, popoverEl.offsetWidth);
     popoverWidth = Math.min(targetWidth, 150);
-    popoverLeft = Math.max(
-      8,
-      Math.min(rect.right - popoverWidth, window.innerWidth - 8 - popoverWidth),
-    );
+    const position = resolveFixedPopoverPosition(rect, popoverWidth, popoverEl.offsetHeight, {
+      align: "end",
+    });
+    popoverTop = position.top;
+    popoverLeft = position.left;
   }
 
   function toggle() {
