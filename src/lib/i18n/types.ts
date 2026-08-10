@@ -172,6 +172,8 @@ export interface LocaleDefinition {
     ocrDescription: string;
     configPath: string;
     readingConfig: string;
+    loadingSettingsPanel: string;
+    settingsPanelLoadFailed: string;
     systemMessage: string;
     storageUnavailable: string;
     configSectionTitle: string;

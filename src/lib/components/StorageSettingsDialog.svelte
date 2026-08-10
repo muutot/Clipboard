@@ -5,14 +5,7 @@
   import Checkbox from "$lib/components/Checkbox.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import DatePicker from "$lib/components/DatePicker.svelte";
-  import KeyboardSettingsPanel from "$lib/components/KeyboardSettingsPanel.svelte";
-  import IgnoredAppsSettingsPanel from "$lib/components/IgnoredAppsSettingsPanel.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
-  import CompactSettingsPanel from "$lib/components/CompactSettingsPanel.svelte";
-  import FontSizeSettingsPanel from "$lib/components/FontSizeSettingsPanel.svelte";
-  import ThemeSettingsPanel from "$lib/components/ThemeSettingsPanel.svelte";
-  import IconColorsSettingsPanel from "$lib/components/IconColorsSettingsPanel.svelte";
-  import TagManagementSettingsPanel from "$lib/components/TagManagementSettingsPanel.svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { resetKeyboardConfig } from "$lib/services/keyboard";
   import { listen } from "@tauri-apps/api/event";
@@ -320,6 +313,52 @@
       tabs: [{ section: "about", labelKey: "about.sectionTitle" }],
     },
   ];
+
+  let compactSettingsPanelModule:
+    Promise<typeof import("$lib/components/CompactSettingsPanel.svelte")> | undefined;
+  let fontSizeSettingsPanelModule:
+    Promise<typeof import("$lib/components/FontSizeSettingsPanel.svelte")> | undefined;
+  let themeSettingsPanelModule:
+    Promise<typeof import("$lib/components/ThemeSettingsPanel.svelte")> | undefined;
+  let iconColorsSettingsPanelModule:
+    Promise<typeof import("$lib/components/IconColorsSettingsPanel.svelte")> | undefined;
+  let ignoredAppsSettingsPanelModule:
+    Promise<typeof import("$lib/components/IgnoredAppsSettingsPanel.svelte")> | undefined;
+  let tagManagementSettingsPanelModule:
+    Promise<typeof import("$lib/components/TagManagementSettingsPanel.svelte")> | undefined;
+  let keyboardSettingsPanelModule:
+    Promise<typeof import("$lib/components/KeyboardSettingsPanel.svelte")> | undefined;
+
+  function loadCompactSettingsPanel() {
+    return (compactSettingsPanelModule ??= import("$lib/components/CompactSettingsPanel.svelte"));
+  }
+
+  function loadFontSizeSettingsPanel() {
+    return (fontSizeSettingsPanelModule ??= import("$lib/components/FontSizeSettingsPanel.svelte"));
+  }
+
+  function loadThemeSettingsPanel() {
+    return (themeSettingsPanelModule ??= import("$lib/components/ThemeSettingsPanel.svelte"));
+  }
+
+  function loadIconColorsSettingsPanel() {
+    return (iconColorsSettingsPanelModule ??=
+      import("$lib/components/IconColorsSettingsPanel.svelte"));
+  }
+
+  function loadIgnoredAppsSettingsPanel() {
+    return (ignoredAppsSettingsPanelModule ??=
+      import("$lib/components/IgnoredAppsSettingsPanel.svelte"));
+  }
+
+  function loadTagManagementSettingsPanel() {
+    return (tagManagementSettingsPanelModule ??=
+      import("$lib/components/TagManagementSettingsPanel.svelte"));
+  }
+
+  function loadKeyboardSettingsPanel() {
+    return (keyboardSettingsPanelModule ??= import("$lib/components/KeyboardSettingsPanel.svelte"));
+  }
 
   let { open, onclose, standalone = false }: Props = $props();
   let status = $state<StorageStatus | null>(null);
@@ -1899,6 +1938,14 @@
   {@render backdropWrap()}
 {/if}
 
+{#snippet loadingSettingsPanel()}
+  <div class="settings-state" role="status">{_t("storage.loadingSettingsPanel")}</div>
+{/snippet}
+
+{#snippet settingsPanelLoadFailed()}
+  <div class="settings-state" role="alert">{_t("storage.settingsPanelLoadFailed")}</div>
+{/snippet}
+
 {#snippet backdropWrap()}
   {#if standalone}
     <div
@@ -2151,15 +2198,50 @@
         showHeader={false}
       />
     {:else if activeSection === "compact"}
-      <CompactSettingsPanel {onclose} showHeader={false} />
+      {#await loadCompactSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel {onclose} showHeader={false} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else if activeSection === "font"}
-      <FontSizeSettingsPanel {onclose} showHeader={false} />
+      {#await loadFontSizeSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel {onclose} showHeader={false} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else if activeSection === "theme"}
-      <ThemeSettingsPanel {onclose} showHeader={false} />
+      {#await loadThemeSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel {onclose} showHeader={false} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else if activeSection === "icons"}
-      <IconColorsSettingsPanel {onclose} showHeader={false} />
+      {#await loadIconColorsSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel {onclose} showHeader={false} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else if activeSection === "capture"}
-      <IgnoredAppsSettingsPanel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
+      {#await loadIgnoredAppsSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else if activeSection === "capture_icons"}
       <div class="settings-scroll">
         <section class="setting-card">
@@ -2267,33 +2349,37 @@
         </section>
       </div>
     {:else if activeSection === "tags"}
-      <TagManagementSettingsPanel
-        {onclose}
-        showHeader={false}
-        {tagSearch}
-        ontagSearchChange={(v) => (tagSearch = v)}
-      />
-    {:else if activeSection === "keyboard_item"}
-      <KeyboardSettingsPanel
-        {onclose}
-        resetToken={keyboardResetToken}
-        category="item"
-        showHeader={false}
-      />
-    {:else if activeSection === "keyboard_quick"}
-      <KeyboardSettingsPanel
-        {onclose}
-        resetToken={keyboardResetToken}
-        category="quick"
-        showHeader={false}
-      />
-    {:else if activeSection === "keyboard_system"}
-      <KeyboardSettingsPanel
-        {onclose}
-        resetToken={keyboardResetToken}
-        category="system"
-        showHeader={false}
-      />
+      {#await loadTagManagementSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel
+          {onclose}
+          showHeader={false}
+          {tagSearch}
+          ontagSearchChange={(v) => (tagSearch = v)}
+        />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
+    {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
+      {#await loadKeyboardSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel
+          {onclose}
+          resetToken={keyboardResetToken}
+          category={activeSection === "keyboard_item"
+            ? "item"
+            : activeSection === "keyboard_quick"
+              ? "quick"
+              : "system"}
+          showHeader={false}
+        />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else if activeSection === "ocr"}
       <div class="settings-scroll">
         <section class="setting-card setting-card-row">

@@ -183,6 +183,8 @@ const en: LocaleDefinition = {
     configPath:
       "Config files are fixed in the project directory. Images, files, and databases can use a custom data directory.",
     readingConfig: "Reading local configuration...",
+    loadingSettingsPanel: "Loading settings panel...",
+    settingsPanelLoadFailed: "Unable to load this settings panel. Reopen settings and try again.",
     systemMessage: "Browser preview cannot read desktop storage configuration",
     storageUnavailable: "Desktop storage service unavailable",
     configSectionTitle: "General Configuration",

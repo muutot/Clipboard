@@ -174,6 +174,8 @@ const zhCN: LocaleDefinition = {
     ocrDescription: "OCR 引擎选择与状态",
     configPath: "配置文件固定在项目目录；图片、文件和数据库可切换到其他数据目录。",
     readingConfig: "正在读取本地配置…",
+    loadingSettingsPanel: "正在加载设置面板…",
+    settingsPanelLoadFailed: "无法加载此设置面板，请重新打开设置后重试。",
     systemMessage: "浏览器预览无法读取桌面端存储配置",
     storageUnavailable: "桌面端存储服务不可用",
     configSectionTitle: "常规配置文件",
