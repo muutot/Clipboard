@@ -20,9 +20,10 @@ pub fn device_id() -> String {
 }
 
 pub use backup::{
-    count_unsynced, create_baseline_backup, create_oplog_backup, mark_oplog_synced, purge_oplog,
-    read_baseline_items, read_baseline_with_resources, read_manifest_from_backup,
-    write_baseline_zip, BackupManifest, ResourceEntry,
+    count_unsynced, create_baseline_backup, create_oplog_backup, mark_oplog_synced,
+    merge_baseline_archives, purge_oplog, read_baseline_archive_bytes, read_baseline_items,
+    read_baseline_with_resources, read_manifest_from_backup, write_baseline_zip, BackupManifest,
+    ResourceEntry,
 };
 pub use pool::{
     absorb_pool_paths, ensure_pool_uploads, load_pool_manifest, mark_pool_references,
@@ -42,7 +43,7 @@ pub use webdav::{
 };
 pub use wire::{
     deserialize_baseline_with_resources, deserialize_oplog, deserialize_oplog_with_resources,
-    merge_baselines, serialize_baseline_with_resources, serialize_oplog,
+    merge_baseline_contents, merge_baselines, serialize_baseline_with_resources, serialize_oplog,
     serialize_oplog_with_resources, OplogResource,
 };
 

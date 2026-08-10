@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -506,16 +506,59 @@ pub fn read_baseline_with_resources(
     String,
 > {
     let file = File::open(backup_path).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    read_baseline_archive(file)
+}
+
+/// Reads baseline contents from an in-memory ZIP archive downloaded from a
+/// remote provider. Keeping archive decoding here prevents callers from
+/// accidentally passing the whole ZIP container to the bincode wire decoder.
+pub fn read_baseline_archive_bytes(
+    archive_bytes: &[u8],
+) -> Result<
+    (
+        Vec<crate::domain::ClipboardItem>,
+        Vec<crate::sync::wire::OplogResource>,
+    ),
+    String,
+> {
+    read_baseline_archive(Cursor::new(archive_bytes))
+}
+
+fn read_baseline_archive<R: Read + Seek>(
+    reader: R,
+) -> Result<
+    (
+        Vec<crate::domain::ClipboardItem>,
+        Vec<crate::sync::wire::OplogResource>,
+    ),
+    String,
+> {
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
     let mut items_file = archive
         .by_name("baseline.bin")
         .map_err(|_| "baseline missing baseline.bin".to_string())?;
     let mut data = Vec::new();
-    use std::io::Read;
     items_file
         .read_to_end(&mut data)
         .map_err(|e| e.to_string())?;
     crate::sync::wire::deserialize_baseline_with_resources(&data)
+}
+
+/// Unpacks and merges complete remote baseline ZIP archives.
+pub fn merge_baseline_archives(
+    archives: &[Vec<u8>],
+) -> Result<
+    (
+        Vec<crate::domain::ClipboardItem>,
+        Vec<crate::sync::wire::OplogResource>,
+    ),
+    String,
+> {
+    let baselines = archives
+        .iter()
+        .map(|archive| read_baseline_archive_bytes(archive))
+        .collect::<Result<Vec<_>, _>>()?;
+    crate::sync::wire::merge_baseline_contents(&baselines)
 }
 
 /// Reads baseline items from a downloaded baseline backup zip (bincode format).
@@ -527,3 +570,80 @@ pub fn read_baseline_items(
 
 // Re-export for backward compatibility
 pub use create_oplog_backup as create_incremental_backup;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::sync::wire::OplogResource;
+
+    fn sample_item(id: &str, created_at_ms: i64) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_string(),
+            kind: ClipboardKind::Image,
+            title: id.to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: Some(format!("image/{id}.png")),
+            preview_path: None,
+            content_hash: format!("hash-{id}"),
+            source_app: None,
+            icon_path: None,
+            size_bytes: 1,
+            created_at_ms,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: None,
+        }
+    }
+
+    fn temporary_archive(label: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join("clipboard-sync-baseline-tests")
+            .join(format!("{label}-{}.zip", std::process::id()))
+    }
+
+    #[test]
+    fn remote_baseline_zip_archives_merge_after_unpacking() {
+        let first_path = temporary_archive("first");
+        let second_path = temporary_archive("second");
+        let _ = fs::remove_file(&first_path);
+        let _ = fs::remove_file(&second_path);
+
+        write_baseline_zip(
+            &first_path,
+            &[sample_item("a", 100)],
+            &[OplogResource {
+                rel_path: "image/a.png".to_string(),
+                bytes: Some(b"a".to_vec()),
+            }],
+            "dev-a",
+        )
+        .unwrap();
+        write_baseline_zip(
+            &second_path,
+            &[sample_item("b", 200)],
+            &[OplogResource {
+                rel_path: "image/b.png".to_string(),
+                bytes: Some(b"b".to_vec()),
+            }],
+            "dev-b",
+        )
+        .unwrap();
+
+        let archives = vec![
+            fs::read(&first_path).unwrap(),
+            fs::read(&second_path).unwrap(),
+        ];
+        let (items, resources) = merge_baseline_archives(&archives).unwrap();
+
+        let mut ids = items.into_iter().map(|item| item.id).collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids, vec!["a", "b"]);
+        assert_eq!(resources.len(), 2);
+
+        let _ = fs::remove_file(first_path);
+        let _ = fs::remove_file(second_path);
+    }
+}

@@ -474,7 +474,8 @@ fn sync_upload_webdav(
                 bytes_downloaded += data.len() as u64;
                 merged_payloads.push(data);
             }
-            let (mut merged_items, merged_resources) = sync::merge_baselines(&merged_payloads)?;
+            let (mut merged_items, merged_resources) =
+                sync::merge_baseline_archives(&merged_payloads)?;
 
             sync::absorb_pool_paths(paths, &merged_resources);
 
@@ -773,7 +774,8 @@ fn sync_upload_s3(
                 bytes_downloaded += data.len() as u64;
                 merged_payloads.push(data);
             }
-            let (mut merged_items, merged_resources) = sync::merge_baselines(&merged_payloads)?;
+            let (mut merged_items, merged_resources) =
+                sync::merge_baseline_archives(&merged_payloads)?;
 
             sync::absorb_pool_paths(paths, &merged_resources);
 

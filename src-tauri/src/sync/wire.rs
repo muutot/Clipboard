@@ -90,31 +90,43 @@ pub fn deserialize_baseline(data: &[u8]) -> Result<Vec<ClipboardItem>, String> {
 pub fn merge_baselines(
     payloads: &[Vec<u8>],
 ) -> Result<(Vec<ClipboardItem>, Vec<OplogResource>), String> {
+    let baselines = payloads
+        .iter()
+        .map(|payload| deserialize_baseline_with_resources(payload))
+        .collect::<Result<Vec<_>, _>>()?;
+    merge_baseline_contents(&baselines)
+}
+
+/// Merges already-decoded baseline contents. Remote baseline files are ZIP
+/// archives, so transport/orchestration code must unpack `baseline.bin` before
+/// entering this wire-level merge.
+pub fn merge_baseline_contents(
+    baselines: &[(Vec<ClipboardItem>, Vec<OplogResource>)],
+) -> Result<(Vec<ClipboardItem>, Vec<OplogResource>), String> {
     let mut items: std::collections::HashMap<String, ClipboardItem> =
         std::collections::HashMap::new();
     let mut resources: std::collections::HashMap<String, Option<Vec<u8>>> =
         std::collections::HashMap::new();
 
-    for payload in payloads {
-        let (batch_items, batch_resources) = deserialize_baseline_with_resources(payload)?;
+    for (batch_items, batch_resources) in baselines {
         for item in batch_items {
             match items.get(&item.id) {
                 Some(existing) if existing.created_at_ms >= item.created_at_ms => {}
                 _ => {
-                    items.insert(item.id.clone(), item);
+                    items.insert(item.id.clone(), item.clone());
                 }
             }
         }
         for resource in batch_resources {
             resources
-                .entry(resource.rel_path)
+                .entry(resource.rel_path.clone())
                 .and_modify(|existing| {
                     // Prefer inline bytes when a payload embeds them.
                     if existing.is_none() {
                         *existing = resource.bytes.clone();
                     }
                 })
-                .or_insert(resource.bytes);
+                .or_insert_with(|| resource.bytes.clone());
         }
     }
 
