@@ -1,4 +1,9 @@
-use std::time::Duration;
+use std::{
+    fs::{File, OpenOptions},
+    io::{Read, Write},
+    path::Path,
+    time::Duration,
+};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::blocking::{Client, RequestBuilder};
@@ -29,6 +34,21 @@ pub struct S3TestResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct S3DownloadedObject {
     pub bytes: Vec<u8>,
+    /// Raw HTTP ETag value, including quotes when supplied by the server.
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3ObjectMetadata {
+    pub size_bytes: Option<u64>,
+    /// Raw HTTP ETag value, including quotes when supplied by the server.
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3DownloadedFile {
+    pub size_bytes: u64,
+    pub sha256: String,
     /// Raw HTTP ETag value, including quotes when supplied by the server.
     pub etag: Option<String>,
 }
@@ -213,6 +233,14 @@ fn signed_request(
 ) -> Result<RequestBuilder, String> {
     let data = req.payload.unwrap_or(&[]);
     let payload_hash = sha256_hex(data);
+    signed_request_with_payload_hash(client, req, &payload_hash)
+}
+
+fn signed_request_with_payload_hash(
+    client: &reqwest::blocking::Client,
+    req: &S3Request,
+    payload_hash: &str,
+) -> Result<RequestBuilder, String> {
     let signer = SigV4::new(req.access_key, req.secret_key, req.region, "s3", now_ms());
 
     let url = s3_url(
@@ -240,7 +268,7 @@ fn signed_request(
     let mut headers: Vec<(String, String)> = vec![
         ("host".to_string(), host_header.clone()),
         ("x-amz-date".to_string(), signer.amz_date.clone()),
-        ("x-amz-content-sha256".to_string(), payload_hash.clone()),
+        ("x-amz-content-sha256".to_string(), payload_hash.to_string()),
     ];
     for (name, value) in req.extra_headers {
         headers.push((name.to_string(), value.to_string()));
@@ -251,7 +279,7 @@ fn signed_request(
         &canonical_uri,
         &canonical_query,
         &headers,
-        &payload_hash,
+        payload_hash,
     );
 
     let mut header_map = HeaderMap::new();
@@ -261,7 +289,7 @@ fn signed_request(
     );
     header_map.insert(
         HeaderName::from_static("x-amz-content-sha256"),
-        HeaderValue::from_str(&payload_hash).unwrap(),
+        HeaderValue::from_str(payload_hash).unwrap(),
     );
     for (name, value) in req.extra_headers {
         header_map.insert(
@@ -436,6 +464,76 @@ pub fn put_s3_object(
     }
 }
 
+/// Uploads a file without buffering it into a `Vec<u8>`. `payload_sha256`
+/// must be the lowercase SHA-256 digest from the caller's fingerprint pass;
+/// S3 verifies the same digest while receiving the streamed request body.
+#[allow(clippy::too_many_arguments)]
+pub fn put_s3_file(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    key: &str,
+    path: &Path,
+    payload_sha256: &str,
+    size_bytes: u64,
+    access_key: &str,
+    secret_key: &str,
+    condition: S3PutCondition,
+) -> Result<S3PutOutcome, String> {
+    validate_payload_sha256(payload_sha256)?;
+    let file =
+        File::open(path).map_err(|error| format!("failed to open S3 upload file: {error}"))?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| format!("failed to inspect S3 upload file: {error}"))?;
+    if !metadata.is_file() {
+        return Err("S3 upload source is not a regular file".to_string());
+    }
+    if metadata.len() != size_bytes {
+        return Err(format!(
+            "S3 upload source size changed: expected {size_bytes}, got {}",
+            metadata.len()
+        ));
+    }
+
+    let client = shared_client()?;
+    let (scheme, host) = parse_endpoint(endpoint);
+    let mut extra_headers = vec![("content-type", "application/octet-stream")];
+    match &condition {
+        S3PutCondition::Unconditional => {}
+        S3PutCondition::IfAbsent => extra_headers.push(("if-none-match", "*")),
+        S3PutCondition::IfMatch(etag) => extra_headers.push(("if-match", etag.as_str())),
+    }
+    let req = S3Request {
+        method: "PUT",
+        scheme: &scheme,
+        endpoint_host: &host,
+        bucket,
+        key,
+        query: None,
+        payload: None,
+        access_key,
+        secret_key,
+        region,
+        extra_headers: &extra_headers,
+    };
+    let response = signed_request_with_payload_hash(&client, &req, payload_sha256)?
+        .timeout(streaming_timeout(size_bytes))
+        .body(reqwest::blocking::Body::sized(file, size_bytes))
+        .send()
+        .map_err(|error| format!("streaming upload failed: {error}"))?;
+
+    if response.status().is_success() {
+        Ok(S3PutOutcome::Stored {
+            etag: response_etag(&response)?,
+        })
+    } else if response.status().as_u16() == 412 {
+        Ok(S3PutOutcome::PreconditionFailed)
+    } else {
+        Err(err_from_response(response, "streaming upload"))
+    }
+}
+
 pub fn download_from_s3(
     endpoint: &str,
     region: &str,
@@ -485,6 +583,146 @@ pub fn get_s3_object(
     } else {
         Err(err_from_response(resp, "download"))
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn head_s3_object(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    key: &str,
+    access_key: &str,
+    secret_key: &str,
+) -> Result<Option<S3ObjectMetadata>, String> {
+    let client = shared_client()?;
+    let (scheme, host) = parse_endpoint(endpoint);
+    let req = S3Request {
+        method: "HEAD",
+        scheme: &scheme,
+        endpoint_host: &host,
+        bucket,
+        key,
+        query: None,
+        payload: None,
+        access_key,
+        secret_key,
+        region,
+        extra_headers: &[],
+    };
+    let response = signed_request(&client, &req)?
+        .send()
+        .map_err(|error| format!("metadata request failed: {error}"))?;
+
+    if response.status().is_success() {
+        Ok(Some(S3ObjectMetadata {
+            size_bytes: response.content_length(),
+            etag: response_etag(&response)?,
+        }))
+    } else if response.status().as_u16() == 404 {
+        Ok(None)
+    } else {
+        Err(err_from_response(response, "metadata request"))
+    }
+}
+
+/// Streams one S3 object into a newly-created destination file while hashing
+/// it. Partial files are removed on every error and the caller remains
+/// responsible for atomically renaming a verified download into place.
+#[allow(clippy::too_many_arguments)]
+pub fn get_s3_object_to_file(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    key: &str,
+    destination: &Path,
+    max_bytes: u64,
+    access_key: &str,
+    secret_key: &str,
+) -> Result<Option<S3DownloadedFile>, String> {
+    let client = shared_client()?;
+    let (scheme, host) = parse_endpoint(endpoint);
+    let req = S3Request {
+        method: "GET",
+        scheme: &scheme,
+        endpoint_host: &host,
+        bucket,
+        key,
+        query: None,
+        payload: None,
+        access_key,
+        secret_key,
+        region,
+        extra_headers: &[],
+    };
+    let mut response = signed_request(&client, &req)?
+        .timeout(streaming_timeout(max_bytes))
+        .send()
+        .map_err(|error| format!("streaming download failed: {error}"))?;
+
+    if response.status().as_u16() == 404 {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(err_from_response(response, "streaming download"));
+    }
+    let expected_size = response.content_length();
+    if expected_size.is_some_and(|size| size > max_bytes) {
+        return Err(format!(
+            "streaming download exceeds the {max_bytes}-byte limit"
+        ));
+    }
+    let etag = response_etag(&response)?;
+    let mut destination_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .map_err(|error| format!("failed to create streaming download file: {error}"))?;
+
+    let download_result = (|| {
+        let mut hasher = Sha256::new();
+        let mut size_bytes = 0u64;
+        let mut buffer = [0u8; 128 * 1024];
+        loop {
+            let read = response
+                .read(&mut buffer)
+                .map_err(|error| format!("failed to read streaming download: {error}"))?;
+            if read == 0 {
+                break;
+            }
+            size_bytes = size_bytes
+                .checked_add(read as u64)
+                .ok_or_else(|| "streaming download size overflowed".to_string())?;
+            if size_bytes > max_bytes {
+                return Err(format!(
+                    "streaming download exceeds the {max_bytes}-byte limit"
+                ));
+            }
+            destination_file
+                .write_all(&buffer[..read])
+                .map_err(|error| format!("failed to write streaming download: {error}"))?;
+            hasher.update(&buffer[..read]);
+        }
+        if expected_size.is_some_and(|size| size != size_bytes) {
+            return Err(format!(
+                "streaming download size mismatch: expected {}, got {size_bytes}",
+                expected_size.unwrap_or_default()
+            ));
+        }
+        destination_file
+            .flush()
+            .map_err(|error| format!("failed to flush streaming download: {error}"))?;
+        Ok(S3DownloadedFile {
+            size_bytes,
+            sha256: hex::encode(hasher.finalize()),
+            etag,
+        })
+    })();
+
+    drop(destination_file);
+    if download_result.is_err() {
+        let _ = std::fs::remove_file(destination);
+    }
+    download_result.map(Some)
 }
 
 pub fn list_s3_objects(
@@ -639,6 +877,31 @@ fn content_md5_base64(data: &[u8]) -> String {
     let mut hasher = Md5::new();
     hasher.update(data);
     STANDARD.encode(hasher.finalize())
+}
+
+fn validate_payload_sha256(value: &str) -> Result<(), String> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("S3 payload SHA-256 must be 64 lowercase hexadecimal characters".to_string());
+    }
+    Ok(())
+}
+
+fn streaming_timeout(size_limit_bytes: u64) -> Duration {
+    const ASSUMED_MIN_BYTES_PER_SECOND: u64 = 64 * 1024;
+    const BASE_SECONDS: u64 = 60;
+    const MAX_SECONDS: u64 = 30 * 60;
+
+    let transfer_seconds = size_limit_bytes.saturating_add(ASSUMED_MIN_BYTES_PER_SECOND - 1)
+        / ASSUMED_MIN_BYTES_PER_SECOND;
+    Duration::from_secs(
+        BASE_SECONDS
+            .saturating_add(transfer_seconds)
+            .min(MAX_SECONDS),
+    )
 }
 
 fn response_etag(response: &reqwest::blocking::Response) -> Result<Option<String>, String> {
@@ -870,6 +1133,53 @@ mod tests {
     }
 
     #[test]
+    fn prehashed_streaming_request_uses_the_supplied_payload_digest() {
+        let client = Client::new();
+        let digest = "a".repeat(64);
+        let req = S3Request {
+            method: "PUT",
+            scheme: "https",
+            endpoint_host: "s3.example.test",
+            bucket: "clipboard",
+            key: "v1/resources/file/sha256-a.bin",
+            query: None,
+            payload: None,
+            access_key: AKID,
+            secret_key: SECRET,
+            region: "us-east-1",
+            extra_headers: &[("if-none-match", "*")],
+        };
+        let request = signed_request_with_payload_hash(&client, &req, &digest)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            request
+                .headers()
+                .get("x-amz-content-sha256")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            digest
+        );
+    }
+
+    #[test]
+    fn streaming_payload_digest_must_be_canonical_sha256() {
+        assert!(validate_payload_sha256(&"a".repeat(64)).is_ok());
+        assert!(validate_payload_sha256(&"A".repeat(64)).is_err());
+        assert!(validate_payload_sha256("abc").is_err());
+    }
+
+    #[test]
+    fn streaming_timeout_scales_with_size_and_is_bounded() {
+        assert_eq!(streaming_timeout(0), Duration::from_secs(60));
+        assert_eq!(streaming_timeout(64 * 1024), Duration::from_secs(61));
+        assert_eq!(streaming_timeout(u64::MAX), Duration::from_secs(30 * 60));
+    }
+
+    #[test]
     #[ignore = "requires an explicitly configured disposable S3-compatible server"]
     fn disposable_s3_round_trip_and_conditional_writes() {
         let endpoint = std::env::var("CLIPBOARD_S3_TEST_ENDPOINT")
@@ -964,7 +1274,78 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].object_key, key);
 
+        let streamed_key = format!("{prefix}streamed.bin");
+        let streamed_source = std::env::temp_dir().join(format!(
+            "clipboard-s3-stream-source-{}-{}.bin",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let streamed_destination = std::env::temp_dir().join(format!(
+            "clipboard-s3-stream-destination-{}-{}.bin",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let streamed_bytes = vec![0x5a; 1024 * 1024 + 17];
+        std::fs::write(&streamed_source, &streamed_bytes).unwrap();
+        let streamed_sha256 = hex::encode(Sha256::digest(&streamed_bytes));
+        assert!(matches!(
+            put_s3_file(
+                &endpoint,
+                &region,
+                &bucket,
+                &streamed_key,
+                &streamed_source,
+                &streamed_sha256,
+                streamed_bytes.len() as u64,
+                &access_key,
+                &secret_key,
+                S3PutCondition::IfAbsent,
+            )
+            .unwrap(),
+            S3PutOutcome::Stored { .. }
+        ));
+        let streamed_head = head_s3_object(
+            &endpoint,
+            &region,
+            &bucket,
+            &streamed_key,
+            &access_key,
+            &secret_key,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(streamed_head.size_bytes, Some(streamed_bytes.len() as u64));
+        let streamed_download = get_s3_object_to_file(
+            &endpoint,
+            &region,
+            &bucket,
+            &streamed_key,
+            &streamed_destination,
+            2 * 1024 * 1024,
+            &access_key,
+            &secret_key,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(streamed_download.sha256, streamed_sha256);
+        assert_eq!(streamed_download.size_bytes, streamed_bytes.len() as u64);
+        assert_eq!(
+            std::fs::read(&streamed_destination).unwrap(),
+            streamed_bytes
+        );
+
         delete_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key).unwrap();
+        delete_from_s3(
+            &endpoint,
+            &region,
+            &bucket,
+            &streamed_key,
+            &access_key,
+            &secret_key,
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(streamed_source);
+        let _ = std::fs::remove_file(streamed_destination);
         assert!(
             get_s3_object(&endpoint, &region, &bucket, &key, &access_key, &secret_key,)
                 .unwrap()

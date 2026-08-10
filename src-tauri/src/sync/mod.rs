@@ -22,8 +22,9 @@ pub use resources::{
     rewrite_item_paths_to_local, rewrite_to_local,
 };
 pub use s3::{
-    delete_from_s3, download_from_s3, get_s3_object, list_s3_objects, list_s3_objects_after,
-    put_s3_object, test_s3_connection, upload_to_s3, S3DownloadedObject, S3Entry, S3PutCondition,
+    delete_from_s3, download_from_s3, get_s3_object, get_s3_object_to_file, head_s3_object,
+    list_s3_objects, list_s3_objects_after, put_s3_file, put_s3_object, test_s3_connection,
+    upload_to_s3, S3DownloadedFile, S3DownloadedObject, S3Entry, S3ObjectMetadata, S3PutCondition,
     S3PutOutcome, S3TestResult,
 };
 pub use webdav::{
