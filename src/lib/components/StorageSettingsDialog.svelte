@@ -1100,6 +1100,26 @@
   let detBoxSlider = $state<HTMLInputElement | null>(null);
   let detUnclipSlider = $state<HTMLInputElement | null>(null);
 
+  interface OcrStatusResult {
+    totalTasks: number;
+    pendingTasks: number;
+    completedTasks: number;
+    failedTasks: number;
+    engine: string;
+    engineAvailable: boolean;
+    hasEngine: boolean;
+    ppocrModelVariant: string;
+    installedVariants: string[];
+  }
+
+  interface OcrConfigResult {
+    engine: string;
+    ppocrModelVariant: string;
+    detScoreThreshold: number;
+    detBoxThreshold: number;
+    detUnclipRatio: number;
+  }
+
   function releaseOcrDownloadListener(): void {
     if (!ocrDownloadUnlisten) return;
     ocrDownloadUnlisten();
@@ -1202,7 +1222,7 @@
     if (!open || activeSection !== "ocr") return;
 
     void loadOcrStatus();
-    const interval = setInterval(() => void loadOcrStatus(), 2000);
+    const interval = setInterval(() => void loadOcrTaskStatus(), 2000);
     return () => clearInterval(interval);
   });
 
@@ -1231,40 +1251,47 @@
     void loadHistoryConfig();
   }
 
+  function applyOcrTaskStatus(result: OcrStatusResult): void {
+    ocrTotal = result.totalTasks;
+    ocrPending = result.pendingTasks;
+    ocrCompleted = result.completedTasks;
+    ocrFailed = result.failedTasks;
+  }
+
+  async function loadOcrTaskStatus() {
+    if (ocrStatusLoading) return;
+    ocrStatusLoading = true;
+    try {
+      applyOcrTaskStatus(await invoke<OcrStatusResult>("get_ocr_status"));
+    } catch {
+      /* ignore */
+    } finally {
+      ocrStatusLoading = false;
+    }
+  }
+
   async function loadOcrStatus() {
     if (ocrStatusLoading) return;
     ocrStatusLoading = true;
     try {
-      const result = await invoke<{
-        totalTasks: number;
-        pendingTasks: number;
-        completedTasks: number;
-        failedTasks: number;
-        engine: string;
-        engineAvailable: boolean;
-        hasEngine: boolean;
-      }>("get_ocr_status");
-      if (result) {
-        ocrTotal = result.totalTasks;
-        ocrPending = result.pendingTasks;
-        ocrCompleted = result.completedTasks;
-        ocrFailed = result.failedTasks;
+      const [statusResult, configResult] = await Promise.allSettled([
+        invoke<OcrStatusResult>("get_ocr_status"),
+        invoke<OcrConfigResult>("get_ocr_config"),
+      ]);
+      if (statusResult.status === "fulfilled") {
+        const result = statusResult.value;
+        applyOcrTaskStatus(result);
         ocrEngine = result.engine;
         ocrEngineAvailable = result.engineAvailable;
         ocrHasEngine = result.hasEngine;
+        installedVariants = result.installedVariants;
+        activeVariant = result.ppocrModelVariant;
+        if (!modelVariant) modelVariant = result.ppocrModelVariant;
+      } else {
+        installedVariants = [];
       }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const cfg = await invoke<{
-        engine: string;
-        ppocrModelVariant: string;
-        detScoreThreshold: number;
-        detBoxThreshold: number;
-        detUnclipRatio: number;
-      }>("get_ocr_config");
-      if (cfg) {
+      if (configResult.status === "fulfilled") {
+        const cfg = configResult.value;
         ocrEngine = cfg.engine;
         detScoreThreshold = cfg.detScoreThreshold;
         detBoxThreshold = cfg.detBoxThreshold;
@@ -1274,19 +1301,6 @@
           if (!modelVariant) modelVariant = cfg.ppocrModelVariant;
         }
       }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const modelStatus = await invoke<{
-        activeVariant: string;
-        installedVariants: string[];
-      }>("check_ppocr_status");
-      installedVariants = modelStatus.installedVariants;
-      activeVariant = modelStatus.activeVariant;
-      if (!modelVariant) modelVariant = modelStatus.activeVariant;
-    } catch {
-      installedVariants = [];
     } finally {
       ocrStatusLoading = false;
     }
