@@ -23,4 +23,4 @@ pub use repository::{
     StorageFileReferences, TagInfo, TextItemUpdate,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};
-pub use sync_v3::{SyncV3OutboxBatch, SyncV3Snapshot};
+pub use sync_v3::{SyncV3OutboxBatch, SyncV3RemoteState, SyncV3Snapshot};

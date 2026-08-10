@@ -1,11 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use rusqlite::{params_from_iter, OptionalExtension, Row};
+use rusqlite::{params, params_from_iter, OptionalExtension, Row, Transaction};
+use uuid::Uuid;
 
 use super::{Database, StorageError};
 use crate::{
     domain::{ClipboardItem, ClipboardKind},
-    sync::v3::{MutationBatch, RecordVersion, ReplicatedItem, Tombstone},
+    sync::v3::{
+        DeviceCursor, DeviceHead, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem,
+        Tombstone,
+    },
 };
 
 const PROTOCOL_VERSION: &str = "3";
@@ -22,6 +26,35 @@ pub struct SyncV3OutboxBatch {
     pub first_sequence: u64,
     pub last_sequence: u64,
     pub mutations: MutationBatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncV3RemoteState {
+    pub remote_scope: String,
+    pub epoch: String,
+    pub snapshot: Option<ObjectRef>,
+    pub snapshot_sequence: u64,
+    pub published_sequence: u64,
+    pub last_segment_key: Option<String>,
+    pub legacy_cleaned: bool,
+    pub initialized: bool,
+    pub updated_at_ms: i64,
+}
+
+impl SyncV3RemoteState {
+    pub fn device_head(&self, device_id: &str) -> Result<DeviceHead, StorageError> {
+        let snapshot = self.snapshot.clone().ok_or_else(|| {
+            StorageError::InvalidSyncState("device head has no published snapshot".to_string())
+        })?;
+        Ok(DeviceHead {
+            device_id: device_id.to_string(),
+            epoch: self.epoch.clone(),
+            snapshot,
+            published_sequence: self.published_sequence,
+            last_segment_key: self.last_segment_key.clone(),
+            updated_at_ms: self.updated_at_ms,
+        })
+    }
 }
 
 struct StoredReplicatedItem {
@@ -322,6 +355,851 @@ impl Database {
             })
         })
     }
+
+    pub fn get_or_create_sync_v3_remote_state(
+        &self,
+        remote_scope: &str,
+    ) -> Result<SyncV3RemoteState, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            if let Some(state) = load_remote_state(&transaction, remote_scope)? {
+                transaction.commit()?;
+                return Ok(state);
+            }
+            let epoch = Uuid::new_v4().to_string();
+            transaction.execute(
+                "INSERT INTO sync_v3_remote_state (remote_scope, epoch, updated_at_ms)
+                 VALUES (?1, ?2, ?3)",
+                params![remote_scope, &epoch, current_time_ms()],
+            )?;
+            let state = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
+                StorageError::InvalidSyncState(
+                    "newly created remote state could not be read".to_string(),
+                )
+            })?;
+            transaction.commit()?;
+            Ok(state)
+        })
+    }
+
+    pub fn reset_sync_v3_remote_state(
+        &self,
+        remote_scope: &str,
+    ) -> Result<SyncV3RemoteState, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let epoch = Uuid::new_v4().to_string();
+            connection.execute(
+                "INSERT INTO sync_v3_remote_state
+                    (remote_scope, epoch, updated_at_ms)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(remote_scope) DO UPDATE SET
+                    epoch = excluded.epoch,
+                    snapshot_key = NULL,
+                    snapshot_sha256 = NULL,
+                    snapshot_size_bytes = 0,
+                    snapshot_record_count = 0,
+                    snapshot_sequence = 0,
+                    published_sequence = 0,
+                    last_segment_key = NULL,
+                    initialized = 0,
+                    updated_at_ms = excluded.updated_at_ms",
+                params![remote_scope, &epoch, current_time_ms()],
+            )?;
+            load_remote_state(connection, remote_scope)?.ok_or_else(|| {
+                StorageError::InvalidSyncState("reset remote state is missing".to_string())
+            })
+        })
+    }
+
+    pub fn mark_sync_v3_legacy_cleaned(&self, remote_scope: &str) -> Result<(), StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let affected = connection.execute(
+                "UPDATE sync_v3_remote_state
+                    SET legacy_cleaned = 1, updated_at_ms = ?2
+                  WHERE remote_scope = ?1",
+                params![remote_scope, current_time_ms()],
+            )?;
+            if affected != 1 {
+                return Err(StorageError::InvalidSyncState(
+                    "cannot mark cleanup for an unknown remote scope".to_string(),
+                ));
+            }
+            Ok(())
+        })
+    }
+
+    pub fn commit_sync_v3_bootstrap_published(
+        &self,
+        remote_scope: &str,
+        expected_epoch: &str,
+        snapshot: &ObjectRef,
+        through_sequence: u64,
+    ) -> Result<SyncV3RemoteState, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        let through_sequence = sequence_to_i64(through_sequence, "sync_v3 snapshot sequence")?;
+        let snapshot_size = sequence_to_i64(snapshot.stored_size_bytes, "sync_v3 snapshot size")?;
+        let snapshot_records =
+            sequence_to_i64(snapshot.record_count, "sync_v3 snapshot record count")?;
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            if through_sequence
+                > sequence_to_i64(current_sequence(&transaction)?, "sync_v3 current sequence")?
+            {
+                return Err(StorageError::InvalidSyncState(
+                    "bootstrap publication exceeds the local outbox high-water".to_string(),
+                ));
+            }
+            let affected = transaction.execute(
+                "UPDATE sync_v3_remote_state
+                    SET snapshot_key = ?3,
+                        snapshot_sha256 = ?4,
+                        snapshot_size_bytes = ?5,
+                        snapshot_record_count = ?6,
+                        snapshot_sequence = ?7,
+                        published_sequence = ?7,
+                        last_segment_key = NULL,
+                        initialized = 1,
+                        updated_at_ms = ?8
+                  WHERE remote_scope = ?1 AND epoch = ?2 AND legacy_cleaned = 1",
+                params![
+                    remote_scope,
+                    expected_epoch,
+                    &snapshot.key,
+                    &snapshot.sha256,
+                    snapshot_size,
+                    snapshot_records,
+                    through_sequence,
+                    current_time_ms(),
+                ],
+            )?;
+            if affected != 1 {
+                return Err(StorageError::InvalidSyncState(
+                    "remote epoch changed before bootstrap publication committed".to_string(),
+                ));
+            }
+            transaction.execute(
+                "DELETE FROM sync_v3_outbox WHERE sequence <= ?1",
+                [through_sequence],
+            )?;
+            let state = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
+                StorageError::InvalidSyncState("published remote state is missing".to_string())
+            })?;
+            transaction.commit()?;
+            Ok(state)
+        })
+    }
+
+    pub fn commit_sync_v3_segment_published(
+        &self,
+        remote_scope: &str,
+        expected_epoch: &str,
+        last_segment_key: &str,
+        through_sequence: u64,
+    ) -> Result<SyncV3RemoteState, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        let through_sequence = sequence_to_i64(through_sequence, "sync_v3 segment sequence")?;
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let current = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
+                StorageError::InvalidSyncState("remote publication state is missing".to_string())
+            })?;
+            if current.epoch != expected_epoch {
+                return Err(StorageError::InvalidSyncState(
+                    "remote epoch changed before segment publication committed".to_string(),
+                ));
+            }
+            if !current.initialized || current.snapshot.is_none() {
+                return Err(StorageError::InvalidSyncState(
+                    "cannot publish a segment before the bootstrap snapshot".to_string(),
+                ));
+            }
+            if through_sequence
+                > sequence_to_i64(current_sequence(&transaction)?, "sync_v3 current sequence")?
+            {
+                return Err(StorageError::InvalidSyncState(
+                    "segment publication exceeds the local outbox high-water".to_string(),
+                ));
+            }
+            if through_sequence
+                < sequence_to_i64(current.published_sequence, "sync_v3 published sequence")?
+            {
+                return Err(StorageError::InvalidSyncState(
+                    "segment publication sequence regressed".to_string(),
+                ));
+            }
+            if through_sequence
+                == sequence_to_i64(current.published_sequence, "sync_v3 published sequence")?
+                && current.last_segment_key.as_deref() != Some(last_segment_key)
+            {
+                return Err(StorageError::InvalidSyncState(
+                    "equal publication sequence has a different segment key".to_string(),
+                ));
+            }
+            transaction.execute(
+                "UPDATE sync_v3_remote_state
+                    SET published_sequence = ?3,
+                        last_segment_key = ?4,
+                        updated_at_ms = ?5
+                  WHERE remote_scope = ?1 AND epoch = ?2",
+                params![
+                    remote_scope,
+                    expected_epoch,
+                    through_sequence,
+                    last_segment_key,
+                    current_time_ms(),
+                ],
+            )?;
+            transaction.execute(
+                "DELETE FROM sync_v3_outbox WHERE sequence <= ?1",
+                [through_sequence],
+            )?;
+            let state = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
+                StorageError::InvalidSyncState("published remote state is missing".to_string())
+            })?;
+            transaction.commit()?;
+            Ok(state)
+        })
+    }
+
+    pub fn get_sync_v3_cursor(
+        &self,
+        remote_scope: &str,
+        device_id: &str,
+    ) -> Result<Option<DeviceCursor>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| load_cursor(connection, remote_scope, device_id))
+    }
+
+    pub fn list_sync_v3_cursors(
+        &self,
+        remote_scope: &str,
+    ) -> Result<Vec<DeviceCursor>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT device_id, epoch, sequence, last_segment_key
+                   FROM sync_v3_cursors
+                  WHERE remote_scope = ?1
+                  ORDER BY device_id",
+            )?;
+            let rows = statement
+                .query_map([remote_scope], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            rows.into_iter()
+                .map(|(device_id, epoch, sequence, last_segment_key)| {
+                    Ok(DeviceCursor {
+                        device_id,
+                        epoch,
+                        sequence: stored_sequence(sequence, "sync_v3 cursor sequence")?,
+                        last_segment_key,
+                    })
+                })
+                .collect()
+        })
+    }
+
+    pub fn apply_sync_v3_snapshot(
+        &self,
+        remote_scope: &str,
+        cursor: &DeviceCursor,
+        snapshot_sha256: &str,
+        mutations: &MutationBatch,
+    ) -> Result<u64, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        validate_cursor_identity(cursor)?;
+        if cursor.last_segment_key.is_some() {
+            return Err(StorageError::InvalidSyncState(
+                "snapshot cursor must not contain a segment key".to_string(),
+            ));
+        }
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
+                if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
+                    return Err(StorageError::InvalidSyncState(
+                        "snapshot cursor sequence regressed".to_string(),
+                    ));
+                }
+            }
+            set_changelog_suppressed(&transaction, true)?;
+            let applied = apply_mutations(&transaction, mutations)?;
+            set_changelog_suppressed(&transaction, false)?;
+            upsert_cursor(&transaction, remote_scope, cursor, Some(snapshot_sha256))?;
+            transaction.commit()?;
+            Ok(applied)
+        })
+    }
+
+    pub fn apply_sync_v3_segment(
+        &self,
+        remote_scope: &str,
+        cursor: &DeviceCursor,
+        mutations: &MutationBatch,
+    ) -> Result<u64, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        validate_cursor_identity(cursor)?;
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let existing =
+                load_cursor(&transaction, remote_scope, &cursor.device_id)?.ok_or_else(|| {
+                    StorageError::InvalidSyncState(
+                        "segment received before its device snapshot".to_string(),
+                    )
+                })?;
+            if existing.epoch != cursor.epoch {
+                return Err(StorageError::InvalidSyncState(
+                    "segment epoch does not match the applied snapshot".to_string(),
+                ));
+            }
+            if cursor.sequence < existing.sequence {
+                return Err(StorageError::InvalidSyncState(
+                    "segment cursor sequence regressed".to_string(),
+                ));
+            }
+            if cursor.sequence == existing.sequence {
+                if cursor.last_segment_key == existing.last_segment_key {
+                    transaction.commit()?;
+                    return Ok(0);
+                }
+                return Err(StorageError::InvalidSyncState(
+                    "equal segment sequence has a different object key".to_string(),
+                ));
+            }
+            if cursor.last_segment_key.is_none() {
+                return Err(StorageError::InvalidSyncState(
+                    "segment cursor is missing its object key".to_string(),
+                ));
+            }
+            set_changelog_suppressed(&transaction, true)?;
+            let applied = apply_mutations(&transaction, mutations)?;
+            set_changelog_suppressed(&transaction, false)?;
+            upsert_cursor(&transaction, remote_scope, cursor, None)?;
+            transaction.commit()?;
+            Ok(applied)
+        })
+    }
+}
+
+fn current_time_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
+
+fn validate_remote_scope(remote_scope: &str) -> Result<(), StorageError> {
+    if remote_scope.len() != 64
+        || !remote_scope
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(StorageError::InvalidSyncState(
+            "remote scope must be a lowercase SHA-256 digest".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn sequence_to_i64(value: u64, field: &'static str) -> Result<i64, StorageError> {
+    i64::try_from(value).map_err(|_| StorageError::ValueOutOfRange { field })
+}
+
+fn stored_sequence(value: i64, field: &'static str) -> Result<u64, StorageError> {
+    u64::try_from(value).map_err(|_| StorageError::InvalidStoredValue { field, value })
+}
+
+fn load_remote_state(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+) -> Result<Option<SyncV3RemoteState>, StorageError> {
+    let stored = connection
+        .query_row(
+            "SELECT epoch, snapshot_key, snapshot_sha256,
+                    snapshot_size_bytes, snapshot_record_count,
+                    snapshot_sequence, published_sequence, last_segment_key,
+                    legacy_cleaned, initialized, updated_at_ms
+               FROM sync_v3_remote_state
+              WHERE remote_scope = ?1",
+            [remote_scope],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, bool>(8)?,
+                    row.get::<_, bool>(9)?,
+                    row.get::<_, i64>(10)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((
+        epoch,
+        snapshot_key,
+        snapshot_sha256,
+        snapshot_size_bytes,
+        snapshot_record_count,
+        snapshot_sequence,
+        published_sequence,
+        last_segment_key,
+        legacy_cleaned,
+        initialized,
+        updated_at_ms,
+    )) = stored
+    else {
+        return Ok(None);
+    };
+    let snapshot = match (snapshot_key, snapshot_sha256) {
+        (Some(key), Some(sha256)) => Some(ObjectRef {
+            key,
+            sha256,
+            stored_size_bytes: stored_sequence(snapshot_size_bytes, "sync_v3 snapshot size")?,
+            record_count: stored_sequence(snapshot_record_count, "sync_v3 snapshot record count")?,
+        }),
+        (None, None) => None,
+        _ => {
+            return Err(StorageError::InvalidSyncState(
+                "remote snapshot key/hash presence does not match".to_string(),
+            ));
+        }
+    };
+    Ok(Some(SyncV3RemoteState {
+        remote_scope: remote_scope.to_string(),
+        epoch,
+        snapshot,
+        snapshot_sequence: stored_sequence(snapshot_sequence, "sync_v3 snapshot sequence")?,
+        published_sequence: stored_sequence(published_sequence, "sync_v3 published sequence")?,
+        last_segment_key,
+        legacy_cleaned,
+        initialized,
+        updated_at_ms,
+    }))
+}
+
+fn load_cursor(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+    device_id: &str,
+) -> Result<Option<DeviceCursor>, StorageError> {
+    let stored = connection
+        .query_row(
+            "SELECT epoch, sequence, last_segment_key
+               FROM sync_v3_cursors
+              WHERE remote_scope = ?1 AND device_id = ?2",
+            params![remote_scope, device_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    stored
+        .map(|(epoch, sequence, last_segment_key)| {
+            Ok(DeviceCursor {
+                device_id: device_id.to_string(),
+                epoch,
+                sequence: stored_sequence(sequence, "sync_v3 cursor sequence")?,
+                last_segment_key,
+            })
+        })
+        .transpose()
+}
+
+fn upsert_cursor(
+    transaction: &Transaction<'_>,
+    remote_scope: &str,
+    cursor: &DeviceCursor,
+    snapshot_sha256: Option<&str>,
+) -> Result<(), StorageError> {
+    let sequence = sequence_to_i64(cursor.sequence, "sync_v3 cursor sequence")?;
+    transaction.execute(
+        "INSERT INTO sync_v3_cursors
+            (remote_scope, device_id, epoch, sequence, snapshot_sha256,
+             last_segment_key, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(remote_scope, device_id) DO UPDATE SET
+            epoch = excluded.epoch,
+            sequence = excluded.sequence,
+            snapshot_sha256 = COALESCE(excluded.snapshot_sha256, sync_v3_cursors.snapshot_sha256),
+            last_segment_key = excluded.last_segment_key,
+            updated_at_ms = excluded.updated_at_ms",
+        params![
+            remote_scope,
+            &cursor.device_id,
+            &cursor.epoch,
+            sequence,
+            snapshot_sha256,
+            &cursor.last_segment_key,
+            current_time_ms(),
+        ],
+    )?;
+    Ok(())
+}
+
+fn set_changelog_suppressed(
+    transaction: &Transaction<'_>,
+    suppressed: bool,
+) -> Result<(), StorageError> {
+    transaction.execute(
+        "INSERT INTO sync_metadata (key, value)
+         VALUES ('sync_suppress_changelog', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [if suppressed { "1" } else { "0" }],
+    )?;
+    Ok(())
+}
+
+fn apply_mutations(
+    transaction: &Transaction<'_>,
+    mutations: &MutationBatch,
+) -> Result<u64, StorageError> {
+    let mut applied = 0u64;
+    for replicated in &mutations.upserts {
+        validate_record_version(&replicated.version)?;
+        let kind = kind_to_storage(replicated.item.kind);
+        let target_id = resolve_sync_item_id(
+            transaction,
+            &replicated.item.id,
+            kind,
+            &replicated.item.content_hash,
+        )?
+        .unwrap_or_else(|| replicated.item.id.clone());
+        if winning_local_version(transaction, &target_id)?
+            .is_some_and(|local| replicated.version <= local)
+        {
+            continue;
+        }
+        let size_bytes = i64::try_from(replicated.item.size_bytes).map_err(|_| {
+            StorageError::ValueOutOfRange {
+                field: "clipboard_items.size_bytes",
+            }
+        })?;
+        let exists = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM clipboard_items WHERE id = ?1)",
+            [&target_id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if exists {
+            transaction.execute(
+                "UPDATE clipboard_items
+                    SET kind = ?2,
+                        title = ?3,
+                        text_content = ?4,
+                        html_content = ?5,
+                        rtf_content = ?6,
+                        resource_path = ?7,
+                        preview_path = ?8,
+                        content_hash = ?9,
+                        source_app = ?10,
+                        icon_path = ?11,
+                        size_bytes = ?12,
+                        created_at_ms = ?13,
+                        last_used_at_ms = ?14,
+                        is_favorite = ?15,
+                        metadata_json = ?16,
+                        deleted = 0,
+                        deleted_at_ms = NULL,
+                        modified_at_ms = ?17,
+                        sync_writer_device_id = ?18
+                  WHERE id = ?1",
+                params![
+                    &target_id,
+                    kind,
+                    &replicated.item.title,
+                    &replicated.item.text_content,
+                    &replicated.item.html_content,
+                    &replicated.item.rtf_content,
+                    &replicated.item.resource_path,
+                    &replicated.item.preview_path,
+                    &replicated.item.content_hash,
+                    &replicated.item.source_app,
+                    &replicated.item.icon_path,
+                    size_bytes,
+                    replicated.item.created_at_ms,
+                    replicated.item.last_used_at_ms,
+                    replicated.item.is_favorite,
+                    &replicated.item.metadata_json,
+                    replicated.version.modified_at_ms,
+                    &replicated.version.writer_device_id,
+                ],
+            )?;
+        } else {
+            transaction.execute(
+                "INSERT INTO clipboard_items
+                    (id, kind, title, text_content, html_content, rtf_content,
+                     resource_path, preview_path, content_hash, source_app,
+                     icon_path, size_bytes, created_at_ms, last_used_at_ms,
+                     is_favorite, metadata_json, deleted, deleted_at_ms,
+                     modified_at_ms, sync_writer_device_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                         ?11, ?12, ?13, ?14, ?15, ?16, 0, NULL, ?17, ?18)",
+                params![
+                    &target_id,
+                    kind,
+                    &replicated.item.title,
+                    &replicated.item.text_content,
+                    &replicated.item.html_content,
+                    &replicated.item.rtf_content,
+                    &replicated.item.resource_path,
+                    &replicated.item.preview_path,
+                    &replicated.item.content_hash,
+                    &replicated.item.source_app,
+                    &replicated.item.icon_path,
+                    size_bytes,
+                    replicated.item.created_at_ms,
+                    replicated.item.last_used_at_ms,
+                    replicated.item.is_favorite,
+                    &replicated.item.metadata_json,
+                    replicated.version.modified_at_ms,
+                    &replicated.version.writer_device_id,
+                ],
+            )?;
+        }
+        transaction.execute(
+            "DELETE FROM sync_v3_tombstones WHERE item_id IN (?1, ?2)",
+            params![&target_id, &replicated.item.id],
+        )?;
+        replace_item_tags(
+            transaction,
+            &target_id,
+            replicated.item.metadata_json.as_deref(),
+        )?;
+        applied += 1;
+    }
+
+    for tombstone in &mutations.tombstones {
+        validate_record_version(&tombstone.version)?;
+        let kind = kind_to_storage(tombstone.kind);
+        let target_id = resolve_sync_item_id(
+            transaction,
+            &tombstone.item_id,
+            kind,
+            &tombstone.content_hash,
+        )?
+        .unwrap_or_else(|| tombstone.item_id.clone());
+        if winning_local_version(transaction, &target_id)?
+            .is_some_and(|local| tombstone.version <= local)
+        {
+            continue;
+        }
+        transaction.execute(
+            "UPDATE clipboard_items
+                SET deleted = 1,
+                    deleted_at_ms = ?2,
+                    modified_at_ms = ?3,
+                    sync_writer_device_id = ?4
+              WHERE id = ?1",
+            params![
+                &target_id,
+                tombstone.deleted_at_ms,
+                tombstone.version.modified_at_ms,
+                &tombstone.version.writer_device_id,
+            ],
+        )?;
+        transaction.execute(
+            "INSERT INTO sync_v3_tombstones
+                (item_id, kind, content_hash, deleted_at_ms,
+                 modified_at_ms, writer_device_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(item_id) DO UPDATE SET
+                kind = excluded.kind,
+                content_hash = excluded.content_hash,
+                deleted_at_ms = excluded.deleted_at_ms,
+                modified_at_ms = excluded.modified_at_ms,
+                writer_device_id = excluded.writer_device_id",
+            params![
+                &target_id,
+                kind,
+                &tombstone.content_hash,
+                tombstone.deleted_at_ms,
+                tombstone.version.modified_at_ms,
+                &tombstone.version.writer_device_id,
+            ],
+        )?;
+        if target_id != tombstone.item_id {
+            transaction.execute(
+                "DELETE FROM sync_v3_tombstones WHERE item_id = ?1",
+                [&tombstone.item_id],
+            )?;
+        }
+        transaction.execute("DELETE FROM item_tags WHERE item_id = ?1", [&target_id])?;
+        applied += 1;
+    }
+    Ok(applied)
+}
+
+fn validate_record_version(version: &RecordVersion) -> Result<(), StorageError> {
+    let writer = Uuid::parse_str(&version.writer_device_id).ok();
+    if version.modified_at_ms < 0
+        || writer
+            .as_ref()
+            .is_none_or(|writer| writer.to_string() != version.writer_device_id)
+    {
+        return Err(StorageError::InvalidSyncState(
+            "record version must contain a non-negative timestamp and writer UUID".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_cursor_identity(cursor: &DeviceCursor) -> Result<(), StorageError> {
+    for (label, value) in [
+        ("device", cursor.device_id.as_str()),
+        ("epoch", cursor.epoch.as_str()),
+    ] {
+        let parsed = Uuid::parse_str(value).map_err(|_| {
+            StorageError::InvalidSyncState(format!("cursor {label} id is not a UUID"))
+        })?;
+        if parsed.to_string() != value {
+            return Err(StorageError::InvalidSyncState(format!(
+                "cursor {label} id is not canonical lowercase"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn winning_local_version(
+    transaction: &Transaction<'_>,
+    item_id: &str,
+) -> Result<Option<RecordVersion>, StorageError> {
+    let row_version = transaction
+        .query_row(
+            "SELECT COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
+               FROM clipboard_items
+              WHERE id = ?1",
+            [item_id],
+            |row| {
+                Ok(RecordVersion {
+                    modified_at_ms: row.get(0)?,
+                    writer_device_id: row.get(1)?,
+                })
+            },
+        )
+        .optional()?;
+    let tombstone_version = transaction
+        .query_row(
+            "SELECT modified_at_ms, writer_device_id
+               FROM sync_v3_tombstones
+              WHERE item_id = ?1",
+            [item_id],
+            |row| {
+                Ok(RecordVersion {
+                    modified_at_ms: row.get(0)?,
+                    writer_device_id: row.get(1)?,
+                })
+            },
+        )
+        .optional()?;
+    Ok(match (row_version, tombstone_version) {
+        (Some(row), Some(tombstone)) => Some(row.max(tombstone)),
+        (Some(row), None) => Some(row),
+        (None, Some(tombstone)) => Some(tombstone),
+        (None, None) => None,
+    })
+}
+
+fn resolve_sync_item_id(
+    transaction: &Transaction<'_>,
+    remote_id: &str,
+    kind: &str,
+    content_hash: &str,
+) -> Result<Option<String>, StorageError> {
+    let exact = transaction
+        .query_row(
+            "SELECT id FROM clipboard_items WHERE id = ?1",
+            [remote_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if exact.is_some() {
+        return Ok(exact);
+    }
+    let alias = transaction
+        .query_row(
+            "SELECT item_id FROM sync_item_aliases WHERE alias_id = ?1",
+            [remote_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if alias.is_some() {
+        return Ok(alias);
+    }
+    if !matches!(kind, "text" | "link") {
+        return Ok(None);
+    }
+    let matching = transaction
+        .query_row(
+            "SELECT id FROM clipboard_items WHERE kind = ?1 AND content_hash = ?2",
+            params![kind, content_hash],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    if let Some(item_id) = matching.as_deref() {
+        transaction.execute(
+            "INSERT INTO sync_item_aliases (alias_id, item_id)
+             VALUES (?1, ?2)
+             ON CONFLICT(alias_id) DO UPDATE SET item_id = excluded.item_id",
+            params![remote_id, item_id],
+        )?;
+    }
+    Ok(matching)
+}
+
+fn replace_item_tags(
+    transaction: &Transaction<'_>,
+    item_id: &str,
+    metadata_json: Option<&str>,
+) -> Result<(), StorageError> {
+    transaction.execute("DELETE FROM item_tags WHERE item_id = ?1", [item_id])?;
+    let Some(metadata_json) = metadata_json else {
+        return Ok(());
+    };
+    let Ok(metadata) = serde_json::from_str::<serde_json::Value>(metadata_json) else {
+        return Ok(());
+    };
+    let Some(tags) = metadata.get("tags").and_then(|value| value.as_array()) else {
+        return Ok(());
+    };
+    let mut unique = BTreeSet::new();
+    for tag in tags.iter().filter_map(|value| value.as_str()) {
+        let tag = tag.trim();
+        if !tag.is_empty() && unique.insert(tag) {
+            transaction.execute(
+                "INSERT INTO item_tags (item_id, tag) VALUES (?1, ?2)",
+                params![item_id, tag],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn kind_to_storage(kind: ClipboardKind) -> &'static str {
+    match kind {
+        ClipboardKind::Text => "text",
+        ClipboardKind::Link => "link",
+        ClipboardKind::Image => "image",
+        ClipboardKind::File => "file",
+    }
 }
 
 fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageError> {
@@ -483,6 +1361,26 @@ mod tests {
         }
     }
 
+    const REMOTE_SCOPE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const REMOTE_DEVICE: &str = "11111111-1111-4111-8111-111111111111";
+    const REMOTE_EPOCH: &str = "22222222-2222-4222-8222-222222222222";
+
+    fn replicated(id: &str, hash: &str, text: &str, version: RecordVersion) -> ReplicatedItem {
+        ReplicatedItem {
+            item: item(id, hash, text),
+            version,
+        }
+    }
+
+    fn cursor(sequence: u64, key: Option<&str>) -> DeviceCursor {
+        DeviceCursor {
+            device_id: REMOTE_DEVICE.to_string(),
+            epoch: REMOTE_EPOCH.to_string(),
+            sequence,
+            last_segment_key: key.map(str::to_string),
+        }
+    }
+
     #[test]
     fn enabling_v3_preserves_items_and_discards_only_legacy_sync_state() {
         let database = Database::open_in_memory().unwrap();
@@ -587,6 +1485,277 @@ mod tests {
             .save_item(&item("pending", "hash-pending", "pending"))
             .unwrap();
         assert!(!database.enable_sync_v3().unwrap());
+        assert_eq!(database.count_sync_v3_outbox().unwrap(), 1);
+    }
+
+    #[test]
+    fn remote_publication_state_acknowledges_only_after_snapshot_or_segment_commit() {
+        let database = Database::open_in_memory().unwrap();
+        database.enable_sync_v3().unwrap();
+        let first = database
+            .get_or_create_sync_v3_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        assert!(!first.initialized);
+        assert!(!first.legacy_cleaned);
+        assert_eq!(
+            database
+                .get_or_create_sync_v3_remote_state(REMOTE_SCOPE)
+                .unwrap()
+                .epoch,
+            first.epoch
+        );
+        database.mark_sync_v3_legacy_cleaned(REMOTE_SCOPE).unwrap();
+
+        database
+            .save_item(&item("snapshot", "hash-snapshot", "snapshot"))
+            .unwrap();
+        let snapshot = ObjectRef {
+            key: "v3/snapshots/device/epoch/hash.pack".to_string(),
+            sha256: "b".repeat(64),
+            stored_size_bytes: 123,
+            record_count: 1,
+        };
+        let published = database
+            .commit_sync_v3_bootstrap_published(REMOTE_SCOPE, &first.epoch, &snapshot, 1)
+            .unwrap();
+        assert!(published.initialized);
+        assert!(published.legacy_cleaned);
+        assert_eq!(published.snapshot.as_ref(), Some(&snapshot));
+        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
+
+        database
+            .save_item(&item("segment", "hash-segment", "segment"))
+            .unwrap();
+        let segment_key = "v3/segments/device/epoch/segment.pack";
+        let published = database
+            .commit_sync_v3_segment_published(REMOTE_SCOPE, &first.epoch, segment_key, 2)
+            .unwrap();
+        assert_eq!(published.published_sequence, 2);
+        assert_eq!(published.last_segment_key.as_deref(), Some(segment_key));
+        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
+
+        let reset = database.reset_sync_v3_remote_state(REMOTE_SCOPE).unwrap();
+        assert_ne!(reset.epoch, first.epoch);
+        assert!(reset.legacy_cleaned);
+        assert!(!reset.initialized);
+        assert!(reset.snapshot.is_none());
+    }
+
+    #[test]
+    fn remote_snapshot_apply_is_atomic_idempotent_and_does_not_echo() {
+        let database = Database::open_in_memory().unwrap();
+        database.enable_sync_v3().unwrap();
+        let writer = RecordVersion {
+            modified_at_ms: 500,
+            writer_device_id: REMOTE_DEVICE.to_string(),
+        };
+        let mut remote = replicated("remote", "hash-remote", "remote", writer);
+        remote.item.metadata_json = Some(r#"{"tags":["shared","work"]}"#.to_string());
+        let mutations = MutationBatch {
+            upserts: vec![remote],
+            tombstones: Vec::new(),
+        };
+
+        assert_eq!(
+            database
+                .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
+                .unwrap(),
+            1
+        );
+        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
+        assert_eq!(
+            database.get_item("remote").unwrap().unwrap().title,
+            "remote"
+        );
+        let tags = database.list_all_tags().unwrap();
+        assert_eq!(
+            tags.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
+            vec!["shared", "work"]
+        );
+        assert_eq!(
+            database
+                .get_sync_v3_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+                .unwrap()
+                .unwrap(),
+            cursor(0, None)
+        );
+        assert_eq!(
+            database
+                .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn record_writer_breaks_equal_timestamp_ties_deterministically() {
+        let database = Database::open_in_memory().unwrap();
+        database.enable_sync_v3().unwrap();
+        let lower_writer = "00000000-0000-4000-8000-000000000001";
+        let higher_writer = "ffffffff-ffff-4fff-bfff-ffffffffffff";
+        let initial = MutationBatch {
+            upserts: vec![replicated(
+                "tie",
+                "hash-tie",
+                "lower",
+                RecordVersion {
+                    modified_at_ms: 100,
+                    writer_device_id: lower_writer.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        database
+            .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"d".repeat(64), &initial)
+            .unwrap();
+
+        let winner = MutationBatch {
+            upserts: vec![replicated(
+                "tie",
+                "hash-tie-winner",
+                "higher",
+                RecordVersion {
+                    modified_at_ms: 100,
+                    writer_device_id: higher_writer.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        database
+            .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(1, Some("segment-1")), &winner)
+            .unwrap();
+        assert_eq!(database.get_item("tie").unwrap().unwrap().title, "higher");
+
+        let loser = MutationBatch {
+            upserts: vec![replicated(
+                "tie",
+                "hash-tie-loser",
+                "lower-again",
+                RecordVersion {
+                    modified_at_ms: 100,
+                    writer_device_id: lower_writer.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        assert_eq!(
+            database
+                .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(2, Some("segment-2")), &loser,)
+                .unwrap(),
+            0
+        );
+        assert_eq!(database.get_item("tie").unwrap().unwrap().title, "higher");
+    }
+
+    #[test]
+    fn tombstone_blocks_an_older_later_segment_from_resurrecting_a_row() {
+        let database = Database::open_in_memory().unwrap();
+        database.enable_sync_v3().unwrap();
+        let initial = MutationBatch {
+            upserts: vec![replicated(
+                "victim",
+                "hash-victim",
+                "live",
+                RecordVersion {
+                    modified_at_ms: 100,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        database
+            .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"e".repeat(64), &initial)
+            .unwrap();
+        let deletion = MutationBatch {
+            upserts: Vec::new(),
+            tombstones: vec![Tombstone {
+                item_id: "victim".to_string(),
+                kind: ClipboardKind::Text,
+                content_hash: "hash-victim".to_string(),
+                deleted_at_ms: 200,
+                version: RecordVersion {
+                    modified_at_ms: 200,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            }],
+        };
+        database
+            .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(1, Some("segment-delete")), &deletion)
+            .unwrap();
+        let stale = MutationBatch {
+            upserts: vec![replicated(
+                "victim",
+                "hash-victim",
+                "stale",
+                RecordVersion {
+                    modified_at_ms: 150,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        assert_eq!(
+            database
+                .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(2, Some("segment-stale")), &stale,)
+                .unwrap(),
+            0
+        );
+        assert_eq!(database.count_active_items().unwrap(), 0);
+        assert_eq!(
+            database
+                .export_sync_v3_snapshot()
+                .unwrap()
+                .mutations
+                .tombstones
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn failed_remote_batch_rolls_back_rows_suppression_and_cursor() {
+        let database = Database::open_in_memory().unwrap();
+        database.enable_sync_v3().unwrap();
+        let mut image = item("local-image", "same-image-hash", "image");
+        image.kind = ClipboardKind::Image;
+        database.save_item(&image).unwrap();
+        database.acknowledge_sync_v3_outbox(1).unwrap();
+
+        let first = replicated(
+            "would-be-inserted",
+            "unique-text-hash",
+            "first",
+            RecordVersion {
+                modified_at_ms: 300,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        let mut collision = replicated(
+            "different-image-id",
+            "same-image-hash",
+            "collision",
+            RecordVersion {
+                modified_at_ms: 300,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        collision.item.kind = ClipboardKind::Image;
+        let failed = MutationBatch {
+            upserts: vec![first, collision],
+            tombstones: Vec::new(),
+        };
+        assert!(database
+            .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"f".repeat(64), &failed)
+            .is_err());
+        assert!(database.get_item("would-be-inserted").unwrap().is_none());
+        assert!(database
+            .get_sync_v3_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+            .unwrap()
+            .is_none());
+
+        database
+            .save_item(&item("after-failure", "hash-after", "after"))
+            .unwrap();
         assert_eq!(database.count_sync_v3_outbox().unwrap(), 1);
     }
 }

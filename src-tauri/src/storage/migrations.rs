@@ -395,6 +395,8 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
             epoch TEXT NOT NULL,
             snapshot_key TEXT,
             snapshot_sha256 TEXT,
+            snapshot_size_bytes INTEGER NOT NULL DEFAULT 0,
+            snapshot_record_count INTEGER NOT NULL DEFAULT 0,
             snapshot_sequence INTEGER NOT NULL DEFAULT 0,
             published_sequence INTEGER NOT NULL DEFAULT 0,
             last_segment_key TEXT,
@@ -586,6 +588,18 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
               FROM sync_v3_tombstones
              WHERE item_id = OLD.id;
         END;",
+    )?;
+    ensure_column(
+        connection,
+        "sync_v3_remote_state",
+        "snapshot_size_bytes",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        connection,
+        "sync_v3_remote_state",
+        "snapshot_record_count",
+        "INTEGER NOT NULL DEFAULT 0",
     )?;
     Ok(())
 }
