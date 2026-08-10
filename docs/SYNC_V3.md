@@ -153,8 +153,8 @@ to resurrect deleted records.
 There is no reader, migration or fallback for the old baseline/oplog format. During the first v3
 initialization of a configured remote scope, the client may directly delete the old remote data:
 
-- objects whose basename starts with `baseline-`;
-- objects whose basename starts with `oplog-`;
+- top-level objects whose name starts with `baseline-`;
+- top-level objects whose name starts with `oplog-`;
 - every object strictly below the old `resources/` prefix;
 - the local legacy pool-manifest file for that exact remote scope.
 

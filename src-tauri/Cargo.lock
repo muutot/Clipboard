@@ -759,6 +759,7 @@ dependencies = [
  "walkdir",
  "window-vibrancy",
  "zip",
+ "zstd",
 ]
 
 [[package]]
