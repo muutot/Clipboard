@@ -226,7 +226,7 @@ header p {
   background-image: none;
 }
 
-.custom-select .settings-select > :global(svg) {
+.custom-select .settings-select > svg {
   flex-shrink: 0;
   color: var(--text-faint);
   transition: color 120ms ease;

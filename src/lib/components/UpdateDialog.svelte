@@ -232,7 +232,7 @@
 
   .update-dialog-btn--secondary:hover {
     color: var(--text-primary);
-    background: var(--row-hover);
+    background: var(--hover-bg);
   }
 
   .update-dialog-btn--primary {
