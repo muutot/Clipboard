@@ -1144,7 +1144,6 @@
     } catch (error) {
       console.error("Unable to refresh storage statistics", error);
     }
-    void loadPerformanceMetrics();
   }
 
   $effect(() => {
@@ -1153,23 +1152,50 @@
       void loadExportFormats();
       void loadImportFormats();
       void loadAppVersion();
-      let disposed = false;
-      let unlistenAdd: (() => void) | undefined;
-      let unlistenInvalidated: (() => void) | undefined;
-      listen("clipboard-item-added", () => void refreshStorageStats()).then((unlisten) => {
-        if (disposed) unlisten();
-        else unlistenAdd = unlisten;
-      });
-      listen("clipboard-history-invalidated", () => void refreshStorageStats()).then((unlisten) => {
-        if (disposed) unlisten();
-        else unlistenInvalidated = unlisten;
-      });
-      return () => {
-        disposed = true;
-        unlistenAdd?.();
-        unlistenInvalidated?.();
-      };
     }
+  });
+
+  $effect(() => {
+    if (!open) return;
+
+    let refreshVisibleStatistics: (() => Promise<void>) | undefined;
+    if (
+      activeSection === "storage_limits" ||
+      (activeSection === "statistics" && activeStatisticsTab === "storage")
+    ) {
+      refreshVisibleStatistics = refreshStorageStats;
+    } else if (activeSection === "statistics" && activeStatisticsTab === "performance") {
+      refreshVisibleStatistics = loadPerformanceMetrics;
+    }
+    if (!refreshVisibleStatistics) return;
+
+    let disposed = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let unlistenAdd: (() => void) | undefined;
+    let unlistenInvalidated: (() => void) | undefined;
+    const scheduleRefresh = () => {
+      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined;
+        if (!disposed) void refreshVisibleStatistics();
+      }, 250);
+    };
+
+    void refreshVisibleStatistics();
+    listen("clipboard-item-added", scheduleRefresh).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenAdd = unlisten;
+    });
+    listen("clipboard-history-invalidated", scheduleRefresh).then((unlisten) => {
+      if (disposed) unlisten();
+      else unlistenInvalidated = unlisten;
+    });
+    return () => {
+      disposed = true;
+      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+      unlistenAdd?.();
+      unlistenInvalidated?.();
+    };
   });
 
   $effect(() => {
@@ -1190,7 +1216,6 @@
 
     try {
       status = await getStorageStatus();
-      await loadStorageKindStats();
       dataDirectory = status?.dataDirectoryPath ?? "";
       if (!status) {
         feedback = _t("storage.systemMessage");
@@ -1203,7 +1228,6 @@
       loading = false;
     }
 
-    void loadPerformanceMetrics();
     void loadHistoryConfig();
   }
 
