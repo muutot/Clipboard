@@ -19,7 +19,7 @@
 | 待审   | 详情图片全屏         | `DetailPanel.svelte` 的图片遮罩和全屏控件仍有固定黑白透明色                                                                                       | 是否与独立 viewer 共用一套“媒体层 token”，还是保持局部固定色                  |
 | 待审   | 主界面分类色         | `+page.svelte` 的部分筛选图标、`ClipboardCard.svelte` 的 source-red/blue/violet 使用固定色                                                        | 这些是内容语义色还是主题色；是否需要独立语义变量                              |
 | 待审   | 主界面阴影           | 搜索建议、下拉框、卡片对话框、快捷键帽等使用固定黑色透明阴影                                                                                      | 是否需要通用 shadow token；当前不要为了消除字面量而机械替换                   |
-| 待审   | 忽略应用面板         | `IgnoredAppsSettingsPanel.svelte` 重复定义 header、card、toggle、feedback、scroll 等共享规则                                                      | 是否拆除重复并完全依赖 `settings-shared.css`；需先做视觉回归                  |
+| 已处理 | 忽略应用面板         | `IgnoredAppsSettingsPanel.svelte` 已复用共享 header、scroll、feedback、auto-save 基础规则，仅保留传输面板布局和必要 modifier                      | 新增共享基础样式时继续放入 `settings-shared.css`，不要在此面板重新复制        |
 | 待审   | 设置父容器           | `StorageSettingsDialog.svelte` 为内置存储/OCR/统计区再次定义 card、heading、slider、feedback 等规则                                               | 父容器是否应提取第二层共享样式，还是保留内置模块专用实现                      |
 | 已处理 | 未定义变量           | `UpdateDialog.svelte` 的次要按钮 hover 已改用现有语义变量 `--hover-bg`；仓库不再引用未定义的 `--row-hover`                                        | 保持 `--hover-bg` 为安静 hover 表面的唯一项目级变量                           |
 | 待审   | 非主题 fallback      | 侧栏用量条使用 `var(--accent-color, #746dff)`，仓库未定义 `--accent-color`                                                                        | 是否应统一到 `--accent` 或 `--selection-color`                                |

@@ -262,56 +262,14 @@
 {/if}
 
 <style>
-  header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 20px 22px 15px;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .eyebrow {
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  h2 {
-    margin: 5px 0 4px;
-    color: var(--text-primary);
-    font-size: var(--settings-page-title-size, 18px);
-    font-weight: 590;
-  }
   header p {
     max-width: 570px;
-    margin: 0;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-    line-height: 1.5;
   }
-  .close-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--settings-close-size, 28px);
-    height: var(--settings-close-size, 28px);
-    flex: 0 0 auto;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-close-radius, 7px);
-    color: var(--text-muted);
-    background: var(--card-bg);
-    font-size: var(--settings-close-font-size, 19px);
-    line-height: 1;
-  }
+
   .settings-scroll {
     display: flex;
     flex-direction: column;
-    gap: 8px;
     flex: 1;
-    min-height: 0;
-    padding: 14px 18px 48px;
-    overflow: auto;
   }
 
   .filter-board {
@@ -500,9 +458,6 @@
     color: var(--text-primary);
     background: var(--hover-bg);
   }
-  button {
-    cursor: pointer;
-  }
   button:disabled {
     cursor: default;
     opacity: 0.35;
@@ -522,29 +477,9 @@
   }
 
   .auto-save-note {
-    margin: 0;
-    padding: 8px 0 0;
-    color: var(--text-faint);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: right;
   }
-  .settings-feedback {
-    position: absolute;
-    right: 18px;
-    bottom: 13px;
-    left: 18px;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
-    border-radius: var(--settings-feedback-radius, 7px);
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
-    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
-  }
-  .settings-feedback.success {
-    border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
-    color: color-mix(in srgb, var(--success-color) 75%, white);
-    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
-  }
+
   @media (max-width: 700px) {
     .filter-board {
       grid-template-columns: 1fr;
