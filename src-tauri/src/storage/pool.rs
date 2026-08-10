@@ -454,6 +454,61 @@ impl Database {
         Ok(())
     }
 
+    /// Resolves a remote sync id to an existing local entity. Text and link
+    /// rows use `(kind, content_hash)` as a one-time rendezvous key when their
+    /// per-capture ids differ; the resulting alias remains stable even if a
+    /// later edit changes the content hash.
+    fn resolve_sync_item_id(
+        tx: &rusqlite::Transaction<'_>,
+        remote_id: &str,
+        kind: &str,
+        content_hash: &str,
+    ) -> Result<Option<String>, StorageError> {
+        let exact = tx
+            .query_row(
+                "SELECT id FROM clipboard_items WHERE id = ?1",
+                [remote_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if exact.is_some() {
+            return Ok(exact);
+        }
+
+        let aliased = tx
+            .query_row(
+                "SELECT item_id FROM sync_item_aliases WHERE alias_id = ?1",
+                [remote_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if aliased.is_some() {
+            return Ok(aliased);
+        }
+
+        if !matches!(kind, "text" | "link") {
+            return Ok(None);
+        }
+
+        let matching = tx
+            .query_row(
+                "SELECT id FROM clipboard_items
+                 WHERE kind = ?1 AND content_hash = ?2",
+                rusqlite::params![kind, content_hash],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if let Some(item_id) = matching.as_deref() {
+            tx.execute(
+                "INSERT INTO sync_item_aliases (alias_id, item_id)
+                 VALUES (?1, ?2)
+                 ON CONFLICT(alias_id) DO NOTHING",
+                rusqlite::params![remote_id, item_id],
+            )?;
+        }
+        Ok(matching)
+    }
+
     /// Exports all active (non-deleted) items for baseline creation.
     pub fn export_active_items(&self) -> Result<Vec<ClipboardItem>, StorageError> {
         self.with_connection(|connection| {
@@ -513,6 +568,9 @@ impl Database {
                     crate::domain::ClipboardKind::Image => "image",
                     crate::domain::ClipboardKind::File => "file",
                 };
+                let target_id =
+                    Self::resolve_sync_item_id(&tx, &item.id, kind_str, &item.content_hash)?
+                        .unwrap_or_else(|| item.id.clone());
                 tx.execute(
                     "INSERT INTO clipboard_items
                      (id, kind, title, text_content, html_content, rtf_content,
@@ -536,10 +594,15 @@ impl Database {
                         last_used_at_ms = excluded.last_used_at_ms,
                         is_favorite = excluded.is_favorite,
                         metadata_json = excluded.metadata_json,
-                        modified_at_ms = excluded.modified_at_ms
-                     WHERE excluded.modified_at_ms >= clipboard_items.modified_at_ms",
+                        modified_at_ms = excluded.modified_at_ms,
+                        deleted = 0,
+                        deleted_at_ms = NULL
+                     WHERE excluded.modified_at_ms >= COALESCE(
+                        clipboard_items.modified_at_ms,
+                        clipboard_items.created_at_ms
+                     )",
                     rusqlite::params![
-                        &item.id,
+                        &target_id,
                         kind_str,
                         &item.title,
                         &item.text_content,
@@ -576,48 +639,27 @@ impl Database {
             let mut applied = 0u64;
 
             for entry in entries {
+                if !matches!(entry.operation.as_str(), "insert" | "update" | "delete") {
+                    continue;
+                }
+                let target_id = Self::resolve_sync_item_id(
+                    &tx,
+                    &entry.item_id,
+                    &entry.kind,
+                    &entry.content_hash,
+                )?
+                .unwrap_or_else(|| entry.item_id.clone());
                 let existing_modified: Option<i64> = tx
                     .query_row(
-                        "SELECT modified_at_ms FROM clipboard_items WHERE id = ?1",
-                        [&entry.item_id],
+                        "SELECT COALESCE(modified_at_ms, created_at_ms)
+                         FROM clipboard_items WHERE id = ?1",
+                        [&target_id],
                         |row| row.get(0),
                     )
-                    .ok();
+                    .optional()?;
 
                 match entry.operation.as_str() {
-                    "insert" => {
-                        let _ = tx.execute(
-                            "INSERT OR IGNORE INTO clipboard_items
-                             (id, kind, title, text_content, html_content, rtf_content,
-                              content_hash, resource_path, preview_path, icon_path,
-                              metadata_json, is_favorite, source_app,
-                              size_bytes, last_used_at_ms,
-                              created_at_ms, modified_at_ms, deleted)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-                                     ?11, ?12, ?13, ?14, ?15, ?16, ?17, 0)",
-                            rusqlite::params![
-                                &entry.item_id,
-                                &entry.kind,
-                                &entry.title,
-                                &entry.text_content,
-                                &entry.html_content,
-                                &entry.rtf_content,
-                                &entry.content_hash,
-                                &entry.resource_path,
-                                &entry.preview_path,
-                                &entry.icon_path,
-                                &entry.metadata_json,
-                                &entry.is_favorite,
-                                &entry.source_app,
-                                &entry.size_bytes,
-                                &entry.last_used_at_ms,
-                                &entry.created_at_ms,
-                                &entry.modified_at_ms,
-                            ],
-                        );
-                        applied += 1;
-                    }
-                    "update" => {
+                    "insert" | "update" => {
                         if let Some(local_modified) = existing_modified {
                             if entry.modified_at_ms >= local_modified {
                                 let _ = tx.execute(
@@ -630,10 +672,10 @@ impl Database {
                                          is_favorite = ?12, source_app = ?13,
                                          size_bytes = ?14, last_used_at_ms = ?15,
                                          modified_at_ms = ?16,
-                                         deleted = 0
+                                         deleted = 0, deleted_at_ms = NULL
                                      WHERE id = ?1",
                                     rusqlite::params![
-                                        &entry.item_id,
+                                        &target_id,
                                         &entry.kind,
                                         &entry.title,
                                         &entry.text_content,
@@ -661,10 +703,10 @@ impl Database {
                                   metadata_json, is_favorite, source_app,
                                   size_bytes, last_used_at_ms,
                                   created_at_ms, modified_at_ms, deleted)
-                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
                                          ?11, ?12, ?13, ?14, ?15, ?16, ?17, 0)",
                                 rusqlite::params![
-                                    &entry.item_id,
+                                    &target_id,
                                     &entry.kind,
                                     &entry.title,
                                     &entry.text_content,
@@ -689,9 +731,10 @@ impl Database {
                     "delete" => {
                         let _ = tx.execute(
                             "UPDATE clipboard_items SET deleted = 1, deleted_at_ms = ?2
-                             WHERE id = ?1 AND COALESCE(modified_at_ms, 0) <= ?3",
+                             WHERE id = ?1
+                               AND COALESCE(modified_at_ms, created_at_ms, 0) <= ?3",
                             rusqlite::params![
-                                &entry.item_id,
+                                &target_id,
                                 &entry.modified_at_ms,
                                 &entry.modified_at_ms,
                             ],
@@ -847,6 +890,14 @@ mod tests {
         }
     }
 
+    fn shared_text_item(id: &str, title: &str, created_at_ms: i64) -> ClipboardItem {
+        let mut item = text_item(id, created_at_ms);
+        item.title = title.to_owned();
+        item.text_content = Some("shared text".to_owned());
+        item.content_hash = "shared-text-hash".to_owned();
+        item
+    }
+
     fn temporary_path(label: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -920,6 +971,130 @@ mod tests {
         assert_eq!(stored.title, "record-item");
 
         let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn remote_oplog_coalesces_different_ids_for_the_same_text_entity() {
+        let source_path = temporary_path("text-alias-oplog-source");
+        let source = Database::open(&source_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source
+            .save_item(&shared_text_item("remote-text-id", "remote", 100))
+            .unwrap();
+        let initial = source.get_unsynced_changelog(10).unwrap();
+        assert_eq!(initial.len(), 1);
+
+        let target_path = temporary_path("text-alias-oplog-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        target
+            .save_item(&shared_text_item("local-text-id", "local", 100))
+            .unwrap();
+
+        assert_eq!(target.apply_remote_oplog(&initial).unwrap(), 1);
+        let active = target.export_active_items().unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, "local-text-id");
+        assert_eq!(active[0].title, "remote");
+        assert!(target.get_item("remote-text-id").unwrap().is_none());
+        let target_modified = target
+            .with_connection(|connection| {
+                connection
+                    .query_row(
+                        "SELECT modified_at_ms FROM clipboard_items WHERE id = 'local-text-id'",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(Into::into)
+            })
+            .unwrap();
+        assert_eq!(target_modified, 100);
+
+        source
+            .mark_changelog_synced(initial.last().unwrap().sequence)
+            .unwrap();
+        source.set_favorite("remote-text-id", true).unwrap();
+        let update = source.get_unsynced_changelog(10).unwrap();
+        assert_eq!(update.len(), 1);
+        assert_eq!(update[0].operation, "update");
+
+        assert_eq!(target.apply_remote_oplog(&update).unwrap(), 1);
+        assert!(
+            target
+                .get_item("local-text-id")
+                .unwrap()
+                .unwrap()
+                .is_favorite
+        );
+
+        source
+            .mark_changelog_synced(update.last().unwrap().sequence)
+            .unwrap();
+        source.set_favorite("remote-text-id", false).unwrap();
+        source.soft_delete("remote-text-id").unwrap();
+        let deletion = source.get_unsynced_changelog(10).unwrap();
+        assert!(deletion.iter().any(|entry| entry.operation == "delete"));
+
+        assert_eq!(target.apply_remote_oplog(&deletion).unwrap(), 2);
+        assert_eq!(target.count_active_items().unwrap(), 0);
+        assert!(target.get_item("remote-text-id").unwrap().is_none());
+
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn baseline_text_alias_persists_for_later_remote_updates() {
+        let source_path = temporary_path("text-alias-baseline-source");
+        let source = Database::open(&source_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source
+            .save_item(&shared_text_item("remote-text-id", "newer remote", 200))
+            .unwrap();
+        let baseline = source.export_active_items().unwrap();
+        let initial = source.get_unsynced_changelog(10).unwrap();
+        source
+            .mark_changelog_synced(initial.last().unwrap().sequence)
+            .unwrap();
+
+        let target_path = temporary_path("text-alias-baseline-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        target
+            .save_item(&shared_text_item("local-text-id", "older local", 100))
+            .unwrap();
+
+        assert_eq!(target.import_baseline_items(&baseline).unwrap(), 1);
+        let active = target.export_active_items().unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, "local-text-id");
+        assert_eq!(active[0].title, "newer remote");
+        let target_modified = target
+            .with_connection(|connection| {
+                connection
+                    .query_row(
+                        "SELECT modified_at_ms FROM clipboard_items WHERE id = 'local-text-id'",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(Into::into)
+            })
+            .unwrap();
+        assert_eq!(target_modified, 200);
+        drop(target);
+
+        source.set_favorite("remote-text-id", true).unwrap();
+        let update = source.get_unsynced_changelog(10).unwrap();
+        assert_eq!(update.len(), 1);
+
+        let reopened = Database::open(&target_path).unwrap();
+        assert_eq!(reopened.apply_remote_oplog(&update).unwrap(), 1);
+        let stored = reopened.get_item("local-text-id").unwrap().unwrap();
+        assert!(stored.is_favorite);
+        assert!(reopened.get_item("remote-text-id").unwrap().is_none());
+
+        let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&target_path);
     }
 

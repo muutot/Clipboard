@@ -1,4 +1,4 @@
-# 同步子系统审计清单（16 项）
+# 同步子系统审计清单（17 项）
 
 > 本文档受版本管理，是同步子系统审计的权威记录。每完成一项，更新状态与提交号；证据以代码为准，不要凭意愿勾选。
 
@@ -32,6 +32,12 @@
 | 14  | 文件名 .json 后缀实际是 bincode，仅靠 fallback 兼容，语义混乱                 | ✅ 完成                  | 见下方      |
 | 15  | 同步导入/应用后不广播 clipboard-history-invalidated，主界面可能不刷新         | ✅ 完成                  | 见下方      |
 | 16  | 同步无并发锁，手动+未来自动同步并发时合并逻辑存在竞争                         | ✅ 完成                  | 见下方      |
+
+## 后续架构审计
+
+| #   | 问题                                                                          | 状态    | 证据 / 提交 |
+| --- | ----------------------------------------------------------------------------- | ------- | ----------- |
+| 17  | 独立设备捕获相同文本时 ID 不同，后续编辑/删除只按 ID 匹配，无法收敛到同一实体 | ✅ 完成 | 见下方      |
 
 ## #5 证据
 
@@ -103,3 +109,9 @@
 
 - 远端 oplog 历史文件名曾是 `oplog-{device_id}-{timestamp}.json`，但载荷实际为 bincode，`.json` 后缀具误导性且同名对象可被覆盖。
 - ✅ 当前修复：wire 只保留单一 bincode v2 envelope，不再做 JSON fallback；新对象名为 `oplog-{device_id}-s{first_sequence}-e{last_sequence}-{sha256}`（无扩展名），序列范围和完整内容哈希共同形成不可变标识。旧时间戳命名对象仍可读取，但不会因元数据账本而被跳过。基线仍为真实 ZIP（内含 `baseline.bin` 与 `manifest.json`）。
+
+## #17 证据
+
+- 文本/链接捕获 ID 包含本机时间戳；两台设备独立捕获相同内容时，`kind + content_hash` 相同但 `id` 不同。SQLite 本地唯一约束会阻止重复插入，但旧 `apply_remote_oplog` 的更新/删除只查远端 ID，因此后续变更无法命中本地保留的另一 ID。
+- ✅ 当前修复：新增 `sync_item_aliases(alias_id → item_id)`。baseline/oplog 首次遇到不同 ID 的同 kind/hash 文本或链接时保留本地行并记录远端 alias；后续内容即使编辑并改变 hash，更新/删除仍通过 alias 命中同一实体。alias 外键随实体永久删除级联清理。
+- LWW 同时改为以 `COALESCE(modified_at_ms, created_at_ms)` 比较；远端应用期间 `clipboard_items_set_modified` 与 sync changelog trigger 一起受 suppression 守卫，接收端时钟不再覆盖发送端时间。新增 oplog 合并、baseline 合并、alias 重开持久性和远端时间戳回归测试。

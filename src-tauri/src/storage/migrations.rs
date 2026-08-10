@@ -146,6 +146,18 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
             PRIMARY KEY (remote_scope, object_name)
         );
 
+        -- Maps a remote text/link id to the matching local row when two
+        -- devices captured the same content independently under different
+        -- per-capture timestamp ids. The alias survives later content edits so
+        -- update/delete oplogs continue to resolve to the same entity.
+        CREATE TABLE IF NOT EXISTS sync_item_aliases (
+            alias_id TEXT PRIMARY KEY NOT NULL,
+            item_id TEXT NOT NULL,
+            FOREIGN KEY (item_id) REFERENCES clipboard_items (id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS sync_item_aliases_item_idx
+            ON sync_item_aliases (item_id);
+
         -- Operation log for multi-device sync. Records every insert/update/delete
         -- on clipboard_items so devices can exchange changes.
         -- `modified_at_ms` + `device_id` enable conflict resolution (last-write-wins).
@@ -268,9 +280,16 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
                  OLD.is_favorite, OLD.source_app, OLD.size_bytes, OLD.last_used_at_ms);
         END;
 
-        -- Auto-set modified_at_ms on row update.
+        -- Auto-set modified_at_ms on genuine local row updates. Remote sync
+        -- applies carry their source timestamp and must not be rewritten to
+        -- the receiver's wall-clock time, otherwise LWW stops converging.
+        DROP TRIGGER IF EXISTS clipboard_items_set_modified;
         CREATE TRIGGER IF NOT EXISTS clipboard_items_set_modified
         AFTER UPDATE ON clipboard_items
+        WHEN NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
         BEGIN
             UPDATE clipboard_items SET modified_at_ms = strftime('%s', 'now') * 1000
             WHERE id = NEW.id AND (modified_at_ms IS NULL OR modified_at_ms < strftime('%s', 'now') * 1000 - 1000);
