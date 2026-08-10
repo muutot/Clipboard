@@ -8,6 +8,9 @@ use sha2::{Digest, Sha256};
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct S3Entry {
+    /// Complete bucket-relative key used by nested v3 namespaces.
+    #[serde(skip_serializing)]
+    pub object_key: String,
     pub name: String,
     pub is_directory: bool,
     pub size_bytes: Option<u64>,
@@ -583,6 +586,7 @@ fn parse_s3_list_page(xml: &str) -> S3ListPage {
 
         if !key.is_empty() {
             entries.push(S3Entry {
+                object_key: key.clone(),
                 name: key.split('/').next_back().unwrap_or(&key).to_string(),
                 is_directory: false,
                 size_bytes: size,
@@ -749,6 +753,7 @@ mod tests {
         assert!(page.is_truncated);
         assert_eq!(page.next_continuation_token.as_deref(), Some("next&token"));
         assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].object_key, "v3/heads/device&a.bin");
         assert_eq!(page.entries[0].name, "device&a.bin");
         assert_eq!(page.entries[0].size_bytes, Some(42));
     }
