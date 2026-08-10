@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -939,6 +939,7 @@ pub fn sync_download_backup(
     filename: String,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<PathBuf, String> {
+    let filename = validate_remote_backup_filename(&filename)?;
     let settings = {
         let guard = config
             .lock()
@@ -953,14 +954,50 @@ pub fn sync_download_backup(
     let remote_path = settings.remote_path.clone().unwrap_or_default();
     let remote_scope = settings.remote_scope_id()?;
     let remote = ConfiguredRemoteStore::new(&settings, &endpoint, &remote_path, &remote_scope)?;
-    let data = remote.download_payload(&filename)?;
+    let data = remote.download_payload(filename)?;
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
-    let target = temp_dir.join(&filename);
+    let target = temp_dir.join(filename);
     std::fs::write(&target, data).map_err(|e| e.to_string())?;
 
     Ok(target)
+}
+
+fn validate_remote_backup_filename(filename: &str) -> Result<&str, String> {
+    let mut components = Path::new(filename).components();
+    let is_single_normal_component = matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(_)), None)
+    );
+    let stem = filename
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    let is_reserved_windows_name = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || stem
+            .strip_prefix("COM")
+            .or_else(|| stem.strip_prefix("LPT"))
+            .is_some_and(|suffix| {
+                matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+            });
+
+    if filename.is_empty()
+        || filename.len() > 255
+        || !filename.ends_with(".zip")
+        || !is_single_normal_component
+        || filename.contains(['/', '\\', ':'])
+        || filename.trim_matches(' ') != filename
+        || filename.chars().any(|ch| {
+            ch.is_control() || matches!(ch, '<' | '>' | '"' | '|' | '?' | '*' | '#' | '%')
+        })
+        || is_reserved_windows_name
+    {
+        return Err("remote backup filename must be one safe .zip file name".to_string());
+    }
+
+    Ok(filename)
 }
 
 #[tauri::command]
@@ -1208,6 +1245,32 @@ mod tests {
             sync::PoolStorage::download(&remote, "image/a.png").unwrap(),
             b"image"
         );
+    }
+
+    #[test]
+    fn remote_backup_filename_rejects_paths_and_unsafe_windows_names() {
+        assert_eq!(
+            validate_remote_backup_filename("baseline-device-20260810_120000.zip").unwrap(),
+            "baseline-device-20260810_120000.zip"
+        );
+
+        for invalid in [
+            "",
+            "../backup.zip",
+            "..\\backup.zip",
+            "/tmp/backup.zip",
+            "C:\\temp\\backup.zip",
+            "backup.zip/other.zip",
+            "backup.zip:stream",
+            "backup%2fescape.zip",
+            "CON.zip",
+            "backup.txt",
+        ] {
+            assert!(
+                validate_remote_backup_filename(invalid).is_err(),
+                "accepted unsafe remote backup name {invalid:?}"
+            );
+        }
     }
 
     #[test]
