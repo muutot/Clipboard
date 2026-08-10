@@ -10,19 +10,32 @@
   interface Props {
     filePath: string;
     opacity: number;
+    mode?: "overlay" | "desktop";
     onclose: () => void;
   }
 
-  let { filePath, opacity, onclose }: Props = $props();
+  let { filePath, opacity, mode = "overlay", onclose }: Props = $props();
 
+  let viewerElement: HTMLDivElement;
   let zoom = $state(1);
   let panX = $state(0);
   let panY = $state(0);
   let isDragging = $state(false);
+  let isClosing = false;
   let dragStartX = 0;
   let dragStartY = 0;
   let panStartX = 0;
   let panStartY = 0;
+
+  function closeViewer() {
+    if (isClosing) return;
+    isClosing = true;
+
+    if (mode === "desktop" && document.fullscreenElement === viewerElement) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    onclose();
+  }
 
   onMount(() => {
     function onKey(e: KeyboardEvent) {
@@ -30,11 +43,30 @@
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        onclose();
+        closeViewer();
       }
     }
+
+    function onFullscreenChange() {
+      if (mode === "desktop" && document.fullscreenElement !== viewerElement) {
+        closeViewer();
+      }
+    }
+
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+
+    if (mode === "desktop") {
+      document.addEventListener("fullscreenchange", onFullscreenChange);
+      void viewerElement.requestFullscreen().catch(closeViewer);
+    }
+
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      if (document.fullscreenElement === viewerElement) {
+        void document.exitFullscreen().catch(() => {});
+      }
+    };
   });
 
   function onWheel(e: WheelEvent) {
@@ -75,9 +107,11 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  bind:this={viewerElement}
   role="presentation"
   class="image-viewer-overlay"
-  style="background: rgba(0, 0, 0, {opacity})"
+  class:desktop={mode === "desktop"}
+  style:background={mode === "desktop" ? "rgb(0 0 0)" : `rgba(0, 0, 0, ${opacity})`}
   onwheel={onWheel}
   onmousedown={onMouseDown}
   onmousemove={onMouseMove}
@@ -85,7 +119,12 @@
   onmouseleave={onMouseUp}
   ondblclick={onDblClick}
 >
-  <button type="button" class="viewer-close-btn" onclick={onclose} aria-label={_t("actions.close")}>
+  <button
+    type="button"
+    class="viewer-close-btn"
+    onclick={closeViewer}
+    aria-label={_t("actions.closeViewer")}
+  >
     <AppIcon name="x" size={20} strokeWidth={2.5} />
   </button>
   <div class="viewer-zoom-hint">{Math.round(zoom * 100)}%</div>
@@ -128,6 +167,11 @@
     transition: none;
   }
 
+  .image-viewer-overlay.desktop .viewer-image {
+    max-width: 100vw;
+    max-height: 100vh;
+  }
+
   .viewer-close-btn {
     position: fixed;
     top: 16px;
@@ -155,6 +199,15 @@
     background: rgba(60, 60, 60, 0.8);
   }
 
+  .image-viewer-overlay.desktop .viewer-close-btn {
+    border-color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .image-viewer-overlay.desktop .viewer-close-btn:hover {
+    color: rgba(255, 255, 255, 0.95);
+  }
+
   .viewer-zoom-hint {
     position: fixed;
     bottom: 20px;
@@ -168,5 +221,9 @@
     backdrop-filter: blur(6px);
     font-size: 12px;
     pointer-events: none;
+  }
+
+  .image-viewer-overlay.desktop .viewer-zoom-hint {
+    color: rgba(255, 255, 255, 0.7);
   }
 </style>

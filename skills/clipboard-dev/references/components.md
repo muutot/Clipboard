@@ -57,17 +57,18 @@ Main-route Escape order: bulk selection (capture phase), then the open tag edit 
 
 ### `ImageFullscreenOverlay.svelte`
 
-Standalone fullscreen image viewer overlay for in-app overlay mode. Renders at `z-index: 200` with zoom, pan, drag, double-click reset, and Escape/close-button dismissal. Uses `window.addEventListener("keydown", ..., true)` in capture phase with `stopPropagation` to intercept Escape before other handlers.
+Shared fullscreen image viewer for both in-app overlay and desktop Fullscreen API modes. Renders at `z-index: 200` with zoom, pan, drag, double-click reset, and Escape/close-button dismissal. Uses `window.addEventListener("keydown", ..., true)` in capture phase with `stopPropagation` to intercept Escape before other handlers.
 
 Key contracts:
 
-- Props: `filePath: string`, `opacity: number` (0–1), `onclose: () => void`.
-- Owns all viewer state (zoom, pan, drag) and destroys listener on unmount.
-- Close paths: Escape key (capture phase), X button (`onclick`), no backdrop-click-to-close.
+- Props: `filePath: string`, `opacity: number` (0–1), optional `mode: "overlay" | "desktop"` (default `"overlay"`), `onclose: () => void`.
+- Owns all viewer state (zoom, pan, drag), keyboard/fullscreen listeners, desktop `requestFullscreen()`, and cleanup on unmount.
+- Overlay mode uses the configured translucent backdrop and constrains the image to `90vw`/`90vh`; desktop mode uses a solid black backdrop and `100vw`/`100vh`.
+- Close paths: Escape key (capture phase), X button (`onclick`), desktop `fullscreenchange`, or a failed fullscreen request. There is no backdrop-click-to-close.
 
 ### Desktop fullscreen viewer (`+page.svelte`)
 
-When `imageFullscreenMode` is `"desktop"`, `handleImageFullscreen` calls `openDesktopViewer()` which creates a raw DOM container, enters the Fullscreen API (`requestFullscreen`), and supports the same zoom/pan/drag/double-click-reset behavior. The zoom hint is displayed as a fixed overlay. Close via Escape key, close button, or `fullscreenchange` event. All event listeners are cleaned up on close.
+When `imageFullscreenMode` is `"desktop"`, `handleImageFullscreen` synchronously mounts `ImageFullscreenOverlay` with `mode="desktop"` so its `requestFullscreen()` remains in the initiating user gesture. The route owns only the selected file/mode state; the component owns desktop viewer interaction and Fullscreen API cleanup.
 
 ### `ContextMenu.svelte`
 

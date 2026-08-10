@@ -8,7 +8,7 @@ This reference is a source map, not a substitute for reading the current files. 
 | ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Main desktop window       | `src/routes/+page.svelte`                                           | Search, filtering, pagination, virtual list, card actions, bulk actions, detail opening, runtime events |
 | Settings window           | `src/routes/settings/+page.svelte` → `StorageSettingsDialog.svelte` | Standalone settings WebviewWindow, theme/font application, settings navigation and panels               |
-| Desktop fullscreen viewer | `src/routes/+page.svelte::openDesktopViewer`                        | Fullscreen image viewer via Fullscreen API with zoom, pan, drag; created in `+page.svelte`              |
+| Desktop fullscreen viewer | `src/routes/+page.svelte` → `ImageFullscreenOverlay.svelte`         | Route selects the mode/file; the shared component owns Fullscreen API, zoom, pan, drag, and cleanup     |
 | GUI backend               | `src-tauri/src/lib.rs::run`                                         | Tauri setup, managed state, commands, workers, tray, hotkeys, shutdown                                  |
 | Process CLI               | `src-tauri/src/main.rs` → `cli/mod.rs`                              | `list`, `search`, `copy`, `paste`, `delete`, `export`, and `stats` without launching the GUI            |
 | Loopback API              | `src-tauri/src/cli/api.rs`                                          | Optional local HTTP automation server bound to `127.0.0.1`                                              |

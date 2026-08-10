@@ -155,7 +155,7 @@ Do not use a parent scoped selector to style inside a child Svelte component. Pa
 | ----------------------------- | --------------- |
 | settings backdrop             | 50              |
 | detail backdrop/panel         | 51 / 52         |
-| image viewer overlay/controls | 100 / 101       |
+| image viewer overlay/controls | 200 / 201       |
 | main search suggestion panel  | 110             |
 | context menu                  | 9999            |
 
