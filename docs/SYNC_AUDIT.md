@@ -25,13 +25,13 @@
 
 ## 低 / 优化
 
-| #   | 问题                                                                                    | 状态                     | 证据 / 提交 |
-| --- | --------------------------------------------------------------------------------------- | ------------------------ | ----------- |
-| 12  | 每个网络调用重建 reqwest Client（webdav.rs:24）                                         | ✅ 完成（OnceLock 复用） | 见下方      |
-| 13  | 两份 get_device_id 重复且回退值不一致（backup.rs:"unknown-device" vs mod.rs:"unknown"） | ✅ 完成                  | 见下方      |
-| 14  | 文件名 .json 后缀实际是 bincode，仅靠 fallback 兼容，语义混乱                           | ✅ 完成                  | 见下方      |
-| 15  | 同步导入/应用后不广播 clipboard-history-invalidated，主界面可能不刷新                   | ✅ 完成                  | 见下方      |
-| 16  | 同步无并发锁，手动+未来自动同步并发时合并逻辑存在竞争                                   | ✅ 完成                  | 见下方      |
+| #   | 问题                                                                          | 状态                     | 证据 / 提交 |
+| --- | ----------------------------------------------------------------------------- | ------------------------ | ----------- |
+| 12  | 每个网络调用重建 reqwest Client（webdav.rs:24）                               | ✅ 完成（OnceLock 复用） | 见下方      |
+| 13  | device_id 曾有重复实现和不稳定 hostname 回退，机器改名/同名设备会破坏身份语义 | ✅ 完成                  | 见下方      |
+| 14  | 文件名 .json 后缀实际是 bincode，仅靠 fallback 兼容，语义混乱                 | ✅ 完成                  | 见下方      |
+| 15  | 同步导入/应用后不广播 clipboard-history-invalidated，主界面可能不刷新         | ✅ 完成                  | 见下方      |
+| 16  | 同步无并发锁，手动+未来自动同步并发时合并逻辑存在竞争                         | ✅ 完成                  | 见下方      |
 
 ## #5 证据
 
@@ -85,7 +85,8 @@
 
 - `src-tauri/src/commands/sync/mod.rs:744-752`：`get_device_id` 回退 `"unknown"`。
 - `src-tauri/src/sync/backup.rs:408-415`：另一份 `get_device_id` 回退 `"unknown-device"`。
-- ✅ 修复：合并为 `sync::device_id()`（`sync/mod.rs`），回退统一为 `"unknown"`；backup.rs 与 commands/sync/mod.rs 均改为调用共享实现，删除重复定义。新增回退单测。
+- 仅合并 hostname 读取仍不稳定：机器改名会产生新身份，同名设备会碰撞，generic fallback 更会让多台设备共享 `unknown`。
+- ✅ 当前修复：`Database::from_connection` 在 schema 创建后生成并持久化 v4 UUID；已有 UUID 重开保持不变。旧 hostname 值一次性迁移到 `legacy_device_id`，仅用于识别升级前本机已经上传的 oplog；空值、`unknown`、`unknown-device` 不保存为 alias。baseline/full backup/oplog manifest 和远端对象命名统一读取数据库 UUID，删除环境变量 hostname 实现。WebDAV/S3 下载循环同时识别当前 UUID 与 legacy alias，避免升级后重放自己的旧 oplog。新增持久性、迁移、fallback 与对象名识别回归测试。
 
 ## #15 证据
 

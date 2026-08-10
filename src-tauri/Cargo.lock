@@ -755,6 +755,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tokio",
  "urlencoding",
+ "uuid",
  "walkdir",
  "window-vibrancy",
  "zip",

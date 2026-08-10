@@ -56,13 +56,16 @@ pub fn create_backup(
         .map_err(|e| format!("failed to count items: {e}"))?;
 
     let now_ms = now_ms();
+    let device_id = database
+        .get_sync_device_id()
+        .map_err(|e| format!("failed to read sync device id: {e}"))?;
 
     let manifest = BackupManifest {
         format_version: SUPPORTED_FORMAT_VERSION,
         backup_type: "full".to_string(),
         created_at_ms: now_ms,
         base_sync_ms: None,
-        device_id: crate::sync::device_id(),
+        device_id,
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count,
         resource_count: resources.len(),
@@ -104,7 +107,9 @@ pub fn create_baseline_backup(
         crate::sync::prepare_pool_refs(paths, &mut resources, pool);
     }
     let now_ms = now_ms();
-    let device_id = crate::sync::device_id();
+    let device_id = database
+        .get_sync_device_id()
+        .map_err(|e| format!("failed to read sync device id: {e}"))?;
 
     let manifest = BackupManifest {
         format_version: SUPPORTED_FORMAT_VERSION,
@@ -217,12 +222,15 @@ pub fn create_oplog_backup(
         .map_err(|e| format!("failed to read changelog: {e}"))?;
 
     if entries.is_empty() {
+        let device_id = database
+            .get_sync_device_id()
+            .map_err(|e| format!("failed to read sync device id: {e}"))?;
         return Ok(BackupManifest {
             format_version: SUPPORTED_FORMAT_VERSION,
             backup_type: "noop".to_string(),
             created_at_ms: now_ms(),
             base_sync_ms: None,
-            device_id: crate::sync::device_id(),
+            device_id,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             item_count: 0,
             resource_count: 0,
@@ -243,6 +251,9 @@ pub fn create_oplog_backup(
     let (resources, total_bytes) = collect_all_resources(paths, &referenced)?;
 
     let now_ms = now_ms();
+    let device_id = database
+        .get_sync_device_id()
+        .map_err(|e| format!("failed to read sync device id: {e}"))?;
 
     let oplog_wire = crate::sync::wire::serialize_oplog(&entries)
         .map_err(|e| format!("failed to serialize oplog: {e}"))?;
@@ -252,7 +263,7 @@ pub fn create_oplog_backup(
         backup_type: "oplog".to_string(),
         created_at_ms: now_ms,
         base_sync_ms: None,
-        device_id: crate::sync::device_id(),
+        device_id,
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         item_count: entries.len(),
         resource_count: resources.len(),

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use rusqlite::OptionalExtension;
+use uuid::Uuid;
 
 use super::{Database, StorageError, StorageFileReferences};
 use crate::domain::ClipboardItem;
@@ -199,9 +200,9 @@ impl Database {
         })
     }
 
-    /// Sets the device identifier in sync_metadata.
-    /// Called once at startup. All trigger-generated changelog entries
-    /// will use this value.
+    /// Explicitly overrides the device identifier in sync_metadata. Production
+    /// databases use `ensure_sync_device_id`; this setter remains useful for
+    /// focused tests that need named local/remote identities.
     pub fn set_sync_device_id(&self, device_id: &str) -> Result<(), StorageError> {
         self.with_connection(|connection| {
             connection.execute(
@@ -222,6 +223,77 @@ impl Database {
                 |row| row.get(0),
             )?;
             Ok(id)
+        })
+    }
+
+    /// Ensures the local sync identity is a stable UUID persisted in the
+    /// database. Pre-UUID hostname identities are migrated once and retained as
+    /// a legacy alias so their already-uploaded oplogs are still recognized as
+    /// local after upgrade.
+    pub fn ensure_sync_device_id(&self) -> Result<String, StorageError> {
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let existing: Option<String> = transaction
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'device_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
+            if let Some(existing) = existing.as_deref() {
+                if Uuid::parse_str(existing).is_ok() {
+                    transaction.commit()?;
+                    return Ok(existing.to_string());
+                }
+                let existing = existing.trim();
+                if !existing.is_empty()
+                    && !existing.eq_ignore_ascii_case("unknown")
+                    && !existing.eq_ignore_ascii_case("unknown-device")
+                {
+                    transaction.execute(
+                        "INSERT INTO sync_metadata (key, value)
+                         VALUES ('legacy_device_id', ?1)
+                         ON CONFLICT(key) DO NOTHING",
+                        [existing],
+                    )?;
+                }
+            }
+
+            let device_id = Uuid::new_v4().to_string();
+            transaction.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('device_id', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [&device_id],
+            )?;
+            transaction.commit()?;
+            Ok(device_id)
+        })
+    }
+
+    /// Current UUID first, followed by any pre-UUID identity retained solely
+    /// for recognizing remote objects uploaded by this database before upgrade.
+    pub fn get_sync_device_ids(&self) -> Result<Vec<String>, StorageError> {
+        self.with_connection(|connection| {
+            let current: String = connection.query_row(
+                "SELECT value FROM sync_metadata WHERE key = 'device_id'",
+                [],
+                |row| row.get(0),
+            )?;
+            let legacy: Option<String> = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'legacy_device_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let mut ids = vec![current];
+            if let Some(legacy) = legacy.filter(|value| !value.is_empty()) {
+                if !ids.contains(&legacy) {
+                    ids.push(legacy);
+                }
+            }
+            Ok(ids)
         })
     }
 

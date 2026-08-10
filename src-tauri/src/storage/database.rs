@@ -30,9 +30,11 @@ impl Database {
         configure_connection(&connection)?;
         migrations::create_schema(&connection)?;
 
-        Ok(Self {
+        let database = Self {
             connection: Mutex::new(connection),
-        })
+        };
+        database.ensure_sync_device_id()?;
+        Ok(database)
     }
 
     pub(crate) fn with_connection<T>(
@@ -73,7 +75,28 @@ fn configure_connection(connection: &Connection) -> Result<(), StorageError> {
 
 #[cfg(test)]
 mod tests {
+    use std::{path::PathBuf, time::SystemTime};
+
+    use uuid::Uuid;
+
     use super::Database;
+
+    fn temporary_database_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "clipboard-database-{label}-{}-{unique}.db",
+            std::process::id()
+        ))
+    }
+
+    fn remove_database_files(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}-wal", path.display()));
+        let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+    }
 
     #[test]
     fn initializes_schema_and_enables_foreign_keys() {
@@ -101,5 +124,52 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn generated_sync_device_uuid_persists_across_reopen() {
+        let path = temporary_database_path("stable-sync-id");
+        let first = Database::open(&path).unwrap();
+        let first_id = first.get_sync_device_id().unwrap();
+        assert!(Uuid::parse_str(&first_id).is_ok());
+        drop(first);
+
+        let reopened = Database::open(&path).unwrap();
+        assert_eq!(reopened.get_sync_device_id().unwrap(), first_id);
+        drop(reopened);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn legacy_hostname_device_id_migrates_to_uuid_and_remains_an_alias() {
+        let path = temporary_database_path("legacy-sync-id");
+        let database = Database::open(&path).unwrap();
+        database.set_sync_device_id("workstation-a").unwrap();
+        drop(database);
+
+        let migrated = Database::open(&path).unwrap();
+        let ids = migrated.get_sync_device_ids().unwrap();
+        assert_eq!(ids.len(), 2);
+        assert!(Uuid::parse_str(&ids[0]).is_ok());
+        assert_eq!(ids[1], "workstation-a");
+        drop(migrated);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn generic_fallback_device_ids_are_not_retained_as_aliases() {
+        for fallback in ["unknown", "unknown-device", " UNKNOWN "] {
+            let path = temporary_database_path("fallback-sync-id");
+            let database = Database::open(&path).unwrap();
+            database.set_sync_device_id(fallback).unwrap();
+            drop(database);
+
+            let migrated = Database::open(&path).unwrap();
+            let ids = migrated.get_sync_device_ids().unwrap();
+            assert_eq!(ids.len(), 1);
+            assert!(Uuid::parse_str(&ids[0]).is_ok());
+            drop(migrated);
+            remove_database_files(&path);
+        }
     }
 }

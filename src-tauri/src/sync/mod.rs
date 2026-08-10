@@ -6,19 +6,6 @@ pub mod s3;
 pub mod webdav;
 pub mod wire;
 
-/// Stable per-device identifier used for oplog file names and conflict
-/// resolution. Falls back to the machine hostname, then a generic placeholder.
-/// Keep the fallback in one place so every sync/backup surface agrees.
-pub fn device_id() -> String {
-    if let Ok(hostname) = std::env::var("COMPUTERNAME") {
-        return hostname.to_lowercase();
-    }
-    if let Ok(hostname) = std::env::var("HOSTNAME") {
-        return hostname.to_lowercase();
-    }
-    "unknown".to_string()
-}
-
 pub use backup::{
     count_unsynced, create_baseline_backup, create_oplog_backup, mark_oplog_synced,
     merge_baseline_archives, purge_oplog, read_baseline_archive_bytes, read_baseline_items,
@@ -46,17 +33,3 @@ pub use wire::{
     merge_baseline_contents, merge_baselines, serialize_baseline_with_resources, serialize_oplog,
     serialize_oplog_with_resources, OplogResource,
 };
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn device_id_falls_back_to_unknown_without_hostname_env() {
-        unsafe {
-            std::env::remove_var("COMPUTERNAME");
-            std::env::remove_var("HOSTNAME");
-        }
-        assert_eq!(device_id(), "unknown");
-    }
-}

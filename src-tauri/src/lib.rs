@@ -266,12 +266,11 @@ pub fn run() {
 
             database.requeue_interrupted_ocr()?;
 
-            // Initialize sync device identifier for multi-device oplog sync.
-            let device_id = get_sync_device_id();
-            if let Err(e) = database.set_sync_device_id(&device_id) {
-                eprintln!("[sync] failed to set device_id: {e}");
-            } else {
-                eprintln!("[sync] device_id = {device_id}");
+            // Database::open creates or migrates the persistent sync UUID before
+            // any capture worker can produce changelog entries.
+            match database.get_sync_device_id() {
+                Ok(device_id) => eprintln!("[sync] device_id = {device_id}"),
+                Err(error) => eprintln!("[sync] failed to read device_id: {error}"),
             }
 
             let db_open_duration = startup_timer.finish_segment();
@@ -665,16 +664,6 @@ pub fn run() {
             stop_runtime_services(app_handle);
         }
     });
-}
-
-fn get_sync_device_id() -> String {
-    if let Ok(hostname) = std::env::var("COMPUTERNAME") {
-        return hostname.to_lowercase();
-    }
-    if let Ok(hostname) = std::env::var("HOSTNAME") {
-        return hostname.to_lowercase();
-    }
-    "unknown".to_string()
 }
 
 #[cfg(test)]

@@ -456,7 +456,11 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
         .ok_or("sync endpoint not configured")?;
     let remote_path = settings.remote_path.clone().unwrap_or_default();
     let remote_scope = settings.remote_scope_id()?;
-    let device_id = get_device_id();
+    let local_device_ids = database.get_sync_device_ids().map_err(|e| e.to_string())?;
+    let device_id = local_device_ids
+        .first()
+        .cloned()
+        .ok_or_else(|| "sync device id not initialized".to_string())?;
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
@@ -474,6 +478,7 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
             &remote_path,
             &remote_scope,
             &device_id,
+            &local_device_ids,
             &timestamp,
             &temp_dir,
         ),
@@ -486,6 +491,7 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
             &remote_path,
             &remote_scope,
             &device_id,
+            &local_device_ids,
             &timestamp,
             &temp_dir,
         ),
@@ -516,6 +522,7 @@ fn sync_upload_webdav(
     remote_path: &str,
     remote_scope: &str,
     device_id: &str,
+    local_device_ids: &[String],
     timestamp: &str,
     temp_dir: &std::path::Path,
 ) -> Result<SyncUploadResult, String> {
@@ -651,7 +658,7 @@ fn sync_upload_webdav(
         if entry.is_directory || !entry.name.starts_with("oplog-") {
             continue;
         }
-        if entry.name.starts_with(&format!("oplog-{device_id}-")) {
+        if is_local_oplog_name(&entry.name, local_device_ids) {
             continue;
         }
         let revision = remote_oplog_revision(entry);
@@ -739,6 +746,7 @@ fn sync_upload_s3(
     remote_path: &str,
     remote_scope: &str,
     device_id: &str,
+    local_device_ids: &[String],
     timestamp: &str,
     temp_dir: &std::path::Path,
 ) -> Result<SyncUploadResult, String> {
@@ -881,7 +889,7 @@ fn sync_upload_s3(
         if entry.is_directory || !entry.name.starts_with("oplog-") {
             continue;
         }
-        if entry.name.starts_with(&format!("oplog-{device_id}-")) {
+        if is_local_oplog_name(&entry.name, local_device_ids) {
             continue;
         }
         let revision = remote_oplog_revision(entry);
@@ -1039,8 +1047,10 @@ fn filter_entries_by_resource_size(
         .collect()
 }
 
-fn get_device_id() -> String {
-    sync::device_id()
+fn is_local_oplog_name(name: &str, local_device_ids: &[String]) -> bool {
+    local_device_ids
+        .iter()
+        .any(|device_id| name.starts_with(&format!("oplog-{device_id}-")))
 }
 
 /// Common shape shared by the WebDAV and S3 remote-listing entries so sync and
@@ -1256,7 +1266,7 @@ pub fn sync_compact_remote(app: tauri::AppHandle) -> Result<SyncUploadResult, St
         .ok_or("sync endpoint not configured")?;
     let remote_path = settings.remote_path.clone().unwrap_or_default();
     let remote_scope = settings.remote_scope_id()?;
-    let device_id = get_device_id();
+    let device_id = database.get_sync_device_id().map_err(|e| e.to_string())?;
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
@@ -1510,6 +1520,27 @@ mod tests {
             modified_ms: Some(10),
         };
         assert_eq!(remote_oplog_revision(&legacy), None);
+    }
+
+    #[test]
+    fn local_oplog_names_match_current_and_legacy_device_ids() {
+        let local_ids = vec![
+            "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
+            "workstation-a".to_string(),
+        ];
+
+        assert!(is_local_oplog_name(
+            "oplog-c527a31e-7f42-43cf-bf73-6e5fbed4be18-s1-e1-hash",
+            &local_ids
+        ));
+        assert!(is_local_oplog_name(
+            "oplog-workstation-a-20260810_120000",
+            &local_ids
+        ));
+        assert!(!is_local_oplog_name(
+            "oplog-workstation-b-s1-e1-hash",
+            &local_ids
+        ));
     }
 
     #[test]
