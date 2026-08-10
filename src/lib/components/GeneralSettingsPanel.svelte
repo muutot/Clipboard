@@ -46,7 +46,6 @@
   let sortListEl = $state<HTMLDivElement | null>(null);
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let stopPointerDrag: (() => void) | undefined;
-  let unlistenPrivacyPause: (() => void) | undefined;
 
   const ALL_SORT_FIELDS: SortRule["field"][] = [
     "createdAt",
@@ -170,7 +169,6 @@
   onDestroy(() => {
     stopPointerDrag?.();
     if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
-    unlistenPrivacyPause?.();
   });
 
   function changeLanguage(lang: Locale) {
@@ -183,14 +181,21 @@
   }
 
   onMount(() => {
+    let disposed = false;
+    let unlistenPrivacyPause: (() => void) | undefined;
     void loadPrivacyStatus();
     if (isTauriRuntime()) {
       listen<boolean>("privacy-pause-changed", (event) => {
         privacyPaused = event.payload;
       }).then((unlisten) => {
-        unlistenPrivacyPause = unlisten;
+        if (disposed) unlisten();
+        else unlistenPrivacyPause = unlisten;
       });
     }
+    return () => {
+      disposed = true;
+      unlistenPrivacyPause?.();
+    };
   });
 
   async function loadPrivacyStatus() {

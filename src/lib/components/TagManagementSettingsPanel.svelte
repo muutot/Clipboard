@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
@@ -80,20 +80,21 @@
     return tags.filter((t) => t.name.toLowerCase().includes(query));
   });
 
-  let unlistenTagsChanged: (() => void) | undefined;
-
   onMount(() => {
+    let disposed = false;
+    let unlistenTagsChanged: (() => void) | undefined;
     void load();
     listen<TagsChangedPayload>("tags-changed", () => {
       if (suppressTagsChangedReload) return;
       void load();
     }).then((unlisten) => {
-      unlistenTagsChanged = unlisten;
+      if (disposed) unlisten();
+      else unlistenTagsChanged = unlisten;
     });
-  });
-
-  onDestroy(() => {
-    unlistenTagsChanged?.();
+    return () => {
+      disposed = true;
+      unlistenTagsChanged?.();
+    };
   });
 
   async function load() {

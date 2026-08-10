@@ -1153,15 +1153,19 @@
       void loadExportFormats();
       void loadImportFormats();
       void loadAppVersion();
+      let disposed = false;
       let unlistenAdd: (() => void) | undefined;
       let unlistenInvalidated: (() => void) | undefined;
       listen("clipboard-item-added", () => void refreshStorageStats()).then((unlisten) => {
-        unlistenAdd = unlisten;
+        if (disposed) unlisten();
+        else unlistenAdd = unlisten;
       });
       listen("clipboard-history-invalidated", () => void refreshStorageStats()).then((unlisten) => {
-        unlistenInvalidated = unlisten;
+        if (disposed) unlisten();
+        else unlistenInvalidated = unlisten;
       });
       return () => {
+        disposed = true;
         unlistenAdd?.();
         unlistenInvalidated?.();
       };
