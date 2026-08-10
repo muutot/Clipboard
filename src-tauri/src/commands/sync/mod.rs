@@ -710,7 +710,12 @@ fn sync_upload_webdav(
                             applied_remote = true;
                         }
                     }
-                    Err(e) => println!("[sync] apply error: {}", e),
+                    Err(error) => {
+                        return Err(format!(
+                            "failed to apply remote oplog {}: {error}",
+                            entry.name
+                        ));
+                    }
                 }
             }
             Err(e) => println!("[sync] download error for {}: {}", entry.name, e),
@@ -942,7 +947,12 @@ fn sync_upload_s3(
                             applied_remote = true;
                         }
                     }
-                    Err(e) => println!("[sync] apply error: {}", e),
+                    Err(error) => {
+                        return Err(format!(
+                            "failed to apply remote oplog {}: {error}",
+                            entry.name
+                        ));
+                    }
                 }
             }
             Err(e) => println!("[sync] download error for {}: {}", entry.name, e),

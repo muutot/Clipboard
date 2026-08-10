@@ -640,7 +640,7 @@ impl Database {
 
             for entry in entries {
                 if !matches!(entry.operation.as_str(), "insert" | "update" | "delete") {
-                    continue;
+                    return Err(StorageError::InvalidSyncOperation(entry.operation.clone()));
                 }
                 let target_id = Self::resolve_sync_item_id(
                     &tx,
@@ -662,7 +662,7 @@ impl Database {
                     "insert" | "update" => {
                         if let Some(local_modified) = existing_modified {
                             if entry.modified_at_ms >= local_modified {
-                                let _ = tx.execute(
+                                let affected = tx.execute(
                                     "UPDATE clipboard_items
                                      SET kind = ?2, title = ?3,
                                          text_content = ?4, html_content = ?5,
@@ -692,12 +692,12 @@ impl Database {
                                         &entry.last_used_at_ms,
                                         &entry.modified_at_ms,
                                     ],
-                                );
-                                applied += 1;
+                                )?;
+                                applied += affected as u64;
                             }
                         } else {
-                            let _ = tx.execute(
-                                "INSERT OR IGNORE INTO clipboard_items
+                            let affected = tx.execute(
+                                "INSERT INTO clipboard_items
                                  (id, kind, title, text_content, html_content, rtf_content,
                                   content_hash, resource_path, preview_path, icon_path,
                                   metadata_json, is_favorite, source_app,
@@ -724,12 +724,12 @@ impl Database {
                                     &entry.created_at_ms,
                                     &entry.modified_at_ms,
                                 ],
-                            );
-                            applied += 1;
+                            )?;
+                            applied += affected as u64;
                         }
                     }
                     "delete" => {
-                        let _ = tx.execute(
+                        let affected = tx.execute(
                             "UPDATE clipboard_items SET deleted = 1, deleted_at_ms = ?2
                              WHERE id = ?1
                                AND COALESCE(modified_at_ms, created_at_ms, 0) <= ?3",
@@ -738,10 +738,10 @@ impl Database {
                                 &entry.modified_at_ms,
                                 &entry.modified_at_ms,
                             ],
-                        );
-                        applied += 1;
+                        )?;
+                        applied += affected as u64;
                     }
-                    _ => {}
+                    _ => unreachable!(),
                 }
             }
 
@@ -867,7 +867,7 @@ mod tests {
     use crate::domain::ClipboardKind;
 
     use super::Database;
-    use crate::storage::ClipboardRepository;
+    use crate::storage::{ClipboardRepository, StorageError};
 
     fn text_item(id: &str, created_at_ms: i64) -> ClipboardItem {
         ClipboardItem {
@@ -971,6 +971,57 @@ mod tests {
         assert_eq!(stored.title, "record-item");
 
         let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn apply_remote_oplog_rolls_back_the_batch_on_sql_error() {
+        let source_path = temporary_path("oplog-atomic-source");
+        let source = Database::open(&source_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source.save_item(&text_item("valid", 100)).unwrap();
+        let valid = source.get_unsynced_changelog(10).unwrap().remove(0);
+
+        let mut invalid = valid.clone();
+        invalid.sequence += 1;
+        invalid.item_id = "invalid".to_owned();
+        invalid.kind = "invalid-kind".to_owned();
+        invalid.content_hash = "invalid-hash".to_owned();
+
+        let target_path = temporary_path("oplog-atomic-target");
+        let target = Database::open(&target_path).unwrap();
+        target.set_sync_device_id("local-device").unwrap();
+        let error = target.apply_remote_oplog(&[valid, invalid]).unwrap_err();
+        assert!(error.to_string().contains("CHECK constraint failed"));
+        assert_eq!(target.count_active_items().unwrap(), 0);
+
+        target
+            .save_item(&text_item("local-after-error", 200))
+            .unwrap();
+        let local_changes = target.get_unsynced_changelog(10).unwrap();
+        assert_eq!(local_changes.len(), 1);
+        assert_eq!(local_changes[0].item_id, "local-after-error");
+
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn apply_remote_oplog_rejects_unknown_operations() {
+        let source_path = temporary_path("oplog-operation-source");
+        let source = Database::open(&source_path).unwrap();
+        source.set_sync_device_id("remote-device").unwrap();
+        source.save_item(&text_item("item", 100)).unwrap();
+        let mut entry = source.get_unsynced_changelog(10).unwrap().remove(0);
+        entry.operation = "merge".to_owned();
+
+        let target_path = temporary_path("oplog-operation-target");
+        let target = Database::open(&target_path).unwrap();
+        let error = target.apply_remote_oplog(&[entry]).unwrap_err();
+        assert!(matches!(error, StorageError::InvalidSyncOperation(_)));
+        assert_eq!(target.count_active_items().unwrap(), 0);
+
+        let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&target_path);
     }
 

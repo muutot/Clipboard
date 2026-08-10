@@ -1,4 +1,4 @@
-# 同步子系统审计清单（17 项）
+# 同步子系统审计清单（18 项）
 
 > 本文档受版本管理，是同步子系统审计的权威记录。每完成一项，更新状态与提交号；证据以代码为准，不要凭意愿勾选。
 
@@ -38,6 +38,7 @@
 | #   | 问题                                                                          | 状态    | 证据 / 提交 |
 | --- | ----------------------------------------------------------------------------- | ------- | ----------- |
 | 17  | 独立设备捕获相同文本时 ID 不同，后续编辑/删除只按 ID 匹配，无法收敛到同一实体 | ✅ 完成 | 见下方      |
+| 18  | apply_remote_oplog 吞掉单条 SQL 错误并继续提交，损坏对象仍可能被当作已应用    | ✅ 完成 | 见下方      |
 
 ## #5 证据
 
@@ -115,3 +116,9 @@
 - 文本/链接捕获 ID 包含本机时间戳；两台设备独立捕获相同内容时，`kind + content_hash` 相同但 `id` 不同。SQLite 本地唯一约束会阻止重复插入，但旧 `apply_remote_oplog` 的更新/删除只查远端 ID，因此后续变更无法命中本地保留的另一 ID。
 - ✅ 当前修复：新增 `sync_item_aliases(alias_id → item_id)`。baseline/oplog 首次遇到不同 ID 的同 kind/hash 文本或链接时保留本地行并记录远端 alias；后续内容即使编辑并改变 hash，更新/删除仍通过 alias 命中同一实体。alias 外键随实体永久删除级联清理。
 - LWW 同时改为以 `COALESCE(modified_at_ms, created_at_ms)` 比较；远端应用期间 `clipboard_items_set_modified` 与 sync changelog trigger 一起受 suppression 守卫，接收端时钟不再覆盖发送端时间。新增 oplog 合并、baseline 合并、alias 重开持久性和远端时间戳回归测试。
+
+## #18 证据
+
+- 旧 `apply_remote_oplog` 对 insert/update/delete 都使用 `let _ = tx.execute(...)`，并且 insert 采用 `INSERT OR IGNORE`；CHECK/UNIQUE 等约束错误或 0-row 结果被吞掉，`applied` 仍加一，随后事务提交。WebDAV/S3 外层对 `Err` 也只打印日志并继续。
+- ✅ 当前修复：所有语句使用 `?` 传播错误，insert 改为普通 `INSERT`，`applied` 只累计 SQLite 实际影响行数；未知 operation 返回 `InvalidSyncOperation`。任一记录失败会回滚整批数据、alias 与 suppression 状态。
+- WebDAV/S3 apply 失败立即返回包含远端对象名的错误；只有整批成功后才写 `sync_applied_oplogs`，失败对象保留为下次可重试。新增“首条成功、次条约束失败仍整批回滚”和未知 operation 回归测试，并验证失败后本地 changelog 未被永久抑制。

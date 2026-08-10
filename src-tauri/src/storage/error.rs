@@ -42,6 +42,7 @@ pub enum StorageError {
     InvalidOcrStatus(String),
     OcrRegenerationInProgress(String),
     InvalidSearchOperation(String),
+    InvalidSyncOperation(String),
     InvalidKeyboardAction(String),
     InvalidShortcut(String),
     ShortcutConflict {
@@ -144,6 +145,9 @@ impl fmt::Display for StorageError {
             }
             Self::InvalidSearchOperation(operation) => {
                 write!(formatter, "unknown search outbox operation: {operation}")
+            }
+            Self::InvalidSyncOperation(operation) => {
+                write!(formatter, "unknown sync operation: {operation}")
             }
             Self::InvalidKeyboardAction(action) => {
                 write!(formatter, "invalid keyboard action name: {action}")
