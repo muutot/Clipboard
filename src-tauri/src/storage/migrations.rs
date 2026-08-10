@@ -208,7 +208,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         BEGIN
             INSERT INTO sync_changelog
@@ -234,7 +234,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         AND (
             OLD.title != NEW.title
@@ -277,7 +277,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         BEGIN
             INSERT INTO sync_changelog
@@ -306,7 +306,7 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         BEGIN
             UPDATE clipboard_items SET modified_at_ms = strftime('%s', 'now') * 1000
@@ -360,14 +360,14 @@ pub(super) fn create_schema(connection: &Connection) -> Result<(), StorageError>
     // every open and for fresh databases.
     connection.execute_batch("DROP INDEX IF EXISTS search_outbox_sequence_idx;")?;
 
-    create_sync_v3_schema(connection)?;
+    create_sync_schema(connection)?;
 
     Ok(())
 }
 
-fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
+fn create_sync_schema(connection: &Connection) -> Result<(), StorageError> {
     connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS sync_v3_outbox (
+        "CREATE TABLE IF NOT EXISTS sync_outbox (
             sequence INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id TEXT NOT NULL,
             operation TEXT NOT NULL CHECK (operation IN ('upsert', 'delete')),
@@ -376,10 +376,10 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
             modified_at_ms INTEGER NOT NULL,
             writer_device_id TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS sync_v3_outbox_item_sequence_idx
-            ON sync_v3_outbox (item_id, sequence DESC);
+        CREATE INDEX IF NOT EXISTS sync_outbox_item_sequence_idx
+            ON sync_outbox (item_id, sequence DESC);
 
-        CREATE TABLE IF NOT EXISTS sync_v3_tombstones (
+        CREATE TABLE IF NOT EXISTS sync_tombstones (
             item_id TEXT PRIMARY KEY NOT NULL,
             kind TEXT NOT NULL CHECK (kind IN ('text', 'link', 'image', 'file')),
             content_hash TEXT NOT NULL DEFAULT '',
@@ -387,10 +387,10 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
             modified_at_ms INTEGER NOT NULL,
             writer_device_id TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS sync_v3_tombstones_version_idx
-            ON sync_v3_tombstones (modified_at_ms, writer_device_id);
+        CREATE INDEX IF NOT EXISTS sync_tombstones_version_idx
+            ON sync_tombstones (modified_at_ms, writer_device_id);
 
-        CREATE TABLE IF NOT EXISTS sync_v3_remote_state (
+        CREATE TABLE IF NOT EXISTS sync_publication_state (
             remote_scope TEXT PRIMARY KEY NOT NULL,
             epoch TEXT NOT NULL,
             snapshot_key TEXT,
@@ -400,12 +400,12 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
             snapshot_sequence INTEGER NOT NULL DEFAULT 0,
             published_sequence INTEGER NOT NULL DEFAULT 0,
             last_segment_key TEXT,
-            legacy_cleaned INTEGER NOT NULL DEFAULT 0 CHECK (legacy_cleaned IN (0, 1)),
+            remote_prepared INTEGER NOT NULL DEFAULT 0 CHECK (remote_prepared IN (0, 1)),
             initialized INTEGER NOT NULL DEFAULT 0 CHECK (initialized IN (0, 1)),
             updated_at_ms INTEGER NOT NULL DEFAULT 0
         );
 
-        CREATE TABLE IF NOT EXISTS sync_v3_cursors (
+        CREATE TABLE IF NOT EXISTS sync_cursors (
             remote_scope TEXT NOT NULL,
             device_id TEXT NOT NULL,
             epoch TEXT NOT NULL,
@@ -416,7 +416,7 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
             PRIMARY KEY (remote_scope, device_id)
         );
 
-        CREATE TABLE IF NOT EXISTS sync_v3_remote_resources (
+        CREATE TABLE IF NOT EXISTS sync_remote_resources (
             remote_scope TEXT NOT NULL,
             object_key TEXT NOT NULL,
             sha256 TEXT NOT NULL,
@@ -425,12 +425,12 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
             PRIMARY KEY (remote_scope, object_key)
         );
 
-        DROP TRIGGER IF EXISTS clipboard_items_sync_v3_insert;
-        CREATE TRIGGER clipboard_items_sync_v3_insert
+        DROP TRIGGER IF EXISTS clipboard_items_sync_outbox_insert;
+        CREATE TRIGGER clipboard_items_sync_outbox_insert
         AFTER INSERT ON clipboard_items
         WHEN EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
@@ -443,7 +443,7 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
                        COALESCE(NEW.modified_at_ms, NEW.created_at_ms, 0),
                        COALESCE((
                            SELECT modified_at_ms + 1
-                           FROM sync_v3_tombstones
+                           FROM sync_tombstones
                            WHERE item_id = NEW.id
                        ), 0)
                    ),
@@ -452,22 +452,22 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
                    ), '')
              WHERE id = NEW.id;
 
-            INSERT INTO sync_v3_outbox
+            INSERT INTO sync_outbox
                 (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
             SELECT id, 'upsert', kind, content_hash,
                    COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
               FROM clipboard_items
              WHERE id = NEW.id;
 
-            DELETE FROM sync_v3_tombstones WHERE item_id = NEW.id;
+            DELETE FROM sync_tombstones WHERE item_id = NEW.id;
         END;
 
-        DROP TRIGGER IF EXISTS clipboard_items_sync_v3_update;
-        CREATE TRIGGER clipboard_items_sync_v3_update
+        DROP TRIGGER IF EXISTS clipboard_items_sync_outbox_update;
+        CREATE TRIGGER clipboard_items_sync_outbox_update
         AFTER UPDATE ON clipboard_items
         WHEN EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
@@ -504,7 +504,7 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
                    ), '')
              WHERE id = NEW.id;
 
-            INSERT INTO sync_v3_outbox
+            INSERT INTO sync_outbox
                 (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
             SELECT id, CASE WHEN deleted = 1 THEN 'delete' ELSE 'upsert' END,
                    kind, content_hash, COALESCE(modified_at_ms, created_at_ms),
@@ -512,7 +512,7 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
               FROM clipboard_items
              WHERE id = NEW.id;
 
-            INSERT INTO sync_v3_tombstones
+            INSERT INTO sync_tombstones
                 (item_id, kind, content_hash, deleted_at_ms, modified_at_ms, writer_device_id)
             SELECT id, kind, content_hash,
                    COALESCE(deleted_at_ms, modified_at_ms, created_at_ms),
@@ -525,27 +525,27 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
                 deleted_at_ms = excluded.deleted_at_ms,
                 modified_at_ms = excluded.modified_at_ms,
                 writer_device_id = excluded.writer_device_id
-            WHERE excluded.modified_at_ms > sync_v3_tombstones.modified_at_ms
-               OR (excluded.modified_at_ms = sync_v3_tombstones.modified_at_ms
-                   AND excluded.writer_device_id > sync_v3_tombstones.writer_device_id);
+            WHERE excluded.modified_at_ms > sync_tombstones.modified_at_ms
+               OR (excluded.modified_at_ms = sync_tombstones.modified_at_ms
+                   AND excluded.writer_device_id > sync_tombstones.writer_device_id);
 
-            DELETE FROM sync_v3_tombstones
+            DELETE FROM sync_tombstones
              WHERE item_id = NEW.id AND NEW.deleted = 0;
         END;
 
-        DROP TRIGGER IF EXISTS clipboard_items_sync_v3_delete;
-        CREATE TRIGGER clipboard_items_sync_v3_delete
+        DROP TRIGGER IF EXISTS clipboard_items_sync_outbox_delete;
+        CREATE TRIGGER clipboard_items_sync_outbox_delete
         AFTER DELETE ON clipboard_items
         WHEN EXISTS (
             SELECT 1 FROM sync_metadata
-            WHERE key = 'sync_v3_enabled' AND value = '1'
+            WHERE key = 'sync_enabled' AND value = '1'
         )
         AND NOT EXISTS (
             SELECT 1 FROM sync_metadata
             WHERE key = 'sync_suppress_changelog' AND value = '1'
         )
         BEGIN
-            INSERT INTO sync_v3_tombstones
+            INSERT INTO sync_tombstones
                 (item_id, kind, content_hash, deleted_at_ms, modified_at_ms, writer_device_id)
             VALUES (
                 OLD.id,
@@ -578,26 +578,26 @@ fn create_sync_v3_schema(connection: &Connection) -> Result<(), StorageError> {
                 deleted_at_ms = excluded.deleted_at_ms,
                 modified_at_ms = excluded.modified_at_ms,
                 writer_device_id = excluded.writer_device_id
-            WHERE excluded.modified_at_ms > sync_v3_tombstones.modified_at_ms
-               OR (excluded.modified_at_ms = sync_v3_tombstones.modified_at_ms
-                   AND excluded.writer_device_id > sync_v3_tombstones.writer_device_id);
+            WHERE excluded.modified_at_ms > sync_tombstones.modified_at_ms
+               OR (excluded.modified_at_ms = sync_tombstones.modified_at_ms
+                   AND excluded.writer_device_id > sync_tombstones.writer_device_id);
 
-            INSERT INTO sync_v3_outbox
+            INSERT INTO sync_outbox
                 (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
             SELECT item_id, 'delete', kind, content_hash, modified_at_ms, writer_device_id
-              FROM sync_v3_tombstones
+              FROM sync_tombstones
              WHERE item_id = OLD.id;
         END;",
     )?;
     ensure_column(
         connection,
-        "sync_v3_remote_state",
+        "sync_publication_state",
         "snapshot_size_bytes",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
     ensure_column(
         connection,
-        "sync_v3_remote_state",
+        "sync_publication_state",
         "snapshot_record_count",
         "INTEGER NOT NULL DEFAULT 0",
     )?;

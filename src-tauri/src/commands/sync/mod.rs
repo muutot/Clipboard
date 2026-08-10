@@ -537,11 +537,8 @@ fn run_sync(app: &tauri::AppHandle) -> Result<SyncUploadResult, String> {
         .ok_or("sync endpoint not configured")?;
     let remote_path = settings.remote_path.clone().unwrap_or_default();
     let remote_scope = settings.remote_scope_id()?;
-    let local_device_ids = database.get_sync_device_ids().map_err(|e| e.to_string())?;
-    let device_id = local_device_ids
-        .first()
-        .cloned()
-        .ok_or_else(|| "sync device id not initialized".to_string())?;
+    let device_id = database.get_sync_device_id().map_err(|e| e.to_string())?;
+    let local_device_ids = vec![device_id.clone()];
 
     let temp_dir = std::env::temp_dir().join("clipboard-sync");
     std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
@@ -1311,17 +1308,14 @@ mod tests {
     }
 
     #[test]
-    fn local_oplog_names_match_current_and_legacy_device_ids() {
-        let local_ids = vec![
-            "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
-            "workstation-a".to_string(),
-        ];
+    fn local_oplog_names_match_only_the_current_device_id() {
+        let local_ids = vec!["c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string()];
 
         assert!(is_local_oplog_name(
             "oplog-c527a31e-7f42-43cf-bf73-6e5fbed4be18-s1-e1-hash",
             &local_ids
         ));
-        assert!(is_local_oplog_name(
+        assert!(!is_local_oplog_name(
             "oplog-workstation-a-20260810_120000",
             &local_ids
         ));

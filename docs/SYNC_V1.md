@@ -1,7 +1,7 @@
-# Sync v3: S3-first replication protocol
+# Sync v1: S3-first replication protocol
 
-Status: approved design for the incompatible sync rewrite. The implementation may land in
-small verified commits, but it must not preserve or read the baseline/oplog wire format.
+Status: first and only supported sync protocol. The implementation may land in small verified
+commits, but it must not preserve, read or convert the baseline/oplog wire format.
 
 ## Workload and priorities
 
@@ -21,10 +21,10 @@ the small per-device head is the only routinely overwritten object.
 
 ## Remote namespace
 
-All v3 objects live below the configured remote prefix in an isolated `v3/` namespace:
+All v1 objects live below the configured remote prefix in an isolated `v1/` namespace:
 
 ```text
-v3/
+v1/
 ├─ heads/{device_id}.bin
 ├─ checkpoint.bin
 ├─ checkpoints/{generation:020}-{sha256}.pack
@@ -41,7 +41,7 @@ v3/
   second inline copy of an uploaded resource.
 - Fixed-width sequence numbers preserve lexical and numeric order for S3 `start-after` listing.
 
-Normal discovery lists `v3/heads/`, which is O(device count). Segment listing starts after the
+Normal discovery lists `v1/heads/`, which is O(device count). Segment listing starts after the
 last applied object key for that device and is O(new segment count), including when a namespace
 contains more than S3's 1,000-object page size.
 
@@ -148,26 +148,26 @@ collection. A segment crossing a checkpoint boundary is retained. Tombstones are
 merely because the corresponding live row is absent; dropping them would allow an offline device
 to resurrect deleted records.
 
-## Legacy reset and deletion boundary
+## Obsolete-state deletion boundary
 
-There is no reader, migration or fallback for the old baseline/oplog format. During the first v3
-initialization of a configured remote scope, the client may directly delete the old remote data:
+There is no reader, migration or fallback for the old baseline/oplog format. During first v1
+initialization of a configured remote scope, the client directly deletes the obsolete remote data:
 
 - top-level objects whose name starts with `baseline-`;
 - top-level objects whose name starts with `oplog-`;
 - every object strictly below the old `resources/` prefix;
-- the local legacy pool-manifest file for that exact remote scope.
+- the obsolete local pool-manifest file for that exact remote scope.
 
 Deletion rules:
 
 1. list the exact configured prefix with full pagination;
 2. normalize and validate every candidate key before deleting it;
-3. never delete the configured prefix itself, a parent prefix, or any object below `v3/`;
-4. mark legacy cleanup complete only after every selected delete succeeds;
-5. publish no v3 head until cleanup and the bootstrap snapshot both succeed.
+3. never delete the configured prefix itself, a parent prefix, or any object below `v1/`;
+4. mark remote preparation complete only after every selected delete succeeds;
+5. publish no v1 head until cleanup and the bootstrap snapshot both succeed.
 
-Local clipboard records remain intact. Only legacy sync tables/state, old remote objects and the
-old local pool manifest are reset.
+Local clipboard records remain intact. All discarded sync-only tables/state, old remote objects
+and the obsolete local pool manifest are deleted, not converted.
 
 ## Performance acceptance criteria
 

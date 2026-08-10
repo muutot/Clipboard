@@ -1,8 +1,8 @@
 use uuid::Uuid;
 
-pub const V3_ROOT: &str = "v3";
-pub const HEADS_PREFIX: &str = "v3/heads/";
-pub const CHECKPOINT_HEAD_KEY: &str = "v3/checkpoint.bin";
+pub const V1_ROOT: &str = "v1";
+pub const HEADS_PREFIX: &str = "v1/heads/";
+pub const CHECKPOINT_HEAD_KEY: &str = "v1/checkpoint.bin";
 
 const DIGEST_HEX_LEN: usize = 64;
 const SEQUENCE_WIDTH: usize = 20;
@@ -78,14 +78,14 @@ pub fn snapshot_object_key(device_id: &str, epoch: &str, sha256: &str) -> Result
     validate_uuid(epoch, "epoch")?;
     validate_digest(sha256)?;
     Ok(format!(
-        "{V3_ROOT}/snapshots/{device_id}/{epoch}/{sha256}.pack"
+        "{V1_ROOT}/snapshots/{device_id}/{epoch}/{sha256}.pack"
     ))
 }
 
 pub fn segment_prefix(device_id: &str, epoch: &str) -> Result<String, String> {
     validate_uuid(device_id, "device")?;
     validate_uuid(epoch, "epoch")?;
-    Ok(format!("{V3_ROOT}/segments/{device_id}/{epoch}/"))
+    Ok(format!("{V1_ROOT}/segments/{device_id}/{epoch}/"))
 }
 
 pub fn segment_object_key(
@@ -112,7 +112,7 @@ pub fn parse_segment_key(key: &str) -> Result<ParsedSegmentKey, String> {
     }
     let components: Vec<&str> = key.split('/').collect();
     if components.len() != 5
-        || components[0] != V3_ROOT
+        || components[0] != V1_ROOT
         || components[1] != "segments"
         || components.iter().any(|component| component.is_empty())
     {
@@ -177,7 +177,7 @@ pub fn checkpoint_object_key(generation: u64, sha256: &str) -> Result<String, St
     }
     validate_digest(sha256)?;
     Ok(format!(
-        "{V3_ROOT}/checkpoints/{generation:0SEQUENCE_WIDTH$}-{sha256}.pack"
+        "{V1_ROOT}/checkpoints/{generation:0SEQUENCE_WIDTH$}-{sha256}.pack"
     ))
 }
 
@@ -189,20 +189,20 @@ pub fn resource_object_key(
     validate_digest(sha256)?;
     validate_extension(extension)?;
     Ok(format!(
-        "{V3_ROOT}/resources/{}/sha256-{sha256}.{extension}",
+        "{V1_ROOT}/resources/{}/sha256-{sha256}.{extension}",
         category.as_str()
     ))
 }
 
-/// Selects only top-level objects emitted by the old sync implementation.
+/// Selects only objects emitted by the discarded sync implementation.
 /// The configured remote prefix is stripped by the caller before this check.
-pub fn legacy_object_candidate(relative_key: &str) -> bool {
+pub fn obsolete_object_candidate(relative_key: &str) -> bool {
     if relative_key.is_empty()
         || relative_key.starts_with('/')
         || relative_key.contains('\\')
         || relative_key.bytes().any(|byte| byte.is_ascii_control())
-        || relative_key == V3_ROOT
-        || relative_key.starts_with("v3/")
+        || relative_key == V1_ROOT
+        || relative_key.starts_with("v1/")
     {
         return false;
     }
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(
             key,
             format!(
-                "v3/segments/{DEVICE}/{EPOCH}/00000000000000000007-00000000000000000091-{DIGEST}.pack"
+                "v1/segments/{DEVICE}/{EPOCH}/00000000000000000007-00000000000000000091-{DIGEST}.pack"
             )
         );
         let parsed = parse_segment_key(&key).unwrap();
@@ -253,15 +253,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_cleanup_never_selects_v3_or_parent_paths() {
-        assert!(legacy_object_candidate("baseline-device.zip"));
-        assert!(legacy_object_candidate("oplog-device-s1-e2-hash"));
-        assert!(legacy_object_candidate("resources/image/a.png"));
-        assert!(!legacy_object_candidate("resources/../v3/heads/a.bin"));
-        assert!(!legacy_object_candidate("nested/baseline-device.zip"));
-        assert!(!legacy_object_candidate("v3/heads/device.bin"));
-        assert!(!legacy_object_candidate("v3/resources/image/a.png"));
-        assert!(!legacy_object_candidate("resources/"));
-        assert!(!legacy_object_candidate("../baseline-device.zip"));
+    fn obsolete_cleanup_never_selects_v1_or_parent_paths() {
+        assert!(obsolete_object_candidate("baseline-device.zip"));
+        assert!(obsolete_object_candidate("oplog-device-s1-e2-hash"));
+        assert!(obsolete_object_candidate("resources/image/a.png"));
+        assert!(!obsolete_object_candidate("resources/../v1/heads/a.bin"));
+        assert!(!obsolete_object_candidate("nested/baseline-device.zip"));
+        assert!(!obsolete_object_candidate("v1/heads/device.bin"));
+        assert!(!obsolete_object_candidate("v1/resources/image/a.png"));
+        assert!(!obsolete_object_candidate("resources/"));
+        assert!(!obsolete_object_candidate("../baseline-device.zip"));
     }
 }

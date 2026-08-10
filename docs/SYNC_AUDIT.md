@@ -101,7 +101,7 @@
 - `src-tauri/src/commands/sync/mod.rs:744-752`：`get_device_id` 回退 `"unknown"`。
 - `src-tauri/src/sync/backup.rs:408-415`：另一份 `get_device_id` 回退 `"unknown-device"`。
 - 仅合并 hostname 读取仍不稳定：机器改名会产生新身份，同名设备会碰撞，generic fallback 更会让多台设备共享 `unknown`。
-- ✅ 当前修复：`Database::from_connection` 在 schema 创建后生成并持久化 v4 UUID；已有 UUID 重开保持不变。旧 hostname 值一次性迁移到 `legacy_device_id`，仅用于识别升级前本机已经上传的 oplog；空值、`unknown`、`unknown-device` 不保存为 alias。baseline/full backup/oplog manifest 和远端对象命名统一读取数据库 UUID，删除环境变量 hostname 实现。WebDAV/S3 下载循环同时识别当前 UUID 与 legacy alias，避免升级后重放自己的旧 oplog。新增持久性、迁移、fallback 与对象名识别回归测试。
+- ✅ 当前修复：`Database::from_connection` 在 schema 创建后生成并持久化 v4 UUID；已有 UUID 重开保持不变，任何非 UUID 值都直接替换且不保留历史 alias。v1 初始化只保留当前数据库 UUID 和 clipboard 记录，丢弃其余同步元数据；baseline/full backup/oplog manifest 和远端对象命名只读取当前 UUID，不识别或迁移旧设备身份。新增 UUID 持久性、无 alias 替换与本机对象名识别回归测试。
 
 ## #15 证据
 

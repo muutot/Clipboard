@@ -141,34 +141,36 @@ mod tests {
     }
 
     #[test]
-    fn legacy_hostname_device_id_migrates_to_uuid_and_remains_an_alias() {
-        let path = temporary_database_path("legacy-sync-id");
+    fn non_uuid_sync_identity_is_replaced_without_an_alias() {
+        let path = temporary_database_path("invalid-sync-id");
         let database = Database::open(&path).unwrap();
         database.set_sync_device_id("workstation-a").unwrap();
         drop(database);
 
-        let migrated = Database::open(&path).unwrap();
-        let ids = migrated.get_sync_device_ids().unwrap();
-        assert_eq!(ids.len(), 2);
-        assert!(Uuid::parse_str(&ids[0]).is_ok());
-        assert_eq!(ids[1], "workstation-a");
-        drop(migrated);
+        let reopened = Database::open(&path).unwrap();
+        assert!(Uuid::parse_str(&reopened.get_sync_device_id().unwrap()).is_ok());
+        let metadata_count: i64 = reopened
+            .with_connection(|connection| {
+                Ok(connection
+                    .query_row("SELECT COUNT(*) FROM sync_metadata", [], |row| row.get(0))?)
+            })
+            .unwrap();
+        assert_eq!(metadata_count, 1);
+        drop(reopened);
         remove_database_files(&path);
     }
 
     #[test]
-    fn generic_fallback_device_ids_are_not_retained_as_aliases() {
+    fn every_invalid_device_id_is_replaced_by_a_uuid() {
         for fallback in ["unknown", "unknown-device", " UNKNOWN "] {
             let path = temporary_database_path("fallback-sync-id");
             let database = Database::open(&path).unwrap();
             database.set_sync_device_id(fallback).unwrap();
             drop(database);
 
-            let migrated = Database::open(&path).unwrap();
-            let ids = migrated.get_sync_device_ids().unwrap();
-            assert_eq!(ids.len(), 1);
-            assert!(Uuid::parse_str(&ids[0]).is_ok());
-            drop(migrated);
+            let reopened = Database::open(&path).unwrap();
+            assert!(Uuid::parse_str(&reopened.get_sync_device_id().unwrap()).is_ok());
+            drop(reopened);
             remove_database_files(&path);
         }
     }

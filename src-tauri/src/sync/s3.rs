@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct S3Entry {
-    /// Complete bucket-relative key used by nested v3 namespaces.
+    /// Complete bucket-relative key used by nested v1 namespaces.
     #[serde(skip_serializing)]
     pub object_key: String,
     pub name: String,
@@ -815,19 +815,19 @@ mod tests {
     fn paginated_list_query_is_canonical_and_uses_only_one_cursor() {
         assert_eq!(
             build_list_query(
-                Some("v3/segments/device-a/"),
-                Some("v3/segments/device-a/0002"),
+                Some("v1/segments/device-a/"),
+                Some("v1/segments/device-a/0002"),
                 None,
             ),
-            "list-type=2&prefix=v3%2Fsegments%2Fdevice-a%2F&start-after=v3%2Fsegments%2Fdevice-a%2F0002"
+            "list-type=2&prefix=v1%2Fsegments%2Fdevice-a%2F&start-after=v1%2Fsegments%2Fdevice-a%2F0002"
         );
         assert_eq!(
             build_list_query(
-                Some("v3/segments/device-a/"),
+                Some("v1/segments/device-a/"),
                 Some("ignored"),
                 Some("next+/="),
             ),
-            "continuation-token=next%2B%2F%3D&list-type=2&prefix=v3%2Fsegments%2Fdevice-a%2F"
+            "continuation-token=next%2B%2F%3D&list-type=2&prefix=v1%2Fsegments%2Fdevice-a%2F"
         );
     }
 
@@ -845,7 +845,7 @@ mod tests {
             scheme: "https",
             endpoint_host: "s3.example.test",
             bucket: "clipboard",
-            key: "v3/checkpoint.bin",
+            key: "v1/checkpoint.bin",
             query: None,
             payload: Some(body),
             access_key: AKID,
@@ -1028,7 +1028,7 @@ mod tests {
                 <IsTruncated>true</IsTruncated>
                 <NextContinuationToken>next&amp;token</NextContinuationToken>
                 <Contents>
-                    <Key>v3/heads/device&amp;a.bin</Key>
+                    <Key>v1/heads/device&amp;a.bin</Key>
                     <LastModified>2026-08-10T12:00:00Z</LastModified>
                     <Size>42</Size>
                 </Contents>
@@ -1037,7 +1037,7 @@ mod tests {
         assert!(page.is_truncated);
         assert_eq!(page.next_continuation_token.as_deref(), Some("next&token"));
         assert_eq!(page.entries.len(), 1);
-        assert_eq!(page.entries[0].object_key, "v3/heads/device&a.bin");
+        assert_eq!(page.entries[0].object_key, "v1/heads/device&a.bin");
         assert_eq!(page.entries[0].name, "device&a.bin");
         assert_eq!(page.entries[0].size_bytes, Some(42));
     }

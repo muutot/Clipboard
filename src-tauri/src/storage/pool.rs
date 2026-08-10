@@ -227,9 +227,8 @@ impl Database {
     }
 
     /// Ensures the local sync identity is a stable UUID persisted in the
-    /// database. Pre-UUID hostname identities are migrated once and retained as
-    /// a legacy alias so their already-uploaded oplogs are still recognized as
-    /// local after upgrade.
+    /// database. Any non-UUID value is discarded because sync v1 does not read
+    /// or preserve identities from an earlier sync implementation.
     pub fn ensure_sync_device_id(&self) -> Result<String, StorageError> {
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
@@ -246,18 +245,6 @@ impl Database {
                     transaction.commit()?;
                     return Ok(existing.to_string());
                 }
-                let existing = existing.trim();
-                if !existing.is_empty()
-                    && !existing.eq_ignore_ascii_case("unknown")
-                    && !existing.eq_ignore_ascii_case("unknown-device")
-                {
-                    transaction.execute(
-                        "INSERT INTO sync_metadata (key, value)
-                         VALUES ('legacy_device_id', ?1)
-                         ON CONFLICT(key) DO NOTHING",
-                        [existing],
-                    )?;
-                }
             }
 
             let device_id = Uuid::new_v4().to_string();
@@ -268,32 +255,6 @@ impl Database {
             )?;
             transaction.commit()?;
             Ok(device_id)
-        })
-    }
-
-    /// Current UUID first, followed by any pre-UUID identity retained solely
-    /// for recognizing remote objects uploaded by this database before upgrade.
-    pub fn get_sync_device_ids(&self) -> Result<Vec<String>, StorageError> {
-        self.with_connection(|connection| {
-            let current: String = connection.query_row(
-                "SELECT value FROM sync_metadata WHERE key = 'device_id'",
-                [],
-                |row| row.get(0),
-            )?;
-            let legacy: Option<String> = connection
-                .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'legacy_device_id'",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            let mut ids = vec![current];
-            if let Some(legacy) = legacy.filter(|value| !value.is_empty()) {
-                if !ids.contains(&legacy) {
-                    ids.push(legacy);
-                }
-            }
-            Ok(ids)
         })
     }
 

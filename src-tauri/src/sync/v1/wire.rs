@@ -10,8 +10,8 @@ use sha2::{Digest, Sha256};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 
-const MAGIC: &[u8; 8] = b"CLPSYNC3";
-const FORMAT_VERSION: u16 = 3;
+const MAGIC: &[u8; 8] = b"CLPSYNC1";
+const FORMAT_VERSION: u16 = 1;
 const HEADER_LEN: usize = 20;
 const FLAG_ENCRYPTED: u8 = 0x01;
 const KNOWN_FLAGS: u8 = FLAG_ENCRYPTED;
@@ -44,7 +44,7 @@ impl TryFrom<u8> for ObjectKind {
             3 => Ok(Self::Segment),
             4 => Ok(Self::Checkpoint),
             5 => Ok(Self::CheckpointHead),
-            _ => Err(format!("unknown sync v3 object kind {value}")),
+            _ => Err(format!("unknown sync v1 object kind {value}")),
         }
     }
 }
@@ -74,7 +74,7 @@ impl SessionKey {
         if remote_scope.is_empty() {
             return Err("sync remote scope is empty".to_string());
         }
-        let mut salt_input = b"clipboard-sync-v3\0".to_vec();
+        let mut salt_input = b"clipboard-sync-v1\0".to_vec();
         salt_input.extend_from_slice(remote_scope.as_bytes());
         let salt = Sha256::digest(salt_input);
         let mut key = [0u8; KEY_LEN];
@@ -210,13 +210,13 @@ fn encode_value<T: Encode>(
         value,
         bincode::config::standard().with_limit::<BINCODE_LIMIT_BYTES>(),
     )
-    .map_err(|error| format!("failed to encode sync v3 object: {error}"))?;
+    .map_err(|error| format!("failed to encode sync v1 object: {error}"))?;
     let uncompressed_size_bytes = raw.len() as u64;
     if uncompressed_size_bytes > MAX_UNCOMPRESSED_BYTES {
-        return Err("sync v3 object exceeds the uncompressed size limit".to_string());
+        return Err("sync v1 object exceeds the uncompressed size limit".to_string());
     }
     let compressed = zstd::stream::encode_all(Cursor::new(raw), ZSTD_LEVEL)
-        .map_err(|error| format!("failed to compress sync v3 object: {error}"))?;
+        .map_err(|error| format!("failed to compress sync v1 object: {error}"))?;
 
     let flags = if key.is_some() { FLAG_ENCRYPTED } else { 0 };
     let header = header(kind, flags, uncompressed_size_bytes);
@@ -235,14 +235,14 @@ fn encode_value<T: Encode>(
                     aad: &header,
                 },
             )
-            .map_err(|_| "failed to encrypt sync v3 object".to_string())?;
+            .map_err(|_| "failed to encrypt sync v1 object".to_string())?;
         bytes.extend_from_slice(&nonce_bytes);
         bytes.extend_from_slice(&ciphertext);
     } else {
         bytes.extend_from_slice(&compressed);
     }
     if bytes.len() > MAX_STORED_BYTES {
-        return Err("sync v3 object exceeds the stored size limit".to_string());
+        return Err("sync v1 object exceeds the stored size limit".to_string());
     }
     let sha256 = hex::encode(Sha256::digest(&bytes));
     Ok(EncodedObject {
@@ -258,42 +258,42 @@ fn decode_value<T: Decode<()>>(
     key: Option<&SessionKey>,
 ) -> Result<T, String> {
     if data.len() < HEADER_LEN || data.len() > MAX_STORED_BYTES {
-        return Err("sync v3 object has an invalid stored size".to_string());
+        return Err("sync v1 object has an invalid stored size".to_string());
     }
     if &data[..MAGIC.len()] != MAGIC {
-        return Err("sync v3 object magic does not match".to_string());
+        return Err("sync v1 object magic does not match".to_string());
     }
     let version = u16::from_le_bytes([data[8], data[9]]);
     if version != FORMAT_VERSION {
-        return Err(format!("unsupported sync v3 format version {version}"));
+        return Err(format!("unsupported sync v1 format version {version}"));
     }
     let actual_kind = ObjectKind::try_from(data[10])?;
     if actual_kind != expected_kind {
         return Err(format!(
-            "sync v3 object kind mismatch: expected {}, got {}",
+            "sync v1 object kind mismatch: expected {}, got {}",
             expected_kind as u8, actual_kind as u8
         ));
     }
     let flags = data[11];
     if flags & !KNOWN_FLAGS != 0 {
-        return Err("sync v3 object contains unknown flags".to_string());
+        return Err("sync v1 object contains unknown flags".to_string());
     }
     let uncompressed_size = u64::from_le_bytes(
         data[12..20]
             .try_into()
-            .map_err(|_| "sync v3 object header is truncated".to_string())?,
+            .map_err(|_| "sync v1 object header is truncated".to_string())?,
     );
     if uncompressed_size > MAX_UNCOMPRESSED_BYTES {
-        return Err("sync v3 object exceeds the uncompressed size limit".to_string());
+        return Err("sync v1 object exceeds the uncompressed size limit".to_string());
     }
     let header = &data[..HEADER_LEN];
     let payload = &data[HEADER_LEN..];
     let compressed = if flags & FLAG_ENCRYPTED != 0 {
         if payload.len() < NONCE_LEN + AUTH_TAG_LEN {
-            return Err("encrypted sync v3 object is truncated".to_string());
+            return Err("encrypted sync v1 object is truncated".to_string());
         }
         let key =
-            key.ok_or_else(|| "sync v3 object requires an encryption password".to_string())?;
+            key.ok_or_else(|| "sync v1 object requires an encryption password".to_string())?;
         key.cipher()?
             .decrypt(
                 Nonce::from_slice(&payload[..NONCE_LEN]),
@@ -303,29 +303,29 @@ fn decode_value<T: Decode<()>>(
                 },
             )
             .map_err(|_| {
-                "failed to decrypt sync v3 object: wrong password or corrupted data".to_string()
+                "failed to decrypt sync v1 object: wrong password or corrupted data".to_string()
             })?
     } else {
         payload.to_vec()
     };
 
     let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed))
-        .map_err(|error| format!("failed to open sync v3 zstd payload: {error}"))?;
+        .map_err(|error| format!("failed to open sync v1 zstd payload: {error}"))?;
     let mut raw = Vec::with_capacity(uncompressed_size.min(16 * 1024 * 1024) as usize);
     decoder
         .take(uncompressed_size.saturating_add(1))
         .read_to_end(&mut raw)
-        .map_err(|error| format!("failed to decompress sync v3 object: {error}"))?;
+        .map_err(|error| format!("failed to decompress sync v1 object: {error}"))?;
     if raw.len() as u64 != uncompressed_size {
-        return Err("sync v3 uncompressed size does not match its header".to_string());
+        return Err("sync v1 uncompressed size does not match its header".to_string());
     }
     let (value, consumed): (T, usize) = bincode::decode_from_slice(
         &raw,
         bincode::config::standard().with_limit::<BINCODE_LIMIT_BYTES>(),
     )
-    .map_err(|error| format!("failed to decode sync v3 object: {error}"))?;
+    .map_err(|error| format!("failed to decode sync v1 object: {error}"))?;
     if consumed != raw.len() {
-        return Err("sync v3 object has trailing decoded bytes".to_string());
+        return Err("sync v1 object has trailing decoded bytes".to_string());
     }
     Ok(value)
 }

@@ -48,6 +48,7 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | `privacy/`             | Pause/ignore/sensitive-source policy helpers                                                       |
 | `performance/`         | Startup/search/performance snapshots and monitoring                                                |
 | `export/`              | JSON, CSV, plain-text import/export, and PPaste `.Pastebackup` import (`ppaste.rs`)                |
+| `sync/`                | Remote transports plus the isolated S3-first v1 layout, wire, and replication logic                |
 | `commands/`            | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                        |
 | `cli/`                 | Process CLI execution and loopback API server                                                      |
 

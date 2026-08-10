@@ -6,42 +6,42 @@ use uuid::Uuid;
 use super::{Database, StorageError};
 use crate::{
     domain::{ClipboardItem, ClipboardKind},
-    sync::v3::{
+    sync::v1::{
         DeviceCursor, DeviceHead, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem,
         Tombstone,
     },
 };
 
-const PROTOCOL_VERSION: &str = "3";
+const PROTOCOL_VERSION: &str = "1";
 const LOOKUP_CHUNK_SIZE: usize = 500;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SyncV3Snapshot {
+pub struct SyncSnapshot {
     pub through_sequence: u64,
     pub mutations: MutationBatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SyncV3OutboxBatch {
+pub struct SyncOutboxBatch {
     pub first_sequence: u64,
     pub last_sequence: u64,
     pub mutations: MutationBatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SyncV3RemoteState {
+pub struct SyncRemoteState {
     pub remote_scope: String,
     pub epoch: String,
     pub snapshot: Option<ObjectRef>,
     pub snapshot_sequence: u64,
     pub published_sequence: u64,
     pub last_segment_key: Option<String>,
-    pub legacy_cleaned: bool,
+    pub remote_prepared: bool,
     pub initialized: bool,
     pub updated_at_ms: i64,
 }
 
-impl SyncV3RemoteState {
+impl SyncRemoteState {
     pub fn device_head(&self, device_id: &str) -> Result<DeviceHead, StorageError> {
         let snapshot = self.snapshot.clone().ok_or_else(|| {
             StorageError::InvalidSyncState("device head has no published snapshot".to_string())
@@ -171,9 +171,10 @@ impl StoredTombstone {
 }
 
 impl Database {
-    /// Performs the one-time, intentionally incompatible transition to sync v3.
-    /// Clipboard rows remain intact; only legacy sync state is discarded.
-    pub fn enable_sync_v3(&self) -> Result<bool, StorageError> {
+    /// Initializes the first sync protocol without reading or converting any
+    /// previous sync state. Clipboard rows remain intact and become the input
+    /// of the first local snapshot; obsolete sync-only state is discarded.
+    pub fn initialize_sync(&self) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
             let current_version: Option<String> = transaction
@@ -183,8 +184,16 @@ impl Database {
                     |row| row.get(0),
                 )
                 .optional()?;
-            let reset = current_version.as_deref() != Some(PROTOCOL_VERSION);
-            if reset {
+            let current_enabled: Option<String> = transaction
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'sync_enabled'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let initialized_now = current_version.as_deref() != Some(PROTOCOL_VERSION)
+                || current_enabled.as_deref() != Some("1");
+            if initialized_now {
                 let device_id: String = transaction.query_row(
                     "SELECT value FROM sync_metadata WHERE key = 'device_id'",
                     [],
@@ -199,10 +208,7 @@ impl Database {
                 transaction.execute(
                     "UPDATE clipboard_items
                         SET modified_at_ms = COALESCE(modified_at_ms, created_at_ms),
-                            sync_writer_device_id = CASE
-                                WHEN sync_writer_device_id = '' THEN ?1
-                                ELSE sync_writer_device_id
-                            END",
+                            sync_writer_device_id = ?1",
                     [&device_id],
                 )?;
                 transaction.execute_batch(
@@ -210,15 +216,15 @@ impl Database {
                      DELETE FROM sync_remote_state;
                      DELETE FROM sync_applied_oplogs;
                      DELETE FROM sync_item_aliases;
-                     DELETE FROM sync_v3_outbox;
-                     DELETE FROM sync_v3_tombstones;
-                     DELETE FROM sync_v3_remote_state;
-                     DELETE FROM sync_v3_cursors;
-                     DELETE FROM sync_v3_remote_resources;
-                     DELETE FROM sqlite_sequence WHERE name = 'sync_v3_outbox';",
+                     DELETE FROM sync_outbox;
+                     DELETE FROM sync_tombstones;
+                     DELETE FROM sync_publication_state;
+                     DELETE FROM sync_cursors;
+                     DELETE FROM sync_remote_resources;
+                     DELETE FROM sqlite_sequence WHERE name = 'sync_outbox';",
                 )?;
                 transaction.execute(
-                    "INSERT INTO sync_v3_tombstones
+                    "INSERT INTO sync_tombstones
                         (item_id, kind, content_hash, deleted_at_ms,
                          modified_at_ms, writer_device_id)
                      SELECT id, kind, content_hash,
@@ -229,11 +235,7 @@ impl Database {
                       WHERE deleted = 1",
                     [],
                 )?;
-                transaction.execute(
-                    "DELETE FROM sync_metadata
-                      WHERE key IN ('legacy_device_id', 'sync_suppress_changelog')",
-                    [],
-                )?;
+                transaction.execute("DELETE FROM sync_metadata WHERE key != 'device_id'", [])?;
                 transaction.execute(
                     "INSERT INTO sync_metadata (key, value)
                      VALUES ('sync_protocol_version', ?1)
@@ -243,50 +245,57 @@ impl Database {
             }
             transaction.execute(
                 "INSERT INTO sync_metadata (key, value)
-                 VALUES ('sync_v3_enabled', '1')
+                 VALUES ('sync_enabled', '1')
                  ON CONFLICT(key) DO UPDATE SET value = '1'",
                 [],
             )?;
             transaction.commit()?;
-            Ok(reset)
+            Ok(initialized_now)
         })
     }
 
-    pub fn is_sync_v3_enabled(&self) -> Result<bool, StorageError> {
+    pub fn is_sync_initialized(&self) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
             let enabled: Option<String> = connection
                 .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'sync_v3_enabled'",
+                    "SELECT value FROM sync_metadata WHERE key = 'sync_enabled'",
                     [],
                     |row| row.get(0),
                 )
                 .optional()?;
-            Ok(enabled.as_deref() == Some("1"))
+            let version: Option<String> = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = 'sync_protocol_version'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            Ok(enabled.as_deref() == Some("1") && version.as_deref() == Some(PROTOCOL_VERSION))
         })
     }
 
-    pub fn export_sync_v3_snapshot(&self) -> Result<SyncV3Snapshot, StorageError> {
+    pub fn export_sync_snapshot(&self) -> Result<SyncSnapshot, StorageError> {
         self.with_connection(|connection| {
             let through_sequence = current_sequence(connection)?;
             let mutations = load_mutations(connection, None)?;
-            Ok(SyncV3Snapshot {
+            Ok(SyncSnapshot {
                 through_sequence,
                 mutations,
             })
         })
     }
 
-    pub fn get_sync_v3_outbox_batch(
+    pub fn get_sync_outbox_batch(
         &self,
         limit: usize,
-    ) -> Result<Option<SyncV3OutboxBatch>, StorageError> {
+    ) -> Result<Option<SyncOutboxBatch>, StorageError> {
         if limit == 0 {
             return Ok(None);
         }
         self.with_connection(|connection| {
             let mut statement = connection.prepare(
                 "SELECT sequence, item_id
-                   FROM sync_v3_outbox
+                   FROM sync_outbox
                   ORDER BY sequence ASC
                   LIMIT ?1",
             )?;
@@ -312,16 +321,16 @@ impl Database {
                     "outbox references an item without a live row or tombstone".to_string(),
                 ));
             }
-            Ok(Some(SyncV3OutboxBatch {
+            Ok(Some(SyncOutboxBatch {
                 first_sequence: u64::try_from(first_sequence).map_err(|_| {
                     StorageError::InvalidStoredValue {
-                        field: "sync_v3_outbox.sequence",
+                        field: "sync_outbox.sequence",
                         value: first_sequence,
                     }
                 })?,
                 last_sequence: u64::try_from(last_sequence).map_err(|_| {
                     StorageError::InvalidStoredValue {
-                        field: "sync_v3_outbox.sequence",
+                        field: "sync_outbox.sequence",
                         value: last_sequence,
                     }
                 })?,
@@ -330,36 +339,35 @@ impl Database {
         })
     }
 
-    pub fn acknowledge_sync_v3_outbox(&self, through_sequence: u64) -> Result<u64, StorageError> {
+    pub fn acknowledge_sync_outbox(&self, through_sequence: u64) -> Result<u64, StorageError> {
         let through_sequence =
             i64::try_from(through_sequence).map_err(|_| StorageError::ValueOutOfRange {
-                field: "sync_v3_outbox.sequence",
+                field: "sync_outbox.sequence",
             })?;
         self.with_connection(|connection| {
             let deleted = connection.execute(
-                "DELETE FROM sync_v3_outbox WHERE sequence <= ?1",
+                "DELETE FROM sync_outbox WHERE sequence <= ?1",
                 [through_sequence],
             )?;
             Ok(deleted as u64)
         })
     }
 
-    pub fn count_sync_v3_outbox(&self) -> Result<u64, StorageError> {
+    pub fn count_sync_outbox(&self) -> Result<u64, StorageError> {
         self.with_connection(|connection| {
             let count: i64 =
-                connection
-                    .query_row("SELECT COUNT(*) FROM sync_v3_outbox", [], |row| row.get(0))?;
+                connection.query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row.get(0))?;
             u64::try_from(count).map_err(|_| StorageError::InvalidStoredValue {
-                field: "sync_v3_outbox.count",
+                field: "sync_outbox.count",
                 value: count,
             })
         })
     }
 
-    pub fn get_or_create_sync_v3_remote_state(
+    pub fn get_or_create_sync_remote_state(
         &self,
         remote_scope: &str,
-    ) -> Result<SyncV3RemoteState, StorageError> {
+    ) -> Result<SyncRemoteState, StorageError> {
         validate_remote_scope(remote_scope)?;
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
@@ -369,7 +377,7 @@ impl Database {
             }
             let epoch = Uuid::new_v4().to_string();
             transaction.execute(
-                "INSERT INTO sync_v3_remote_state (remote_scope, epoch, updated_at_ms)
+                "INSERT INTO sync_publication_state (remote_scope, epoch, updated_at_ms)
                  VALUES (?1, ?2, ?3)",
                 params![remote_scope, &epoch, current_time_ms()],
             )?;
@@ -383,15 +391,15 @@ impl Database {
         })
     }
 
-    pub fn reset_sync_v3_remote_state(
+    pub fn reset_sync_remote_state(
         &self,
         remote_scope: &str,
-    ) -> Result<SyncV3RemoteState, StorageError> {
+    ) -> Result<SyncRemoteState, StorageError> {
         validate_remote_scope(remote_scope)?;
         self.with_connection(|connection| {
             let epoch = Uuid::new_v4().to_string();
             connection.execute(
-                "INSERT INTO sync_v3_remote_state
+                "INSERT INTO sync_publication_state
                     (remote_scope, epoch, updated_at_ms)
                  VALUES (?1, ?2, ?3)
                  ON CONFLICT(remote_scope) DO UPDATE SET
@@ -413,12 +421,12 @@ impl Database {
         })
     }
 
-    pub fn mark_sync_v3_legacy_cleaned(&self, remote_scope: &str) -> Result<(), StorageError> {
+    pub fn mark_sync_remote_prepared(&self, remote_scope: &str) -> Result<(), StorageError> {
         validate_remote_scope(remote_scope)?;
         self.with_connection(|connection| {
             let affected = connection.execute(
-                "UPDATE sync_v3_remote_state
-                    SET legacy_cleaned = 1, updated_at_ms = ?2
+                "UPDATE sync_publication_state
+                    SET remote_prepared = 1, updated_at_ms = ?2
                   WHERE remote_scope = ?1",
                 params![remote_scope, current_time_ms()],
             )?;
@@ -431,29 +439,29 @@ impl Database {
         })
     }
 
-    pub fn commit_sync_v3_bootstrap_published(
+    pub fn commit_sync_bootstrap_published(
         &self,
         remote_scope: &str,
         expected_epoch: &str,
         snapshot: &ObjectRef,
         through_sequence: u64,
-    ) -> Result<SyncV3RemoteState, StorageError> {
+    ) -> Result<SyncRemoteState, StorageError> {
         validate_remote_scope(remote_scope)?;
-        let through_sequence = sequence_to_i64(through_sequence, "sync_v3 snapshot sequence")?;
-        let snapshot_size = sequence_to_i64(snapshot.stored_size_bytes, "sync_v3 snapshot size")?;
+        let through_sequence = sequence_to_i64(through_sequence, "sync snapshot sequence")?;
+        let snapshot_size = sequence_to_i64(snapshot.stored_size_bytes, "sync snapshot size")?;
         let snapshot_records =
-            sequence_to_i64(snapshot.record_count, "sync_v3 snapshot record count")?;
+            sequence_to_i64(snapshot.record_count, "sync snapshot record count")?;
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
             if through_sequence
-                > sequence_to_i64(current_sequence(&transaction)?, "sync_v3 current sequence")?
+                > sequence_to_i64(current_sequence(&transaction)?, "sync current sequence")?
             {
                 return Err(StorageError::InvalidSyncState(
                     "bootstrap publication exceeds the local outbox high-water".to_string(),
                 ));
             }
             let affected = transaction.execute(
-                "UPDATE sync_v3_remote_state
+                "UPDATE sync_publication_state
                     SET snapshot_key = ?3,
                         snapshot_sha256 = ?4,
                         snapshot_size_bytes = ?5,
@@ -463,7 +471,7 @@ impl Database {
                         last_segment_key = NULL,
                         initialized = 1,
                         updated_at_ms = ?8
-                  WHERE remote_scope = ?1 AND epoch = ?2 AND legacy_cleaned = 1",
+                  WHERE remote_scope = ?1 AND epoch = ?2 AND remote_prepared = 1",
                 params![
                     remote_scope,
                     expected_epoch,
@@ -481,7 +489,7 @@ impl Database {
                 ));
             }
             transaction.execute(
-                "DELETE FROM sync_v3_outbox WHERE sequence <= ?1",
+                "DELETE FROM sync_outbox WHERE sequence <= ?1",
                 [through_sequence],
             )?;
             let state = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
@@ -492,15 +500,15 @@ impl Database {
         })
     }
 
-    pub fn commit_sync_v3_segment_published(
+    pub fn commit_sync_segment_published(
         &self,
         remote_scope: &str,
         expected_epoch: &str,
         last_segment_key: &str,
         through_sequence: u64,
-    ) -> Result<SyncV3RemoteState, StorageError> {
+    ) -> Result<SyncRemoteState, StorageError> {
         validate_remote_scope(remote_scope)?;
-        let through_sequence = sequence_to_i64(through_sequence, "sync_v3 segment sequence")?;
+        let through_sequence = sequence_to_i64(through_sequence, "sync segment sequence")?;
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
             let current = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
@@ -517,21 +525,21 @@ impl Database {
                 ));
             }
             if through_sequence
-                > sequence_to_i64(current_sequence(&transaction)?, "sync_v3 current sequence")?
+                > sequence_to_i64(current_sequence(&transaction)?, "sync current sequence")?
             {
                 return Err(StorageError::InvalidSyncState(
                     "segment publication exceeds the local outbox high-water".to_string(),
                 ));
             }
             if through_sequence
-                < sequence_to_i64(current.published_sequence, "sync_v3 published sequence")?
+                < sequence_to_i64(current.published_sequence, "sync published sequence")?
             {
                 return Err(StorageError::InvalidSyncState(
                     "segment publication sequence regressed".to_string(),
                 ));
             }
             if through_sequence
-                == sequence_to_i64(current.published_sequence, "sync_v3 published sequence")?
+                == sequence_to_i64(current.published_sequence, "sync published sequence")?
                 && current.last_segment_key.as_deref() != Some(last_segment_key)
             {
                 return Err(StorageError::InvalidSyncState(
@@ -539,7 +547,7 @@ impl Database {
                 ));
             }
             transaction.execute(
-                "UPDATE sync_v3_remote_state
+                "UPDATE sync_publication_state
                     SET published_sequence = ?3,
                         last_segment_key = ?4,
                         updated_at_ms = ?5
@@ -553,7 +561,7 @@ impl Database {
                 ],
             )?;
             transaction.execute(
-                "DELETE FROM sync_v3_outbox WHERE sequence <= ?1",
+                "DELETE FROM sync_outbox WHERE sequence <= ?1",
                 [through_sequence],
             )?;
             let state = load_remote_state(&transaction, remote_scope)?.ok_or_else(|| {
@@ -564,7 +572,7 @@ impl Database {
         })
     }
 
-    pub fn get_sync_v3_cursor(
+    pub fn get_sync_cursor(
         &self,
         remote_scope: &str,
         device_id: &str,
@@ -573,15 +581,12 @@ impl Database {
         self.with_connection(|connection| load_cursor(connection, remote_scope, device_id))
     }
 
-    pub fn list_sync_v3_cursors(
-        &self,
-        remote_scope: &str,
-    ) -> Result<Vec<DeviceCursor>, StorageError> {
+    pub fn list_sync_cursors(&self, remote_scope: &str) -> Result<Vec<DeviceCursor>, StorageError> {
         validate_remote_scope(remote_scope)?;
         self.with_connection(|connection| {
             let mut statement = connection.prepare(
                 "SELECT device_id, epoch, sequence, last_segment_key
-                   FROM sync_v3_cursors
+                   FROM sync_cursors
                   WHERE remote_scope = ?1
                   ORDER BY device_id",
             )?;
@@ -600,7 +605,7 @@ impl Database {
                     Ok(DeviceCursor {
                         device_id,
                         epoch,
-                        sequence: stored_sequence(sequence, "sync_v3 cursor sequence")?,
+                        sequence: stored_sequence(sequence, "sync cursor sequence")?,
                         last_segment_key,
                     })
                 })
@@ -608,7 +613,7 @@ impl Database {
         })
     }
 
-    pub fn apply_sync_v3_snapshot(
+    pub fn apply_sync_snapshot(
         &self,
         remote_scope: &str,
         cursor: &DeviceCursor,
@@ -640,7 +645,7 @@ impl Database {
         })
     }
 
-    pub fn apply_sync_v3_segment(
+    pub fn apply_sync_segment(
         &self,
         remote_scope: &str,
         cursor: &DeviceCursor,
@@ -722,14 +727,14 @@ fn stored_sequence(value: i64, field: &'static str) -> Result<u64, StorageError>
 fn load_remote_state(
     connection: &rusqlite::Connection,
     remote_scope: &str,
-) -> Result<Option<SyncV3RemoteState>, StorageError> {
+) -> Result<Option<SyncRemoteState>, StorageError> {
     let stored = connection
         .query_row(
             "SELECT epoch, snapshot_key, snapshot_sha256,
                     snapshot_size_bytes, snapshot_record_count,
                     snapshot_sequence, published_sequence, last_segment_key,
-                    legacy_cleaned, initialized, updated_at_ms
-               FROM sync_v3_remote_state
+                    remote_prepared, initialized, updated_at_ms
+               FROM sync_publication_state
               WHERE remote_scope = ?1",
             [remote_scope],
             |row| {
@@ -758,7 +763,7 @@ fn load_remote_state(
         snapshot_sequence,
         published_sequence,
         last_segment_key,
-        legacy_cleaned,
+        remote_prepared,
         initialized,
         updated_at_ms,
     )) = stored
@@ -769,8 +774,8 @@ fn load_remote_state(
         (Some(key), Some(sha256)) => Some(ObjectRef {
             key,
             sha256,
-            stored_size_bytes: stored_sequence(snapshot_size_bytes, "sync_v3 snapshot size")?,
-            record_count: stored_sequence(snapshot_record_count, "sync_v3 snapshot record count")?,
+            stored_size_bytes: stored_sequence(snapshot_size_bytes, "sync snapshot size")?,
+            record_count: stored_sequence(snapshot_record_count, "sync snapshot record count")?,
         }),
         (None, None) => None,
         _ => {
@@ -779,14 +784,14 @@ fn load_remote_state(
             ));
         }
     };
-    Ok(Some(SyncV3RemoteState {
+    Ok(Some(SyncRemoteState {
         remote_scope: remote_scope.to_string(),
         epoch,
         snapshot,
-        snapshot_sequence: stored_sequence(snapshot_sequence, "sync_v3 snapshot sequence")?,
-        published_sequence: stored_sequence(published_sequence, "sync_v3 published sequence")?,
+        snapshot_sequence: stored_sequence(snapshot_sequence, "sync snapshot sequence")?,
+        published_sequence: stored_sequence(published_sequence, "sync published sequence")?,
         last_segment_key,
-        legacy_cleaned,
+        remote_prepared,
         initialized,
         updated_at_ms,
     }))
@@ -800,7 +805,7 @@ fn load_cursor(
     let stored = connection
         .query_row(
             "SELECT epoch, sequence, last_segment_key
-               FROM sync_v3_cursors
+               FROM sync_cursors
               WHERE remote_scope = ?1 AND device_id = ?2",
             params![remote_scope, device_id],
             |row| {
@@ -817,7 +822,7 @@ fn load_cursor(
             Ok(DeviceCursor {
                 device_id: device_id.to_string(),
                 epoch,
-                sequence: stored_sequence(sequence, "sync_v3 cursor sequence")?,
+                sequence: stored_sequence(sequence, "sync cursor sequence")?,
                 last_segment_key,
             })
         })
@@ -830,16 +835,16 @@ fn upsert_cursor(
     cursor: &DeviceCursor,
     snapshot_sha256: Option<&str>,
 ) -> Result<(), StorageError> {
-    let sequence = sequence_to_i64(cursor.sequence, "sync_v3 cursor sequence")?;
+    let sequence = sequence_to_i64(cursor.sequence, "sync cursor sequence")?;
     transaction.execute(
-        "INSERT INTO sync_v3_cursors
+        "INSERT INTO sync_cursors
             (remote_scope, device_id, epoch, sequence, snapshot_sha256,
              last_segment_key, updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(remote_scope, device_id) DO UPDATE SET
             epoch = excluded.epoch,
             sequence = excluded.sequence,
-            snapshot_sha256 = COALESCE(excluded.snapshot_sha256, sync_v3_cursors.snapshot_sha256),
+            snapshot_sha256 = COALESCE(excluded.snapshot_sha256, sync_cursors.snapshot_sha256),
             last_segment_key = excluded.last_segment_key,
             updated_at_ms = excluded.updated_at_ms",
         params![
@@ -975,7 +980,7 @@ fn apply_mutations(
             )?;
         }
         transaction.execute(
-            "DELETE FROM sync_v3_tombstones WHERE item_id IN (?1, ?2)",
+            "DELETE FROM sync_tombstones WHERE item_id IN (?1, ?2)",
             params![&target_id, &replicated.item.id],
         )?;
         replace_item_tags(
@@ -1016,7 +1021,7 @@ fn apply_mutations(
             ],
         )?;
         transaction.execute(
-            "INSERT INTO sync_v3_tombstones
+            "INSERT INTO sync_tombstones
                 (item_id, kind, content_hash, deleted_at_ms,
                  modified_at_ms, writer_device_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -1037,7 +1042,7 @@ fn apply_mutations(
         )?;
         if target_id != tombstone.item_id {
             transaction.execute(
-                "DELETE FROM sync_v3_tombstones WHERE item_id = ?1",
+                "DELETE FROM sync_tombstones WHERE item_id = ?1",
                 [&tombstone.item_id],
             )?;
         }
@@ -1099,7 +1104,7 @@ fn winning_local_version(
     let tombstone_version = transaction
         .query_row(
             "SELECT modified_at_ms, writer_device_id
-               FROM sync_v3_tombstones
+               FROM sync_tombstones
               WHERE item_id = ?1",
             [item_id],
             |row| {
@@ -1215,14 +1220,14 @@ fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageError> {
 fn current_sequence(connection: &rusqlite::Connection) -> Result<u64, StorageError> {
     let sequence: Option<i64> = connection
         .query_row(
-            "SELECT seq FROM sqlite_sequence WHERE name = 'sync_v3_outbox'",
+            "SELECT seq FROM sqlite_sequence WHERE name = 'sync_outbox'",
             [],
             |row| row.get(0),
         )
         .optional()?;
     let sequence = sequence.unwrap_or(0);
     u64::try_from(sequence).map_err(|_| StorageError::InvalidStoredValue {
-        field: "sync_v3_outbox.sequence",
+        field: "sync_outbox.sequence",
         value: sequence,
     })
 }
@@ -1263,7 +1268,7 @@ fn load_mutations(
             let tombstone_sql = format!(
                 "SELECT item_id, kind, content_hash, deleted_at_ms,
                         modified_at_ms, writer_device_id
-                   FROM sync_v3_tombstones
+                   FROM sync_tombstones
                   WHERE item_id IN ({placeholders})"
             );
             let mut tombstone_statement = connection.prepare(&tombstone_sql)?;
@@ -1297,7 +1302,7 @@ fn load_mutations(
         let mut tombstone_statement = connection.prepare(
             "SELECT item_id, kind, content_hash, deleted_at_ms,
                     modified_at_ms, writer_device_id
-               FROM sync_v3_tombstones
+               FROM sync_tombstones
               ORDER BY item_id",
         )?;
         let stored_tombstones = tombstone_statement
@@ -1382,18 +1387,49 @@ mod tests {
     }
 
     #[test]
-    fn enabling_v3_preserves_items_and_discards_only_legacy_sync_state() {
+    fn initializing_v1_preserves_items_and_discards_all_previous_sync_state() {
         let database = Database::open_in_memory().unwrap();
         database
             .save_item(&item("existing", "hash-existing", "existing"))
             .unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "INSERT INTO sync_metadata (key, value) VALUES ('obsolete_marker', '1')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO sync_remote_state (remote_scope, state_key, value)
+                     VALUES ('discarded', 'initialized', '1')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO sync_applied_oplogs
+                        (remote_scope, object_name, revision, applied_at_ms)
+                     VALUES ('discarded', 'oplog-old', 'old', 1)",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO sync_item_aliases (alias_id, item_id)
+                     VALUES ('discarded-alias', 'existing')",
+                    [],
+                )?;
+                connection.execute(
+                    "UPDATE clipboard_items
+                        SET sync_writer_device_id = 'discarded-writer'
+                      WHERE id = 'existing'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
         assert_eq!(database.count_unsynced_changelog().unwrap(), 1);
-        assert!(!database.is_sync_v3_enabled().unwrap());
+        assert!(!database.is_sync_initialized().unwrap());
 
-        assert!(database.enable_sync_v3().unwrap());
-        assert!(database.is_sync_v3_enabled().unwrap());
+        assert!(database.initialize_sync().unwrap());
+        assert!(database.is_sync_initialized().unwrap());
         assert_eq!(database.count_unsynced_changelog().unwrap(), 0);
-        let snapshot = database.export_sync_v3_snapshot().unwrap();
+        let snapshot = database.export_sync_snapshot().unwrap();
         assert_eq!(snapshot.through_sequence, 0);
         assert_eq!(snapshot.mutations.upserts.len(), 1);
         assert_eq!(snapshot.mutations.upserts[0].item.id, "existing");
@@ -1401,16 +1437,35 @@ mod tests {
             snapshot.mutations.upserts[0].version.writer_device_id,
             database.get_sync_device_id().unwrap()
         );
+        database
+            .with_connection(|connection| {
+                let obsolete_row_count: i64 = connection.query_row(
+                    "SELECT
+                        (SELECT COUNT(*) FROM sync_changelog) +
+                        (SELECT COUNT(*) FROM sync_remote_state) +
+                        (SELECT COUNT(*) FROM sync_applied_oplogs) +
+                        (SELECT COUNT(*) FROM sync_item_aliases)",
+                    [],
+                    |row| row.get(0),
+                )?;
+                let metadata_count: i64 =
+                    connection
+                        .query_row("SELECT COUNT(*) FROM sync_metadata", [], |row| row.get(0))?;
+                assert_eq!(obsolete_row_count, 0);
+                assert_eq!(metadata_count, 3);
+                Ok(())
+            })
+            .unwrap();
 
         database.save_item(&item("new", "hash-new", "new")).unwrap();
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 1);
+        assert_eq!(database.count_sync_outbox().unwrap(), 1);
         assert_eq!(database.count_unsynced_changelog().unwrap(), 0);
     }
 
     #[test]
     fn outbox_batch_coalesces_repeated_changes_to_current_state() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         database
             .save_item(&item("item", "hash-1", "first"))
             .unwrap();
@@ -1428,31 +1483,28 @@ mod tests {
                 .unwrap();
         }
 
-        let batch = database.get_sync_v3_outbox_batch(100).unwrap().unwrap();
+        let batch = database.get_sync_outbox_batch(100).unwrap().unwrap();
         assert_eq!(batch.first_sequence, 1);
         assert_eq!(batch.last_sequence, 3);
         assert_eq!(batch.mutations.len(), 1);
         assert_eq!(batch.mutations.upserts[0].item.title, "third");
         assert_eq!(batch.mutations.upserts[0].item.content_hash, "hash-3");
-        assert_eq!(database.acknowledge_sync_v3_outbox(3).unwrap(), 3);
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
-        assert_eq!(
-            database.export_sync_v3_snapshot().unwrap().through_sequence,
-            3
-        );
+        assert_eq!(database.acknowledge_sync_outbox(3).unwrap(), 3);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        assert_eq!(database.export_sync_snapshot().unwrap().through_sequence, 3);
     }
 
     #[test]
     fn permanent_delete_keeps_a_compact_tombstone() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         database
             .save_item(&item("deleted", "hash-deleted", "deleted"))
             .unwrap();
         assert!(database.soft_delete("deleted").unwrap());
         assert!(database.permanently_delete("deleted").unwrap());
 
-        let snapshot = database.export_sync_v3_snapshot().unwrap();
+        let snapshot = database.export_sync_snapshot().unwrap();
         assert!(snapshot.mutations.upserts.is_empty());
         assert_eq!(snapshot.mutations.tombstones.len(), 1);
         assert_eq!(snapshot.mutations.tombstones[0].item_id, "deleted");
@@ -1465,78 +1517,78 @@ mod tests {
     #[test]
     fn restoring_a_soft_deleted_item_replaces_its_tombstone() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         database
             .save_item(&item("restored", "hash-restored", "restored"))
             .unwrap();
         assert!(database.soft_delete("restored").unwrap());
         assert!(database.restore_deleted("restored").unwrap());
 
-        let snapshot = database.export_sync_v3_snapshot().unwrap();
+        let snapshot = database.export_sync_snapshot().unwrap();
         assert_eq!(snapshot.mutations.upserts.len(), 1);
         assert!(snapshot.mutations.tombstones.is_empty());
     }
 
     #[test]
-    fn enabling_v3_again_is_idempotent_and_keeps_pending_changes() {
+    fn initializing_v1_again_is_idempotent_and_keeps_pending_changes() {
         let database = Database::open_in_memory().unwrap();
-        assert!(database.enable_sync_v3().unwrap());
+        assert!(database.initialize_sync().unwrap());
         database
             .save_item(&item("pending", "hash-pending", "pending"))
             .unwrap();
-        assert!(!database.enable_sync_v3().unwrap());
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 1);
+        assert!(!database.initialize_sync().unwrap());
+        assert_eq!(database.count_sync_outbox().unwrap(), 1);
     }
 
     #[test]
     fn remote_publication_state_acknowledges_only_after_snapshot_or_segment_commit() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         let first = database
-            .get_or_create_sync_v3_remote_state(REMOTE_SCOPE)
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
             .unwrap();
         assert!(!first.initialized);
-        assert!(!first.legacy_cleaned);
+        assert!(!first.remote_prepared);
         assert_eq!(
             database
-                .get_or_create_sync_v3_remote_state(REMOTE_SCOPE)
+                .get_or_create_sync_remote_state(REMOTE_SCOPE)
                 .unwrap()
                 .epoch,
             first.epoch
         );
-        database.mark_sync_v3_legacy_cleaned(REMOTE_SCOPE).unwrap();
+        database.mark_sync_remote_prepared(REMOTE_SCOPE).unwrap();
 
         database
             .save_item(&item("snapshot", "hash-snapshot", "snapshot"))
             .unwrap();
         let snapshot = ObjectRef {
-            key: "v3/snapshots/device/epoch/hash.pack".to_string(),
+            key: "v1/snapshots/device/epoch/hash.pack".to_string(),
             sha256: "b".repeat(64),
             stored_size_bytes: 123,
             record_count: 1,
         };
         let published = database
-            .commit_sync_v3_bootstrap_published(REMOTE_SCOPE, &first.epoch, &snapshot, 1)
+            .commit_sync_bootstrap_published(REMOTE_SCOPE, &first.epoch, &snapshot, 1)
             .unwrap();
         assert!(published.initialized);
-        assert!(published.legacy_cleaned);
+        assert!(published.remote_prepared);
         assert_eq!(published.snapshot.as_ref(), Some(&snapshot));
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
 
         database
             .save_item(&item("segment", "hash-segment", "segment"))
             .unwrap();
-        let segment_key = "v3/segments/device/epoch/segment.pack";
+        let segment_key = "v1/segments/device/epoch/segment.pack";
         let published = database
-            .commit_sync_v3_segment_published(REMOTE_SCOPE, &first.epoch, segment_key, 2)
+            .commit_sync_segment_published(REMOTE_SCOPE, &first.epoch, segment_key, 2)
             .unwrap();
         assert_eq!(published.published_sequence, 2);
         assert_eq!(published.last_segment_key.as_deref(), Some(segment_key));
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
 
-        let reset = database.reset_sync_v3_remote_state(REMOTE_SCOPE).unwrap();
+        let reset = database.reset_sync_remote_state(REMOTE_SCOPE).unwrap();
         assert_ne!(reset.epoch, first.epoch);
-        assert!(reset.legacy_cleaned);
+        assert!(reset.remote_prepared);
         assert!(!reset.initialized);
         assert!(reset.snapshot.is_none());
     }
@@ -1544,7 +1596,7 @@ mod tests {
     #[test]
     fn remote_snapshot_apply_is_atomic_idempotent_and_does_not_echo() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         let writer = RecordVersion {
             modified_at_ms: 500,
             writer_device_id: REMOTE_DEVICE.to_string(),
@@ -1558,11 +1610,11 @@ mod tests {
 
         assert_eq!(
             database
-                .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
+                .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
                 .unwrap(),
             1
         );
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 0);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
         assert_eq!(
             database.get_item("remote").unwrap().unwrap().title,
             "remote"
@@ -1574,14 +1626,14 @@ mod tests {
         );
         assert_eq!(
             database
-                .get_sync_v3_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+                .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
                 .unwrap()
                 .unwrap(),
             cursor(0, None)
         );
         assert_eq!(
             database
-                .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
+                .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"c".repeat(64), &mutations)
                 .unwrap(),
             0
         );
@@ -1590,7 +1642,7 @@ mod tests {
     #[test]
     fn record_writer_breaks_equal_timestamp_ties_deterministically() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         let lower_writer = "00000000-0000-4000-8000-000000000001";
         let higher_writer = "ffffffff-ffff-4fff-bfff-ffffffffffff";
         let initial = MutationBatch {
@@ -1606,7 +1658,7 @@ mod tests {
             tombstones: Vec::new(),
         };
         database
-            .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"d".repeat(64), &initial)
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"d".repeat(64), &initial)
             .unwrap();
 
         let winner = MutationBatch {
@@ -1622,7 +1674,7 @@ mod tests {
             tombstones: Vec::new(),
         };
         database
-            .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(1, Some("segment-1")), &winner)
+            .apply_sync_segment(REMOTE_SCOPE, &cursor(1, Some("segment-1")), &winner)
             .unwrap();
         assert_eq!(database.get_item("tie").unwrap().unwrap().title, "higher");
 
@@ -1640,7 +1692,7 @@ mod tests {
         };
         assert_eq!(
             database
-                .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(2, Some("segment-2")), &loser,)
+                .apply_sync_segment(REMOTE_SCOPE, &cursor(2, Some("segment-2")), &loser,)
                 .unwrap(),
             0
         );
@@ -1650,7 +1702,7 @@ mod tests {
     #[test]
     fn tombstone_blocks_an_older_later_segment_from_resurrecting_a_row() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         let initial = MutationBatch {
             upserts: vec![replicated(
                 "victim",
@@ -1664,7 +1716,7 @@ mod tests {
             tombstones: Vec::new(),
         };
         database
-            .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"e".repeat(64), &initial)
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"e".repeat(64), &initial)
             .unwrap();
         let deletion = MutationBatch {
             upserts: Vec::new(),
@@ -1680,7 +1732,7 @@ mod tests {
             }],
         };
         database
-            .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(1, Some("segment-delete")), &deletion)
+            .apply_sync_segment(REMOTE_SCOPE, &cursor(1, Some("segment-delete")), &deletion)
             .unwrap();
         let stale = MutationBatch {
             upserts: vec![replicated(
@@ -1696,14 +1748,14 @@ mod tests {
         };
         assert_eq!(
             database
-                .apply_sync_v3_segment(REMOTE_SCOPE, &cursor(2, Some("segment-stale")), &stale,)
+                .apply_sync_segment(REMOTE_SCOPE, &cursor(2, Some("segment-stale")), &stale,)
                 .unwrap(),
             0
         );
         assert_eq!(database.count_active_items().unwrap(), 0);
         assert_eq!(
             database
-                .export_sync_v3_snapshot()
+                .export_sync_snapshot()
                 .unwrap()
                 .mutations
                 .tombstones
@@ -1715,11 +1767,11 @@ mod tests {
     #[test]
     fn failed_remote_batch_rolls_back_rows_suppression_and_cursor() {
         let database = Database::open_in_memory().unwrap();
-        database.enable_sync_v3().unwrap();
+        database.initialize_sync().unwrap();
         let mut image = item("local-image", "same-image-hash", "image");
         image.kind = ClipboardKind::Image;
         database.save_item(&image).unwrap();
-        database.acknowledge_sync_v3_outbox(1).unwrap();
+        database.acknowledge_sync_outbox(1).unwrap();
 
         let first = replicated(
             "would-be-inserted",
@@ -1745,17 +1797,17 @@ mod tests {
             tombstones: Vec::new(),
         };
         assert!(database
-            .apply_sync_v3_snapshot(REMOTE_SCOPE, &cursor(0, None), &"f".repeat(64), &failed)
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(0, None), &"f".repeat(64), &failed)
             .is_err());
         assert!(database.get_item("would-be-inserted").unwrap().is_none());
         assert!(database
-            .get_sync_v3_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+            .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
             .unwrap()
             .is_none());
 
         database
             .save_item(&item("after-failure", "hash-after", "after"))
             .unwrap();
-        assert_eq!(database.count_sync_v3_outbox().unwrap(), 1);
+        assert_eq!(database.count_sync_outbox().unwrap(), 1);
     }
 }

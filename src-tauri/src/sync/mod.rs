@@ -3,7 +3,7 @@ pub mod crypto;
 pub mod pool;
 pub mod resources;
 pub mod s3;
-pub mod v3;
+pub mod v1;
 pub mod webdav;
 pub mod wire;
 
