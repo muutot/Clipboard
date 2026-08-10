@@ -93,6 +93,7 @@ This is the settings shell and an integration hotspot. It owns:
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
 - composition of child settings panels with `showHeader={false}`;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
+- sync provider/policy configuration, manual sync, remote-backup listing/download, and the conditional non-destructive snapshot-refresh action;
 - the built-in About section: app version, an update-source dropdown (GitHub/GitCode, persisted via `updateSource`), and update check via `checkForUpdate()`/`update.ts`, with up-to-date/available/error states; when an update is available with release notes, a compact "View Details" button opens `UpdateDialog` to render the notes as markdown;
 - the `--settings-*` semantic metrics consumed by child panels.
 

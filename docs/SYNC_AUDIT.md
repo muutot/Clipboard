@@ -4,22 +4,22 @@
 
 ## 严重：数据正确性
 
-| #   | 问题                                                                                                            | 状态    | 证据 / 提交                                |
-| --- | --------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------ |
-| 1   | 增量 oplog 不携带实际文本内容（text/html/rtf/metadata/is_favorite/source_app 丢失）                             | ✅ 完成 | `adc39a1`                                  |
-| 2   | 图片/文件资源从不真正传输（serialize_oplog 只传元数据，create_oplog_backup 未接入同步流程）                     | ✅ 完成 | `924085c`（内嵌 OplogResource）            |
-| 3   | 前端/后端 SyncUploadResult 字段完全不匹配（uploadedEntries vs itemsSynced）                                     | ✅ 完成 | `c287d07`                                  |
-| 4   | S3 是伪实现（Authorization 为 `AWS key:placeholder`，无 SigV4，_region 被忽略，仅虚拟主机式 URL）               | ✅ 完成 | `201ecbd`（SigV4 + 端点解析 + path-style） |
-| 5   | S3 oplog 清理删错 key：list_s3_objects 返回去前缀短名，delete 未重新拼 remote_path/ 前缀，且 `let _ =` 静默失败 | ✅ 完成 | 见下方                                     |
-| 6   | 应用远程 oplog/导入基线触发本地 trigger，造成回声广播（收到的条目又生成 unsynced changelog 再广播回远端）       | ✅ 完成 | 见下方                                     |
+| #   | 问题                                                                                                      | 状态    | 证据 / 提交                                |
+| --- | --------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------ |
+| 1   | 增量 oplog 不携带实际文本内容（text/html/rtf/metadata/is_favorite/source_app 丢失）                       | ✅ 完成 | `adc39a1`                                  |
+| 2   | 图片/文件资源从不真正传输（serialize_oplog 只传元数据，create_oplog_backup 未接入同步流程）               | ✅ 完成 | `924085c`（内嵌 OplogResource）            |
+| 3   | 前端/后端 SyncUploadResult 字段完全不匹配（uploadedEntries vs itemsSynced）                               | ✅ 完成 | `c287d07`                                  |
+| 4   | S3 是伪实现（Authorization 为 `AWS key:placeholder`，无 SigV4，_region 被忽略，仅虚拟主机式 URL）         | ✅ 完成 | `201ecbd`（SigV4 + 端点解析 + path-style） |
+| 5   | S3 oplog 清理曾用去前缀短名删除错误 key；更根本的问题是无设备确认时不应删除任何远端日志                   | ✅ 完成 | 见下方                                     |
+| 6   | 应用远程 oplog/导入基线触发本地 trigger，造成回声广播（收到的条目又生成 unsynced changelog 再广播回远端） | ✅ 完成 | 见下方                                     |
 
 ## 高
 
 | #   | 问题                                                                                               | 状态    | 证据 / 提交 |
 | --- | -------------------------------------------------------------------------------------------------- | ------- | ----------- |
 | 7   | auto_sync 是完全的死配置：有 UI 开关和 store 方法，但没有后台 worker/timer 调用 sync_upload_backup | ✅ 完成 | 见下方      |
-| 8   | 每次同步全量重放远端所有其他设备的 oplog，无已应用水位线，带宽/CPU 膨胀                            | ✅ 完成 | 见下方      |
-| 9   | cleanup 只删其他设备的文件，本设备多轮 rollover 的旧 oplog 永不清理，远端无限增长                  | ✅ 完成 | 见下方      |
+| 8   | 每次同步全量重放 oplog；旧的全局 mtime 水位又会跨远端继承并误跳过可覆盖对象                        | ✅ 完成 | 见下方      |
+| 9   | 按文件数清理无法证明长期离线设备已接收历史，可能造成不可恢复的数据缺口                             | ✅ 完成 | 见下方      |
 | 10  | ConfigStore 锁贯穿整个网络同步，命令是阻塞同步调用，慢网络阻塞其他配置访问                         | ✅ 完成 | 见下方      |
 | 11  | 解密失败静默回退原始字节，改密码后旧文件按密文解析失败被跳过，无明确报错                           | ✅ 完成 | 见下方      |
 
@@ -35,11 +35,8 @@
 
 ## #5 证据
 
-- `src-tauri/src/commands/sync/mod.rs:695`：`cleanup_old_s3_oplogs` 把 `list_s3_objects` 返回的 `name`（短名）直接传给 `delete_from_s3`。
-- `src-tauri/src/sync/s3.rs:519`：`parse_s3_list_response` 用 `key.split('/').next_back()` 只保留最后一段（去前缀）。
-- 配了 `remotePath` 时，真实对象 key 是 `{remotePath}/{name}`，短名删除会命中根路径的错误对象；`let _ =` 让错误完全静默。
-- 对比：WebDAV 的 `cleanup_old_remote_oplogs`（mod.rs:782）把 `name` 传给 `delete_from_webdav(endpoint, remote_path, name, ...)`，由 webdav.rs 内部拼接路径，是正确的。
-- ✅ 修复：提取 `s3_object_key(remote_path, name)`（trim 斜杠，空则取原名），`sync_upload_s3` 与 `cleanup_old_s3_oplogs` 共用；cleanup 删除前用 prefix 重拼完整 key，`let _ =` 改为 `?` 传播错误。新增 4 个单测。
+- 历史实现中 `list_s3_objects` 返回去前缀短名，清理逻辑若未重拼 `remotePath` 会删除错误 key；即使 key 修正，仅凭数量删除也无法证明安全。
+- ✅ 当前修复：`commands/sync/mod.rs` 的 WebDAV/S3 编排不再调用 `delete_from_webdav` / `delete_from_s3`，低层 transport 删除函数不参与正常同步或快照刷新。S3 上传/下载仍统一通过 `s3_object_key(remote_path, name)` 构造真实 key。
 
 ## #6 证据
 
@@ -58,13 +55,14 @@
 
 ## #8 证据
 
-- 每个同步周期，webdav 与 s3 的下载循环（`sync_upload_webdav`/`sync_upload_s3`）都无差别下载、解密、解析远端所有其他设备的 oplog 文件，即使内容早已在上一轮应用过；随远端 oplog 数量线性增长，带宽/CPU 膨胀。
-- ✅ 修复：`sync_metadata` 新增键 `sync_applied_oplog_watermark_ms`，`Database::get/set_sync_applied_oplog_watermark`（pool.rs:229/243）持久化「已成功应用远端 oplog 的最大 `modified_ms`」；两个下载循环开头读水位线，`entry.modified_ms <= watermark` 的文件直接跳过（无 mtime 的文件不跳过，保守处理），每成功应用一个文件用其 mtime 滚动 `max_applied_mtime`，循环结束后写回。新增回环单测。
+- 全局 `modified_ms` 水位既依赖远端元数据精度，也会在切换 provider/endpoint/path 后继承到另一远端，导致合法对象被误跳过。
+- ✅ 当前修复：新增 `sync_remote_state` 与 `sync_applied_oplogs`，按 provider/endpoint/path/非秘密账户字段的 SHA-256 scope 隔离初始化、统计和已应用对象。新 oplog 使用不可变名称 `oplog-{device_id}-s{first_sequence}-e{last_sequence}-{sha256}`，成功处理后按 scope/object/revision 记账；旧时间戳命名对象可能被老客户端覆盖，因此每次都保守重读。
 
 ## #9 证据
 
-- `src-tauri/src/commands/sync/mod.rs:781`（webdav）与 `mod.rs:693`（s3）：cleanup 只删除 `!name.contains(device_id)` 的文件，即只删其他设备的；本设备 rollover 后的旧 oplog 永不清除。
-- ✅ 修复：两个 cleanup 函数去掉本设备排除，改为 `keep_name` 参数只保护本次刚写入的文件（按 mtime 排序后保留最新 `max_files` 个，刚写入的是最新，天然安全），本设备多轮 rollover 产生的旧 oplog 同样受 `max_files` 上限约束被清理。
+- “最新 N 个文件”不是安全回收条件：长期离线设备可能从未见过被删 oplog，而新基线也不能证明它已经完成切换。
+- ✅ 当前修复：删除 WebDAV/S3 自动按数量清理、首次多基线合并后的替换删除，以及手动维护中的 baseline/oplog 删除。首次同步只合并导入全部基线；兼容命令 `sync_compact_remote` 现在先完整同步，再追加一个新基线，前端称为“刷新同步快照”。
+- `maxRemoteOplogFiles` 暂时仅保留配置，不执行删除；必须先设计每设备 acknowledgement/lease，再实现可证明安全的垃圾回收。
 
 ## #10 证据
 
@@ -97,10 +95,10 @@
 
 ## #16 证据
 
-- `sync_upload_backup` 与 auto-sync worker 都会执行同一套非重入的 oplog 合并/应用/清理逻辑，无任何并发保护，交错执行会产生竞争。
+- `sync_upload_backup` 与 auto-sync worker 都会执行同一套非重入的 oplog 上传/应用/快照逻辑，无任何并发保护时，交错执行会产生竞争。
 - ✅ 修复：`commands/sync/mod.rs` 新增模块级 `static SYNC_RUN_LOCK: Mutex<()>`；`sync_upload_backup` 与 worker 共用的 `run_sync` 入口 `try_lock`，获取失败快速返回 `"sync already in progress"` 而非排队/交错。
 
 ## #14 证据
 
-- 远端 oplog 文件名是 `oplog-{device_id}-{timestamp}.json`，但载荷是 bincode（`serialize_oplog_with_resources`），仅靠读取时 JSON 回退兼容老文件，`.json` 后缀具误导性。
-- ✅ 修复：彻底移除 oplog 的 JSON 回退解析（webdav/s3 下载循环与 rollover 合并的 `serde_json::from_str` fallback 全部删除），oplog 文件名去掉 `.json` 后缀（`oplog-{device_id}-{timestamp}` 无扩展名），下载/清理过滤逻辑同步改为仅 `starts_with("oplog-")`。基线仍为真实 zip（`.zip` + 内嵌 `baseline.bin` 与 `manifest.json`，属真实格式不误导）。`test_sync_connection`/`sync_list_remote_backups` 返回给前端的 JSON 字符串是 IPC 契约，不属于 wire 格式，保留。
+- 远端 oplog 历史文件名曾是 `oplog-{device_id}-{timestamp}.json`，但载荷实际为 bincode，`.json` 后缀具误导性且同名对象可被覆盖。
+- ✅ 当前修复：wire 只保留单一 bincode v2 envelope，不再做 JSON fallback；新对象名为 `oplog-{device_id}-s{first_sequence}-e{last_sequence}-{sha256}`（无扩展名），序列范围和完整内容哈希共同形成不可变标识。旧时间戳命名对象仍可读取，但不会因元数据账本而被跳过。基线仍为真实 ZIP（内含 `baseline.bin` 与 `manifest.json`）。

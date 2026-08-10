@@ -133,12 +133,12 @@ export interface LocaleDefinition {
     syncNeverSynced: string;
     syncPendingCount: string;
     syncLastTime: string;
-    syncCompactTitle: string;
-    syncCompactDesc: string;
-    syncCompactNow: string;
-    syncCompacting: string;
-    syncCompactSummary: string;
-    syncCompactFailed: string;
+    syncSnapshotRefreshTitle: string;
+    syncSnapshotRefreshDesc: string;
+    syncSnapshotRefreshNow: string;
+    syncSnapshotRefreshing: string;
+    syncSnapshotRefreshSummary: string;
+    syncSnapshotRefreshFailed: string;
     syncStatusSuccess: string;
     syncStatusFailed: string;
     syncBackupList: string;

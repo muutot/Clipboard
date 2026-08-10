@@ -51,7 +51,7 @@
     syncUploadBackup,
     syncListRemoteBackups,
     syncDownloadBackup,
-    syncCompactRemote,
+    syncRefreshRemoteSnapshot,
     type ExportFormatInfo,
     type ImportFormatInfo,
     type SyncConfig,
@@ -800,8 +800,8 @@
   let syncStatus = $state<string | null>(null);
   let syncListing = $state(false);
   let syncDownloading = $state(false);
-  let syncCompacting = $state(false);
-  let syncCompactionSuggested = $state(false);
+  let syncRefreshingSnapshot = $state(false);
+  let syncSnapshotRefreshSuggested = $state(false);
   let syncUnsyncedCount = $state(0);
   let syncAutoSync = $state(false);
   let syncAutoInterval = $state(300);
@@ -835,7 +835,7 @@
       syncStatus = cfg.lastSyncStatus ?? null;
       syncUnsyncedCount = cfg.unsyncedCount ?? 0;
       syncAutoSync = cfg.autoSync ?? false;
-      syncCompactionSuggested = cfg.compactionSuggested ?? false;
+      syncSnapshotRefreshSuggested = cfg.compactionSuggested ?? false;
       syncAutoInterval = cfg.autoSyncIntervalSecs ?? 300;
       syncMaxOplogFiles = cfg.maxRemoteOplogFiles ?? 10;
       syncRolloverEntries = cfg.oplogRolloverEntries ?? 100;
@@ -967,26 +967,25 @@
     }
   }
 
-  async function handleCompactRemote() {
-    if (!isTauriRuntime() || syncCompacting || syncing) return;
-    syncCompacting = true;
+  async function handleRefreshRemoteSnapshot() {
+    if (!isTauriRuntime() || syncRefreshingSnapshot || syncing) return;
+    syncRefreshingSnapshot = true;
     feedback = "";
     try {
-      const result = await syncCompactRemote();
-      feedback = _t("storage.syncCompactSummary", {
-        deleted: String(result.deletedRemoteFiles),
+      const result = await syncRefreshRemoteSnapshot();
+      feedback = _t("storage.syncSnapshotRefreshSummary", {
         bytesUp: (result.bytesUploaded / 1024).toFixed(1),
       });
       feedbackSuccess = true;
-      syncCompactionSuggested = false;
+      syncSnapshotRefreshSuggested = false;
       syncLastMs = Date.now();
       syncStatus = "success";
     } catch (e) {
-      feedback = _t("storage.syncCompactFailed") + `: ${String(e)}`;
+      feedback = _t("storage.syncSnapshotRefreshFailed") + `: ${String(e)}`;
       feedbackSuccess = false;
       syncStatus = "failed";
     } finally {
-      syncCompacting = false;
+      syncRefreshingSnapshot = false;
     }
   }
 
@@ -3466,25 +3465,27 @@
                 </div>
               </section>
 
-              {#if syncCompactionSuggested}
+              {#if syncSnapshotRefreshSuggested}
                 <section class="setting-card">
                   <div class="setting-heading">
                     <span class="setting-icon"><AppIcon name="layers" size={17} /></span>
                     <div style="flex:1">
-                      <strong>{_t("storage.syncCompactTitle")}</strong>
+                      <strong>{_t("storage.syncSnapshotRefreshTitle")}</strong>
                       <p
                         style="margin:2px 0 0;font-size:var(--settings-description-size,var(--font-size-secondary,11px));color:var(--text-muted)"
                       >
-                        {_t("storage.syncCompactDesc")}
+                        {_t("storage.syncSnapshotRefreshDesc")}
                       </p>
                     </div>
                     <button
                       type="button"
                       class="settings-action-btn"
-                      disabled={syncCompacting || syncing || syncTesting}
-                      onclick={handleCompactRemote}
+                      disabled={syncRefreshingSnapshot || syncing || syncTesting}
+                      onclick={handleRefreshRemoteSnapshot}
                     >
-                      {syncCompacting ? _t("storage.syncCompacting") : _t("storage.syncCompactNow")}
+                      {syncRefreshingSnapshot
+                        ? _t("storage.syncSnapshotRefreshing")
+                        : _t("storage.syncSnapshotRefreshNow")}
                     </button>
                   </div>
                 </section>

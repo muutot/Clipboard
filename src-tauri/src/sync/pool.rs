@@ -2,7 +2,7 @@
 //!
 //! Resource files (images, previews, files, icons) are stored on the remote as
 //! standalone objects under a dedicated `resources/` folder instead of always
-//! being embedded inside baseline/oplog payloads. A compacted baseline can then
+//! being embedded inside baseline/oplog payloads. A refreshed baseline can then
 //! reference already-uploaded files (`bytes: None`) instead of re-transferring
 //! every file, so rebuilding the index never re-uploads resources that the pool
 //! already holds.
@@ -76,7 +76,7 @@ pub fn save_pool_manifest(
 /// to exist remotely because the sender only downgraded files after uploading
 /// them. Inline (`bytes: Some`) resources are not recorded: an older or
 /// non-pooling sender embeds them without a standalone pool object, so claiming
-/// them would let a later compaction emit a dangling reference. Best-effort;
+/// them would let a later snapshot refresh emit a dangling reference. Best-effort;
 /// manifest write failures are ignored.
 pub fn absorb_pool_paths(
     paths: &StoragePaths,

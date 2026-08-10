@@ -473,8 +473,10 @@ export async function syncDownloadBackup(filename: string): Promise<string> {
   return invoke<string>("sync_download_backup", { filename });
 }
 
-export async function syncCompactRemote(): Promise<SyncUploadResult> {
+export async function syncRefreshRemoteSnapshot(): Promise<SyncUploadResult> {
   if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
+  // The backend keeps the legacy command name for IPC compatibility. Its
+  // behavior is a non-destructive snapshot refresh.
   return invoke<SyncUploadResult>("sync_compact_remote");
 }
 

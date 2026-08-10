@@ -150,7 +150,7 @@ pub fn create_baseline_backup(
 }
 
 /// Writes a baseline zip from already-serialized (wire-form) items and inline
-/// resources. Used when consolidating multiple remote baselines into one.
+/// resources. Kept as the canonical writer for already-merged baseline data.
 pub fn write_baseline_zip(
     output_path: &Path,
     items: &[crate::domain::ClipboardItem],

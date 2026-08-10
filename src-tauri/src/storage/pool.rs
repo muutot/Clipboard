@@ -341,7 +341,8 @@ impl Database {
     }
 
     /// Latest modified time of the newest remote baseline file observed during
-    /// the last sync, used to suggest compaction when the snapshot is old.
+    /// the last sync, used to suggest a non-destructive refresh when the
+    /// snapshot is old.
     pub fn get_sync_remote_baseline_modified_ms(
         &self,
         remote_scope: &str,
