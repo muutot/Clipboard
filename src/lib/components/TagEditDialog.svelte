@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import TagColorPicker from "$lib/components/TagColorPicker.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
   import { listAllTags, renameTag, setTagColor } from "$lib/services/clipboard";
@@ -17,24 +18,6 @@
   }
 
   let { tag, color, onclose }: Props = $props();
-
-  const presets = [
-    "#e5484d",
-    "#f76b15",
-    "#ffb224",
-    "#46a758",
-    "#3e63dd",
-    "#8e4ec6",
-    "#00a2c7",
-    "#5c7cfa",
-    "#d6409f",
-    "#12a594",
-    "#ad5700",
-    "#6b7280",
-    "#84cc16",
-    "#d946ef",
-    "#f8fafc",
-  ];
 
   let dialog = $state<HTMLDialogElement | null>(null);
   let nameInput = $state<HTMLInputElement | null>(null);
@@ -83,14 +66,6 @@
     }
   }
 
-  function pickColor(next: string) {
-    void saveColor(currentColor === next ? "" : next);
-  }
-
-  function selectCustom(next: string) {
-    void saveColor(next);
-  }
-
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) onclose();
   }
@@ -133,35 +108,12 @@
       </button>
     </div>
 
-    <div class="tag-edit-colors" aria-label={_t("tags.color")}>
-      {#each presets as presetColor (presetColor)}
-        <button
-          type="button"
-          class="tag-swatch-option"
-          class:active={currentColor === presetColor}
-          style={`--swatch: ${presetColor}`}
-          aria-label={presetColor}
-          title={presetColor}
-          onclick={() => pickColor(presetColor)}
-        ></button>
-      {/each}
-      <label
-        class="tag-swatch-option tag-swatch-custom"
-        class:active={currentColor !== "" && !presets.includes(currentColor)}
-        style={currentColor && !presets.includes(currentColor)
-          ? `--swatch: ${currentColor}`
-          : undefined}
-        title={_t("tags.customColor")}
-        aria-label={_t("tags.customColor")}
-      >
-        <input
-          type="color"
-          value={/^#[0-9a-fA-F]{6}$/.test(currentColor) ? currentColor : "#5c7cfa"}
-          onchange={(e) => selectCustom(e.currentTarget.value)}
-        />
-        <AppIcon name="palette" size={12} />
-      </label>
-    </div>
+    <TagColorPicker
+      value={currentColor}
+      customLabel={_t("tags.customColor")}
+      ariaLabel={_t("tags.color")}
+      onchange={(next) => void saveColor(next)}
+    />
   </div>
 </dialog>
 
@@ -239,67 +191,5 @@
   .tag-edit-close:hover {
     color: var(--text-primary);
     border-color: var(--border-color);
-  }
-
-  .tag-edit-colors {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 8px;
-    justify-items: center;
-    align-items: center;
-  }
-
-  .tag-swatch-option {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    background: var(--surface-bg);
-    cursor: pointer;
-  }
-
-  .tag-swatch-option[style*="--swatch"] {
-    background: var(--swatch);
-  }
-
-  .tag-swatch-option.active {
-    outline: 2px solid var(--text-primary);
-    outline-offset: 1px;
-  }
-
-  .tag-swatch-custom {
-    position: relative;
-    overflow: hidden;
-    color: var(--text-secondary);
-    background: conic-gradient(
-      from 180deg,
-      #e5484d,
-      #f76b15,
-      #ffb224,
-      #46a758,
-      #3e63dd,
-      #8e4ec6,
-      #00a2c7,
-      #e5484d
-    );
-  }
-
-  .tag-swatch-custom input {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  .tag-swatch-custom.active {
-    color: var(--text-primary);
   }
 </style>

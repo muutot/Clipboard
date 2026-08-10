@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import TagColorPicker from "$lib/components/TagColorPicker.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
   import {
@@ -41,24 +42,6 @@
     tagSearch = "",
     ontagSearchChange = () => {},
   }: Props = $props();
-
-  const presets = [
-    "#e5484d",
-    "#f76b15",
-    "#ffb224",
-    "#46a758",
-    "#3e63dd",
-    "#8e4ec6",
-    "#00a2c7",
-    "#5c7cfa",
-    "#d6409f",
-    "#12a594",
-    "#ad5700",
-    "#6b7280",
-    "#84cc16",
-    "#d946ef",
-    "#f8fafc",
-  ];
 
   let tags = $state<TagInfo[]>([]);
   let loading = $state(true);
@@ -110,14 +93,13 @@
     feedbackTimer = setTimeout(() => (feedback = null), 3000);
   }
 
-  async function pickColor(tag: TagInfo, color: string) {
-    const next = tag.color === color ? "" : color;
+  async function saveColor(tag: TagInfo, color: string) {
     colorPopover = null;
-    const ok = await setTagColor(tag.name, next);
+    const ok = await setTagColor(tag.name, color);
     if (ok) {
       const index = tags.findIndex((t) => t.name === tag.name);
-      if (index >= 0) tags[index] = { ...tags[index], color: next };
-      notify(next ? _t("tags.colorSaved") : _t("tags.saved"));
+      if (index >= 0) tags[index] = { ...tags[index], color };
+      notify(color ? _t("tags.colorSaved") : _t("tags.saved"));
       emitTagsChanged({});
     }
   }
@@ -286,35 +268,13 @@
           onclick={() => (colorPopover = null)}
           aria-hidden="true"
         ></div>
-        <div class="tag-color-grid">
-          {#each presets as color (color)}
-            <button
-              type="button"
-              class="tag-swatch-option"
-              class:active={currentTag.color === color}
-              style={`--swatch: ${color}`}
-              aria-label={color}
-              title={color}
-              onclick={() => pickColor(currentTag, color)}
-            ></button>
-          {/each}
-          <label
-            class="tag-swatch-option tag-swatch-custom"
-            class:active={currentTag.color !== "" && !presets.includes(currentTag.color)}
-            style={currentTag.color && !presets.includes(currentTag.color)
-              ? `--swatch: ${currentTag.color}`
-              : undefined}
-            title={_t("tags.customColor")}
-            aria-label={_t("tags.customColor")}
-          >
-            <input
-              type="color"
-              value={/^#[0-9a-fA-F]{6}$/.test(currentTag.color) ? currentTag.color : "#5c7cfa"}
-              onchange={(e) => pickColor(currentTag, e.currentTarget.value)}
-            />
-            <AppIcon name="palette" size={12} />
-          </label>
-        </div>
+        <TagColorPicker
+          value={currentTag.color}
+          customLabel={_t("tags.customColor")}
+          size={20}
+          gap={6}
+          onchange={(color) => void saveColor(currentTag, color)}
+        />
       </div>
     {/if}
   {/if}
@@ -422,68 +382,6 @@
   .tag-color-popover {
     position: fixed;
     padding: 10px;
-  }
-
-  .tag-color-grid {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
-    justify-items: center;
-    align-items: center;
-  }
-
-  .tag-color-grid .tag-swatch-option {
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    background: var(--surface-bg);
-    cursor: pointer;
-  }
-
-  .tag-color-grid .tag-swatch-option[style*="--swatch"] {
-    background: var(--swatch);
-  }
-
-  .tag-color-grid .tag-swatch-custom {
-    position: relative;
-    overflow: hidden;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-    background: conic-gradient(
-      from 180deg,
-      #e5484d,
-      #f76b15,
-      #ffb224,
-      #46a758,
-      #3e63dd,
-      #8e4ec6,
-      #00a2c7,
-      #e5484d
-    );
-  }
-
-  .tag-color-grid .tag-swatch-custom input {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  .tag-color-grid .tag-swatch-custom.active {
-    color: var(--text-primary);
-  }
-
-  .tag-color-grid .tag-swatch-option.active {
-    outline: 2px solid var(--text-primary);
-    outline-offset: 1px;
   }
 
   .tag-delete {
