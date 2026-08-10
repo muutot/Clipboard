@@ -1,7 +1,8 @@
 use std::time::Duration;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::blocking::{Client, RequestBuilder};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ETAG};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -23,6 +24,28 @@ pub struct S3TestResult {
     pub success: bool,
     pub message: String,
     pub status_code: Option<u16>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3DownloadedObject {
+    pub bytes: Vec<u8>,
+    /// Raw HTTP ETag value, including quotes when supplied by the server.
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum S3PutCondition {
+    #[default]
+    Unconditional,
+    IfAbsent,
+    /// Raw HTTP ETag value returned by a previous GET/PUT.
+    IfMatch(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum S3PutOutcome {
+    Stored { etag: Option<String> },
+    PreconditionFailed,
 }
 
 /// A shared request-signing client. Rebuilt only once, then reused so every
@@ -254,7 +277,9 @@ fn signed_request(
     let req_builder = match req.method {
         "GET" => client.get(&url).headers(header_map),
         "HEAD" => client.head(&url).headers(header_map),
-        "PUT" => client.put(&url).headers(header_map).body(data.to_vec()),
+        // The caller attaches the owned body after signing so a large pack is
+        // not cloned solely to construct the request builder.
+        "PUT" => client.put(&url).headers(header_map),
         "DELETE" => client.delete(&url).headers(header_map),
         _ => return Err(format!("unsupported S3 method {}", req.method)),
     };
@@ -342,9 +367,46 @@ pub fn upload_to_s3(
     access_key: &str,
     secret_key: &str,
 ) -> Result<(), String> {
+    match put_s3_object(
+        endpoint,
+        region,
+        bucket,
+        key,
+        data,
+        access_key,
+        secret_key,
+        S3PutCondition::Unconditional,
+    )? {
+        S3PutOutcome::Stored { .. } => Ok(()),
+        S3PutOutcome::PreconditionFailed => {
+            Err("unconditional S3 upload failed its precondition".to_string())
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn put_s3_object(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    key: &str,
+    data: Vec<u8>,
+    access_key: &str,
+    secret_key: &str,
+    condition: S3PutCondition,
+) -> Result<S3PutOutcome, String> {
     let client = shared_client()?;
     let (scheme, host) = parse_endpoint(endpoint);
-    let content_md5 = simple_md5_hex(&data);
+    let content_md5 = content_md5_base64(&data);
+    let mut extra_headers = vec![
+        ("content-type", "application/octet-stream"),
+        ("content-md5", content_md5.as_str()),
+    ];
+    match &condition {
+        S3PutCondition::Unconditional => {}
+        S3PutCondition::IfAbsent => extra_headers.push(("if-none-match", "*")),
+        S3PutCondition::IfMatch(etag) => extra_headers.push(("if-match", etag.as_str())),
+    }
     let req = S3Request {
         method: "PUT",
         scheme: &scheme,
@@ -356,17 +418,19 @@ pub fn upload_to_s3(
         access_key,
         secret_key,
         region,
-        extra_headers: &[
-            ("content-type", "application/octet-stream"),
-            ("content-md5", &content_md5),
-        ],
+        extra_headers: &extra_headers,
     };
     let resp = signed_request(&client, &req)?
+        .body(data)
         .send()
         .map_err(|e| format!("upload failed: {e}"))?;
 
     if resp.status().is_success() {
-        Ok(())
+        Ok(S3PutOutcome::Stored {
+            etag: response_etag(&resp)?,
+        })
+    } else if resp.status().as_u16() == 412 {
+        Ok(S3PutOutcome::PreconditionFailed)
     } else {
         Err(err_from_response(resp, "upload"))
     }
@@ -380,6 +444,19 @@ pub fn download_from_s3(
     access_key: &str,
     secret_key: &str,
 ) -> Result<Vec<u8>, String> {
+    get_s3_object(endpoint, region, bucket, key, access_key, secret_key)?
+        .map(|object| object.bytes)
+        .ok_or_else(|| format!("download failed: S3 object not found: {key}"))
+}
+
+pub fn get_s3_object(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    key: &str,
+    access_key: &str,
+    secret_key: &str,
+) -> Result<Option<S3DownloadedObject>, String> {
     let client = shared_client()?;
     let (scheme, host) = parse_endpoint(endpoint);
     let req = S3Request {
@@ -400,7 +477,11 @@ pub fn download_from_s3(
         .map_err(|e| format!("download failed: {e}"))?;
 
     if resp.status().is_success() {
-        Ok(resp.bytes().map_err(|e| e.to_string())?.to_vec())
+        let etag = response_etag(&resp)?;
+        let bytes = resp.bytes().map_err(|e| e.to_string())?.to_vec();
+        Ok(Some(S3DownloadedObject { bytes, etag }))
+    } else if resp.status().as_u16() == 404 {
+        Ok(None)
     } else {
         Err(err_from_response(resp, "download"))
     }
@@ -553,11 +634,24 @@ fn build_list_query(
         .join("&")
 }
 
-fn simple_md5_hex(data: &[u8]) -> String {
+fn content_md5_base64(data: &[u8]) -> String {
     use md5::{Digest, Md5};
     let mut hasher = Md5::new();
     hasher.update(data);
-    hex::encode(hasher.finalize())
+    STANDARD.encode(hasher.finalize())
+}
+
+fn response_etag(response: &reqwest::blocking::Response) -> Result<Option<String>, String> {
+    response
+        .headers()
+        .get(ETAG)
+        .map(|value| {
+            value
+                .to_str()
+                .map(str::to_owned)
+                .map_err(|error| format!("S3 returned an invalid ETag header: {error}"))
+        })
+        .transpose()
 }
 
 struct S3ListPage {
@@ -735,6 +829,196 @@ mod tests {
             ),
             "continuation-token=next%2B%2F%3D&list-type=2&prefix=v3%2Fsegments%2Fdevice-a%2F"
         );
+    }
+
+    #[test]
+    fn content_md5_uses_the_s3_required_base64_encoding() {
+        assert_eq!(content_md5_base64(b"hello"), "XUFAKrxLKna5cZ2REBfFkg==");
+    }
+
+    #[test]
+    fn conditional_put_headers_are_included_in_the_signature() {
+        let client = Client::new();
+        let body = b"checkpoint";
+        let req = S3Request {
+            method: "PUT",
+            scheme: "https",
+            endpoint_host: "s3.example.test",
+            bucket: "clipboard",
+            key: "v3/checkpoint.bin",
+            query: None,
+            payload: Some(body),
+            access_key: AKID,
+            secret_key: SECRET,
+            region: "us-east-1",
+            extra_headers: &[("if-none-match", "*")],
+        };
+        let request = signed_request(&client, &req)
+            .unwrap()
+            .body(body.to_vec())
+            .build()
+            .unwrap();
+        let authorization = request
+            .headers()
+            .get("authorization")
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        assert!(authorization
+            .contains("SignedHeaders=host;if-none-match;x-amz-content-sha256;x-amz-date"));
+    }
+
+    #[test]
+    #[ignore = "requires an explicitly configured disposable S3-compatible server"]
+    fn disposable_s3_round_trip_and_conditional_writes() {
+        let endpoint = std::env::var("CLIPBOARD_S3_TEST_ENDPOINT")
+            .expect("CLIPBOARD_S3_TEST_ENDPOINT must be set");
+        let region =
+            std::env::var("CLIPBOARD_S3_TEST_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+        let bucket = std::env::var("CLIPBOARD_S3_TEST_BUCKET")
+            .expect("CLIPBOARD_S3_TEST_BUCKET must be set");
+        let access_key = std::env::var("CLIPBOARD_S3_TEST_ACCESS_KEY")
+            .expect("CLIPBOARD_S3_TEST_ACCESS_KEY must be set");
+        let secret_key = std::env::var("CLIPBOARD_S3_TEST_SECRET_KEY")
+            .expect("CLIPBOARD_S3_TEST_SECRET_KEY must be set");
+
+        create_disposable_test_bucket(&endpoint, &region, &bucket, &access_key, &secret_key)
+            .unwrap();
+
+        let prefix = format!("transport-test-{}/", uuid::Uuid::new_v4());
+        let key = format!("{prefix}object.bin");
+        let first = put_s3_object(
+            &endpoint,
+            &region,
+            &bucket,
+            &key,
+            b"first".to_vec(),
+            &access_key,
+            &secret_key,
+            S3PutCondition::IfAbsent,
+        )
+        .unwrap();
+        let S3PutOutcome::Stored { etag: first_etag } = first else {
+            panic!("first conditional PUT unexpectedly lost its precondition");
+        };
+        let first_etag = first_etag.expect("RustFS-compatible server must return an ETag");
+
+        assert_eq!(
+            put_s3_object(
+                &endpoint,
+                &region,
+                &bucket,
+                &key,
+                b"duplicate".to_vec(),
+                &access_key,
+                &secret_key,
+                S3PutCondition::IfAbsent,
+            )
+            .unwrap(),
+            S3PutOutcome::PreconditionFailed
+        );
+
+        let downloaded = get_s3_object(&endpoint, &region, &bucket, &key, &access_key, &secret_key)
+            .unwrap()
+            .unwrap();
+        assert_eq!(downloaded.bytes, b"first");
+        assert_eq!(downloaded.etag.as_deref(), Some(first_etag.as_str()));
+
+        let updated = put_s3_object(
+            &endpoint,
+            &region,
+            &bucket,
+            &key,
+            b"second".to_vec(),
+            &access_key,
+            &secret_key,
+            S3PutCondition::IfMatch(first_etag.clone()),
+        )
+        .unwrap();
+        assert!(matches!(updated, S3PutOutcome::Stored { .. }));
+        assert_eq!(
+            put_s3_object(
+                &endpoint,
+                &region,
+                &bucket,
+                &key,
+                b"stale".to_vec(),
+                &access_key,
+                &secret_key,
+                S3PutCondition::IfMatch(first_etag),
+            )
+            .unwrap(),
+            S3PutOutcome::PreconditionFailed
+        );
+
+        let listed = list_s3_objects(
+            &endpoint,
+            &region,
+            &bucket,
+            Some(&prefix),
+            &access_key,
+            &secret_key,
+        )
+        .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].object_key, key);
+
+        delete_from_s3(&endpoint, &region, &bucket, &key, &access_key, &secret_key).unwrap();
+        assert!(
+            get_s3_object(&endpoint, &region, &bucket, &key, &access_key, &secret_key,)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    fn create_disposable_test_bucket(
+        endpoint: &str,
+        region: &str,
+        bucket: &str,
+        access_key: &str,
+        secret_key: &str,
+    ) -> Result<(), String> {
+        let client = shared_client()?;
+        let (scheme, host) = parse_endpoint(endpoint);
+        let mut last_error = "S3 test server did not become ready".to_string();
+        for attempt in 0..40 {
+            let empty = Vec::new();
+            let req = S3Request {
+                method: "PUT",
+                scheme: &scheme,
+                endpoint_host: &host,
+                bucket,
+                key: "",
+                query: None,
+                payload: Some(&empty),
+                access_key,
+                secret_key,
+                region,
+                extra_headers: &[],
+            };
+            match signed_request(&client, &req)?.body(empty).send() {
+                Ok(response)
+                    if response.status().is_success() || response.status().as_u16() == 409 =>
+                {
+                    return Ok(());
+                }
+                Ok(response) => {
+                    let should_retry = response.status().as_u16() == 503;
+                    last_error = err_from_response(response, "create test bucket");
+                    if !should_retry {
+                        return Err(last_error);
+                    }
+                }
+                Err(error) => {
+                    last_error = format!("create test bucket failed: {error}");
+                }
+            }
+            if attempt + 1 < 40 {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
+        Err(last_error)
     }
 
     #[test]
