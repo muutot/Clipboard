@@ -4705,24 +4705,6 @@
       monospace;
   }
 
-  .settings-action-btn {
-    height: 34px;
-    box-sizing: border-box;
-    padding: 5px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-    font: inherit;
-    font-size: var(--settings-control-size);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
-  }
-
   .about-update-controls {
     display: flex;
     align-items: center;
@@ -4737,15 +4719,6 @@
   .about-path {
     overflow-wrap: anywhere;
     word-break: break-all;
-  }
-
-  .settings-action-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .settings-action-btn:disabled {
-    opacity: 0.55;
-    cursor: default;
   }
 
   .icon-select-all {
@@ -5421,93 +5394,6 @@
     cursor: default;
   }
 
-  .setting-card-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 13px;
-  }
-
-  .setting-card-row .setting-icon {
-    flex-shrink: 0;
-  }
-
-  .setting-label {
-    flex: 1;
-    min-width: 0;
-    color: var(--text-primary);
-    font-size: var(--settings-heading-size);
-    font-weight: 560;
-  }
-
-  .setting-card-row input {
-    height: 34px;
-    box-sizing: border-box;
-    width: 100px;
-    flex-shrink: 0;
-    padding: 7px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font: inherit;
-    font-size: var(--settings-control-size);
-    text-align: right;
-    outline: none;
-    transition: border-color 120ms ease;
-    appearance: textfield;
-    -moz-appearance: textfield;
-  }
-
-  .setting-card-row input::-webkit-outer-spin-button,
-  .setting-card-row input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  .setting-card-row button:not(.toggle-switch) {
-    height: 34px;
-    box-sizing: border-box;
-    padding: 5px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-    font: inherit;
-    font-size: var(--settings-control-size);
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
-  }
-
-  :global(.setting-card-row .settings-select) {
-    height: 34px;
-    box-sizing: border-box;
-  }
-
-  .setting-card-row button:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
-  .setting-card-row button:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-
-  .setting-card-row input:focus {
-    border-color: var(--text-faint);
-  }
-
-  .setting-card-row .number-suffix {
-    color: var(--text-muted);
-    font-size: var(--settings-description-size);
-    flex-shrink: 0;
-  }
-
   .config-path {
     flex: 1;
     min-width: 0;
@@ -5762,16 +5648,6 @@
   .resource-path-summary .restart-btn {
     grid-column: 2;
     grid-row: 1 / span 2;
-  }
-
-  :global(.unit-select) {
-    width: 64px;
-  }
-
-  :global(.unit-select .settings-select) {
-    justify-content: center;
-    padding-right: 10px;
-    text-align: center;
   }
 
   .restart-btn {

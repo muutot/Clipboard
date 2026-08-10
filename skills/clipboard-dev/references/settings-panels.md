@@ -163,7 +163,7 @@ Panels that render cards only after async/conditional data (e.g. keyboard config
 
 ## Shared versus panel-specific CSS
 
-Shared base classes belong in `settings-shared.css`. Panel-specific examples include theme color inputs/presets, keyboard binding chips, font numeric inputs, general sort-rule controls, and the ignored-app transfer board.
+Shared base classes belong in `settings-shared.css`, which is imported by the `/settings` route rather than global `app.css` so settings-only rules do not increase or leak into the main-page stylesheet. Panel-specific examples include theme color inputs/presets, keyboard binding chips, font numeric inputs, general sort-rule controls, and the ignored-app transfer board.
 
 Before adding CSS:
 
