@@ -90,6 +90,18 @@ pub fn head_object_key(device_id: &str) -> Result<String, String> {
     Ok(format!("{HEADS_PREFIX}{device_id}.bin"))
 }
 
+pub fn parse_head_key(key: &str) -> Result<String, String> {
+    let device_id = key
+        .strip_prefix(HEADS_PREFIX)
+        .and_then(|value| value.strip_suffix(".bin"))
+        .ok_or_else(|| "head key has an invalid layout".to_string())?;
+    validate_uuid(device_id, "device")?;
+    if head_object_key(device_id)? != key {
+        return Err("head key is not canonical".to_string());
+    }
+    Ok(device_id.to_string())
+}
+
 pub fn snapshot_object_key(device_id: &str, epoch: &str, sha256: &str) -> Result<String, String> {
     validate_uuid(device_id, "device")?;
     validate_uuid(epoch, "epoch")?;
@@ -296,6 +308,14 @@ mod tests {
             resource_object_key(ResourceCategory::Image, &DIGEST.to_uppercase(), "png").is_err()
         );
         assert!(resource_object_key(ResourceCategory::Image, DIGEST, "tar.gz").is_err());
+    }
+
+    #[test]
+    fn head_keys_round_trip_from_v1() {
+        let key = head_object_key(DEVICE).unwrap();
+        assert_eq!(parse_head_key(&key).unwrap(), DEVICE);
+        assert!(parse_head_key("v3/heads/device.bin").is_err());
+        assert!(parse_head_key(&format!("v1/heads/{}.BIN", DEVICE)).is_err());
     }
 
     #[test]

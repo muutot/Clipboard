@@ -225,7 +225,18 @@ fn encode_value<T: Encode>(
     );
     bytes.extend_from_slice(&header);
     if let Some(key) = key {
-        let nonce_bytes: [u8; NONCE_LEN] = rand::random();
+        // Immutable v1 objects are content addressed. Deriving the nonce from
+        // the authenticated header and compressed plaintext makes a retry
+        // reproduce the exact same ciphertext/object key while still giving
+        // distinct plaintexts distinct nonces with SHA-256 collision
+        // resistance. Equality is already observable through object names.
+        let mut nonce_hasher = Sha256::new();
+        nonce_hasher.update(b"clipboard-sync-v1-nonce\0");
+        nonce_hasher.update(header);
+        nonce_hasher.update(&compressed);
+        let nonce_digest = nonce_hasher.finalize();
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        nonce_bytes.copy_from_slice(&nonce_digest[..NONCE_LEN]);
         let ciphertext = key
             .cipher()?
             .encrypt(
@@ -418,15 +429,13 @@ mod tests {
     }
 
     #[test]
-    fn encrypted_segment_uses_one_derived_session_key() {
+    fn encrypted_segment_retries_are_content_addressed() {
         let key = SessionKey::derive("correct horse battery staple", "remote-a").unwrap();
         let segment = sample_segment();
         let first = encode_segment(&segment, Some(&key)).unwrap();
         let second = encode_segment(&segment, Some(&key)).unwrap();
-        assert_ne!(
-            first.bytes, second.bytes,
-            "every object needs a fresh nonce"
-        );
+        assert_eq!(first.bytes, second.bytes);
+        assert_eq!(first.sha256, second.sha256);
         assert_eq!(decode_segment(&first.bytes, Some(&key)).unwrap(), segment);
         assert_eq!(decode_segment(&second.bytes, Some(&key)).unwrap(), segment);
     }

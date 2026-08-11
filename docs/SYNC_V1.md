@@ -55,7 +55,10 @@ magic | version | kind | flags | nonce? | compressed-or-encrypted payload
 ```
 
 - One sync run derives the encryption key once and reuses that key for all object envelopes.
-- Every encrypted object still uses a fresh random nonce.
+- Immutable encrypted objects derive their nonce from the authenticated header and compressed
+  plaintext. The same logical retry therefore produces the same ciphertext and content-addressed
+  key, while distinct plaintexts receive distinct nonces with SHA-256 collision resistance.
+  Equality is already visible from the immutable object key.
 - A password mismatch or authentication failure is a hard error. Ciphertext is never retried as
   plaintext.
 - SHA-256 in an object name is computed over the final stored bytes, allowing corruption checks
@@ -111,8 +114,8 @@ For each push:
 6. advance the local published cursor and purge acknowledged outbox rows in one transaction.
 
 If a crash occurs before step 5, the orphan immutable segment is unreachable and harmless. If it
-occurs after step 5 but before step 6, the same logical range may be republished under the same
-content-addressed name; receivers remain idempotent.
+occurs after step 5 but before step 6, deterministic immutable encoding republishes the same
+logical range under the same content-addressed name; receivers remain idempotent.
 
 ## Incremental pull
 
