@@ -34,9 +34,12 @@ Duplicate imports are not double-counted: before persisting each row, `import_ro
 
 ## SQLite schema
 
-`src-tauri/src/storage/schema.rs::initialize` is authoritative. The database has one current
-schema marker (`PRAGMA user_version = 1`); any other value is reset transactionally and is never
-read as a migration source.
+`src-tauri/src/storage/schema.rs::initialize` is authoritative. Schema v1 is the clean baseline:
+`PRAGMA user_version = 0`/pre-v1 input is transactionally reset only for this redesign. From v1
+forward, every schema bump must register exactly one adjacent migration in
+`storage/migrations.rs`; the entire chain runs in one transaction, advances `user_version` after
+each step, validates foreign keys, and rolls back all steps on failure. A database newer than the
+binary's current schema is rejected without modification rather than downgraded or reset.
 
 - `clipboard_items`: ID, kind, title/text/html/rtf/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique. Sync v1 stores `modified_at_ms` plus `sync_writer_device_id`; together they form the deterministic `(timestamp, writer UUID)` conflict version. The current schema is created with all columns present; there is no historical column migration.
 - `ocr_results`: one row per item, status/engine/model/language/text/blocks/image hash/timestamps/error, with cascade deletion.
@@ -60,7 +63,7 @@ Core invariants:
 - Binary image/file content lives in managed files; SQLite stores paths and metadata, not blobs.
 - Tantivy is derived and rebuildable; SQLite plus owned resource files are the primary data.
 
-Schema changes require a deliberate new schema marker, row mapping, repository tests, recovery/backup consideration, derived-data behavior, and an update to this reference. Historical migration code is intentionally out of scope for the current v1 database.
+Schema changes require a deliberate new schema marker, one registered adjacent migration, row mapping, migration and repository tests, recovery/backup consideration, derived-data behavior, and an update to this reference. Pre-v1 historical readers remain intentionally out of scope; that one-time reset boundary must not be reused for changes after v1.
 
 ## Configuration contracts
 

@@ -18,6 +18,20 @@ pub enum StorageError {
         database: PathBuf,
         reason: String,
     },
+    UnsupportedDatabaseSchemaVersion {
+        found: i64,
+        supported: i64,
+    },
+    InvalidDatabaseMigrationPlan {
+        from_version: i64,
+        to_version: i64,
+        reason: String,
+    },
+    DatabaseMigrationFailed {
+        from_version: i64,
+        to_version: i64,
+        reason: String,
+    },
     FavoriteMustBeRemoved(String),
     DataDirectoryMustBeAbsolute(PathBuf),
     ResourceDirectoryMustBeAbsolute {
@@ -87,6 +101,26 @@ impl fmt::Display for StorageError {
                 formatter,
                 "database recovery unavailable for {}: {reason}",
                 database.display()
+            ),
+            Self::UnsupportedDatabaseSchemaVersion { found, supported } => write!(
+                formatter,
+                "database schema v{found} is newer than supported v{supported}; refusing to downgrade or reset it"
+            ),
+            Self::InvalidDatabaseMigrationPlan {
+                from_version,
+                to_version,
+                reason,
+            } => write!(
+                formatter,
+                "invalid database migration plan from v{from_version} to v{to_version}: {reason}"
+            ),
+            Self::DatabaseMigrationFailed {
+                from_version,
+                to_version,
+                reason,
+            } => write!(
+                formatter,
+                "database migration from v{from_version} to v{to_version} failed: {reason}"
             ),
             Self::FavoriteMustBeRemoved(id) => {
                 write!(

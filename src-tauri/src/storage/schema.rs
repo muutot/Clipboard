@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-use super::StorageError;
+use super::{migrations, StorageError};
 
 pub(super) const SCHEMA_VERSION: i64 = 1;
 
@@ -9,14 +9,31 @@ pub(super) struct SchemaInitResult {
     pub was_reset: bool,
 }
 
-/// Opens only the current schema. Databases without the exact v1 marker are
-/// reset transactionally; no historical table, column, trigger, or row is
-/// migrated into the current layout.
+/// Schema v1 is the clean baseline. Pre-v1 databases are reset once for this
+/// redesign; later versions are migrated sequentially and are never reset.
 pub(super) fn initialize(connection: &Connection) -> Result<SchemaInitResult, StorageError> {
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if version != SCHEMA_VERSION {
+    if version < 0 {
+        return Err(StorageError::InvalidStoredValue {
+            field: "PRAGMA user_version",
+            value: version,
+        });
+    }
+    if version > SCHEMA_VERSION {
+        return Err(StorageError::UnsupportedDatabaseSchemaVersion {
+            found: version,
+            supported: SCHEMA_VERSION,
+        });
+    }
+
+    migrations::validate_registered_plan(1, SCHEMA_VERSION)?;
+    if version == 0 {
         reset_to_current_schema(connection)?;
         return Ok(SchemaInitResult { was_reset: true });
+    }
+    if version < SCHEMA_VERSION {
+        migrations::migrate_to_current(connection, version, SCHEMA_VERSION, create_current_schema)?;
+        return Ok(SchemaInitResult { was_reset: false });
     }
 
     create_current_schema(connection)?;
@@ -508,6 +525,42 @@ mod tests {
         assert_eq!(count, 0);
         assert!(!table_exists(&connection, "sync_changelog"));
         assert!(!table_exists(&connection, "legacy_only"));
+    }
+
+    #[test]
+    fn newer_schema_is_rejected_without_modifying_data() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE future_data (value TEXT NOT NULL);
+                 INSERT INTO future_data VALUES ('keep');
+                 PRAGMA user_version = 2;",
+            )
+            .unwrap();
+
+        assert!(matches!(
+            initialize(&connection),
+            Err(StorageError::UnsupportedDatabaseSchemaVersion {
+                found: 2,
+                supported: SCHEMA_VERSION
+            })
+        ));
+        assert_eq!(
+            connection
+                .query_row("SELECT value FROM future_data", [], |row| row
+                    .get::<_, String>(0))
+                .unwrap(),
+            "keep"
+        );
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn current_version_has_a_complete_registered_migration_plan() {
+        migrations::validate_registered_plan(1, SCHEMA_VERSION).unwrap();
     }
 
     #[test]

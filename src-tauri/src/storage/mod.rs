@@ -1,6 +1,7 @@
 mod database;
 mod error;
 mod maintenance;
+mod migrations;
 mod ocr_repository;
 mod paths;
 mod recovery;
