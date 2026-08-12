@@ -204,12 +204,12 @@
 
 ### 阶段 0：数据契约与配置
 
-- [ ] 定义 wire record schema：upsert/delete/tombstone 行格式、字段名、类型、协议版本；明确排除 `resource_path`、`preview_path`、`icon_path` 等本地路径。
+- [ ] 定义 wire record schema：upsert/delete/tombstone/tag 行格式、字段名、类型、协议版本；明确排除 `resource_path`、`preview_path`、`icon_path` 等本地路径。
   - 验收：serde 序列化单测覆盖字段集合，样例 JSON 不包含本地绝对路径。
 - [ ] 定义同步范围：text/link 全量；image/file 按大小上限，超限跳过并本地标记；标签与收藏参与；`last_used_at_ms`、OCR、搜索索引、预览、图标不参与。
   - 验收：字段映射测试 + 策略文档。
-- [ ] 定义标签同步契约：单记录标签随 `metadata_json` upsert；`tags` 注册表（名称/颜色）与全局重命名/删除需要独立 op 或批量压缩策略。
-  - 验收：标签重命名/颜色变更跨 3 机一致；重命名 1 个标签不产生逐条全量 upsert 风暴。
+- [ ] 定义标签同步契约：单记录标签随 `metadata_json` upsert；`tags` 注册表（名称/颜色）与全局重命名/删除使用专用 tag op，各端本地批量改写 `item_tags`/`metadata_json.tags`；按 `(modified_at_ms, writer_device_id)` 仲裁，颜色全局一致，删除只在无引用后生效。
+  - 验收：标签重命名/颜色变更跨 3 机一致且每次只产生 1 条 tag op；并发重命名/颜色冲突按版本仲裁；删除在仍有引用时不生效。
 - [ ] 解决本地使用产生的同步噪音：当前更新触发器把 `last_used_at_ms` 变化写入 outbox，需通过过滤、独立列或触发条件调整，使本地使用不产生网络 op。
   - 验收：模拟本地复制/使用不产生出站 op；真正内容修改产生且只产生 1 个 op。
 - [ ] 定义版本仲裁与冲突规则：`(modified_at_ms, writer_device_id)` 全序；同内容不同 ID 经 `sync_item_aliases` 合并；删除与更新按版本比较。
@@ -355,4 +355,3 @@
 - [暂缓] 驱逐标记发布后、快照完成前的离线恢复窗口：暂时跳过。
 - [暂缓] 首次开启存量合并流量优化：暂时跳过。
 - [待定] 时钟偏差会破坏 `(modified_at_ms, writer_device_id)` 仲裁，需要容差或本地单调序列。
-- [待定] 标签重命名/颜色变更若走逐条 item upsert 会放大流量，需要专用 op 或批量压缩。
