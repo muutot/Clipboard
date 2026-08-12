@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import ColorField from "$lib/components/ColorField.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import {
     ICON_NAMES,
@@ -127,27 +128,13 @@
             <AppIcon {name} size={18} />
           </span>
           <span class="icon-color-name">{name}</span>
-          <input
-            type="color"
-            class="color-picker"
+          <ColorField
             value={effectiveColor(name)}
             disabled={isReadonly}
-            aria-label={name}
-            oninput={(e) => updateIconColor(name, (e.target as HTMLInputElement).value)}
-          />
-          <input
-            type="text"
-            class="color-text-input"
-            value={effectiveColor(name)}
-            disabled={isReadonly}
-            maxlength={9}
-            aria-label={`${name} hex`}
-            oninput={(e) => {
-              const val = (e.target as HTMLInputElement).value;
-              if (/^#[0-9a-fA-F]{0,8}$/.test(val)) {
-                updateIconColor(name, val);
-              }
-            }}
+            compact
+            colorAriaLabel={name}
+            hexAriaLabel={`${name} hex`}
+            onchange={(v) => updateIconColor(name, v)}
           />
           <button
             type="button"
@@ -172,12 +159,6 @@
 {/if}
 
 <style>
-  .readonly-hint {
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-    color: var(--text-muted);
-    margin: 0 0 12px 16px;
-  }
-
   .icon-colors-reset-all {
     flex-shrink: 0;
     padding: 5px 10px;
@@ -239,45 +220,6 @@
     white-space: nowrap;
     color: var(--text-secondary);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-  }
-
-  .color-picker {
-    width: 28px;
-    height: 28px;
-    flex-shrink: 0;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    cursor: pointer;
-    padding: 2px;
-    background: var(--input-bg);
-  }
-
-  .color-picker:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .color-text-input {
-    width: 74px;
-    flex-shrink: 0;
-    padding: 4px 6px;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    font-family: monospace;
-    text-transform: uppercase;
-  }
-
-  .color-text-input:focus {
-    border-color: var(--text-faint);
-    outline: none;
-  }
-
-  .color-text-input:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .icon-color-reset {

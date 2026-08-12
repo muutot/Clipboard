@@ -66,6 +66,12 @@ header p {
   font-size: var(--settings-description-size);
 }
 
+.readonly-hint {
+  font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  color: var(--text-muted);
+  margin: 0 0 12px 16px;
+}
+
 /* ── cards ── */
 .setting-card {
   padding: 6px 13px;

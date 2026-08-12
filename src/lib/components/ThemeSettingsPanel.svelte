@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import ColorField from "$lib/components/ColorField.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import type { ThemeColors, ThemeMode, ThemePreset } from "$lib/types/clipboard";
@@ -370,25 +371,10 @@
           </div>
         </div>
         <div class="color-input-group">
-          <input
-            type="color"
-            class="color-picker"
+          <ColorField
             value={themeColors[entry.key]}
             disabled={isReadonly}
-            oninput={(e) => updateColor(entry.key, (e.target as HTMLInputElement).value)}
-          />
-          <input
-            type="text"
-            class="color-text-input"
-            value={themeColors[entry.key]}
-            disabled={isReadonly}
-            maxlength={9}
-            oninput={(e) => {
-              const val = (e.target as HTMLInputElement).value;
-              if (/^#[0-9a-fA-F]{0,8}$/.test(val)) {
-                updateColor(entry.key, val);
-              }
-            }}
+            onchange={(v) => updateColor(entry.key, v)}
           />
         </div>
       </section>
@@ -416,49 +402,6 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-  }
-
-  .color-picker {
-    width: 32px;
-    height: 32px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    cursor: pointer;
-    padding: 2px;
-    background: var(--input-bg);
-  }
-
-  .color-picker:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .color-text-input {
-    width: 80px;
-    padding: 5px 8px;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    font-family: monospace;
-    text-transform: uppercase;
-  }
-
-  .color-text-input:focus {
-    border-color: var(--text-faint);
-    outline: none;
-  }
-
-  .color-text-input:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .readonly-hint {
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-    color: var(--text-muted);
-    margin: 0 0 12px 16px;
   }
 
   .close-button:hover {

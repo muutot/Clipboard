@@ -169,6 +169,8 @@ Panels that render cards only after async/conditional data (e.g. keyboard config
 
 Shared base classes belong in `settings-shared.css`, which is imported by the `/settings` route rather than global `app.css` so settings-only rules do not increase or leak into the main-page stylesheet. Panel-specific examples include theme color inputs/presets, keyboard binding chips, font numeric inputs, general sort-rule controls, and the ignored-app transfer board.
 
+Reuse the `ColorField.svelte` component for the color-picker + HEX text pair instead of copying the two inputs and their validation into another panel; pass `compact` for the icon-color row sizing. The `.readonly-hint` note belongs in `settings-shared.css`.
+
 Before adding CSS:
 
 1. search `settings-shared.css`, the parent shell, and sibling panels for the same primitive;
