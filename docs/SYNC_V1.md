@@ -177,22 +177,38 @@ error because discovery cannot proceed safely.
 ## Global checkpoint and safe garbage collection
 
 `checkpoint.bin` points to one immutable global checkpoint and carries an ETag-protected generation
-plus a vector clock of `{device_id, epoch, sequence}` entries.
+plus a vector clock of `{device_id, epoch, sequence}` entries. Each database stores the vector of
+the last checkpoint it successfully applied or published in `sync_checkpoint_cursors`; that compact
+local baseline lets an idle run decide that compaction is not due without reading `checkpoint.bin`.
+
+Compaction is due when no local checkpoint baseline exists, when the device/epoch set changes, or
+when the sum of sequence advances since that baseline reaches 50,000. A run with any failed peer
+does not compact because its materialized view is not known to cover every discoverable head. The
+compactor also skips publication while local outbox state is not fully represented by the published
+local sequence.
 
 A compactor:
 
-1. reads the current checkpoint pointer and all device heads;
-2. materializes the previous checkpoint plus every segment up to a frozen vector;
-3. writes a checkpoint containing the winning record version for every id, including tombstones;
-4. conditionally replaces `checkpoint.bin` with `If-Match` (or `If-None-Match: *` initially);
-5. only after the conditional publish succeeds, deletes snapshots and segments fully covered by
-   the published vector;
-6. retains the immediately previous checkpoint until the new pointer and cleanup are revalidated.
+1. freezes the locally published device state plus every successfully applied peer cursor;
+2. reads and validates the current checkpoint pointer/body only when the local baseline says work
+   is due, rejecting a candidate that drops a known device or regresses a sequence in the same epoch;
+3. exports the complete local materialized state, including tombstones, and uploads missing
+   content-addressed resources;
+4. writes one immutable checkpoint containing that complete winning state and frozen vector;
+5. conditionally replaces `checkpoint.bin` with `If-Match` (or `If-None-Match: *` initially);
+6. only after the conditional publish succeeds, deletes snapshots and segments covered by the
+   immediately previous checkpoint vector;
+7. retains the current and immediately previous checkpoints and atomically records the new local
+   baseline only after cleanup completes.
 
 Concurrent compactors are safe: only the conditional pointer update winner may perform garbage
-collection. A segment crossing a checkpoint boundary is retained. Tombstones are never discarded
-merely because the corresponding live row is absent; dropping them would allow an offline device
-to resurrect deleted records.
+collection. A delayed winner never prunes a checkpoint pack from its own or a higher generation;
+same-generation losing candidates are therefore harmless and become eligible only after a later
+generation advances. Cleanup is restartable: if the pointer was published but the process stopped
+before GC/local-baseline recording, a later run with the same vector revalidates the checkpoint and
+finishes cleanup. A segment crossing a checkpoint boundary is retained. Tombstones are never
+discarded merely because the corresponding live row is absent; dropping them would allow an offline
+device to resurrect deleted records.
 
 ## Obsolete-state deletion boundary
 

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use sha2::{Digest, Sha256};
 
 use crate::storage::{Database, StoragePaths};
@@ -11,6 +13,8 @@ use super::{
     ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
     Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
+
+const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SyncEngineOptions {
@@ -134,6 +138,22 @@ pub fn sync_database(
         options.resource_limits,
         &mut result,
     )?;
+    if result.failed_peers == 0 {
+        state = database
+            .get_or_create_sync_remote_state(remote_scope)
+            .map_err(|error| error.to_string())?;
+        maybe_compact(
+            store,
+            database,
+            paths,
+            remote_scope,
+            &device_id,
+            &state,
+            session_key,
+            options.resource_limits,
+            &mut result,
+        )?;
+    }
     Ok(result)
 }
 
@@ -215,13 +235,18 @@ fn pull_checkpoint_if_needed(
     result: &mut SyncEngineResult,
     force: bool,
 ) -> Result<bool, String> {
-    if !force
-        && !database
+    if !force {
+        let has_checkpoint = database
+            .get_sync_checkpoint_state(remote_scope)
+            .map_err(|error| error.to_string())?
+            .is_some();
+        let has_peer_cursors = !database
             .list_sync_cursors(remote_scope)
-            .map_err(|e| e.to_string())?
-            .is_empty()
-    {
-        return Ok(false);
+            .map_err(|error| error.to_string())?
+            .is_empty();
+        if has_checkpoint || has_peer_cursors {
+            return Ok(false);
+        }
     }
     let Some(downloaded_head) = store.get(CHECKPOINT_HEAD_KEY)? else {
         return if force {
@@ -400,6 +425,343 @@ fn validate_checkpoint_vector(vector: &[DeviceCursor]) -> Result<(), String> {
         previous_device = Some(&cursor.device_id);
     }
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn maybe_compact(
+    store: &impl ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    remote_scope: &str,
+    local_device_id: &str,
+    local_state: &crate::storage::SyncRemoteState,
+    session_key: Option<&SessionKey>,
+    resource_limits: ResourceLimits,
+    result: &mut SyncEngineResult,
+) -> Result<(), String> {
+    let vector = frozen_checkpoint_vector(database, remote_scope, local_device_id, local_state)?;
+    let baseline = database
+        .get_sync_checkpoint_cursors(remote_scope)
+        .map_err(|error| error.to_string())?;
+    if vector.is_empty() || !checkpoint_compaction_due(&baseline, &vector) {
+        return Ok(());
+    }
+    let existing = read_checkpoint_head(store, session_key, result)?;
+
+    if let Some(current) = existing.as_ref() {
+        let current_is_locally_verified = database
+            .get_sync_checkpoint_state(remote_scope)
+            .map_err(|error| error.to_string())?
+            .is_some_and(|(generation, sha256)| {
+                generation == current.head.generation && sha256 == current.head.checkpoint.sha256
+            })
+            && baseline == current.head.vector;
+        if !current_is_locally_verified {
+            match download_checkpoint(
+                store,
+                &current.head.checkpoint,
+                current.head.generation,
+                session_key,
+                result,
+            ) {
+                Ok(checkpoint) if checkpoint.vector == current.head.vector => {}
+                Ok(_) | Err(_) => return Ok(()),
+            }
+        }
+        validate_compaction_vector(&current.head.vector, &vector)?;
+        if current.head.vector == vector {
+            finalize_checkpoint_publication(
+                store,
+                database,
+                remote_scope,
+                &current.head,
+                None,
+                session_key,
+                result,
+            )?;
+            return Ok(());
+        }
+    }
+
+    let generation = existing.as_ref().map_or(Ok(1), |current| {
+        current
+            .head
+            .generation
+            .checked_add(1)
+            .ok_or_else(|| "checkpoint generation overflowed".to_string())
+    })?;
+    let snapshot = database
+        .export_sync_snapshot()
+        .map_err(|error| error.to_string())?;
+    if snapshot.through_sequence != local_state.published_sequence {
+        return Ok(());
+    }
+    let mut mutations = snapshot.mutations;
+    let resources = prepare_mutation_resources(store, &mut mutations, paths, resource_limits)?;
+    result.uploaded_resources += resources.transferred_resources;
+    result.bytes_uploaded = checked_add(
+        result.bytes_uploaded,
+        resources.transferred_bytes,
+        "uploaded byte count",
+    )?;
+    let checkpoint = Checkpoint {
+        generation,
+        vector: vector.clone(),
+        mutations,
+    };
+    let encoded = super::encode_checkpoint(&checkpoint, session_key)?;
+    let key = super::checkpoint_object_key(generation, &encoded.sha256)?;
+    put_immutable(store, &key, &encoded, result)?;
+    let checkpoint_ref = ObjectRef {
+        key,
+        sha256: encoded.sha256,
+        stored_size_bytes: encoded.bytes.len() as u64,
+        record_count: checkpoint.mutations.len() as u64,
+    };
+    let head = CheckpointHead {
+        generation,
+        checkpoint: checkpoint_ref,
+        vector,
+        previous_checkpoint: existing
+            .as_ref()
+            .map(|current| current.head.checkpoint.clone()),
+        updated_at_ms: current_time_ms(),
+    };
+    let encoded_head = super::encode_checkpoint_head(&head, session_key)?;
+    let encoded_head_size = encoded_head.stored_size_bytes();
+    let condition = existing.as_ref().map_or(PutCondition::IfAbsent, |current| {
+        PutCondition::IfMatch(current.etag.clone())
+    });
+    match store.put(CHECKPOINT_HEAD_KEY, encoded_head.bytes, condition)? {
+        PutOutcome::PreconditionFailed => return Ok(()),
+        PutOutcome::Stored { .. } => {
+            result.bytes_uploaded = checked_add(
+                result.bytes_uploaded,
+                encoded_head_size,
+                "uploaded byte count",
+            )?;
+        }
+    }
+    finalize_checkpoint_publication(
+        store,
+        database,
+        remote_scope,
+        &head,
+        existing
+            .as_ref()
+            .map(|current| current.head.vector.as_slice()),
+        session_key,
+        result,
+    )
+}
+
+fn finalize_checkpoint_publication(
+    store: &impl ObjectStore,
+    database: &Database,
+    remote_scope: &str,
+    head: &CheckpointHead,
+    covered_vector_hint: Option<&[DeviceCursor]>,
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> Result<(), String> {
+    if let Some(previous) = head.previous_checkpoint.as_ref() {
+        let previous_generation = parse_checkpoint_key(&previous.key)?.generation;
+        let covered_vector = if let Some(vector) = covered_vector_hint {
+            vector.to_vec()
+        } else {
+            let local_state = database
+                .get_sync_checkpoint_state(remote_scope)
+                .map_err(|error| error.to_string())?;
+            let local_vector = if local_state.is_some_and(|(generation, sha256)| {
+                generation == previous_generation && sha256 == previous.sha256
+            }) {
+                database
+                    .get_sync_checkpoint_cursors(remote_scope)
+                    .map_err(|error| error.to_string())?
+            } else {
+                Vec::new()
+            };
+            if local_vector.is_empty() {
+                download_checkpoint(store, previous, previous_generation, session_key, result)?
+                    .vector
+            } else {
+                local_vector
+            }
+        };
+        validate_checkpoint_vector(&covered_vector)?;
+        let deleted = garbage_collect_covered_history(store, &covered_vector)?;
+        result.deleted_remote_objects = checked_add(
+            result.deleted_remote_objects,
+            deleted,
+            "deleted remote object count",
+        )?;
+    }
+    let deleted = prune_unreferenced_checkpoints(store, head)?;
+    result.deleted_remote_objects = checked_add(
+        result.deleted_remote_objects,
+        deleted,
+        "deleted remote object count",
+    )?;
+    database
+        .record_sync_checkpoint_published(
+            remote_scope,
+            head.generation,
+            &head.checkpoint.sha256,
+            &head.vector,
+        )
+        .map_err(|error| error.to_string())
+}
+
+fn prune_unreferenced_checkpoints(
+    store: &impl ObjectStore,
+    head: &CheckpointHead,
+) -> Result<u64, String> {
+    let mut retained = vec![head.checkpoint.key.as_str()];
+    if let Some(previous) = head.previous_checkpoint.as_ref() {
+        retained.push(previous.key.as_str());
+    }
+    let mut deleted = 0u64;
+    for object in store.list("v1/checkpoints/", None)? {
+        let Ok(parsed) = parse_checkpoint_key(&object.key) else {
+            continue;
+        };
+        if retained.contains(&object.key.as_str()) || parsed.generation >= head.generation {
+            continue;
+        }
+        store.delete(&object.key)?;
+        deleted = checked_add(deleted, 1, "deleted remote object count")?;
+    }
+    Ok(deleted)
+}
+
+struct StoredCheckpointHead {
+    head: CheckpointHead,
+    etag: String,
+}
+
+fn read_checkpoint_head(
+    store: &impl ObjectStore,
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> Result<Option<StoredCheckpointHead>, String> {
+    let Some(downloaded) = store.get(CHECKPOINT_HEAD_KEY)? else {
+        return Ok(None);
+    };
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        downloaded.bytes.len() as u64,
+        "downloaded byte count",
+    )?;
+    let etag = downloaded
+        .etag
+        .ok_or_else(|| "checkpoint pointer response is missing an ETag".to_string())?;
+    let head = decode_checkpoint_head(&downloaded.bytes, session_key)?;
+    validate_checkpoint_head(&head)?;
+    Ok(Some(StoredCheckpointHead { head, etag }))
+}
+
+fn frozen_checkpoint_vector(
+    database: &Database,
+    remote_scope: &str,
+    local_device_id: &str,
+    local_state: &crate::storage::SyncRemoteState,
+) -> Result<Vec<DeviceCursor>, String> {
+    let mut vector = database
+        .list_sync_cursors(remote_scope)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|cursor| (cursor.device_id.clone(), cursor))
+        .collect::<BTreeMap<_, _>>();
+    vector.insert(
+        local_device_id.to_string(),
+        DeviceCursor {
+            device_id: local_device_id.to_string(),
+            epoch: local_state.epoch.clone(),
+            sequence: local_state.published_sequence,
+            last_segment_key: local_state.last_segment_key.clone(),
+        },
+    );
+    let vector = vector.into_values().collect::<Vec<_>>();
+    validate_checkpoint_vector(&vector)?;
+    Ok(vector)
+}
+
+fn checkpoint_compaction_due(baseline: &[DeviceCursor], vector: &[DeviceCursor]) -> bool {
+    if baseline.is_empty() {
+        return true;
+    }
+    let previous = baseline
+        .iter()
+        .map(|cursor| (cursor.device_id.as_str(), cursor))
+        .collect::<BTreeMap<_, _>>();
+    if previous.len() != vector.len() {
+        return true;
+    }
+    let mut delta = 0u64;
+    for cursor in vector {
+        let Some(old) = previous.get(cursor.device_id.as_str()) else {
+            return true;
+        };
+        if old.epoch != cursor.epoch || old.sequence > cursor.sequence {
+            return true;
+        }
+        delta = delta.saturating_add(cursor.sequence - old.sequence);
+    }
+    delta >= CHECKPOINT_SEQUENCE_DELTA_THRESHOLD
+}
+
+fn validate_compaction_vector(
+    current: &[DeviceCursor],
+    candidate: &[DeviceCursor],
+) -> Result<(), String> {
+    let current = current
+        .iter()
+        .map(|cursor| (cursor.device_id.as_str(), cursor))
+        .collect::<BTreeMap<_, _>>();
+    for device_id in current.keys() {
+        if !candidate
+            .iter()
+            .any(|cursor| cursor.device_id == *device_id)
+        {
+            return Err(format!(
+                "checkpoint candidate dropped known device {device_id}"
+            ));
+        }
+    }
+    for cursor in candidate {
+        if let Some(existing) = current.get(cursor.device_id.as_str()) {
+            if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
+                return Err(format!(
+                    "checkpoint candidate regresses device {} from {} to {}",
+                    cursor.device_id, existing.sequence, cursor.sequence
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn garbage_collect_covered_history(
+    store: &impl ObjectStore,
+    covered_vector: &[DeviceCursor],
+) -> Result<u64, String> {
+    let mut deleted = 0u64;
+    for cursor in covered_vector {
+        let snapshot_prefix = format!("v1/snapshots/{}/{}/", cursor.device_id, cursor.epoch);
+        for object in store.list(&snapshot_prefix, None)? {
+            store.delete(&object.key)?;
+            deleted = checked_add(deleted, 1, "deleted remote object count")?;
+        }
+        let prefix = segment_prefix(&cursor.device_id, &cursor.epoch)?;
+        for object in store.list(&prefix, None)? {
+            let segment = parse_segment_key(&object.key)?;
+            if segment.last_sequence <= cursor.sequence {
+                store.delete(&object.key)?;
+                deleted = checked_add(deleted, 1, "deleted remote object count")?;
+            }
+        }
+    }
+    Ok(deleted)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -980,6 +1342,10 @@ mod tests {
     #[derive(Default)]
     struct MemoryStore {
         objects: Mutex<BTreeMap<String, Vec<u8>>>,
+        fail_checkpoint_cas: Mutex<bool>,
+        deleted: Mutex<Vec<String>>,
+        gets: Mutex<Vec<String>>,
+        puts: Mutex<Vec<String>>,
     }
 
     impl ObjectStore for MemoryStore {
@@ -1000,13 +1366,17 @@ mod tests {
         }
 
         fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
+            self.gets.lock().unwrap().push(key.to_string());
             Ok(self
                 .objects
                 .lock()
                 .unwrap()
                 .get(key)
                 .cloned()
-                .map(|bytes| DownloadedObject { bytes, etag: None }))
+                .map(|bytes| DownloadedObject {
+                    etag: Some(format!("\"{}\"", hex::encode(Sha256::digest(&bytes)))),
+                    bytes,
+                }))
         }
 
         fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
@@ -1052,12 +1422,29 @@ mod tests {
             bytes: Vec<u8>,
             condition: PutCondition,
         ) -> Result<PutOutcome, String> {
+            self.puts.lock().unwrap().push(key.to_string());
             let mut objects = self.objects.lock().unwrap();
+            if key == CHECKPOINT_HEAD_KEY
+                && matches!(condition, PutCondition::IfAbsent | PutCondition::IfMatch(_))
+                && *self.fail_checkpoint_cas.lock().unwrap()
+            {
+                return Ok(PutOutcome::PreconditionFailed);
+            }
             if matches!(condition, PutCondition::IfAbsent) && objects.contains_key(key) {
                 return Ok(PutOutcome::PreconditionFailed);
             }
+            if let PutCondition::IfMatch(expected) = &condition {
+                let Some(existing) = objects.get(key) else {
+                    return Ok(PutOutcome::PreconditionFailed);
+                };
+                let actual = format!("\"{}\"", hex::encode(Sha256::digest(existing)));
+                if &actual != expected {
+                    return Ok(PutOutcome::PreconditionFailed);
+                }
+            }
+            let etag = format!("\"{}\"", hex::encode(Sha256::digest(&bytes)));
             objects.insert(key.to_string(), bytes);
-            Ok(PutOutcome::Stored { etag: None })
+            Ok(PutOutcome::Stored { etag: Some(etag) })
         }
 
         fn put_file(
@@ -1077,6 +1464,7 @@ mod tests {
 
         fn delete(&self, key: &str) -> Result<(), String> {
             self.objects.lock().unwrap().remove(key);
+            self.deleted.lock().unwrap().push(key.to_string());
             Ok(())
         }
     }
@@ -1367,27 +1755,10 @@ mod tests {
         assert_eq!(result.downloaded_entries, 1);
         assert_eq!(result.applied_entries, 1);
         assert!(database.get_item("checkpoint-only").unwrap().is_some());
-        assert_eq!(
-            database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
-            Some((
-                1,
-                checkpoint_digest_for_generation(
-                    &decode_checkpoint_head(
-                        &store
-                            .objects
-                            .lock()
-                            .unwrap()
-                            .get(CHECKPOINT_HEAD_KEY)
-                            .unwrap()
-                            .clone(),
-                        None,
-                    )
-                    .unwrap(),
-                    1,
-                )
-                .unwrap()
-            ))
-        );
+        assert!(database
+            .get_sync_checkpoint_state(REMOTE_SCOPE)
+            .unwrap()
+            .is_some_and(|(generation, _)| generation >= 1));
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
@@ -1444,13 +1815,344 @@ mod tests {
 
         assert!(database.get_item("previous-only").unwrap().is_some());
         assert!(database.get_item("current-only").unwrap().is_none());
-        assert_eq!(
-            database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
-            Some((1, previous_ref.sha256))
-        );
+        assert!(database
+            .get_sync_checkpoint_state(REMOTE_SCOPE)
+            .unwrap()
+            .is_some_and(|(generation, _)| generation >= 1));
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn idle_sync_does_not_read_or_publish_a_checkpoint() {
+        let store = MemoryStore::default();
+        let paths = temp_paths("checkpoint-idle");
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&text_item("initial", "initial"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        store.gets.lock().unwrap().clear();
+        store.puts.lock().unwrap().clear();
+
+        let idle = sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert_eq!(idle.uploaded_entries, 0);
+        assert_eq!(idle.bytes_uploaded, 0);
+        assert_eq!(idle.deleted_remote_objects, 0);
+        assert!(!store
+            .gets
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY));
+        assert!(!store
+            .puts
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn checkpoint_cas_loser_never_garbage_collects_history() {
+        let store = MemoryStore::default();
+        let paths = temp_paths("checkpoint-cas-loser");
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&text_item("initial", "initial"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let device_id = database.get_sync_device_id().unwrap();
+        database.save_item(&text_item("later", "later")).unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let state = database
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        let protected_snapshot = state.snapshot.as_ref().unwrap().key.clone();
+        store.deleted.lock().unwrap().clear();
+        *store.fail_checkpoint_cas.lock().unwrap() = true;
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                    [REMOTE_SCOPE],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+
+        let mut result = SyncEngineResult::default();
+        maybe_compact(
+            &store,
+            &database,
+            &paths,
+            REMOTE_SCOPE,
+            &device_id,
+            &state,
+            None,
+            options().resource_limits,
+            &mut result,
+        )
+        .unwrap();
+
+        assert_eq!(result.deleted_remote_objects, 0);
+        assert!(result.bytes_uploaded > 0);
+        assert!(store.deleted.lock().unwrap().is_empty());
+        assert!(store
+            .objects
+            .lock()
+            .unwrap()
+            .contains_key(&protected_snapshot));
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn successful_compaction_keeps_current_and_previous_checkpoints_only() {
+        let store = MemoryStore::default();
+        let paths = temp_paths("checkpoint-retention");
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&text_item("initial", "initial"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let device_id = database.get_sync_device_id().unwrap();
+        let first_state = database
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        let first_snapshot = first_state.snapshot.as_ref().unwrap().key.clone();
+        database.save_item(&text_item("second", "second")).unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let first_state = database
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                    [REMOTE_SCOPE],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let mut first_compaction = SyncEngineResult::default();
+        maybe_compact(
+            &store,
+            &database,
+            &paths,
+            REMOTE_SCOPE,
+            &device_id,
+            &first_state,
+            None,
+            options().resource_limits,
+            &mut first_compaction,
+        )
+        .unwrap();
+        assert!(!store.objects.lock().unwrap().contains_key(&first_snapshot));
+
+        database.save_item(&text_item("third", "third")).unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                    [REMOTE_SCOPE],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let state = database
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        let mut second_compaction = SyncEngineResult::default();
+        maybe_compact(
+            &store,
+            &database,
+            &paths,
+            REMOTE_SCOPE,
+            &device_id,
+            &state,
+            None,
+            options().resource_limits,
+            &mut second_compaction,
+        )
+        .unwrap();
+
+        let checkpoint_count = store
+            .objects
+            .lock()
+            .unwrap()
+            .keys()
+            .filter(|key| key.starts_with("v1/checkpoints/"))
+            .count();
+        assert_eq!(checkpoint_count, 2);
+        let head = decode_checkpoint_head(
+            store
+                .objects
+                .lock()
+                .unwrap()
+                .get(CHECKPOINT_HEAD_KEY)
+                .unwrap(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(head.generation, 3);
+        assert!(head.previous_checkpoint.is_some());
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn stale_compactor_never_prunes_a_newer_checkpoint_candidate() {
+        let store = MemoryStore::default();
+        let device_id = "11111111-1111-4111-8111-111111111111";
+        let epoch = "22222222-2222-4222-8222-222222222222";
+        let vector = vec![DeviceCursor {
+            device_id: device_id.to_string(),
+            epoch: epoch.to_string(),
+            sequence: 0,
+            last_segment_key: None,
+        }];
+        let checkpoint = |generation| Checkpoint {
+            generation,
+            vector: vector.clone(),
+            mutations: super::super::MutationBatch {
+                upserts: Vec::new(),
+                tombstones: Vec::new(),
+            },
+        };
+        let first = insert_checkpoint(&store, &checkpoint(1));
+        let second = insert_checkpoint(&store, &checkpoint(2));
+        let third = insert_checkpoint(&store, &checkpoint(3));
+        let future = insert_checkpoint(&store, &checkpoint(4));
+        let head = CheckpointHead {
+            generation: 3,
+            checkpoint: third.clone(),
+            vector,
+            previous_checkpoint: Some(second.clone()),
+            updated_at_ms: 1,
+        };
+
+        assert_eq!(prune_unreferenced_checkpoints(&store, &head).unwrap(), 1);
+
+        let objects = store.objects.lock().unwrap();
+        assert!(!objects.contains_key(&first.key));
+        assert!(objects.contains_key(&second.key));
+        assert!(objects.contains_key(&third.key));
+        assert!(objects.contains_key(&future.key));
+    }
+
+    #[test]
+    fn fourth_device_bootstraps_after_three_device_compaction_and_gc() {
+        let store = MemoryStore::default();
+        let first_paths = temp_paths("compact-first");
+        let second_paths = temp_paths("compact-second");
+        let third_paths = temp_paths("compact-third");
+        let fourth_paths = temp_paths("compact-fourth");
+        let first = Database::open(&first_paths.database).unwrap();
+        let second = Database::open(&second_paths.database).unwrap();
+        let third = Database::open(&third_paths.database).unwrap();
+        let fourth = Database::open(&fourth_paths.database).unwrap();
+        first.save_item(&text_item("first-only", "first")).unwrap();
+        second
+            .save_item(&text_item("second-only", "second"))
+            .unwrap();
+        third.save_item(&text_item("third-only", "third")).unwrap();
+
+        for _ in 0..2 {
+            sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+            sync_database(
+                &store,
+                &second,
+                &second_paths,
+                REMOTE_SCOPE,
+                None,
+                options(),
+            )
+            .unwrap();
+            sync_database(&store, &third, &third_paths, REMOTE_SCOPE, None, options()).unwrap();
+        }
+        let all_ids = ["first-only", "second-only", "third-only"];
+        for database in [&first, &second, &third] {
+            for id in all_ids {
+                assert!(
+                    database.get_item(id).unwrap().is_some(),
+                    "missing item {id}"
+                );
+            }
+        }
+
+        first
+            .save_item(&text_item("after-convergence", "after convergence"))
+            .unwrap();
+        sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        let first_id = first.get_sync_device_id().unwrap();
+        let first_state = first.get_or_create_sync_remote_state(REMOTE_SCOPE).unwrap();
+        first
+            .with_connection(|connection| {
+                connection.execute(
+                    "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                    [REMOTE_SCOPE],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let mut compacted = SyncEngineResult::default();
+        maybe_compact(
+            &store,
+            &first,
+            &first_paths,
+            REMOTE_SCOPE,
+            &first_id,
+            &first_state,
+            None,
+            options().resource_limits,
+            &mut compacted,
+        )
+        .unwrap();
+        assert!(compacted.deleted_remote_objects > 0);
+
+        store.gets.lock().unwrap().clear();
+        let bootstrap = sync_database(
+            &store,
+            &fourth,
+            &fourth_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        assert!(bootstrap.downloaded_entries >= 3);
+        for id in [
+            "first-only",
+            "second-only",
+            "third-only",
+            "after-convergence",
+        ] {
+            assert!(fourth.get_item(id).unwrap().is_some(), "missing item {id}");
+        }
+        assert!(store
+            .gets
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key == CHECKPOINT_HEAD_KEY));
+
+        drop(first);
+        drop(second);
+        drop(third);
+        drop(fourth);
+        for paths in [first_paths, second_paths, third_paths, fourth_paths] {
+            fs::remove_dir_all(paths.project).unwrap();
+        }
     }
 
     #[test]
@@ -1535,8 +2237,18 @@ mod tests {
             .cloned()
             .unwrap();
         store.objects.lock().unwrap().remove(&second_segment_key);
+        let current_head = decode_checkpoint_head(
+            store
+                .objects
+                .lock()
+                .unwrap()
+                .get(CHECKPOINT_HEAD_KEY)
+                .unwrap(),
+            None,
+        )
+        .unwrap();
         let checkpoint = Checkpoint {
-            generation: 1,
+            generation: current_head.generation + 1,
             vector: vec![DeviceCursor {
                 device_id: source_id.clone(),
                 epoch: state.epoch.clone(),
@@ -1546,7 +2258,67 @@ mod tests {
             mutations: source.export_sync_snapshot().unwrap().mutations,
         };
         let reference = insert_checkpoint(&store, &checkpoint);
-        insert_checkpoint_head(&store, &checkpoint, reference, None);
+        insert_checkpoint_head(
+            &store,
+            &checkpoint,
+            reference,
+            Some(current_head.checkpoint),
+        );
+        target
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                checkpoint.generation,
+                &checkpoint_digest_for_generation(
+                    &decode_checkpoint_head(
+                        &store
+                            .objects
+                            .lock()
+                            .unwrap()
+                            .get(CHECKPOINT_HEAD_KEY)
+                            .unwrap()
+                            .clone(),
+                        None,
+                    )
+                    .unwrap(),
+                    checkpoint.generation,
+                )
+                .unwrap(),
+                &checkpoint.vector,
+                &checkpoint.mutations,
+            )
+            .unwrap();
+        assert_eq!(
+            target
+                .get_sync_cursor(REMOTE_SCOPE, &source_id)
+                .unwrap()
+                .unwrap()
+                .sequence,
+            3
+        );
+        target
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE sync_cursors
+                        SET sequence = 1, last_segment_key = ?3
+                      WHERE remote_scope = ?1 AND device_id = ?2",
+                    rusqlite::params![REMOTE_SCOPE, &source_id, {
+                        let first_segment = store
+                            .objects
+                            .lock()
+                            .unwrap()
+                            .keys()
+                            .filter(|key| {
+                                key.starts_with(&segment_prefix(&source_id, &state.epoch).unwrap())
+                            })
+                            .find(|key| parse_segment_key(key).unwrap().first_sequence == 1)
+                            .cloned()
+                            .unwrap();
+                        first_segment
+                    }],
+                )?;
+                Ok(())
+            })
+            .unwrap();
 
         let recovered = sync_database(
             &store,
@@ -1575,6 +2347,128 @@ mod tests {
         drop(target);
         fs::remove_dir_all(source_paths.project).unwrap();
         fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn pulls_and_garbage_collects_more_than_one_thousand_segments() {
+        const SEGMENT_COUNT: u64 = 1_001;
+
+        let store = MemoryStore::default();
+        let paths = temp_paths("segment-pagination");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let device_id = "11111111-1111-4111-8111-111111111111";
+        let epoch = "22222222-2222-4222-8222-222222222222";
+        let snapshot = Snapshot {
+            device_id: device_id.to_string(),
+            epoch: epoch.to_string(),
+            through_sequence: 0,
+            mutations: super::super::MutationBatch {
+                upserts: Vec::new(),
+                tombstones: Vec::new(),
+            },
+        };
+        let encoded_snapshot = encode_snapshot(&snapshot, None).unwrap();
+        let snapshot_key = snapshot_object_key(device_id, epoch, &encoded_snapshot.sha256).unwrap();
+        let snapshot_ref = ObjectRef {
+            key: snapshot_key.clone(),
+            sha256: encoded_snapshot.sha256,
+            stored_size_bytes: encoded_snapshot.bytes.len() as u64,
+            record_count: 0,
+        };
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(snapshot_key, encoded_snapshot.bytes);
+
+        let mut last_segment_key = None;
+        let mut thousandth_segment_key = None;
+        for sequence in 1..=SEGMENT_COUNT {
+            let segment = Segment {
+                device_id: device_id.to_string(),
+                epoch: epoch.to_string(),
+                first_sequence: sequence,
+                last_sequence: sequence,
+                mutations: super::super::MutationBatch {
+                    upserts: vec![replicated_text(
+                        &format!("segment-{sequence}"),
+                        &format!("segment {sequence}"),
+                        sequence as i64,
+                        device_id,
+                    )],
+                    tombstones: Vec::new(),
+                },
+            };
+            let encoded = encode_segment(&segment, None).unwrap();
+            let key =
+                segment_object_key(device_id, epoch, sequence, sequence, &encoded.sha256).unwrap();
+            if sequence == 1_000 {
+                thousandth_segment_key = Some(key.clone());
+            }
+            store
+                .objects
+                .lock()
+                .unwrap()
+                .insert(key.clone(), encoded.bytes);
+            last_segment_key = Some(key);
+        }
+        let head = DeviceHead {
+            device_id: device_id.to_string(),
+            epoch: epoch.to_string(),
+            snapshot: snapshot_ref,
+            published_sequence: SEGMENT_COUNT,
+            last_segment_key: last_segment_key.clone(),
+            updated_at_ms: 1,
+        };
+        let mut result = SyncEngineResult::default();
+
+        pull_device(
+            &store,
+            &database,
+            &paths,
+            REMOTE_SCOPE,
+            &head,
+            None,
+            options().resource_limits,
+            &mut result,
+        )
+        .unwrap();
+
+        assert_eq!(result.downloaded_entries, SEGMENT_COUNT);
+        assert_eq!(result.applied_entries, SEGMENT_COUNT);
+        assert!(database
+            .get_item(&format!("segment-{SEGMENT_COUNT}"))
+            .unwrap()
+            .is_some());
+        assert_eq!(
+            database
+                .get_sync_cursor(REMOTE_SCOPE, device_id)
+                .unwrap()
+                .unwrap()
+                .sequence,
+            SEGMENT_COUNT
+        );
+
+        let deleted = garbage_collect_covered_history(
+            &store,
+            &[DeviceCursor {
+                device_id: device_id.to_string(),
+                epoch: epoch.to_string(),
+                sequence: 1_000,
+                last_segment_key: thousandth_segment_key,
+            }],
+        )
+        .unwrap();
+        assert_eq!(deleted, 1_001);
+        assert!(store
+            .objects
+            .lock()
+            .unwrap()
+            .contains_key(last_segment_key.as_ref().unwrap()));
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
     }
 
     #[test]

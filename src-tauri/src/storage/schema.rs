@@ -248,6 +248,17 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             updated_at_ms INTEGER NOT NULL DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS sync_checkpoint_cursors (
+            remote_scope TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            epoch TEXT NOT NULL,
+            sequence INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
+            last_segment_key TEXT,
+            PRIMARY KEY (remote_scope, device_id),
+            FOREIGN KEY (remote_scope) REFERENCES sync_checkpoint_state(remote_scope)
+                ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS sync_remote_resources (
             remote_scope TEXT NOT NULL,
             object_key TEXT NOT NULL,
