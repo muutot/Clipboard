@@ -37,6 +37,7 @@
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
+  import { getKeyboardConfig } from "$lib/services/keyboard";
   import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
   import type { IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
@@ -51,7 +52,7 @@
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
   import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
-  import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
+  import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
     applyGeneralSettingsToDocument,
@@ -248,6 +249,30 @@
         ]
       : []),
   ]);
+
+  // Configured group-switch shortcuts (conf/keyboard.json), keyed by filter id.
+  // An absent action falls back to its default (Alt+<N>, one per filter
+  // position); an action explicitly configured to empty disables the shortcut.
+  let keyboardShortcuts = $state<Record<string, string[]>>({});
+
+  const filterShortcutBindings = $derived.by(() => {
+    const map: Record<string, string[]> = {};
+    filters.forEach((filter, index) => {
+      const actionKey = `switchFilter${index + 1}`;
+      const hasAction = Object.prototype.hasOwnProperty.call(keyboardShortcuts, actionKey);
+      map[filter.id] = hasAction ? (keyboardShortcuts[actionKey] ?? []) : [`Alt+${index + 1}`];
+    });
+    return map;
+  });
+
+  async function loadKeyboardShortcuts() {
+    try {
+      const config = await getKeyboardConfig();
+      keyboardShortcuts = config?.shortcuts ?? {};
+    } catch {
+      keyboardShortcuts = {};
+    }
+  }
 
   // --- Date range resolution ---
 
@@ -734,6 +759,8 @@
       }
     });
 
+    void loadKeyboardShortcuts();
+
     // Load one recycle-bin page during startup so the filter reflects the
     // persisted desktop state even before the user opens the deleted view.
     void loadDeletedHistoryPage();
@@ -979,7 +1006,17 @@
     let listenersDisposed = false;
     let unlistenMove: (() => void) | undefined;
     let unlistenResize: (() => void) | undefined;
+    let unlistenFocus: (() => void) | undefined;
     if (appWindow) {
+      appWindow
+        .onFocusChanged(() => {
+          void loadKeyboardShortcuts();
+        })
+        .then((fn) => {
+          if (listenersDisposed) fn();
+          else unlistenFocus = fn;
+        })
+        .catch(() => {});
       appWindow
         .onMoved(() => {
           scheduleWindowBoundsSave();
@@ -1011,6 +1048,7 @@
       unsubSettings();
       if (unlistenMove) unlistenMove();
       if (unlistenResize) unlistenResize();
+      if (unlistenFocus) unlistenFocus();
       if (heightRafId) cancelAnimationFrame(heightRafId);
       if (scrollRaf) cancelAnimationFrame(scrollRaf);
       if (searchBlurTimer !== undefined) window.clearTimeout(searchBlurTimer);
@@ -2567,6 +2605,25 @@
       return;
     }
 
+    const switchEditableTarget = !editableTarget || event.target === searchInputEl;
+    if (!editingId && switchEditableTarget) {
+      for (const [filterId, bindings] of Object.entries(filterShortcutBindings)) {
+        if (bindings.some((binding) => shortcutMatchesEvent(binding, event))) {
+          event.preventDefault();
+          setFilter(filterId as ClipboardFilter);
+          if (!editableTarget) {
+            void tick().then(() => {
+              const btn = document.querySelector<HTMLElement>(
+                `.filters [role="tab"][aria-selected="true"]`,
+              );
+              btn?.focus();
+            });
+          }
+          return;
+        }
+      }
+    }
+
     if (event.key === "ArrowDown") {
       event.preventDefault();
       moveSelection(1);
@@ -2996,6 +3053,9 @@
           tabindex={activeFilter === filter.id ? 0 : -1}
           aria-selected={activeFilter === filter.id}
           class:active={activeFilter === filter.id}
+          title={filterShortcutBindings[filter.id]?.[0]
+            ? `${filter.label} (${filterShortcutBindings[filter.id]?.[0]})`
+            : filter.label}
           onclick={() => setFilter(filter.id)}
         >
           <AppIcon

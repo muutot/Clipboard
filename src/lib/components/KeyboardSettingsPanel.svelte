@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
@@ -112,6 +112,69 @@
       description: "",
       icon: "arrow-left",
       defaults: ["Arrowleft", "Shift+Tab"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter1",
+      labelKey: "keyboard.switchFilterAll",
+      descKey: "keyboard.switchFilterAll",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+1"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter2",
+      labelKey: "keyboard.switchFilterText",
+      descKey: "keyboard.switchFilterText",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+2"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter3",
+      labelKey: "keyboard.switchFilterLink",
+      descKey: "keyboard.switchFilterLink",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+3"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter4",
+      labelKey: "keyboard.switchFilterImage",
+      descKey: "keyboard.switchFilterImage",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+4"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter5",
+      labelKey: "keyboard.switchFilterFile",
+      descKey: "keyboard.switchFilterFile",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+5"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter6",
+      labelKey: "keyboard.switchFilterFavorite",
+      descKey: "keyboard.switchFilterFavorite",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+6"],
+      cat: "item",
+    },
+    {
+      id: "switchFilter7",
+      labelKey: "keyboard.switchFilterDeleted",
+      descKey: "keyboard.switchFilterDeleted",
+      description: "",
+      icon: "grid",
+      defaults: ["Alt+7"],
       cat: "item",
     },
     {
@@ -277,6 +340,7 @@
 
   function settingsSearchIdForAction(action: SystemAction): string | null {
     if (/^quickCopy\d+$/.test(action.id)) return "keyboard.quick-copy";
+    if (/^switchFilter\d+$/.test(action.id)) return "keyboard.switch-filter";
     const map: Record<string, string> = {
       copyItem: "keyboard.copy-item",
       deleteItem: "keyboard.delete-item",

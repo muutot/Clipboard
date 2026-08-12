@@ -55,6 +55,8 @@ Modal edit dialog for a single tag, opened from the main route by right-clicking
 
 Main-route Escape order: bulk selection (capture phase), then the open tag edit dialog (which closes itself; the route returns early while `tagEditDialog` is set), then the detail panel (closed by `DetailPanel`), then an active `tagFilter` (cleared via `toggleTagFilter`), then window hide.
 
+Main-route group switching is configurable: the route loads `conf/keyboard.json` (via `getKeyboardConfig`) on mount and on window focus, maps each `switchFilter<N>` action to `filters[N-1]`, and switches groups when the pressed chord matches a configured binding (default `Alt+<N>`, keyed per filter position in `filterShortcutBindings`). Filter-tab `title` hints show the first configured binding. The keyboard settings panel exposes the same `switchFilter1..7` actions under the item category, labeled with the target group name (e.g. "Switch to All"); see `data-contracts.md` for the canonical shortcut format.
+
 ### `ImageFullscreenOverlay.svelte`
 
 Shared fullscreen image viewer for both in-app overlay and desktop Fullscreen API modes. Renders at `z-index: 200` with zoom, pan, drag, double-click reset, and Escape/close-button dismissal. Uses `window.addEventListener("keydown", ..., true)` in capture phase with `stopPropagation` to intercept Escape before other handlers.
@@ -96,7 +98,7 @@ This is the settings shell and an integration hotspot. It owns:
 - composition of child settings panels with `showHeader={false}`;
 - eager loading of the default `GeneralSettingsPanel`; compact/font/theme/icon-color/ignored-app/tag/keyboard panels are dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
-- sync provider/policy configuration, manual sync, remote-backup listing/download, and the conditional non-destructive snapshot-refresh action;
+- S3-only v1 configuration, connection testing, encryption, automatic/manual sync, immutable-segment sizing, and resource limits; no remote-backup or compaction UI remains;
 - the built-in About section: app version, an update-source dropdown (GitHub/GitCode, persisted via `updateSource`), and update check via `checkForUpdate()`/`update.ts`, with up-to-date/available/error states; when an update is available with release notes, a compact "View Details" button opens `UpdateDialog` to render the notes as markdown;
 - the `--settings-*` semantic metrics consumed by child panels.
 

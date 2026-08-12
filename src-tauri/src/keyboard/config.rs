@@ -40,61 +40,65 @@ pub struct KeyboardConfig {
 
 impl Default for KeyboardConfig {
     fn default() -> Self {
+        let mut shortcuts = BTreeMap::from([
+            (
+                DEFAULT_TOGGLE_WINDOW_ACTION.to_owned(),
+                vec![DEFAULT_TOGGLE_WINDOW_SHORTCUT.to_owned()],
+            ),
+            (
+                "copyItem".to_owned(),
+                vec![
+                    DEFAULT_COPY_ITEM_SHORTCUT.to_owned(),
+                    DEFAULT_COPY_ITEM_ACTIVATE_SHORTCUT.to_owned(),
+                ],
+            ),
+            (
+                "deleteItem".to_owned(),
+                vec![DEFAULT_DELETE_ITEM_SHORTCUT.to_owned()],
+            ),
+            (
+                "favoriteItem".to_owned(),
+                vec![DEFAULT_FAVORITE_ITEM_SHORTCUT.to_owned()],
+            ),
+            (
+                "openDetail".to_owned(),
+                vec![
+                    DEFAULT_OPEN_DETAIL_SHORTCUT.to_owned(),
+                    DEFAULT_OPEN_DETAIL_EDIT_SHORTCUT.to_owned(),
+                ],
+            ),
+            (
+                "selectAll".to_owned(),
+                vec![DEFAULT_SELECT_ALL_SHORTCUT.to_owned()],
+            ),
+            (
+                "moveSelectionUp".to_owned(),
+                vec![DEFAULT_MOVE_SELECTION_UP_SHORTCUT.to_owned()],
+            ),
+            (
+                "moveSelectionDown".to_owned(),
+                vec![DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT.to_owned()],
+            ),
+            (
+                "switchFilterNext".to_owned(),
+                vec![
+                    DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT.to_owned(),
+                    DEFAULT_SWITCH_FILTER_NEXT_TAB_SHORTCUT.to_owned(),
+                ],
+            ),
+            (
+                "switchFilterPrev".to_owned(),
+                vec![
+                    DEFAULT_SWITCH_FILTER_PREV_SHORTCUT.to_owned(),
+                    DEFAULT_SWITCH_FILTER_PREV_TAB_SHORTCUT.to_owned(),
+                ],
+            ),
+        ]);
+        for index in 1..=7 {
+            shortcuts.insert(format!("switchFilter{index}"), vec![format!("Alt+{index}")]);
+        }
         Self {
-            shortcuts: BTreeMap::from([
-                (
-                    DEFAULT_TOGGLE_WINDOW_ACTION.to_owned(),
-                    vec![DEFAULT_TOGGLE_WINDOW_SHORTCUT.to_owned()],
-                ),
-                (
-                    "copyItem".to_owned(),
-                    vec![
-                        DEFAULT_COPY_ITEM_SHORTCUT.to_owned(),
-                        DEFAULT_COPY_ITEM_ACTIVATE_SHORTCUT.to_owned(),
-                    ],
-                ),
-                (
-                    "deleteItem".to_owned(),
-                    vec![DEFAULT_DELETE_ITEM_SHORTCUT.to_owned()],
-                ),
-                (
-                    "favoriteItem".to_owned(),
-                    vec![DEFAULT_FAVORITE_ITEM_SHORTCUT.to_owned()],
-                ),
-                (
-                    "openDetail".to_owned(),
-                    vec![
-                        DEFAULT_OPEN_DETAIL_SHORTCUT.to_owned(),
-                        DEFAULT_OPEN_DETAIL_EDIT_SHORTCUT.to_owned(),
-                    ],
-                ),
-                (
-                    "selectAll".to_owned(),
-                    vec![DEFAULT_SELECT_ALL_SHORTCUT.to_owned()],
-                ),
-                (
-                    "moveSelectionUp".to_owned(),
-                    vec![DEFAULT_MOVE_SELECTION_UP_SHORTCUT.to_owned()],
-                ),
-                (
-                    "moveSelectionDown".to_owned(),
-                    vec![DEFAULT_MOVE_SELECTION_DOWN_SHORTCUT.to_owned()],
-                ),
-                (
-                    "switchFilterNext".to_owned(),
-                    vec![
-                        DEFAULT_SWITCH_FILTER_NEXT_SHORTCUT.to_owned(),
-                        DEFAULT_SWITCH_FILTER_NEXT_TAB_SHORTCUT.to_owned(),
-                    ],
-                ),
-                (
-                    "switchFilterPrev".to_owned(),
-                    vec![
-                        DEFAULT_SWITCH_FILTER_PREV_SHORTCUT.to_owned(),
-                        DEFAULT_SWITCH_FILTER_PREV_TAB_SHORTCUT.to_owned(),
-                    ],
-                ),
-            ]),
+            shortcuts,
             extra: BTreeMap::new(),
         }
     }
@@ -287,6 +291,8 @@ mod tests {
             saved["shortcuts"]["switchFilterPrev"],
             json!(["Arrowleft", "Shift+Tab"])
         );
+        assert_eq!(saved["shortcuts"]["switchFilter1"], json!(["Alt+1"]));
+        assert_eq!(saved["shortcuts"]["switchFilter7"], json!(["Alt+7"]));
         fs::remove_dir_all(project).unwrap();
     }
 
