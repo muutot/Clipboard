@@ -91,14 +91,14 @@
 1. 元数据增量 + 周期快照。日常只上传/下载增量 segment；定期生成一份压缩全量快照用于新设备引导和损坏恢复，避免重放全部历史。
 2. 内容寻址去重。blob 以 SHA256 为 key，每个 scope 内只上传一次；上传使用条件写避免重复 PUT。
 3. blob 按需下载。普通同步只交换元数据；图片/文件在打开或预览时才按哈希下载并校验，预览与图标本地重建。
-4. 版本化收敛。以 `(modified_at_ms, writer_device_id)` 作为全序版本；删除用 tombstone；同内容不同 ID 通过别名表合并。
+4. 版本化收敛。以 `(modified_at_ms, writer_device_id, change_seq)` 作为全序版本；删除用 tombstone；同内容不同 ID 通过别名表合并。
 5. 本地批量应用。网络 IO 在 worker 线程完成且不持有数据库锁；应用端按批事务写入，通过现有触发器只增量更新搜索索引，绝不整库重建。
 6. 压缩与小对象。segment 与 snapshot 使用 gzip（可选 zstd）压缩；发现用 HEAD/小指针对象优先，ListObjectsV2 兜底，不做全桶扫描。
 7. 可恢复与幂等。所有远端对象不可变，失败重试不改变内容；本地游标在成功应用后才推进。
 8. 容量与保留必须是 scope 级且确定性。`max_items`/`retention_days` 按同步 scope 统一生效，驱逐候选按 `(created_at_ms, id)` 全序选取且收藏豁免；任何设备执行清理都收敛到同一批 tombstone，避免“A 机删掉 B 机刚同步的记录”或删除风暴。
 9. 首次开启同步必须处理存量数据。本地已有记录不会自动进入 outbox，需要生成初始快照/批量 segment 上传，并与远端快照做首轮合并。
 10. 同步 metadata 必须加密。内容包含完整剪贴板文本/HTML/RTF，不能明文上传 S3；密钥派生、epoch 轮换与凭据保护属于发布契约的一部分。
-11. 版本仲裁必须容忍时钟偏差。`modified_at_ms` 是墙钟，需要最大偏差容差或本地单调序列参与，避免错误时钟设备覆盖正确数据。
+11. 版本仲裁使用 `(modified_at_ms, writer_device_id, change_seq)` 全序，并加时钟偏差容差（建议 5 分钟）与未来时间戳护栏，避免错误时钟设备覆盖正确数据。
 
 ## 4. S3 对象布局
 
@@ -136,7 +136,7 @@
 
 1. 读取 `current.json` 或列出 snapshot，判断 epoch/快照是否需要切换。
 2. 对每个已知 peer 读取 `latest/{device_id}.json` 或列出 changelog 前缀，按 `sync_cursors` 下载缺失 segment。
-3. 校验 sha256/size 后解析，按 `(modified_at_ms, writer_device_id)` 仲裁是否应用。
+3. 校验 sha256/size 后解析，按 `(modified_at_ms, writer_device_id, change_seq)` 仲裁是否应用。
 4. 应用期间设置 `sync_suppress_changelog`，防止远端变更回环成新的出站 op；批量事务写入并依赖触发器增量更新搜索索引。
 5. 每批成功后推进 peer cursor；blob 不在此阶段下载，只登记待下载资源。
 
@@ -212,10 +212,10 @@
   - 验收：标签重命名/颜色变更跨 3 机一致且每次只产生 1 条 tag op；并发重命名/颜色冲突按版本仲裁；删除在仍有引用时不生效。
 - [ ] 解决本地使用产生的同步噪音：当前更新触发器把 `last_used_at_ms` 变化写入 outbox，需通过过滤、独立列或触发条件调整，使本地使用不产生网络 op。
   - 验收：模拟本地复制/使用不产生出站 op；真正内容修改产生且只产生 1 个 op。
-- [ ] 定义版本仲裁与冲突规则：`(modified_at_ms, writer_device_id)` 全序；同内容不同 ID 经 `sync_item_aliases` 合并；删除与更新按版本比较。
-  - 验收：乱序、同版本、重启场景属性测试收敛。
-- [ ] 定义时钟偏差策略：版本仲裁对 `modified_at_ms` 加最大偏差容差，或引入设备本地单调序列参与全序；明确错误时钟下的行为。
-  - 验收：模拟 5 分钟、1 小时时钟偏差下的乱序收敛测试。
+- [ ] 定义版本仲裁与冲突规则：`(modified_at_ms, writer_device_id, change_seq)` 全序；`change_seq` 为每设备单调序列（新增列或复用 outbox sequence）；同内容不同 ID 经 `sync_item_aliases` 合并；删除与更新按版本比较。
+  - 验收：乱序、同版本、同毫秒、重启场景属性测试收敛；`change_seq` 每设备单调。
+- [ ] 定义时钟偏差策略：采用容差（建议 5 分钟）+ 每设备单调 `change_seq`；远端时间戳超过本地当前时间 + 容差时拒绝或 clamp；设备尽量保持系统时钟同步。
+  - 验收：模拟 5 分钟、1 小时时钟偏差下的乱序收敛测试；未来时间戳不被接受为胜者。
 - [ ] 定义 scope 级容量与保留策略：`max_items`/`retention_days` 在同步 scope 内统一生效；确认配置与 UI 支持 100k+；明确本地上限与 scope 上限的关系；已接受 union 超过上限时的确定性全局驱逐。
   - 验收：策略文档 + 配置读写测试覆盖不同设备配置的归一化。
 - [ ] 同步开启后统一容量/保留设置：`max_items`、`retention_days`、`recycle_bin_days` 改由 scope 级配置生效；同步设置页新增这三条设置，原 `StorageSettingsDialog` 的三条在同步开启时禁用并显示提示，不隐藏；首次开启同步前必须用户确认，确认后才启用 S3。
@@ -354,4 +354,3 @@
 - [暂缓] 保留期与恢复窗口的交互：暂时跳过。
 - [暂缓] 驱逐标记发布后、快照完成前的离线恢复窗口：暂时跳过。
 - [暂缓] 首次开启存量合并流量优化：暂时跳过。
-- [待定] 时钟偏差会破坏 `(modified_at_ms, writer_device_id)` 仲裁，需要容差或本地单调序列。
