@@ -58,6 +58,13 @@ header p {
   padding: 14px 18px 48px;
   overflow: auto;
 }
+.settings-state {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--settings-description-size);
+}
 
 /* ── cards ── */
 .setting-card {

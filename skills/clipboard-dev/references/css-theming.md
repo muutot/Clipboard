@@ -120,7 +120,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.settings-select` shared control/button base (input look: custom arrow, hover/focus/disabled states). Settings dropdowns must use the `CustomSelect.svelte` component, not native `<select>`/`<option>`; the trigger keeps the closed `.settings-select` look, opening into the shared `.popover-surface` described above.
 - `.transparency-slider` including WebKit and Firefox tracks/thumbs;
 - `.settings-feedback` success/error states;
-- `.auto-save-note` and the default pointer cursor for buttons;
+- `.settings-state` loading/unavailable placeholder state (centered muted text) and `.auto-save-note` plus the default pointer cursor for buttons;
 - `.restart-note` for restart-required notices in general-settings cards.
 
 `src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `CompactSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
