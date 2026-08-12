@@ -241,6 +241,13 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             PRIMARY KEY (remote_scope, device_id)
         );
 
+        CREATE TABLE IF NOT EXISTS sync_checkpoint_state (
+            remote_scope TEXT PRIMARY KEY NOT NULL,
+            generation INTEGER NOT NULL CHECK (generation > 0),
+            checkpoint_sha256 TEXT NOT NULL,
+            updated_at_ms INTEGER NOT NULL DEFAULT 0
+        );
+
         CREATE TABLE IF NOT EXISTS sync_remote_resources (
             remote_scope TEXT NOT NULL,
             object_key TEXT NOT NULL,

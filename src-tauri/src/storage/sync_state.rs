@@ -7,8 +7,8 @@ use super::{Database, StorageError};
 use crate::{
     domain::{ClipboardItem, ClipboardKind},
     sync::v1::{
-        DeviceCursor, DeviceHead, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem,
-        Tombstone,
+        checkpoint_object_key, parse_segment_key, DeviceCursor, DeviceHead, MutationBatch,
+        ObjectRef, RecordVersion, ReplicatedItem, Tombstone,
     },
 };
 
@@ -259,6 +259,7 @@ impl Database {
                  DELETE FROM sync_tombstones;
                  DELETE FROM sync_publication_state;
                  DELETE FROM sync_cursors;
+                 DELETE FROM sync_checkpoint_state;
                  DELETE FROM sync_remote_resources;
                  DELETE FROM sqlite_sequence WHERE name = 'sync_outbox';",
             )?;
@@ -638,6 +639,122 @@ impl Database {
                     })
                 })
                 .collect()
+        })
+    }
+
+    pub fn get_sync_checkpoint_state(
+        &self,
+        remote_scope: &str,
+    ) -> Result<Option<(u64, String)>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            connection
+                .query_row(
+                    "SELECT generation, checkpoint_sha256
+                       FROM sync_checkpoint_state
+                      WHERE remote_scope = ?1",
+                    [remote_scope],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?
+                .map(|(generation, sha256)| {
+                    let generation = stored_sequence(generation, "sync checkpoint generation")?;
+                    checkpoint_object_key(generation, &sha256)
+                        .map_err(StorageError::InvalidSyncState)?;
+                    Ok((generation, sha256))
+                })
+                .transpose()
+        })
+    }
+
+    pub fn apply_sync_checkpoint(
+        &self,
+        remote_scope: &str,
+        generation: u64,
+        checkpoint_sha256: &str,
+        cursors: &[DeviceCursor],
+        mutations: &MutationBatch,
+    ) -> Result<u64, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        checkpoint_object_key(generation, checkpoint_sha256)
+            .map_err(StorageError::InvalidSyncState)?;
+        let generation = sequence_to_i64(generation, "sync checkpoint generation")?;
+        let mut identities = BTreeSet::new();
+        for cursor in cursors {
+            validate_cursor_identity(cursor)?;
+            if let Some(key) = cursor.last_segment_key.as_deref() {
+                let parsed = parse_segment_key(key).map_err(StorageError::InvalidSyncState)?;
+                if parsed.device_id != cursor.device_id
+                    || parsed.epoch != cursor.epoch
+                    || parsed.last_sequence != cursor.sequence
+                {
+                    return Err(StorageError::InvalidSyncState(
+                        "checkpoint cursor does not match its segment key".to_string(),
+                    ));
+                }
+            }
+            if !identities.insert(cursor.device_id.as_str()) {
+                return Err(StorageError::InvalidSyncState(
+                    "checkpoint contains duplicate device cursors".to_string(),
+                ));
+            }
+        }
+
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            if let Some((stored_generation, stored_sha256)) = transaction
+                .query_row(
+                    "SELECT generation, checkpoint_sha256
+                       FROM sync_checkpoint_state
+                      WHERE remote_scope = ?1",
+                    [remote_scope],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?
+            {
+                if stored_generation > generation {
+                    return Err(StorageError::InvalidSyncState(
+                        "checkpoint generation regressed".to_string(),
+                    ));
+                }
+                if stored_generation == generation {
+                    if stored_sha256 == checkpoint_sha256 {
+                        transaction.commit()?;
+                        return Ok(0);
+                    }
+                    return Err(StorageError::InvalidSyncState(
+                        "equal checkpoint generation has a different digest".to_string(),
+                    ));
+                }
+            }
+
+            set_changelog_suppressed(&transaction, true)?;
+            let applied = apply_mutations(&transaction, mutations)?;
+            set_changelog_suppressed(&transaction, false)?;
+            transaction.execute(
+                "DELETE FROM sync_cursors WHERE remote_scope = ?1",
+                [remote_scope],
+            )?;
+            for cursor in cursors {
+                upsert_cursor(&transaction, remote_scope, cursor, None)?;
+            }
+            transaction.execute(
+                "INSERT INTO sync_checkpoint_state
+                    (remote_scope, generation, checkpoint_sha256, updated_at_ms)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(remote_scope) DO UPDATE SET
+                    generation = excluded.generation,
+                    checkpoint_sha256 = excluded.checkpoint_sha256,
+                    updated_at_ms = excluded.updated_at_ms",
+                params![
+                    remote_scope,
+                    generation,
+                    checkpoint_sha256,
+                    current_time_ms(),
+                ],
+            )?;
+            transaction.commit()?;
+            Ok(applied)
         })
     }
 
@@ -1441,6 +1558,12 @@ mod tests {
                      VALUES ('existing', 'upsert', 'text', 'hash-existing', 100, 'pending-writer')",
                     [],
                 )?;
+                connection.execute(
+                    "INSERT INTO sync_checkpoint_state
+                        (remote_scope, generation, checkpoint_sha256)
+                     VALUES (?1, 1, ?2)",
+                    params![REMOTE_SCOPE, "a".repeat(64)],
+                )?;
                 Ok(())
             })
             .unwrap();
@@ -1470,12 +1593,18 @@ mod tests {
                 let outbox_count: i64 =
                     connection
                         .query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row.get(0))?;
+                let checkpoint_count: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM sync_checkpoint_state",
+                    [],
+                    |row| row.get(0),
+                )?;
                 let metadata_count: i64 =
                     connection
                         .query_row("SELECT COUNT(*) FROM sync_metadata", [], |row| row.get(0))?;
                 assert_eq!(alias_count, 0);
                 assert_eq!(publication_count, 0);
                 assert_eq!(outbox_count, 0);
+                assert_eq!(checkpoint_count, 0);
                 assert_eq!(metadata_count, 2);
                 Ok(())
             })
@@ -1872,6 +2001,120 @@ mod tests {
             0
         );
         assert_eq!(database.get_item("tie").unwrap().unwrap().title, "higher");
+    }
+
+    #[test]
+    fn checkpoint_apply_updates_mutations_cursors_and_generation_atomically() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let second_device = "33333333-3333-4333-8333-333333333333";
+        let second_epoch = "44444444-4444-4444-8444-444444444444";
+        let first_key =
+            crate::sync::v1::segment_object_key(REMOTE_DEVICE, REMOTE_EPOCH, 1, 2, &"a".repeat(64))
+                .unwrap();
+        let cursors = vec![
+            cursor(2, Some(&first_key)),
+            DeviceCursor {
+                device_id: second_device.to_string(),
+                epoch: second_epoch.to_string(),
+                sequence: 0,
+                last_segment_key: None,
+            },
+        ];
+        let mutations = MutationBatch {
+            upserts: vec![replicated(
+                "checkpoint-item",
+                "hash-checkpoint",
+                "checkpoint",
+                RecordVersion {
+                    modified_at_ms: 900,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+
+        assert_eq!(
+            database
+                .apply_sync_checkpoint(REMOTE_SCOPE, 1, &"b".repeat(64), &cursors, &mutations)
+                .unwrap(),
+            1
+        );
+        assert!(database.get_item("checkpoint-item").unwrap().is_some());
+        assert_eq!(database.list_sync_cursors(REMOTE_SCOPE).unwrap(), cursors);
+        assert_eq!(
+            database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+            Some((1, "b".repeat(64)))
+        );
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        assert_eq!(
+            database
+                .apply_sync_checkpoint(REMOTE_SCOPE, 1, &"b".repeat(64), &cursors, &mutations)
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn invalid_checkpoint_rolls_back_rows_cursors_and_generation() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let existing = cursor(1, None);
+        let initial = MutationBatch {
+            upserts: vec![replicated(
+                "existing-checkpoint",
+                "hash-existing-checkpoint",
+                "existing",
+                RecordVersion {
+                    modified_at_ms: 500,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        database
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                1,
+                &"c".repeat(64),
+                std::slice::from_ref(&existing),
+                &initial,
+            )
+            .unwrap();
+        let invalid = MutationBatch {
+            upserts: vec![ReplicatedItem {
+                item: item("broken-checkpoint", "hash-broken-checkpoint", "broken"),
+                version: RecordVersion {
+                    modified_at_ms: 600,
+                    writer_device_id: "not-a-uuid".to_string(),
+                },
+            }],
+            tombstones: Vec::new(),
+        };
+
+        assert!(database
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                2,
+                &"d".repeat(64),
+                &[DeviceCursor {
+                    device_id: "33333333-3333-4333-8333-333333333333".to_string(),
+                    epoch: "44444444-4444-4444-8444-444444444444".to_string(),
+                    sequence: 0,
+                    last_segment_key: None,
+                }],
+                &invalid,
+            )
+            .is_err());
+        assert!(database.get_item("broken-checkpoint").unwrap().is_none());
+        assert_eq!(
+            database.list_sync_cursors(REMOTE_SCOPE).unwrap(),
+            vec![existing]
+        );
+        assert_eq!(
+            database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+            Some((1, "c".repeat(64)))
+        );
     }
 
     #[test]
