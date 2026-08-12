@@ -206,7 +206,7 @@
 
 - [ ] 定义 wire record schema：upsert/delete/tombstone 行格式、字段名、类型、协议版本；明确排除 `resource_path`、`preview_path`、`icon_path` 等本地路径。
   - 验收：serde 序列化单测覆盖字段集合，样例 JSON 不包含本地绝对路径。
-- [ ] 定义同步范围：text/link 全量；image/file 按大小上限；标签与收藏参与；`last_used_at_ms`、OCR、搜索索引、预览、图标不参与。
+- [ ] 定义同步范围：text/link 全量；image/file 按大小上限，超限跳过并本地标记；标签与收藏参与；`last_used_at_ms`、OCR、搜索索引、预览、图标不参与。
   - 验收：字段映射测试 + 策略文档。
 - [ ] 定义标签同步契约：单记录标签随 `metadata_json` upsert；`tags` 注册表（名称/颜色）与全局重命名/删除需要独立 op 或批量压缩策略。
   - 验收：标签重命名/颜色变更跨 3 机一致；重命名 1 个标签不产生逐条全量 upsert 风暴。
@@ -216,9 +216,9 @@
   - 验收：乱序、同版本、重启场景属性测试收敛。
 - [ ] 定义时钟偏差策略：版本仲裁对 `modified_at_ms` 加最大偏差容差，或引入设备本地单调序列参与全序；明确错误时钟下的行为。
   - 验收：模拟 5 分钟、1 小时时钟偏差下的乱序收敛测试。
-- [ ] 定义 scope 级容量与保留策略：`max_items`/`retention_days` 在同步 scope 内统一生效；确认配置与 UI 支持 100k+；明确本地上限与 scope 上限的关系。
+- [ ] 定义 scope 级容量与保留策略：`max_items`/`retention_days` 在同步 scope 内统一生效；确认配置与 UI 支持 100k+；明确本地上限与 scope 上限的关系；已接受 union 超过上限时的确定性全局驱逐。
   - 验收：策略文档 + 配置读写测试覆盖不同设备配置的归一化。
-- [ ] 同步开启后统一容量/保留设置：`max_items`、`retention_days`、`recycle_bin_days` 改由 scope 级配置生效；同步设置页新增这三条设置，原 `StorageSettingsDialog` 的三条在同步开启时禁用并显示提示，不隐藏。
+- [ ] 同步开启后统一容量/保留设置：`max_items`、`retention_days`、`recycle_bin_days` 改由 scope 级配置生效；同步设置页新增这三条设置，原 `StorageSettingsDialog` 的三条在同步开启时禁用并显示提示，不隐藏；首次开启同步前必须用户确认，确认后才启用 S3。
   - 验收：开启同步后本地 history 设置不可写并显示来源提示；关闭同步后恢复可编辑；配置读写测试覆盖归一化与回写。
 - [ ] 定义驱逐与回收站语义：容量/保留驱逐按 `(created_at_ms, id)` 确定性硬删除并生成 tombstone；用户删除走软删除/回收站；恢复生成更新的 upsert。
   - 验收：模拟超限、保留到期、回收站恢复的收敛测试，无复活、无重复 tombstone。
@@ -228,14 +228,14 @@
   - 验收：同一像素图片不同 PNG 编码在目标策略下只产生 1 条记录与 1 个 blob，或明确接受重复并记录原因。
 - [ ] 确定 S3/同步配置存储：复用或扩展 `conf/conf.json` 的 sync 区，覆盖 endpoint、region、bucket、prefix、scope、credential、加密参数；凭据不进入日志。
   - 验收：配置读写单测；grep 日志输出无 secret。
-- [ ] 定义同步加密与凭据保护：metadata segment/快照客户端 AEAD 加密（密钥由 `sync_password` 派生），blob 加密策略，密钥变更触发 epoch 轮换；凭据进入系统钥匙串或加密配置。
+- [ ] 定义同步加密与凭据保护：metadata segment/快照客户端 AEAD 加密（密钥由 `sync_password` 派生），blob 使用 SSE-S3/SSE-C，两者组合；密钥变更触发 epoch 轮换；凭据进入系统钥匙串或加密配置。
   - 验收：S3 对象明文不可读；密钥变更后旧 epoch 可弃用；凭据不出现在日志/快照。
 - [ ] 定义首次开启同步流程：存量记录生成初始快照/批量 segment，与远端做首轮合并；明确冲突与容量驱逐顺序。
   - 验收：3 台已有 100k 记录的设备先后开启同步，最终一致且无丢失。
 
 ### 阶段 1：S3 客户端与对象 IO
 
-- [ ] S3 客户端抽象：put/get/head/delete/list/multipart，支持自定义 endpoint、path-style、region。
+- [ ] S3 客户端抽象：put/get/head/delete/list/multipart，支持自定义 endpoint、path-style、region；只保证 Amazon S3 协议兼容。
   - 验收：对 S3-compatible mock（MinIO/moto 等）的集成测试通过；断网、超时、权限错误映射为可恢复/不可恢复错误。
 - [ ] scope 初始化与更新：`meta/scope.json` 用条件写创建，配置变更以 version 单调递增覆盖，多台设备同时首次开启不互相覆盖。
   - 验收：并发初始化测试只有一个 scope 配置生效；配置更新不会回退 version。
@@ -326,8 +326,8 @@
   - 验收：设置页集成测试与视觉检查。
 - [ ] 同步设置页容量/保留设置与禁用态：同步页新增 `max_items`/`retention_days`/`recycle_bin_days`；`StorageSettingsDialog` 对应三条在同步开启时禁用并显示原因提示，不隐藏。
   - 验收：设置页集成测试与视觉检查；关闭同步后三条恢复可用；按仓库 settings style gate 执行。
-- [ ] 设备管理与 ack 超时：列出在线/离线设备，支持移除设备、轮换 epoch；ack 型 GC 对移除或超时设备跳过等待。
-  - 验收：移除设备后 GC 可继续；重新加入设备从快照引导。
+- [ ] 设备管理与 ack 超时：列出在线/离线设备，支持移除设备、轮换 epoch；默认离线 30 天视为离线，ack 型 GC 对移除或超时设备跳过等待。
+  - 验收：移除设备后 GC 可继续；默认 30 天离线配置生效；重新加入设备从快照引导。
 - [ ] 本地 tombstone 清理：在快照确认 + peer ack + 保留期后清理本地 tombstone；远端 tombstone 随快照压缩。
   - 验收：持续同步后 tombstone 数量有界。
 - [ ] S3 Event Notification/SQS 推送，减少轮询。
@@ -339,7 +339,8 @@
 
 - 不同步搜索索引、OCR、预览、图标等可重建派生数据。
 - 不做启动即全量下载 blob；blob 只按需物化。
-- 不做 P2P 或自建服务端；同步通道仅限 S3-compatible。
+- 不做 P2P 或自建服务端；同步通道只保证 Amazon S3 协议兼容。
+- 暂不特判 R2/MinIO 等非 AWS 服务商的兼容差异。
 - 不做账户/密码找回系统；凭据由用户在各设备配置。
 - 不做冲突编辑 UI；采用确定性的版本全序与别名合并。
 - 不做“本机上限触发删除但不同步”的本地裁剪：删除必须走 scope 级策略并生成 tombstone，否则其他设备会把记录重新同步回来。
@@ -347,17 +348,17 @@
 
 ## 9. 风险与待决问题
 
-- 超过大小上限的 image/file 记录：默认跳过并本地标记，还是压缩后同步，需要产品决策。
-- 加密策略：客户端 AEAD 加密 metadata，blob 用 SSE-S3/SSE-C，或两者组合；`sync_password` 变更需要 epoch 轮换。
-- `last_used_at_ms` 触发噪音必须在阶段 0 解决，否则 200 条/日假设不成立。
-- 设备永久离线会使 ack 型 GC 停摆，需要保留期兜底策略。
-- 300k 记录 snapshot 的实际压缩比与引导耗时需要先基准，再定调度周期。
-- S3 兼容性差异（path-style、region 空值、R2/MinIO 行为）需要 mock 之外的真实端点验证。
-- 3 台设备各 100k 且同步后 union 可能 300k，与单机 `max_items = 100k` 冲突：需要决定 scope 上限设为 union 规模，还是接受确定性全局驱逐（后者会删掉部分记录）。
-- 容量驱逐的发布者与版本：所有设备都执行清理会产生重复 tombstone，需要统一 writer/版本或幂等合并策略。
-- 保留期与恢复窗口的交互：回收站恢复、离线设备晚到、保留期硬删除之间需要版本仲裁测试。
-- 开启同步时不同设备原有三条配置可能不同，需要归一化规则：以 scope 配置覆盖、首次开启写入，还是要求用户确认。
-- 驱逐标记发布后、快照完成前，离线设备恢复时仍可能拉取到驱逐前的旧增量，需要定义补齐与收敛窗口。
-- 首次开启的存量合并是一次性大流量，需要与快照调度合并，避免每台设备各自重复上传全量。
-- 时钟偏差会破坏 `(modified_at_ms, writer_device_id)` 仲裁，需要容差或本地单调序列。
-- 标签重命名/颜色变更若走逐条 item upsert 会放大流量，需要专用 op 或批量压缩。
+- [已定] 超过大小上限的 image/file：按大小限制同步，超限记录跳过并本地标记，不压缩后同步。
+- [已定] 加密策略：metadata 客户端 AEAD + blob SSE-S3/SSE-C 两者组合；`sync_password` 变更触发 epoch 轮换。
+- [暂缓] `last_used_at_ms` 触发噪音：暂时跳过，流量目标需在基准中复核。
+- [已定] 设备永久离线：设定离线时长默认 30 天，超过后 ack 型 GC 跳过等待。
+- [待基准] 300k 记录 snapshot 的压缩比与引导耗时仍需基准后定调度周期。
+- [已定] S3 兼容范围：只保证 Amazon S3 协议，暂不考虑其余客户端/服务商差异。
+- [已定] union 超过 `max_items`：接受确定性全局驱逐。
+- [暂缓] 容量驱逐的发布者与版本：暂时跳过，保留幂等合并要求。
+- [暂缓] 保留期与恢复窗口的交互：暂时跳过。
+- [已定] 开启同步：需要用户确认，确认后才可以启用 S3。
+- [暂缓] 驱逐标记发布后、快照完成前的离线恢复窗口：暂时跳过。
+- [暂缓] 首次开启存量合并流量优化：暂时跳过。
+- [待定] 时钟偏差会破坏 `(modified_at_ms, writer_device_id)` 仲裁，需要容差或本地单调序列。
+- [待定] 标签重命名/颜色变更若走逐条 item upsert 会放大流量，需要专用 op 或批量压缩。
