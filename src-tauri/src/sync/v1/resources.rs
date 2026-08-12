@@ -55,6 +55,13 @@ pub struct ResourceTransferStats {
     pub skipped_resources: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncResourceRef {
+    pub slot: String,
+    pub ordinal: u32,
+    pub object_key: String,
+}
+
 /// Fingerprints one managed resource with a bounded streaming read. The
 /// canonical source must be a regular non-symlink file below `managed_root`.
 pub fn fingerprint_resource(
@@ -392,6 +399,232 @@ pub fn materialize_mutation_resources(
     Ok(stats)
 }
 
+/// Replaces untrusted portable resource keys with absent local paths and
+/// returns the compact references that must be committed beside the item.
+/// This performs no object-store I/O.
+pub fn defer_mutation_resources(
+    mutations: &mut MutationBatch,
+) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, String> {
+    let mut pending = BTreeMap::new();
+    for replicated in &mut mutations.upserts {
+        let item = &mut replicated.item;
+        let mut references = Vec::new();
+        let mut path_map = BTreeMap::<String, Option<String>>::new();
+
+        match item.kind {
+            ClipboardKind::Image => {
+                if let Some(object_key) = take_portable_resource(
+                    item.resource_path.take(),
+                    &[ResourceCategory::Image],
+                    "image",
+                    0,
+                    &mut references,
+                    &mut path_map,
+                )? {
+                    path_map.insert(object_key, None);
+                }
+                item.resource_path = None;
+                item.preview_path = None;
+            }
+            ClipboardKind::File => {
+                let primary = item.resource_path.take();
+                item.resource_path = None;
+
+                if let Some(json) = item.text_content.as_deref() {
+                    if let Ok(portable_paths) = serde_json::from_str::<Vec<String>>(json) {
+                        if primary.as_deref().is_some_and(|primary| {
+                            portable_paths.first().is_some_and(|first| first != primary)
+                        }) {
+                            return Err(
+                                "file resource_path does not match the first portable path"
+                                    .to_string(),
+                            );
+                        }
+                        let mut local_paths = Vec::new();
+                        for (index, portable_path) in portable_paths.into_iter().enumerate() {
+                            let ordinal = u32::try_from(index)
+                                .map_err(|_| "file resource ordinal overflowed".to_string())?;
+                            if let Some(object_key) = take_portable_resource(
+                                Some(portable_path),
+                                &[ResourceCategory::File],
+                                "file",
+                                ordinal,
+                                &mut references,
+                                &mut path_map,
+                            )? {
+                                path_map.insert(object_key, None);
+                            }
+                            local_paths.push(String::new());
+                        }
+                        item.text_content =
+                            Some(serde_json::to_string(&local_paths).map_err(|error| {
+                                format!("failed to encode deferred file paths: {error}")
+                            })?);
+                    } else if let Some(object_key) = take_portable_resource(
+                        primary,
+                        &[ResourceCategory::File],
+                        "file",
+                        0,
+                        &mut references,
+                        &mut path_map,
+                    )? {
+                        path_map.insert(object_key, None);
+                    }
+                } else if let Some(object_key) = take_portable_resource(
+                    primary,
+                    &[ResourceCategory::File],
+                    "file",
+                    0,
+                    &mut references,
+                    &mut path_map,
+                )? {
+                    path_map.insert(object_key, None);
+                }
+            }
+            ClipboardKind::Text | ClipboardKind::Link => {}
+        }
+
+        if let Some(object_key) = take_portable_resource(
+            item.icon_path.take(),
+            &[ResourceCategory::Icon],
+            "icon",
+            0,
+            &mut references,
+            &mut path_map,
+        )? {
+            path_map.insert(object_key, None);
+        }
+        item.icon_path = None;
+        rewrite_metadata_paths(item.metadata_json.as_mut(), &path_map, true)?;
+        remove_preview_metadata(item.metadata_json.as_mut())?;
+        if !references.is_empty() {
+            pending.insert(item.id.clone(), references);
+        }
+    }
+    Ok(pending)
+}
+
+/// Collects canonical resource references from a portable mutation batch
+/// without changing its wire fields. Call this after outgoing preparation so
+/// publication state can retain the remote keys even if local files disappear.
+pub fn collect_mutation_resource_refs(
+    mutations: &MutationBatch,
+) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, String> {
+    let mut references_by_item = BTreeMap::new();
+    for replicated in &mutations.upserts {
+        let item = &replicated.item;
+        let mut references = Vec::new();
+        match item.kind {
+            ClipboardKind::Image => collect_resource_ref(
+                item.resource_path.as_deref(),
+                ResourceCategory::Image,
+                "image",
+                0,
+                &mut references,
+            )?,
+            ClipboardKind::File => {
+                let portable_paths = item
+                    .text_content
+                    .as_deref()
+                    .and_then(|json| serde_json::from_str::<Vec<String>>(json).ok());
+                if let Some(paths) = portable_paths {
+                    for (index, path) in paths.iter().enumerate() {
+                        let ordinal = u32::try_from(index)
+                            .map_err(|_| "file resource ordinal overflowed".to_string())?;
+                        collect_resource_ref(
+                            Some(path),
+                            ResourceCategory::File,
+                            "file",
+                            ordinal,
+                            &mut references,
+                        )?;
+                    }
+                } else {
+                    collect_resource_ref(
+                        item.resource_path.as_deref(),
+                        ResourceCategory::File,
+                        "file",
+                        0,
+                        &mut references,
+                    )?;
+                }
+            }
+            ClipboardKind::Text | ClipboardKind::Link => {}
+        }
+        collect_resource_ref(
+            item.icon_path.as_deref(),
+            ResourceCategory::Icon,
+            "icon",
+            0,
+            &mut references,
+        )?;
+        if !references.is_empty() {
+            references_by_item.insert(item.id.clone(), references);
+        }
+    }
+    Ok(references_by_item)
+}
+
+fn collect_resource_ref(
+    value: Option<&str>,
+    expected: ResourceCategory,
+    slot: &str,
+    ordinal: u32,
+    references: &mut Vec<SyncResourceRef>,
+) -> Result<(), String> {
+    let Some(value) = value.filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    let parsed = parse_resource_key(value)?;
+    if parsed.category != expected {
+        return Err(format!(
+            "resource {value:?} has category {:?}, expected {expected:?}",
+            parsed.category
+        ));
+    }
+    references.push(SyncResourceRef {
+        slot: slot.to_string(),
+        ordinal,
+        object_key: value.to_string(),
+    });
+    Ok(())
+}
+
+fn take_portable_resource(
+    value: Option<String>,
+    allowed_categories: &[ResourceCategory],
+    slot: &str,
+    ordinal: u32,
+    references: &mut Vec<SyncResourceRef>,
+    path_map: &mut BTreeMap<String, Option<String>>,
+) -> Result<Option<String>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    let parsed = parse_resource_key(&value)?;
+    if !allowed_categories.contains(&parsed.category) {
+        return Err(format!(
+            "resource {value:?} has category {:?}, expected one of {allowed_categories:?}",
+            parsed.category
+        ));
+    }
+    if !references
+        .iter()
+        .any(|pending| pending.slot == slot && pending.ordinal == ordinal)
+    {
+        references.push(SyncResourceRef {
+            slot: slot.to_string(),
+            ordinal,
+            object_key: value.clone(),
+        });
+    }
+    path_map.insert(value.clone(), None);
+    Ok(Some(value))
+}
+
 fn rewrite_outgoing_path(
     value: Option<&str>,
     managed_root: &Path,
@@ -404,6 +637,15 @@ fn rewrite_outgoing_path(
     let value = value?.to_string();
     if let Some(existing) = path_map.get(&value) {
         return existing.clone();
+    }
+    if let Ok(parsed) = parse_resource_key(&value) {
+        if parsed.category == category {
+            path_map.insert(value.clone(), Some(value.clone()));
+            return Some(value);
+        }
+        *skipped_resources = skipped_resources.saturating_add(1);
+        path_map.insert(value, None);
+        return None;
     }
     let descriptor = fingerprint_resource(managed_root, Path::new(&value), category, max_bytes);
     match descriptor {
@@ -430,6 +672,15 @@ fn rewrite_outgoing_icon(
     skipped_resources: &mut u64,
 ) -> Option<String> {
     let value = value?;
+    if let Ok(parsed) = parse_resource_key(value) {
+        if parsed.category == ResourceCategory::Icon {
+            path_map.insert(value.to_string(), Some(value.to_string()));
+            return Some(value.to_string());
+        }
+        path_map.insert(value.to_string(), None);
+        *skipped_resources = skipped_resources.saturating_add(1);
+        return None;
+    }
     let icon_root = paths.storage.join("icons");
     let source = if Path::new(value).is_absolute() {
         PathBuf::from(value)

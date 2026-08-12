@@ -259,14 +259,38 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
                 ON DELETE CASCADE
         );
 
-        CREATE TABLE IF NOT EXISTS sync_remote_resources (
-            remote_scope TEXT NOT NULL,
-            object_key TEXT NOT NULL,
-            sha256 TEXT NOT NULL,
-            size_bytes INTEGER NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
-            confirmed_at_ms INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (remote_scope, object_key)
+        CREATE TABLE IF NOT EXISTS sync_resource_scopes (
+            id INTEGER PRIMARY KEY,
+            remote_scope TEXT NOT NULL UNIQUE
         );
+
+        CREATE TABLE IF NOT EXISTS sync_item_resources (
+            scope_id INTEGER NOT NULL,
+            item_id TEXT NOT NULL,
+            slot INTEGER NOT NULL CHECK (slot IN (0, 1, 2)),
+            ordinal INTEGER NOT NULL DEFAULT 0 CHECK (ordinal >= 0),
+            sha256 BLOB NOT NULL CHECK (length(sha256) = 32),
+            extension TEXT NOT NULL CHECK (length(extension) BETWEEN 1 AND 16),
+            PRIMARY KEY (scope_id, item_id, slot, ordinal),
+            FOREIGN KEY (scope_id) REFERENCES sync_resource_scopes(id) ON DELETE CASCADE,
+            FOREIGN KEY (item_id) REFERENCES clipboard_items(id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+
+        CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_resources_update
+        AFTER UPDATE OF resource_path, icon_path, text_content, deleted ON clipboard_items
+        WHEN NOT EXISTS (
+            SELECT 1 FROM sync_metadata
+            WHERE key = 'sync_suppress_changelog' AND value = '1'
+        )
+        AND (
+               OLD.resource_path IS NOT NEW.resource_path
+            OR OLD.icon_path IS NOT NEW.icon_path
+            OR OLD.text_content IS NOT NEW.text_content
+            OR OLD.deleted != NEW.deleted
+        )
+        BEGIN
+            DELETE FROM sync_item_resources WHERE item_id = NEW.id;
+        END;
 
         CREATE TRIGGER IF NOT EXISTS clipboard_items_search_insert
         AFTER INSERT ON clipboard_items
@@ -517,7 +541,8 @@ mod tests {
             "sync_tombstones",
             "sync_publication_state",
             "sync_cursors",
-            "sync_remote_resources",
+            "sync_resource_scopes",
+            "sync_item_resources",
         ] {
             assert!(table_exists(&connection, table), "missing table {table}");
         }

@@ -157,8 +157,13 @@ For each remote head:
 2. if the epoch changed or the local cursor predates the advertised snapshot, apply that snapshot;
 3. list segment keys strictly after the saved key and at or below the head's published sequence;
 4. verify object-name hash, decrypt, decompress and decode with bounded limits;
-5. fetch and validate missing resources before changing database paths;
-6. apply all mutations and advance that device cursor in one SQLite transaction.
+5. validate canonical resource keys, strip them from device-local path fields, and stage compact
+   per-item resource references without downloading blob bodies;
+6. apply all mutations, resource references and the device cursor in one SQLite transaction.
+
+An unmaterialized item can still be published in a later segment or checkpoint: scope-aware export
+restores its stored canonical keys. Local image/file paths remain either usable paths on this device
+or absent; an S3 object key is never written into a field consumed as a local filesystem path.
 
 Segment ranges must be continuous: the next object begins at exactly `cursor.sequence + 1`.
 Missing/overlapping ranges, an unavailable bootstrap snapshot, or another incomplete chain triggers

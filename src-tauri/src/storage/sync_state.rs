@@ -8,7 +8,7 @@ use crate::{
     domain::{ClipboardItem, ClipboardKind},
     sync::v1::{
         checkpoint_object_key, parse_segment_key, DeviceCursor, DeviceHead, MutationBatch,
-        ObjectRef, RecordVersion, ReplicatedItem, Tombstone,
+        ObjectRef, RecordVersion, ReplicatedItem, SyncResourceRef, Tombstone,
     },
 };
 
@@ -64,7 +64,6 @@ struct StoredReplicatedItem {
     html_content: Option<String>,
     rtf_content: Option<String>,
     resource_path: Option<String>,
-    preview_path: Option<String>,
     content_hash: String,
     source_app: Option<String>,
     icon_path: Option<String>,
@@ -86,16 +85,15 @@ impl StoredReplicatedItem {
             html_content: row.get(4)?,
             rtf_content: row.get(5)?,
             resource_path: row.get(6)?,
-            preview_path: row.get(7)?,
-            content_hash: row.get(8)?,
-            source_app: row.get(9)?,
-            icon_path: row.get(10)?,
-            size_bytes: row.get(11)?,
-            created_at_ms: row.get(12)?,
-            is_favorite: row.get(13)?,
-            metadata_json: row.get(14)?,
-            modified_at_ms: row.get(15)?,
-            writer_device_id: row.get(16)?,
+            content_hash: row.get(7)?,
+            source_app: row.get(8)?,
+            icon_path: row.get(9)?,
+            size_bytes: row.get(10)?,
+            created_at_ms: row.get(11)?,
+            is_favorite: row.get(12)?,
+            metadata_json: row.get(13)?,
+            modified_at_ms: row.get(14)?,
+            writer_device_id: row.get(15)?,
         })
     }
 
@@ -114,7 +112,7 @@ impl StoredReplicatedItem {
                 html_content: self.html_content,
                 rtf_content: self.rtf_content,
                 resource_path: self.resource_path,
-                preview_path: self.preview_path,
+                preview_path: None,
                 content_hash: self.content_hash,
                 source_app: self.source_app,
                 icon_path: self.icon_path,
@@ -255,13 +253,14 @@ impl Database {
             )?;
             transaction.execute_batch(
                 "DELETE FROM sync_item_aliases;
+                 DELETE FROM sync_item_resources;
                  DELETE FROM sync_outbox;
                  DELETE FROM sync_tombstones;
                  DELETE FROM sync_publication_state;
                  DELETE FROM sync_cursors;
                  DELETE FROM sync_checkpoint_cursors;
                  DELETE FROM sync_checkpoint_state;
-                 DELETE FROM sync_remote_resources;
+                 DELETE FROM sync_resource_scopes;
                  DELETE FROM sqlite_sequence WHERE name = 'sync_outbox';",
             )?;
             transaction.execute(
@@ -307,7 +306,22 @@ impl Database {
     pub fn export_sync_snapshot(&self) -> Result<SyncSnapshot, StorageError> {
         self.with_connection(|connection| {
             let through_sequence = current_sequence(connection)?;
-            let mutations = load_mutations(connection, None)?;
+            let mutations = load_mutations(connection, None, None)?;
+            Ok(SyncSnapshot {
+                through_sequence,
+                mutations,
+            })
+        })
+    }
+
+    pub fn export_sync_snapshot_for_scope(
+        &self,
+        remote_scope: &str,
+    ) -> Result<SyncSnapshot, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let through_sequence = current_sequence(connection)?;
+            let mutations = load_mutations(connection, Some(remote_scope), None)?;
             Ok(SyncSnapshot {
                 through_sequence,
                 mutations,
@@ -317,6 +331,23 @@ impl Database {
 
     pub fn get_sync_outbox_batch(
         &self,
+        limit: usize,
+    ) -> Result<Option<SyncOutboxBatch>, StorageError> {
+        self.get_sync_outbox_batch_inner(None, limit)
+    }
+
+    pub fn get_sync_outbox_batch_for_scope(
+        &self,
+        remote_scope: &str,
+        limit: usize,
+    ) -> Result<Option<SyncOutboxBatch>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.get_sync_outbox_batch_inner(Some(remote_scope), limit)
+    }
+
+    fn get_sync_outbox_batch_inner(
+        &self,
+        remote_scope: Option<&str>,
         limit: usize,
     ) -> Result<Option<SyncOutboxBatch>, StorageError> {
         if limit == 0 {
@@ -345,7 +376,7 @@ impl Database {
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect::<Vec<_>>();
-            let mutations = load_mutations(connection, Some(&item_ids))?;
+            let mutations = load_mutations(connection, remote_scope, Some(&item_ids))?;
             if mutations.len() != item_ids.len() {
                 return Err(StorageError::InvalidSyncState(
                     "outbox references an item without a live row or tombstone".to_string(),
@@ -391,6 +422,47 @@ impl Database {
                 field: "sync_outbox.count",
                 value: count,
             })
+        })
+    }
+
+    pub fn record_sync_resource_refs(
+        &self,
+        remote_scope: &str,
+        mutations: &MutationBatch,
+        resource_refs: &BTreeMap<String, Vec<SyncResourceRef>>,
+    ) -> Result<(), StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            for replicated in &mutations.upserts {
+                let current = transaction
+                    .query_row(
+                        "SELECT COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
+                           FROM clipboard_items
+                          WHERE id = ?1 AND deleted = 0",
+                        [&replicated.item.id],
+                        |row| {
+                            Ok(RecordVersion {
+                                modified_at_ms: row.get(0)?,
+                                writer_device_id: row.get(1)?,
+                            })
+                        },
+                    )
+                    .optional()?;
+                if current.as_ref() == Some(&replicated.version) {
+                    replace_sync_resource_refs(
+                        &transaction,
+                        remote_scope,
+                        &replicated.item.id,
+                        resource_refs
+                            .get(&replicated.item.id)
+                            .map(Vec::as_slice)
+                            .unwrap_or_default(),
+                    )?;
+                }
+            }
+            transaction.commit()?;
+            Ok(())
         })
     }
 
@@ -740,6 +812,25 @@ impl Database {
         cursors: &[DeviceCursor],
         mutations: &MutationBatch,
     ) -> Result<u64, StorageError> {
+        self.apply_sync_checkpoint_with_resources(
+            remote_scope,
+            generation,
+            checkpoint_sha256,
+            cursors,
+            mutations,
+            &BTreeMap::new(),
+        )
+    }
+
+    pub fn apply_sync_checkpoint_with_resources(
+        &self,
+        remote_scope: &str,
+        generation: u64,
+        checkpoint_sha256: &str,
+        cursors: &[DeviceCursor],
+        mutations: &MutationBatch,
+        resource_refs: &BTreeMap<String, Vec<SyncResourceRef>>,
+    ) -> Result<u64, StorageError> {
         validate_remote_scope(remote_scope)?;
         checkpoint_object_key(generation, checkpoint_sha256)
             .map_err(StorageError::InvalidSyncState)?;
@@ -771,7 +862,7 @@ impl Database {
             }
 
             set_changelog_suppressed(&transaction, true)?;
-            let applied = apply_mutations(&transaction, mutations)?;
+            let applied = apply_mutations(&transaction, remote_scope, mutations, resource_refs)?;
             set_changelog_suppressed(&transaction, false)?;
             transaction.execute(
                 "DELETE FROM sync_cursors WHERE remote_scope = ?1",
@@ -808,6 +899,23 @@ impl Database {
         snapshot_sha256: &str,
         mutations: &MutationBatch,
     ) -> Result<u64, StorageError> {
+        self.apply_sync_snapshot_with_resources(
+            remote_scope,
+            cursor,
+            snapshot_sha256,
+            mutations,
+            &BTreeMap::new(),
+        )
+    }
+
+    pub fn apply_sync_snapshot_with_resources(
+        &self,
+        remote_scope: &str,
+        cursor: &DeviceCursor,
+        snapshot_sha256: &str,
+        mutations: &MutationBatch,
+        resource_refs: &BTreeMap<String, Vec<SyncResourceRef>>,
+    ) -> Result<u64, StorageError> {
         validate_remote_scope(remote_scope)?;
         validate_cursor_identity(cursor)?;
         if cursor.last_segment_key.is_some() {
@@ -825,7 +933,7 @@ impl Database {
                 }
             }
             set_changelog_suppressed(&transaction, true)?;
-            let applied = apply_mutations(&transaction, mutations)?;
+            let applied = apply_mutations(&transaction, remote_scope, mutations, resource_refs)?;
             set_changelog_suppressed(&transaction, false)?;
             upsert_cursor(&transaction, remote_scope, cursor, Some(snapshot_sha256))?;
             transaction.commit()?;
@@ -838,6 +946,16 @@ impl Database {
         remote_scope: &str,
         cursor: &DeviceCursor,
         mutations: &MutationBatch,
+    ) -> Result<u64, StorageError> {
+        self.apply_sync_segment_with_resources(remote_scope, cursor, mutations, &BTreeMap::new())
+    }
+
+    pub fn apply_sync_segment_with_resources(
+        &self,
+        remote_scope: &str,
+        cursor: &DeviceCursor,
+        mutations: &MutationBatch,
+        resource_refs: &BTreeMap<String, Vec<SyncResourceRef>>,
     ) -> Result<u64, StorageError> {
         validate_remote_scope(remote_scope)?;
         validate_cursor_identity(cursor)?;
@@ -874,7 +992,7 @@ impl Database {
                 ));
             }
             set_changelog_suppressed(&transaction, true)?;
-            let applied = apply_mutations(&transaction, mutations)?;
+            let applied = apply_mutations(&transaction, remote_scope, mutations, resource_refs)?;
             set_changelog_suppressed(&transaction, false)?;
             upsert_cursor(&transaction, remote_scope, cursor, None)?;
             transaction.commit()?;
@@ -1145,7 +1263,9 @@ fn set_changelog_suppressed(
 
 fn apply_mutations(
     transaction: &Transaction<'_>,
+    remote_scope: &str,
     mutations: &MutationBatch,
+    resource_refs: &BTreeMap<String, Vec<SyncResourceRef>>,
 ) -> Result<u64, StorageError> {
     let mut applied = 0u64;
     for replicated in &mutations.upserts {
@@ -1173,6 +1293,76 @@ fn apply_mutations(
             [&target_id],
             |row| row.get::<_, bool>(0),
         )?;
+        let refs = resource_refs
+            .get(&replicated.item.id)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let old_refs = load_sync_resource_refs(transaction, remote_scope, &target_id)?;
+        let content_slot = match replicated.item.kind {
+            ClipboardKind::Image => "image",
+            ClipboardKind::File => "file",
+            ClipboardKind::Text | ClipboardKind::Link => "",
+        };
+        let preserve_local_resource = exists
+            && !content_slot.is_empty()
+            && resource_slot_matches(&old_refs, refs, content_slot)
+            && replicated.item.resource_path.is_none();
+        let preserve_local_icon = exists
+            && resource_slot_matches(&old_refs, refs, "icon")
+            && replicated.item.icon_path.is_none();
+        let local_paths = exists.then(|| {
+            transaction.query_row(
+                "SELECT resource_path, preview_path, icon_path, text_content, metadata_json
+                   FROM clipboard_items
+                  WHERE id = ?1",
+                [&target_id],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                },
+            )
+        });
+        let (local_resource, local_preview, local_icon, local_text, local_metadata) =
+            match local_paths {
+                Some(row) => row?,
+                None => (None, None, None, None, None),
+            };
+        let resource_path = if preserve_local_resource {
+            local_resource.as_ref()
+        } else {
+            replicated.item.resource_path.as_ref()
+        };
+        let preview_path = if preserve_local_resource {
+            local_preview.as_ref()
+        } else {
+            replicated.item.preview_path.as_ref()
+        };
+        let icon_path = if preserve_local_icon {
+            local_icon.as_ref()
+        } else {
+            replicated.item.icon_path.as_ref()
+        };
+        let text_content = if preserve_local_resource && replicated.item.kind == ClipboardKind::File
+        {
+            local_text.as_ref()
+        } else {
+            replicated.item.text_content.as_ref()
+        };
+        let metadata_json = if preserve_local_resource || preserve_local_icon {
+            merge_local_resource_metadata(
+                replicated.item.metadata_json.as_deref(),
+                local_metadata.as_deref(),
+                preserve_local_resource,
+                preserve_local_icon,
+            )?
+        } else {
+            replicated.item.metadata_json.clone()
+        };
         if exists {
             transaction.execute(
                 "UPDATE clipboard_items
@@ -1199,18 +1389,18 @@ fn apply_mutations(
                     &target_id,
                     kind,
                     &replicated.item.title,
-                    &replicated.item.text_content,
+                    text_content,
                     &replicated.item.html_content,
                     &replicated.item.rtf_content,
-                    &replicated.item.resource_path,
-                    &replicated.item.preview_path,
+                    resource_path,
+                    preview_path,
                     &replicated.item.content_hash,
                     &replicated.item.source_app,
-                    &replicated.item.icon_path,
+                    icon_path,
                     size_bytes,
                     replicated.item.created_at_ms,
                     replicated.item.is_favorite,
-                    &replicated.item.metadata_json,
+                    &metadata_json,
                     replicated.version.modified_at_ms,
                     &replicated.version.writer_device_id,
                 ],
@@ -1250,11 +1440,8 @@ fn apply_mutations(
             "DELETE FROM sync_tombstones WHERE item_id IN (?1, ?2)",
             params![&target_id, &replicated.item.id],
         )?;
-        replace_item_tags(
-            transaction,
-            &target_id,
-            replicated.item.metadata_json.as_deref(),
-        )?;
+        replace_item_tags(transaction, &target_id, metadata_json.as_deref())?;
+        replace_sync_resource_refs(transaction, remote_scope, &target_id, refs)?;
         applied += 1;
     }
 
@@ -1314,9 +1501,245 @@ fn apply_mutations(
             )?;
         }
         transaction.execute("DELETE FROM item_tags WHERE item_id = ?1", [&target_id])?;
+        transaction.execute(
+            "DELETE FROM sync_item_resources WHERE item_id = ?1",
+            [&target_id],
+        )?;
         applied += 1;
     }
     Ok(applied)
+}
+
+fn load_sync_resource_refs(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+    item_id: &str,
+) -> Result<Vec<SyncResourceRef>, StorageError> {
+    let Some(scope_id) = sync_resource_scope_id(connection, remote_scope)? else {
+        return Ok(Vec::new());
+    };
+    let mut statement = connection.prepare(
+        "SELECT slot, ordinal, sha256, extension
+           FROM sync_item_resources
+          WHERE scope_id = ?1 AND item_id = ?2
+          ORDER BY slot, ordinal",
+    )?;
+    let references = statement
+        .query_map(params![scope_id, item_id], |row| {
+            let ordinal = row.get::<_, i64>(1)?;
+            let ordinal = u32::try_from(ordinal)
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(1, ordinal))?;
+            let slot = resource_slot_from_i64(row.get(0)?)?;
+            let sha256 = row.get::<_, Vec<u8>>(2)?;
+            let extension = row.get::<_, String>(3)?;
+            sync_resource_ref_from_parts(slot, ordinal, &sha256, &extension)
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(references)
+}
+
+fn resource_slot_matches(
+    old_refs: &[SyncResourceRef],
+    new_refs: &[SyncResourceRef],
+    slot: &str,
+) -> bool {
+    let old = old_refs
+        .iter()
+        .filter(|reference| reference.slot == slot)
+        .collect::<Vec<_>>();
+    let new = new_refs
+        .iter()
+        .filter(|reference| reference.slot == slot)
+        .collect::<Vec<_>>();
+    old == new
+}
+
+fn merge_local_resource_metadata(
+    remote_json: Option<&str>,
+    local_json: Option<&str>,
+    preserve_resource: bool,
+    preserve_icon: bool,
+) -> Result<Option<String>, StorageError> {
+    let mut remote = remote_json
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .unwrap_or_else(|| serde_json::Value::Object(Default::default()));
+    let Some(local) =
+        local_json.and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+    else {
+        return Ok(remote_json.map(str::to_string));
+    };
+    if preserve_resource {
+        copy_json_key(&local, &mut remote, "resourcePath");
+        copy_json_key(&local, &mut remote, "storagePath");
+        copy_json_key(&local, &mut remote, "previewPath");
+        copy_file_storage_paths(&local, &mut remote);
+    }
+    if preserve_icon {
+        copy_json_key(&local, &mut remote, "iconPath");
+    }
+    serde_json::to_string(&remote).map(Some).map_err(|error| {
+        StorageError::InvalidSyncState(format!("failed to merge local resource metadata: {error}"))
+    })
+}
+
+fn copy_json_key(source: &serde_json::Value, target: &mut serde_json::Value, key: &str) {
+    let (Some(source), Some(target)) = (source.as_object(), target.as_object_mut()) else {
+        return;
+    };
+    match source.get(key) {
+        Some(value) => {
+            target.insert(key.to_string(), value.clone());
+        }
+        None => {
+            target.remove(key);
+        }
+    }
+}
+
+fn copy_file_storage_paths(source: &serde_json::Value, target: &mut serde_json::Value) {
+    let Some(source_files) = source.get("files").and_then(serde_json::Value::as_array) else {
+        return;
+    };
+    let Some(target_files) = target
+        .get_mut("files")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return;
+    };
+    for (source, target) in source_files.iter().zip(target_files.iter_mut()) {
+        copy_json_key(source, target, "storagePath");
+        copy_json_key(source, target, "path");
+    }
+}
+
+fn replace_sync_resource_refs(
+    transaction: &Transaction<'_>,
+    remote_scope: &str,
+    item_id: &str,
+    references: &[SyncResourceRef],
+) -> Result<(), StorageError> {
+    let scope_id = get_or_create_sync_resource_scope(transaction, remote_scope)?;
+    transaction.execute(
+        "DELETE FROM sync_item_resources
+          WHERE scope_id = ?1 AND item_id = ?2",
+        params![scope_id, item_id],
+    )?;
+    for reference in references {
+        let parsed = crate::sync::v1::parse_resource_key(&reference.object_key)
+            .map_err(StorageError::InvalidSyncState)?;
+        let slot_is_valid = match reference.slot.as_str() {
+            "image" => {
+                reference.ordinal == 0
+                    && parsed.category == crate::sync::v1::ResourceCategory::Image
+            }
+            "file" => parsed.category == crate::sync::v1::ResourceCategory::File,
+            "icon" => {
+                reference.ordinal == 0 && parsed.category == crate::sync::v1::ResourceCategory::Icon
+            }
+            _ => false,
+        };
+        if !slot_is_valid {
+            return Err(StorageError::InvalidSyncState(
+                "sync resource reference has an invalid slot/category".to_string(),
+            ));
+        }
+        transaction.execute(
+            "INSERT INTO sync_item_resources
+                (scope_id, item_id, slot, ordinal, sha256, extension)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                scope_id,
+                item_id,
+                resource_slot_to_i64(&reference.slot)?,
+                i64::from(reference.ordinal),
+                hex::decode(&parsed.sha256).map_err(|error| {
+                    StorageError::InvalidSyncState(format!(
+                        "sync resource digest is not hexadecimal: {error}"
+                    ))
+                })?,
+                &parsed.extension,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn sync_resource_scope_id(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+) -> Result<Option<i64>, StorageError> {
+    Ok(connection
+        .query_row(
+            "SELECT id FROM sync_resource_scopes WHERE remote_scope = ?1",
+            [remote_scope],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+fn get_or_create_sync_resource_scope(
+    transaction: &Transaction<'_>,
+    remote_scope: &str,
+) -> Result<i64, StorageError> {
+    transaction.execute(
+        "INSERT INTO sync_resource_scopes (remote_scope) VALUES (?1)
+         ON CONFLICT(remote_scope) DO NOTHING",
+        [remote_scope],
+    )?;
+    Ok(transaction.query_row(
+        "SELECT id FROM sync_resource_scopes WHERE remote_scope = ?1",
+        [remote_scope],
+        |row| row.get(0),
+    )?)
+}
+
+fn resource_slot_to_i64(slot: &str) -> Result<i64, StorageError> {
+    match slot {
+        "image" => Ok(0),
+        "file" => Ok(1),
+        "icon" => Ok(2),
+        _ => Err(StorageError::InvalidSyncState(
+            "sync resource reference has an unknown slot".to_string(),
+        )),
+    }
+}
+
+fn resource_slot_from_i64(slot: i64) -> rusqlite::Result<&'static str> {
+    match slot {
+        0 => Ok("image"),
+        1 => Ok("file"),
+        2 => Ok("icon"),
+        _ => Err(rusqlite::Error::IntegralValueOutOfRange(0, slot)),
+    }
+}
+
+fn sync_resource_ref_from_parts(
+    slot: &str,
+    ordinal: u32,
+    sha256: &[u8],
+    extension: &str,
+) -> rusqlite::Result<SyncResourceRef> {
+    if sha256.len() != 32 {
+        return Err(rusqlite::Error::InvalidColumnType(
+            2,
+            "sha256".to_string(),
+            rusqlite::types::Type::Blob,
+        ));
+    }
+    let category = match slot {
+        "image" => crate::sync::v1::ResourceCategory::Image,
+        "file" => crate::sync::v1::ResourceCategory::File,
+        "icon" => crate::sync::v1::ResourceCategory::Icon,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    let object_key =
+        crate::sync::v1::resource_object_key(category, &hex::encode(sha256), extension)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
+    Ok(SyncResourceRef {
+        slot: slot.to_string(),
+        ordinal,
+        object_key,
+    })
 }
 
 fn validate_record_version(version: &RecordVersion) -> Result<(), StorageError> {
@@ -1501,6 +1924,7 @@ fn current_sequence(connection: &rusqlite::Connection) -> Result<u64, StorageErr
 
 fn load_mutations(
     connection: &rusqlite::Connection,
+    remote_scope: Option<&str>,
     item_ids: Option<&[String]>,
 ) -> Result<MutationBatch, StorageError> {
     let mut upserts = BTreeMap::<String, ReplicatedItem>::new();
@@ -1513,7 +1937,7 @@ fn load_mutations(
                 .join(", ");
             let item_sql = format!(
                 "SELECT id, kind, title, text_content, html_content, rtf_content,
-                        resource_path, preview_path, content_hash, source_app,
+                        resource_path, content_hash, source_app,
                         icon_path, size_bytes, created_at_ms,
                         is_favorite, metadata_json,
                         COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
@@ -1527,8 +1951,17 @@ fn load_mutations(
                     StoredReplicatedItem::from_row,
                 )?
                 .collect::<Result<Vec<_>, _>>()?;
+            let mut resource_refs = match remote_scope {
+                Some(remote_scope) => {
+                    load_sync_resource_ref_map(connection, remote_scope, Some(chunk))?
+                }
+                None => BTreeMap::new(),
+            };
             for stored in stored_items {
-                let item = stored.into_wire()?;
+                let mut item = stored.into_wire()?;
+                if let Some(references) = resource_refs.remove(&item.item.id) {
+                    restore_sync_resource_refs(&mut item, &references)?;
+                }
                 upserts.insert(item.item.id.clone(), item);
             }
 
@@ -1550,7 +1983,7 @@ fn load_mutations(
     } else {
         let mut item_statement = connection.prepare(
             "SELECT id, kind, title, text_content, html_content, rtf_content,
-                    resource_path, preview_path, content_hash, source_app,
+                    resource_path, content_hash, source_app,
                     icon_path, size_bytes, created_at_ms,
                     is_favorite, metadata_json,
                     COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
@@ -1561,9 +1994,17 @@ fn load_mutations(
         let stored_items = item_statement
             .query_map([], StoredReplicatedItem::from_row)?
             .collect::<Result<Vec<_>, _>>()?;
+        let mut resource_refs = match remote_scope {
+            Some(remote_scope) => load_sync_resource_ref_map(connection, remote_scope, None)?,
+            None => BTreeMap::new(),
+        };
         let mut snapshot_upserts = Vec::with_capacity(stored_items.len());
         for stored in stored_items {
-            snapshot_upserts.push(stored.into_wire()?);
+            let mut item = stored.into_wire()?;
+            if let Some(references) = resource_refs.remove(&item.item.id) {
+                restore_sync_resource_refs(&mut item, &references)?;
+            }
+            snapshot_upserts.push(item);
         }
 
         let mut tombstone_statement = connection.prepare(
@@ -1602,6 +2043,208 @@ fn load_mutations(
         upserts: upserts.into_values().collect(),
         tombstones: tombstones.into_values().collect(),
     })
+}
+
+fn load_sync_resource_ref_map(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+    item_ids: Option<&[String]>,
+) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, StorageError> {
+    let Some(scope_id) = sync_resource_scope_id(connection, remote_scope)? else {
+        return Ok(BTreeMap::new());
+    };
+    let (sql, values) = if let Some(item_ids) = item_ids {
+        if item_ids.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let placeholders = (2..=(item_ids.len() + 1))
+            .map(|position| format!("?{position}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut values: Vec<Box<dyn rusqlite::types::ToSql>> =
+            Vec::with_capacity(item_ids.len() + 1);
+        values.push(Box::new(scope_id));
+        values.extend(
+            item_ids
+                .iter()
+                .cloned()
+                .map(|item_id| Box::new(item_id) as Box<dyn rusqlite::types::ToSql>),
+        );
+        (
+            format!(
+                "SELECT item_id, slot, ordinal, sha256, extension
+                   FROM sync_item_resources
+                  WHERE scope_id = ?1 AND item_id IN ({placeholders})
+                  ORDER BY item_id, slot, ordinal"
+            ),
+            values,
+        )
+    } else {
+        (
+            "SELECT item_id, slot, ordinal, sha256, extension
+               FROM sync_item_resources
+              WHERE scope_id = ?1
+              ORDER BY item_id, slot, ordinal"
+                .to_string(),
+            vec![Box::new(scope_id) as Box<dyn rusqlite::types::ToSql>],
+        )
+    };
+    let mut statement = connection.prepare(&sql)?;
+    let rows = statement
+        .query_map(
+            params_from_iter(values.iter().map(|value| value.as_ref())),
+            |row| {
+                let item_id = row.get::<_, String>(0)?;
+                let slot = resource_slot_from_i64(row.get(1)?)?;
+                let ordinal = row.get::<_, i64>(2)?;
+                let sha256 = row.get::<_, Vec<u8>>(3)?;
+                let extension = row.get::<_, String>(4)?;
+                let reference = sync_resource_ref_from_parts(
+                    slot,
+                    u32::try_from(ordinal)
+                        .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, ordinal))?,
+                    &sha256,
+                    &extension,
+                )?;
+                Ok((item_id, reference))
+            },
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut references = BTreeMap::<String, Vec<SyncResourceRef>>::new();
+    for (item_id, reference) in rows {
+        references.entry(item_id).or_default().push(reference);
+    }
+    Ok(references)
+}
+
+fn restore_sync_resource_refs(
+    replicated: &mut ReplicatedItem,
+    references: &[SyncResourceRef],
+) -> Result<(), StorageError> {
+    if references.is_empty() {
+        return Ok(());
+    }
+
+    let mut file_paths = replicated
+        .item
+        .text_content
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<Vec<String>>(json).ok());
+    let mut metadata = replicated
+        .item
+        .metadata_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok());
+
+    for reference in references {
+        let slot = reference.slot.as_str();
+        let ordinal = i64::from(reference.ordinal);
+        let object_key = &reference.object_key;
+        let parsed = crate::sync::v1::parse_resource_key(object_key)
+            .map_err(StorageError::InvalidSyncState)?;
+        match slot {
+            "image" if ordinal == 0 => {
+                if replicated.item.kind != ClipboardKind::Image
+                    || parsed.category != crate::sync::v1::ResourceCategory::Image
+                {
+                    return Err(StorageError::InvalidSyncState(
+                        "image sync resource category does not match item kind".to_string(),
+                    ));
+                }
+                replicated.item.resource_path = Some(object_key.clone());
+                rewrite_exported_metadata_path(&mut metadata, "resourcePath", object_key);
+                rewrite_exported_metadata_path(&mut metadata, "storagePath", object_key);
+            }
+            "file" => {
+                if parsed.category != crate::sync::v1::ResourceCategory::File
+                    || replicated.item.kind != ClipboardKind::File
+                {
+                    return Err(StorageError::InvalidSyncState(
+                        "file sync resource category does not match item kind".to_string(),
+                    ));
+                }
+                let index =
+                    usize::try_from(ordinal).map_err(|_| StorageError::InvalidStoredValue {
+                        field: "sync_item_resources.ordinal",
+                        value: ordinal,
+                    })?;
+                let paths = file_paths.get_or_insert_with(Vec::new);
+                if paths.len() <= index {
+                    paths.resize(index + 1, String::new());
+                }
+                paths[index] = object_key.clone();
+                if index == 0 {
+                    replicated.item.resource_path = Some(object_key.clone());
+                    rewrite_exported_metadata_path(&mut metadata, "resourcePath", object_key);
+                }
+                rewrite_exported_file_metadata_path(&mut metadata, index, object_key);
+            }
+            "icon" if ordinal == 0 => {
+                if parsed.category != crate::sync::v1::ResourceCategory::Icon {
+                    return Err(StorageError::InvalidSyncState(
+                        "icon sync resource has a non-icon category".to_string(),
+                    ));
+                }
+                replicated.item.icon_path = Some(object_key.clone());
+            }
+            _ => {
+                return Err(StorageError::InvalidSyncState(
+                    "sync item resource has an unknown slot".to_string(),
+                ));
+            }
+        }
+    }
+
+    if let Some(paths) = file_paths {
+        replicated.item.text_content = Some(serde_json::to_string(&paths).map_err(|error| {
+            StorageError::InvalidSyncState(format!(
+                "failed to encode restored file resource paths: {error}"
+            ))
+        })?);
+    }
+    if let Some(metadata) = metadata {
+        replicated.item.metadata_json =
+            Some(serde_json::to_string(&metadata).map_err(|error| {
+                StorageError::InvalidSyncState(format!(
+                    "failed to encode restored resource metadata: {error}"
+                ))
+            })?);
+    }
+    Ok(())
+}
+
+fn rewrite_exported_metadata_path(
+    metadata: &mut Option<serde_json::Value>,
+    key: &str,
+    object_key: &str,
+) {
+    let Some(serde_json::Value::Object(object)) = metadata else {
+        return;
+    };
+    object.insert(
+        key.to_string(),
+        serde_json::Value::String(object_key.to_string()),
+    );
+}
+
+fn rewrite_exported_file_metadata_path(
+    metadata: &mut Option<serde_json::Value>,
+    index: usize,
+    object_key: &str,
+) {
+    let Some(serde_json::Value::Object(object)) = metadata else {
+        return;
+    };
+    let Some(serde_json::Value::Array(files)) = object.get_mut("files") else {
+        return;
+    };
+    let Some(serde_json::Value::Object(file)) = files.get_mut(index) else {
+        return;
+    };
+    file.insert(
+        "storagePath".to_string(),
+        serde_json::Value::String(object_key.to_string()),
+    );
 }
 
 #[cfg(test)]
@@ -1858,6 +2501,195 @@ mod tests {
         assert_eq!(stored.title, "remote update");
         assert_eq!(stored.last_used_at_ms, Some(777));
         assert_eq!(database.count_sync_outbox().unwrap(), 0);
+    }
+
+    #[test]
+    fn resource_refs_commit_with_the_cursor_and_survive_local_only_updates() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let mut remote = replicated(
+            "remote-image",
+            "hash-remote-image",
+            "remote image",
+            RecordVersion {
+                modified_at_ms: 500,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        remote.item.kind = ClipboardKind::Image;
+        remote.item.text_content = None;
+        remote.item.resource_path = None;
+        remote.item.metadata_json = Some("{}".to_string());
+        let object_key = format!("v1/resources/image/sha256-{}.png", "a".repeat(64));
+        let refs = BTreeMap::from([(
+            remote.item.id.clone(),
+            vec![SyncResourceRef {
+                slot: "image".to_string(),
+                ordinal: 0,
+                object_key: object_key.clone(),
+            }],
+        )]);
+        database
+            .apply_sync_snapshot_with_resources(
+                REMOTE_SCOPE,
+                &cursor(0, None),
+                &"a".repeat(64),
+                &MutationBatch {
+                    upserts: vec![remote],
+                    tombstones: Vec::new(),
+                },
+                &refs,
+            )
+            .unwrap();
+        database
+            .set_preview_path("remote-image", "previews/remote-image.jpg")
+            .unwrap();
+
+        let exported = database
+            .export_sync_snapshot_for_scope(REMOTE_SCOPE)
+            .unwrap();
+        assert_eq!(
+            exported.mutations.upserts[0].item.resource_path.as_deref(),
+            Some(object_key.as_str())
+        );
+        assert!(exported.mutations.upserts[0].item.preview_path.is_none());
+
+        let mut invalid_refs = refs;
+        invalid_refs.get_mut("remote-image").unwrap()[0].object_key = "invalid".to_string();
+        let mut newer = exported.mutations.upserts[0].clone();
+        newer.version.modified_at_ms += 1;
+        assert!(database
+            .apply_sync_segment_with_resources(
+                REMOTE_SCOPE,
+                &cursor(1, Some("segment-1")),
+                &MutationBatch {
+                    upserts: vec![newer],
+                    tombstones: Vec::new(),
+                },
+                &invalid_refs,
+            )
+            .is_err());
+        assert!(
+            database
+                .get_sync_cursor(REMOTE_SCOPE, REMOTE_DEVICE)
+                .unwrap()
+                .unwrap()
+                .sequence
+                == 0
+        );
+        assert_eq!(
+            database
+                .export_sync_snapshot_for_scope(REMOTE_SCOPE)
+                .unwrap()
+                .mutations
+                .upserts[0]
+                .item
+                .resource_path
+                .as_deref(),
+            Some(object_key.as_str())
+        );
+    }
+
+    #[test]
+    fn unchanged_remote_file_refs_preserve_materialized_local_paths() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let first_key = format!("v1/resources/file/sha256-{}.txt", "b".repeat(64));
+        let second_key = format!("v1/resources/file/sha256-{}.txt", "c".repeat(64));
+        let local_paths = vec!["C:\\cache\\first.txt", "C:\\cache\\second.txt"];
+        let mut remote = replicated(
+            "remote-files",
+            "hash-remote-files",
+            "remote files",
+            RecordVersion {
+                modified_at_ms: 500,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        remote.item.kind = ClipboardKind::File;
+        remote.item.resource_path = Some(local_paths[0].to_string());
+        remote.item.text_content = Some(serde_json::to_string(&local_paths).unwrap());
+        remote.item.metadata_json = Some(
+            serde_json::json!({
+                "resourcePath": local_paths[0],
+                "files": [
+                    {"storagePath": local_paths[0]},
+                    {"storagePath": local_paths[1]}
+                ]
+            })
+            .to_string(),
+        );
+        let refs = BTreeMap::from([(
+            remote.item.id.clone(),
+            vec![
+                SyncResourceRef {
+                    slot: "file".to_string(),
+                    ordinal: 0,
+                    object_key: first_key.clone(),
+                },
+                SyncResourceRef {
+                    slot: "file".to_string(),
+                    ordinal: 1,
+                    object_key: second_key.clone(),
+                },
+            ],
+        )]);
+        database
+            .apply_sync_snapshot_with_resources(
+                REMOTE_SCOPE,
+                &cursor(0, None),
+                &"a".repeat(64),
+                &MutationBatch {
+                    upserts: vec![remote.clone()],
+                    tombstones: Vec::new(),
+                },
+                &refs,
+            )
+            .unwrap();
+
+        remote.version.modified_at_ms += 1;
+        remote.item.title = "renamed remotely".to_string();
+        remote.item.resource_path = None;
+        remote.item.text_content = Some("[\"\",\"\"]".to_string());
+        remote.item.metadata_json = Some(
+            serde_json::json!({
+                "resourcePath": null,
+                "files": [{"storagePath": null}, {"storagePath": null}],
+                "tags": ["remote"]
+            })
+            .to_string(),
+        );
+        database
+            .apply_sync_segment_with_resources(
+                REMOTE_SCOPE,
+                &cursor(1, Some("segment-1")),
+                &MutationBatch {
+                    upserts: vec![remote],
+                    tombstones: Vec::new(),
+                },
+                &refs,
+            )
+            .unwrap();
+
+        let stored = database.get_item("remote-files").unwrap().unwrap();
+        assert_eq!(stored.resource_path.as_deref(), Some(local_paths[0]));
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(stored.text_content.as_deref().unwrap()).unwrap(),
+            local_paths
+        );
+        let metadata: serde_json::Value =
+            serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+        assert_eq!(metadata["files"][1]["storagePath"], local_paths[1]);
+        assert_eq!(metadata["tags"], serde_json::json!(["remote"]));
+        let exported = database
+            .export_sync_snapshot_for_scope(REMOTE_SCOPE)
+            .unwrap();
+        let item = &exported.mutations.upserts[0].item;
+        assert_eq!(item.resource_path.as_deref(), Some(first_key.as_str()));
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(item.text_content.as_deref().unwrap()).unwrap(),
+            vec![first_key, second_key]
+        );
     }
 
     #[test]

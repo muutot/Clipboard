@@ -23,9 +23,10 @@ pub use remote::{
     ObjectStore, ObsoleteCleanupReport, PutCondition, PutOutcome, S3ObjectStore,
 };
 pub use resources::{
-    ensure_resource_uploaded, fingerprint_resource, materialize_mutation_resources,
-    materialize_resource, prepare_mutation_resources, MaterializedResource, ResourceDescriptor,
-    ResourceLimits, ResourceTransferStats, ResourceUploadResult,
+    collect_mutation_resource_refs, defer_mutation_resources, ensure_resource_uploaded,
+    fingerprint_resource, materialize_mutation_resources, materialize_resource,
+    prepare_mutation_resources, MaterializedResource, ResourceDescriptor, ResourceLimits,
+    ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
 };
 pub use wire::{
     decode_checkpoint, decode_checkpoint_head, decode_device_head, decode_segment, decode_snapshot,

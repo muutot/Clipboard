@@ -5,13 +5,13 @@ use sha2::{Digest, Sha256};
 use crate::storage::{Database, StoragePaths};
 
 use super::{
-    cleanup_obsolete_objects, decode_checkpoint, decode_checkpoint_head, decode_device_head,
-    decode_segment, decode_snapshot, encode_device_head, encode_segment, encode_snapshot,
-    head_object_key, materialize_mutation_resources, parse_checkpoint_key, parse_head_key,
-    parse_segment_key, prepare_mutation_resources, segment_object_key, segment_prefix,
-    snapshot_object_key, Checkpoint, CheckpointHead, DeviceCursor, DeviceHead, EncodedObject,
-    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
-    Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    cleanup_obsolete_objects, collect_mutation_resource_refs, decode_checkpoint,
+    decode_checkpoint_head, decode_device_head, decode_segment, decode_snapshot,
+    defer_mutation_resources, encode_device_head, encode_segment, encode_snapshot, head_object_key,
+    parse_checkpoint_key, parse_head_key, parse_segment_key, prepare_mutation_resources,
+    segment_object_key, segment_prefix, snapshot_object_key, Checkpoint, CheckpointHead,
+    DeviceCursor, DeviceHead, EncodedObject, ObjectRef, ObjectStore, PutCondition, PutOutcome,
+    ResourceLimits, Segment, SessionKey, Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
@@ -100,7 +100,7 @@ pub fn sync_database(
     }
 
     while let Some(batch) = database
-        .get_sync_outbox_batch(options.segment_max_entries)
+        .get_sync_outbox_batch_for_scope(remote_scope, options.segment_max_entries)
         .map_err(|error| error.to_string())?
     {
         state = publish_segment(
@@ -228,10 +228,10 @@ fn local_publication_matches_remote(
 fn pull_checkpoint_if_needed(
     store: &impl ObjectStore,
     database: &Database,
-    paths: &StoragePaths,
+    _paths: &StoragePaths,
     remote_scope: &str,
     session_key: Option<&SessionKey>,
-    resource_limits: ResourceLimits,
+    _resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
     force: bool,
 ) -> Result<bool, String> {
@@ -307,25 +307,20 @@ fn pull_checkpoint_if_needed(
         }
     };
     let mut mutations = checkpoint.mutations;
-    let resources = materialize_mutation_resources(store, &mut mutations, paths, resource_limits)?;
-    result.downloaded_resources += resources.transferred_resources;
-    result.bytes_downloaded = checked_add(
-        result.bytes_downloaded,
-        resources.transferred_bytes,
-        "downloaded byte count",
-    )?;
+    let resource_refs = defer_mutation_resources(&mut mutations)?;
     result.downloaded_entries = checked_add(
         result.downloaded_entries,
         mutations.len() as u64,
         "downloaded entry count",
     )?;
     let applied = database
-        .apply_sync_checkpoint(
+        .apply_sync_checkpoint_with_resources(
             remote_scope,
             checkpoint.generation,
             &checkpoint_digest_for_generation(&checkpoint_head, checkpoint.generation)?,
             &checkpoint.vector,
             &mutations,
+            &resource_refs,
         )
         .map_err(|error| error.to_string())?;
     result.applied_entries = checked_add(result.applied_entries, applied, "applied entry count")?;
@@ -491,7 +486,7 @@ fn maybe_compact(
             .ok_or_else(|| "checkpoint generation overflowed".to_string())
     })?;
     let snapshot = database
-        .export_sync_snapshot()
+        .export_sync_snapshot_for_scope(remote_scope)
         .map_err(|error| error.to_string())?;
     if snapshot.through_sequence != local_state.published_sequence {
         return Ok(());
@@ -504,6 +499,10 @@ fn maybe_compact(
         resources.transferred_bytes,
         "uploaded byte count",
     )?;
+    let resource_refs = collect_mutation_resource_refs(&mutations)?;
+    database
+        .record_sync_resource_refs(remote_scope, &mutations, &resource_refs)
+        .map_err(|error| error.to_string())?;
     let checkpoint = Checkpoint {
         generation,
         vector: vector.clone(),
@@ -832,7 +831,7 @@ fn publish_bootstrap(
     result: &mut SyncEngineResult,
 ) -> Result<crate::storage::SyncRemoteState, String> {
     let exported = database
-        .export_sync_snapshot()
+        .export_sync_snapshot_for_scope(remote_scope)
         .map_err(|error| error.to_string())?;
     let mut snapshot = Snapshot {
         device_id: device_id.to_string(),
@@ -848,6 +847,10 @@ fn publish_bootstrap(
         resources.transferred_bytes,
         "uploaded byte count",
     )?;
+    let resource_refs = collect_mutation_resource_refs(&snapshot.mutations)?;
+    database
+        .record_sync_resource_refs(remote_scope, &snapshot.mutations, &resource_refs)
+        .map_err(|error| error.to_string())?;
 
     let encoded = encode_snapshot(&snapshot, session_key)?;
     let snapshot_key = snapshot_object_key(device_id, &state.epoch, &encoded.sha256)?;
@@ -910,6 +913,10 @@ fn publish_segment(
         resources.transferred_bytes,
         "uploaded byte count",
     )?;
+    let resource_refs = collect_mutation_resource_refs(&segment.mutations)?;
+    database
+        .record_sync_resource_refs(remote_scope, &segment.mutations, &resource_refs)
+        .map_err(|error| error.to_string())?;
 
     let encoded = encode_segment(&segment, session_key)?;
     let segment_key = segment_object_key(
@@ -1076,14 +1083,7 @@ fn pull_device(
         {
             return Err(format!("segment payload does not match key {:?}", info.key));
         }
-        let resources =
-            materialize_mutation_resources(store, &mut segment.mutations, paths, resource_limits)?;
-        result.downloaded_resources += resources.transferred_resources;
-        result.bytes_downloaded = checked_add(
-            result.bytes_downloaded,
-            resources.transferred_bytes,
-            "downloaded byte count",
-        )?;
+        let resource_refs = defer_mutation_resources(&mut segment.mutations)?;
         result.downloaded_entries = checked_add(
             result.downloaded_entries,
             segment.mutations.len() as u64,
@@ -1096,7 +1096,12 @@ fn pull_device(
             last_segment_key: Some(info.key.clone()),
         };
         let applied = database
-            .apply_sync_segment(remote_scope, &next_cursor, &segment.mutations)
+            .apply_sync_segment_with_resources(
+                remote_scope,
+                &next_cursor,
+                &segment.mutations,
+                &resource_refs,
+            )
             .map_err(|error| error.to_string())?;
         result.applied_entries =
             checked_add(result.applied_entries, applied, "applied entry count")?;
@@ -1119,11 +1124,11 @@ fn pull_device(
 fn pull_snapshot(
     store: &impl ObjectStore,
     database: &Database,
-    paths: &StoragePaths,
+    _paths: &StoragePaths,
     remote_scope: &str,
     head: &DeviceHead,
     session_key: Option<&SessionKey>,
-    resource_limits: ResourceLimits,
+    _resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<DeviceCursor, String> {
     let downloaded = get_verified_object(
@@ -1144,14 +1149,7 @@ fn pull_snapshot(
             head.device_id
         ));
     }
-    let resources =
-        materialize_mutation_resources(store, &mut snapshot.mutations, paths, resource_limits)?;
-    result.downloaded_resources += resources.transferred_resources;
-    result.bytes_downloaded = checked_add(
-        result.bytes_downloaded,
-        resources.transferred_bytes,
-        "downloaded byte count",
-    )?;
+    let resource_refs = defer_mutation_resources(&mut snapshot.mutations)?;
     result.downloaded_entries = checked_add(
         result.downloaded_entries,
         snapshot.mutations.len() as u64,
@@ -1164,11 +1162,12 @@ fn pull_snapshot(
         last_segment_key: None,
     };
     let applied = database
-        .apply_sync_snapshot(
+        .apply_sync_snapshot_with_resources(
             remote_scope,
             &cursor,
             &head.snapshot.sha256,
             &snapshot.mutations,
+            &resource_refs,
         )
         .map_err(|error| error.to_string())?;
     result.applied_entries = checked_add(result.applied_entries, applied, "applied entry count")?;
@@ -1397,6 +1396,7 @@ mod tests {
             destination: &Path,
             max_bytes: u64,
         ) -> Result<Option<DownloadedFile>, String> {
+            self.gets.lock().unwrap().push(key.to_string());
             let Some(bytes) = self.objects.lock().unwrap().get(key).cloned() else {
                 return Ok(None);
             };
@@ -1496,6 +1496,35 @@ mod tests {
             last_used_at_ms: None,
             is_favorite: false,
             metadata_json: Some("{}".to_string()),
+        }
+    }
+
+    fn image_item(id: &str, path: &Path) -> ClipboardItem {
+        let path = path.to_string_lossy().to_string();
+        ClipboardItem {
+            id: id.to_string(),
+            kind: ClipboardKind::Image,
+            title: id.to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: Some(path.clone()),
+            preview_path: Some(path.clone()),
+            content_hash: format!("hash-{id}"),
+            source_app: None,
+            icon_path: None,
+            size_bytes: fs::metadata(path.as_str()).unwrap().len(),
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: Some(
+                serde_json::json!({
+                    "resourcePath": path,
+                    "storagePath": path,
+                    "previewPath": path,
+                })
+                .to_string(),
+            ),
         }
     }
 
@@ -1628,6 +1657,80 @@ mod tests {
         drop(second);
         fs::remove_dir_all(first_paths.project).unwrap();
         fs::remove_dir_all(second_paths.project).unwrap();
+    }
+
+    #[test]
+    fn ordinary_pull_defers_resource_download_and_can_republish_the_reference() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("deferred-source");
+        let target_paths = temp_paths("deferred-target");
+        fs::create_dir_all(&source_paths.images).unwrap();
+        let source_image = source_paths.images.join("source.png");
+        fs::write(&source_image, b"image-bytes").unwrap();
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        source
+            .save_item(&image_item("remote-image", &source_image))
+            .unwrap();
+
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        let resource_key = store
+            .objects
+            .lock()
+            .unwrap()
+            .keys()
+            .find(|key| key.starts_with("v1/resources/image/"))
+            .cloned()
+            .unwrap();
+        store.gets.lock().unwrap().clear();
+
+        let pulled = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        assert_eq!(pulled.downloaded_resources, 0);
+        assert!(!store.gets.lock().unwrap().contains(&resource_key));
+        let local = target.get_item("remote-image").unwrap().unwrap();
+        assert!(local.resource_path.is_none());
+        assert!(local.preview_path.is_none());
+        assert!(!local.metadata_json.unwrap().contains("v1/resources/"));
+
+        let exported = target.export_sync_snapshot_for_scope(REMOTE_SCOPE).unwrap();
+        let remote = exported
+            .mutations
+            .upserts
+            .iter()
+            .find(|item| item.item.id == "remote-image")
+            .unwrap();
+        assert_eq!(
+            remote.item.resource_path.as_deref(),
+            Some(resource_key.as_str())
+        );
+        assert!(remote.item.preview_path.is_none());
+        assert!(remote
+            .item
+            .metadata_json
+            .as_deref()
+            .unwrap()
+            .contains(resource_key.as_str()));
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
     }
 
     #[test]
