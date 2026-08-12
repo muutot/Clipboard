@@ -103,7 +103,7 @@ Defaults include positional group-switch actions `switchFilter1`..`switchFilter7
 
 Optional encryption is owned by `sync/v1/wire.rs`: PBKDF2-HMAC-SHA256 derives a remote-scope-specific AES-256-GCM key once per run. Immutable object nonces are derived from the authenticated header plus compressed plaintext, making retries byte-identical. A missing/wrong password, authentication failure, or corruption is a hard error; there is no raw-plaintext fallback.
 
-Sync resource paths are untrusted canonical keys below `v1/resources/{image|preview|file|icon}/`. Uploads canonicalize regular files below the configured managed roots, enforce byte limits, hash with streaming reads, and clear unavailable local references rather than publishing machine paths. Downloads use bounded streaming temporary files, verify the key digest before rename, reject symlinks/non-files, and rewrite item plus metadata paths only after materialization succeeds.
+Sync resource paths are untrusted canonical keys below `v1/resources/{image|file|icon}/`. Uploads canonicalize regular files below the configured managed roots, enforce byte limits, hash with streaming reads, and clear unavailable local references rather than publishing machine paths. Preview images are derived local state: v1 packs clear `preview_path` and every `previewPath` metadata key and never upload a preview object; the UI falls back to the original image until a local preview exists. Downloads use bounded streaming temporary files, verify the key digest before rename, reject symlinks/non-files, and rewrite item plus metadata paths only after materialization succeeds.
 
 ### Sync wire-format evolution rules
 

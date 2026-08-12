@@ -11,7 +11,6 @@ const SEQUENCE_WIDTH: usize = 20;
 pub enum ResourceCategory {
     Image,
     File,
-    Preview,
     Icon,
 }
 
@@ -20,7 +19,6 @@ impl ResourceCategory {
         match self {
             Self::Image => "image",
             Self::File => "file",
-            Self::Preview => "preview",
             Self::Icon => "icon",
         }
     }
@@ -29,7 +27,6 @@ impl ResourceCategory {
         match value {
             "image" => Ok(Self::Image),
             "file" => Ok(Self::File),
-            "preview" => Ok(Self::Preview),
             "icon" => Ok(Self::Icon),
             _ => Err("resource key has an unknown category".to_string()),
         }
@@ -376,6 +373,7 @@ mod tests {
         assert!(parse_resource_key("v1/resources/unknown/sha256-a.bin").is_err());
         assert!(parse_resource_key(&format!("v1/resources/file/../sha256-{DIGEST}.bin")).is_err());
         assert!(parse_resource_key(&format!("v1/resources/file/sha256-{}.BIN", DIGEST)).is_err());
+        assert!(parse_resource_key(&format!("v1/resources/preview/sha256-{DIGEST}.jpg")).is_err());
     }
 
     #[test]

@@ -42,7 +42,7 @@ v1/
 ├─ checkpoints/{generation:020}-{sha256}.pack
 ├─ snapshots/{device_id}/{epoch}/{sha256}.pack
 ├─ segments/{device_id}/{epoch}/{first:020}-{last:020}-{sha256}.pack
-└─ resources/{category}/sha256-{digest}.{ext}
+└─ resources/{image|file|icon}/sha256-{digest}.{ext}
 ```
 
 - `device_id` is the persisted UUID belonging to one local database.
@@ -51,6 +51,9 @@ v1/
 - Snapshot, segment and checkpoint names are content addressed and immutable.
 - Resource names are content addressed over the raw bytes. Packs contain references, never a
   second inline copy of an uploaded resource.
+- Preview images are device-local derived data: packs clear `preview_path` and `previewPath`, never
+  create `resources/preview/` objects, and receivers can display the original image until a local
+  preview is rebuilt.
 - Fixed-width sequence numbers preserve lexical and numeric order for S3 `start-after` listing.
 
 Normal discovery lists `v1/heads/`, which is O(device count). Segment listing starts after the

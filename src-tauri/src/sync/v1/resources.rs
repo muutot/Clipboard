@@ -225,9 +225,8 @@ pub fn prepare_mutation_resources(
         let mut path_map = BTreeMap::<String, Option<String>>::new();
         match item.kind {
             ClipboardKind::Image => {
-                let original_resource = item.resource_path.clone();
                 item.resource_path = rewrite_outgoing_path(
-                    original_resource.as_deref(),
+                    item.resource_path.as_deref(),
                     &paths.images,
                     ResourceCategory::Image,
                     limits.image_bytes,
@@ -235,24 +234,7 @@ pub fn prepare_mutation_resources(
                     &mut path_map,
                     &mut skipped_resources,
                 );
-                if item.preview_path == original_resource && item.resource_path.is_some() {
-                    if let (Some(original), Some(portable)) =
-                        (item.preview_path.clone(), item.resource_path.clone())
-                    {
-                        path_map.insert(original, Some(portable.clone()));
-                        item.preview_path = Some(portable);
-                    }
-                } else {
-                    item.preview_path = rewrite_outgoing_path(
-                        item.preview_path.as_deref(),
-                        &paths.previews,
-                        ResourceCategory::Preview,
-                        limits.image_bytes,
-                        &mut descriptors,
-                        &mut path_map,
-                        &mut skipped_resources,
-                    );
-                }
+                item.preview_path = None;
             }
             ClipboardKind::File => {
                 item.resource_path = rewrite_outgoing_path(
@@ -299,6 +281,7 @@ pub fn prepare_mutation_resources(
             &mut skipped_resources,
         );
         rewrite_metadata_paths(item.metadata_json.as_mut(), &path_map, true)?;
+        remove_preview_metadata(item.metadata_json.as_mut())?;
     }
 
     let mut stats = ResourceTransferStats {
@@ -345,16 +328,7 @@ pub fn materialize_mutation_resources(
                     &mut materialized,
                     &mut stats,
                 )?;
-                item.preview_path = rewrite_incoming_path(
-                    store,
-                    item.preview_path.as_deref(),
-                    &[ResourceCategory::Image, ResourceCategory::Preview],
-                    paths,
-                    limits,
-                    false,
-                    &mut materialized,
-                    &mut stats,
-                )?;
+                item.preview_path = None;
             }
             ClipboardKind::File => {
                 item.resource_path = rewrite_incoming_path(
@@ -412,6 +386,7 @@ pub fn materialize_mutation_resources(
             &materialized_map(&materialized),
             false,
         )?;
+        remove_preview_metadata(item.metadata_json.as_mut())?;
     }
     stats.referenced_resources = materialized.len() as u64;
     Ok(stats)
@@ -538,7 +513,6 @@ fn resource_destination(
 ) -> (PathBuf, u64) {
     match category {
         ResourceCategory::Image => (paths.images.clone(), limits.image_bytes),
-        ResourceCategory::Preview => (paths.previews.clone(), limits.image_bytes),
         ResourceCategory::File => (paths.files.clone(), limits.file_bytes),
         ResourceCategory::Icon => (paths.storage.join("icons"), limits.icon_bytes),
     }
@@ -566,6 +540,36 @@ fn rewrite_metadata_paths(
     *metadata_json = serde_json::to_string(&value)
         .map_err(|error| format!("failed to encode rewritten resource metadata: {error}"))?;
     Ok(())
+}
+
+fn remove_preview_metadata(metadata_json: Option<&mut String>) -> Result<(), String> {
+    let Some(metadata_json) = metadata_json else {
+        return Ok(());
+    };
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata_json) else {
+        return Ok(());
+    };
+    remove_preview_keys(&mut value);
+    *metadata_json = serde_json::to_string(&value)
+        .map_err(|error| format!("failed to remove preview metadata: {error}"))?;
+    Ok(())
+}
+
+fn remove_preview_keys(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(object) => {
+            object.remove("previewPath");
+            for child in object.values_mut() {
+                remove_preview_keys(child);
+            }
+        }
+        serde_json::Value::Array(array) => {
+            for child in array {
+                remove_preview_keys(child);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn rewrite_json_value(
@@ -980,22 +984,24 @@ mod tests {
         let source_paths = StoragePaths::initialize(root.join("source")).unwrap();
         let target_paths = StoragePaths::initialize(root.join("target")).unwrap();
         let image_path = source_paths.images.join("image.png");
+        let preview_path = source_paths.previews.join("image.jpg");
         let file_path = source_paths.files.join("document.txt");
         let icon_dir = source_paths.storage.join("icons");
         fs::create_dir_all(&icon_dir).unwrap();
         fs::write(&image_path, b"image-bytes").unwrap();
+        fs::write(&preview_path, b"preview-bytes").unwrap();
         fs::write(&file_path, b"file-bytes").unwrap();
         fs::write(icon_dir.join("app.png"), b"icon-bytes").unwrap();
 
         let mut image = sample_item("image", ClipboardKind::Image);
         image.item.resource_path = Some(image_path.to_string_lossy().to_string());
-        image.item.preview_path = image.item.resource_path.clone();
+        image.item.preview_path = Some(preview_path.to_string_lossy().to_string());
         image.item.icon_path = Some("app.png".to_string());
         image.item.metadata_json = Some(
             serde_json::json!({
                 "resourcePath": image_path,
                 "storagePath": image_path,
-                "previewPath": image_path,
+                "previewPath": preview_path,
             })
             .to_string(),
         );
@@ -1035,10 +1041,12 @@ mod tests {
                 .as_deref()
                 .is_none_or(|path| path.starts_with("v1/resources/"))
         }));
-        assert_eq!(
-            batch.upserts[0].item.preview_path,
-            batch.upserts[0].item.resource_path
-        );
+        assert!(batch.upserts[0].item.preview_path.is_none());
+        assert!(!store
+            .objects
+            .borrow()
+            .keys()
+            .any(|key| key.starts_with("v1/resources/preview/")));
         assert!(batch.upserts[0]
             .item
             .icon_path
@@ -1050,6 +1058,7 @@ mod tests {
             materialize_mutation_resources(&store, &mut batch, &target_paths, limits).unwrap();
         assert_eq!(downloaded.referenced_resources, 3);
         assert_eq!(downloaded.transferred_resources, 3);
+        assert!(batch.upserts[0].item.preview_path.is_none());
         let target_images = fs::canonicalize(&target_paths.images).unwrap();
         let target_files = fs::canonicalize(&target_paths.files).unwrap();
         assert!(
@@ -1073,6 +1082,9 @@ mod tests {
             metadata["files"][0]["originalPath"],
             "C:/original/document.txt"
         );
+        let image_metadata: serde_json::Value =
+            serde_json::from_str(batch.upserts[0].item.metadata_json.as_deref().unwrap()).unwrap();
+        assert!(image_metadata.get("previewPath").is_none());
 
         fs::remove_dir_all(root).unwrap();
     }
