@@ -143,6 +143,11 @@ For each remote head:
 Objects newer than the downloaded head are ignored until a later run. This makes the head the
 publication barrier and prevents observing a partially uploaded batch.
 
+Head parsing, download, validation and application errors are isolated per remote device. A bad
+peer increments the run's `failedPeers` count and is reported as a partial run, while remaining
+device heads continue in lexical order. Failure to list the head namespace remains a whole-run
+error because discovery cannot proceed safely.
+
 ## Global checkpoint and safe garbage collection
 
 `checkpoint.bin` points to one immutable global checkpoint and carries an ETag-protected generation

@@ -125,12 +125,15 @@ const en: LocaleDefinition = {
     syncNow: "Sync Now",
     syncing: "Syncing...",
     syncRunFailed: "Sync failed",
+    syncRunPartial:
+      "Sync partially completed: {failed} peer(s) failed; {uploaded} uploaded, {downloaded} downloaded, {applied} applied",
     syncNoChanges: "No changes to sync",
     syncRunSummary:
       "Sync complete: {uploaded} entries uploaded, {downloaded} downloaded, {applied} applied, {bytesUp} KB up / {bytesDown} KB down",
     syncPendingCount: "{count} pending",
     syncLastTime: "Last: {time}",
     syncStatusSuccess: "Success",
+    syncStatusPartial: "Partial",
     syncStatusFailed: "Failed",
     syncCloudTab: "Cloud",
     syncS3Title: "S3 Configuration",

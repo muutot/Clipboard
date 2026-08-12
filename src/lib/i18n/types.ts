@@ -117,11 +117,13 @@ export interface LocaleDefinition {
     syncNow: string;
     syncing: string;
     syncRunFailed: string;
+    syncRunPartial: string;
     syncNoChanges: string;
     syncRunSummary: string;
     syncPendingCount: string;
     syncLastTime: string;
     syncStatusSuccess: string;
+    syncStatusPartial: string;
     syncStatusFailed: string;
     syncCloudTab: string;
     syncS3Title: string;

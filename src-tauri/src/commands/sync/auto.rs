@@ -57,10 +57,11 @@ impl AutoSyncWorker {
                         match run_sync(&app) {
                             Ok(result) => {
                                 eprintln!(
-                                    "[auto-sync] done: {} uploaded, {} downloaded, {} applied",
+                                    "[auto-sync] done: {} uploaded, {} downloaded, {} applied, {} peers failed",
                                     result.uploaded_entries,
                                     result.downloaded_entries,
                                     result.applied_entries,
+                                    result.failed_peers,
                                 );
                                 last_sync_ms = SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)

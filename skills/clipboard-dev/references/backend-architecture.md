@@ -49,7 +49,7 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 `src-tauri/src/sync/` contains only the S3 transport and the first/only replication protocol:
 
 - `s3.rs` owns AWS SigV4 request signing, paginated object listing, conditional writes, streaming file upload/download, ETag handling, and S3-compatible connection testing.
-- `v1/` owns the isolated namespace, strict wire envelopes, content-addressed resources, the scoped object-store adapter, bootstrap/incremental replication, and checkpoint records described in `docs/SYNC_V1.md`.
+- `v1/` owns the isolated namespace, strict wire envelopes, content-addressed resources, the scoped object-store adapter, bootstrap/incremental replication, and checkpoint records described in `docs/SYNC_V1.md`. Remote-head failures are isolated per device: healthy peers continue, the result reports `failedPeers`, and only head-namespace discovery failure aborts the whole pull pass.
 - `commands/sync/mod.rs` exposes only `get_sync_config`, `set_sync_config`, typed S3 connection testing, and `sync_now`. It snapshots config before I/O, derives one optional remote-scoped `SessionKey`, constructs one scoped `S3ObjectStore`, and calls `v1::sync_database` for manual and automatic runs.
 - `commands/sync/auto.rs` owns the stoppable background loop. Manual and automatic runs share a process-wide try-lock; a successful remote apply emits `clipboard-history-invalidated`, and last-run status persistence is best-effort.
 

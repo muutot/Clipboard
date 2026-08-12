@@ -831,7 +831,15 @@
     try {
       await persistSyncConfig();
       const result = await runSync();
-      if (
+      if (result.failedPeers > 0) {
+        feedback = _t("storage.syncRunPartial", {
+          failed: String(result.failedPeers),
+          uploaded: String(result.uploadedEntries),
+          downloaded: String(result.downloadedEntries),
+          applied: String(result.appliedEntries),
+        });
+        feedbackSuccess = false;
+      } else if (
         result.uploadedEntries === 0 &&
         result.downloadedEntries === 0 &&
         result.deletedRemoteObjects === 0
@@ -849,7 +857,7 @@
         feedbackSuccess = true;
       }
       syncLastMs = Date.now();
-      syncStatus = "success";
+      syncStatus = result.failedPeers === 0 ? "success" : "partial";
       syncPendingEntries = 0;
     } catch (e) {
       feedback = _t("storage.syncRunFailed") + `: ${String(e)}`;
@@ -2526,7 +2534,9 @@
                         })}{/if}{#if syncStatus}
                         | {syncStatus === "success"
                           ? _t("storage.syncStatusSuccess")
-                          : _t("storage.syncStatusFailed")}{/if}
+                          : syncStatus === "partial"
+                            ? _t("storage.syncStatusPartial")
+                            : _t("storage.syncStatusFailed")}{/if}
                     </p>
                   </div>
                   <button

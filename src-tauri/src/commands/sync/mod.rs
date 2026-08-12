@@ -47,6 +47,7 @@ pub struct SyncRunResult {
     pub uploaded_entries: u64,
     pub downloaded_entries: u64,
     pub applied_entries: u64,
+    pub failed_peers: u64,
     pub uploaded_resources: u64,
     pub downloaded_resources: u64,
     pub deleted_remote_objects: u64,
@@ -60,6 +61,7 @@ impl From<v1::SyncEngineResult> for SyncRunResult {
             uploaded_entries: result.uploaded_entries,
             downloaded_entries: result.downloaded_entries,
             applied_entries: result.applied_entries,
+            failed_peers: result.failed_peers,
             uploaded_resources: result.uploaded_resources,
             downloaded_resources: result.downloaded_resources,
             deleted_remote_objects: result.deleted_remote_objects,
@@ -309,7 +311,12 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
                 );
             }
             if let Ok(mut guard) = config.lock() {
-                let _ = guard.update_sync_status("success", now_ms);
+                let status = if engine_result.failed_peers == 0 {
+                    "success"
+                } else {
+                    "partial"
+                };
+                let _ = guard.update_sync_status(status, now_ms);
             }
             Ok(engine_result.into())
         }
@@ -417,6 +424,7 @@ mod tests {
             uploaded_entries: 2,
             downloaded_entries: 3,
             applied_entries: 1,
+            failed_peers: 9,
             uploaded_resources: 4,
             downloaded_resources: 5,
             deleted_remote_objects: 6,
@@ -427,5 +435,6 @@ mod tests {
 
         assert_eq!(value["uploadedResources"], 4);
         assert_eq!(value["deletedRemoteObjects"], 6);
+        assert_eq!(value["failedPeers"], 9);
     }
 }

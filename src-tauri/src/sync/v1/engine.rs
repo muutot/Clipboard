@@ -22,6 +22,7 @@ pub struct SyncEngineResult {
     pub uploaded_entries: u64,
     pub downloaded_entries: u64,
     pub applied_entries: u64,
+    pub failed_peers: u64,
     pub uploaded_resources: u64,
     pub downloaded_resources: u64,
     pub deleted_remote_objects: u64,
@@ -250,30 +251,36 @@ fn pull_remote_devices(
     let mut heads = store.list(HEADS_PREFIX, None)?;
     heads.sort_by(|left, right| left.key.cmp(&right.key));
     for info in heads {
-        let device_id = parse_head_key(&info.key)?;
-        if device_id == local_device_id {
-            continue;
+        let peer_result = (|| -> Result<(), String> {
+            let device_id = parse_head_key(&info.key)?;
+            if device_id == local_device_id {
+                return Ok(());
+            }
+            let downloaded = store
+                .get(&info.key)?
+                .ok_or_else(|| format!("remote head {:?} disappeared during sync", info.key))?;
+            result.bytes_downloaded = checked_add(
+                result.bytes_downloaded,
+                downloaded.bytes.len() as u64,
+                "downloaded byte count",
+            )?;
+            let head = decode_device_head(&downloaded.bytes, session_key)?;
+            validate_head(&info.key, &device_id, &head)?;
+            pull_device(
+                store,
+                database,
+                paths,
+                remote_scope,
+                &head,
+                session_key,
+                resource_limits,
+                result,
+            )
+        })();
+        if let Err(error) = peer_result {
+            result.failed_peers = checked_add(result.failed_peers, 1, "failed peer count")?;
+            eprintln!("[sync] skipped remote head {:?}: {error}", info.key);
         }
-        let downloaded = store
-            .get(&info.key)?
-            .ok_or_else(|| format!("remote head {:?} disappeared during sync", info.key))?;
-        result.bytes_downloaded = checked_add(
-            result.bytes_downloaded,
-            downloaded.bytes.len() as u64,
-            "downloaded byte count",
-        )?;
-        let head = decode_device_head(&downloaded.bytes, session_key)?;
-        validate_head(&info.key, &device_id, &head)?;
-        pull_device(
-            store,
-            database,
-            paths,
-            remote_scope,
-            &head,
-            session_key,
-            resource_limits,
-            result,
-        )?;
     }
     Ok(())
 }
@@ -882,6 +889,50 @@ mod tests {
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn corrupt_peer_head_does_not_block_other_devices() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("isolated-source");
+        let target_paths = temp_paths("isolated-target");
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        source
+            .save_item(&text_item("healthy-peer-item", "healthy"))
+            .unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        store.objects.lock().unwrap().insert(
+            "v1/heads/00000000-0000-4000-8000-000000000000.bin".to_string(),
+            b"corrupt-head".to_vec(),
+        );
+
+        let result = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+
+        assert_eq!(result.failed_peers, 1);
+        assert!(result.applied_entries >= 1);
+        assert!(target.get_item("healthy-peer-item").unwrap().is_some());
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
     }
 
     #[test]

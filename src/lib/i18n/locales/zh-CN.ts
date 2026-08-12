@@ -117,12 +117,15 @@ const zhCN: LocaleDefinition = {
     syncNow: "立即同步",
     syncing: "同步中…",
     syncRunFailed: "同步失败",
+    syncRunPartial:
+      "同步部分完成：{failed} 台设备失败；上传 {uploaded} 条，下载 {downloaded} 条，应用 {applied} 条",
     syncNoChanges: "没有需要同步的变更",
     syncRunSummary:
       "同步完成: 上传 {uploaded} 条, 下载 {downloaded} 条, 应用 {applied} 条, 上 {bytesUp} KB / 下 {bytesDown} KB",
     syncPendingCount: "待同步: {count} 条",
     syncLastTime: "上次: {time}",
     syncStatusSuccess: "成功",
+    syncStatusPartial: "部分成功",
     syncStatusFailed: "失败",
     syncCloudTab: "云端",
     syncS3Title: "S3 存储配置",

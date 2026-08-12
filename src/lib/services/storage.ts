@@ -389,6 +389,7 @@ export interface SyncRunResult {
   uploadedEntries: number;
   downloadedEntries: number;
   appliedEntries: number;
+  failedPeers: number;
   uploadedResources: number;
   downloadedResources: number;
   deletedRemoteObjects: number;
