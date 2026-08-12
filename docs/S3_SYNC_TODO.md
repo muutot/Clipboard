@@ -51,7 +51,7 @@
 
 - `clipboard_items`：`id`、`kind(text/link/image/file)`、`title`、`text_content`、`html_content`、`rtf_content`、`resource_path`、`preview_path`、`content_hash`、`source_app`、`icon_path`、`size_bytes`、`created_at_ms`、`last_used_at_ms`、`is_favorite`、`deleted`、`deleted_at_ms`、`modified_at_ms`、`sync_writer_device_id`、`metadata_json`，并有 `UNIQUE(kind, content_hash)`。
 - `ocr_results`：按 `item_id` 关联的 OCR 文本、block JSON、模型版本等，属于派生数据。
-- `tags`、`item_tags`：标签及其记录关联。
+- `tags`、`item_tags`：标签注册表与记录关联；单条记录标签同时写入 `metadata_json.tags`。
 - `search_outbox`：搜索索引增量队列，派生自主表。
 - `sync_metadata`：key-value，已有 `sync_enabled`、`sync_suppress_changelog`、`device_id` 等语义。
 - `sync_item_aliases`：`alias_id -> item_id`，可用于同内容不同 ID 的合并映射。
@@ -67,6 +67,7 @@
 
 - 文本/链接/文件记录哈希规则为 SHA256(kind + text + resource_path)；图片支持按解码后 RGBA 计算的归一化哈希。
 - blob 文件名是 `{sha256}.{ext}`，同一内容天然只存一份。
+- 图片存在 raw 与 normalized 两套哈希：当前保存路径用 raw hash 作为 `content_hash` 和文件名，normalized hash 用于跨编码去重；同步契约需明确以哪个作为 blob key 与记录身份。
 - `UNIQUE(kind, content_hash)` 保证单机不重复；跨机同内容不同 ID 的收敛依赖别名映射。
 - `resource_path`、`preview_path`、`icon_path` 是本地绝对路径，不能作为同步契约字段直接传输。
 
@@ -95,6 +96,9 @@
 6. 压缩与小对象。segment 与 snapshot 使用 gzip（可选 zstd）压缩；发现用 HEAD/小指针对象优先，ListObjectsV2 兜底，不做全桶扫描。
 7. 可恢复与幂等。所有远端对象不可变，失败重试不改变内容；本地游标在成功应用后才推进。
 8. 容量与保留必须是 scope 级且确定性。`max_items`/`retention_days` 按同步 scope 统一生效，驱逐候选按 `(created_at_ms, id)` 全序选取且收藏豁免；任何设备执行清理都收敛到同一批 tombstone，避免“A 机删掉 B 机刚同步的记录”或删除风暴。
+9. 首次开启同步必须处理存量数据。本地已有记录不会自动进入 outbox，需要生成初始快照/批量 segment 上传，并与远端快照做首轮合并。
+10. 同步 metadata 必须加密。内容包含完整剪贴板文本/HTML/RTF，不能明文上传 S3；密钥派生、epoch 轮换与凭据保护属于发布契约的一部分。
+11. 版本仲裁必须容忍时钟偏差。`modified_at_ms` 是墙钟，需要最大偏差容差或本地单调序列参与，避免错误时钟设备覆盖正确数据。
 
 ## 4. S3 对象布局
 
@@ -167,6 +171,13 @@
 
 小规模驱逐（如 < 1000 条）继续走 5.5 的普通 delete op，避免等待快照。
 
+### 5.7 首次开启与恢复再同步
+
+1. 开启同步时，本地存量记录不会自动出现在 outbox；先基于本地库生成初始快照（或批量 segment）并上传。
+2. 同时拉取远端最新快照/增量做首轮合并：同一 id 按版本仲裁，同内容不同 id 进别名表，只保留胜者。
+3. 合并后按 scope 容量/保留规则驱逐并登记 tombstone，再进入常规增量流程。
+4. 本地库从备份恢复或 schema 重置后，同步游标可能回退；检测到游标缺失或落后时回到快照引导，不信任本地状态。
+
 ## 6. 量化验收目标
 
 | 指标           | 目标                                                                   |
@@ -183,6 +194,8 @@
 | 正确性         | 3 台设备随机离线/乱序后最终一致，无丢数据、无重复显示                  |
 | 驱逐一致性     | 3 台设备容量/保留策略一致，驱逐候选集相同，无删除风暴与复活            |
 | 驱逐流量       | 普通驱逐每条 1 个 delete op；大范围驱逐只发布 1 个驱逐标记，由快照固化 |
+| 首次启用       | 存量 100k 只上传 1 个初始快照 + 缺失 blob，不逐条重放 outbox           |
+| 本地 Tombstone | ack + 快照确认后清理，数量有界                                         |
 
 ## 7. 分阶段实施 TODO
 
@@ -194,10 +207,14 @@
   - 验收：serde 序列化单测覆盖字段集合，样例 JSON 不包含本地绝对路径。
 - [ ] 定义同步范围：text/link 全量；image/file 按大小上限；标签与收藏参与；`last_used_at_ms`、OCR、搜索索引、预览、图标不参与。
   - 验收：字段映射测试 + 策略文档。
+- [ ] 定义标签同步契约：单记录标签随 `metadata_json` upsert；`tags` 注册表（名称/颜色）与全局重命名/删除需要独立 op 或批量压缩策略。
+  - 验收：标签重命名/颜色变更跨 3 机一致；重命名 1 个标签不产生逐条全量 upsert 风暴。
 - [ ] 解决本地使用产生的同步噪音：当前更新触发器把 `last_used_at_ms` 变化写入 outbox，需通过过滤、独立列或触发条件调整，使本地使用不产生网络 op。
   - 验收：模拟本地复制/使用不产生出站 op；真正内容修改产生且只产生 1 个 op。
 - [ ] 定义版本仲裁与冲突规则：`(modified_at_ms, writer_device_id)` 全序；同内容不同 ID 经 `sync_item_aliases` 合并；删除与更新按版本比较。
   - 验收：乱序、同版本、重启场景属性测试收敛。
+- [ ] 定义时钟偏差策略：版本仲裁对 `modified_at_ms` 加最大偏差容差，或引入设备本地单调序列参与全序；明确错误时钟下的行为。
+  - 验收：模拟 5 分钟、1 小时时钟偏差下的乱序收敛测试。
 - [ ] 定义 scope 级容量与保留策略：`max_items`/`retention_days` 在同步 scope 内统一生效；确认配置与 UI 支持 100k+；明确本地上限与 scope 上限的关系。
   - 验收：策略文档 + 配置读写测试覆盖不同设备配置的归一化。
 - [ ] 同步开启后统一容量/保留设置：`max_items`、`retention_days`、`recycle_bin_days` 改由 scope 级配置生效；同步设置页新增这三条设置，原 `StorageSettingsDialog` 的三条在同步开启时禁用并显示提示，不隐藏。
@@ -206,13 +223,21 @@
   - 验收：模拟超限、保留到期、回收站恢复的收敛测试，无复活、无重复 tombstone。
 - [ ] 定义大范围驱逐标记：wire 协议新增紧凑驱逐 op/标记，含 `evictionVersion`、`ruleVersion`、`scopeMaxItems`、`appliedAtMs`，与逐条 delete op 并存。
   - 验收：serde 单测 + 协议文档；200k 驱逐不产生 200k 条 delete op。
+- [ ] 定义图片哈希规范：明确 blob key 使用 raw 还是 normalized hash；同图不同编码是否跨机去重；`content_hash` 与本地文件名/远端 key 的映射。
+  - 验收：同一像素图片不同 PNG 编码在目标策略下只产生 1 条记录与 1 个 blob，或明确接受重复并记录原因。
 - [ ] 确定 S3/同步配置存储：复用或扩展 `conf/conf.json` 的 sync 区，覆盖 endpoint、region、bucket、prefix、scope、credential、加密参数；凭据不进入日志。
   - 验收：配置读写单测；grep 日志输出无 secret。
+- [ ] 定义同步加密与凭据保护：metadata segment/快照客户端 AEAD 加密（密钥由 `sync_password` 派生），blob 加密策略，密钥变更触发 epoch 轮换；凭据进入系统钥匙串或加密配置。
+  - 验收：S3 对象明文不可读；密钥变更后旧 epoch 可弃用；凭据不出现在日志/快照。
+- [ ] 定义首次开启同步流程：存量记录生成初始快照/批量 segment，与远端做首轮合并；明确冲突与容量驱逐顺序。
+  - 验收：3 台已有 100k 记录的设备先后开启同步，最终一致且无丢失。
 
 ### 阶段 1：S3 客户端与对象 IO
 
 - [ ] S3 客户端抽象：put/get/head/delete/list/multipart，支持自定义 endpoint、path-style、region。
   - 验收：对 S3-compatible mock（MinIO/moto 等）的集成测试通过；断网、超时、权限错误映射为可恢复/不可恢复错误。
+- [ ] scope 初始化与认领：`meta/scope.json` 用条件写创建，多台设备同时首次开启不互相覆盖。
+  - 验收：并发初始化测试只有一个 scope 配置生效。
 - [ ] 不可变对象幂等上传：`If-None-Match: *`；失败重试同一内容；上传前 HEAD 跳过已存在 blob。
   - 验收：mock 断言重复同步不产生重复 PUT。
 - [ ] 下载校验：对象 sha256/size 校验，临时文件 + 原子 rename，并发去重。
@@ -258,8 +283,8 @@
 
 ### 阶段 4：快照与引导
 
-- [ ] 快照生成：live 记录 + tombstone + 标签 + 各设备已发布 seq 地图，gzip + sha256。
-  - 验收：由快照可重建与源库一致的状态。
+- [ ] 快照生成：在单一事务快照上读取 live 记录 + tombstone + 标签 + 各设备已发布 seq 地图，gzip + sha256。
+  - 验收：由快照可重建与源库一致的状态；生成过程不会读到半应用状态。
 - [ ] 快照调度与指针切换：按日或变更阈值生成，`current.json` 单调前进，上传成功后才切换。
   - 验收：新快照 seq 大于旧快照，指针指向已确认对象。
 - [ ] 新设备引导：`current.json` + 最新 snapshot + 后续增量，不重放全部历史。
@@ -270,6 +295,12 @@
   - 验收：桶对象数量与元数据大小有界。
 - [ ] 快照固化驱逐：快照内容基于驱逐后的状态生成，包含驱逐 tombstone；快照确认 + peer ack 后 GC 驱逐前的旧 segment。
   - 验收：离线设备从新快照引导后不重放驱逐前历史。
+- [ ] 首次开启存量种子：本地存量记录生成初始快照/批量 segment 上传；与远端快照做首轮合并后按容量策略驱逐。
+  - 验收：100k 存量启用同步后只上传 1 个初始快照 + 缺失 blob；合并无丢失。
+- [ ] 本地恢复后再同步：数据库从备份恢复或 schema 重置后检测游标回退，自动回到快照引导。
+  - 验收：模拟恢复旧库后重新收敛，不产生重复/丢失。
+- [ ] 引导期索引重建：300k 行应用后不逐条回放 `search_outbox`，改为批量重建 Tantivy 索引，并支持暂停增量消费。
+  - 验收：引导建库 + 索引重建耗时与内存满足第 6 节目标。
 
 ### 阶段 5：性能、存储与流量基准
 
@@ -294,9 +325,13 @@
   - 验收：设置页集成测试与视觉检查。
 - [ ] 同步设置页容量/保留设置与禁用态：同步页新增 `max_items`/`retention_days`/`recycle_bin_days`；`StorageSettingsDialog` 对应三条在同步开启时禁用并显示原因提示，不隐藏。
   - 验收：设置页集成测试与视觉检查；关闭同步后三条恢复可用；按仓库 settings style gate 执行。
+- [ ] 设备管理与 ack 超时：列出在线/离线设备，支持移除设备、轮换 epoch；ack 型 GC 对移除或超时设备跳过等待。
+  - 验收：移除设备后 GC 可继续；重新加入设备从快照引导。
+- [ ] 本地 tombstone 清理：在快照确认 + peer ack + 保留期后清理本地 tombstone；远端 tombstone 随快照压缩。
+  - 验收：持续同步后 tombstone 数量有界。
 - [ ] S3 Event Notification/SQS 推送，减少轮询。
   - 验收：推送模式下轮询请求数为 0。
-- [ ] 可选同步增强：OCR 结果按需同步、近期缩略图预取、多 scope/多桶、客户端 AEAD 加密。
+- [ ] 可选同步增强：OCR 结果按需同步、近期缩略图预取、多 scope/多桶。
   - 验收：每项独立开关与测试。
 
 ## 8. 明确不做
@@ -307,6 +342,7 @@
 - 不做账户/密码找回系统；凭据由用户在各设备配置。
 - 不做冲突编辑 UI；采用确定性的版本全序与别名合并。
 - 不做“本机上限触发删除但不同步”的本地裁剪：删除必须走 scope 级策略并生成 tombstone，否则其他设备会把记录重新同步回来。
+- 不做明文 metadata 同步：开启同步时 metadata segment 与快照必须客户端加密。
 
 ## 9. 风险与待决问题
 
@@ -321,3 +357,6 @@
 - 保留期与恢复窗口的交互：回收站恢复、离线设备晚到、保留期硬删除之间需要版本仲裁测试。
 - 开启同步时不同设备原有三条配置可能不同，需要归一化规则：以 scope 配置覆盖、首次开启写入，还是要求用户确认。
 - 驱逐标记发布后、快照完成前，离线设备恢复时仍可能拉取到驱逐前的旧增量，需要定义补齐与收敛窗口。
+- 首次开启的存量合并是一次性大流量，需要与快照调度合并，避免每台设备各自重复上传全量。
+- 时钟偏差会破坏 `(modified_at_ms, writer_device_id)` 仲裁，需要容差或本地单调序列。
+- 标签重命名/颜色变更若走逐条 item upsert 会放大流量，需要专用 op 或批量压缩。
