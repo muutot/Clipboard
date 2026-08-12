@@ -1,6 +1,7 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
   import Checkbox from "$lib/components/Checkbox.svelte";
+  import TagChip from "$lib/components/TagChip.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import type { ContextMenuItem } from "$lib/components/ContextMenu.svelte";
@@ -638,39 +639,16 @@
 {#snippet tagArea()}
   <span class="tag-chips">
     {#each item.tags ?? [] as tag (tag)}
-      <span
-        class="tag-chip"
-        role="button"
-        tabindex="0"
-        title={tag}
-        style={tagColors[tag] ? `--tag-accent: ${tagColors[tag]}` : undefined}
-        onclick={(e) => {
-          e.stopPropagation();
-          ontoggleTagFilter?.(tag);
-        }}
-        onkeydown={(e) => {
-          if (e.key === "Enter") {
-            e.stopPropagation();
-            ontoggleTagFilter?.(tag);
-          }
-        }}
-        oncontextmenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          oneditTag?.(tag);
-        }}
-      >
+      <TagChip
         {tag}
-        <button
-          type="button"
-          class="tag-chip-remove"
-          aria-label={_t("card.removeTag")}
-          onclick={(e) => {
-            e.stopPropagation();
-            removeTagCard(tag);
-          }}><AppIcon name="x" size={10} /></button
-        >
-      </span>
+        accent={tagColors[tag]}
+        compact
+        hoverReveal
+        onclick={ontoggleTagFilter}
+        oncontextmenu={oneditTag}
+        onremove={removeTagCard}
+        removeAriaLabel={_t("card.removeTag")}
+      />
     {/each}
     {#if tagAdding}
       <input
@@ -1190,71 +1168,6 @@
 
   .meta-row .tag-chips {
     max-width: 40%;
-  }
-
-  .tag-chip {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    padding: 1px 5px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    background: var(--surface-bg);
-    font-size: 10.5px;
-    line-height: 1.5;
-    cursor: pointer;
-    white-space: nowrap;
-    user-select: none;
-  }
-
-  .tag-chip:hover {
-    color: var(--text-primary);
-    border-color: var(--text-faint);
-  }
-
-  .tag-chip[style*="--tag-accent"] {
-    border-color: color-mix(in srgb, var(--tag-accent) 55%, transparent);
-    color: var(--tag-accent);
-    background: color-mix(in srgb, var(--tag-accent) 12%, var(--surface-bg));
-  }
-
-  .tag-chip[style*="--tag-accent"]:hover {
-    color: var(--tag-accent);
-    border-color: var(--tag-accent);
-  }
-
-  .tag-chip-remove {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    z-index: 2;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 13px;
-    height: 13px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    color: var(--text-faint);
-    background: var(--surface-bg);
-    box-shadow: 0 0 0 1px var(--border-color);
-    cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 100ms ease;
-  }
-
-  .tag-chip:hover .tag-chip-remove,
-  .tag-chip-remove:focus-visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .tag-chip-remove:hover {
-    color: var(--danger-color);
-    border-color: var(--danger-color);
   }
 
   .tag-add-input {

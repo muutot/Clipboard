@@ -5,6 +5,7 @@
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
+  import TagChip from "$lib/components/TagChip.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
@@ -830,18 +831,12 @@
               <dt><AppIcon name="tag" size={14} /> {_t("detail.tags")}</dt>
               <dd class="tags-editor">
                 {#each item.tags ?? [] as tag (tag)}
-                  <span
-                    class="tag-chip"
-                    style={tagColors[tag] ? `--tag-accent: ${tagColors[tag]}` : undefined}
-                  >
+                  <TagChip
                     {tag}
-                    <button
-                      type="button"
-                      class="tag-remove"
-                      aria-label={_t("detail.removeTag")}
-                      onclick={() => removeTag(tag)}><AppIcon name="x" size={11} /></button
-                    >
-                  </span>
+                    accent={tagColors[tag]}
+                    onremove={removeTag}
+                    removeAriaLabel={_t("detail.removeTag")}
+                  />
                 {/each}
                 <span class="tag-input-wrap">
                   <input
@@ -1541,44 +1536,6 @@
     gap: 6px;
     justify-content: flex-end;
     max-width: 65%;
-  }
-
-  .tag-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    padding: 2px 6px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    background: var(--surface-bg);
-    font-size: 11px;
-    line-height: 1.4;
-  }
-
-  .tag-chip[style*="--tag-accent"] {
-    border-color: color-mix(in srgb, var(--tag-accent) 55%, transparent);
-    color: var(--tag-accent);
-    background: color-mix(in srgb, var(--tag-accent) 12%, var(--surface-bg));
-  }
-
-  .tag-remove {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    padding: 0;
-    border: 0;
-    border-radius: 3px;
-    color: var(--text-faint);
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .tag-remove:hover {
-    color: var(--danger-color);
-    background: var(--hover-bg);
   }
 
   .tag-input-wrap {
