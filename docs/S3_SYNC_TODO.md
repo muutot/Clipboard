@@ -61,7 +61,7 @@
 - `sync_cursors`：每个 `(remote_scope, device_id)` 的拉取游标。
 - `sync_remote_resources`：已确认远端对象的 key、sha256、size。
 
-主表触发器在 `sync_enabled = 1` 且未抑制 changelog 时写入 `sync_outbox` 与 `sync_tombstones`。当前更新触发器把 `last_used_at_ms` 变化也视为同步变化，这会放大网络流量，需要在数据契约阶段处理。
+主表触发器在 `sync_enabled = 1` 且未抑制 changelog 时写入 `sync_outbox` 与 `sync_tombstones`。契约阶段已定：从同步变更判定中排除 `last_used_at_ms`，本地使用只更新本地值，远端记录落地时 `last_used_at_ms = created_at_ms`。
 
 ### 2.3 哈希与去重
 
@@ -76,6 +76,8 @@
 必须同步：记录元数据、文本/HTML/RTF 正文、标签、收藏状态、删除墓碑、版本信息。
 
 禁止同步：搜索索引、OCR 结果、预览图、图标缓存、`last_used_at_ms` 等本地派生或本地使用数据；blob 只按需同步。
+
+`last_used_at_ms` 处理规则：本地以本地值为准并不同步；应用远端记录时以 `created_at_ms` 作为 `last_used_at_ms`。
 
 ### 2.5 存储条目限制与清理语义
 
@@ -137,7 +139,7 @@
 1. 读取 `current.json` 或列出 snapshot，判断 epoch/快照是否需要切换。
 2. 对每个已知 peer 读取 `latest/{device_id}.json` 或列出 changelog 前缀，按 `sync_cursors` 下载缺失 segment。
 3. 校验 sha256/size 后解析，按 `(modified_at_ms, writer_device_id, change_seq)` 仲裁是否应用。
-4. 应用期间设置 `sync_suppress_changelog`，防止远端变更回环成新的出站 op；批量事务写入并依赖触发器增量更新搜索索引。
+4. 应用期间设置 `sync_suppress_changelog`，防止远端变更回环成新的出站 op；批量事务写入并依赖触发器增量更新搜索索引；远端记录落地时 `last_used_at_ms = created_at_ms`。
 5. 每批成功后推进 peer cursor；blob 不在此阶段下载，只登记待下载资源。
 
 ### 5.3 引导与恢复
@@ -210,8 +212,8 @@
   - 验收：字段映射测试 + 策略文档。
 - [ ] 定义标签同步契约：单记录标签随 `metadata_json` upsert；`tags` 注册表（名称/颜色）与全局重命名/删除使用专用 tag op，各端本地批量改写 `item_tags`/`metadata_json.tags`；按 `(modified_at_ms, writer_device_id)` 仲裁，颜色全局一致，删除只在无引用后生效。
   - 验收：标签重命名/颜色变更跨 3 机一致且每次只产生 1 条 tag op；并发重命名/颜色冲突按版本仲裁；删除在仍有引用时不生效。
-- [ ] 解决本地使用产生的同步噪音：当前更新触发器把 `last_used_at_ms` 变化写入 outbox，需通过过滤、独立列或触发条件调整，使本地使用不产生网络 op。
-  - 验收：模拟本地复制/使用不产生出站 op；真正内容修改产生且只产生 1 个 op。
+- [ ] 过滤 `last_used_at_ms` 同步噪音：从更新触发器/同步变更判定中排除该字段；本地使用只更新本地值并不同步；应用远端记录时 `last_used_at_ms = created_at_ms`。
+  - 验收：模拟本地复制/使用不产生出站 op 且本地排序仍更新；远端记录落地后 `last_used_at_ms` 等于 `created_at_ms`；真正内容修改仍产生且只产生 1 个 op。
 - [ ] 定义版本仲裁与冲突规则：`(modified_at_ms, writer_device_id, change_seq)` 全序；`change_seq` 为每设备单调序列（新增列或复用 outbox sequence）；同内容不同 ID 经 `sync_item_aliases` 合并；删除与更新按版本比较。
   - 验收：乱序、同版本、同毫秒、重启场景属性测试收敛；`change_seq` 每设备单调。
 - [ ] 定义时钟偏差策略：采用容差（建议 5 分钟）+ 每设备单调 `change_seq`；远端时间戳超过本地当前时间 + 容差时拒绝或 clamp；设备尽量保持系统时钟同步。
@@ -348,7 +350,6 @@
 
 ## 9. 风险与待决问题
 
-- [暂缓] `last_used_at_ms` 触发噪音：暂时跳过，流量目标需在基准中复核。
 - [待基准] 300k 记录 snapshot 的压缩比与引导耗时仍需基准后定调度周期。
 - [暂缓] 容量驱逐的发布者与版本：暂时跳过，保留幂等合并要求。
 - [暂缓] 保留期与恢复窗口的交互：暂时跳过。
