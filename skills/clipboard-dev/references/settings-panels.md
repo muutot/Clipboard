@@ -171,7 +171,7 @@ Shared base classes belong in `settings-shared.css`, which is imported by the `/
 
 Reuse the `ColorField.svelte` component for the color-picker + HEX text pair instead of copying the two inputs and their validation into another panel; pass `compact` for the icon-color row sizing. The `.readonly-hint` note belongs in `settings-shared.css`.
 
-Search inputs inside panels use the shared `SearchField.svelte` component; pass `width` for a fixed-size field (tag management) or `margin` for the ignored-app transfer columns instead of restyling the field locally.
+Search inputs use the shared `SearchField.svelte` component: pass `width` for a fixed-size field (tag management), `margin` for the ignored-app transfer columns, or `sidebar` + `fill` + `clearLabel`/`onclear` for the settings-shell search; do not restyle the field locally. The `.visually-hidden` label rule and search-field styles live in `settings-shared.css`/the component.
 
 Before adding CSS:
 

@@ -8,21 +8,59 @@
     ariaLabel?: string;
     width?: number;
     margin?: string;
+    clearLabel?: string;
+    onclear?: () => void;
+    fill?: boolean;
+    sidebar?: boolean;
+    labelFor?: string;
+    id?: string;
+    autocomplete?: "off" | "on";
+    spellcheck?: boolean;
   }
 
-  let { value, oninput, placeholder, ariaLabel, width, margin }: Props = $props();
+  let {
+    value,
+    oninput,
+    placeholder,
+    ariaLabel,
+    width,
+    margin,
+    clearLabel,
+    onclear,
+    fill = false,
+    sidebar = false,
+    labelFor,
+    id,
+    autocomplete,
+    spellcheck,
+  }: Props = $props();
 </script>
 
-<label class="search-field" style:width={width ? `${width}px` : undefined} style:margin>
+<div
+  class="search-field"
+  class:fill
+  class:sidebar
+  style:width={width ? `${width}px` : undefined}
+  style:margin
+>
   <AppIcon name="search" size={15} />
+  {#if labelFor}
+    <label class="visually-hidden" for={labelFor}>{ariaLabel}</label>
+  {/if}
   <input
+    {id}
     type="search"
     {value}
     {placeholder}
     aria-label={ariaLabel}
+    {autocomplete}
+    {spellcheck}
     oninput={(e) => oninput((e.currentTarget as HTMLInputElement).value)}
   />
-</label>
+  {#if onclear && value}
+    <button type="button" class="search-clear" aria-label={clearLabel} onclick={onclear}>×</button>
+  {/if}
+</div>
 
 <style>
   .search-field {
@@ -34,6 +72,33 @@
     border-radius: var(--settings-control-radius, 6px);
     color: var(--text-faint);
     background: var(--input-bg);
+  }
+
+  .search-field.fill {
+    flex: 1;
+  }
+
+  .search-field.sidebar {
+    gap: 8px;
+    padding: 0 9px;
+    color: var(--text-muted);
+    transition:
+      border-color 100ms ease,
+      background 100ms ease;
+  }
+
+  .search-field.sidebar:focus-within {
+    border-color: var(--text-faint);
+    background: var(--hover-bg);
+  }
+
+  .search-field.sidebar input {
+    width: 100%;
+    padding: 7px 0;
+  }
+
+  .search-field.sidebar input::placeholder {
+    color: var(--placeholder-color);
   }
 
   .search-field input {
@@ -49,5 +114,27 @@
 
   .search-field input::-webkit-search-cancel-button {
     display: none;
+  }
+
+  .search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .search-clear:hover {
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 </style>

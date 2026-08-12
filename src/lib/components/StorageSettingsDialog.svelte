@@ -5,6 +5,7 @@
   import Checkbox from "$lib/components/Checkbox.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import DatePicker from "$lib/components/DatePicker.svelte";
+  import SearchField from "$lib/components/SearchField.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { resetKeyboardConfig } from "$lib/services/keyboard";
@@ -1443,29 +1444,20 @@
       role="search"
       aria-label={_t("storage.settingsSearchLabel")}
     >
-      <div class="settings-search-field">
-        <AppIcon name="search" size={14} />
-        <label class="visually-hidden" for="settings-search-input"
-          >{_t("storage.settingsSearchLabel")}</label
-        >
-        <input
-          id="settings-search-input"
-          type="search"
-          bind:value={settingsSearch}
-          aria-label={_t("storage.settingsSearchLabel")}
-          placeholder={_t("storage.settingsSearchPlaceholder")}
-          autocomplete="off"
-          spellcheck="false"
-        />
-        {#if settingsSearch}
-          <button
-            type="button"
-            class="settings-search-clear"
-            aria-label={_t("storage.clearSettingsSearch")}
-            onclick={clearSettingsSearch}>��</button
-          >
-        {/if}
-      </div>
+      <SearchField
+        value={settingsSearch}
+        oninput={(v) => (settingsSearch = v)}
+        placeholder={_t("storage.settingsSearchPlaceholder")}
+        ariaLabel={_t("storage.settingsSearchLabel")}
+        id="settings-search-input"
+        labelFor="settings-search-input"
+        clearLabel={_t("storage.clearSettingsSearch")}
+        onclear={clearSettingsSearch}
+        autocomplete="off"
+        spellcheck={false}
+        fill
+        sidebar
+      />
     </div>
 
     <nav class="settings-primary-nav" aria-label={_t("storage.navAriaLabel")}>
@@ -2933,68 +2925,6 @@
     margin: 0 0 12px;
   }
 
-  .settings-search-field {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    flex: 1;
-    padding: 0 9px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    color: var(--text-muted);
-    background: var(--input-bg);
-    transition:
-      border-color 100ms ease,
-      background 100ms ease;
-  }
-
-  .settings-search-field:focus-within {
-    border-color: var(--text-faint);
-    background: var(--hover-bg);
-  }
-
-  .settings-search-field input {
-    width: 100%;
-    min-width: 0;
-    padding: 7px 0;
-    border: 0;
-    outline: none;
-    color: var(--text-primary);
-    background: transparent;
-    font: inherit;
-    font-size: var(--settings-control-size);
-  }
-
-  .settings-search-field input::placeholder {
-    color: var(--placeholder-color);
-  }
-
-  .settings-search-field input::-webkit-search-cancel-button {
-    appearance: none;
-  }
-
-  .settings-search-clear {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    flex: 0 0 auto;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    color: var(--text-muted);
-    background: transparent;
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  .settings-search-clear:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
   .settings-count {
     min-width: 0;
     color: var(--text-muted);
@@ -3072,19 +3002,6 @@
     box-shadow:
       0 0 0 1px color-mix(in srgb, var(--selection-color) 55%, transparent),
       0 0 0 4px color-mix(in srgb, var(--selection-color) 12%, transparent) !important;
-  }
-
-  .visually-hidden,
-  label.visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
   }
 
   .setting-heading p {
