@@ -358,23 +358,27 @@ fn sync_settings_use_documented_defaults() {
 
     assert!(!sync.auto_sync);
     assert_eq!(sync.auto_sync_interval_secs, 300);
-    assert_eq!(sync.max_remote_oplog_files, 10);
-    assert_eq!(sync.oplog_rollover_entries, 100);
-    assert_eq!(sync.oplog_rollover_size_bytes, 51_200);
+    assert_eq!(sync.remote_path.as_deref(), Some("clipboard-sync"));
+    assert_eq!(sync.s3_region.as_deref(), Some("us-east-1"));
+    assert_eq!(sync.segment_max_entries, 512);
     assert_eq!(sync.max_sync_image_bytes, 5_242_880);
     assert_eq!(sync.max_sync_file_bytes, 10_485_760);
 
     let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
     assert_eq!(saved["sync"]["autoSyncIntervalSecs"], 300);
+    assert_eq!(saved["sync"]["segmentMaxEntries"], 512);
     assert_eq!(saved["sync"]["maxSyncImageBytes"], 5_242_880);
     assert_eq!(saved["sync"]["maxSyncFileBytes"], 10_485_760);
+    assert!(saved["sync"].get("maxRemoteOplogFiles").is_none());
+    assert!(saved["sync"].get("oplogRolloverEntries").is_none());
+    assert!(saved["sync"].get("oplogRolloverSizeBytes").is_none());
 
     fs::remove_dir_all(project).unwrap();
 }
 
 #[test]
-fn legacy_sync_settings_without_policy_fields_use_defaults() {
-    let project = temporary_test_directory("legacy-sync-defaults");
+fn partial_sync_settings_use_current_defaults() {
+    let project = temporary_test_directory("partial-sync-defaults");
     let config_directory = project.join("conf");
     fs::create_dir_all(&config_directory).unwrap();
     fs::write(
@@ -390,9 +394,9 @@ fn legacy_sync_settings_without_policy_fields_use_defaults() {
 
     let sync = ConfigStore::load(&project).unwrap().sync_config();
     assert_eq!(sync.auto_sync_interval_secs, 300);
-    assert_eq!(sync.max_remote_oplog_files, 10);
-    assert_eq!(sync.oplog_rollover_entries, 100);
-    assert_eq!(sync.oplog_rollover_size_bytes, 51_200);
+    assert_eq!(sync.remote_path.as_deref(), Some("clipboard-sync"));
+    assert_eq!(sync.s3_region.as_deref(), Some("us-east-1"));
+    assert_eq!(sync.segment_max_entries, 512);
     assert_eq!(sync.max_sync_image_bytes, 5_242_880);
     assert_eq!(sync.max_sync_file_bytes, 10_485_760);
 

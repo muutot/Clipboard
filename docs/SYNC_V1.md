@@ -19,6 +19,18 @@ Priorities, in order:
 Sync latency is not traded for mutable remote log files. Every published data pack is immutable;
 the small per-device head is the only routinely overwritten object.
 
+## Runtime entry points
+
+The desktop runtime supports only S3-compatible storage. `get_sync_config`, `set_sync_config`,
+typed `test_sync_connection`, and `sync_now` are the complete Tauri surface; automatic sync calls
+the same internal `run_sync` function. The old remote-backup list/download/verification,
+compaction, WebDAV, baseline and oplog IPC surfaces are not registered.
+
+Each run snapshots configuration once, releases the config lock, derives at most one optional
+remote-scoped encryption key, creates one prefix-scoped S3 object store, and enters the v1 engine.
+The frontend exposes `segmentMaxEntries` plus image/file resource byte limits; it has no mutable-log
+rollover or remote-file-retention settings.
+
 ## Remote namespace
 
 All v1 objects live below the configured remote prefix in an isolated `v1/` namespace:

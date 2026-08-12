@@ -121,22 +121,25 @@ When backend startup, validation, or native behavior needs one of these fields, 
 
 These defaults come from `SyncConfig::default` and are also the values serialized for a fresh `conf.json`; `get_sync_config` returns the complete effective policy so the settings UI does not have to reconstruct missing backend fields.
 
-| Field                         | Type             | Default           | Range        | Description                                                                                                     |
-| ----------------------------- | ---------------- | ----------------- | ------------ | --------------------------------------------------------------------------------------------------------------- |
-| `sync.autoSync`               | `bool`           | `false`           | boolean      | Enable auto-sync on clipboard change                                                                            |
-| `sync.autoSyncIntervalSecs`   | `u64`            | `300`             | 10–86400     | Auto-sync interval in seconds                                                                                   |
-| `sync.maxRemoteOplogFiles`    | `u32`            | `10`              | 3–100        | Reserved oplog retention target; currently not enforced because safe deletion needs per-device acknowledgements |
-| `sync.oplogRolloverEntries`   | `u32`            | `100`             | 10–10000     | Max entries per oplog file before rollover                                                                      |
-| `sync.oplogRolloverSizeBytes` | `u32`            | `51200`           | 1024–1048576 | Max bytes per oplog file before rollover                                                                        |
-| `sync.maxSyncImageBytes`      | `u64`            | `5242880` (5MB)   | 0–           | Max image size to sync (0=disabled)                                                                             |
-| `sync.maxSyncFileBytes`       | `u64`            | `10485760` (10MB) | 0–           | Max file size to sync (0=disabled)                                                                              |
-| `sync.s3Region`               | `Option<String>` | `None`            | —            | S3 region (defaults to `us-east-1` on use)                                                                      |
-| `sync.s3Bucket`               | `Option<String>` | `None`            | —            | S3 bucket name                                                                                                  |
-| `sync.s3AccessKey`            | `Option<String>` | `None`            | —            | S3 access key                                                                                                   |
-| `sync.s3SecretKey`            | `Option<String>` | `None`            | —            | S3 secret key (write-only; `hasS3SecretKey` flag returned)                                                      |
-| `sync.syncPassword`           | `Option<String>` | `None`            | —            | Optional password encrypting remote baseline/oplog payloads (write-only; `hasSyncPassword` flag returned)       |
-| `sync.lastSyncMs`             | `Option<i64>`    | `None`            | —            | Last successful sync timestamp (auto-managed)                                                                   |
-| `sync.lastSyncStatus`         | `Option<String>` | `None`            | —            | Last sync status (auto-managed)                                                                                 |
+| Field                       | Type             | Default           | Range    | Description                                                                                  |
+| --------------------------- | ---------------- | ----------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `sync.autoSync`             | `bool`           | `false`           | boolean  | Enable auto-sync on clipboard change                                                         |
+| `sync.autoSyncIntervalSecs` | `u64`            | `300`             | 10–86400 | Auto-sync interval in seconds                                                                |
+| `sync.segmentMaxEntries`    | `u32`            | `512`             | 16–10000 | Maximum coalesced mutations in one immutable v1 segment                                      |
+| `sync.maxSyncImageBytes`    | `u64`            | `5242880` (5MB)   | 0–       | Max image size to sync (0=disabled)                                                          |
+| `sync.maxSyncFileBytes`     | `u64`            | `10485760` (10MB) | 0–       | Max file size to sync (0=disabled)                                                           |
+| `sync.remotePath`           | `Option<String>` | `clipboard-sync`  | —        | Object-key prefix containing the isolated v1 namespace                                       |
+| `sync.s3Region`             | `Option<String>` | `us-east-1`       | —        | S3 signing region                                                                            |
+| `sync.s3Bucket`             | `Option<String>` | `None`            | —        | S3 bucket name                                                                               |
+| `sync.s3AccessKey`          | `Option<String>` | `None`            | —        | S3 access key                                                                                |
+| `sync.s3SecretKey`          | `Option<String>` | `None`            | —        | S3 secret key (write-only; `hasS3SecretKey` flag returned)                                   |
+| `sync.syncPassword`         | `Option<String>` | `None`            | —        | Optional password encrypting v1 metadata packs (write-only; `hasSyncPassword` flag returned) |
+| `sync.lastSyncMs`           | `Option<i64>`    | `None`            | —        | Last attempted sync timestamp (auto-managed)                                                 |
+| `sync.lastSyncStatus`       | `Option<String>` | `None`            | —        | Last sync status (auto-managed)                                                              |
+
+`SyncProvider` has only `off` and `s3`. The settings UI exposes no WebDAV, remote-backup list,
+download, verification, compaction, baseline, or oplog controls. `segmentMaxEntries` bounds local
+memory per incremental pack; it is not a mutable-log rollover policy.
 
 ## Settings update checklist
 

@@ -306,11 +306,9 @@ export async function importFromFile(path: string): Promise<ImportSummary> {
 }
 
 export interface SyncConfig {
-  provider: string;
+  provider: "off" | "s3";
   endpoint: string | null;
   remotePath: string | null;
-  username: string | null;
-  hasPassword: boolean;
   s3Region: string | null;
   s3Bucket: string | null;
   s3AccessKey: string | null;
@@ -318,38 +316,34 @@ export interface SyncConfig {
   hasSyncPassword: boolean;
   lastSyncMs: number | null;
   lastSyncStatus: string | null;
-  unsyncedCount: number;
+  pendingEntries: number;
   autoSync: boolean;
   autoSyncIntervalSecs: number;
-  maxRemoteOplogFiles: number;
-  oplogRolloverEntries: number;
-  oplogRolloverSizeBytes: number;
+  segmentMaxEntries: number;
   maxSyncImageBytes: number;
   maxSyncFileBytes: number;
-  compactionSuggested: boolean;
 }
 
-export interface WebDavTestResult {
+export interface S3TestResult {
   success: boolean;
   message: string;
   statusCode: number | null;
 }
 
-export interface RemoteBackupEntry {
-  name: string;
-  isDirectory: boolean;
-  sizeBytes: number | null;
-  modifiedMs: number | null;
-}
-
-export interface BackupManifest {
-  formatVersion: number;
-  createdAtMs: number;
-  deviceId: string;
-  appVersion: string;
-  itemCount: number;
-  resourceCount: number;
-  totalResourceBytes: number;
+export interface SyncConfigUpdate {
+  provider: "off" | "s3";
+  endpoint: string | null;
+  remotePath: string | null;
+  autoSync: boolean;
+  autoSyncIntervalSecs: number;
+  segmentMaxEntries: number;
+  maxSyncImageBytes: number;
+  maxSyncFileBytes: number;
+  s3Region: string | null;
+  s3Bucket: string | null;
+  s3AccessKey: string | null;
+  s3SecretKey?: string | null;
+  syncPassword?: string | null;
 }
 
 export async function getSyncConfig(): Promise<SyncConfig> {
@@ -357,130 +351,53 @@ export async function getSyncConfig(): Promise<SyncConfig> {
     return {
       provider: "off",
       endpoint: null,
-      remotePath: null,
-      username: null,
-      hasPassword: false,
+      remotePath: "clipboard-sync",
       lastSyncMs: null,
       lastSyncStatus: null,
-      unsyncedCount: 0,
+      pendingEntries: 0,
       autoSync: false,
       autoSyncIntervalSecs: 300,
-      maxRemoteOplogFiles: 10,
-      oplogRolloverEntries: 100,
-      oplogRolloverSizeBytes: 51200,
+      segmentMaxEntries: 512,
       maxSyncImageBytes: 5242880,
       maxSyncFileBytes: 10485760,
-      s3Region: null,
+      s3Region: "us-east-1",
       s3Bucket: null,
       s3AccessKey: null,
       hasS3SecretKey: false,
       hasSyncPassword: false,
-      compactionSuggested: false,
     };
   }
   return invoke<SyncConfig>("get_sync_config");
 }
 
-export async function setSyncConfig(
-  provider: string,
-  endpoint: string | null,
-  remotePath: string | null,
-  username: string | null,
-  password: string | null,
-  autoSync: boolean,
-  autoSyncIntervalSecs: number,
-  maxRemoteOplogFiles: number,
-  oplogRolloverEntries: number,
-  oplogRolloverSizeBytes: number,
-  maxSyncImageBytes: number,
-  maxSyncFileBytes: number,
-  s3Region?: string | null,
-  s3Bucket?: string | null,
-  s3AccessKey?: string | null,
-  s3SecretKey?: string | null,
-  syncPassword?: string | null,
-): Promise<void> {
+export async function setSyncConfig(settings: SyncConfigUpdate): Promise<void> {
   if (!isTauriRuntime()) return;
   return invoke<void>("set_sync_config", {
-    provider,
-    endpoint,
-    remotePath,
-    username,
-    password,
-    autoSync,
-    autoSyncIntervalSecs,
-    maxRemoteOplogFiles,
-    oplogRolloverEntries,
-    oplogRolloverSizeBytes,
-    maxSyncImageBytes,
-    maxSyncFileBytes,
-    s3Region: s3Region ?? null,
-    s3Bucket: s3Bucket ?? null,
-    s3AccessKey: s3AccessKey ?? null,
-    s3SecretKey: s3SecretKey ?? null,
-    syncPassword: syncPassword ?? null,
+    ...settings,
+    s3SecretKey: settings.s3SecretKey ?? null,
+    syncPassword: settings.syncPassword ?? null,
   });
 }
 
-export async function testSyncConnection(
-  provider: string,
-  endpoint: string,
-  remotePath: string | null,
-  username: string | null,
-  password: string | null,
-  s3Region?: string | null,
-  s3Bucket?: string | null,
-  s3AccessKey?: string | null,
-  s3SecretKey?: string | null,
-): Promise<string> {
+export async function testSyncConnection(): Promise<S3TestResult> {
   if (!isTauriRuntime()) {
-    return JSON.stringify({ success: false, message: "Not in desktop runtime" });
+    return { success: false, message: "Not in desktop runtime", statusCode: null };
   }
-  return invoke<string>("test_sync_connection", {
-    provider,
-    endpoint,
-    remotePath,
-    username,
-    password,
-    s3Region: s3Region ?? null,
-    s3Bucket: s3Bucket ?? null,
-    s3AccessKey: s3AccessKey ?? null,
-    s3SecretKey: s3SecretKey ?? null,
-  });
+  return invoke<S3TestResult>("test_sync_connection");
 }
 
-export interface SyncUploadResult {
+export interface SyncRunResult {
   uploadedEntries: number;
   downloadedEntries: number;
   appliedEntries: number;
-  deletedRemoteFiles: number;
+  uploadedResources: number;
+  downloadedResources: number;
+  deletedRemoteObjects: number;
   bytesUploaded: number;
   bytesDownloaded: number;
 }
 
-export async function syncUploadBackup(): Promise<SyncUploadResult> {
+export async function runSync(): Promise<SyncRunResult> {
   if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
-  return invoke<SyncUploadResult>("sync_upload_backup");
-}
-
-export async function syncListRemoteBackups(): Promise<RemoteBackupEntry[]> {
-  if (!isTauriRuntime()) return [];
-  return invoke<RemoteBackupEntry[]>("sync_list_remote_backups");
-}
-
-export async function syncDownloadBackup(filename: string): Promise<string> {
-  if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
-  return invoke<string>("sync_download_backup", { filename });
-}
-
-export async function syncRefreshRemoteSnapshot(): Promise<SyncUploadResult> {
-  if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
-  // The backend keeps the legacy command name for IPC compatibility. Its
-  // behavior is a non-destructive snapshot refresh.
-  return invoke<SyncUploadResult>("sync_compact_remote");
-}
-
-export async function verifyBackupFile(path: string): Promise<BackupManifest> {
-  if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
-  return invoke<BackupManifest>("verify_backup_file", { path });
+  return invoke<SyncRunResult>("sync_now");
 }

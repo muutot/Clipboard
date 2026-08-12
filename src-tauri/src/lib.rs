@@ -650,11 +650,7 @@ pub fn run() {
             get_sync_config,
             set_sync_config,
             test_sync_connection,
-            sync_upload_backup,
-            sync_list_remote_backups,
-            sync_download_backup,
-            sync_compact_remote,
-            verify_backup_file
+            sync_now
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

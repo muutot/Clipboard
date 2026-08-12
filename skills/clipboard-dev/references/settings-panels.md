@@ -26,7 +26,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                                                                                  |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                   |
 | Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent |
-| Sync             | Cloud (provider, credentials, manual sync, backups, snapshot refresh), Advanced (batch/resource limits and reserved oplog target) → built into the parent               |
+| Sync             | Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits) → built into the parent                     |
 | Keyboard         | Item, Quick, Global → `KeyboardSettingsPanel` with category prop                                                                                                        |
 | OCR              | Single current section → built into the parent                                                                                                                          |
 | Statistics       | Storage, Performance, Memory → built into the parent                                                                                                                    |

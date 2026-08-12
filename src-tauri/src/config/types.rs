@@ -377,8 +377,6 @@ pub struct SyncConfig {
     pub provider: SyncProvider,
     pub endpoint: Option<String>,
     pub remote_path: Option<String>,
-    pub username: Option<String>,
-    pub password: Option<String>,
     pub s3_region: Option<String>,
     pub s3_bucket: Option<String>,
     pub s3_access_key: Option<String>,
@@ -388,13 +386,9 @@ pub struct SyncConfig {
     pub last_sync_status: Option<String>,
     pub auto_sync: bool,
     pub auto_sync_interval_secs: u64,
-    pub max_remote_oplog_files: u32,
-    pub oplog_rollover_entries: u32,
-    pub oplog_rollover_size_bytes: u32,
+    pub segment_max_entries: u32,
     pub max_sync_image_bytes: u64,
     pub max_sync_file_bytes: u64,
-    #[serde(flatten)]
-    pub(crate) extra: BTreeMap<String, Value>,
 }
 
 impl Default for SyncConfig {
@@ -402,10 +396,8 @@ impl Default for SyncConfig {
         Self {
             provider: SyncProvider::Off,
             endpoint: None,
-            remote_path: None,
-            username: None,
-            password: None,
-            s3_region: None,
+            remote_path: Some("clipboard-sync".to_string()),
+            s3_region: Some("us-east-1".to_string()),
             s3_bucket: None,
             s3_access_key: None,
             s3_secret_key: None,
@@ -414,12 +406,9 @@ impl Default for SyncConfig {
             last_sync_status: None,
             auto_sync: false,
             auto_sync_interval_secs: 300,
-            max_remote_oplog_files: 10,
-            oplog_rollover_entries: 100,
-            oplog_rollover_size_bytes: 51_200,
+            segment_max_entries: 512,
             max_sync_image_bytes: 5_242_880,
             max_sync_file_bytes: 10_485_760,
-            extra: BTreeMap::new(),
         }
     }
 }
@@ -427,10 +416,10 @@ impl Default for SyncConfig {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncProvider {
-    #[default]
-    Off,
-    Webdav,
     S3,
+    #[default]
+    #[serde(other)]
+    Off,
 }
 
 #[derive(Debug)]

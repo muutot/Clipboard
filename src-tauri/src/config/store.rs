@@ -379,48 +379,6 @@ impl ConfigStore {
         self.save()
     }
 
-    pub fn max_remote_oplog_files(&self) -> u32 {
-        if self.config.sync.max_remote_oplog_files == 0 {
-            10
-        } else {
-            self.config.sync.max_remote_oplog_files.clamp(3, 100)
-        }
-    }
-
-    pub fn set_max_remote_oplog_files(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.sync.max_remote_oplog_files = value.clamp(3, 100);
-        self.save()
-    }
-
-    pub fn oplog_rollover_entries(&self) -> u32 {
-        if self.config.sync.oplog_rollover_entries == 0 {
-            100
-        } else {
-            self.config.sync.oplog_rollover_entries.clamp(10, 10000)
-        }
-    }
-
-    pub fn set_oplog_rollover_entries(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.sync.oplog_rollover_entries = value.clamp(10, 10000);
-        self.save()
-    }
-
-    pub fn oplog_rollover_size_bytes(&self) -> u32 {
-        if self.config.sync.oplog_rollover_size_bytes == 0 {
-            51200
-        } else {
-            self.config
-                .sync
-                .oplog_rollover_size_bytes
-                .clamp(1024, 1048576)
-        }
-    }
-
-    pub fn set_oplog_rollover_size_bytes(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.sync.oplog_rollover_size_bytes = value.clamp(1024, 1048576);
-        self.save()
-    }
-
     pub fn max_sync_image_bytes(&self) -> u64 {
         self.config.sync.max_sync_image_bytes
     }

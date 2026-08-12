@@ -7,10 +7,9 @@ use tauri::Manager;
 use crate::commands::sync::run_sync;
 use crate::config::ConfigStore;
 
-/// Background worker that periodically runs `run_sync` while the user has
-/// auto-sync enabled. The manual `sync_upload_backup` command and this worker
-/// share the same `SYNC_RUN_LOCK`, so a manual sync while the worker is running
-/// fails fast instead of interleaving the non-reentrant merge/apply/cleanup.
+/// Background worker that periodically runs the same S3-first v1 engine as the
+/// manual `sync_now` command. Both paths share `SYNC_RUN_LOCK`, so a second run
+/// fails fast instead of interleaving local publication state.
 ///
 /// The worker owns an `AppHandle` only; all managed states are resolved from it
 /// on each tick. Config is re-read every second so a settings change to
