@@ -68,6 +68,18 @@ pub fn sync_database(
             .map_err(|error| error.to_string())?;
     }
 
+    state = reconcile_local_device_head(
+        store,
+        database,
+        paths,
+        remote_scope,
+        &device_id,
+        state,
+        session_key,
+        options.resource_limits,
+        &mut result,
+    )?;
+
     if !state.initialized {
         state = publish_bootstrap(
             store,
@@ -111,6 +123,73 @@ pub fn sync_database(
         &mut result,
     )?;
     Ok(result)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn reconcile_local_device_head(
+    store: &impl ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    remote_scope: &str,
+    device_id: &str,
+    state: crate::storage::SyncRemoteState,
+    session_key: Option<&SessionKey>,
+    resource_limits: ResourceLimits,
+    result: &mut SyncEngineResult,
+) -> Result<crate::storage::SyncRemoteState, String> {
+    let key = head_object_key(device_id)?;
+    let Some(downloaded) = store.get(&key)? else {
+        if state.initialized {
+            return database
+                .reset_sync_remote_state(remote_scope)
+                .map_err(|error| error.to_string());
+        }
+        return Ok(state);
+    };
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        downloaded.bytes.len() as u64,
+        "downloaded byte count",
+    )?;
+    let remote_head = decode_device_head(&downloaded.bytes, session_key)?;
+    validate_head(&key, device_id, &remote_head)?;
+    if local_publication_matches_remote(&state, &remote_head) {
+        return Ok(state);
+    }
+
+    let already_applied = database
+        .get_sync_cursor(remote_scope, device_id)
+        .map_err(|error| error.to_string())?
+        .is_some_and(|cursor| {
+            cursor.epoch == remote_head.epoch && cursor.sequence >= remote_head.published_sequence
+        });
+    if !already_applied {
+        pull_device(
+            store,
+            database,
+            paths,
+            remote_scope,
+            &remote_head,
+            session_key,
+            resource_limits,
+            result,
+        )?;
+    }
+
+    database
+        .reset_sync_remote_state(remote_scope)
+        .map_err(|error| error.to_string())
+}
+
+fn local_publication_matches_remote(
+    state: &crate::storage::SyncRemoteState,
+    head: &DeviceHead,
+) -> bool {
+    state.initialized
+        && state.epoch == head.epoch
+        && state.snapshot.as_ref() == Some(&head.snapshot)
+        && state.published_sequence == head.published_sequence
+        && state.last_segment_key == head.last_segment_key
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -933,6 +1012,106 @@ mod tests {
         drop(target);
         fs::remove_dir_all(source_paths.project).unwrap();
         fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn restored_database_merges_its_remote_head_before_rotating_epoch() {
+        let store = MemoryStore::default();
+        let paths = temp_paths("restored-head");
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&text_item("initial", "initial"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let device_id = database.get_sync_device_id().unwrap();
+        let head_key = head_object_key(&device_id).unwrap();
+        let backup_path = paths.project.join("restored.sqlite3");
+        database.vacuum_into(&backup_path).unwrap();
+
+        database
+            .save_item(&text_item("remote-only", "remote-only"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let advanced_head =
+            decode_device_head(store.objects.lock().unwrap().get(&head_key).unwrap(), None)
+                .unwrap();
+        assert_eq!(advanced_head.published_sequence, 1);
+        drop(database);
+
+        let restored = Database::open(&backup_path).unwrap();
+        restored
+            .save_item(&text_item("local-after-restore", "local-after-restore"))
+            .unwrap();
+        let healed =
+            sync_database(&store, &restored, &paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert!(healed.downloaded_entries >= 2);
+        assert_eq!(healed.uploaded_entries, 3);
+        for id in ["initial", "remote-only", "local-after-restore"] {
+            assert!(
+                restored.get_item(id).unwrap().is_some(),
+                "missing item {id}"
+            );
+        }
+        let replacement_head =
+            decode_device_head(store.objects.lock().unwrap().get(&head_key).unwrap(), None)
+                .unwrap();
+        assert_ne!(replacement_head.epoch, advanced_head.epoch);
+        assert!(replacement_head.last_segment_key.is_none());
+        assert_eq!(replacement_head.snapshot.record_count, 3);
+
+        drop(restored);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn divergent_local_head_state_does_not_overwrite_remote_history() {
+        let store = MemoryStore::default();
+        let paths = temp_paths("divergent-head");
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&text_item("initial", "initial"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let device_id = database.get_sync_device_id().unwrap();
+        let head_key = head_object_key(&device_id).unwrap();
+        database
+            .save_item(&text_item("remote-only", "remote-only"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let advanced_head =
+            decode_device_head(store.objects.lock().unwrap().get(&head_key).unwrap(), None)
+                .unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE sync_publication_state
+                        SET published_sequence = 999,
+                            last_segment_key = 'v1/segments/diverged.pack'
+                      WHERE remote_scope = ?1",
+                    [REMOTE_SCOPE],
+                )?;
+                connection.execute("DELETE FROM clipboard_items WHERE id = 'remote-only'", [])?;
+                connection.execute(
+                    "DELETE FROM sync_tombstones WHERE item_id = 'remote-only'",
+                    [],
+                )?;
+                connection.execute("DELETE FROM sync_outbox", [])?;
+                Ok(())
+            })
+            .unwrap();
+
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert!(database.get_item("remote-only").unwrap().is_some());
+        let replacement_head =
+            decode_device_head(store.objects.lock().unwrap().get(&head_key).unwrap(), None)
+                .unwrap();
+        assert_ne!(replacement_head.epoch, advanced_head.epoch);
+        assert_eq!(replacement_head.snapshot.record_count, 2);
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
     }
 
     #[test]

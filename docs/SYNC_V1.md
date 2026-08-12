@@ -111,6 +111,13 @@ with records downloaded during the same first sync:
 The snapshot pack contains resource references only. A failed resource upload aborts publication;
 the head can never point to a snapshot with dangling resources.
 
+Before any bootstrap or incremental publication, a device reads and validates its own remote head.
+If the local publication state was restored, lost, or otherwise differs from that head, the client
+first applies the remote device history back into SQLite, rotates to a new epoch, and publishes one
+replacement bootstrap snapshot. It never overwrites a newer or divergent remote head with an older
+local sequence. If the local state claims initialization but the remote head is missing, the same
+epoch-rotation/bootstrap path recreates it from the complete local materialized state.
+
 ## Incremental push
 
 Local mutation triggers append compact outbox rows containing sequence, item id, operation and
