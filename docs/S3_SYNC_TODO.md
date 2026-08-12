@@ -80,9 +80,9 @@
 ### 2.5 存储条目限制与清理语义
 
 - `HistoryConfig` 当前默认 `max_items = 10_000`、`retention_days = 30`、`recycle_bin_days = 7`、`favorites_exempt = true`，配置持久化在 `conf/conf.json`。
-- 容量与保留清理都是硬删除：容量超出时按 `created_at_ms ASC` 删除最旧的非收藏记录；保留期到期删除 `created_at_ms` 早于阈值的非收藏记录。
+- 容量与保留清理都是硬删除：容量超出时按 `created_at_ms ASC` 删除最旧的非收藏记录；保留期到期删除 `created_at_ms` 早于阈值的非收藏记录。当前容量 SQL 没有 `id` 决胜，多机确定性需要在同步契约中补上。
 - 回收站是软删除：用户删除先置 `deleted = 1` 并记录 `deleted_at_ms`，超过 `recycle_bin_days` 后永久删除。
-- 清理同时会清掉孤儿搜索索引与孤儿 blob 文件。
+- 清理会删除孤儿 `search_outbox` 条目（不是重建 Tantivy 索引）与孤儿 blob 文件。
 - 同步开启时，这些删除会经过主表删除触发器进入 `sync_outbox` 与 `sync_tombstones`，因此清理删除天然会传播到其他设备，而不是只作用于本机。
 - 目标场景是每台 100k 条，当前默认上限只有 10k，必须显式提高上限并定义 scope 级策略，否则单机清理会把其他设备的记录一并删掉。
 
@@ -104,21 +104,22 @@
 
 桶前缀建议为 `{remote_path}/v1/{scope}/{epoch}/`，其中 `scope` 区分同步组，`epoch` 在协议/数据契约升级或手动重置时轮换。
 
-| 对象                                       | 可变性 | 用途                                                           |
-| ------------------------------------------ | ------ | -------------------------------------------------------------- |
-| `changelog/{device_id}/{seq:010}.jsonl.gz` | 不可变 | 单设备增量段，每行一个 upsert/delete/tombstone                 |
-| `snapshots/{seq:010}.jsonl.gz`             | 不可变 | 全量状态快照，含 live 记录、墓碑、标签、各设备已发布 seq 地图  |
-| `current.json`                             | 可变   | 指向最新 snapshot，含 epoch、snapshot_sha256、记录数           |
-| `latest/{device_id}.json`                  | 可变   | 指向该设备最新 segment，含 seq、sha256、size                   |
-| `blobs/{sha256}`                           | 不可变 | 内容寻址 blob，无扩展名，扩展名由记录元数据保存                |
-| `acks/{device_id}.json`                    | 可变   | 可选：设备已应用游标，用于 GC 判断                             |
-| `meta/scope.json`                          | 不可变 | scope 协议版本、schema 版本、加密参数、快照策略、容量/保留策略 |
+| 对象                                       | 可变性 | 用途                                                                             |
+| ------------------------------------------ | ------ | -------------------------------------------------------------------------------- |
+| `changelog/{device_id}/{seq:010}.jsonl.gz` | 不可变 | 单设备增量段，每行一个 upsert/delete/tombstone                                   |
+| `snapshots/{seq:010}.jsonl.gz`             | 不可变 | 全量状态快照，含 live 记录、墓碑、标签、各设备已发布 seq 地图                    |
+| `current.json`                             | 可变   | 指向最新 snapshot，含 epoch、snapshot_sha256、记录数                             |
+| `latest/{device_id}.json`                  | 可变   | 指向该设备最新 segment，含 seq、sha256、size                                     |
+| `blobs/{sha256}`                           | 不可变 | 内容寻址 blob，无扩展名，扩展名由记录元数据保存                                  |
+| `acks/{device_id}.json`                    | 可变   | 可选：设备已应用游标，用于 GC 判断                                               |
+| `meta/scope.json`                          | 可变   | scope 协议版本、schema 版本、加密参数、快照策略、容量/保留策略，version 单调递增 |
 
 约束：
 
 - segment、snapshot、blob 一旦上传不可修改，名称单调递增或内容确定。
 - 上传用 `If-None-Match: *`，重复上传不覆盖已有对象。
-- `current.json` 更新采用 last-write-wins，读取方校验 epoch 与 checksum；快照上传成功后才切换指针。
+- `current.json` 更新使用条件写，只允许 snapshot seq 单调前进的覆盖；读取方校验 epoch 与 checksum；快照上传成功后才切换指针。
+- `latest/{device_id}.json` 与 `acks/{device_id}.json` 同样只允许 seq/version 单调前进的覆盖。
 - blob key 不依赖扩展名，避免同哈希不同扩展名产生重复对象。
 
 ## 5. 核心流程
@@ -236,8 +237,8 @@
 
 - [ ] S3 客户端抽象：put/get/head/delete/list/multipart，支持自定义 endpoint、path-style、region。
   - 验收：对 S3-compatible mock（MinIO/moto 等）的集成测试通过；断网、超时、权限错误映射为可恢复/不可恢复错误。
-- [ ] scope 初始化与认领：`meta/scope.json` 用条件写创建，多台设备同时首次开启不互相覆盖。
-  - 验收：并发初始化测试只有一个 scope 配置生效。
+- [ ] scope 初始化与更新：`meta/scope.json` 用条件写创建，配置变更以 version 单调递增覆盖，多台设备同时首次开启不互相覆盖。
+  - 验收：并发初始化测试只有一个 scope 配置生效；配置更新不会回退 version。
 - [ ] 不可变对象幂等上传：`If-None-Match: *`；失败重试同一内容；上传前 HEAD 跳过已存在 blob。
   - 验收：mock 断言重复同步不产生重复 PUT。
 - [ ] 下载校验：对象 sha256/size 校验，临时文件 + 原子 rename，并发去重。
