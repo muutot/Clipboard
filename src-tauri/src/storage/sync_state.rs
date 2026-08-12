@@ -717,11 +717,7 @@ impl Database {
                         "checkpoint generation regressed".to_string(),
                     ));
                 }
-                if stored_generation == generation {
-                    if stored_sha256 == checkpoint_sha256 {
-                        transaction.commit()?;
-                        return Ok(0);
-                    }
+                if stored_generation == generation && stored_sha256 != checkpoint_sha256 {
                     return Err(StorageError::InvalidSyncState(
                         "equal checkpoint generation has a different digest".to_string(),
                     ));

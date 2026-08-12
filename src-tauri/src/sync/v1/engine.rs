@@ -3,12 +3,13 @@ use sha2::{Digest, Sha256};
 use crate::storage::{Database, StoragePaths};
 
 use super::{
-    cleanup_obsolete_objects, decode_device_head, decode_segment, decode_snapshot,
-    encode_device_head, encode_segment, encode_snapshot, head_object_key,
-    materialize_mutation_resources, parse_head_key, parse_segment_key, prepare_mutation_resources,
-    segment_object_key, segment_prefix, snapshot_object_key, DeviceCursor, DeviceHead,
-    EncodedObject, ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment,
-    SessionKey, Snapshot, HEADS_PREFIX,
+    cleanup_obsolete_objects, decode_checkpoint, decode_checkpoint_head, decode_device_head,
+    decode_segment, decode_snapshot, encode_device_head, encode_segment, encode_snapshot,
+    head_object_key, materialize_mutation_resources, parse_checkpoint_key, parse_head_key,
+    parse_segment_key, prepare_mutation_resources, segment_object_key, segment_prefix,
+    snapshot_object_key, Checkpoint, CheckpointHead, DeviceCursor, DeviceHead, EncodedObject,
+    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
+    Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,6 +113,17 @@ pub fn sync_database(
         )?;
     }
 
+    pull_checkpoint_if_needed(
+        store,
+        database,
+        paths,
+        remote_scope,
+        session_key,
+        options.resource_limits,
+        &mut result,
+        false,
+    )?;
+
     pull_remote_devices(
         store,
         database,
@@ -164,7 +176,7 @@ fn reconcile_local_device_head(
             cursor.epoch == remote_head.epoch && cursor.sequence >= remote_head.published_sequence
         });
     if !already_applied {
-        pull_device(
+        pull_device_with_checkpoint_recovery(
             store,
             database,
             paths,
@@ -190,6 +202,259 @@ fn local_publication_matches_remote(
         && state.snapshot.as_ref() == Some(&head.snapshot)
         && state.published_sequence == head.published_sequence
         && state.last_segment_key == head.last_segment_key
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pull_checkpoint_if_needed(
+    store: &impl ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    remote_scope: &str,
+    session_key: Option<&SessionKey>,
+    resource_limits: ResourceLimits,
+    result: &mut SyncEngineResult,
+    force: bool,
+) -> Result<bool, String> {
+    if !force
+        && !database
+            .list_sync_cursors(remote_scope)
+            .map_err(|e| e.to_string())?
+            .is_empty()
+    {
+        return Ok(false);
+    }
+    let Some(downloaded_head) = store.get(CHECKPOINT_HEAD_KEY)? else {
+        return if force {
+            Err("sync checkpoint is required to recover missing history".to_string())
+        } else {
+            Ok(false)
+        };
+    };
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        downloaded_head.bytes.len() as u64,
+        "downloaded byte count",
+    )?;
+    let checkpoint_head = decode_checkpoint_head(&downloaded_head.bytes, session_key)?;
+    validate_checkpoint_head(&checkpoint_head)?;
+    if !force
+        && database
+            .get_sync_checkpoint_state(remote_scope)
+            .map_err(|error| error.to_string())?
+            .is_some_and(|(generation, sha256)| {
+                generation == checkpoint_head.generation
+                    && sha256 == checkpoint_head.checkpoint.sha256
+            })
+    {
+        return Ok(false);
+    }
+
+    let checkpoint = match download_checkpoint(
+        store,
+        &checkpoint_head.checkpoint,
+        checkpoint_head.generation,
+        session_key,
+        result,
+    ) {
+        Ok(checkpoint) => {
+            if checkpoint.vector != checkpoint_head.vector {
+                return Err("checkpoint payload vector does not match its head".to_string());
+            }
+            checkpoint
+        }
+        Err(current_error) => {
+            let previous = checkpoint_head.previous_checkpoint.as_ref().ok_or_else(|| {
+                format!("current checkpoint is unusable and no previous checkpoint is retained: {current_error}")
+            })?;
+            let parsed = parse_checkpoint_key(&previous.key)?;
+            download_checkpoint(
+                store,
+                previous,
+                parsed.generation,
+                session_key,
+                result,
+            )
+            .map_err(|previous_error| {
+                format!(
+                    "current checkpoint failed ({current_error}); previous checkpoint failed ({previous_error})"
+                )
+            })?
+        }
+    };
+    let mut mutations = checkpoint.mutations;
+    let resources = materialize_mutation_resources(store, &mut mutations, paths, resource_limits)?;
+    result.downloaded_resources += resources.transferred_resources;
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        resources.transferred_bytes,
+        "downloaded byte count",
+    )?;
+    result.downloaded_entries = checked_add(
+        result.downloaded_entries,
+        mutations.len() as u64,
+        "downloaded entry count",
+    )?;
+    let applied = database
+        .apply_sync_checkpoint(
+            remote_scope,
+            checkpoint.generation,
+            &checkpoint_digest_for_generation(&checkpoint_head, checkpoint.generation)?,
+            &checkpoint.vector,
+            &mutations,
+        )
+        .map_err(|error| error.to_string())?;
+    result.applied_entries = checked_add(result.applied_entries, applied, "applied entry count")?;
+    Ok(true)
+}
+
+fn checkpoint_digest_for_generation(
+    head: &CheckpointHead,
+    generation: u64,
+) -> Result<String, String> {
+    if generation == head.generation {
+        return Ok(head.checkpoint.sha256.clone());
+    }
+    let previous = head
+        .previous_checkpoint
+        .as_ref()
+        .ok_or_else(|| "checkpoint generation is not referenced by its head".to_string())?;
+    let parsed = parse_checkpoint_key(&previous.key)?;
+    if parsed.generation != generation {
+        return Err("checkpoint generation is not referenced by its head".to_string());
+    }
+    Ok(previous.sha256.clone())
+}
+
+fn download_checkpoint(
+    store: &impl ObjectStore,
+    reference: &ObjectRef,
+    generation: u64,
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> Result<Checkpoint, String> {
+    let parsed = parse_checkpoint_key(&reference.key)?;
+    if parsed.generation != generation || parsed.sha256 != reference.sha256 {
+        return Err("checkpoint reference is not canonical".to_string());
+    }
+    let bytes = get_verified_object(
+        store,
+        &reference.key,
+        &reference.sha256,
+        Some(reference.stored_size_bytes),
+        result,
+    )?;
+    let checkpoint = decode_checkpoint(&bytes, session_key)?;
+    if checkpoint.generation != generation
+        || checkpoint.mutations.len() as u64 != reference.record_count
+    {
+        return Err("checkpoint payload does not match its reference".to_string());
+    }
+    validate_checkpoint_vector(&checkpoint.vector)?;
+    Ok(checkpoint)
+}
+
+fn validate_checkpoint_head(head: &CheckpointHead) -> Result<(), String> {
+    let parsed = parse_checkpoint_key(&head.checkpoint.key)?;
+    if head.generation == 0
+        || parsed.generation != head.generation
+        || parsed.sha256 != head.checkpoint.sha256
+        || head.vector.is_empty()
+    {
+        return Err("checkpoint head is invalid".to_string());
+    }
+    validate_checkpoint_vector(&head.vector)?;
+    if let Some(previous) = &head.previous_checkpoint {
+        let previous_key = parse_checkpoint_key(&previous.key)?;
+        if previous_key.generation >= head.generation || previous_key.sha256 != previous.sha256 {
+            return Err("previous checkpoint reference is invalid".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn validate_checkpoint_vector(vector: &[DeviceCursor]) -> Result<(), String> {
+    let mut previous_device = None::<&str>;
+    for cursor in vector {
+        if previous_device.is_some_and(|previous| previous >= cursor.device_id.as_str()) {
+            return Err("checkpoint vector must contain unique sorted device ids".to_string());
+        }
+        let device = uuid::Uuid::parse_str(&cursor.device_id)
+            .map_err(|_| "checkpoint cursor device is not canonical".to_string())?;
+        if device.to_string() != cursor.device_id {
+            return Err("checkpoint cursor device is not canonical".to_string());
+        }
+        let epoch = uuid::Uuid::parse_str(&cursor.epoch)
+            .map_err(|_| "checkpoint cursor epoch is not canonical".to_string())?;
+        if epoch.to_string() != cursor.epoch {
+            return Err("checkpoint cursor epoch is not canonical".to_string());
+        }
+        if let Some(key) = cursor.last_segment_key.as_deref() {
+            let parsed = parse_segment_key(key)?;
+            if parsed.device_id != cursor.device_id
+                || parsed.epoch != cursor.epoch
+                || parsed.last_sequence != cursor.sequence
+            {
+                return Err("checkpoint cursor does not match its segment key".to_string());
+            }
+        }
+        previous_device = Some(&cursor.device_id);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pull_device_with_checkpoint_recovery(
+    store: &impl ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    remote_scope: &str,
+    head: &DeviceHead,
+    session_key: Option<&SessionKey>,
+    resource_limits: ResourceLimits,
+    result: &mut SyncEngineResult,
+) -> Result<(), String> {
+    match pull_device(
+        store,
+        database,
+        paths,
+        remote_scope,
+        head,
+        session_key,
+        resource_limits,
+        result,
+    ) {
+        Ok(()) => Ok(()),
+        Err(original_error) => {
+            let recovered = pull_checkpoint_if_needed(
+                store,
+                database,
+                paths,
+                remote_scope,
+                session_key,
+                resource_limits,
+                result,
+                true,
+            )?;
+            if !recovered {
+                return Err(original_error);
+            }
+            pull_device(
+                store,
+                database,
+                paths,
+                remote_scope,
+                head,
+                session_key,
+                resource_limits,
+                result,
+            )
+            .map_err(|retry_error| {
+                format!(
+                    "device pull failed before checkpoint recovery ({original_error}); retry failed ({retry_error})"
+                )
+            })
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -345,7 +610,7 @@ fn pull_remote_devices(
             )?;
             let head = decode_device_head(&downloaded.bytes, session_key)?;
             validate_head(&info.key, &device_id, &head)?;
-            pull_device(
+            pull_device_with_checkpoint_recovery(
                 store,
                 database,
                 paths,
@@ -426,10 +691,14 @@ fn pull_device(
         if parsed.last_sequence <= cursor.sequence {
             continue;
         }
-        if parsed.first_sequence <= cursor.sequence {
+        let expected_first = cursor
+            .sequence
+            .checked_add(1)
+            .ok_or_else(|| "remote cursor sequence overflowed".to_string())?;
+        if parsed.first_sequence != expected_first {
             return Err(format!(
-                "segment {:?} overlaps applied sequence {}",
-                info.key, cursor.sequence
+                "segment {:?} starts at {}, expected {} after applied sequence {}",
+                info.key, parsed.first_sequence, expected_first, cursor.sequence
             ));
         }
         if parsed.last_sequence > head.published_sequence {
@@ -853,6 +1122,56 @@ mod tests {
         }
     }
 
+    fn replicated_text(
+        id: &str,
+        text: &str,
+        modified_at_ms: i64,
+        writer_device_id: &str,
+    ) -> super::super::ReplicatedItem {
+        super::super::ReplicatedItem {
+            item: text_item(id, text),
+            version: super::super::RecordVersion {
+                modified_at_ms,
+                writer_device_id: writer_device_id.to_string(),
+            },
+        }
+    }
+
+    fn insert_checkpoint(store: &MemoryStore, checkpoint: &Checkpoint) -> ObjectRef {
+        let encoded = super::super::encode_checkpoint(checkpoint, None).unwrap();
+        let key =
+            super::super::checkpoint_object_key(checkpoint.generation, &encoded.sha256).unwrap();
+        let reference = ObjectRef {
+            key: key.clone(),
+            sha256: encoded.sha256,
+            stored_size_bytes: encoded.bytes.len() as u64,
+            record_count: checkpoint.mutations.len() as u64,
+        };
+        store.objects.lock().unwrap().insert(key, encoded.bytes);
+        reference
+    }
+
+    fn insert_checkpoint_head(
+        store: &MemoryStore,
+        checkpoint: &Checkpoint,
+        reference: ObjectRef,
+        previous_checkpoint: Option<ObjectRef>,
+    ) {
+        let head = CheckpointHead {
+            generation: checkpoint.generation,
+            checkpoint: reference,
+            vector: checkpoint.vector.clone(),
+            previous_checkpoint,
+            updated_at_ms: 1,
+        };
+        let encoded = super::super::encode_checkpoint_head(&head, None).unwrap();
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(CHECKPOINT_HEAD_KEY.to_string(), encoded.bytes);
+    }
+
     #[test]
     fn independent_snapshots_and_incremental_segments_converge() {
         let store = MemoryStore::default();
@@ -1007,6 +1326,250 @@ mod tests {
         assert_eq!(result.failed_peers, 1);
         assert!(result.applied_entries >= 1);
         assert!(target.get_item("healthy-peer-item").unwrap().is_some());
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn empty_device_bootstraps_from_checkpoint_without_peer_history() {
+        let store = MemoryStore::default();
+        let source_device = "11111111-1111-4111-8111-111111111111";
+        let source_epoch = "22222222-2222-4222-8222-222222222222";
+        let checkpoint = Checkpoint {
+            generation: 1,
+            vector: vec![DeviceCursor {
+                device_id: source_device.to_string(),
+                epoch: source_epoch.to_string(),
+                sequence: 0,
+                last_segment_key: None,
+            }],
+            mutations: super::super::MutationBatch {
+                upserts: vec![replicated_text(
+                    "checkpoint-only",
+                    "checkpoint",
+                    100,
+                    source_device,
+                )],
+                tombstones: Vec::new(),
+            },
+        };
+        let reference = insert_checkpoint(&store, &checkpoint);
+        insert_checkpoint_head(&store, &checkpoint, reference, None);
+        let paths = temp_paths("checkpoint-bootstrap");
+        let database = Database::open(&paths.database).unwrap();
+
+        let result =
+            sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert_eq!(result.downloaded_entries, 1);
+        assert_eq!(result.applied_entries, 1);
+        assert!(database.get_item("checkpoint-only").unwrap().is_some());
+        assert_eq!(
+            database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+            Some((
+                1,
+                checkpoint_digest_for_generation(
+                    &decode_checkpoint_head(
+                        &store
+                            .objects
+                            .lock()
+                            .unwrap()
+                            .get(CHECKPOINT_HEAD_KEY)
+                            .unwrap()
+                            .clone(),
+                        None,
+                    )
+                    .unwrap(),
+                    1,
+                )
+                .unwrap()
+            ))
+        );
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn corrupt_current_checkpoint_falls_back_to_previous_generation() {
+        let store = MemoryStore::default();
+        let source_device = "11111111-1111-4111-8111-111111111111";
+        let source_epoch = "22222222-2222-4222-8222-222222222222";
+        let previous = Checkpoint {
+            generation: 1,
+            vector: vec![DeviceCursor {
+                device_id: source_device.to_string(),
+                epoch: source_epoch.to_string(),
+                sequence: 0,
+                last_segment_key: None,
+            }],
+            mutations: super::super::MutationBatch {
+                upserts: vec![replicated_text(
+                    "previous-only",
+                    "previous",
+                    100,
+                    source_device,
+                )],
+                tombstones: Vec::new(),
+            },
+        };
+        let previous_ref = insert_checkpoint(&store, &previous);
+        let current = Checkpoint {
+            generation: 2,
+            vector: previous.vector.clone(),
+            mutations: super::super::MutationBatch {
+                upserts: vec![replicated_text(
+                    "current-only",
+                    "current",
+                    200,
+                    source_device,
+                )],
+                tombstones: Vec::new(),
+            },
+        };
+        let current_ref = insert_checkpoint(&store, &current);
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(current_ref.key.clone(), b"corrupt".to_vec());
+        insert_checkpoint_head(&store, &current, current_ref, Some(previous_ref.clone()));
+        let paths = temp_paths("checkpoint-fallback");
+        let database = Database::open(&paths.database).unwrap();
+
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert!(database.get_item("previous-only").unwrap().is_some());
+        assert!(database.get_item("current-only").unwrap().is_none());
+        assert_eq!(
+            database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+            Some((1, previous_ref.sha256))
+        );
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn missing_segment_chain_recovers_from_newer_checkpoint() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("gap-source");
+        let target_paths = temp_paths("gap-target");
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        source.save_item(&text_item("initial", "initial")).unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        source.save_item(&text_item("segment-one", "one")).unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        source.save_item(&text_item("segment-two", "two")).unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        source
+            .save_item(&text_item("segment-three", "three"))
+            .unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+
+        let source_id = source.get_sync_device_id().unwrap();
+        let state = source
+            .get_or_create_sync_remote_state(REMOTE_SCOPE)
+            .unwrap();
+        let second_segment_key = store
+            .objects
+            .lock()
+            .unwrap()
+            .keys()
+            .filter(|key| key.starts_with(&segment_prefix(&source_id, &state.epoch).unwrap()))
+            .find(|key| parse_segment_key(key).unwrap().first_sequence == 2)
+            .cloned()
+            .unwrap();
+        store.objects.lock().unwrap().remove(&second_segment_key);
+        let checkpoint = Checkpoint {
+            generation: 1,
+            vector: vec![DeviceCursor {
+                device_id: source_id.clone(),
+                epoch: state.epoch.clone(),
+                sequence: 3,
+                last_segment_key: state.last_segment_key.clone(),
+            }],
+            mutations: source.export_sync_snapshot().unwrap().mutations,
+        };
+        let reference = insert_checkpoint(&store, &checkpoint);
+        insert_checkpoint_head(&store, &checkpoint, reference, None);
+
+        let recovered = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+
+        assert!(recovered.downloaded_entries >= 4);
+        for id in ["initial", "segment-one", "segment-two", "segment-three"] {
+            assert!(target.get_item(id).unwrap().is_some(), "missing item {id}");
+        }
+        assert_eq!(
+            target
+                .get_sync_cursor(REMOTE_SCOPE, &source_id)
+                .unwrap()
+                .unwrap()
+                .sequence,
+            3
+        );
 
         drop(source);
         drop(target);

@@ -157,6 +157,15 @@ For each remote head:
 5. fetch and validate missing resources before changing database paths;
 6. apply all mutations and advance that device cursor in one SQLite transaction.
 
+Segment ranges must be continuous: the next object begins at exactly `cursor.sequence + 1`.
+Missing/overlapping ranges, an unavailable bootstrap snapshot, or another incomplete chain triggers
+a forced global-checkpoint apply and one pull retry. A database with no peer cursors applies the
+current checkpoint before scanning heads, so a fresh fourth device does not need compacted peer
+history. Checkpoint mutation state, the complete cursor vector, generation and digest commit in one
+SQLite transaction. If the current immutable checkpoint is corrupt or missing, the retained
+previous checkpoint is tried; ordinary devices with cursors do not download checkpoint bodies on
+idle runs.
+
 Objects newer than the downloaded head are ignored until a later run. This makes the head the
 publication barrier and prevents observing a partially uploaded batch.
 

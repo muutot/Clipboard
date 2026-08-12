@@ -46,6 +46,12 @@ pub struct ParsedSegmentKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedCheckpointKey {
+    pub generation: u64,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedResourceKey {
     pub category: ResourceCategory,
     pub sha256: String,
@@ -210,6 +216,32 @@ pub fn checkpoint_object_key(generation: u64, sha256: &str) -> Result<String, St
     ))
 }
 
+pub fn parse_checkpoint_key(key: &str) -> Result<ParsedCheckpointKey, String> {
+    let filename = key
+        .strip_prefix("v1/checkpoints/")
+        .ok_or_else(|| "checkpoint key has an invalid layout".to_string())?;
+    let stem = filename
+        .strip_suffix(".pack")
+        .ok_or_else(|| "checkpoint key must end in .pack".to_string())?;
+    let (generation, sha256) = stem
+        .split_once('-')
+        .ok_or_else(|| "checkpoint key is missing its digest".to_string())?;
+    if generation.len() != SEQUENCE_WIDTH || !generation.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("checkpoint generation must be fixed-width decimal".to_string());
+    }
+    let generation = generation
+        .parse::<u64>()
+        .map_err(|_| "checkpoint generation is out of range".to_string())?;
+    validate_digest(sha256)?;
+    if checkpoint_object_key(generation, sha256)? != key {
+        return Err("checkpoint key is not canonical".to_string());
+    }
+    Ok(ParsedCheckpointKey {
+        generation,
+        sha256: sha256.to_string(),
+    })
+}
+
 pub fn resource_object_key(
     category: ResourceCategory,
     sha256: &str,
@@ -316,6 +348,18 @@ mod tests {
         assert_eq!(parse_head_key(&key).unwrap(), DEVICE);
         assert!(parse_head_key("v3/heads/device.bin").is_err());
         assert!(parse_head_key(&format!("v1/heads/{}.BIN", DEVICE)).is_err());
+    }
+
+    #[test]
+    fn checkpoint_keys_round_trip_with_fixed_width_generation() {
+        let key = checkpoint_object_key(42, DIGEST).unwrap();
+        let parsed = parse_checkpoint_key(&key).unwrap();
+        assert_eq!(parsed.generation, 42);
+        assert_eq!(parsed.sha256, DIGEST);
+        assert!(parse_checkpoint_key(&format!("v1/checkpoints/42-{DIGEST}.pack")).is_err());
+        assert!(
+            parse_checkpoint_key(&format!("v1/checkpoints/{:020}-{}.pack", 0, DIGEST)).is_err()
+        );
     }
 
     #[test]
