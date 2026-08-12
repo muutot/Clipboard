@@ -1,6 +1,7 @@
 ﻿<script lang="ts">
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import SearchField from "$lib/components/SearchField.svelte";
   import {
     configureIgnoredApplications,
     getApplicationFilterSettings,
@@ -161,10 +162,13 @@
             onclick={loadSettings}>&#x21bb;</button
           >
         </div>
-        <label class="search-field">
-          <AppIcon name="search" size={15} />
-          <input bind:value={availableSearch} placeholder={_t("capture.searchApps")} />
-        </label>
+        <SearchField
+          value={availableSearch}
+          oninput={(v) => (availableSearch = v)}
+          placeholder={_t("capture.searchApps")}
+          ariaLabel={_t("capture.searchApps")}
+          margin="9px 0"
+        />
         <div class="application-list">
           {#each visibleAvailable as application}
             <button
@@ -207,10 +211,13 @@
           >
           <span class="plus-mark">+</span>
         </div>
-        <label class="search-field">
-          <AppIcon name="search" size={15} />
-          <input bind:value={ignoredSearch} placeholder={_t("capture.searchIgnored")} />
-        </label>
+        <SearchField
+          value={ignoredSearch}
+          oninput={(v) => (ignoredSearch = v)}
+          placeholder={_t("capture.searchIgnored")}
+          ariaLabel={_t("capture.searchIgnored")}
+          margin="9px 0"
+        />
         <div class="manual-add">
           <input
             bind:value={manualApplication}
@@ -321,18 +328,6 @@
     background: transparent;
     font-size: var(--font-size-base, 14px);
   }
-  .search-field {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    margin: 9px 0;
-    padding: 7px 9px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-faint);
-    background: var(--input-bg);
-  }
-  .search-field input,
   .manual-add input {
     min-width: 0;
     flex: 1;
