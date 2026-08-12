@@ -138,7 +138,7 @@
 
 1. 读取 `current.json` 或列出 snapshot，判断 epoch/快照是否需要切换。
 2. 对每个已知 peer 读取 `latest/{device_id}.json` 或列出 changelog 前缀，按 `sync_cursors` 下载缺失 segment。
-3. 校验 sha256/size 后解析，按 `(modified_at_ms, writer_device_id, change_seq)` 仲裁是否应用。
+3. 校验 sha256/size 后解析，按 `(modified_at_ms, writer_device_id, change_seq)` 仲裁是否应用；应用 upsert 前先比较 tombstone，tombstone 版本更新则拒绝该 upsert。
 4. 应用期间设置 `sync_suppress_changelog`，防止远端变更回环成新的出站 op；批量事务写入并依赖触发器增量更新搜索索引；远端记录落地时 `last_used_at_ms = created_at_ms`。
 5. 每批成功后推进 peer cursor；blob 不在此阶段下载，只登记待下载资源。
 
@@ -160,8 +160,9 @@
 1. 每次本地变更应用结束或按清理周期检查 `deleted = 0` 计数；超过 scope 级 `max_items` 时按 `(created_at_ms, id)` 选择最旧的非收藏记录作为候选。
 2. 驱逐走当前存储的硬删除路径，同一事务内写入 tombstone/outbox；小规模驱逐作为普通 delete op 发布，大范围驱逐见 5.6；重复驱逐必须幂等。
 3. 保留期清理同样走 scope 级 `retention_days`，所有设备按同一阈值删除，避免旧记录在设备间反复复活。
-4. 用户手动删除仍走软删除 + 回收站；回收站内恢复产生更新的 upsert，可覆盖 tombstone。
+4. 用户手动删除仍走软删除 + 回收站；恢复产生更新版本的 upsert，并写入 `restored_at_ms` 作为保留期锚点；保留期年龄按 `MAX(created_at_ms, restored_at_ms)` 计算，避免恢复后立即被再次删除。
 5. 永久删除后由本地孤儿清理删除无引用 blob；远端 blob 只有在快照/segment 均无引用且所有设备 ack 后才 GC。
+6. tombstone 保留到所有 peer ack + 快照确认 + 缓冲期（建议 7 天）后才清理；应用远端 upsert 前先比较 tombstone，tombstone 更新则拒绝该 upsert。
 
 ### 5.6 大范围驱逐收敛
 
@@ -169,8 +170,9 @@
 
 1. 任何设备都可在本地按 scope 规则完成驱逐，不设唯一发布者；发布前检查候选删除是否已在 outbox 中存在，只发布新增删除对应的紧凑标记，含 `evictionVersion`、`ruleVersion`、`scopeMaxItems`、`appliedAtMs`。
 2. 在线端收到标记后不下载逐条 tombstone；记录已处理的最大 `evictionVersion`，相同或更旧标记跳过；新标记按同一确定性规则在本地执行驱逐，并把结果登记为待发布/待快照状态。
-3. 下一次快照在驱逐完成后生成，固化剩余 live 记录与驱逐 tombstone，作为新设备/离线设备的引导基线。
+3. 大范围驱逐完成后立即生成快照（不等常规调度）；快照记录 `evictionVersion` 与各设备已发布 seq，固化剩余 live 记录与驱逐 tombstone，作为新设备/离线设备的引导基线。
 4. 快照确认且 peer ack 后，驱逐前的旧 segment 与冗余 tombstone 可 GC。
+5. 新设备/离线设备只从最新快照 + 快照之后的 segment 引导，游标直接跳到快照已包含的 seq，不重放驱逐前历史。
 
 小规模驱逐（如 < 1000 条）继续走 5.5 的普通 delete op，避免等待快照。
 
@@ -222,8 +224,10 @@
   - 验收：策略文档 + 配置读写测试覆盖不同设备配置的归一化。
 - [ ] 同步开启后统一容量/保留设置：`max_items`、`retention_days`、`recycle_bin_days` 改由 scope 级配置生效；同步设置页新增这三条设置，原 `StorageSettingsDialog` 的三条在同步开启时禁用并显示提示，不隐藏；首次开启同步前必须用户确认，确认后才启用 S3。
   - 验收：开启同步后本地 history 设置不可写并显示来源提示；关闭同步后恢复可编辑；配置读写测试覆盖归一化与回写。
-- [ ] 定义驱逐与回收站语义：容量/保留驱逐按 `(created_at_ms, id)` 确定性硬删除并生成 tombstone；用户删除走软删除/回收站；恢复生成更新的 upsert。
-  - 验收：模拟超限、保留到期、回收站恢复的收敛测试，无复活、无重复 tombstone。
+- [ ] 定义驱逐与回收站语义：容量/保留驱逐按 `(created_at_ms, id)` 确定性硬删除并生成 tombstone；用户删除走软删除/回收站；恢复生成更新版本 upsert 并写入 `restored_at_ms` 保留期锚点；保留期年龄按 `MAX(created_at_ms, restored_at_ms)` 计算。
+  - 验收：模拟超限、保留到期、回收站恢复的收敛测试，无复活、无重复 tombstone；恢复后不会立即被保留期再次删除。
+- [ ] 定义 tombstone 生命周期：保留到所有 peer ack + 快照确认 + 缓冲期（建议 7 天）后才清理；应用 upsert 前先比较 tombstone，tombstone 更新则拒绝。
+  - 验收：离线设备晚到不复活；tombstone 清理后数量有界。
 - [ ] 定义大范围驱逐标记：wire 协议新增紧凑驱逐 op/标记，含 `evictionVersion`、`ruleVersion`、`scopeMaxItems`、`appliedAtMs`；所有设备均可发布，不设唯一发布者；与逐条 delete op 并存。
   - 验收：serde 单测 + 协议文档；200k 驱逐不产生 200k 条 delete op；重复标记按版本去重。
 - [ ] 定义图片哈希规范：明确 blob key 使用 raw 还是 normalized hash；同图不同编码是否跨机去重；`content_hash` 与本地文件名/远端 key 的映射。
@@ -262,8 +266,8 @@
   - 验收：重启后 outbox 大小有界，无重复出站。
 - [ ] 发布节流与触发：间隔/手动/立即同步，后台 worker 不阻塞 UI。
   - 验收：200 条/日场景满足第 6 节流量目标，UI 交互无卡顿。
-- [ ] 大范围驱逐发布：超过阈值（建议单批 > 1000 条）时只发布驱逐标记，不逐条上传 delete op；发布前检查 outbox 已有同批删除则跳过；小规模驱逐仍逐条。
-  - 验收：mock 断言 200k 驱逐只产生 1 个标记对象与后续快照，无逐条 delete segment；两台设备同时驱逐不重复发布同批 tombstone。
+- [ ] 大范围驱逐发布：超过阈值（建议单批 > 1000 条）时只发布驱逐标记，不逐条上传 delete op；发布前检查 outbox 已有同批删除则跳过；驱逐完成后触发即时快照；小规模驱逐仍逐条。
+  - 验收：mock 断言 200k 驱逐只产生 1 个标记对象 + 1 个即时快照，无逐条 delete segment；两台设备同时驱逐不重复发布同批 tombstone。
 
 ### 阶段 3：拉取端
 
@@ -275,8 +279,8 @@
   - 验收：200 条应用 p95 < 1 s；应用远端变更后不产生回环出站 op。
 - [ ] 拉取应用后超限处理：应用远端记录导致本地计数超过 scope 上限时，在同一批事务内按同一候选规则驱逐并登记待发布 tombstone。
   - 验收：拉取 300k 后按策略降到上限；驱逐不产生回环出站 op。
-- [ ] 驱逐标记应用：收到标记后校验 `evictionVersion`/`ruleVersion`，记录已处理的最大版本，相同或更旧标记跳过；新标记按同一确定性规则本地驱逐并登记待发布状态；不依赖下载逐条 tombstone。
-  - 验收：3 台设备不同时刻收到标记后候选集一致，无删除风暴；重复/乱序标记不重复应用。
+- [ ] 驱逐标记应用：收到标记后校验 `evictionVersion`/`ruleVersion`，记录已处理的最大版本，相同或更旧标记跳过；新标记按同一确定性规则本地驱逐并登记待发布状态；不依赖下载逐条 tombstone；离线设备恢复时只从最新快照引导，不重放驱逐前历史。
+  - 验收：3 台设备不同时刻收到标记后候选集一致，无删除风暴；重复/乱序标记不重复应用；离线设备恢复不重放驱逐前历史。
 - [ ] 冲突与别名：`UNIQUE(kind, content_hash)` 冲突合并到别名表；删除不复活；落后设备旧版本不覆盖新版本。
   - 验收：3 台设备乱序/离线测试最终一致。
 - [ ] blob 按需下载：打开/预览时按哈希检查并下载，校验后原子落盘；并发去重；失败显示占位。
@@ -288,15 +292,15 @@
 
 - [ ] 快照生成：在单一事务快照上读取 live 记录 + tombstone + 标签 + 各设备已发布 seq 地图，gzip + sha256。
   - 验收：由快照可重建与源库一致的状态；生成过程不会读到半应用状态。
-- [ ] 快照调度与指针切换：按日或变更阈值生成，`current.json` 单调前进，上传成功后才切换。
+- [ ] 快照调度与指针切换：按日或变更阈值生成；大范围驱逐完成后立即生成；`current.json` 单调前进，上传成功后才切换。
   - 验收：新快照 seq 大于旧快照，指针指向已确认对象。
-- [ ] 新设备引导：`current.json` + 最新 snapshot + 后续增量，不重放全部历史。
-  - 验收：从空库到 300k 条只下载 1 个 snapshot 与增量，流量满足目标。
+- [ ] 新设备引导：`current.json` + 最新 snapshot + 后续增量，游标直接跳到快照已包含的 seq，不重放驱逐前历史。
+  - 验收：从空库到 300k 条只下载 1 个 snapshot 与增量；驱逐前历史不被重放，流量满足目标。
 - [ ] 快照损坏回退：checksum 失败回退上一版本；旧 snapshot 保留一个版本。
   - 验收：模拟损坏后引导成功。
 - [ ] 快照清理与生命周期：保留最新与上一版，旧增量按 ack/保留期删除。
   - 验收：桶对象数量与元数据大小有界。
-- [ ] 快照固化驱逐：快照内容基于驱逐后的状态生成，包含驱逐 tombstone；快照确认 + peer ack 后 GC 驱逐前的旧 segment。
+- [ ] 快照固化驱逐：快照基于驱逐后的状态生成，记录 `evictionVersion` 与各设备已发布 seq，包含驱逐 tombstone；快照确认 + peer ack 后 GC 驱逐前的旧 segment。
   - 验收：离线设备从新快照引导后不重放驱逐前历史。
 - [ ] 首次开启存量种子：本地存量记录生成初始快照/批量 segment 上传；与远端快照做首轮合并后按容量策略驱逐。
   - 验收：100k 存量启用同步后只上传 1 个初始快照 + 缺失 blob；合并无丢失。
@@ -330,7 +334,7 @@
   - 验收：设置页集成测试与视觉检查；关闭同步后三条恢复可用；按仓库 settings style gate 执行。
 - [ ] 设备管理与 ack 超时：列出在线/离线设备，支持移除设备、轮换 epoch；默认离线 30 天视为离线，ack 型 GC 对移除或超时设备跳过等待。
   - 验收：移除设备后 GC 可继续；默认 30 天离线配置生效；重新加入设备从快照引导。
-- [ ] 本地 tombstone 清理：在快照确认 + peer ack + 保留期后清理本地 tombstone；远端 tombstone 随快照压缩。
+- [ ] 本地 tombstone 清理：在快照确认 + 所有 peer ack + 缓冲期（建议 7 天）后清理本地 tombstone；远端 tombstone 随快照压缩。
   - 验收：持续同步后 tombstone 数量有界。
 - [ ] S3 Event Notification/SQS 推送，减少轮询。
   - 验收：推送模式下轮询请求数为 0。
@@ -351,6 +355,4 @@
 ## 9. 风险与待决问题
 
 - [待基准] 300k 记录 snapshot 的压缩比与引导耗时仍需基准后定调度周期。
-- [暂缓] 保留期与恢复窗口的交互：暂时跳过。
-- [暂缓] 驱逐标记发布后、快照完成前的离线恢复窗口：暂时跳过。
 - [暂缓] 首次开启存量合并流量优化：暂时跳过。
