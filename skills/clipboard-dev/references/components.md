@@ -96,7 +96,7 @@ This is the settings shell and an integration hotspot. It owns:
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
 - the typed `settings-navigation.ts::SETTINGS_NAV_GROUP_DEFINITIONS` descriptor that drives primary buttons, secondary tabs, active-group matching, section title/description metadata, and breadcrumb resolution; section state reuses its `SettingsSection`/`StatisticsTab` types rather than declaring a parallel union;
 - composition of child settings panels with `showHeader={false}`;
-- eager loading of the default `GeneralSettingsPanel`; compact/font/theme/icon-color/ignored-app/tag/keyboard/statistics panels are dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk;
+- eager loading of the default `GeneralSettingsPanel`; compact/font/theme/icon-color/ignored-app/tag/keyboard/statistics/about panels are dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
 - S3-only v1 configuration, connection testing, encryption, automatic/manual sync, immutable-segment sizing, and resource limits; no remote-backup or compaction UI remains;
 - the built-in About section: app version, an update-source dropdown (GitHub/GitCode, persisted via `updateSource`), and update check via `checkForUpdate()`/`update.ts`, with up-to-date/available/error states; when an update is available with release notes, a compact "View Details" button opens `UpdateDialog` to render the notes as markdown;
@@ -121,6 +121,8 @@ Every child panel accepts `onclose` and optional `showHeader`. The parent must r
 `GeneralSettingsPanel` remains an eager import because it is the initial section. Other child panels are loaded through the matching cached loader in `StorageSettingsDialog`; keep the pending/error render paths and the concrete module type so panel props remain checked. Settings-search result navigation already polls for asynchronously mounted cards.
 
 `StatisticsSettingsPanel.svelte` is the lazy child for the Statistics category. The shell passes `activeTab` (`StatisticsTab`), `status`, `loading`, `onrefreshStatus`, and `onclose`; the panel owns performance metrics, memory diagnostics, browser-memory snapshots, debounced event refreshes, and the 3-second memory polling, cleaning up listeners and intervals on unmount. It reuses the shared `.settings-state` empty state, so the statistics-only styles live in the panel while the empty-state rule stays in `settings-shared.css`.
+
+`AboutSettingsPanel.svelte` is the lazy child for the About category. The shell keeps loading `appVersion`/`appExecutablePath` for the sidebar brand and passes them in; the panel owns the update-source select, release-notes/update checks, and `UpdateDialog` state, plus its scoped about styles. Moving the update service and dialog out of the shell keeps them out of the initial settings chunk.
 
 ## Shared utility components
 

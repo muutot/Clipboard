@@ -42,8 +42,6 @@
     type ImportFormatInfo,
     type SyncConfig,
   } from "$lib/services/storage";
-  import { checkForUpdate, getRelease, type UpdateInfo } from "$lib/services/update";
-  import UpdateDialog from "$lib/components/UpdateDialog.svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import { messages, resolvePath } from "$lib/i18n";
   import {
@@ -105,6 +103,8 @@
     Promise<typeof import("$lib/components/KeyboardSettingsPanel.svelte")> | undefined;
   let statisticsSettingsPanelModule:
     Promise<typeof import("$lib/components/StatisticsSettingsPanel.svelte")> | undefined;
+  let aboutSettingsPanelModule:
+    Promise<typeof import("$lib/components/AboutSettingsPanel.svelte")> | undefined;
 
   function loadCompactSettingsPanel() {
     return (compactSettingsPanelModule ??= import("$lib/components/CompactSettingsPanel.svelte"));
@@ -140,6 +140,10 @@
   function loadStatisticsSettingsPanel() {
     return (statisticsSettingsPanelModule ??=
       import("$lib/components/StatisticsSettingsPanel.svelte"));
+  }
+
+  function loadAboutSettingsPanel() {
+    return (aboutSettingsPanelModule ??= import("$lib/components/AboutSettingsPanel.svelte"));
   }
 
   let { open, onclose, standalone = false }: Props = $props();
@@ -727,13 +731,6 @@
 
   let appVersion = $state("");
   let appExecutablePath = $state("");
-  let checkingUpdate = $state(false);
-  let updateResult = $state<UpdateInfo | null>(null);
-  let updateError = $state("");
-  let showUpdateDialog = $state(false);
-  let dialogMode: "current" | "available" = $state("available");
-  let loadingRelease = $state(false);
-
   let syncProvider = $state<"off" | "s3">("off");
   let syncEndpoint = $state("");
   let syncRemotePath = $state("");
@@ -884,44 +881,6 @@
     } catch (error) {
       console.error("Unable to read runtime info", error);
     }
-  }
-
-  async function handleViewRelease(): Promise<void> {
-    if (!isTauriRuntime() || loadingRelease || !appVersion) return;
-    loadingRelease = true;
-    try {
-      updateResult = await getRelease(appVersion);
-      dialogMode = "current";
-      showUpdateDialog = true;
-    } catch (error) {
-      updateError = error instanceof Error ? error.message : String(error);
-    } finally {
-      loadingRelease = false;
-    }
-  }
-
-  async function handleCheckUpdate(): Promise<void> {
-    if (!isTauriRuntime() || checkingUpdate) return;
-    checkingUpdate = true;
-    updateResult = null;
-    updateError = "";
-    try {
-      updateResult = await checkForUpdate();
-      if (updateResult.updateAvailable) {
-        dialogMode = "available";
-        showUpdateDialog = true;
-      }
-    } catch (error) {
-      updateError = error instanceof Error ? error.message : String(error);
-    } finally {
-      checkingUpdate = false;
-    }
-  }
-
-  function formatUpdateDate(value: string | null): string {
-    if (!value) return "";
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
   }
 
   let ocrEngine = $state("ppocr");
@@ -2181,104 +2140,14 @@
         {@render settingsPanelLoadFailed()}
       {/await}
     {:else if activeSection === "about"}
-      <div class="settings-scroll">
-        <section class="setting-card toggle-card" data-settings-search-id="about.info">
-          <div class="setting-heading">
-            <span class="brand-icon"><AppIcon name="clipboard" size={18} /></span>
-            <div>
-              <strong>{_t("app.name")}</strong>
-              <p>{_t("about.versionLabel", { version: appVersion })}</p>
-            </div>
-          </div>
-          <div class="about-update-controls">
-            <CustomSelect
-              value={$generalSettings.updateSource}
-              ariaLabel={_t("about.updateSource")}
-              options={[
-                { value: "gitcode", label: _t("about.updateSourceGitcode") },
-                { value: "github", label: _t("about.updateSourceGithub") },
-              ]}
-              onchange={(v) =>
-                generalSettings.updateSetting("updateSource", v as "gitcode" | "github")}
-            />
-            <button
-              type="button"
-              class="settings-action-btn"
-              disabled={!appVersion || loadingRelease}
-              onclick={handleViewRelease}
-            >
-              {loadingRelease ? _t("about.loadingReleaseNotes") : _t("about.releaseNotes")}
-            </button>
-            <button
-              type="button"
-              class="settings-action-btn"
-              disabled={checkingUpdate}
-              onclick={handleCheckUpdate}
-            >
-              {checkingUpdate ? _t("about.checking") : _t("about.checkUpdate")}
-            </button>
-          </div>
-        </section>
-
-        <section class="setting-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-            <div>
-              <strong>{_t("about.executablePathTitle")}</strong>
-              <p class="about-path">{appExecutablePath || _t("about.executablePathEmpty")}</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="setting-card toggle-card">
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="code" size={17} /></span>
-            <div>
-              <strong>{_t("about.repoTitle")}</strong>
-              <p>{_t("about.repoDesc")}</p>
-            </div>
-          </div>
-          <div class="about-update-controls">
-            <button
-              type="button"
-              class="settings-action-btn"
-              onclick={() =>
-                invoke("open_external_url", { url: "https://github.com/muutot/Clipboard" })}
-            >
-              GitHub
-            </button>
-            <button
-              type="button"
-              class="settings-action-btn"
-              onclick={() =>
-                invoke("open_external_url", { url: "https://gitcode.com/m2u/Clipboard" })}
-            >
-              GitCode
-            </button>
-          </div>
-        </section>
-
-        {#if updateResult}
-          {#if !updateResult.updateAvailable}
-            <div class="about-update-state" role="status">
-              <AppIcon name="check" size={14} />
-              <span>{_t("about.upToDate")}</span>
-            </div>
-          {/if}
-        {:else if updateError}
-          <div class="about-update-state about-update-state--fail" role="alert">
-            <AppIcon name="x" size={14} />
-            <span>{_t("about.checkFailed", { error: updateError })}</span>
-          </div>
-        {/if}
-        {#if showUpdateDialog && updateResult}
-          <UpdateDialog
-            result={updateResult}
-            mode={dialogMode}
-            onclose={() => (showUpdateDialog = false)}
-          />
-        {/if}
-      </div>
+      {#await loadAboutSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel {appVersion} {appExecutablePath} {onclose} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
     {:else}
       {#if loading}
         <div class="settings-state">{_t("storage.readingConfig")}</div>
@@ -3096,9 +2965,6 @@
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
     background: var(--hover-bg);
-  }
-
-  .brand-icon {
     width: 32px;
     height: 32px;
     border-radius: 9px;
@@ -3676,22 +3542,6 @@
       monospace;
   }
 
-  .about-update-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-  }
-
-  .about-update-controls :global(.settings-select) {
-    height: 34px;
-  }
-
-  .about-path {
-    overflow-wrap: anywhere;
-    word-break: break-all;
-  }
-
   .icon-select-all {
     display: flex;
     align-items: center;
@@ -4076,25 +3926,6 @@
     color: var(--text-muted);
     font-size: var(--settings-description-size);
     flex-shrink: 0;
-  }
-
-  .about-update-state {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    padding: 7px 10px;
-    border: 1px solid color-mix(in srgb, var(--success-color) 35%, transparent);
-    border-radius: var(--settings-control-radius);
-    color: color-mix(in srgb, var(--success-color) 75%, white);
-    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
-    font-size: var(--settings-description-size);
-  }
-
-  .about-update-state--fail {
-    border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
   }
 
   @media (max-width: 560px) {
