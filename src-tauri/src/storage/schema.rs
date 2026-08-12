@@ -417,6 +417,7 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             SELECT 1 FROM sync_metadata
             WHERE key = 'sync_suppress_changelog' AND value = '1'
         )
+        AND OLD.deleted = 0
         BEGIN
             INSERT INTO sync_tombstones
                 (item_id, kind, content_hash, deleted_at_ms, modified_at_ms, writer_device_id)

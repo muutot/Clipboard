@@ -98,6 +98,11 @@ that field neither advance the record version nor enter the sync outbox. Exporte
 segments clear it; a remotely inserted row initializes it from `created_at_ms`, while later remote
 content updates preserve the receiving device's current value.
 
+Soft deletion is the replicated mutation boundary. Its trigger writes the winning tombstone and one
+outbox delete; later permanent removal of an already-deleted row only reclaims local SQLite/resource
+state and does not enqueue the same delete again. A direct hard delete of an active row remains a
+replicated delete so non-recycle-bin cleanup paths cannot silently lose convergence.
+
 ## Bootstrap
 
 Bootstrap order is intentionally upload-first so an existing local collection is not confused

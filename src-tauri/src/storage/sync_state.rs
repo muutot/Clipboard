@@ -1614,7 +1614,9 @@ mod tests {
             .save_item(&item("deleted", "hash-deleted", "deleted"))
             .unwrap();
         assert!(database.soft_delete("deleted").unwrap());
+        let before_purge = database.count_sync_outbox().unwrap();
         assert!(database.permanently_delete("deleted").unwrap());
+        assert_eq!(database.count_sync_outbox().unwrap(), before_purge);
 
         let snapshot = database.export_sync_snapshot().unwrap();
         assert!(snapshot.mutations.upserts.is_empty());
@@ -1624,6 +1626,67 @@ mod tests {
             snapshot.mutations.tombstones[0].content_hash,
             "hash-deleted"
         );
+    }
+
+    #[test]
+    fn purging_a_remote_tombstone_does_not_echo_a_delete() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        database
+            .save_item(&item(
+                "remote-deleted",
+                "hash-remote-deleted",
+                "remote deleted",
+            ))
+            .unwrap();
+        database.acknowledge_sync_outbox(1).unwrap();
+        let remote_delete_version = current_time_ms() + 10_000;
+        let delete = MutationBatch {
+            upserts: Vec::new(),
+            tombstones: vec![Tombstone {
+                item_id: "remote-deleted".to_string(),
+                kind: ClipboardKind::Text,
+                content_hash: "hash-remote-deleted".to_string(),
+                deleted_at_ms: remote_delete_version,
+                version: RecordVersion {
+                    modified_at_ms: remote_delete_version,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            }],
+        };
+        database
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(1, None), "a", &delete)
+            .unwrap();
+
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        assert!(database.permanently_delete("remote-deleted").unwrap());
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        let snapshot = database.export_sync_snapshot().unwrap();
+        assert_eq!(snapshot.mutations.tombstones.len(), 1);
+        assert_eq!(
+            snapshot.mutations.tombstones[0].version.writer_device_id,
+            REMOTE_DEVICE
+        );
+    }
+
+    #[test]
+    fn deleting_an_active_row_directly_still_publishes_a_tombstone() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        database
+            .save_item(&item(
+                "direct-delete",
+                "hash-direct-delete",
+                "direct delete",
+            ))
+            .unwrap();
+        database.acknowledge_sync_outbox(1).unwrap();
+
+        assert!(database.delete_item("direct-delete").unwrap());
+        assert_eq!(database.count_sync_outbox().unwrap(), 1);
+        let snapshot = database.export_sync_snapshot().unwrap();
+        assert_eq!(snapshot.mutations.tombstones.len(), 1);
+        assert_eq!(snapshot.mutations.tombstones[0].item_id, "direct-delete");
     }
 
     #[test]
