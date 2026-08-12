@@ -261,17 +261,6 @@
 
       <section class="setting-card stats-metric-card">
         <div class="setting-heading stats-metric-heading">
-          <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-          <div class="stats-metric-copy">
-            <strong>{_t("storage.dbMigrateTime")}</strong>
-            <p>{_t("storage.dbMigrateTimeDesc")}</p>
-          </div>
-        </div>
-        <span class="stats-metric-value">{perfMetrics.startup.migrationsMs}ms</span>
-      </section>
-
-      <section class="setting-card stats-metric-card">
-        <div class="setting-heading stats-metric-heading">
           <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
           <div class="stats-metric-copy">
             <strong>{_t("storage.uptime")}</strong>

@@ -324,8 +324,6 @@ const en: LocaleDefinition = {
     dbOpenTimeDesc: "Time to open local SQLite database",
     searchInitTime: "Search Initialization",
     searchInitTimeDesc: "Time to load search index",
-    dbMigrateTime: "Database Migration",
-    dbMigrateTimeDesc: "Time for startup data migration",
     uptime: "Uptime",
     uptimeDesc: "How long this app process has been running",
     memoryPeak: "Peak Memory",

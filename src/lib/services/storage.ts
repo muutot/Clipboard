@@ -54,7 +54,6 @@ export interface PerformanceMetrics {
     totalStartupMs: number;
     dbOpenMs: number;
     searchInitMs: number;
-    migrationsMs: number;
   };
   searchLatency: {
     searchesRecorded: number;

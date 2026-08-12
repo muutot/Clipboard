@@ -300,8 +300,6 @@ export interface LocaleDefinition {
     dbOpenTimeDesc: string;
     searchInitTime: string;
     searchInitTimeDesc: string;
-    dbMigrateTime: string;
-    dbMigrateTimeDesc: string;
     uptime: string;
     uptimeDesc: string;
     memoryPeak: string;

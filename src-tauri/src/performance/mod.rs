@@ -69,14 +69,13 @@ pub struct StartupMetrics {
     pub total_startup_ms: u64,
     pub db_open_ms: u64,
     pub search_init_ms: u64,
-    pub migrations_ms: u64,
 }
 
 impl StartupMetrics {
     pub fn log_summary(&self) {
         eprintln!(
-            "[perf] startup: {}ms (db: {}ms, search: {}ms, migrations: {}ms)",
-            self.total_startup_ms, self.db_open_ms, self.search_init_ms, self.migrations_ms
+            "[perf] startup: {}ms (db: {}ms, search: {}ms)",
+            self.total_startup_ms, self.db_open_ms, self.search_init_ms
         );
     }
 }
@@ -101,14 +100,13 @@ impl StartupTimer {
         elapsed
     }
 
-    pub fn finish(mut self, search_init_ms: u64, migrations_ms: u64) -> StartupMetrics {
+    pub fn finish(mut self, search_init_ms: u64) -> StartupMetrics {
         let total = self.start.elapsed();
         let db_open = self.finish_segment();
         StartupMetrics {
             total_startup_ms: total.as_millis() as u64,
             db_open_ms: db_open.as_millis() as u64,
             search_init_ms,
-            migrations_ms,
         }
     }
 }
@@ -370,12 +368,11 @@ mod tests {
         let mut timer = StartupTimer::start();
         std::thread::sleep(Duration::from_millis(10));
         let db_open = timer.finish_segment();
-        let metrics = timer.finish(5, 2);
+        let metrics = timer.finish(5);
 
         assert!(db_open.as_millis() > 0);
         assert!(metrics.total_startup_ms > 0);
         assert_eq!(metrics.search_init_ms, 5);
-        assert_eq!(metrics.migrations_ms, 2);
     }
 
     #[test]

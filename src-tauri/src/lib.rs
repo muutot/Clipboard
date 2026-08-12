@@ -298,13 +298,11 @@ pub fn run() {
             let _search_init_result = SearchSynchronizer::default().initialize(&database, &search_index);
             let search_init_duration = startup_timer.finish_segment();
 
-            let migrations_ms = 0;
             let startup_metrics = StartupMetrics {
                 total_startup_ms: db_open_duration.as_millis() as u64
                     + search_init_duration.as_millis() as u64,
                 db_open_ms: db_open_duration.as_millis() as u64,
                 search_init_ms: search_init_duration.as_millis() as u64,
-                migrations_ms,
             };
             startup_metrics.log_summary();
 

@@ -812,12 +812,6 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "加载搜索索引所需时间",
   ),
   entry(
-    "statistics.performance.migrations",
-    { section: "statistics", statisticsTab: "performance" },
-    "数据库迁移",
-    "启动时执行数据迁移所需时间",
-  ),
-  entry(
     "statistics.performance.uptime",
     { section: "statistics", statisticsTab: "performance" },
     "运行时长",

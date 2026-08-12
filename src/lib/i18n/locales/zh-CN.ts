@@ -307,8 +307,6 @@ const zhCN: LocaleDefinition = {
     dbOpenTimeDesc: "打开本地 SQLite 数据库所需时间",
     searchInitTime: "搜索初始化",
     searchInitTimeDesc: "加载搜索索引所需时间",
-    dbMigrateTime: "数据库迁移",
-    dbMigrateTimeDesc: "启动时执行数据迁移所需时间",
     uptime: "运行时长",
     uptimeDesc: "本次应用进程已运行时间",
     memoryPeak: "内存峰值",
