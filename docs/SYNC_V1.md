@@ -93,6 +93,11 @@ The local database stores the current writer beside each clipboard row and store
 tombstones separately. A remote apply runs in one transaction with changelog suppression enabled,
 updates the search outbox normally, and never echoes the received mutation back to S3.
 
+`last_used_at_ms` is device-local usage state, not replicated record content. Local-only updates to
+that field neither advance the record version nor enter the sync outbox. Exported snapshots and
+segments clear it; a remotely inserted row initializes it from `created_at_ms`, while later remote
+content updates preserve the receiving device's current value.
+
 ## Bootstrap
 
 Bootstrap order is intentionally upload-first so an existing local collection is not confused

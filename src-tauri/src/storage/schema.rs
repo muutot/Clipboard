@@ -361,7 +361,6 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             OR OLD.icon_path IS NOT NEW.icon_path
             OR OLD.size_bytes != NEW.size_bytes
             OR OLD.created_at_ms != NEW.created_at_ms
-            OR OLD.last_used_at_ms IS NOT NEW.last_used_at_ms
             OR OLD.is_favorite != NEW.is_favorite
             OR OLD.deleted != NEW.deleted
             OR OLD.deleted_at_ms IS NOT NEW.deleted_at_ms

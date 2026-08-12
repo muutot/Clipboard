@@ -70,7 +70,6 @@ struct StoredReplicatedItem {
     icon_path: Option<String>,
     size_bytes: i64,
     created_at_ms: i64,
-    last_used_at_ms: Option<i64>,
     is_favorite: bool,
     metadata_json: Option<String>,
     modified_at_ms: i64,
@@ -93,11 +92,10 @@ impl StoredReplicatedItem {
             icon_path: row.get(10)?,
             size_bytes: row.get(11)?,
             created_at_ms: row.get(12)?,
-            last_used_at_ms: row.get(13)?,
-            is_favorite: row.get(14)?,
-            metadata_json: row.get(15)?,
-            modified_at_ms: row.get(16)?,
-            writer_device_id: row.get(17)?,
+            is_favorite: row.get(13)?,
+            metadata_json: row.get(14)?,
+            modified_at_ms: row.get(15)?,
+            writer_device_id: row.get(16)?,
         })
     }
 
@@ -122,7 +120,7 @@ impl StoredReplicatedItem {
                 icon_path: self.icon_path,
                 size_bytes,
                 created_at_ms: self.created_at_ms,
-                last_used_at_ms: self.last_used_at_ms,
+                last_used_at_ms: None,
                 is_favorite: self.is_favorite,
                 metadata_json: self.metadata_json,
             },
@@ -948,13 +946,12 @@ fn apply_mutations(
                         icon_path = ?11,
                         size_bytes = ?12,
                         created_at_ms = ?13,
-                        last_used_at_ms = ?14,
-                        is_favorite = ?15,
-                        metadata_json = ?16,
+                        is_favorite = ?14,
+                        metadata_json = ?15,
                         deleted = 0,
                         deleted_at_ms = NULL,
-                        modified_at_ms = ?17,
-                        sync_writer_device_id = ?18
+                        modified_at_ms = ?16,
+                        sync_writer_device_id = ?17
                   WHERE id = ?1",
                 params![
                     &target_id,
@@ -970,7 +967,6 @@ fn apply_mutations(
                     &replicated.item.icon_path,
                     size_bytes,
                     replicated.item.created_at_ms,
-                    replicated.item.last_used_at_ms,
                     replicated.item.is_favorite,
                     &replicated.item.metadata_json,
                     replicated.version.modified_at_ms,
@@ -986,7 +982,7 @@ fn apply_mutations(
                      is_favorite, metadata_json, deleted, deleted_at_ms,
                      modified_at_ms, sync_writer_device_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-                         ?11, ?12, ?13, ?14, ?15, ?16, 0, NULL, ?17, ?18)",
+                         ?11, ?12, ?13, ?13, ?14, ?15, 0, NULL, ?16, ?17)",
                 params![
                     &target_id,
                     kind,
@@ -1001,7 +997,6 @@ fn apply_mutations(
                     &replicated.item.icon_path,
                     size_bytes,
                     replicated.item.created_at_ms,
-                    replicated.item.last_used_at_ms,
                     replicated.item.is_favorite,
                     &replicated.item.metadata_json,
                     replicated.version.modified_at_ms,
@@ -1277,7 +1272,7 @@ fn load_mutations(
             let item_sql = format!(
                 "SELECT id, kind, title, text_content, html_content, rtf_content,
                         resource_path, preview_path, content_hash, source_app,
-                        icon_path, size_bytes, created_at_ms, last_used_at_ms,
+                        icon_path, size_bytes, created_at_ms,
                         is_favorite, metadata_json,
                         COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
                    FROM clipboard_items
@@ -1314,7 +1309,7 @@ fn load_mutations(
         let mut item_statement = connection.prepare(
             "SELECT id, kind, title, text_content, html_content, rtf_content,
                     resource_path, preview_path, content_hash, source_app,
-                    icon_path, size_bytes, created_at_ms, last_used_at_ms,
+                    icon_path, size_bytes, created_at_ms,
                     is_favorite, metadata_json,
                     COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
                FROM clipboard_items
@@ -1520,6 +1515,95 @@ mod tests {
         assert_eq!(database.acknowledge_sync_outbox(3).unwrap(), 3);
         assert_eq!(database.count_sync_outbox().unwrap(), 0);
         assert_eq!(database.export_sync_snapshot().unwrap().through_sequence, 3);
+    }
+
+    #[test]
+    fn local_last_used_changes_never_enter_the_sync_outbox_or_wire() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let mut local = item("local-usage", "hash-local-usage", "local usage");
+        local.last_used_at_ms = Some(150);
+        database.save_item(&local).unwrap();
+        database.acknowledge_sync_outbox(1).unwrap();
+
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE clipboard_items SET last_used_at_ms = 999 WHERE id = 'local-usage'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        let snapshot = database.export_sync_snapshot().unwrap();
+        assert_eq!(snapshot.mutations.upserts.len(), 1);
+        assert_eq!(snapshot.mutations.upserts[0].item.last_used_at_ms, None);
+        assert_eq!(
+            database
+                .get_item("local-usage")
+                .unwrap()
+                .unwrap()
+                .last_used_at_ms,
+            Some(999)
+        );
+    }
+
+    #[test]
+    fn remote_last_used_value_is_ignored_on_insert_and_update() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let mut remote = replicated(
+            "remote-usage",
+            "hash-remote-usage",
+            "remote usage",
+            RecordVersion {
+                modified_at_ms: 500,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        remote.item.created_at_ms = 100;
+        remote.item.last_used_at_ms = Some(9_999);
+        let first = MutationBatch {
+            upserts: vec![remote.clone()],
+            tombstones: Vec::new(),
+        };
+        database
+            .apply_sync_snapshot(REMOTE_SCOPE, &cursor(1, None), "a", &first)
+            .unwrap();
+        assert_eq!(
+            database
+                .get_item("remote-usage")
+                .unwrap()
+                .unwrap()
+                .last_used_at_ms,
+            Some(100)
+        );
+
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE clipboard_items SET last_used_at_ms = 777 WHERE id = 'remote-usage'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        remote.item.title = "remote update".to_string();
+        remote.item.last_used_at_ms = Some(8_888);
+        remote.version.modified_at_ms = 501;
+        let second = MutationBatch {
+            upserts: vec![remote],
+            tombstones: Vec::new(),
+        };
+        database
+            .apply_sync_segment(REMOTE_SCOPE, &cursor(2, Some("segment-2")), &second)
+            .unwrap();
+        let stored = database.get_item("remote-usage").unwrap().unwrap();
+        assert_eq!(stored.title, "remote update");
+        assert_eq!(stored.last_used_at_ms, Some(777));
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
     }
 
     #[test]
