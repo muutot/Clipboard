@@ -19,7 +19,6 @@
     rebuildSearchIndex,
     repairDatabase,
     setResourceStoragePaths,
-    validateSearchIndex,
     type StorageDirectoryUpdate,
     type StorageKind,
     type StorageKindStats,
