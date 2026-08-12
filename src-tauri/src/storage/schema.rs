@@ -373,7 +373,6 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             OR OLD.html_content IS NOT NEW.html_content
             OR OLD.rtf_content IS NOT NEW.rtf_content
             OR OLD.resource_path IS NOT NEW.resource_path
-            OR OLD.preview_path IS NOT NEW.preview_path
             OR OLD.content_hash != NEW.content_hash
             OR OLD.source_app IS NOT NEW.source_app
             OR OLD.icon_path IS NOT NEW.icon_path

@@ -77,9 +77,22 @@ mod tests {
     }
 
     #[test]
-    fn preview_update_and_integrity_check_use_the_current_database() {
+    fn preview_update_stays_local_and_integrity_check_uses_the_current_database() {
         let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
         database.save_item(&item()).unwrap();
+        database.acknowledge_sync_outbox(1).unwrap();
+        let version_before = database
+            .with_connection(|connection| {
+                Ok(connection.query_row(
+                    "SELECT modified_at_ms, sync_writer_device_id
+                       FROM clipboard_items
+                      WHERE id = 'item'",
+                    [],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )?)
+            })
+            .unwrap();
 
         assert!(database
             .set_preview_path("item", "previews/item.jpg")
@@ -93,6 +106,19 @@ mod tests {
                 .as_deref(),
             Some("previews/item.jpg")
         );
+        let version_after = database
+            .with_connection(|connection| {
+                Ok(connection.query_row(
+                    "SELECT modified_at_ms, sync_writer_device_id
+                       FROM clipboard_items
+                      WHERE id = 'item'",
+                    [],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(version_after, version_before);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
         assert!(database.repair().unwrap().integrity_ok);
     }
 }
