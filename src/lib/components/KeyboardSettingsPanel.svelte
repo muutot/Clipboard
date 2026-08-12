@@ -726,12 +726,4 @@
     border-color: var(--danger-color);
     background: color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
-
-  .settings-state {
-    display: grid;
-    flex: 1;
-    place-items: center;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
 </style>

@@ -468,14 +468,6 @@
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     text-align: center;
   }
-  .settings-state {
-    display: grid;
-    flex: 1;
-    place-items: center;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
   .auto-save-note {
     text-align: right;
   }
