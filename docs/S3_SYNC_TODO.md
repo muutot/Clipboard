@@ -29,6 +29,8 @@
 - `src-tauri/src/search/manifest.rs`
 - `src-tauri/src/config/types.rs`
 - `src-tauri/src/config/store.rs`
+- `src-tauri/src/commands/cleanup.rs`
+- `src-tauri/src/storage/repository/impls.rs`
 
 ### 2.1 目录与文件
 
@@ -74,6 +76,15 @@
 
 禁止同步：搜索索引、OCR 结果、预览图、图标缓存、`last_used_at_ms` 等本地派生或本地使用数据；blob 只按需同步。
 
+### 2.5 存储条目限制与清理语义
+
+- `HistoryConfig` 当前默认 `max_items = 10_000`、`retention_days = 30`、`recycle_bin_days = 7`、`favorites_exempt = true`，配置持久化在 `conf/conf.json`。
+- 容量与保留清理都是硬删除：容量超出时按 `created_at_ms ASC` 删除最旧的非收藏记录；保留期到期删除 `created_at_ms` 早于阈值的非收藏记录。
+- 回收站是软删除：用户删除先置 `deleted = 1` 并记录 `deleted_at_ms`，超过 `recycle_bin_days` 后永久删除。
+- 清理同时会清掉孤儿搜索索引与孤儿 blob 文件。
+- 同步开启时，这些删除会经过主表删除触发器进入 `sync_outbox` 与 `sync_tombstones`，因此清理删除天然会传播到其他设备，而不是只作用于本机。
+- 目标场景是每台 100k 条，当前默认上限只有 10k，必须显式提高上限并定义 scope 级策略，否则单机清理会把其他设备的记录一并删掉。
+
 ## 3. 设计取舍
 
 1. 元数据增量 + 周期快照。日常只上传/下载增量 segment；定期生成一份压缩全量快照用于新设备引导和损坏恢复，避免重放全部历史。
@@ -83,20 +94,21 @@
 5. 本地批量应用。网络 IO 在 worker 线程完成且不持有数据库锁；应用端按批事务写入，通过现有触发器只增量更新搜索索引，绝不整库重建。
 6. 压缩与小对象。segment 与 snapshot 使用 gzip（可选 zstd）压缩；发现用 HEAD/小指针对象优先，ListObjectsV2 兜底，不做全桶扫描。
 7. 可恢复与幂等。所有远端对象不可变，失败重试不改变内容；本地游标在成功应用后才推进。
+8. 容量与保留必须是 scope 级且确定性。`max_items`/`retention_days` 按同步 scope 统一生效，驱逐候选按 `(created_at_ms, id)` 全序选取且收藏豁免；任何设备执行清理都收敛到同一批 tombstone，避免“A 机删掉 B 机刚同步的记录”或删除风暴。
 
 ## 4. S3 对象布局
 
 桶前缀建议为 `{remote_path}/v1/{scope}/{epoch}/`，其中 `scope` 区分同步组，`epoch` 在协议/数据契约升级或手动重置时轮换。
 
-| 对象                                       | 可变性 | 用途                                                          |
-| ------------------------------------------ | ------ | ------------------------------------------------------------- |
-| `changelog/{device_id}/{seq:010}.jsonl.gz` | 不可变 | 单设备增量段，每行一个 upsert/delete/tombstone                |
-| `snapshots/{seq:010}.jsonl.gz`             | 不可变 | 全量状态快照，含 live 记录、墓碑、标签、各设备已发布 seq 地图 |
-| `current.json`                             | 可变   | 指向最新 snapshot，含 epoch、snapshot_sha256、记录数          |
-| `latest/{device_id}.json`                  | 可变   | 指向该设备最新 segment，含 seq、sha256、size                  |
-| `blobs/{sha256}`                           | 不可变 | 内容寻址 blob，无扩展名，扩展名由记录元数据保存               |
-| `acks/{device_id}.json`                    | 可变   | 可选：设备已应用游标，用于 GC 判断                            |
-| `meta/scope.json`                          | 不可变 | scope 协议版本、schema 版本、加密参数、快照策略               |
+| 对象                                       | 可变性 | 用途                                                           |
+| ------------------------------------------ | ------ | -------------------------------------------------------------- |
+| `changelog/{device_id}/{seq:010}.jsonl.gz` | 不可变 | 单设备增量段，每行一个 upsert/delete/tombstone                 |
+| `snapshots/{seq:010}.jsonl.gz`             | 不可变 | 全量状态快照，含 live 记录、墓碑、标签、各设备已发布 seq 地图  |
+| `current.json`                             | 可变   | 指向最新 snapshot，含 epoch、snapshot_sha256、记录数           |
+| `latest/{device_id}.json`                  | 可变   | 指向该设备最新 segment，含 seq、sha256、size                   |
+| `blobs/{sha256}`                           | 不可变 | 内容寻址 blob，无扩展名，扩展名由记录元数据保存                |
+| `acks/{device_id}.json`                    | 可变   | 可选：设备已应用游标，用于 GC 判断                             |
+| `meta/scope.json`                          | 不可变 | scope 协议版本、schema 版本、加密参数、快照策略、容量/保留策略 |
 
 约束：
 
@@ -136,6 +148,14 @@
 - 孤儿 blob 只有确认无任何 snapshot/segment 引用后才可删除，优先级低于元数据 GC。
 - S3 Lifecycle 只清理不完整 multipart 上传与过期备份，不直接清理业务对象。
 
+### 5.5 容量与保留驱逐
+
+1. 每次本地变更应用结束或按清理周期检查 `deleted = 0` 计数；超过 scope 级 `max_items` 时按 `(created_at_ms, id)` 选择最旧的非收藏记录作为候选。
+2. 驱逐走当前存储的硬删除路径，同一事务内写入 tombstone/outbox，作为普通 delete op 发布；重复驱逐必须幂等。
+3. 保留期清理同样走 scope 级 `retention_days`，所有设备按同一阈值删除，避免旧记录在设备间反复复活。
+4. 用户手动删除仍走软删除 + 回收站；回收站内恢复产生更新的 upsert，可覆盖 tombstone。
+5. 永久删除后由本地孤儿清理删除无引用 blob；远端 blob 只有在快照/segment 均无引用且所有设备 ack 后才 GC。
+
 ## 6. 量化验收目标
 
 | 指标           | 目标                                                         |
@@ -150,6 +170,8 @@
 | 本地存储       | 无重复 blob、无同步的派生数据、outbox 有界                   |
 | S3 元数据      | 最新 snapshot + snapshot 后增量，目标 < 2 倍 live 元数据量   |
 | 正确性         | 3 台设备随机离线/乱序后最终一致，无丢数据、无重复显示        |
+| 驱逐一致性     | 3 台设备容量/保留策略一致，驱逐候选集相同，无删除风暴与复活  |
+| 驱逐流量       | 每条被驱逐记录只产生 1 个 delete op，重复运行不重复上传      |
 
 ## 7. 分阶段实施 TODO
 
@@ -165,6 +187,10 @@
   - 验收：模拟本地复制/使用不产生出站 op；真正内容修改产生且只产生 1 个 op。
 - [ ] 定义版本仲裁与冲突规则：`(modified_at_ms, writer_device_id)` 全序；同内容不同 ID 经 `sync_item_aliases` 合并；删除与更新按版本比较。
   - 验收：乱序、同版本、重启场景属性测试收敛。
+- [ ] 定义 scope 级容量与保留策略：`max_items`/`retention_days` 在同步 scope 内统一生效；确认配置与 UI 支持 100k+；明确本地上限与 scope 上限的关系。
+  - 验收：策略文档 + 配置读写测试覆盖不同设备配置的归一化。
+- [ ] 定义驱逐与回收站语义：容量/保留驱逐按 `(created_at_ms, id)` 确定性硬删除并生成 tombstone；用户删除走软删除/回收站；恢复生成更新的 upsert。
+  - 验收：模拟超限、保留到期、回收站恢复的收敛测试，无复活、无重复 tombstone。
 - [ ] 确定 S3/同步配置存储：复用或扩展 `conf/conf.json` 的 sync 区，覆盖 endpoint、region、bucket、prefix、scope、credential、加密参数；凭据不进入日志。
   - 验收：配置读写单测；grep 日志输出无 secret。
 
@@ -202,6 +228,8 @@
   - 验收：断网重试成功；损坏 segment 隔离不中断其他 peer。
 - [ ] 批量应用：每批事务内比较版本、执行 upsert/delete/tombstone、设置 `sync_suppress_changelog` 防回环、触发搜索增量。
   - 验收：200 条应用 p95 < 1 s；应用远端变更后不产生回环出站 op。
+- [ ] 拉取应用后超限处理：应用远端记录导致本地计数超过 scope 上限时，在同一批事务内按同一候选规则驱逐并登记待发布 tombstone。
+  - 验收：拉取 300k 后按策略降到上限；驱逐不产生回环出站 op。
 - [ ] 冲突与别名：`UNIQUE(kind, content_hash)` 冲突合并到别名表；删除不复活；落后设备旧版本不覆盖新版本。
   - 验收：3 台设备乱序/离线测试最终一致。
 - [ ] blob 按需下载：打开/预览时按哈希检查并下载，校验后原子落盘；并发去重；失败显示占位。
@@ -226,6 +254,8 @@
 
 - [ ] 3 机端到端正确性：每台初始 100k 不同数据，每日 +200，随机离线/乱序后最终一致。
   - 验收：自动化集成测试 + 一致性报告。
+- [ ] 容量/保留基准：3 台设备不同增量速度、不同超限时刻、收藏与回收站恢复混合场景。
+  - 验收：最终一致且无删除风暴；满足第 6 节驱逐指标。
 - [ ] 本地性能基准：增量应用 p95、引导建库耗时、内存峰值、UI 响应。
   - 验收：达到第 6 节目标并记录基线。
 - [ ] 存储基准：本地 DB/blob 大小、S3 元数据大小、blob 去重率、outbox 上界。
@@ -253,6 +283,7 @@
 - 不做 P2P 或自建服务端；同步通道仅限 S3-compatible。
 - 不做账户/密码找回系统；凭据由用户在各设备配置。
 - 不做冲突编辑 UI；采用确定性的版本全序与别名合并。
+- 不做“本机上限触发删除但不同步”的本地裁剪：删除必须走 scope 级策略并生成 tombstone，否则其他设备会把记录重新同步回来。
 
 ## 9. 风险与待决问题
 
@@ -262,3 +293,6 @@
 - 设备永久离线会使 ack 型 GC 停摆，需要保留期兜底策略。
 - 300k 记录 snapshot 的实际压缩比与引导耗时需要先基准，再定调度周期。
 - S3 兼容性差异（path-style、region 空值、R2/MinIO 行为）需要 mock 之外的真实端点验证。
+- 3 台设备各 100k 且同步后 union 可能 300k，与单机 `max_items = 100k` 冲突：需要决定 scope 上限设为 union 规模，还是接受确定性全局驱逐（后者会删掉部分记录）。
+- 容量驱逐的发布者与版本：所有设备都执行清理会产生重复 tombstone，需要统一 writer/版本或幂等合并策略。
+- 保留期与恢复窗口的交互：回收站恢复、离线设备晚到、保留期硬删除之间需要版本仲裁测试。
