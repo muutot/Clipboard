@@ -171,9 +171,9 @@ _t("status.recordCount", { count: items.length })
 
 ## 数据库
 
-### 新增字段需要 migration
+### 当前 schema 不做历史迁移
 
-在 `storage/migrations.rs` 的 `create_schema` 中添加 `ALTER TABLE`，并在 `StorageConfig` 中用 `#[serde(default)]` 保证旧数据兼容。
+`storage/schema.rs` 只定义 `PRAGMA user_version = 1` 的当前布局。打开其他版本的数据库会事务性重建当前 schema；不要添加旧字段的 `ALTER TABLE` 或 fallback reader。需要改变布局时，先提高 schema 标识并更新重建测试。
 
 ### 内容去重靠 `content_hash`
 
@@ -185,10 +185,10 @@ _t("status.recordCount", { count: items.length })
 
 ### 触发器内部对同表的嵌套 UPDATE 会再次触发其他 AFTER 触发器
 
-`clipboard_items_set_modified` 在 `AFTER UPDATE` 内对同一表执行 `UPDATE clipboard_items SET modified_at_ms = ...`，该嵌套 UPDATE 会让所有同表无 WHEN 守卫的 AFTER 触发器（如 `clipboard_items_search_update`）再触发一次，产生重复的搜索/同步事件。
+v1 的 `clipboard_items_sync_outbox_*` 在 `AFTER INSERT/UPDATE` 内维护版本列。该嵌套 UPDATE 会让所有同表无 WHEN 守卫的 AFTER 触发器再触发一次，产生重复的搜索/同步事件。
 
 ```sql
--- BUG: 无 WHEN 守卫，set_modified 的嵌套 UPDATE 会重复插入 search_outbox
+-- BUG: 无 WHEN 守卫，outbox 维护 UPDATE 会重复插入 search_outbox
 CREATE TRIGGER clipboard_items_search_update
 AFTER UPDATE ON clipboard_items
 BEGIN
@@ -204,26 +204,26 @@ BEGIN
 END;
 ```
 
-新增/修改同表 AFTER 触发器时，必须带上 WHEN 守卫，明确列出真正影响该触发器语义的列（如 `sync_update` 已按 title/text/content 等列守卫），否则会与 `set_modified` 的嵌套 UPDATE 组合出重复事件。递归触发器 pragma（`PRAGMA recursive_triggers`）默认关闭，但这只限制同表递归，不能替代 WHEN 守卫。
+新增/修改同表 AFTER 触发器时，必须带上 WHEN 守卫，明确列出真正影响该触发器语义的列；同步 outbox 触发器的维护列更新不能再次产生搜索事件。递归触发器 pragma（`PRAGMA recursive_triggers`）默认关闭，但这只限制同表递归，不能替代 WHEN 守卫。
 
 ### 应用远端数据时，同步触发器会把收到的条目再广播回去（回声）
 
-`clipboard_items_sync_*` 触发器对任何 `clipboard_items` 写入都生成一条 `sync_changelog`。如果 `apply_remote_oplog` / `import_baseline_items` 走裸 SQL 写入，接收到的条目会以本机 `device_id` 再次入 changelog，下次同步又广播回远端（导入 1 万条基线就回传 1 万条）。
+`clipboard_items_sync_outbox_*` 触发器在启用同步时会为本地写入生成 outbox 行。如果 v1 的快照/段应用没有在同一事务内设置 `sync_suppress_changelog=1`，接收端会把远端条目再次加入本机 outbox。
 
 ```sql
--- FIX: 触发器带 WHEN 守卫，读取 sync_metadata 的抑制标记
-CREATE TRIGGER clipboard_items_sync_insert
+-- FIX: 触发器读取 sync_metadata 的抑制标记
+CREATE TRIGGER clipboard_items_sync_outbox_insert
 AFTER INSERT ON clipboard_items
 WHEN NOT EXISTS (
     SELECT 1 FROM sync_metadata
     WHERE key = 'sync_suppress_changelog' AND value = '1'
 )
 BEGIN
-    INSERT INTO sync_changelog ...;
+    INSERT INTO sync_outbox ...;
 END;
 ```
 
-写入远端数据的代码路径（`apply_remote_oplog`、`import_baseline_items`）必须在**同一事务内**先置 `sync_suppress_changelog=1`、提交前再置回 `0`（`Database::set_changelog_suppressed`）。因为标记随事务回滚而回滚，崩溃也不会残留永久抑制。注意：这三个同步触发器每次打开库都会 `DROP` + `CREATE`（见 `migrations.rs`），因此老库也会在下次打开时获得新守卫；搜索触发器不读该标记，接收到的条目仍需进 `search_outbox` 以便索引。
+写入远端数据的代码路径（`apply_sync_snapshot`、`apply_sync_segment`）必须在**同一事务内**先置 `sync_suppress_changelog=1`、提交前再删除该标记。因为标记随事务回滚而回滚，崩溃也不会残留永久抑制；搜索触发器不读该标记，接收到的条目仍需进 `search_outbox` 以便索引。
 
 ## Rust 模块结构
 
@@ -231,7 +231,7 @@ END;
 
 | 模块        | 职责                                |
 | ----------- | ----------------------------------- |
-| `storage/`  | 数据库 CRUD、migrations、paths      |
+| `storage/`  | 数据库 CRUD、schema、paths          |
 | `search/`   | Tantivy 索引、查询、同步            |
 | `ocr/`      | OCR 引擎、worker                    |
 | `keyboard/` | 全局快捷键解析、注册、匹配          |

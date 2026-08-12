@@ -84,7 +84,7 @@ Treat these as integration points and avoid concurrent edits:
 - locale files plus `src/lib/i18n/types.ts`
 - `src-tauri/src/lib.rs`
 - `src-tauri/src/config.rs`
-- `src-tauri/src/storage/migrations.rs`
+- `src-tauri/src/storage/schema.rs`
 - `TODO.md`
 - `SKILL.md` and shared references
 

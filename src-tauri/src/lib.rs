@@ -63,8 +63,9 @@ use shutdown::stop_runtime_services;
 use state::{CaptureState, CaptureWorker, SelfTriggerState};
 use std::str::FromStr;
 use storage::{
-    quarantine_search_index, recover_database_if_needed, refresh_database_backup, Database,
-    KindDeleteScope, OcrRepository, StoragePaths,
+    discard_database_backups, discard_database_quarantine, quarantine_search_index,
+    recover_database_if_needed, refresh_database_backup, Database, KindDeleteScope, OcrRepository,
+    StoragePaths,
 };
 use tauri::Manager;
 
@@ -243,6 +244,20 @@ pub fn run() {
                         quarantined_database.display()
                     );
                 }
+            }
+            let database = Database::open(&paths.database)?;
+
+            if database.schema_was_reset() {
+                eprintln!("[storage] initialized schema v1; reset derived and recovery state");
+                discard_database_backups(&paths.database)?;
+                if let Some(quarantined_database) = recovery_report
+                    .as_ref()
+                    .and_then(|report| report.quarantined_database.as_deref())
+                {
+                    discard_database_quarantine(quarantined_database)?;
+                }
+                storage::reset_search_index(&paths.search_index)?;
+            } else if recovery_report.is_some() {
                 if let Some(quarantined_index) = quarantine_search_index(&paths.search_index)? {
                     eprintln!(
                         "[recovery] quarantined stale search index at {}",
@@ -250,7 +265,6 @@ pub fn run() {
                     );
                 }
             }
-            let database = Database::open(&paths.database)?;
 
             let repair_result = database.repair()?;
             if !repair_result.integrity_ok {
@@ -266,8 +280,8 @@ pub fn run() {
 
             database.requeue_interrupted_ocr()?;
 
-            // Database::open creates or migrates the persistent sync UUID before
-            // any capture worker can produce changelog entries.
+            // Database::open creates the persistent sync UUID before any
+            // capture worker can produce v1 outbox entries.
             match database.get_sync_device_id() {
                 Ok(device_id) => eprintln!("[sync] device_id = {device_id}"),
                 Err(error) => eprintln!("[sync] failed to read device_id: {error}"),

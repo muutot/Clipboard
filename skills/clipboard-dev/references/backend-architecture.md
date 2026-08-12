@@ -42,7 +42,7 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 `src-tauri/src/storage/` owns SQLite schema, repositories, recovery, and derived-data coordination. `Database::from_connection` enables foreign keys, WAL, normal synchronous mode, memory temp storage, cache/mmap settings, creates the current schema, and persists one UUID device identity. `storage/sync_state.rs` is the compact v1 replication repository: it preserves clipboard rows as first-snapshot input, assigns deterministic `(modified_at_ms, sync_writer_device_id)` versions, maintains the outbox/tombstone/publication/cursor/resource tables, and applies remote packs transactionally with echo suppression. The v1 command orchestrator calls `Database::initialize_sync` through `sync::v1::sync_database`; initialization does not read or convert obsolete sync data.
 
-`storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
+`storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
 
 ## Synchronization
 

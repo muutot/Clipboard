@@ -2,10 +2,11 @@ use std::{fs, path::Path, sync::Mutex, time::Duration};
 
 use rusqlite::Connection;
 
-use super::{migrations, StorageError};
+use super::{schema, StorageError};
 
 pub struct Database {
     pub(super) connection: Mutex<Connection>,
+    schema_was_reset: bool,
 }
 
 impl Database {
@@ -28,13 +29,18 @@ impl Database {
 
     fn from_connection(connection: Connection) -> Result<Self, StorageError> {
         configure_connection(&connection)?;
-        migrations::create_schema(&connection)?;
+        let schema = schema::initialize(&connection)?;
 
         let database = Self {
             connection: Mutex::new(connection),
+            schema_was_reset: schema.was_reset,
         };
         database.ensure_sync_device_id()?;
         Ok(database)
+    }
+
+    pub fn schema_was_reset(&self) -> bool {
+        self.schema_was_reset
     }
 
     pub(crate) fn with_connection<T>(

@@ -22,6 +22,42 @@ pub fn previous_backup_path(database_path: &Path) -> PathBuf {
     sibling_with_suffix(database_path, ".backup.prev")
 }
 
+/// A schema reset deliberately discards historical rows, so old recovery
+/// copies must not survive and reintroduce them on a later startup.
+pub fn discard_database_backups(database_path: &Path) -> Result<(), StorageError> {
+    for path in [
+        backup_path(database_path),
+        previous_backup_path(database_path),
+        sibling_with_suffix(database_path, ".backup.tmp"),
+    ] {
+        remove_file_if_present(&path).map_err(|error| StorageError::DatabaseRecoveryFailed {
+            database: database_path.to_path_buf(),
+            reason: format!(
+                "discard obsolete database backup {}: {error}",
+                path.display()
+            ),
+        })?;
+    }
+    Ok(())
+}
+
+pub fn discard_database_quarantine(quarantined_database: &Path) -> Result<(), StorageError> {
+    for path in [
+        quarantined_database.to_path_buf(),
+        sibling_with_suffix(quarantined_database, "-wal"),
+        sibling_with_suffix(quarantined_database, "-shm"),
+    ] {
+        remove_file_if_present(&path).map_err(|error| StorageError::DatabaseRecoveryFailed {
+            database: quarantined_database.to_path_buf(),
+            reason: format!(
+                "discard obsolete database quarantine {}: {error}",
+                path.display()
+            ),
+        })?;
+    }
+    Ok(())
+}
+
 pub fn recover_database_if_needed(
     database_path: &Path,
 ) -> Result<Option<DatabaseRecoveryReport>, StorageError> {
@@ -140,6 +176,29 @@ pub fn quarantine_search_index(search_index: &Path) -> Result<Option<PathBuf>, S
     Ok(Some(quarantined))
 }
 
+/// Search data is derived. When the SQLite schema is deliberately reset, the
+/// old index must be removed instead of quarantined or reused.
+pub fn reset_search_index(search_index: &Path) -> Result<(), StorageError> {
+    if let Ok(metadata) = fs::symlink_metadata(search_index) {
+        let result = if metadata.file_type().is_symlink() {
+            fs::remove_file(search_index)
+                .or_else(|file_error| fs::remove_dir(search_index).map_err(|_| file_error))
+        } else if metadata.is_file() {
+            fs::remove_file(search_index)
+        } else {
+            fs::remove_dir_all(search_index)
+        };
+        result.map_err(|error| StorageError::DatabaseRecoveryFailed {
+            database: search_index.to_path_buf(),
+            reason: format!("remove derived search index: {error}"),
+        })?;
+    }
+    fs::create_dir_all(search_index).map_err(|error| StorageError::DatabaseRecoveryFailed {
+        database: search_index.to_path_buf(),
+        reason: format!("recreate search index directory: {error}"),
+    })
+}
+
 fn validate_database_file(path: &Path) -> Result<(), String> {
     let connection = Connection::open_with_flags(
         path,
@@ -255,10 +314,11 @@ fn rollback_moves(moved: &[(PathBuf, PathBuf)]) {
 }
 
 fn remove_file_if_present(path: &Path) -> std::io::Result<()> {
-    if path.exists() {
-        fs::remove_file(path)?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
     }
-    Ok(())
 }
 
 fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
@@ -313,8 +373,9 @@ mod tests {
     };
 
     use super::{
-        backup_path, previous_backup_path, quarantine_search_index, recover_database_if_needed,
-        refresh_database_backup,
+        backup_path, discard_database_backups, discard_database_quarantine, previous_backup_path,
+        quarantine_search_index, recover_database_if_needed, refresh_database_backup,
+        reset_search_index,
     };
     use crate::storage::Database;
 
@@ -370,6 +431,45 @@ mod tests {
         drop(previous);
         drop(backup);
         drop(database);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn schema_reset_discards_all_database_backup_generations() {
+        let root = temporary_path("discard-backups");
+        fs::create_dir_all(&root).unwrap();
+        let database = root.join("clipboard.sqlite3");
+        let backup = backup_path(&database);
+        let previous = previous_backup_path(&database);
+        let temporary = super::sibling_with_suffix(&database, ".backup.tmp");
+        for path in [&backup, &previous, &temporary] {
+            fs::write(path, b"obsolete").unwrap();
+        }
+
+        discard_database_backups(&database).unwrap();
+
+        assert!(!backup.exists());
+        assert!(!previous.exists());
+        assert!(!temporary.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn schema_reset_discards_the_obsolete_database_quarantine() {
+        let root = temporary_path("discard-quarantine");
+        fs::create_dir_all(&root).unwrap();
+        let quarantine = root.join("clipboard.sqlite3.corrupt-1");
+        let wal = super::sibling_with_suffix(&quarantine, "-wal");
+        let shm = super::sibling_with_suffix(&quarantine, "-shm");
+        for path in [&quarantine, &wal, &shm] {
+            fs::write(path, b"obsolete").unwrap();
+        }
+
+        discard_database_quarantine(&quarantine).unwrap();
+
+        assert!(!quarantine.exists());
+        assert!(!wal.exists());
+        assert!(!shm.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -472,6 +572,50 @@ mod tests {
         assert!(!index.join("meta.json").exists());
         assert_eq!(fs::read(quarantined.join("meta.json")).unwrap(), b"stale");
         assert!(index.is_dir());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn schema_reset_removes_derived_search_index_contents() {
+        let root = temporary_path("reset-index");
+        let index = root.join("search-index");
+        fs::create_dir_all(&index).unwrap();
+        fs::write(index.join("meta.json"), b"stale").unwrap();
+
+        reset_search_index(&index).unwrap();
+
+        assert!(index.is_dir());
+        assert!(!index.join("meta.json").exists());
+        assert_eq!(fs::read_dir(&index).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn schema_reset_does_not_follow_a_search_index_symlink() {
+        let root = temporary_path("reset-index-symlink");
+        let target = root.join("outside-index");
+        let index = root.join("search-index");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("keep.txt"), b"keep").unwrap();
+
+        #[cfg(windows)]
+        let link_result = std::os::windows::fs::symlink_dir(&target, &index);
+        #[cfg(unix)]
+        let link_result = std::os::unix::fs::symlink(&target, &index);
+
+        if link_result.is_err() {
+            fs::remove_dir_all(root).unwrap();
+            return;
+        }
+
+        reset_search_index(&index).unwrap();
+
+        assert!(target.join("keep.txt").is_file());
+        assert!(index.is_dir());
+        assert!(!fs::symlink_metadata(&index)
+            .unwrap()
+            .file_type()
+            .is_symlink());
         fs::remove_dir_all(root).unwrap();
     }
 }

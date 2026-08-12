@@ -12,7 +12,6 @@ use crate::{
     },
 };
 
-const PROTOCOL_VERSION: &str = "1";
 const LOOKUP_CHUNK_SIZE: usize = 500;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,19 +170,62 @@ impl StoredTombstone {
 }
 
 impl Database {
-    /// Initializes the first sync protocol without reading or converting any
-    /// previous sync state. Clipboard rows remain intact and become the input
-    /// of the first local snapshot; obsolete sync-only state is discarded.
-    pub fn initialize_sync(&self) -> Result<bool, StorageError> {
+    pub fn set_sync_device_id(&self, device_id: &str) -> Result<(), StorageError> {
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('device_id', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [device_id],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn get_sync_device_id(&self) -> Result<String, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.query_row(
+                "SELECT value FROM sync_metadata WHERE key = 'device_id'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+    }
+
+    /// Ensures one stable UUID identity for the current database. Invalid
+    /// values are replaced directly; no historical identity alias is kept.
+    pub fn ensure_sync_device_id(&self) -> Result<String, StorageError> {
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
-            let current_version: Option<String> = transaction
+            let existing: Option<String> = transaction
                 .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'sync_protocol_version'",
+                    "SELECT value FROM sync_metadata WHERE key = 'device_id'",
                     [],
                     |row| row.get(0),
                 )
                 .optional()?;
+            if let Some(existing) = existing.as_deref() {
+                if Uuid::parse_str(existing).is_ok() {
+                    transaction.commit()?;
+                    return Ok(existing.to_string());
+                }
+            }
+
+            let device_id = Uuid::new_v4().to_string();
+            transaction.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('device_id', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [&device_id],
+            )?;
+            transaction.commit()?;
+            Ok(device_id)
+        })
+    }
+
+    /// Enables the sole v1 replication state. Existing clipboard rows become
+    /// the first local snapshot; no historical schema or sync state is read.
+    pub fn initialize_sync(&self) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
             let current_enabled: Option<String> = transaction
                 .query_row(
                     "SELECT value FROM sync_metadata WHERE key = 'sync_enabled'",
@@ -191,58 +233,53 @@ impl Database {
                     |row| row.get(0),
                 )
                 .optional()?;
-            let initialized_now = current_version.as_deref() != Some(PROTOCOL_VERSION)
-                || current_enabled.as_deref() != Some("1");
-            if initialized_now {
-                let device_id: String = transaction.query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'device_id'",
-                    [],
-                    |row| row.get(0),
-                )?;
-                transaction.execute(
-                    "INSERT INTO sync_metadata (key, value)
-                     VALUES ('sync_suppress_changelog', '1')
-                     ON CONFLICT(key) DO UPDATE SET value = '1'",
-                    [],
-                )?;
-                transaction.execute(
-                    "UPDATE clipboard_items
-                        SET modified_at_ms = COALESCE(modified_at_ms, created_at_ms),
-                            sync_writer_device_id = ?1",
-                    [&device_id],
-                )?;
-                transaction.execute_batch(
-                    "DELETE FROM sync_changelog;
-                     DELETE FROM sync_remote_state;
-                     DELETE FROM sync_applied_oplogs;
-                     DELETE FROM sync_item_aliases;
-                     DELETE FROM sync_outbox;
-                     DELETE FROM sync_tombstones;
-                     DELETE FROM sync_publication_state;
-                     DELETE FROM sync_cursors;
-                     DELETE FROM sync_remote_resources;
-                     DELETE FROM sqlite_sequence WHERE name = 'sync_outbox';",
-                )?;
-                transaction.execute(
-                    "INSERT INTO sync_tombstones
-                        (item_id, kind, content_hash, deleted_at_ms,
-                         modified_at_ms, writer_device_id)
-                     SELECT id, kind, content_hash,
-                            COALESCE(deleted_at_ms, modified_at_ms, created_at_ms),
-                            COALESCE(modified_at_ms, created_at_ms),
-                            sync_writer_device_id
-                       FROM clipboard_items
-                      WHERE deleted = 1",
-                    [],
-                )?;
-                transaction.execute("DELETE FROM sync_metadata WHERE key != 'device_id'", [])?;
-                transaction.execute(
-                    "INSERT INTO sync_metadata (key, value)
-                     VALUES ('sync_protocol_version', ?1)
-                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    [PROTOCOL_VERSION],
-                )?;
+            if current_enabled.as_deref() == Some("1") {
+                transaction.commit()?;
+                return Ok(false);
             }
+
+            let device_id: String = transaction.query_row(
+                "SELECT value FROM sync_metadata WHERE key = 'device_id'",
+                [],
+                |row| row.get(0),
+            )?;
+            transaction.execute(
+                "INSERT INTO sync_metadata (key, value)
+                 VALUES ('sync_suppress_changelog', '1')
+                 ON CONFLICT(key) DO UPDATE SET value = '1'",
+                [],
+            )?;
+            transaction.execute(
+                "UPDATE clipboard_items
+                    SET modified_at_ms = COALESCE(modified_at_ms, created_at_ms),
+                        sync_writer_device_id = ?1",
+                [&device_id],
+            )?;
+            transaction.execute_batch(
+                "DELETE FROM sync_item_aliases;
+                 DELETE FROM sync_outbox;
+                 DELETE FROM sync_tombstones;
+                 DELETE FROM sync_publication_state;
+                 DELETE FROM sync_cursors;
+                 DELETE FROM sync_remote_resources;
+                 DELETE FROM sqlite_sequence WHERE name = 'sync_outbox';",
+            )?;
+            transaction.execute(
+                "INSERT INTO sync_tombstones
+                    (item_id, kind, content_hash, deleted_at_ms,
+                     modified_at_ms, writer_device_id)
+                 SELECT id, kind, content_hash,
+                        COALESCE(deleted_at_ms, modified_at_ms, created_at_ms),
+                        COALESCE(modified_at_ms, created_at_ms),
+                        sync_writer_device_id
+                   FROM clipboard_items
+                  WHERE deleted = 1",
+                [],
+            )?;
+            transaction.execute(
+                "DELETE FROM sync_metadata WHERE key = 'sync_suppress_changelog'",
+                [],
+            )?;
             transaction.execute(
                 "INSERT INTO sync_metadata (key, value)
                  VALUES ('sync_enabled', '1')
@@ -250,7 +287,7 @@ impl Database {
                 [],
             )?;
             transaction.commit()?;
-            Ok(initialized_now)
+            Ok(true)
         })
     }
 
@@ -263,14 +300,7 @@ impl Database {
                     |row| row.get(0),
                 )
                 .optional()?;
-            let version: Option<String> = connection
-                .query_row(
-                    "SELECT value FROM sync_metadata WHERE key = 'sync_protocol_version'",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            Ok(enabled.as_deref() == Some("1") && version.as_deref() == Some(PROTOCOL_VERSION))
+            Ok(enabled.as_deref() == Some("1"))
         })
     }
 
@@ -1387,7 +1417,7 @@ mod tests {
     }
 
     #[test]
-    fn initializing_v1_preserves_items_and_discards_all_previous_sync_state() {
+    fn initializing_v1_preserves_items_and_discards_pending_v1_state() {
         let database = Database::open_in_memory().unwrap();
         database
             .save_item(&item("existing", "hash-existing", "existing"))
@@ -1395,40 +1425,34 @@ mod tests {
         database
             .with_connection(|connection| {
                 connection.execute(
-                    "INSERT INTO sync_metadata (key, value) VALUES ('obsolete_marker', '1')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO sync_remote_state (remote_scope, state_key, value)
-                     VALUES ('discarded', 'initialized', '1')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO sync_applied_oplogs
-                        (remote_scope, object_name, revision, applied_at_ms)
-                     VALUES ('discarded', 'oplog-old', 'old', 1)",
-                    [],
-                )?;
-                connection.execute(
                     "INSERT INTO sync_item_aliases (alias_id, item_id)
-                     VALUES ('discarded-alias', 'existing')",
+                     VALUES ('pending-alias', 'existing')",
                     [],
                 )?;
                 connection.execute(
                     "UPDATE clipboard_items
-                        SET sync_writer_device_id = 'discarded-writer'
+                        SET sync_writer_device_id = 'pending-writer'
                       WHERE id = 'existing'",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO sync_publication_state (remote_scope, epoch)
+                     VALUES ('pending-remote', 'pending-epoch')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO sync_outbox
+                        (item_id, operation, kind, content_hash, modified_at_ms, writer_device_id)
+                     VALUES ('existing', 'upsert', 'text', 'hash-existing', 100, 'pending-writer')",
                     [],
                 )?;
                 Ok(())
             })
             .unwrap();
-        assert_eq!(database.count_unsynced_changelog().unwrap(), 1);
         assert!(!database.is_sync_initialized().unwrap());
 
         assert!(database.initialize_sync().unwrap());
         assert!(database.is_sync_initialized().unwrap());
-        assert_eq!(database.count_unsynced_changelog().unwrap(), 0);
         let snapshot = database.export_sync_snapshot().unwrap();
         assert_eq!(snapshot.through_sequence, 0);
         assert_eq!(snapshot.mutations.upserts.len(), 1);
@@ -1439,27 +1463,31 @@ mod tests {
         );
         database
             .with_connection(|connection| {
-                let obsolete_row_count: i64 = connection.query_row(
-                    "SELECT
-                        (SELECT COUNT(*) FROM sync_changelog) +
-                        (SELECT COUNT(*) FROM sync_remote_state) +
-                        (SELECT COUNT(*) FROM sync_applied_oplogs) +
-                        (SELECT COUNT(*) FROM sync_item_aliases)",
+                let alias_count: i64 =
+                    connection.query_row("SELECT COUNT(*) FROM sync_item_aliases", [], |row| {
+                        row.get(0)
+                    })?;
+                let publication_count: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM sync_publication_state",
                     [],
                     |row| row.get(0),
                 )?;
+                let outbox_count: i64 =
+                    connection
+                        .query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row.get(0))?;
                 let metadata_count: i64 =
                     connection
                         .query_row("SELECT COUNT(*) FROM sync_metadata", [], |row| row.get(0))?;
-                assert_eq!(obsolete_row_count, 0);
-                assert_eq!(metadata_count, 3);
+                assert_eq!(alias_count, 0);
+                assert_eq!(publication_count, 0);
+                assert_eq!(outbox_count, 0);
+                assert_eq!(metadata_count, 2);
                 Ok(())
             })
             .unwrap();
 
         database.save_item(&item("new", "hash-new", "new")).unwrap();
         assert_eq!(database.count_sync_outbox().unwrap(), 1);
-        assert_eq!(database.count_unsynced_changelog().unwrap(), 0);
     }
 
     #[test]
@@ -1752,7 +1780,12 @@ mod tests {
                 .unwrap(),
             0
         );
-        assert_eq!(database.count_active_items().unwrap(), 0);
+        assert!(database
+            .export_sync_snapshot()
+            .unwrap()
+            .mutations
+            .upserts
+            .is_empty());
         assert_eq!(
             database
                 .export_sync_snapshot()
