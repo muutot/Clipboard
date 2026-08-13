@@ -1132,12 +1132,41 @@ fn parse_s3_list_page(xml: &str) -> S3ListPage {
 }
 
 fn decode_xml_text(value: &str) -> String {
-    value
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&amp;", "&")
+    let mut decoded = String::with_capacity(value.len());
+    let mut remaining = value;
+    while let Some(start) = remaining.find('&') {
+        decoded.push_str(&remaining[..start]);
+        let entity = &remaining[start..];
+        let Some(end) = entity.find(';') else {
+            decoded.push_str(entity);
+            return decoded;
+        };
+        let name = &entity[1..end];
+        let character = match name {
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "amp" => Some('&'),
+            numeric if numeric.starts_with("#x") || numeric.starts_with("#X") => {
+                u32::from_str_radix(&numeric[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32)
+            }
+            numeric if numeric.starts_with('#') => {
+                numeric[1..].parse::<u32>().ok().and_then(char::from_u32)
+            }
+            _ => None,
+        };
+        if let Some(character) = character {
+            decoded.push(character);
+        } else {
+            decoded.push_str(&entity[..=end]);
+        }
+        remaining = &entity[end + 1..];
+    }
+    decoded.push_str(remaining);
+    decoded
 }
 
 fn extract_tag<'a>(block: &'a str, tag: &str) -> Option<&'a str> {
@@ -1456,7 +1485,10 @@ mod tests {
             S3PutCondition::IfMatch(first_etag.clone()),
         )
         .unwrap();
-        assert!(matches!(updated, S3PutOutcome::Stored { .. }));
+        let S3PutOutcome::Stored { etag: updated_etag } = updated else {
+            panic!("conditional update unexpectedly lost its precondition");
+        };
+        let updated_etag = updated_etag.expect("S3-compatible server must return an ETag");
         assert_eq!(
             put_s3_object(
                 &endpoint,
@@ -1483,6 +1515,7 @@ mod tests {
         .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].object_key, key);
+        assert_eq!(listed[0].etag.as_deref(), Some(updated_etag.as_str()));
 
         let streamed_key = format!("{prefix}streamed.bin");
         let streamed_source = std::env::temp_dir().join(format!(
@@ -1633,5 +1666,17 @@ mod tests {
         assert_eq!(page.entries[0].name, "device&a.bin");
         assert_eq!(page.entries[0].size_bytes, Some(42));
         assert_eq!(page.entries[0].etag.as_deref(), Some("\"abc123\""));
+    }
+
+    #[test]
+    fn xml_text_decodes_named_and_numeric_entities() {
+        assert_eq!(
+            decode_xml_text("&quot;&#34;&#x22;&amp;&lt;&gt;&apos;"),
+            "\"\"\"&<>'"
+        );
+        assert_eq!(
+            decode_xml_text("keep-&unknown;-literal"),
+            "keep-&unknown;-literal"
+        );
     }
 }
