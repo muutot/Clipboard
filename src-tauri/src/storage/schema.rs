@@ -549,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn non_v1_database_is_reset_instead_of_migrated() {
+    fn pre_v1_database_is_reset_instead_of_migrated() {
         let connection = Connection::open_in_memory().unwrap();
         connection
             .execute_batch(

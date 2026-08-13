@@ -171,9 +171,9 @@ _t("status.recordCount", { count: items.length })
 
 ## 数据库
 
-### 当前 schema 不做历史迁移
+### v0 只在本次重构中清空，v1 之后必须迁移
 
-`storage/schema.rs` 只定义 `PRAGMA user_version = 1` 的当前布局。打开其他版本的数据库会事务性重建当前 schema；不要添加旧字段的 `ALTER TABLE` 或 fallback reader。需要改变布局时，先提高 schema 标识并更新重建测试。
+`storage/schema.rs` 以 `PRAGMA user_version = 1` 作为一次性的干净基线。只有 `user_version = 0`/pre-v1 输入会在本次重构中事务性清空并建立 v1；不得为旧布局添加字段级迁移或 fallback reader。从 v1 开始，任何布局变化都必须提高 schema 版本，并在 `storage/migrations.rs` 注册恰好一个相邻迁移（v1→v2→v3）；完整迁移链在同一事务中执行，任一步失败都整体回滚。高于当前程序支持版本的数据库必须原样拒绝，不能降级或清空。
 
 ### 内容去重靠 `content_hash`
 
