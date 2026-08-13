@@ -3166,6 +3166,10 @@
     transition: border-color 120ms ease;
   }
 
+  .setting-card-row input {
+    width: 100px;
+  }
+
   input:focus {
     border-color: var(--text-faint);
   }
