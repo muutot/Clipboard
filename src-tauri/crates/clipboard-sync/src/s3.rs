@@ -882,7 +882,14 @@ pub fn list_s3_objects_after(
     secret_key: &str,
 ) -> Result<Vec<S3Entry>, String> {
     list_s3_objects_after_with_metrics(
-        endpoint, region, bucket, prefix, start_after, access_key, secret_key, None,
+        endpoint,
+        region,
+        bucket,
+        prefix,
+        start_after,
+        access_key,
+        secret_key,
+        None,
     )
 }
 

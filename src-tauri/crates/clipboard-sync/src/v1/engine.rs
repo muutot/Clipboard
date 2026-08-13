@@ -830,13 +830,7 @@ fn maybe_compact(
             )?;
         }
     }
-    if !checkpoint_pointer_is_durable(
-        store,
-        &head,
-        &expected_head_bytes,
-        session_key,
-        result,
-    )? {
+    if !checkpoint_pointer_is_durable(store, &head, &expected_head_bytes, session_key, result)? {
         return Ok(());
     }
     finalize_checkpoint_publication(
@@ -860,9 +854,9 @@ fn checkpoint_pointer_is_durable(
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<bool, String> {
-    let downloaded = store
-        .get(CHECKPOINT_HEAD_KEY)?
-        .ok_or_else(|| "checkpoint pointer disappeared after a successful conditional write".to_string())?;
+    let downloaded = store.get(CHECKPOINT_HEAD_KEY)?.ok_or_else(|| {
+        "checkpoint pointer disappeared after a successful conditional write".to_string()
+    })?;
     result.bytes_downloaded = checked_add(
         result.bytes_downloaded,
         downloaded.bytes.len() as u64,

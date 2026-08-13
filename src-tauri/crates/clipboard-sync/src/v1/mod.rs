@@ -7,6 +7,7 @@ pub mod repository;
 pub mod resources;
 pub mod wire;
 
+pub use crate::s3::{S3RequestMetrics, S3RequestMetricsSnapshot};
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 pub use layout::{
     checkpoint_object_key, head_object_key, obsolete_object_candidate, parse_checkpoint_key,
@@ -18,7 +19,6 @@ pub use remote::{
     cleanup_obsolete_objects, DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata,
     ObjectStore, ObsoleteCleanupReport, PutCondition, PutOutcome, S3ObjectStore,
 };
-pub use crate::s3::{S3RequestMetrics, S3RequestMetricsSnapshot};
 pub use repository::{
     SyncEnginePaths, SyncHeadCache, SyncIncomingBatch, SyncOutboxBatch, SyncRemoteState,
     SyncRepository, SyncResourceReferences, SyncSnapshot, SyncSnapshotExport,
