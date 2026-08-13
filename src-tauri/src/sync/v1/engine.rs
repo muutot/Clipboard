@@ -2,8 +2,6 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::storage::{Database, StoragePaths};
-
 use super::wire::envelope_is_encrypted;
 use super::{
     cleanup_obsolete_objects, collect_mutation_resource_refs, decode_checkpoint_head,
@@ -13,40 +11,28 @@ use super::{
     parse_segment_key, prepare_mutation_resources, segment_object_key, segment_prefix,
     snapshot_object_key, CheckpointHead, CheckpointPackHeader, DeviceCursor, DeviceHead,
     EncodedFile, EncodedObject, LargePackKind, LargePackWriter, MutationBatch, ObjectInfo,
-    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, ResourceRoots, Segment,
-    SessionKey, SnapshotPackHeader, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
+    SnapshotPackHeader, SyncEnginePaths, SyncHeadCache, SyncOutboxBatch, SyncRemoteState,
+    SyncRepository, SyncSnapshotExport, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
 const LARGE_PACK_BATCH_ENTRIES: usize = 2048;
 const MAX_LARGE_PACK_STORED_BYTES: u64 = 1024 * 1024 * 1024;
 
-fn resource_roots(paths: &StoragePaths) -> ResourceRoots {
-    ResourceRoots::new(
-        paths.images.clone(),
-        paths.files.clone(),
-        paths.storage.join("icons"),
-    )
-}
-
 fn write_large_pack_batch(
     writer: &mut LargePackWriter<'_>,
     mutations: MutationBatch,
-) -> Result<(), crate::storage::StorageError> {
+) -> Result<(), String> {
     if mutations.is_empty() {
         return Ok(());
     }
-    let encoded_size = mutation_batch_encoded_size(&mutations)
-        .map_err(crate::storage::StorageError::InvalidSyncState)?;
+    let encoded_size = mutation_batch_encoded_size(&mutations)?;
     if encoded_size <= large_pack_chunk_limit_bytes() {
-        return writer
-            .write_batch(&mutations)
-            .map_err(crate::storage::StorageError::InvalidSyncState);
+        return writer.write_batch(&mutations);
     }
     if mutations.len() == 1 {
-        return Err(crate::storage::StorageError::InvalidSyncState(
-            "one sync record exceeds the large-pack chunk size limit".to_string(),
-        ));
+        return Err("one sync record exceeds the large-pack chunk size limit".to_string());
     }
 
     if !mutations.upserts.is_empty() {
@@ -103,8 +89,8 @@ pub struct SyncEngineResult {
 /// same SQLite transaction as the corresponding mutation batch.
 pub fn sync_database(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     session_key: Option<&SessionKey>,
     options: SyncEngineOptions,
@@ -112,27 +98,17 @@ pub fn sync_database(
     if options.segment_max_entries == 0 {
         return Err("sync segment entry limit must be greater than zero".to_string());
     }
-    database
-        .initialize_sync()
-        .map_err(|error| error.to_string())?;
-    let device_id = database
-        .get_sync_device_id()
-        .map_err(|error| error.to_string())?;
+    database.initialize_sync()?;
+    let device_id = database.get_sync_device_id()?;
     let mut result = SyncEngineResult::default();
-    let mut state = database
-        .get_or_create_sync_remote_state(remote_scope)
-        .map_err(|error| error.to_string())?;
+    let mut state = database.get_or_create_sync_remote_state(remote_scope)?;
 
     if !state.remote_prepared {
         let cleanup = cleanup_obsolete_objects(store)?;
         result.deleted_remote_objects = cleanup.deleted_objects;
-        remove_obsolete_local_manifest(paths, remote_scope)?;
-        database
-            .mark_sync_remote_prepared(remote_scope)
-            .map_err(|error| error.to_string())?;
-        state = database
-            .get_or_create_sync_remote_state(remote_scope)
-            .map_err(|error| error.to_string())?;
+        remove_obsolete_local_manifest(&paths.temporary_directory, remote_scope)?;
+        database.mark_sync_remote_prepared(remote_scope)?;
+        state = database.get_or_create_sync_remote_state(remote_scope)?;
     }
 
     let mut heads = store.list(HEADS_PREFIX, None)?;
@@ -167,9 +143,8 @@ pub fn sync_database(
         )?;
     }
 
-    while let Some(batch) = database
-        .get_sync_outbox_batch_for_scope(remote_scope, options.segment_max_entries)
-        .map_err(|error| error.to_string())?
+    while let Some(batch) =
+        database.get_sync_outbox_batch_for_scope(remote_scope, options.segment_max_entries)?
     {
         state = publish_segment(
             store,
@@ -208,9 +183,7 @@ pub fn sync_database(
         &mut result,
     )?;
     if result.failed_peers == 0 {
-        state = database
-            .get_or_create_sync_remote_state(remote_scope)
-            .map_err(|error| error.to_string())?;
+        state = database.get_or_create_sync_remote_state(remote_scope)?;
         maybe_compact(
             store,
             database,
@@ -228,7 +201,7 @@ pub fn sync_database(
 
 fn validate_remote_access_before_first_publish(
     store: &impl ObjectStore,
-    state: &crate::storage::SyncRemoteState,
+    state: &SyncRemoteState,
     heads: &[ObjectInfo],
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
@@ -311,16 +284,16 @@ fn remote_access_error(error: String) -> String {
 #[allow(clippy::too_many_arguments)]
 fn reconcile_local_device_head(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     device_id: &str,
-    state: crate::storage::SyncRemoteState,
+    state: SyncRemoteState,
     heads: &[ObjectInfo],
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
-) -> Result<crate::storage::SyncRemoteState, String> {
+) -> Result<SyncRemoteState, String> {
     let key = head_object_key(device_id)?;
     let listed = heads.iter().find(|info| info.key == key);
     if state.initialized
@@ -333,9 +306,7 @@ fn reconcile_local_device_head(
     }
     let Some(downloaded) = store.get(&key)? else {
         if state.initialized {
-            return database
-                .reset_sync_remote_state(remote_scope)
-                .map_err(|error| error.to_string());
+            return database.reset_sync_remote_state(remote_scope);
         }
         return Ok(state);
     };
@@ -360,8 +331,7 @@ fn reconcile_local_device_head(
     }
 
     let already_applied = database
-        .get_sync_cursor(remote_scope, device_id)
-        .map_err(|error| error.to_string())?
+        .get_sync_cursor(remote_scope, device_id)?
         .is_some_and(|cursor| {
             cursor.epoch == remote_head.epoch && cursor.sequence >= remote_head.published_sequence
         });
@@ -378,15 +348,10 @@ fn reconcile_local_device_head(
         )?;
     }
 
-    database
-        .reset_sync_remote_state(remote_scope)
-        .map_err(|error| error.to_string())
+    database.reset_sync_remote_state(remote_scope)
 }
 
-fn local_publication_matches_remote(
-    state: &crate::storage::SyncRemoteState,
-    head: &DeviceHead,
-) -> bool {
+fn local_publication_matches_remote(state: &SyncRemoteState, head: &DeviceHead) -> bool {
     state.initialized
         && state.epoch == head.epoch
         && state.snapshot.as_ref() == Some(&head.snapshot)
@@ -398,7 +363,7 @@ fn listed_head_identity(info: &ObjectInfo) -> Option<(&str, u64)> {
     Some((info.etag.as_deref()?, info.size_bytes?))
 }
 
-fn cache_matches_listing(cache: &crate::storage::SyncHeadCache, info: &ObjectInfo) -> bool {
+fn cache_matches_listing(cache: &SyncHeadCache, info: &ObjectInfo) -> bool {
     listed_head_identity(info).is_some_and(|(etag, size)| {
         cache.etag == etag
             && cache.stored_size_bytes == size
@@ -410,47 +375,36 @@ fn cache_matches_listing(cache: &crate::storage::SyncHeadCache, info: &ObjectInf
 }
 
 fn local_head_cache_matches(
-    database: &Database,
+    database: &impl SyncRepository,
     remote_scope: &str,
     device_id: &str,
-    state: &crate::storage::SyncRemoteState,
+    state: &SyncRemoteState,
     info: &ObjectInfo,
 ) -> Result<bool, String> {
-    let Some(cache) = database
-        .get_sync_head_cache(remote_scope, device_id)
-        .map_err(|error| error.to_string())?
-    else {
+    let Some(cache) = database.get_sync_head_cache(remote_scope, device_id)? else {
         return Ok(false);
     };
-    let head = state
-        .device_head(device_id)
-        .map_err(|error| error.to_string())?;
+    let head = state.device_head(device_id)?;
     Ok(cache_matches_listing(&cache, info) && cache.matches_head(&head))
 }
 
 fn peer_head_cache_matches(
-    database: &Database,
+    database: &impl SyncRepository,
     remote_scope: &str,
     device_id: &str,
     info: &ObjectInfo,
 ) -> Result<bool, String> {
-    let Some(cache) = database
-        .get_sync_head_cache(remote_scope, device_id)
-        .map_err(|error| error.to_string())?
-    else {
+    let Some(cache) = database.get_sync_head_cache(remote_scope, device_id)? else {
         return Ok(false);
     };
-    let Some(cursor) = database
-        .get_sync_cursor(remote_scope, device_id)
-        .map_err(|error| error.to_string())?
-    else {
+    let Some(cursor) = database.get_sync_cursor(remote_scope, device_id)? else {
         return Ok(false);
     };
     Ok(cache_matches_listing(&cache, info) && cache.matches_cursor(&cursor))
 }
 
 fn record_head_cache(
-    database: &Database,
+    database: &impl SyncRepository,
     remote_scope: &str,
     device_id: &str,
     listed: Option<&ObjectInfo>,
@@ -475,8 +429,8 @@ fn record_head_cache(
 #[allow(clippy::too_many_arguments)]
 fn pull_checkpoint_if_needed(
     store: &impl ObjectStore,
-    database: &Database,
-    _paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     session_key: Option<&SessionKey>,
     _resource_limits: ResourceLimits,
@@ -484,14 +438,8 @@ fn pull_checkpoint_if_needed(
     force: bool,
 ) -> Result<bool, String> {
     if !force {
-        let has_checkpoint = database
-            .get_sync_checkpoint_state(remote_scope)
-            .map_err(|error| error.to_string())?
-            .is_some();
-        let has_peer_cursors = !database
-            .list_sync_cursors(remote_scope)
-            .map_err(|error| error.to_string())?
-            .is_empty();
+        let has_checkpoint = database.get_sync_checkpoint_state(remote_scope)?.is_some();
+        let has_peer_cursors = !database.list_sync_cursors(remote_scope)?.is_empty();
         if has_checkpoint || has_peer_cursors {
             return Ok(false);
         }
@@ -512,8 +460,7 @@ fn pull_checkpoint_if_needed(
     validate_checkpoint_head(&checkpoint_head)?;
     if !force
         && database
-            .get_sync_checkpoint_state(remote_scope)
-            .map_err(|error| error.to_string())?
+            .get_sync_checkpoint_state(remote_scope)?
             .is_some_and(|(generation, sha256)| {
                 generation == checkpoint_head.generation
                     && sha256 == checkpoint_head.checkpoint.sha256
@@ -527,6 +474,7 @@ fn pull_checkpoint_if_needed(
         &checkpoint_head.checkpoint,
         checkpoint_head.generation,
         session_key,
+        &paths.temporary_directory,
         result,
     ) {
         Ok(checkpoint) => {
@@ -545,6 +493,7 @@ fn pull_checkpoint_if_needed(
                 previous,
                 parsed.generation,
                 session_key,
+                &paths.temporary_directory,
                 result,
             )
             .map_err(|previous_error| {
@@ -559,40 +508,34 @@ fn pull_checkpoint_if_needed(
     let expected_record_count = checkpoint.expected_record_count;
     let mut reader = open_checkpoint_pack(&checkpoint.file.path, session_key)?;
     let mut terminal_checked = false;
-    let batches = std::iter::from_fn(|| {
+    let mut batches = std::iter::from_fn(|| {
         if terminal_checked {
             return None;
         }
         match reader.next() {
-            Some(batch) => Some(
-                batch
-                    .and_then(|mut mutations| {
-                        let resource_refs = defer_mutation_resources(&mut mutations)?;
-                        Ok((mutations, resource_refs))
-                    })
-                    .map_err(crate::storage::StorageError::InvalidSyncState),
-            ),
+            Some(batch) => Some(batch.and_then(|mut mutations| {
+                let resource_refs = defer_mutation_resources(&mut mutations)?;
+                Ok((mutations, resource_refs))
+            })),
             None => {
                 terminal_checked = true;
                 if reader.record_count() != expected_record_count || !reader.is_complete() {
-                    Some(Err(crate::storage::StorageError::InvalidSyncState(
-                        "checkpoint payload does not match its reference".to_string(),
-                    )))
+                    Some(Err(
+                        "checkpoint payload does not match its reference".to_string()
+                    ))
                 } else {
                     None
                 }
             }
         }
     });
-    let applied = database
-        .apply_sync_checkpoint_batches(
-            remote_scope,
-            generation,
-            &checkpoint_digest_for_generation(&checkpoint_head, generation)?,
-            &vector,
-            batches,
-        )
-        .map_err(|error| error.to_string())?;
+    let applied = database.apply_sync_checkpoint_batches(
+        remote_scope,
+        generation,
+        &checkpoint_digest_for_generation(&checkpoint_head, generation)?,
+        &vector,
+        &mut batches,
+    )?;
     result.downloaded_entries = checked_add(
         result.downloaded_entries,
         expected_record_count,
@@ -625,6 +568,7 @@ fn download_checkpoint(
     reference: &ObjectRef,
     generation: u64,
     session_key: Option<&SessionKey>,
+    temporary_directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<DownloadedCheckpoint, String> {
     let parsed = parse_checkpoint_key(&reference.key)?;
@@ -636,7 +580,7 @@ fn download_checkpoint(
         &reference.key,
         &reference.sha256,
         Some(reference.stored_size_bytes),
-        &std::env::temp_dir(),
+        temporary_directory,
         result,
     )?;
     let reader = open_checkpoint_pack(&file.path, session_key)?;
@@ -709,8 +653,8 @@ fn validate_checkpoint_vector(vector: &[DeviceCursor]) -> Result<(), String> {
 #[allow(clippy::too_many_arguments)]
 fn encode_database_pack(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     kind: LargePackKind,
     snapshot_header: Option<&SnapshotPackHeader>,
@@ -718,53 +662,46 @@ fn encode_database_pack(
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
-) -> Result<(EncodedFile, crate::storage::SyncSnapshotExport), String> {
-    let database_snapshot = TemporaryDatabaseSnapshot::create(database, &paths.data_directory)?;
-    let export_database =
-        Database::open(&database_snapshot.path).map_err(|error| error.to_string())?;
-    let resource_roots = resource_roots(paths);
+) -> Result<(EncodedFile, SyncSnapshotExport), String> {
     let mut writer = match kind {
         LargePackKind::Snapshot => LargePackWriter::new(
-            &paths.data_directory,
+            &paths.temporary_directory,
             kind,
             snapshot_header.ok_or_else(|| "snapshot pack header is missing".to_string())?,
             session_key,
         )?,
         LargePackKind::Checkpoint => LargePackWriter::new(
-            &paths.data_directory,
+            &paths.temporary_directory,
             kind,
             checkpoint_header.ok_or_else(|| "checkpoint pack header is missing".to_string())?,
             session_key,
         )?,
     };
-    let export = export_database
-        .visit_sync_snapshot_for_scope(remote_scope, LARGE_PACK_BATCH_ENTRIES, |mut mutations| {
+    let export = database.visit_sync_snapshot_for_scope(
+        remote_scope,
+        LARGE_PACK_BATCH_ENTRIES,
+        &paths.temporary_directory,
+        &mut |mut mutations| {
             let resources = prepare_mutation_resources(
                 store,
                 &mut mutations,
-                &resource_roots,
+                &paths.resource_roots,
                 resource_limits,
                 session_key,
-            )
-            .map_err(crate::storage::StorageError::InvalidSyncState)?;
+            )?;
             result.uploaded_resources = result
                 .uploaded_resources
                 .checked_add(resources.transferred_resources)
-                .ok_or(crate::storage::StorageError::ValueOutOfRange {
-                    field: "uploaded sync resource count",
-                })?;
+                .ok_or_else(|| "uploaded sync resource count overflowed".to_string())?;
             result.bytes_uploaded = result
                 .bytes_uploaded
                 .checked_add(resources.transferred_bytes)
-                .ok_or(crate::storage::StorageError::ValueOutOfRange {
-                    field: "uploaded sync byte count",
-                })?;
-            let resource_refs = collect_mutation_resource_refs(&mutations)
-                .map_err(crate::storage::StorageError::InvalidSyncState)?;
+                .ok_or_else(|| "uploaded sync byte count overflowed".to_string())?;
+            let resource_refs = collect_mutation_resource_refs(&mutations)?;
             database.record_sync_resource_refs(remote_scope, &mutations, &resource_refs)?;
             write_large_pack_batch(&mut writer, mutations)
-        })
-        .map_err(|error| error.to_string())?;
+        },
+    )?;
     if let Some(header) = snapshot_header {
         writer.rewrite_header(&SnapshotPackHeader {
             device_id: header.device_id.clone(),
@@ -782,19 +719,17 @@ fn encode_database_pack(
 #[allow(clippy::too_many_arguments)]
 fn maybe_compact(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     local_device_id: &str,
-    local_state: &crate::storage::SyncRemoteState,
+    local_state: &SyncRemoteState,
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
     let vector = frozen_checkpoint_vector(database, remote_scope, local_device_id, local_state)?;
-    let baseline = database
-        .get_sync_checkpoint_cursors(remote_scope)
-        .map_err(|error| error.to_string())?;
+    let baseline = database.get_sync_checkpoint_cursors(remote_scope)?;
     if vector.is_empty() || !checkpoint_compaction_due(&baseline, &vector) {
         return Ok(());
     }
@@ -802,8 +737,7 @@ fn maybe_compact(
 
     if let Some(current) = existing.as_ref() {
         let current_is_locally_verified = database
-            .get_sync_checkpoint_state(remote_scope)
-            .map_err(|error| error.to_string())?
+            .get_sync_checkpoint_state(remote_scope)?
             .is_some_and(|(generation, sha256)| {
                 generation == current.head.generation && sha256 == current.head.checkpoint.sha256
             })
@@ -814,6 +748,7 @@ fn maybe_compact(
                 &current.head.checkpoint,
                 current.head.generation,
                 session_key,
+                &paths.temporary_directory,
                 result,
             ) {
                 Ok(checkpoint) if checkpoint.header.vector == current.head.vector => {}
@@ -829,6 +764,7 @@ fn maybe_compact(
                 &current.head,
                 None,
                 session_key,
+                &paths.temporary_directory,
                 result,
             )?;
             return Ok(());
@@ -902,17 +838,20 @@ fn maybe_compact(
             .as_ref()
             .map(|current| current.head.vector.as_slice()),
         session_key,
+        &paths.temporary_directory,
         result,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn finalize_checkpoint_publication(
     store: &impl ObjectStore,
-    database: &Database,
+    database: &impl SyncRepository,
     remote_scope: &str,
     head: &CheckpointHead,
     covered_vector_hint: Option<&[DeviceCursor]>,
     session_key: Option<&SessionKey>,
+    temporary_directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
     if let Some(previous) = head.previous_checkpoint.as_ref() {
@@ -920,22 +859,25 @@ fn finalize_checkpoint_publication(
         let covered_vector = if let Some(vector) = covered_vector_hint {
             vector.to_vec()
         } else {
-            let local_state = database
-                .get_sync_checkpoint_state(remote_scope)
-                .map_err(|error| error.to_string())?;
+            let local_state = database.get_sync_checkpoint_state(remote_scope)?;
             let local_vector = if local_state.is_some_and(|(generation, sha256)| {
                 generation == previous_generation && sha256 == previous.sha256
             }) {
-                database
-                    .get_sync_checkpoint_cursors(remote_scope)
-                    .map_err(|error| error.to_string())?
+                database.get_sync_checkpoint_cursors(remote_scope)?
             } else {
                 Vec::new()
             };
             if local_vector.is_empty() {
-                download_checkpoint(store, previous, previous_generation, session_key, result)?
-                    .header
-                    .vector
+                download_checkpoint(
+                    store,
+                    previous,
+                    previous_generation,
+                    session_key,
+                    temporary_directory,
+                    result,
+                )?
+                .header
+                .vector
             } else {
                 local_vector
             }
@@ -954,14 +896,12 @@ fn finalize_checkpoint_publication(
         deleted,
         "deleted remote object count",
     )?;
-    database
-        .record_sync_checkpoint_published(
-            remote_scope,
-            head.generation,
-            &head.checkpoint.sha256,
-            &head.vector,
-        )
-        .map_err(|error| error.to_string())
+    database.record_sync_checkpoint_published(
+        remote_scope,
+        head.generation,
+        &head.checkpoint.sha256,
+        &head.vector,
+    )
 }
 
 fn prune_unreferenced_checkpoints(
@@ -1013,14 +953,13 @@ fn read_checkpoint_head(
 }
 
 fn frozen_checkpoint_vector(
-    database: &Database,
+    database: &impl SyncRepository,
     remote_scope: &str,
     local_device_id: &str,
-    local_state: &crate::storage::SyncRemoteState,
+    local_state: &SyncRemoteState,
 ) -> Result<Vec<DeviceCursor>, String> {
     let mut vector = database
-        .list_sync_cursors(remote_scope)
-        .map_err(|error| error.to_string())?
+        .list_sync_cursors(remote_scope)?
         .into_iter()
         .map(|cursor| (cursor.device_id.clone(), cursor))
         .collect::<BTreeMap<_, _>>();
@@ -1119,8 +1058,8 @@ fn garbage_collect_covered_history(
 #[allow(clippy::too_many_arguments)]
 fn pull_device_with_checkpoint_recovery(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     head: &DeviceHead,
     session_key: Option<&SessionKey>,
@@ -1174,15 +1113,15 @@ fn pull_device_with_checkpoint_recovery(
 #[allow(clippy::too_many_arguments)]
 fn publish_bootstrap(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     device_id: &str,
-    state: crate::storage::SyncRemoteState,
+    state: SyncRemoteState,
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
-) -> Result<crate::storage::SyncRemoteState, String> {
+) -> Result<SyncRemoteState, String> {
     let snapshot_header = SnapshotPackHeader {
         device_id: device_id.to_string(),
         epoch: state.epoch.clone(),
@@ -1222,14 +1161,12 @@ fn publish_bootstrap(
         encoded.record_count,
         "uploaded entry count",
     )?;
-    let state = database
-        .commit_sync_bootstrap_published(
-            remote_scope,
-            &state.epoch,
-            &snapshot_ref,
-            export.through_sequence,
-        )
-        .map_err(|error| error.to_string())?;
+    let state = database.commit_sync_bootstrap_published(
+        remote_scope,
+        &state.epoch,
+        &snapshot_ref,
+        export.through_sequence,
+    )?;
     record_head_cache(
         database,
         remote_scope,
@@ -1245,16 +1182,16 @@ fn publish_bootstrap(
 #[allow(clippy::too_many_arguments)]
 fn publish_segment(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     device_id: &str,
-    state: crate::storage::SyncRemoteState,
-    batch: crate::storage::SyncOutboxBatch,
+    state: SyncRemoteState,
+    batch: SyncOutboxBatch,
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
-) -> Result<crate::storage::SyncRemoteState, String> {
+) -> Result<SyncRemoteState, String> {
     let mut segment = Segment {
         device_id: device_id.to_string(),
         epoch: state.epoch.clone(),
@@ -1262,11 +1199,10 @@ fn publish_segment(
         last_sequence: batch.last_sequence,
         mutations: batch.mutations,
     };
-    let resource_roots = resource_roots(paths);
     let resources = prepare_mutation_resources(
         store,
         &mut segment.mutations,
-        &resource_roots,
+        &paths.resource_roots,
         resource_limits,
         session_key,
     )?;
@@ -1277,9 +1213,7 @@ fn publish_segment(
         "uploaded byte count",
     )?;
     let resource_refs = collect_mutation_resource_refs(&segment.mutations)?;
-    database
-        .record_sync_resource_refs(remote_scope, &segment.mutations, &resource_refs)
-        .map_err(|error| error.to_string())?;
+    database.record_sync_resource_refs(remote_scope, &segment.mutations, &resource_refs)?;
 
     let encoded = encode_segment(&segment, session_key)?;
     let segment_key = segment_object_key(
@@ -1294,23 +1228,19 @@ fn publish_segment(
     next_state.published_sequence = segment.last_sequence;
     next_state.last_segment_key = Some(segment_key.clone());
     next_state.updated_at_ms = current_time_ms();
-    let head = next_state
-        .device_head(device_id)
-        .map_err(|error| error.to_string())?;
+    let head = next_state.device_head(device_id)?;
     let published_head = publish_head(store, &head, session_key, result)?;
     result.uploaded_entries = checked_add(
         result.uploaded_entries,
         segment.mutations.len() as u64,
         "uploaded entry count",
     )?;
-    let state = database
-        .commit_sync_segment_published(
-            remote_scope,
-            &state.epoch,
-            &segment_key,
-            segment.last_sequence,
-        )
-        .map_err(|error| error.to_string())?;
+    let state = database.commit_sync_segment_published(
+        remote_scope,
+        &state.epoch,
+        &segment_key,
+        segment.last_sequence,
+    )?;
     record_head_cache(
         database,
         remote_scope,
@@ -1326,8 +1256,8 @@ fn publish_segment(
 #[allow(clippy::too_many_arguments)]
 fn pull_remote_devices(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     local_device_id: &str,
     heads: &[ObjectInfo],
@@ -1386,17 +1316,15 @@ fn pull_remote_devices(
 #[allow(clippy::too_many_arguments)]
 fn pull_device(
     store: &impl ObjectStore,
-    database: &Database,
-    paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     head: &DeviceHead,
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
-    let mut cursor = database
-        .get_sync_cursor(remote_scope, &head.device_id)
-        .map_err(|error| error.to_string())?;
+    let mut cursor = database.get_sync_cursor(remote_scope, &head.device_id)?;
     if cursor
         .as_ref()
         .is_none_or(|cursor| cursor.epoch != head.epoch)
@@ -1480,14 +1408,12 @@ fn pull_device(
             sequence: segment.last_sequence,
             last_segment_key: Some(info.key.clone()),
         };
-        let applied = database
-            .apply_sync_segment_with_resources(
-                remote_scope,
-                &next_cursor,
-                &segment.mutations,
-                &resource_refs,
-            )
-            .map_err(|error| error.to_string())?;
+        let applied = database.apply_sync_segment_with_resources(
+            remote_scope,
+            &next_cursor,
+            &segment.mutations,
+            &resource_refs,
+        )?;
         result.applied_entries =
             checked_add(result.applied_entries, applied, "applied entry count")?;
         cursor = next_cursor;
@@ -1508,8 +1434,8 @@ fn pull_device(
 #[allow(clippy::too_many_arguments)]
 fn pull_snapshot(
     store: &impl ObjectStore,
-    database: &Database,
-    _paths: &StoragePaths,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
     remote_scope: &str,
     head: &DeviceHead,
     session_key: Option<&SessionKey>,
@@ -1521,7 +1447,7 @@ fn pull_snapshot(
         &head.snapshot.key,
         &head.snapshot.sha256,
         Some(head.snapshot.stored_size_bytes),
-        &std::env::temp_dir(),
+        &paths.temporary_directory,
         result,
     )?;
     let mut reader = open_snapshot_pack(&downloaded.path, session_key)?;
@@ -1542,27 +1468,21 @@ fn pull_snapshot(
     };
     let expected_record_count = head.snapshot.record_count;
     let mut terminal_checked = false;
-    let batches = std::iter::from_fn(|| {
+    let mut batches = std::iter::from_fn(|| {
         if terminal_checked {
             return None;
         }
         match reader.next() {
-            Some(batch) => Some(
-                batch
-                    .and_then(|mut mutations| {
-                        let resource_refs = defer_mutation_resources(&mut mutations)?;
-                        Ok((mutations, resource_refs))
-                    })
-                    .map_err(crate::storage::StorageError::InvalidSyncState),
-            ),
+            Some(batch) => Some(batch.and_then(|mut mutations| {
+                let resource_refs = defer_mutation_resources(&mut mutations)?;
+                Ok((mutations, resource_refs))
+            })),
             None => {
                 terminal_checked = true;
                 if reader.record_count() != expected_record_count || !reader.is_complete() {
-                    Some(Err(crate::storage::StorageError::InvalidSyncState(
-                        format!(
-                            "snapshot payload does not match head for {}",
-                            head.device_id
-                        ),
+                    Some(Err(format!(
+                        "snapshot payload does not match head for {}",
+                        head.device_id
                     )))
                 } else {
                     None
@@ -1570,9 +1490,12 @@ fn pull_snapshot(
             }
         }
     });
-    let applied = database
-        .apply_sync_snapshot_batches(remote_scope, &cursor, &head.snapshot.sha256, batches)
-        .map_err(|error| error.to_string())?;
+    let applied = database.apply_sync_snapshot_batches(
+        remote_scope,
+        &cursor,
+        &head.snapshot.sha256,
+        &mut batches,
+    )?;
     result.downloaded_entries = checked_add(
         result.downloaded_entries,
         expected_record_count,
@@ -1699,10 +1622,11 @@ fn get_verified_object(
     Ok(downloaded.bytes)
 }
 
-fn remove_obsolete_local_manifest(paths: &StoragePaths, remote_scope: &str) -> Result<(), String> {
-    let path = paths
-        .data_directory
-        .join(format!("sync-pool-manifest-{remote_scope}.json"));
+fn remove_obsolete_local_manifest(
+    temporary_directory: &std::path::Path,
+    remote_scope: &str,
+) -> Result<(), String> {
+    let path = temporary_directory.join(format!("sync-pool-manifest-{remote_scope}.json"));
     match std::fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_file() || metadata.file_type().is_symlink() => {
             std::fs::remove_file(&path)
@@ -1760,43 +1684,6 @@ impl TemporarySyncFile {
 impl Drop for TemporarySyncFile {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
-    }
-}
-
-struct TemporaryDatabaseSnapshot {
-    path: PathBuf,
-}
-
-impl TemporaryDatabaseSnapshot {
-    fn create(database: &Database, directory: &std::path::Path) -> Result<Self, String> {
-        fs::create_dir_all(directory)
-            .map_err(|error| format!("failed to create sync temporary directory: {error}"))?;
-        for _ in 0..16 {
-            let path = directory.join(format!(
-                ".sync-database-snapshot-{}-{:016x}.sqlite3",
-                std::process::id(),
-                rand::random::<u64>()
-            ));
-            match fs::symlink_metadata(&path) {
-                Ok(_) => continue,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    database
-                        .snapshot_into(&path)
-                        .map_err(|error| error.to_string())?;
-                    return Ok(Self { path });
-                }
-                Err(error) => return Err(format!("failed to inspect sync snapshot path: {error}")),
-            }
-        }
-        Err("failed to allocate a unique sync database snapshot".to_string())
-    }
-}
-
-impl Drop for TemporaryDatabaseSnapshot {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-        let _ = fs::remove_file(format!("{}-wal", self.path.display()));
-        let _ = fs::remove_file(format!("{}-shm", self.path.display()));
     }
 }
 
@@ -1893,7 +1780,7 @@ mod tests {
     use super::*;
     use crate::{
         domain::{ClipboardItem, ClipboardKind},
-        storage::ClipboardRepository,
+        storage::{ClipboardRepository, Database, StoragePaths},
         sync::v1::{
             DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata, ResourceCategory,
         },
@@ -2045,6 +1932,76 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         StoragePaths::initialize(project).unwrap()
+    }
+
+    fn engine_paths(paths: &StoragePaths) -> SyncEnginePaths {
+        paths.into()
+    }
+
+    fn sync_database(
+        store: &impl ObjectStore,
+        database: &Database,
+        paths: &StoragePaths,
+        remote_scope: &str,
+        session_key: Option<&SessionKey>,
+        options: SyncEngineOptions,
+    ) -> Result<SyncEngineResult, String> {
+        super::sync_database(
+            store,
+            database,
+            &engine_paths(paths),
+            remote_scope,
+            session_key,
+            options,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn maybe_compact(
+        store: &impl ObjectStore,
+        database: &Database,
+        paths: &StoragePaths,
+        remote_scope: &str,
+        local_device_id: &str,
+        local_state: &SyncRemoteState,
+        session_key: Option<&SessionKey>,
+        resource_limits: ResourceLimits,
+        result: &mut SyncEngineResult,
+    ) -> Result<(), String> {
+        super::maybe_compact(
+            store,
+            database,
+            &engine_paths(paths),
+            remote_scope,
+            local_device_id,
+            local_state,
+            session_key,
+            resource_limits,
+            result,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn pull_device(
+        store: &impl ObjectStore,
+        database: &Database,
+        paths: &StoragePaths,
+        remote_scope: &str,
+        head: &DeviceHead,
+        session_key: Option<&SessionKey>,
+        resource_limits: ResourceLimits,
+        result: &mut SyncEngineResult,
+    ) -> Result<(), String> {
+        super::pull_device(
+            store,
+            database,
+            &engine_paths(paths),
+            remote_scope,
+            head,
+            session_key,
+            resource_limits,
+            result,
+        )
     }
 
     fn text_item(id: &str, text: &str) -> ClipboardItem {

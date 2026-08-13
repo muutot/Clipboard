@@ -6,7 +6,7 @@
 
 pub mod engine;
 
-pub use clipboard_sync::v1::{layout, remote, resources, wire};
+pub use clipboard_sync::v1::{layout, remote, repository, resources, wire};
 
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 
@@ -19,6 +19,10 @@ pub use layout::{
 pub use remote::{
     cleanup_obsolete_objects, DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata,
     ObjectStore, ObsoleteCleanupReport, PutCondition, PutOutcome, S3ObjectStore,
+};
+pub use repository::{
+    SyncEnginePaths, SyncHeadCache, SyncIncomingBatch, SyncOutboxBatch, SyncRemoteState,
+    SyncRepository, SyncResourceReferences, SyncSnapshot, SyncSnapshotExport,
 };
 pub use resources::{
     collect_mutation_resource_refs, defer_mutation_resources, ensure_resource_uploaded,
@@ -36,6 +40,19 @@ pub use wire::{
 };
 
 use crate::domain::{ClipboardItem, ClipboardKind};
+
+impl From<&crate::storage::StoragePaths> for SyncEnginePaths {
+    fn from(paths: &crate::storage::StoragePaths) -> Self {
+        Self::new(
+            paths.data_directory.clone(),
+            ResourceRoots::new(
+                paths.images.clone(),
+                paths.files.clone(),
+                paths.storage.join("icons"),
+            ),
+        )
+    }
+}
 
 impl From<ClipboardKind> for SyncItemKind {
     fn from(kind: ClipboardKind) -> Self {

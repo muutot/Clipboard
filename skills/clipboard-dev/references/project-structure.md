@@ -48,8 +48,8 @@ Read `components.md` and `services.md` for ownership and change gates inside tho
 | `privacy/`               | Pause/ignore/sensitive-source policy helpers                                                                           |
 | `performance/`           | Startup/search/performance snapshots and monitoring                                                                    |
 | `export/`                | JSON, CSV, plain-text import/export, and PPaste `.Pastebackup` import (`ppaste.rs`)                                    |
-| `crates/clipboard-sync/` | Tauri-independent S3 transport, v1 protocol/object store, wire codecs, and content-addressed resource processing       |
-| `sync/`                  | Desktop DTO/path adapters plus v1 replication engine and application integration                                       |
+| `crates/clipboard-sync/` | Tauri-independent S3 transport, v1 protocol/object store, wire codecs, repository contract, and resource processing    |
+| `sync/`                  | Desktop DTO/path adapters plus the v1 replication engine and application integration                                   |
 | `commands/`              | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                                            |
 | `cli/`                   | Process CLI execution and loopback API server                                                                          |
 

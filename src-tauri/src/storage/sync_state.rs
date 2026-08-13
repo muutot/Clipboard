@@ -1,98 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{params, params_from_iter, OptionalExtension, Row, Transaction};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Database, StorageError};
 use crate::sync::v1::{
     checkpoint_object_key, parse_segment_key, snapshot_object_key, DeviceCursor, DeviceHead,
-    MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, SyncItem, SyncItemKind,
-    SyncResourceRef, Tombstone,
+    MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, SyncHeadCache, SyncItem, SyncItemKind,
+    SyncOutboxBatch, SyncRemoteState, SyncResourceRef, SyncSnapshot, SyncSnapshotExport, Tombstone,
 };
 
 const LOOKUP_CHUNK_SIZE: usize = 500;
 const SYNC_HEAD_CACHE_PREFIX: &str = "sync_head_cache:";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SyncHeadCache {
-    pub etag: String,
-    pub stored_size_bytes: u64,
-    pub modified_ms: Option<i64>,
-    pub epoch: String,
-    pub snapshot_key: String,
-    pub snapshot_sha256: String,
-    pub snapshot_size_bytes: u64,
-    pub snapshot_record_count: u64,
-    pub published_sequence: u64,
-    pub last_segment_key: Option<String>,
-}
-
-impl SyncHeadCache {
-    pub(crate) fn matches_head(&self, head: &DeviceHead) -> bool {
-        self.epoch == head.epoch
-            && self.snapshot_key == head.snapshot.key
-            && self.snapshot_sha256 == head.snapshot.sha256
-            && self.snapshot_size_bytes == head.snapshot.stored_size_bytes
-            && self.snapshot_record_count == head.snapshot.record_count
-            && self.published_sequence == head.published_sequence
-            && self.last_segment_key == head.last_segment_key
-    }
-
-    pub(crate) fn matches_cursor(&self, cursor: &DeviceCursor) -> bool {
-        self.epoch == cursor.epoch
-            && self.published_sequence == cursor.sequence
-            && self.last_segment_key == cursor.last_segment_key
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SyncSnapshot {
-    pub through_sequence: u64,
-    pub mutations: MutationBatch,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SyncSnapshotExport {
-    pub through_sequence: u64,
-    pub record_count: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SyncOutboxBatch {
-    pub first_sequence: u64,
-    pub last_sequence: u64,
-    pub mutations: MutationBatch,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SyncRemoteState {
-    pub remote_scope: String,
-    pub epoch: String,
-    pub snapshot: Option<ObjectRef>,
-    pub snapshot_sequence: u64,
-    pub published_sequence: u64,
-    pub last_segment_key: Option<String>,
-    pub remote_prepared: bool,
-    pub initialized: bool,
-    pub updated_at_ms: i64,
-}
-
-impl SyncRemoteState {
-    pub fn device_head(&self, device_id: &str) -> Result<DeviceHead, StorageError> {
-        let snapshot = self.snapshot.clone().ok_or_else(|| {
-            StorageError::InvalidSyncState("device head has no published snapshot".to_string())
-        })?;
-        Ok(DeviceHead {
-            device_id: device_id.to_string(),
-            epoch: self.epoch.clone(),
-            snapshot,
-            published_sequence: self.published_sequence,
-            last_segment_key: self.last_segment_key.clone(),
-            updated_at_ms: self.updated_at_ms,
-        })
-    }
-}
 
 struct StoredReplicatedItem {
     id: String,

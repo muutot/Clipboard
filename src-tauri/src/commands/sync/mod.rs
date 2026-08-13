@@ -467,11 +467,12 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
     let remote_scope = settings.remote_scope_id();
     let session_key = settings.session_key(&remote_scope)?;
     let store = settings.object_store()?;
+    let engine_paths = v1::SyncEnginePaths::from(paths.inner());
 
     let outcome = v1::sync_database(
         &store,
-        &database,
-        &paths,
+        database.inner(),
+        &engine_paths,
         &remote_scope,
         session_key.as_ref(),
         settings.engine_options(),
