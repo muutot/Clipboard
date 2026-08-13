@@ -444,7 +444,7 @@ fn independent_snapshots_and_incremental_segments_converge() {
 }
 
 #[test]
-fn source_can_publish_after_an_empty_peer_advances_the_checkpoint() {
+fn empty_peer_joins_without_rewriting_checkpoint_and_source_keeps_publishing() {
     let store = MemoryStore::default();
     let source_paths = temp_paths("empty-peer-source");
     let target_paths = temp_paths("empty-peer-target");
@@ -461,7 +461,17 @@ fn source_can_publish_after_an_empty_peer_advances_the_checkpoint() {
         options(),
     )
     .unwrap();
-    sync_database(
+    let checkpoint_before = store
+        .objects
+        .lock()
+        .unwrap()
+        .get(CHECKPOINT_HEAD_KEY)
+        .cloned()
+        .expect("source bootstrap should publish a checkpoint");
+    store.puts.lock().unwrap().clear();
+    store.deleted.lock().unwrap().clear();
+
+    let joined = sync_database(
         &store,
         &target,
         &target_paths,
@@ -470,6 +480,24 @@ fn source_can_publish_after_an_empty_peer_advances_the_checkpoint() {
         options(),
     )
     .unwrap();
+    assert_eq!(joined.uploaded_entries, 0);
+    assert_eq!(joined.deleted_remote_objects, 0);
+    assert_eq!(
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .get(CHECKPOINT_HEAD_KEY)
+            .cloned(),
+        Some(checkpoint_before)
+    );
+    assert!(!store
+        .puts
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+    assert!(store.deleted.lock().unwrap().is_empty());
 
     source
         .save_item(&text_item("immediate-incremental", "incremental"))

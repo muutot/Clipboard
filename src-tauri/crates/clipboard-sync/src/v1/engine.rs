@@ -730,7 +730,16 @@ fn maybe_compact(
 ) -> Result<(), String> {
     let vector = frozen_checkpoint_vector(database, remote_scope, local_device_id, local_state)?;
     let baseline = database.get_sync_checkpoint_cursors(remote_scope)?;
-    if vector.is_empty() || !checkpoint_compaction_due(&baseline, &vector) {
+    if vector.is_empty()
+        || !checkpoint_compaction_due(
+            database,
+            remote_scope,
+            local_device_id,
+            local_state,
+            &baseline,
+            &vector,
+        )?
+    {
         return Ok(());
     }
     let existing = read_checkpoint_head(store, session_key, result)?;
@@ -1009,28 +1018,59 @@ fn frozen_checkpoint_vector(
     Ok(vector)
 }
 
-fn checkpoint_compaction_due(baseline: &[DeviceCursor], vector: &[DeviceCursor]) -> bool {
+fn checkpoint_compaction_due(
+    database: &impl SyncRepository,
+    remote_scope: &str,
+    local_device_id: &str,
+    local_state: &SyncRemoteState,
+    baseline: &[DeviceCursor],
+    vector: &[DeviceCursor],
+) -> Result<bool, String> {
     if baseline.is_empty() {
-        return true;
+        return Ok(true);
     }
     let previous = baseline
         .iter()
         .map(|cursor| (cursor.device_id.as_str(), cursor))
         .collect::<BTreeMap<_, _>>();
-    if previous.len() != vector.len() {
-        return true;
+    if previous
+        .keys()
+        .any(|device_id| !vector.iter().any(|cursor| cursor.device_id == *device_id))
+    {
+        return Ok(true);
     }
     let mut delta = 0u64;
     for cursor in vector {
-        let Some(old) = previous.get(cursor.device_id.as_str()) else {
-            return true;
-        };
-        if old.epoch != cursor.epoch || old.sequence > cursor.sequence {
-            return true;
+        if let Some(old) = previous.get(cursor.device_id.as_str()) {
+            if old.epoch != cursor.epoch || old.sequence > cursor.sequence {
+                return Ok(true);
+            }
+            delta = delta.saturating_add(cursor.sequence - old.sequence);
+            continue;
         }
-        delta = delta.saturating_add(cursor.sequence - old.sequence);
+
+        let snapshot_records = if cursor.device_id == local_device_id {
+            local_state
+                .snapshot
+                .as_ref()
+                .filter(|_| {
+                    local_state.epoch == cursor.epoch
+                        && local_state.published_sequence == cursor.sequence
+                        && local_state.last_segment_key == cursor.last_segment_key
+                })
+                .map(|snapshot| snapshot.record_count)
+        } else {
+            database
+                .get_sync_head_cache(remote_scope, &cursor.device_id)?
+                .filter(|cache| cache.matches_cursor(cursor))
+                .map(|cache| cache.snapshot_record_count)
+        };
+        let Some(snapshot_records) = snapshot_records else {
+            return Ok(true);
+        };
+        delta = delta.saturating_add(snapshot_records.max(cursor.sequence));
     }
-    delta >= CHECKPOINT_SEQUENCE_DELTA_THRESHOLD
+    Ok(delta >= CHECKPOINT_SEQUENCE_DELTA_THRESHOLD)
 }
 
 fn validate_compaction_vector(

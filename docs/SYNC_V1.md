@@ -258,11 +258,15 @@ plus a vector clock of `{device_id, epoch, sequence}` entries. Each database sto
 the last checkpoint it successfully applied or published in `sync_checkpoint_cursors`; that compact
 local baseline lets an idle run decide that compaction is not due without reading `checkpoint.bin`.
 
-Compaction is due when no local checkpoint baseline exists, when the device/epoch set changes, or
-when the sum of sequence advances since that baseline reaches 50,000. A run with any failed peer
-does not compact because its materialized view is not known to cover every discoverable head. The
-compactor also skips publication while local outbox state is not fully represented by the published
-local sequence.
+Compaction is due when no local checkpoint baseline exists, when a known device disappears, when a
+known device changes epoch or regresses, or when accumulated new history reaches 50,000. Existing
+devices contribute sequence advance. A newly observed device contributes the larger of its trusted
+bootstrap snapshot record count and published sequence; an empty device therefore joins and
+bootstraps from the retained checkpoint without immediately re-uploading the complete materialized
+state. Missing trustworthy head/snapshot accounting remains conservative and triggers compaction.
+A run with any failed peer does not compact because its materialized view is not known to cover
+every discoverable head. The compactor also skips publication while local outbox state is not fully
+represented by the published local sequence.
 
 A compactor:
 
