@@ -6,6 +6,8 @@
 
 #[cfg(test)]
 mod engine_tests;
+#[cfg(test)]
+mod scale_bench;
 
 pub use clipboard_sync::v1::{engine, layout, remote, repository, resources, wire};
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};

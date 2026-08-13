@@ -319,8 +319,14 @@ and the obsolete local pool manifest are deleted, not converted.
 
 ## Performance acceptance criteria
 
-Synthetic verification uses three independent 100,000-record databases followed by 200 new
-records per device. It records both raw and compressed sizes and counts every simulated request.
+Default-ignored release benchmarks use an explicitly configured disposable S3-compatible server,
+three independent SQLite databases with 100,000 distinct text/metadata records each, then 200 new
+records per device. Every run owns a random `clipboard-sync-benchmark/{uuid}/...` object prefix and
+deletes only that prefix. The transport counters measure actual HTTP PUT/GET/HEAD/LIST/DELETE
+requests, LIST continuation pages, payload bytes and method time; repository timers separate pack
+export/encoding from snapshot, checkpoint and segment apply time. Binary-resource encryption,
+streaming transfer and on-demand materialization remain covered by focused real-transport and
+resource tests rather than fabricating 300,000 large blobs in the metadata workload.
 
 The implementation is accepted only when:
 
@@ -339,3 +345,59 @@ The implementation is accepted only when:
 Benchmarks must report elapsed encode/decode/apply time, peak pack size, SQLite file growth, S3 PUT/
 GET/LIST/DELETE counts and total uploaded/downloaded bytes. Correctness gates precede performance
 claims.
+
+### Real S3 benchmark commands
+
+The server and bucket are opt-in. Never point these tests at a prefix containing user data.
+
+```powershell
+$env:CLIPBOARD_S3_TEST_ENDPOINT = "http://127.0.0.1:9200"
+$env:CLIPBOARD_S3_TEST_REGION = "us-east-1"
+$env:CLIPBOARD_S3_TEST_BUCKET = "clipboard-sync-codex-test"
+$env:CLIPBOARD_S3_TEST_ACCESS_KEY = "..."
+$env:CLIPBOARD_S3_TEST_SECRET_KEY = "..."
+$env:CLIPBOARD_S3_TEST_PASSWORD = "..." # optional, recommended
+$env:CARGO_PROFILE_RELEASE_OPT_LEVEL = "3"
+$env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "1"
+$env:CARGO_PROFILE_RELEASE_LTO = "true"
+
+cargo test --manifest-path src-tauri/Cargo.toml --lib --release `
+  sync::v1::scale_bench::s3_segment_listing_paginates_beyond_one_thousand_objects `
+  -- --ignored --exact --nocapture
+
+cargo test --manifest-path src-tauri/Cargo.toml --lib --release `
+  sync::v1::scale_bench::s3_three_device_target_scale_benchmark `
+  -- --ignored --exact --nocapture
+```
+
+The pagination benchmark publishes 1,001 one-record segments, requires at least one heads LIST page
+plus two segment LIST pages, applies all 1,001 records and compares streaming SQLite content
+digests. The target-scale benchmark verifies the 300,000-record initial union, the 300,600-record
+daily union, zero remaining sync outbox rows, steady-state idle traffic, two threshold checkpoint
+generations with vector-bounded GC, and a fresh fourth database bootstrapped solely from retained
+v1 state.
+
+### 2026-08-13 Windows baseline
+
+An isolated MinIO `RELEASE.2025-09-07T16-13-09Z` instance on the local machine produced this
+correctness/performance baseline with encrypted metadata and the extreme release profile above:
+
+- 1,001-segment pagination: publish 5.366 s; pull/apply 961 ms; the pull issued 3 LIST requests and
+  1,002 GET requests, then matched the source digest.
+- Initial three-device convergence: 300,000 records with identical streaming content digests; the
+  largest observed bootstrap encode was 38.584 s and the largest observed checkpoint apply was
+  33.882 s.
+- Daily workload: each device published 200 records; the two non-empty receiving applies completed
+  in about 126 ms and 66 ms on the final pull passes.
+- Warm idle: about 26 ms per device, exactly 1 LIST request and 0 PUT/GET/HEAD/DELETE requests, with
+  0 snapshot/segment/resource body bytes transferred. LIST response bytes are transport overhead
+  and are reported separately from engine object-body traffic.
+- Checkpoint/GC: each 50,000-sequence wave coalesced into 5 uploaded mutations at a 10,000-entry
+  segment limit; after the second generation the namespace retained 5 current segments, 2
+  checkpoints, no obsolete snapshots and about 29.9 MB total metadata objects.
+- Fresh fourth database: applied all 300,600 records from retained checkpoint state in about 51 s,
+  uploaded only its 359-byte empty snapshot/head pair (2 PUTs), did not advance the checkpoint or
+  delete history, and observed about 232 MB peak process RSS across the complete benchmark.
+
+These numbers are a regression baseline for this machine and server, not universal latency limits.
+The correctness assertions and request/body-count invariants are the portable acceptance criteria.

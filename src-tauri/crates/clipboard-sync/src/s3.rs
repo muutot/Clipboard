@@ -453,6 +453,66 @@ fn err_from_response(resp: reqwest::blocking::Response, op: &str) -> String {
     )
 }
 
+/// Ensures an explicitly configured benchmark bucket exists. Tests must still
+/// isolate every run below a random object prefix and delete only that prefix.
+#[cfg(any(test, feature = "engine-test-support"))]
+pub fn ensure_test_bucket(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    access_key: &str,
+    secret_key: &str,
+) -> Result<(), String> {
+    let client = shared_client()?;
+    let (scheme, host) = parse_endpoint(endpoint);
+    let mut last_error = "S3 test server did not become ready".to_string();
+    for attempt in 0..40 {
+        let empty = Vec::new();
+        let req = S3Request {
+            method: "PUT",
+            scheme: &scheme,
+            endpoint_host: &host,
+            bucket,
+            key: "",
+            query: None,
+            payload: Some(&empty),
+            access_key,
+            secret_key,
+            region,
+            extra_headers: &[],
+        };
+        match signed_request(&client, &req)?.body(empty).send() {
+            Ok(response) if response.status().is_success() => return Ok(()),
+            Ok(response) if response.status().as_u16() == 409 => {
+                let body = response.text().unwrap_or_default();
+                if body.contains("<Code>BucketAlreadyOwnedByYou</Code>")
+                    || body.contains("<Code>BucketAlreadyExists</Code>")
+                {
+                    return Ok(());
+                }
+                return Err(format!(
+                    "create test bucket failed: HTTP 409 Conflict: {}",
+                    body.chars().take(300).collect::<String>()
+                ));
+            }
+            Ok(response) => {
+                let should_retry = response.status().as_u16() == 503;
+                last_error = err_from_response(response, "create test bucket");
+                if !should_retry {
+                    return Err(last_error);
+                }
+            }
+            Err(error) => {
+                last_error = format!("create test bucket failed: {error}");
+            }
+        }
+        if attempt + 1 < 40 {
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    }
+    Err(last_error)
+}
+
 pub fn test_s3_connection(
     endpoint: &str,
     region: &str,
@@ -1439,8 +1499,7 @@ mod tests {
         let secret_key = std::env::var("CLIPBOARD_S3_TEST_SECRET_KEY")
             .expect("CLIPBOARD_S3_TEST_SECRET_KEY must be set");
 
-        create_disposable_test_bucket(&endpoint, &region, &bucket, &access_key, &secret_key)
-            .unwrap();
+        ensure_test_bucket(&endpoint, &region, &bucket, &access_key, &secret_key).unwrap();
 
         let prefix = format!("transport-test-{}/", uuid::Uuid::new_v4());
         let key = format!("{prefix}object.bin");
@@ -1601,55 +1660,6 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-    }
-
-    fn create_disposable_test_bucket(
-        endpoint: &str,
-        region: &str,
-        bucket: &str,
-        access_key: &str,
-        secret_key: &str,
-    ) -> Result<(), String> {
-        let client = shared_client()?;
-        let (scheme, host) = parse_endpoint(endpoint);
-        let mut last_error = "S3 test server did not become ready".to_string();
-        for attempt in 0..40 {
-            let empty = Vec::new();
-            let req = S3Request {
-                method: "PUT",
-                scheme: &scheme,
-                endpoint_host: &host,
-                bucket,
-                key: "",
-                query: None,
-                payload: Some(&empty),
-                access_key,
-                secret_key,
-                region,
-                extra_headers: &[],
-            };
-            match signed_request(&client, &req)?.body(empty).send() {
-                Ok(response)
-                    if response.status().is_success() || response.status().as_u16() == 409 =>
-                {
-                    return Ok(());
-                }
-                Ok(response) => {
-                    let should_retry = response.status().as_u16() == 503;
-                    last_error = err_from_response(response, "create test bucket");
-                    if !should_retry {
-                        return Err(last_error);
-                    }
-                }
-                Err(error) => {
-                    last_error = format!("create test bucket failed: {error}");
-                }
-            }
-            if attempt + 1 < 40 {
-                std::thread::sleep(Duration::from_millis(250));
-            }
-        }
-        Err(last_error)
     }
 
     #[test]
