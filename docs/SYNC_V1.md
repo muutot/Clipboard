@@ -22,8 +22,8 @@ the small per-device head is the only routinely overwritten object.
 ## Runtime entry points
 
 The desktop runtime supports only S3-compatible storage. `get_sync_config`, `set_sync_config`,
-typed `test_sync_connection`, and `sync_now` are the complete Tauri surface; automatic sync calls
-the same internal `run_sync` function. The old remote-backup list/download/verification,
+typed `test_sync_connection`, `sync_now`, and on-demand `materialize_clipboard_item` are the complete
+sync Tauri surface; automatic sync calls the same internal `run_sync` function. The old remote-backup list/download/verification,
 compaction, WebDAV, baseline and oplog IPC surfaces are not registered.
 
 Each run snapshots configuration once, releases the config lock, derives at most one optional
@@ -164,6 +164,15 @@ For each remote head:
 An unmaterialized item can still be published in a later segment or checkpoint: scope-aware export
 restores its stored canonical keys. Local image/file paths remain either usable paths on this device
 or absent; an S3 object key is never written into a field consumed as a local filesystem path.
+
+Copy, double-click paste, detail, fullscreen, save-as, or an explicit first drag attempt may request
+materialization. The command verifies an existing local path by digest before network I/O, shares one
+in-flight download per remote scope/object key, streams into a bounded temporary file, verifies the
+canonical SHA-256 and atomically renames it. Every resource path for the item is then written in one
+SQLite transaction while retaining the remote references; this local cache update neither advances
+the replicated version nor enters the sync outbox. A failed or stale reference leaves the whole path
+set unchanged. Images are sent to the local thumbnail worker after success; hovering/listing never
+downloads body resources, and a drag with no path is cancelled until the user retries after download.
 
 Segment ranges must be continuous: the next object begins at exactly `cursor.sequence + 1`.
 Missing/overlapping ranges, an unavailable bootstrap snapshot, or another incomplete chain triggers

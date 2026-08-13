@@ -25,8 +25,8 @@ pub use remote::{
 pub use resources::{
     collect_mutation_resource_refs, defer_mutation_resources, ensure_resource_uploaded,
     fingerprint_resource, materialize_mutation_resources, materialize_resource,
-    prepare_mutation_resources, MaterializedResource, ResourceDescriptor, ResourceLimits,
-    ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
+    prepare_mutation_resources, verify_local_resource, MaterializedResource, ResourceDescriptor,
+    ResourceLimits, ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
 };
 pub use wire::{
     decode_checkpoint, decode_checkpoint_head, decode_device_head, decode_segment, decode_snapshot,

@@ -33,6 +33,7 @@ Owns the record boundary and list operations:
 - source-app listing and content-action detection;
 - `PersistedClipboardItem` → `ClipboardItem` mapping (including `tags` parsed from `metadata_json.tags`);
 - resource metadata parsing and display title/size helpers.
+- `materializeClipboardItem(item)` invokes `materialize_clipboard_item` immediately before a remote image/file action needs local paths and coalesces concurrent frontend callers by item id. It preserves explicit command failures; ordinary list/search/hover paths never call it.
 
 Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard.
 
@@ -65,7 +66,7 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 
 Paste paths (`plainPaste`, `formatPaste`, `cleanPaste`) live in the route. When `pasteCleaningEnabled` is set, plain/format paste run `transform_text` with `cleanPaste` first; format paste falls back to writing the cleaned plain text (instead of HTML) whenever cleaning changed the content, since URL/whitespace cleanup cannot be applied reliably inside markup. `formatPaste` passes the stored `rtfContent` to `writeClipboardHtml(html, plainText, rtf)`, which writes `text/rtf` alongside `text/html`/`text/plain` so RTF-preferring apps keep formatted paste.
 
-Double-click paste (`doubleClickPasteItem`, enabled by the `doubleClickPaste` setting which defaults on) also lives in the route: text/link items reuse `formatPaste` when the item has `htmlContent`, otherwise `plainPaste`; image items re-fetch the stored image via `convertFileSrc` and call `writeClipboardImage`; file items re-use the copy-item path (multi-file `textContent` JSON list joined by newlines, or the primary `resourcePath`). All four cases end in `pasteToPreviousApplication`. When `doubleClickPaste` is off, the card's double click falls back to `ondetail`.
+Double-click paste (`doubleClickPasteItem`, enabled by the `doubleClickPaste` setting which defaults on) also lives in the route: text/link items reuse `formatPaste` when the item has `htmlContent`, otherwise `plainPaste`; image/file items first pass through the same on-demand materialization wrapper used by copy, detail, fullscreen and save, then image items re-fetch the verified local image via `convertFileSrc` and file items use the multi-file `textContent` JSON list or primary `resourcePath`. All four cases end in `pasteToPreviousApplication`. When `doubleClickPaste` is off, the card's double click falls back to `ondetail`.
 
 Events currently crossing windows/runtime include:
 

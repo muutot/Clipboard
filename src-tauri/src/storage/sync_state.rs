@@ -466,6 +466,307 @@ impl Database {
         })
     }
 
+    /// Returns the canonical remote resource references for one item in the
+    /// configured scope. Local paths are deliberately not inferred here: a
+    /// missing path means the caller must materialize the returned keys first.
+    pub fn get_sync_resource_refs(
+        &self,
+        remote_scope: &str,
+        item_id: &str,
+    ) -> Result<Vec<SyncResourceRef>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        if item_id.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.with_connection(|connection| {
+            load_sync_resource_refs(connection, remote_scope, item_id)
+        })
+    }
+
+    /// Records a successfully materialized path while retaining the canonical
+    /// reference. The reference is the stable content identity used to keep a
+    /// later remote metadata update attached to the local cache; local path
+    /// changes or deletion clear it through the resource trigger. This is a
+    /// local-only cache update: it must not alter the replicated version or
+    /// enqueue an outbox mutation.
+    pub fn mark_sync_resource_materialized(
+        &self,
+        remote_scope: &str,
+        item_id: &str,
+        reference: &SyncResourceRef,
+        local_path: &str,
+    ) -> Result<bool, StorageError> {
+        self.mark_sync_resources_materialized(
+            remote_scope,
+            item_id,
+            &[(reference.clone(), local_path.to_string())],
+        )
+    }
+
+    /// Atomically writes all paths materialized for one item while retaining
+    /// their canonical remote references. This is deliberately a local cache
+    /// update: replicated versions and the sync outbox remain unchanged.
+    pub fn mark_sync_resources_materialized(
+        &self,
+        remote_scope: &str,
+        item_id: &str,
+        materialized: &[(SyncResourceRef, String)],
+    ) -> Result<bool, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        if item_id.is_empty() || materialized.is_empty() {
+            return Ok(false);
+        }
+        for (reference, local_path) in materialized {
+            if local_path.trim().is_empty() {
+                return Ok(false);
+            }
+            crate::sync::v1::parse_resource_key(&reference.object_key)
+                .map_err(StorageError::InvalidSyncState)?;
+        }
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let Some(scope_id) = sync_resource_scope_id(&transaction, remote_scope)? else {
+                transaction.commit()?;
+                return Ok(false);
+            };
+            let Some(item_kind) = transaction
+                .query_row(
+                    "SELECT kind FROM clipboard_items WHERE id = ?1 AND deleted = 0",
+                    [item_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?
+            else {
+                transaction.commit()?;
+                return Ok(false);
+            };
+            let mut stored_refs = Vec::with_capacity(materialized.len());
+            for (reference, local_path) in materialized {
+                let slot = resource_slot_to_i64(&reference.slot)?;
+                let ordinal = sequence_to_i64(u64::from(reference.ordinal), "resource ordinal")?;
+                let parsed = crate::sync::v1::parse_resource_key(&reference.object_key)
+                    .map_err(StorageError::InvalidSyncState)?;
+                let digest = hex::decode(parsed.sha256).map_err(|error| {
+                    StorageError::InvalidSyncState(format!(
+                        "sync resource digest is not hexadecimal: {error}"
+                    ))
+                })?;
+                let stored: Option<()> = transaction
+                    .query_row(
+                        "SELECT 1
+                           FROM sync_item_resources
+                          WHERE scope_id = ?1 AND item_id = ?2 AND slot = ?3 AND ordinal = ?4
+                            AND sha256 = ?5",
+                        params![scope_id, item_id, slot, ordinal, digest],
+                        |_row| Ok(()),
+                    )
+                    .optional()?;
+                if stored.is_none() {
+                    transaction.commit()?;
+                    return Ok(false);
+                }
+                if (reference.slot == "image" && item_kind != "image")
+                    || (reference.slot == "file" && item_kind != "file")
+                    || (reference.slot != "image"
+                        && reference.slot != "file"
+                        && reference.slot != "icon")
+                    || (reference.slot == "icon"
+                        && parsed.category != crate::sync::v1::ResourceCategory::Icon)
+                {
+                    transaction.commit()?;
+                    return Ok(false);
+                }
+                let stored_path = if reference.slot == "icon" {
+                    std::path::Path::new(local_path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .ok_or_else(|| {
+                            StorageError::InvalidSyncState(
+                                "materialized icon path has no portable file name".to_string(),
+                            )
+                        })?
+                        .to_string()
+                } else {
+                    local_path.clone()
+                };
+                stored_refs.push((reference.clone(), stored_path));
+            }
+
+            let (mut resource_path, mut icon_path, mut text_content, metadata_json): (
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ) = transaction.query_row(
+                "SELECT resource_path, icon_path, text_content, metadata_json
+                   FROM clipboard_items WHERE id = ?1 AND deleted = 0",
+                [item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            let mut metadata = metadata_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
+            let mut file_paths = if item_kind == "file" {
+                match text_content.as_deref() {
+                    Some(json) => {
+                        Some(serde_json::from_str::<Vec<String>>(json).map_err(|error| {
+                            StorageError::InvalidSyncState(format!(
+                                "stored file resource paths are invalid JSON: {error}"
+                            ))
+                        })?)
+                    }
+                    None => None,
+                }
+            } else {
+                None
+            };
+            let mut changed = false;
+            set_changelog_suppressed(&transaction, true)?;
+            for (reference, stored_path) in &stored_refs {
+                match reference.slot.as_str() {
+                    "image" => {
+                        changed |= resource_path.as_deref() != Some(stored_path.as_str());
+                        resource_path = Some(stored_path.clone());
+                        set_metadata_path(&mut metadata, "resourcePath", stored_path);
+                        set_metadata_path(&mut metadata, "storagePath", stored_path);
+                    }
+                    "file" => {
+                        let index = usize::try_from(reference.ordinal).map_err(|_| {
+                            StorageError::ValueOutOfRange {
+                                field: "sync resource ordinal",
+                            }
+                        })?;
+                        if index == 0 {
+                            changed |= resource_path.as_deref() != Some(stored_path.as_str());
+                            resource_path = Some(stored_path.clone());
+                            set_metadata_path(&mut metadata, "resourcePath", stored_path);
+                        }
+                        if let Some(paths) = file_paths.as_mut() {
+                            if paths.len() <= index {
+                                paths.resize(index + 1, String::new());
+                            }
+                            changed |= paths[index] != *stored_path;
+                            paths[index] = stored_path.clone();
+                        } else if index > 0 {
+                            set_changelog_suppressed(&transaction, false)?;
+                            transaction.commit()?;
+                            return Ok(false);
+                        }
+                        set_file_metadata_path(&mut metadata, index, stored_path);
+                    }
+                    "icon" => {
+                        changed |= icon_path.as_deref() != Some(stored_path.as_str());
+                        icon_path = Some(stored_path.clone());
+                        set_metadata_path(&mut metadata, "iconPath", stored_path);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            let encoded_metadata = serde_json::to_string(&metadata).map_err(|error| {
+                StorageError::InvalidSyncState(format!(
+                    "failed to encode materialized resource metadata: {error}"
+                ))
+            })?;
+            if let Some(paths) = file_paths {
+                text_content = Some(serde_json::to_string(&paths).map_err(|error| {
+                    StorageError::InvalidSyncState(format!(
+                        "failed to encode materialized file paths: {error}"
+                    ))
+                })?);
+            }
+            if metadata_json.as_deref() != Some(encoded_metadata.as_str()) {
+                changed = true;
+            }
+            if !changed {
+                set_changelog_suppressed(&transaction, false)?;
+                transaction.commit()?;
+                return Ok(false);
+            }
+            transaction.execute(
+                "UPDATE clipboard_items
+                    SET resource_path = ?2,
+                        text_content = ?3,
+                        icon_path = ?4,
+                        metadata_json = ?5
+                  WHERE id = ?1 AND deleted = 0",
+                params![
+                    item_id,
+                    resource_path,
+                    text_content,
+                    icon_path,
+                    encoded_metadata
+                ],
+            )?;
+            set_changelog_suppressed(&transaction, false)?;
+            transaction.commit()?;
+            Ok(true)
+        })
+    }
+
+    pub fn materialized_sync_resource_path(
+        &self,
+        remote_scope: &str,
+        item_id: &str,
+        reference: &SyncResourceRef,
+    ) -> Result<Option<String>, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        self.with_connection(|connection| {
+            let Some(scope_id) = sync_resource_scope_id(connection, remote_scope)? else {
+                return Ok(None);
+            };
+            let slot = resource_slot_to_i64(&reference.slot)?;
+            let ordinal = sequence_to_i64(u64::from(reference.ordinal), "resource ordinal")?;
+            let parsed = crate::sync::v1::parse_resource_key(&reference.object_key)
+                .map_err(StorageError::InvalidSyncState)?;
+            let digest = hex::decode(parsed.sha256).map_err(|error| {
+                StorageError::InvalidSyncState(format!(
+                    "sync resource digest is not hexadecimal: {error}"
+                ))
+            })?;
+            let exists: bool = connection.query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sync_item_resources
+                     WHERE scope_id = ?1 AND item_id = ?2 AND slot = ?3 AND ordinal = ?4
+                       AND sha256 = ?5
+                )",
+                params![scope_id, item_id, slot, ordinal, digest],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                return Ok(None);
+            }
+            let (kind, resource_path, icon_path, text_content): (
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ) = connection.query_row(
+                "SELECT kind, resource_path, icon_path, text_content
+                   FROM clipboard_items WHERE id = ?1 AND deleted = 0",
+                [item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            match reference.slot.as_str() {
+                "image" if kind == "image" && reference.ordinal == 0 => Ok(resource_path),
+                "icon" if reference.ordinal == 0 => Ok(icon_path),
+                "file" if kind == "file" => {
+                    let index = usize::try_from(reference.ordinal).map_err(|_| {
+                        StorageError::ValueOutOfRange {
+                            field: "sync resource ordinal",
+                        }
+                    })?;
+                    let listed_path = text_content
+                        .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok())
+                        .and_then(|paths| paths.get(index).cloned())
+                        .filter(|path| !path.is_empty());
+                    Ok(listed_path.or_else(|| (index == 0).then_some(resource_path).flatten()))
+                }
+                _ => Ok(None),
+            }
+        })
+    }
+
     pub fn get_or_create_sync_remote_state(
         &self,
         remote_scope: &str,
@@ -2247,6 +2548,35 @@ fn rewrite_exported_file_metadata_path(
     );
 }
 
+fn set_metadata_path(metadata: &mut serde_json::Value, key: &str, value: &str) {
+    if let Some(object) = metadata.as_object_mut() {
+        object.insert(
+            key.to_string(),
+            serde_json::Value::String(value.to_string()),
+        );
+    }
+}
+
+fn set_file_metadata_path(metadata: &mut serde_json::Value, index: usize, value: &str) {
+    let Some(files) = metadata
+        .get_mut("files")
+        .and_then(|value| value.as_array_mut())
+    else {
+        return;
+    };
+    let Some(file) = files.get_mut(index).and_then(|value| value.as_object_mut()) else {
+        return;
+    };
+    file.insert(
+        "storagePath".to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
+    file.insert(
+        "path".to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2588,6 +2918,250 @@ mod tests {
                 .as_deref(),
             Some(object_key.as_str())
         );
+    }
+
+    #[test]
+    fn materialized_resources_update_paths_without_replicating_the_cache_write() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let first_key = format!("v1/resources/file/sha256-{}.txt", "b".repeat(64));
+        let second_key = format!("v1/resources/file/sha256-{}.txt", "c".repeat(64));
+        let icon_key = format!("v1/resources/icon/sha256-{}.png", "d".repeat(64));
+        let mut remote = replicated(
+            "materialized-files",
+            "hash-materialized-files",
+            "materialized files",
+            RecordVersion {
+                modified_at_ms: 500,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        remote.item.kind = ClipboardKind::File;
+        remote.item.resource_path = None;
+        remote.item.text_content = Some("[\"\",\"\"]".to_string());
+        remote.item.metadata_json = Some(
+            serde_json::json!({
+                "resourcePath": null,
+                "files": [{"storagePath": null}, {"storagePath": null}],
+                "iconPath": null
+            })
+            .to_string(),
+        );
+        let refs = vec![
+            SyncResourceRef {
+                slot: "file".to_string(),
+                ordinal: 0,
+                object_key: first_key.clone(),
+            },
+            SyncResourceRef {
+                slot: "file".to_string(),
+                ordinal: 1,
+                object_key: second_key.clone(),
+            },
+            SyncResourceRef {
+                slot: "icon".to_string(),
+                ordinal: 0,
+                object_key: icon_key.clone(),
+            },
+        ];
+        database
+            .apply_sync_snapshot_with_resources(
+                REMOTE_SCOPE,
+                &cursor(0, None),
+                &"a".repeat(64),
+                &MutationBatch {
+                    upserts: vec![remote],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("materialized-files".to_string(), refs.clone())]),
+            )
+            .unwrap();
+        let version_before = database
+            .with_connection(|connection| {
+                Ok(connection.query_row(
+                    "SELECT modified_at_ms, sync_writer_device_id
+                       FROM clipboard_items WHERE id = 'materialized-files'",
+                    [],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )?)
+            })
+            .unwrap();
+
+        assert!(database
+            .mark_sync_resources_materialized(
+                REMOTE_SCOPE,
+                "materialized-files",
+                &[
+                    (refs[0].clone(), "C:\\cache\\first.txt".to_string()),
+                    (refs[1].clone(), "C:\\cache\\second.txt".to_string()),
+                    (refs[2].clone(), "C:\\cache\\icons\\source.png".to_string()),
+                ],
+            )
+            .unwrap());
+
+        let stored = database.get_item("materialized-files").unwrap().unwrap();
+        assert_eq!(
+            stored.resource_path.as_deref(),
+            Some("C:\\cache\\first.txt")
+        );
+        assert_eq!(stored.icon_path.as_deref(), Some("source.png"));
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(stored.text_content.as_deref().unwrap()).unwrap(),
+            ["C:\\cache\\first.txt", "C:\\cache\\second.txt"]
+        );
+        let metadata: serde_json::Value =
+            serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+        assert_eq!(metadata["files"][1]["storagePath"], "C:\\cache\\second.txt");
+        assert_eq!(metadata["iconPath"], "source.png");
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+        assert_eq!(
+            database
+                .get_sync_resource_refs(REMOTE_SCOPE, "materialized-files")
+                .unwrap(),
+            refs
+        );
+        let version_after = database
+            .with_connection(|connection| {
+                Ok(connection.query_row(
+                    "SELECT modified_at_ms, sync_writer_device_id
+                       FROM clipboard_items WHERE id = 'materialized-files'",
+                    [],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(version_after, version_before);
+        let exported = database
+            .export_sync_snapshot_for_scope(REMOTE_SCOPE)
+            .unwrap();
+        let item = &exported.mutations.upserts[0].item;
+        assert_eq!(item.resource_path.as_deref(), Some(first_key.as_str()));
+        assert_eq!(item.icon_path.as_deref(), Some(icon_key.as_str()));
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(item.text_content.as_deref().unwrap()).unwrap(),
+            vec![first_key, second_key]
+        );
+    }
+
+    #[test]
+    fn materialized_resource_write_is_atomic_when_any_reference_is_stale() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let object_key = format!("v1/resources/image/sha256-{}.png", "a".repeat(64));
+        let reference = SyncResourceRef {
+            slot: "image".to_string(),
+            ordinal: 0,
+            object_key: object_key.clone(),
+        };
+        let mut remote = replicated(
+            "atomic-image",
+            "hash-atomic-image",
+            "atomic image",
+            RecordVersion {
+                modified_at_ms: 500,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        remote.item.kind = ClipboardKind::Image;
+        remote.item.text_content = None;
+        remote.item.resource_path = None;
+        database
+            .apply_sync_snapshot_with_resources(
+                REMOTE_SCOPE,
+                &cursor(0, None),
+                &"a".repeat(64),
+                &MutationBatch {
+                    upserts: vec![remote],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("atomic-image".to_string(), vec![reference.clone()])]),
+            )
+            .unwrap();
+        let stale = SyncResourceRef {
+            object_key: format!("v1/resources/icon/sha256-{}.png", "b".repeat(64)),
+            slot: "icon".to_string(),
+            ordinal: 0,
+        };
+
+        assert!(!database
+            .mark_sync_resources_materialized(
+                REMOTE_SCOPE,
+                "atomic-image",
+                &[
+                    (reference, "C:\\cache\\image.png".to_string()),
+                    (stale, "C:\\cache\\icon.png".to_string()),
+                ],
+            )
+            .unwrap());
+        assert!(database
+            .get_item("atomic-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none());
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+    }
+
+    #[test]
+    fn single_file_materialization_keeps_null_text_content_and_reuses_resource_path() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let object_key = format!("v1/resources/file/sha256-{}.txt", "e".repeat(64));
+        let reference = SyncResourceRef {
+            slot: "file".to_string(),
+            ordinal: 0,
+            object_key,
+        };
+        let mut remote = replicated(
+            "single-file",
+            "hash-single-file",
+            "single file",
+            RecordVersion {
+                modified_at_ms: 500,
+                writer_device_id: REMOTE_DEVICE.to_string(),
+            },
+        );
+        remote.item.kind = ClipboardKind::File;
+        remote.item.resource_path = None;
+        remote.item.text_content = None;
+        remote.item.metadata_json = Some(
+            serde_json::json!({
+                "resourcePath": null,
+                "files": [{"storagePath": null}]
+            })
+            .to_string(),
+        );
+        database
+            .apply_sync_snapshot_with_resources(
+                REMOTE_SCOPE,
+                &cursor(0, None),
+                &"f".repeat(64),
+                &MutationBatch {
+                    upserts: vec![remote],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("single-file".to_string(), vec![reference.clone()])]),
+            )
+            .unwrap();
+
+        let local_path = "C:\\cache\\single.txt";
+        assert!(database
+            .mark_sync_resource_materialized(REMOTE_SCOPE, "single-file", &reference, local_path,)
+            .unwrap());
+        let stored = database.get_item("single-file").unwrap().unwrap();
+        assert_eq!(stored.resource_path.as_deref(), Some(local_path));
+        assert!(stored.text_content.is_none());
+        assert_eq!(
+            database
+                .materialized_sync_resource_path(REMOTE_SCOPE, "single-file", &reference)
+                .unwrap()
+                .as_deref(),
+            Some(local_path)
+        );
+        assert!(!database
+            .mark_sync_resource_materialized(REMOTE_SCOPE, "single-file", &reference, local_path,)
+            .unwrap());
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
     }
 
     #[test]

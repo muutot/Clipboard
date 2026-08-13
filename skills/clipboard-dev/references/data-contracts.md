@@ -103,7 +103,7 @@ Defaults include positional group-switch actions `switchFilter1`..`switchFilter7
 
 Optional encryption is owned by `sync/v1/wire.rs`: PBKDF2-HMAC-SHA256 derives a remote-scope-specific AES-256-GCM key once per run. Immutable object nonces are derived from the authenticated header plus compressed plaintext, making retries byte-identical. A missing/wrong password, authentication failure, or corruption is a hard error; there is no raw-plaintext fallback.
 
-Sync resource paths are untrusted canonical keys below `v1/resources/{image|file|icon}/`. Uploads canonicalize regular files below the configured managed roots, enforce byte limits, hash with streaming reads, and clear unavailable local references rather than publishing machine paths. Preview images are derived local state: storage export and v1 packs clear `preview_path` and every `previewPath` metadata key and never upload a preview object. Normal snapshot/segment/checkpoint pull only registers remote references and leaves local resource fields absent; no resource `GET` occurs until an explicit materialization path requests it. Downloads use bounded streaming temporary files, verify the key digest before rename, reject symlinks/non-files, and rewrite item plus metadata paths only after materialization succeeds.
+Sync resource paths are untrusted canonical keys below `v1/resources/{image|file|icon}/`. Uploads canonicalize regular files below the configured managed roots, enforce byte limits, hash with streaming reads, and clear unavailable local references rather than publishing machine paths. Preview images are derived local state: storage export and v1 packs clear `preview_path` and every `previewPath` metadata key and never upload a preview object. Normal snapshot/segment/checkpoint pull only registers remote references and leaves local resource fields absent; no resource `GET` occurs until `materialize_clipboard_item` is invoked for an operation that needs a local path. Materialization verifies a matching existing local path first, coalesces concurrent downloads by remote scope/object key, uses a bounded streaming temporary file plus SHA-256 verification and atomic rename, and writes all paths for one record back in one changelog-suppressed SQLite transaction while retaining the canonical references. A single-file record keeps `text_content = NULL`; ordered path JSON is only used for multi-file records. Image completion is queued to the local thumbnail worker so previews are rebuilt without sync traffic.
 
 ### Sync wire-format evolution rules
 
@@ -127,6 +127,8 @@ For each command change:
 5. update wrapper/caller error and null semantics;
 6. add or adjust focused tests;
 7. update the focused reference rather than copying a full command list here.
+
+`materialize_clipboard_item(id)` returns the refreshed camelCase `PersistedClipboardItem`. It is a local-cache mutation: it must not advance `(modified_at_ms, sync_writer_device_id)` or create a sync outbox row, and any stale/missing reference causes the whole path write-back to remain unchanged.
 
 A direct `invoke` in a component is still a public cross-layer contract and receives the same audit.
 

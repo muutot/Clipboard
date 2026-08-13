@@ -1,11 +1,17 @@
-use std::sync::Mutex;
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock, Weak},
+};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 
 use crate::config::{ConfigStore, SyncConfig, SyncProvider};
-use crate::storage::{Database, StoragePaths};
+use crate::content::ThumbnailWorker;
+use crate::domain::{ClipboardItem, ClipboardKind};
+use crate::storage::{ClipboardRepository, Database, StoragePaths};
 use crate::sync::{self, v1};
 
 mod auto;
@@ -15,10 +21,31 @@ mod auto;
 /// potentially long S3 transfer.
 static SYNC_RUN_LOCK: Mutex<()> = Mutex::new(());
 
+// One lock per content-addressed object prevents two cards opened at the same
+// time from downloading the same S3 blob twice. The map is intentionally
+// process-local; the verified cache file is the cross-process coordination
+// point and materialize_resource re-checks it before every download.
+static RESOURCE_MATERIALIZATION_LOCKS: OnceLock<Mutex<HashMap<String, Weak<Mutex<()>>>>> =
+    OnceLock::new();
+
 pub(crate) use auto::AutoSyncWorker;
 
 const DEFAULT_S3_REGION: &str = "us-east-1";
 const MAX_SYNC_ICON_BYTES: u64 = 1024 * 1024;
+
+fn resource_materialization_lock(key: &str) -> Result<Arc<Mutex<()>>, String> {
+    let locks = RESOURCE_MATERIALIZATION_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut locks = locks
+        .lock()
+        .map_err(|_| "resource materialization lock map is poisoned".to_string())?;
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(key).and_then(Weak::upgrade) {
+        return Ok(lock);
+    }
+    let lock = Arc::new(Mutex::new(()));
+    locks.insert(key.to_string(), Arc::downgrade(&lock));
+    Ok(lock)
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -272,6 +299,144 @@ pub fn sync_now(app: tauri::AppHandle) -> Result<SyncRunResult, String> {
     run_sync(&app)
 }
 
+/// Materializes the content-addressed resources for one record on demand.
+/// Metadata synchronization never performs these GETs; callers invoke this
+/// command immediately before an operation that needs a local path.
+#[tauri::command]
+pub fn materialize_clipboard_item(
+    id: String,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+    thumbnail_worker: tauri::State<'_, Mutex<ThumbnailWorker>>,
+) -> Result<ClipboardItem, String> {
+    if id.trim().is_empty() {
+        return Err("clipboard item id is empty".to_string());
+    }
+
+    let current = database
+        .get_item(&id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "clipboard item was not found".to_string())?;
+
+    let sync_config = {
+        let guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_string())?;
+        guard.sync_config()
+    };
+    if sync_config.provider != SyncProvider::S3 {
+        return Ok(current);
+    }
+    let settings = SyncSettings::from_sync_config(&sync_config)?;
+    let remote_scope = settings.remote_scope_id();
+    let refs = database
+        .get_sync_resource_refs(&remote_scope, &id)
+        .map_err(|error| error.to_string())?;
+    if refs.is_empty() {
+        return Ok(current);
+    }
+    let store = settings.object_store()?;
+    let (updated, changed) = materialize_item_resources(
+        &store,
+        database.inner(),
+        paths.inner(),
+        &settings,
+        &remote_scope,
+        &id,
+        refs,
+    )?;
+
+    if changed && updated.kind == ClipboardKind::Image {
+        if let Some(resource_path) = updated.resource_path.as_deref() {
+            if let Ok(worker) = thumbnail_worker.lock() {
+                worker.enqueue(id.clone(), PathBuf::from(resource_path));
+            }
+        }
+    }
+    Ok(updated)
+}
+
+fn resource_destination(
+    paths: &StoragePaths,
+    category: v1::ResourceCategory,
+    settings: &SyncSettings,
+) -> (PathBuf, u64) {
+    match category {
+        v1::ResourceCategory::Image => (paths.images.clone(), settings.max_sync_image_bytes),
+        v1::ResourceCategory::File => (paths.files.clone(), settings.max_sync_file_bytes),
+        v1::ResourceCategory::Icon => (paths.storage.join("icons"), MAX_SYNC_ICON_BYTES),
+    }
+}
+
+fn materialize_item_resources(
+    store: &impl v1::ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    settings: &SyncSettings,
+    remote_scope: &str,
+    id: &str,
+    refs: Vec<v1::SyncResourceRef>,
+) -> Result<(ClipboardItem, bool), String> {
+    let mut materialized = Vec::with_capacity(refs.len());
+    for reference in refs {
+        let parsed = v1::parse_resource_key(&reference.object_key)?;
+        let (destination_root, max_bytes) = resource_destination(paths, parsed.category, settings);
+        let existing = database
+            .materialized_sync_resource_path(remote_scope, id, &reference)
+            .map_err(|error| error.to_string())?
+            .map(|path| {
+                if parsed.category == v1::ResourceCategory::Icon {
+                    paths.storage.join("icons").join(path)
+                } else {
+                    PathBuf::from(path)
+                }
+            });
+        let cache_path = if let Some(path) = existing.as_ref().filter(|path| {
+            v1::verify_local_resource(path, &reference.object_key, max_bytes).unwrap_or(false)
+        }) {
+            path.clone()
+        } else {
+            let lock =
+                resource_materialization_lock(&format!("{remote_scope}:{}", reference.object_key))?;
+            let _guard = lock
+                .lock()
+                .map_err(|_| "resource materialization lock is poisoned".to_string())?;
+            let rechecked = database
+                .materialized_sync_resource_path(remote_scope, id, &reference)
+                .map_err(|error| error.to_string())?
+                .map(|path| {
+                    if parsed.category == v1::ResourceCategory::Icon {
+                        paths.storage.join("icons").join(path)
+                    } else {
+                        PathBuf::from(path)
+                    }
+                });
+            if let Some(path) = rechecked.as_ref().filter(|path| {
+                v1::verify_local_resource(path, &reference.object_key, max_bytes).unwrap_or(false)
+            }) {
+                path.clone()
+            } else {
+                v1::materialize_resource(store, &reference.object_key, &destination_root, max_bytes)
+                    .map_err(|error| {
+                        format!("failed to materialize {}: {error}", reference.object_key)
+                    })?
+                    .path
+            }
+        };
+        materialized.push((reference, cache_path.to_string_lossy().to_string()));
+    }
+
+    let changed = database
+        .mark_sync_resources_materialized(remote_scope, id, &materialized)
+        .map_err(|error| error.to_string())?;
+    let updated = database
+        .get_item(id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "clipboard item disappeared during materialization".to_string())?;
+    Ok((updated, changed))
+}
+
 /// Shared entry point for the Tauri command and the auto-sync worker.
 pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> {
     let _run_guard = SYNC_RUN_LOCK
@@ -357,7 +522,125 @@ fn current_time_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::BTreeMap,
+        fs,
+        io::Write,
+        path::Path,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
     use super::*;
+    use crate::{
+        domain::ClipboardKind,
+        sync::v1::{
+            DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata, PutCondition, PutOutcome,
+            RecordVersion, ReplicatedItem,
+        },
+    };
+
+    #[derive(Default)]
+    struct MaterializationStore {
+        objects: Mutex<BTreeMap<String, Vec<u8>>>,
+        gets: AtomicU64,
+    }
+
+    impl v1::ObjectStore for MaterializationStore {
+        fn list(
+            &self,
+            _prefix: &str,
+            _start_after: Option<&str>,
+        ) -> Result<Vec<ObjectInfo>, String> {
+            Ok(Vec::new())
+        }
+
+        fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
+            Ok(self
+                .objects
+                .lock()
+                .map_err(|_| "object lock poisoned".to_string())?
+                .get(key)
+                .cloned()
+                .map(|bytes| DownloadedObject { bytes, etag: None }))
+        }
+
+        fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+            Ok(self
+                .objects
+                .lock()
+                .map_err(|_| "object lock poisoned".to_string())?
+                .get(key)
+                .map(|bytes| ObjectMetadata {
+                    size_bytes: Some(bytes.len() as u64),
+                    etag: None,
+                }))
+        }
+
+        fn get_to_file(
+            &self,
+            key: &str,
+            destination: &Path,
+            max_bytes: u64,
+        ) -> Result<Option<DownloadedFile>, String> {
+            let Some(bytes) = self
+                .objects
+                .lock()
+                .map_err(|_| "object lock poisoned".to_string())?
+                .get(key)
+                .cloned()
+            else {
+                return Ok(None);
+            };
+            if bytes.len() as u64 > max_bytes {
+                return Err("object exceeds limit".to_string());
+            }
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(destination)
+                .map_err(|error| error.to_string())?;
+            file.write_all(&bytes).map_err(|error| error.to_string())?;
+            self.gets.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(DownloadedFile {
+                size_bytes: bytes.len() as u64,
+                sha256: hex::encode(Sha256::digest(&bytes)),
+                etag: None,
+            }))
+        }
+
+        fn put(
+            &self,
+            _key: &str,
+            _bytes: Vec<u8>,
+            _condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            unreachable!()
+        }
+
+        fn put_file(
+            &self,
+            _key: &str,
+            _path: &Path,
+            _sha256: &str,
+            _size_bytes: u64,
+            _condition: PutCondition,
+        ) -> Result<PutOutcome, String> {
+            unreachable!()
+        }
+
+        fn delete(&self, _key: &str) -> Result<(), String> {
+            unreachable!()
+        }
+    }
+
+    fn temporary_paths(label: &str) -> StoragePaths {
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-sync-materialize-{label}-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        StoragePaths::initialize(root).unwrap()
+    }
 
     fn configured_sync() -> SyncConfig {
         SyncConfig {
@@ -436,5 +719,206 @@ mod tests {
         assert_eq!(value["uploadedResources"], 4);
         assert_eq!(value["deletedRemoteObjects"], 6);
         assert_eq!(value["failedPeers"], 9);
+    }
+
+    #[test]
+    fn materialization_downloads_once_and_repairs_a_corrupt_cache() {
+        let paths = temporary_paths("retry");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let bytes = b"remote image bytes".repeat(64);
+        let digest = hex::encode(Sha256::digest(&bytes));
+        let object_key =
+            v1::resource_object_key(v1::ResourceCategory::Image, &digest, "png").unwrap();
+        let item = crate::domain::ClipboardItem {
+            id: "remote-image".to_string(),
+            kind: ClipboardKind::Image,
+            title: "remote image".to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "hash-remote-image".to_string(),
+            source_app: None,
+            icon_path: None,
+            size_bytes: bytes.len() as u64,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: Some("{}".to_string()),
+        };
+        let reference = v1::SyncResourceRef {
+            slot: "image".to_string(),
+            ordinal: 0,
+            object_key: object_key.clone(),
+        };
+        database
+            .apply_sync_snapshot_with_resources(
+                &"a".repeat(64),
+                &v1::DeviceCursor {
+                    device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                    epoch: "22222222-2222-4222-8222-222222222222".to_string(),
+                    sequence: 0,
+                    last_segment_key: None,
+                },
+                &"b".repeat(64),
+                &v1::MutationBatch {
+                    upserts: vec![ReplicatedItem {
+                        item: item.clone(),
+                        version: RecordVersion {
+                            modified_at_ms: 2,
+                            writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                        },
+                    }],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("remote-image".to_string(), vec![reference.clone()])]),
+            )
+            .unwrap();
+        let settings = SyncSettings::from_sync_config(&configured_sync()).unwrap();
+        let store = MaterializationStore::default();
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(object_key, bytes.clone());
+
+        let (first, changed) = materialize_item_resources(
+            &store,
+            &database,
+            &paths,
+            &settings,
+            &"a".repeat(64),
+            "remote-image",
+            vec![reference.clone()],
+        )
+        .unwrap();
+        assert!(changed);
+        assert_eq!(store.gets.load(Ordering::Relaxed), 1);
+        let local_path = PathBuf::from(first.resource_path.unwrap());
+        assert_eq!(fs::read(&local_path).unwrap(), bytes);
+
+        let (_, changed) = materialize_item_resources(
+            &store,
+            &database,
+            &paths,
+            &settings,
+            &"a".repeat(64),
+            "remote-image",
+            vec![reference.clone()],
+        )
+        .unwrap();
+        assert!(!changed);
+        assert_eq!(store.gets.load(Ordering::Relaxed), 1);
+
+        fs::write(&local_path, b"corrupt").unwrap();
+        let (repaired, _) = materialize_item_resources(
+            &store,
+            &database,
+            &paths,
+            &settings,
+            &"a".repeat(64),
+            "remote-image",
+            vec![reference],
+        )
+        .unwrap();
+        assert_eq!(store.gets.load(Ordering::Relaxed), 2);
+        assert_eq!(fs::read(repaired.resource_path.unwrap()).unwrap(), bytes);
+        assert_eq!(database.count_sync_outbox().unwrap(), 0);
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn concurrent_materialization_shares_one_object_download() {
+        let paths = temporary_paths("concurrent");
+        let database = Database::open(&paths.database).unwrap();
+        database.initialize_sync().unwrap();
+        let bytes = b"concurrent image".repeat(128);
+        let digest = hex::encode(Sha256::digest(&bytes));
+        let object_key =
+            v1::resource_object_key(v1::ResourceCategory::Image, &digest, "png").unwrap();
+        let reference = v1::SyncResourceRef {
+            slot: "image".to_string(),
+            ordinal: 0,
+            object_key: object_key.clone(),
+        };
+        let item = crate::domain::ClipboardItem {
+            id: "concurrent-image".to_string(),
+            kind: ClipboardKind::Image,
+            title: "concurrent image".to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: "hash-concurrent-image".to_string(),
+            source_app: None,
+            icon_path: None,
+            size_bytes: bytes.len() as u64,
+            created_at_ms: 1,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: Some("{}".to_string()),
+        };
+        let remote_scope = "c".repeat(64);
+        database
+            .apply_sync_snapshot_with_resources(
+                &remote_scope,
+                &v1::DeviceCursor {
+                    device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                    epoch: "22222222-2222-4222-8222-222222222222".to_string(),
+                    sequence: 0,
+                    last_segment_key: None,
+                },
+                &"d".repeat(64),
+                &v1::MutationBatch {
+                    upserts: vec![ReplicatedItem {
+                        item,
+                        version: RecordVersion {
+                            modified_at_ms: 2,
+                            writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                        },
+                    }],
+                    tombstones: Vec::new(),
+                },
+                &BTreeMap::from([("concurrent-image".to_string(), vec![reference.clone()])]),
+            )
+            .unwrap();
+        let store = Arc::new(MaterializationStore::default());
+        store.objects.lock().unwrap().insert(object_key, bytes);
+        let settings = Arc::new(SyncSettings::from_sync_config(&configured_sync()).unwrap());
+        let paths = Arc::new(paths);
+        let database = Arc::new(database);
+        let mut handles = Vec::new();
+        for _ in 0..2 {
+            let store = Arc::clone(&store);
+            let settings = Arc::clone(&settings);
+            let paths = Arc::clone(&paths);
+            let database = Arc::clone(&database);
+            let remote_scope = remote_scope.clone();
+            let reference = reference.clone();
+            handles.push(std::thread::spawn(move || {
+                materialize_item_resources(
+                    store.as_ref(),
+                    database.as_ref(),
+                    paths.as_ref(),
+                    settings.as_ref(),
+                    &remote_scope,
+                    "concurrent-image",
+                    vec![reference],
+                )
+                .unwrap();
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(store.gets.load(Ordering::Relaxed), 1);
+        drop(database);
+        fs::remove_dir_all(&paths.project).unwrap();
     }
 }

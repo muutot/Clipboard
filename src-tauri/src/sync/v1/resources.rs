@@ -213,6 +213,27 @@ pub fn materialize_resource(
     })
 }
 
+/// Verifies an already materialized local file against a canonical resource
+/// key without touching the object store. This lets records captured locally
+/// (or materialized during an earlier request) reuse their existing path while
+/// retaining the remote reference as the stable cache identity.
+pub fn verify_local_resource(
+    path: &Path,
+    object_key: &str,
+    max_bytes: u64,
+) -> Result<bool, String> {
+    let parsed = parse_resource_key(object_key)?;
+    let metadata = match symlink_metadata_if_exists(path)? {
+        Some(metadata) => metadata,
+        None => return Ok(false),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > max_bytes {
+        return Ok(false);
+    }
+    let (sha256, _) = hash_regular_file(path, max_bytes)?;
+    Ok(sha256 == parsed.sha256)
+}
+
 /// Rewrites local managed paths in a mutation batch to canonical v1 resource
 /// keys and uploads every distinct referenced object before the caller may
 /// publish the enclosing snapshot or segment. Missing, external, or oversized
@@ -1188,6 +1209,28 @@ mod tests {
         assert!(!repaired_oversized.reused_local_file);
         assert_eq!(fs::read(&repaired_oversized.path).unwrap(), bytes);
         assert_eq!(store.file_gets.get(), 3);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn local_verification_rejects_missing_corrupt_and_oversized_files() {
+        let root = temporary_directory("verify-local");
+        let path = root.join("cached.bin");
+        fs::write(&path, b"expected").unwrap();
+        let key = resource_object_key(
+            ResourceCategory::File,
+            &hex::encode(Sha256::digest(b"expected")),
+            "bin",
+        )
+        .unwrap();
+
+        assert!(verify_local_resource(&path, &key, 1024).unwrap());
+        fs::write(&path, b"corrupt").unwrap();
+        assert!(!verify_local_resource(&path, &key, 1024).unwrap());
+        assert!(!verify_local_resource(&path, &key, 3).unwrap());
+        fs::remove_file(&path).unwrap();
+        assert!(!verify_local_resource(&path, &key, 1024).unwrap());
 
         fs::remove_dir_all(root).unwrap();
     }

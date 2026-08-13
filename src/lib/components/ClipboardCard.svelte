@@ -86,6 +86,7 @@
     ontoggleFavorite: (id: string) => void;
     ondelete: (id: string) => void;
     oncopy: (id: string) => void;
+    onsave?: (id: string) => void;
     ondetail: (id: string) => void;
     onedit: (id: string) => void;
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
@@ -98,6 +99,7 @@
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
+    onmaterialize?: (id: string) => void;
     onheightchange?: (id: string, height: number, immediate?: boolean) => void;
     onsavetags?: (id: string, tags: string[]) => void;
     ontoggleTagFilter?: (tag: string) => void;
@@ -145,6 +147,7 @@
     ontoggleFavorite,
     ondelete,
     oncopy,
+    onsave,
     ondetail,
     onedit,
     onsaveedit,
@@ -157,6 +160,7 @@
     onsaveasnew,
     onrestore,
     onimagefullscreen,
+    onmaterialize,
     onheightchange,
     onsavetags,
     ontoggleTagFilter,
@@ -414,6 +418,12 @@
   function handleDragStart(event: DragEvent) {
     if (!event.dataTransfer) return;
 
+    if ((item.kind === "image" || item.kind === "file") && !item.resourcePath) {
+      event.preventDefault();
+      onmaterialize?.(item.id);
+      return;
+    }
+
     if (item.kind === "text" || item.kind === "link") {
       event.dataTransfer.setData("text/plain", item.title);
       if (item.textContent) {
@@ -617,22 +627,9 @@
     }
   }
 
-  async function handleSaveAsClick(event: MouseEvent) {
+  function handleSaveAsClick(event: MouseEvent) {
     event.stopPropagation();
-    if (item.resourcePath && isTauriRuntime()) {
-      try {
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        const defaultName = item.fileName || item.title.split(/[\\/]/).pop() || "file";
-        const ext = defaultName.includes(".") ? defaultName.split(".").pop() : "";
-        const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
-        const filePath = await save({ defaultPath: defaultName, filters });
-        if (filePath) {
-          await invoke("copy_file_to", { src: item.resourcePath, dst: filePath });
-        }
-      } catch {
-        invoke("open_external_url", { url: item.resourcePath }).catch(() => {});
-      }
-    }
+    onsave?.(item.id);
   }
 </script>
 

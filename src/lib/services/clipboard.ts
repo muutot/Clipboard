@@ -14,6 +14,7 @@ import zhCN from "$lib/i18n/locales/zh-CN";
 import en from "$lib/i18n/locales/en";
 
 const locales = { "zh-CN": zhCN, en };
+const materializationRequests = new Map<string, Promise<ClipboardItem>>();
 
 export async function writeClipboardText(text: string): Promise<void> {
   if (isTauriRuntime()) {
@@ -110,6 +111,22 @@ export async function loadDeletedClipboardHistory(
   });
 
   return records.map((record) => ({ ...toClipboardItem(record), deleted: true }));
+}
+
+/** Ensures every remotely referenced image/file/icon for one record has a
+ * verified local path. Concurrent callers share one in-flight backend request
+ * so copy, preview, fullscreen and save never download the same blob twice. */
+export async function materializeClipboardItem(item: ClipboardItem): Promise<ClipboardItem> {
+  if (!isTauriRuntime() || (item.kind !== "image" && item.kind !== "file")) return item;
+
+  const existing = materializationRequests.get(item.id);
+  if (existing) return existing;
+
+  const request = invoke<PersistedClipboardItem>("materialize_clipboard_item", { id: item.id })
+    .then(toClipboardItem)
+    .finally(() => materializationRequests.delete(item.id));
+  materializationRequests.set(item.id, request);
+  return request;
 }
 
 export async function searchClipboardHistory(

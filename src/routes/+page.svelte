@@ -27,6 +27,7 @@
     listSourceApplications,
     formatTextLength,
     generatedClipboardTitle,
+    materializeClipboardItem,
     toClipboardItem,
     writeClipboardImage,
     writeClipboardText,
@@ -134,6 +135,37 @@
         indexedItems = indexedItems;
       }
     }
+  }
+
+  function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
+    const replace = (item: ClipboardItem) => (item.id === updated.id ? updated : item);
+    items = items.map(replace);
+    if (indexedItems) indexedItems = indexedItems.map(replace);
+    searchCache = searchCache.map(replace);
+    if (detailItem?.id === updated.id) detailItem = updated;
+    return updated;
+  }
+
+  function findLoadedItem(id: string): ClipboardItem | undefined {
+    return (
+      items.find((item) => item.id === id) ??
+      indexedItems?.find((item) => item.id === id) ??
+      searchCache.find((item) => item.id === id) ??
+      (detailItem?.id === id ? detailItem : undefined)
+    );
+  }
+
+  async function ensureItemMaterialized(item: ClipboardItem): Promise<ClipboardItem> {
+    if (item.kind !== "image" && item.kind !== "file") return item;
+    return replaceMaterializedItem(await materializeClipboardItem(item));
+  }
+
+  function prepareItemMaterialization(id: string) {
+    const item = findLoadedItem(id);
+    if (!item || (item.kind !== "image" && item.kind !== "file")) return;
+    void ensureItemMaterialized(item).catch((error) => {
+      console.error("Unable to prefetch remote clipboard resource", error);
+    });
   }
 
   let deletedHistoryLoaded = $state(false);
@@ -1683,8 +1715,18 @@
   }
 
   async function copyItem(id: string) {
-    const item = items.find((i) => i.id === id);
+    let item = findLoadedItem(id);
     if (!item) return;
+
+    if (item.kind === "image" || item.kind === "file") {
+      try {
+        item = await ensureItemMaterialized(item);
+      } catch (error) {
+        console.error("Unable to materialize clipboard item for copy", error);
+        showToast(_t("toast.copyFailed"), "error");
+        return;
+      }
+    }
 
     if ($generalSettings.pinCopiedToTop) moveToTop(id);
 
@@ -1740,16 +1782,32 @@
       });
   }
 
-  function openDetail(id: string) {
-    const item =
-      items.find((i) => i.id === id) ??
-      indexedItems?.find((i) => i.id === id) ??
-      searchCache.find((i) => i.id === id);
-    if (item) detailItem = item;
+  async function openDetail(id: string) {
+    const item = findLoadedItem(id);
+    if (!item) return;
+    detailItem = item;
+    if (item.kind === "image" || item.kind === "file") {
+      try {
+        detailItem = await ensureItemMaterialized(item);
+      } catch (error) {
+        console.error("Unable to materialize clipboard item for detail", error);
+      }
+    }
   }
 
   async function handleImageFullscreen(id: string) {
-    const item = items.find((i) => i.id === id);
+    let item = findLoadedItem(id);
+    if (!item) return;
+    const needsMaterialization = !item.resourcePath && !item.previewPath;
+    if (needsMaterialization) {
+      try {
+        item = await ensureItemMaterialized(item);
+      } catch (error) {
+        console.error("Unable to materialize image for fullscreen", error);
+        showToast(_t("toast.copyFailed"), "error");
+        return;
+      }
+    }
     const filePath = item?.resourcePath || item?.previewPath;
     if (!filePath) return;
 
@@ -2077,7 +2135,7 @@
   }
 
   async function doubleClickPasteItem(id: string) {
-    const item = items.find((i) => i.id === id);
+    let item = findLoadedItem(id);
     if (!item) return;
 
     if (item.kind === "text" || item.kind === "link") {
@@ -2090,35 +2148,55 @@
     }
 
     if (item.kind === "image") {
+      try {
+        item = await ensureItemMaterialized(item);
+      } catch (error) {
+        console.error("Unable to materialize image for paste", error);
+        showToast(_t("toast.imagePasteFailed"), "error");
+        return;
+      }
+      const materializedItem = item;
       await pasteToPreviousApplication(
-        item,
+        materializedItem,
         {
           paste: "toast.imagePasteSuccess",
           copy: "toast.imageCopySuccess",
           failed: "toast.imagePasteFailed",
         },
         async () => {
-          const src = convertFileSrc((item.resourcePath ?? "").replace(/\\/g, "/"));
+          const src = convertFileSrc((materializedItem.resourcePath ?? "").replace(/\\/g, "/"));
           const response = await fetch(src);
           const blob = await response.blob();
-          await writeClipboardImage(blob, item.resourcePath, item.contentHash);
+          await writeClipboardImage(
+            blob,
+            materializedItem.resourcePath,
+            materializedItem.contentHash,
+          );
         },
       );
       return;
     }
 
     if (item.kind === "file") {
+      try {
+        item = await ensureItemMaterialized(item);
+      } catch (error) {
+        console.error("Unable to materialize files for paste", error);
+        showToast(_t("toast.filePasteFailed"), "error");
+        return;
+      }
+      const materializedItem = item;
       await pasteToPreviousApplication(
-        item,
+        materializedItem,
         {
           paste: "toast.filePasteSuccess",
           copy: "toast.fileCopySuccess",
           failed: "toast.filePasteFailed",
         },
         async () => {
-          if (item.textContent && item.textContent.startsWith("[")) {
+          if (materializedItem.textContent && materializedItem.textContent.startsWith("[")) {
             try {
-              const paths = JSON.parse(item.textContent) as string[];
+              const paths = JSON.parse(materializedItem.textContent) as string[];
               if (paths.length > 1) {
                 await writeClipboardText(paths.join("\n"));
                 return;
@@ -2127,8 +2205,8 @@
               /* ignore */
             }
           }
-          if (item.resourcePath) {
-            await writeClipboardText(item.resourcePath);
+          if (materializedItem.resourcePath) {
+            await writeClipboardText(materializedItem.resourcePath);
           }
         },
       );
@@ -2174,8 +2252,16 @@
   }
 
   async function saveItem(id: string) {
-    const item = items.find((i) => i.id === id);
-    if (!item || !item.resourcePath) return;
+    let item = findLoadedItem(id);
+    if (!item) return;
+    try {
+      item = await ensureItemMaterialized(item);
+    } catch (error) {
+      console.error("Unable to materialize file for save", error);
+      showToast(_t("toast.saveFailed"), "error");
+      return;
+    }
+    if (!item.resourcePath) return;
     if (!isTauriRuntime()) return;
     try {
       const { save } = await import("@tauri-apps/plugin-dialog");
@@ -2742,7 +2828,7 @@
         return;
       }
       if (event.key === "s") {
-        if ((item.kind === "image" || item.kind === "file") && item.resourcePath) {
+        if (item.kind === "image" || item.kind === "file") {
           event.preventDefault();
           saveItem(selectedId);
         }
@@ -3256,8 +3342,10 @@
                     ontoggleFavorite={toggleFavorite}
                     ondelete={deleteItem}
                     oncopy={copyItem}
+                    onsave={saveItem}
                     ondetail={openDetail}
                     onimagefullscreen={handleImageFullscreen}
+                    onmaterialize={prepareItemMaterialization}
                     onedit={startEdit}
                     onsaveedit={saveEdit}
                     onsaveasnew={saveAsNew}
@@ -3304,8 +3392,10 @@
                   ontoggleFavorite={toggleFavorite}
                   ondelete={deleteItem}
                   oncopy={copyItem}
+                  onsave={saveItem}
                   ondetail={openDetail}
                   onimagefullscreen={handleImageFullscreen}
+                  onmaterialize={prepareItemMaterialization}
                   onedit={startEdit}
                   onsaveedit={saveEdit}
                   onsaveasnew={saveAsNew}
