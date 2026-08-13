@@ -54,6 +54,12 @@ pub struct SyncSnapshot {
     pub mutations: MutationBatch,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SyncSnapshotExport {
+    pub through_sequence: u64,
+    pub record_count: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyncOutboxBatch {
     pub first_sequence: u64,
@@ -364,6 +370,75 @@ impl Database {
             Ok(SyncSnapshot {
                 through_sequence,
                 mutations,
+            })
+        })
+    }
+
+    /// Visits a deterministic, point-in-time snapshot in bounded mutation
+    /// batches. The SQLite read transaction stays open only while rows are
+    /// exported; callers must not perform network I/O from `visit`.
+    pub fn visit_sync_snapshot_for_scope(
+        &self,
+        remote_scope: &str,
+        batch_size: usize,
+        mut visit: impl FnMut(MutationBatch) -> Result<(), StorageError>,
+    ) -> Result<SyncSnapshotExport, StorageError> {
+        validate_remote_scope(remote_scope)?;
+        if batch_size == 0 {
+            return Err(StorageError::InvalidSyncState(
+                "sync snapshot export batch size must be greater than zero".to_string(),
+            ));
+        }
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let through_sequence = current_sequence(&transaction)?;
+            let mut record_count = 0u64;
+            let mut after_item_id = None::<String>;
+            loop {
+                let batch = load_snapshot_upsert_batch(
+                    &transaction,
+                    remote_scope,
+                    after_item_id.as_deref(),
+                    batch_size,
+                )?;
+                if batch.is_empty() {
+                    break;
+                }
+                after_item_id = batch.upserts.last().map(|item| item.item.id.clone());
+                record_count = record_count.checked_add(batch.len() as u64).ok_or(
+                    StorageError::ValueOutOfRange {
+                        field: "sync snapshot record count",
+                    },
+                )?;
+                visit(batch)?;
+            }
+
+            let mut after_tombstone_id = None::<String>;
+            loop {
+                let batch = load_snapshot_tombstone_batch(
+                    &transaction,
+                    after_tombstone_id.as_deref(),
+                    batch_size,
+                )?;
+                if batch.is_empty() {
+                    break;
+                }
+                after_tombstone_id = batch
+                    .tombstones
+                    .last()
+                    .map(|tombstone| tombstone.item_id.clone());
+                record_count = record_count.checked_add(batch.len() as u64).ok_or(
+                    StorageError::ValueOutOfRange {
+                        field: "sync snapshot record count",
+                    },
+                )?;
+                visit(batch)?;
+            }
+
+            transaction.commit()?;
+            Ok(SyncSnapshotExport {
+                through_sequence,
+                record_count,
             })
         })
     }
@@ -1295,6 +1370,93 @@ impl Database {
         })
     }
 
+    pub fn apply_sync_checkpoint_batches<I>(
+        &self,
+        remote_scope: &str,
+        generation: u64,
+        checkpoint_sha256: &str,
+        cursors: &[DeviceCursor],
+        batches: I,
+    ) -> Result<u64, StorageError>
+    where
+        I: IntoIterator<
+            Item = Result<(MutationBatch, BTreeMap<String, Vec<SyncResourceRef>>), StorageError>,
+        >,
+    {
+        validate_remote_scope(remote_scope)?;
+        checkpoint_object_key(generation, checkpoint_sha256)
+            .map_err(StorageError::InvalidSyncState)?;
+        let generation = sequence_to_i64(generation, "sync checkpoint generation")?;
+        validate_checkpoint_cursors(cursors)?;
+
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            if let Some((stored_generation, stored_sha256)) = transaction
+                .query_row(
+                    "SELECT generation, checkpoint_sha256
+                       FROM sync_checkpoint_state
+                      WHERE remote_scope = ?1",
+                    [remote_scope],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?
+            {
+                if stored_generation > generation {
+                    return Err(StorageError::InvalidSyncState(
+                        "checkpoint generation regressed".to_string(),
+                    ));
+                }
+                if stored_generation == generation && stored_sha256 != checkpoint_sha256 {
+                    return Err(StorageError::InvalidSyncState(
+                        "equal checkpoint generation has a different digest".to_string(),
+                    ));
+                }
+            }
+
+            set_changelog_suppressed(&transaction, true)?;
+            let mut applied = 0u64;
+            for batch in batches {
+                let (mutations, resource_refs) = batch?;
+                applied = applied
+                    .checked_add(apply_mutations(
+                        &transaction,
+                        remote_scope,
+                        &mutations,
+                        &resource_refs,
+                    )?)
+                    .ok_or(StorageError::ValueOutOfRange {
+                        field: "applied sync mutation count",
+                    })?;
+            }
+            set_changelog_suppressed(&transaction, false)?;
+            transaction.execute(
+                "DELETE FROM sync_cursors WHERE remote_scope = ?1",
+                [remote_scope],
+            )?;
+            for cursor in cursors {
+                upsert_cursor(&transaction, remote_scope, cursor, None)?;
+            }
+            transaction.execute(
+                "INSERT INTO sync_checkpoint_state
+                    (remote_scope, generation, checkpoint_sha256, updated_at_ms)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(remote_scope) DO UPDATE SET
+                    generation = excluded.generation,
+                    checkpoint_sha256 = excluded.checkpoint_sha256,
+                    updated_at_ms = excluded.updated_at_ms",
+                params![
+                    remote_scope,
+                    generation,
+                    checkpoint_sha256,
+                    current_time_ms(),
+                ],
+            )?;
+            replace_checkpoint_cursors(&transaction, remote_scope, cursors)?;
+            transaction.commit()?;
+            Ok(applied)
+        })
+    }
+
     pub fn apply_sync_snapshot(
         &self,
         remote_scope: &str,
@@ -1337,6 +1499,56 @@ impl Database {
             }
             set_changelog_suppressed(&transaction, true)?;
             let applied = apply_mutations(&transaction, remote_scope, mutations, resource_refs)?;
+            set_changelog_suppressed(&transaction, false)?;
+            upsert_cursor(&transaction, remote_scope, cursor, Some(snapshot_sha256))?;
+            transaction.commit()?;
+            Ok(applied)
+        })
+    }
+
+    pub fn apply_sync_snapshot_batches<I>(
+        &self,
+        remote_scope: &str,
+        cursor: &DeviceCursor,
+        snapshot_sha256: &str,
+        batches: I,
+    ) -> Result<u64, StorageError>
+    where
+        I: IntoIterator<
+            Item = Result<(MutationBatch, BTreeMap<String, Vec<SyncResourceRef>>), StorageError>,
+        >,
+    {
+        validate_remote_scope(remote_scope)?;
+        validate_cursor_identity(cursor)?;
+        if cursor.last_segment_key.is_some() {
+            return Err(StorageError::InvalidSyncState(
+                "snapshot cursor must not contain a segment key".to_string(),
+            ));
+        }
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
+                if existing.epoch == cursor.epoch && existing.sequence > cursor.sequence {
+                    return Err(StorageError::InvalidSyncState(
+                        "snapshot cursor sequence regressed".to_string(),
+                    ));
+                }
+            }
+            set_changelog_suppressed(&transaction, true)?;
+            let mut applied = 0u64;
+            for batch in batches {
+                let (mutations, resource_refs) = batch?;
+                applied = applied
+                    .checked_add(apply_mutations(
+                        &transaction,
+                        remote_scope,
+                        &mutations,
+                        &resource_refs,
+                    )?)
+                    .ok_or(StorageError::ValueOutOfRange {
+                        field: "applied sync mutation count",
+                    })?;
+            }
             set_changelog_suppressed(&transaction, false)?;
             upsert_cursor(&transaction, remote_scope, cursor, Some(snapshot_sha256))?;
             transaction.commit()?;
@@ -2367,6 +2579,81 @@ fn current_sequence(connection: &rusqlite::Connection) -> Result<u64, StorageErr
     })
 }
 
+fn load_snapshot_upsert_batch(
+    connection: &rusqlite::Connection,
+    remote_scope: &str,
+    after_item_id: Option<&str>,
+    limit: usize,
+) -> Result<MutationBatch, StorageError> {
+    let limit = i64::try_from(limit).map_err(|_| StorageError::ValueOutOfRange {
+        field: "sync snapshot export batch size",
+    })?;
+    let mut statement = connection.prepare(
+        "SELECT id, kind, title, text_content, html_content, rtf_content,
+                resource_path, content_hash, source_app,
+                icon_path, size_bytes, created_at_ms,
+                is_favorite, metadata_json,
+                COALESCE(modified_at_ms, created_at_ms), sync_writer_device_id
+           FROM clipboard_items
+          WHERE deleted = 0
+            AND (?1 IS NULL OR id > ?1)
+          ORDER BY id
+          LIMIT ?2",
+    )?;
+    let stored_items = statement
+        .query_map(
+            params![after_item_id, limit],
+            StoredReplicatedItem::from_row,
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+    let item_ids = stored_items
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<Vec<_>>();
+    let mut resource_refs = load_sync_resource_ref_map(connection, remote_scope, Some(&item_ids))?;
+    let mut upserts = Vec::with_capacity(stored_items.len());
+    for stored in stored_items {
+        let mut item = stored.into_wire()?;
+        if let Some(references) = resource_refs.remove(&item.item.id) {
+            restore_sync_resource_refs(&mut item, &references)?;
+        }
+        upserts.push(item);
+    }
+    Ok(MutationBatch {
+        upserts,
+        tombstones: Vec::new(),
+    })
+}
+
+fn load_snapshot_tombstone_batch(
+    connection: &rusqlite::Connection,
+    after_item_id: Option<&str>,
+    limit: usize,
+) -> Result<MutationBatch, StorageError> {
+    let limit = i64::try_from(limit).map_err(|_| StorageError::ValueOutOfRange {
+        field: "sync snapshot export batch size",
+    })?;
+    let mut statement = connection.prepare(
+        "SELECT item_id, kind, content_hash, deleted_at_ms,
+                modified_at_ms, writer_device_id
+           FROM sync_tombstones
+          WHERE (?1 IS NULL OR item_id > ?1)
+          ORDER BY item_id
+          LIMIT ?2",
+    )?;
+    let stored_tombstones = statement
+        .query_map(params![after_item_id, limit], StoredTombstone::from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut tombstones = Vec::with_capacity(stored_tombstones.len());
+    for stored in stored_tombstones {
+        tombstones.push(stored.into_wire()?);
+    }
+    Ok(MutationBatch {
+        upserts: Vec::new(),
+        tombstones,
+    })
+}
+
 fn load_mutations(
     connection: &rusqlite::Connection,
     remote_scope: Option<&str>,
@@ -2952,6 +3239,101 @@ mod tests {
         assert_eq!(database.acknowledge_sync_outbox(3).unwrap(), 3);
         assert_eq!(database.count_sync_outbox().unwrap(), 0);
         assert_eq!(database.export_sync_snapshot().unwrap().through_sequence, 3);
+    }
+
+    #[test]
+    fn snapshot_visitor_is_deterministic_bounded_and_point_in_time() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        for index in 0..7 {
+            database
+                .save_item(&item(
+                    &format!("item-{index:02}"),
+                    &format!("hash-{index:02}"),
+                    &format!("value-{index:02}"),
+                ))
+                .unwrap();
+        }
+        database.soft_delete("item-06").unwrap();
+        let expected_sequence = current_sequence(&database.connection.lock().unwrap()).unwrap();
+
+        let mut batches = Vec::new();
+        let export = database
+            .visit_sync_snapshot_for_scope(REMOTE_SCOPE, 2, |batch| {
+                assert!(batch.len() <= 2);
+                batches.push(batch);
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(export.through_sequence, expected_sequence);
+        assert_eq!(export.record_count, 7);
+        let upsert_ids = batches
+            .iter()
+            .flat_map(|batch| batch.upserts.iter().map(|item| item.item.id.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            upsert_ids,
+            vec!["item-00", "item-01", "item-02", "item-03", "item-04", "item-05"]
+        );
+        assert_eq!(
+            batches
+                .iter()
+                .flat_map(|batch| batch.tombstones.iter())
+                .map(|tombstone| tombstone.item_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["item-06"]
+        );
+    }
+
+    #[test]
+    fn batched_snapshot_apply_rolls_back_every_prior_chunk_on_late_failure() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let good = MutationBatch {
+            upserts: vec![replicated(
+                "remote-good",
+                "remote-good-hash",
+                "good",
+                RecordVersion {
+                    modified_at_ms: 10,
+                    writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        let bad = MutationBatch {
+            upserts: vec![replicated(
+                "remote-bad",
+                "remote-bad-hash",
+                "bad",
+                RecordVersion {
+                    modified_at_ms: 11,
+                    writer_device_id: "not-a-uuid".to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        let cursor = DeviceCursor {
+            device_id: "22222222-2222-4222-8222-222222222222".to_string(),
+            epoch: "33333333-3333-4333-8333-333333333333".to_string(),
+            sequence: 2,
+            last_segment_key: None,
+        };
+
+        assert!(database
+            .apply_sync_snapshot_batches(
+                REMOTE_SCOPE,
+                &cursor,
+                &"a".repeat(64),
+                [Ok((good, BTreeMap::new())), Ok((bad, BTreeMap::new())),],
+            )
+            .is_err());
+        assert!(database.get_item("remote-good").unwrap().is_none());
+        assert!(database
+            .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
+            .unwrap()
+            .is_none());
     }
 
     #[test]

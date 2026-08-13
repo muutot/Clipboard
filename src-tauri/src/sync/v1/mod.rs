@@ -29,8 +29,10 @@ pub use resources::{
     ResourceLimits, ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
 };
 pub use wire::{
-    decode_checkpoint, decode_checkpoint_head, decode_device_head, decode_segment, decode_snapshot,
-    encode_checkpoint, encode_checkpoint_head, encode_device_head, encode_segment, encode_snapshot,
-    Checkpoint, CheckpointHead, DeviceCursor, DeviceHead, EncodedObject, MutationBatch, ObjectRef,
-    RecordVersion, ReplicatedItem, Segment, SessionKey, Snapshot, Tombstone,
+    decode_checkpoint_head, decode_device_head, decode_segment, encode_checkpoint_head,
+    encode_device_head, encode_segment, large_pack_chunk_limit_bytes, mutation_batch_encoded_size,
+    open_checkpoint_pack, open_snapshot_pack, CheckpointHead, CheckpointPackHeader,
+    CheckpointPackReader, DeviceCursor, DeviceHead, EncodedFile, EncodedObject, LargePackKind,
+    LargePackWriter, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, Segment, SessionKey,
+    SnapshotPackHeader, SnapshotPackReader, Tombstone,
 };

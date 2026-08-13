@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use sha2::{Digest, Sha256};
 
@@ -6,16 +6,69 @@ use crate::storage::{Database, StoragePaths};
 
 use super::wire::envelope_is_encrypted;
 use super::{
-    cleanup_obsolete_objects, collect_mutation_resource_refs, decode_checkpoint,
-    decode_checkpoint_head, decode_device_head, decode_segment, decode_snapshot,
-    defer_mutation_resources, encode_device_head, encode_segment, encode_snapshot, head_object_key,
-    parse_checkpoint_key, parse_head_key, parse_segment_key, prepare_mutation_resources,
-    segment_object_key, segment_prefix, snapshot_object_key, Checkpoint, CheckpointHead,
-    DeviceCursor, DeviceHead, EncodedObject, ObjectInfo, ObjectRef, ObjectStore, PutCondition,
-    PutOutcome, ResourceLimits, Segment, SessionKey, Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    cleanup_obsolete_objects, collect_mutation_resource_refs, decode_checkpoint_head,
+    decode_device_head, decode_segment, defer_mutation_resources, encode_device_head,
+    encode_segment, head_object_key, large_pack_chunk_limit_bytes, mutation_batch_encoded_size,
+    open_checkpoint_pack, open_snapshot_pack, parse_checkpoint_key, parse_head_key,
+    parse_segment_key, prepare_mutation_resources, segment_object_key, segment_prefix,
+    snapshot_object_key, CheckpointHead, CheckpointPackHeader, DeviceCursor, DeviceHead,
+    EncodedFile, EncodedObject, LargePackKind, LargePackWriter, MutationBatch, ObjectInfo,
+    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
+    SnapshotPackHeader, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
+const LARGE_PACK_BATCH_ENTRIES: usize = 2048;
+const MAX_LARGE_PACK_STORED_BYTES: u64 = 1024 * 1024 * 1024;
+
+fn write_large_pack_batch(
+    writer: &mut LargePackWriter<'_>,
+    mutations: MutationBatch,
+) -> Result<(), crate::storage::StorageError> {
+    if mutations.is_empty() {
+        return Ok(());
+    }
+    let encoded_size = mutation_batch_encoded_size(&mutations)
+        .map_err(crate::storage::StorageError::InvalidSyncState)?;
+    if encoded_size <= large_pack_chunk_limit_bytes() {
+        return writer
+            .write_batch(&mutations)
+            .map_err(crate::storage::StorageError::InvalidSyncState);
+    }
+    if mutations.len() == 1 {
+        return Err(crate::storage::StorageError::InvalidSyncState(
+            "one sync record exceeds the large-pack chunk size limit".to_string(),
+        ));
+    }
+
+    if !mutations.upserts.is_empty() {
+        let middle = mutations.upserts.len() / 2;
+        if middle > 0 {
+            let mut left = mutations;
+            let right = left.upserts.split_off(middle);
+            write_large_pack_batch(writer, left)?;
+            return write_large_pack_batch(
+                writer,
+                MutationBatch {
+                    upserts: right,
+                    tombstones: Vec::new(),
+                },
+            );
+        }
+    }
+
+    let middle = mutations.tombstones.len() / 2;
+    let mut left = mutations;
+    let right = left.tombstones.split_off(middle);
+    write_large_pack_batch(writer, left)?;
+    write_large_pack_batch(
+        writer,
+        MutationBatch {
+            upserts: Vec::new(),
+            tombstones: right,
+        },
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SyncEngineOptions {
@@ -469,7 +522,7 @@ fn pull_checkpoint_if_needed(
         result,
     ) {
         Ok(checkpoint) => {
-            if checkpoint.vector != checkpoint_head.vector {
+            if checkpoint.header.vector != checkpoint_head.vector {
                 return Err("checkpoint payload vector does not match its head".to_string());
             }
             checkpoint
@@ -493,23 +546,50 @@ fn pull_checkpoint_if_needed(
             })?
         }
     };
-    let mut mutations = checkpoint.mutations;
-    let resource_refs = defer_mutation_resources(&mut mutations)?;
-    result.downloaded_entries = checked_add(
-        result.downloaded_entries,
-        mutations.len() as u64,
-        "downloaded entry count",
-    )?;
+    let generation = checkpoint.header.generation;
+    let vector = checkpoint.header.vector.clone();
+    let expected_record_count = checkpoint.expected_record_count;
+    let mut reader = open_checkpoint_pack(&checkpoint.file.path, session_key)?;
+    let mut terminal_checked = false;
+    let batches = std::iter::from_fn(|| {
+        if terminal_checked {
+            return None;
+        }
+        match reader.next() {
+            Some(batch) => Some(
+                batch
+                    .and_then(|mut mutations| {
+                        let resource_refs = defer_mutation_resources(&mut mutations)?;
+                        Ok((mutations, resource_refs))
+                    })
+                    .map_err(crate::storage::StorageError::InvalidSyncState),
+            ),
+            None => {
+                terminal_checked = true;
+                if reader.record_count() != expected_record_count || !reader.is_complete() {
+                    Some(Err(crate::storage::StorageError::InvalidSyncState(
+                        "checkpoint payload does not match its reference".to_string(),
+                    )))
+                } else {
+                    None
+                }
+            }
+        }
+    });
     let applied = database
-        .apply_sync_checkpoint_with_resources(
+        .apply_sync_checkpoint_batches(
             remote_scope,
-            checkpoint.generation,
-            &checkpoint_digest_for_generation(&checkpoint_head, checkpoint.generation)?,
-            &checkpoint.vector,
-            &mutations,
-            &resource_refs,
+            generation,
+            &checkpoint_digest_for_generation(&checkpoint_head, generation)?,
+            &vector,
+            batches,
         )
         .map_err(|error| error.to_string())?;
+    result.downloaded_entries = checked_add(
+        result.downloaded_entries,
+        expected_record_count,
+        "downloaded entry count",
+    )?;
     result.applied_entries = checked_add(result.applied_entries, applied, "applied entry count")?;
     Ok(true)
 }
@@ -538,26 +618,35 @@ fn download_checkpoint(
     generation: u64,
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
-) -> Result<Checkpoint, String> {
+) -> Result<DownloadedCheckpoint, String> {
     let parsed = parse_checkpoint_key(&reference.key)?;
     if parsed.generation != generation || parsed.sha256 != reference.sha256 {
         return Err("checkpoint reference is not canonical".to_string());
     }
-    let bytes = get_verified_object(
+    let file = get_verified_object_to_file(
         store,
         &reference.key,
         &reference.sha256,
         Some(reference.stored_size_bytes),
+        &std::env::temp_dir(),
         result,
     )?;
-    let checkpoint = decode_checkpoint(&bytes, session_key)?;
-    if checkpoint.generation != generation
-        || checkpoint.mutations.len() as u64 != reference.record_count
-    {
+    let reader = open_checkpoint_pack(&file.path, session_key)?;
+    if reader.header.generation != generation {
         return Err("checkpoint payload does not match its reference".to_string());
     }
-    validate_checkpoint_vector(&checkpoint.vector)?;
-    Ok(checkpoint)
+    validate_checkpoint_vector(&reader.header.vector)?;
+    Ok(DownloadedCheckpoint {
+        file,
+        header: reader.header.clone(),
+        expected_record_count: reference.record_count,
+    })
+}
+
+struct DownloadedCheckpoint {
+    file: TemporarySyncFile,
+    header: CheckpointPackHeader,
+    expected_record_count: u64,
 }
 
 fn validate_checkpoint_head(head: &CheckpointHead) -> Result<(), String> {
@@ -610,6 +699,78 @@ fn validate_checkpoint_vector(vector: &[DeviceCursor]) -> Result<(), String> {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn encode_database_pack(
+    store: &impl ObjectStore,
+    database: &Database,
+    paths: &StoragePaths,
+    remote_scope: &str,
+    kind: LargePackKind,
+    snapshot_header: Option<&SnapshotPackHeader>,
+    checkpoint_header: Option<&CheckpointPackHeader>,
+    session_key: Option<&SessionKey>,
+    resource_limits: ResourceLimits,
+    result: &mut SyncEngineResult,
+) -> Result<(EncodedFile, crate::storage::SyncSnapshotExport), String> {
+    let database_snapshot = TemporaryDatabaseSnapshot::create(database, &paths.data_directory)?;
+    let export_database =
+        Database::open(&database_snapshot.path).map_err(|error| error.to_string())?;
+    let mut writer = match kind {
+        LargePackKind::Snapshot => LargePackWriter::new(
+            &paths.data_directory,
+            kind,
+            snapshot_header.ok_or_else(|| "snapshot pack header is missing".to_string())?,
+            session_key,
+        )?,
+        LargePackKind::Checkpoint => LargePackWriter::new(
+            &paths.data_directory,
+            kind,
+            checkpoint_header.ok_or_else(|| "checkpoint pack header is missing".to_string())?,
+            session_key,
+        )?,
+    };
+    let export = export_database
+        .visit_sync_snapshot_for_scope(remote_scope, LARGE_PACK_BATCH_ENTRIES, |mut mutations| {
+            let resources = prepare_mutation_resources(
+                store,
+                &mut mutations,
+                paths,
+                resource_limits,
+                session_key,
+            )
+            .map_err(crate::storage::StorageError::InvalidSyncState)?;
+            result.uploaded_resources = result
+                .uploaded_resources
+                .checked_add(resources.transferred_resources)
+                .ok_or(crate::storage::StorageError::ValueOutOfRange {
+                    field: "uploaded sync resource count",
+                })?;
+            result.bytes_uploaded = result
+                .bytes_uploaded
+                .checked_add(resources.transferred_bytes)
+                .ok_or(crate::storage::StorageError::ValueOutOfRange {
+                    field: "uploaded sync byte count",
+                })?;
+            let resource_refs = collect_mutation_resource_refs(&mutations)
+                .map_err(crate::storage::StorageError::InvalidSyncState)?;
+            database.record_sync_resource_refs(remote_scope, &mutations, &resource_refs)?;
+            write_large_pack_batch(&mut writer, mutations)
+        })
+        .map_err(|error| error.to_string())?;
+    if let Some(header) = snapshot_header {
+        writer.rewrite_header(&SnapshotPackHeader {
+            device_id: header.device_id.clone(),
+            epoch: header.epoch.clone(),
+            through_sequence: export.through_sequence,
+        })?;
+    }
+    let encoded = writer.finish()?;
+    if encoded.record_count != export.record_count {
+        return Err("sync pack record count changed during export".to_string());
+    }
+    Ok((encoded, export))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn maybe_compact(
     store: &impl ObjectStore,
     database: &Database,
@@ -646,7 +807,7 @@ fn maybe_compact(
                 session_key,
                 result,
             ) {
-                Ok(checkpoint) if checkpoint.vector == current.head.vector => {}
+                Ok(checkpoint) if checkpoint.header.vector == current.head.vector => {}
                 Ok(_) | Err(_) => return Ok(()),
             }
         }
@@ -672,38 +833,32 @@ fn maybe_compact(
             .checked_add(1)
             .ok_or_else(|| "checkpoint generation overflowed".to_string())
     })?;
-    let snapshot = database
-        .export_sync_snapshot_for_scope(remote_scope)
-        .map_err(|error| error.to_string())?;
-    if snapshot.through_sequence != local_state.published_sequence {
-        return Ok(());
-    }
-    let mut mutations = snapshot.mutations;
-    let resources =
-        prepare_mutation_resources(store, &mut mutations, paths, resource_limits, session_key)?;
-    result.uploaded_resources += resources.transferred_resources;
-    result.bytes_uploaded = checked_add(
-        result.bytes_uploaded,
-        resources.transferred_bytes,
-        "uploaded byte count",
-    )?;
-    let resource_refs = collect_mutation_resource_refs(&mutations)?;
-    database
-        .record_sync_resource_refs(remote_scope, &mutations, &resource_refs)
-        .map_err(|error| error.to_string())?;
-    let checkpoint = Checkpoint {
+    let checkpoint_header = CheckpointPackHeader {
         generation,
         vector: vector.clone(),
-        mutations,
     };
-    let encoded = super::encode_checkpoint(&checkpoint, session_key)?;
+    let (encoded, export) = encode_database_pack(
+        store,
+        database,
+        paths,
+        remote_scope,
+        LargePackKind::Checkpoint,
+        None,
+        Some(&checkpoint_header),
+        session_key,
+        resource_limits,
+        result,
+    )?;
+    if export.through_sequence != local_state.published_sequence {
+        return Ok(());
+    }
     let key = super::checkpoint_object_key(generation, &encoded.sha256)?;
-    put_immutable(store, &key, &encoded, result)?;
+    put_immutable_file(store, &key, &encoded, result)?;
     let checkpoint_ref = ObjectRef {
         key,
-        sha256: encoded.sha256,
-        stored_size_bytes: encoded.bytes.len() as u64,
-        record_count: checkpoint.mutations.len() as u64,
+        sha256: encoded.sha256.clone(),
+        stored_size_bytes: encoded.stored_size_bytes,
+        record_count: encoded.record_count,
     };
     let head = CheckpointHead {
         generation,
@@ -770,6 +925,7 @@ fn finalize_checkpoint_publication(
             };
             if local_vector.is_empty() {
                 download_checkpoint(store, previous, previous_generation, session_key, result)?
+                    .header
                     .vector
             } else {
                 local_vector
@@ -1018,54 +1174,43 @@ fn publish_bootstrap(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<crate::storage::SyncRemoteState, String> {
-    let exported = database
-        .export_sync_snapshot_for_scope(remote_scope)
-        .map_err(|error| error.to_string())?;
-    let mut snapshot = Snapshot {
+    let snapshot_header = SnapshotPackHeader {
         device_id: device_id.to_string(),
         epoch: state.epoch.clone(),
-        through_sequence: exported.through_sequence,
-        mutations: exported.mutations,
+        through_sequence: 0,
     };
-    let resources = prepare_mutation_resources(
+    let (encoded, export) = encode_database_pack(
         store,
-        &mut snapshot.mutations,
+        database,
         paths,
-        resource_limits,
+        remote_scope,
+        LargePackKind::Snapshot,
+        Some(&snapshot_header),
+        None,
         session_key,
+        resource_limits,
+        result,
     )?;
-    result.uploaded_resources += resources.transferred_resources;
-    result.bytes_uploaded = checked_add(
-        result.bytes_uploaded,
-        resources.transferred_bytes,
-        "uploaded byte count",
-    )?;
-    let resource_refs = collect_mutation_resource_refs(&snapshot.mutations)?;
-    database
-        .record_sync_resource_refs(remote_scope, &snapshot.mutations, &resource_refs)
-        .map_err(|error| error.to_string())?;
-
-    let encoded = encode_snapshot(&snapshot, session_key)?;
     let snapshot_key = snapshot_object_key(device_id, &state.epoch, &encoded.sha256)?;
-    put_immutable(store, &snapshot_key, &encoded, result)?;
+    put_immutable_file(store, &snapshot_key, &encoded, result)?;
     let snapshot_ref = ObjectRef {
         key: snapshot_key,
-        sha256: encoded.sha256,
-        stored_size_bytes: encoded.bytes.len() as u64,
-        record_count: snapshot.mutations.len() as u64,
+        sha256: encoded.sha256.clone(),
+        stored_size_bytes: encoded.stored_size_bytes,
+        record_count: encoded.record_count,
     };
     let head = DeviceHead {
         device_id: device_id.to_string(),
         epoch: state.epoch.clone(),
         snapshot: snapshot_ref.clone(),
-        published_sequence: snapshot.through_sequence,
+        published_sequence: export.through_sequence,
         last_segment_key: None,
         updated_at_ms: current_time_ms(),
     };
     let published_head = publish_head(store, &head, session_key, result)?;
     result.uploaded_entries = checked_add(
         result.uploaded_entries,
-        snapshot.mutations.len() as u64,
+        encoded.record_count,
         "uploaded entry count",
     )?;
     let state = database
@@ -1073,7 +1218,7 @@ fn publish_bootstrap(
             remote_scope,
             &state.epoch,
             &snapshot_ref,
-            snapshot.through_sequence,
+            export.through_sequence,
         )
         .map_err(|error| error.to_string())?;
     record_head_cache(
@@ -1361,45 +1506,68 @@ fn pull_snapshot(
     _resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<DeviceCursor, String> {
-    let downloaded = get_verified_object(
+    let downloaded = get_verified_object_to_file(
         store,
         &head.snapshot.key,
         &head.snapshot.sha256,
         Some(head.snapshot.stored_size_bytes),
+        &std::env::temp_dir(),
         result,
     )?;
-    let mut snapshot = decode_snapshot(&downloaded, session_key)?;
-    if snapshot.device_id != head.device_id
-        || snapshot.epoch != head.epoch
-        || snapshot.mutations.len() as u64 != head.snapshot.record_count
-        || snapshot.through_sequence > head.published_sequence
+    let mut reader = open_snapshot_pack(&downloaded.path, session_key)?;
+    if reader.header.device_id != head.device_id
+        || reader.header.epoch != head.epoch
+        || reader.header.through_sequence > head.published_sequence
     {
         return Err(format!(
             "snapshot payload does not match head for {}",
             head.device_id
         ));
     }
-    let resource_refs = defer_mutation_resources(&mut snapshot.mutations)?;
-    result.downloaded_entries = checked_add(
-        result.downloaded_entries,
-        snapshot.mutations.len() as u64,
-        "downloaded entry count",
-    )?;
     let cursor = DeviceCursor {
         device_id: head.device_id.clone(),
         epoch: head.epoch.clone(),
-        sequence: snapshot.through_sequence,
+        sequence: reader.header.through_sequence,
         last_segment_key: None,
     };
+    let expected_record_count = head.snapshot.record_count;
+    let mut terminal_checked = false;
+    let batches = std::iter::from_fn(|| {
+        if terminal_checked {
+            return None;
+        }
+        match reader.next() {
+            Some(batch) => Some(
+                batch
+                    .and_then(|mut mutations| {
+                        let resource_refs = defer_mutation_resources(&mut mutations)?;
+                        Ok((mutations, resource_refs))
+                    })
+                    .map_err(crate::storage::StorageError::InvalidSyncState),
+            ),
+            None => {
+                terminal_checked = true;
+                if reader.record_count() != expected_record_count || !reader.is_complete() {
+                    Some(Err(crate::storage::StorageError::InvalidSyncState(
+                        format!(
+                            "snapshot payload does not match head for {}",
+                            head.device_id
+                        ),
+                    )))
+                } else {
+                    None
+                }
+            }
+        }
+    });
     let applied = database
-        .apply_sync_snapshot_with_resources(
-            remote_scope,
-            &cursor,
-            &head.snapshot.sha256,
-            &snapshot.mutations,
-            &resource_refs,
-        )
+        .apply_sync_snapshot_batches(remote_scope, &cursor, &head.snapshot.sha256, batches)
         .map_err(|error| error.to_string())?;
+    result.downloaded_entries = checked_add(
+        result.downloaded_entries,
+        expected_record_count,
+        "downloaded entry count",
+    )?;
     result.applied_entries = checked_add(result.applied_entries, applied, "applied entry count")?;
     Ok(cursor)
 }
@@ -1551,6 +1719,151 @@ fn checked_add(left: u64, right: u64, label: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("{label} overflowed"))
 }
 
+struct TemporarySyncFile {
+    path: PathBuf,
+}
+
+impl TemporarySyncFile {
+    fn new(directory: &std::path::Path, label: &str) -> Result<Self, String> {
+        fs::create_dir_all(directory)
+            .map_err(|error| format!("failed to create sync temporary directory: {error}"))?;
+        for _ in 0..16 {
+            let path = directory.join(format!(
+                ".sync-{label}-{}-{:016x}.tmp",
+                std::process::id(),
+                rand::random::<u64>()
+            ));
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Ok(Self { path }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(format!("failed to create sync temporary file: {error}")),
+            }
+        }
+        Err("failed to allocate a unique sync temporary file".to_string())
+    }
+}
+
+impl Drop for TemporarySyncFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+struct TemporaryDatabaseSnapshot {
+    path: PathBuf,
+}
+
+impl TemporaryDatabaseSnapshot {
+    fn create(database: &Database, directory: &std::path::Path) -> Result<Self, String> {
+        fs::create_dir_all(directory)
+            .map_err(|error| format!("failed to create sync temporary directory: {error}"))?;
+        for _ in 0..16 {
+            let path = directory.join(format!(
+                ".sync-database-snapshot-{}-{:016x}.sqlite3",
+                std::process::id(),
+                rand::random::<u64>()
+            ));
+            match fs::symlink_metadata(&path) {
+                Ok(_) => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    database
+                        .snapshot_into(&path)
+                        .map_err(|error| error.to_string())?;
+                    return Ok(Self { path });
+                }
+                Err(error) => return Err(format!("failed to inspect sync snapshot path: {error}")),
+            }
+        }
+        Err("failed to allocate a unique sync database snapshot".to_string())
+    }
+}
+
+impl Drop for TemporaryDatabaseSnapshot {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+        let _ = fs::remove_file(format!("{}-wal", self.path.display()));
+        let _ = fs::remove_file(format!("{}-shm", self.path.display()));
+    }
+}
+
+fn get_verified_object_to_file(
+    store: &impl ObjectStore,
+    key: &str,
+    expected_sha256: &str,
+    expected_size: Option<u64>,
+    directory: &std::path::Path,
+    result: &mut SyncEngineResult,
+) -> Result<TemporarySyncFile, String> {
+    let temporary = TemporarySyncFile::new(directory, "download")?;
+    fs::remove_file(&temporary.path)
+        .map_err(|error| format!("failed to prepare sync download file: {error}"))?;
+    let max_bytes = expected_size.unwrap_or(MAX_LARGE_PACK_STORED_BYTES);
+    if max_bytes > MAX_LARGE_PACK_STORED_BYTES {
+        return Err(format!(
+            "remote object {key:?} exceeds the sync pack size limit"
+        ));
+    }
+    let downloaded = store
+        .get_to_file(key, &temporary.path, max_bytes)?
+        .ok_or_else(|| format!("remote object {key:?} does not exist"))?;
+    if expected_size.is_some_and(|size| size != downloaded.size_bytes) {
+        return Err(format!(
+            "remote object {key:?} size does not match its reference"
+        ));
+    }
+    if downloaded.sha256 != expected_sha256 {
+        return Err(format!(
+            "remote object {key:?} digest does not match its reference"
+        ));
+    }
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        downloaded.size_bytes,
+        "downloaded byte count",
+    )?;
+    Ok(temporary)
+}
+
+fn put_immutable_file(
+    store: &impl ObjectStore,
+    key: &str,
+    encoded: &EncodedFile,
+    result: &mut SyncEngineResult,
+) -> Result<(), String> {
+    match store.put_file(
+        key,
+        encoded.path(),
+        &encoded.sha256,
+        encoded.stored_size_bytes,
+        PutCondition::IfAbsent,
+    )? {
+        PutOutcome::Stored { .. } => {
+            result.bytes_uploaded = checked_add(
+                result.bytes_uploaded,
+                encoded.stored_size_bytes,
+                "uploaded byte count",
+            )?;
+            Ok(())
+        }
+        PutOutcome::PreconditionFailed => {
+            let metadata = store
+                .head(key)?
+                .ok_or_else(|| format!("immutable object {key:?} disappeared after a retry"))?;
+            if metadata
+                .size_bytes
+                .is_some_and(|size| size != encoded.stored_size_bytes)
+            {
+                return Err(format!("immutable object {key:?} has an unexpected size"));
+            }
+            Ok(())
+        }
+    }
+}
+
 trait EncodedObjectExt {
     fn stored_size_bytes(&self) -> u64;
 }
@@ -1564,6 +1877,8 @@ impl EncodedObjectExt for EncodedObject {
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, fs, io::Write, path::Path, sync::Mutex};
+
+    use crate::sync::v1::MutationBatch;
 
     use super::*;
     use crate::{
@@ -1798,23 +2113,50 @@ mod tests {
         }
     }
 
-    fn insert_checkpoint(store: &MemoryStore, checkpoint: &Checkpoint) -> ObjectRef {
-        let encoded = super::super::encode_checkpoint(checkpoint, None).unwrap();
+    #[derive(Clone)]
+    struct CheckpointFixture {
+        generation: u64,
+        vector: Vec<DeviceCursor>,
+        mutations: MutationBatch,
+    }
+
+    fn insert_checkpoint(store: &MemoryStore, checkpoint: &CheckpointFixture) -> ObjectRef {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-checkpoint-fixture-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let encoded = super::super::wire::encode_checkpoint_pack(
+            &directory,
+            &CheckpointPackHeader {
+                generation: checkpoint.generation,
+                vector: checkpoint.vector.clone(),
+            },
+            (!checkpoint.mutations.is_empty()).then_some(checkpoint.mutations.clone()),
+            None,
+        )
+        .unwrap();
         let key =
             super::super::checkpoint_object_key(checkpoint.generation, &encoded.sha256).unwrap();
         let reference = ObjectRef {
             key: key.clone(),
-            sha256: encoded.sha256,
-            stored_size_bytes: encoded.bytes.len() as u64,
+            sha256: encoded.sha256.clone(),
+            stored_size_bytes: encoded.stored_size_bytes,
             record_count: checkpoint.mutations.len() as u64,
         };
-        store.objects.lock().unwrap().insert(key, encoded.bytes);
+        store
+            .objects
+            .lock()
+            .unwrap()
+            .insert(key, fs::read(encoded.path()).unwrap());
+        drop(encoded);
+        let _ = fs::remove_dir(&directory);
         reference
     }
 
     fn insert_checkpoint_head(
         store: &MemoryStore,
-        checkpoint: &Checkpoint,
+        checkpoint: &CheckpointFixture,
         reference: ObjectRef,
         previous_checkpoint: Option<ObjectRef>,
     ) {
@@ -2249,7 +2591,7 @@ mod tests {
         let store = MemoryStore::default();
         let source_device = "11111111-1111-4111-8111-111111111111";
         let source_epoch = "22222222-2222-4222-8222-222222222222";
-        let checkpoint = Checkpoint {
+        let checkpoint = CheckpointFixture {
             generation: 1,
             vector: vec![DeviceCursor {
                 device_id: source_device.to_string(),
@@ -2292,7 +2634,7 @@ mod tests {
         let store = MemoryStore::default();
         let source_device = "11111111-1111-4111-8111-111111111111";
         let source_epoch = "22222222-2222-4222-8222-222222222222";
-        let previous = Checkpoint {
+        let previous = CheckpointFixture {
             generation: 1,
             vector: vec![DeviceCursor {
                 device_id: source_device.to_string(),
@@ -2311,7 +2653,7 @@ mod tests {
             },
         };
         let previous_ref = insert_checkpoint(&store, &previous);
-        let current = Checkpoint {
+        let current = CheckpointFixture {
             generation: 2,
             vector: previous.vector.clone(),
             mutations: super::super::MutationBatch {
@@ -2686,7 +3028,7 @@ mod tests {
             sequence: 0,
             last_segment_key: None,
         }];
-        let checkpoint = |generation| Checkpoint {
+        let checkpoint = |generation| CheckpointFixture {
             generation,
             vector: vector.clone(),
             mutations: super::super::MutationBatch {
@@ -2913,7 +3255,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let checkpoint = Checkpoint {
+        let checkpoint = CheckpointFixture {
             generation: current_head.generation + 1,
             vector: vec![DeviceCursor {
                 device_id: source_id.clone(),
@@ -3025,28 +3367,37 @@ mod tests {
         database.initialize_sync().unwrap();
         let device_id = "11111111-1111-4111-8111-111111111111";
         let epoch = "22222222-2222-4222-8222-222222222222";
-        let snapshot = Snapshot {
+        let snapshot_header = SnapshotPackHeader {
             device_id: device_id.to_string(),
             epoch: epoch.to_string(),
             through_sequence: 0,
-            mutations: super::super::MutationBatch {
-                upserts: Vec::new(),
-                tombstones: Vec::new(),
-            },
         };
-        let encoded_snapshot = encode_snapshot(&snapshot, None).unwrap();
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-snapshot-fixture-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let encoded_snapshot = super::super::wire::encode_snapshot_pack(
+            &directory,
+            &snapshot_header,
+            std::iter::empty::<MutationBatch>(),
+            None,
+        )
+        .unwrap();
         let snapshot_key = snapshot_object_key(device_id, epoch, &encoded_snapshot.sha256).unwrap();
         let snapshot_ref = ObjectRef {
             key: snapshot_key.clone(),
-            sha256: encoded_snapshot.sha256,
-            stored_size_bytes: encoded_snapshot.bytes.len() as u64,
+            sha256: encoded_snapshot.sha256.clone(),
+            stored_size_bytes: encoded_snapshot.stored_size_bytes,
             record_count: 0,
         };
         store
             .objects
             .lock()
             .unwrap()
-            .insert(snapshot_key, encoded_snapshot.bytes);
+            .insert(snapshot_key, fs::read(encoded_snapshot.path()).unwrap());
+        drop(encoded_snapshot);
+        let _ = fs::remove_dir(&directory);
 
         let mut last_segment_key = None;
         let mut thousandth_segment_key = None;

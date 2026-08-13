@@ -95,6 +95,19 @@ magic | version | kind | flags | nonce? | compressed-or-encrypted payload
   before decoding.
 - Decoders enforce size, entry-count and decompression limits before allocating untrusted sizes.
 
+Snapshots and checkpoints keep one immutable S3 object each, but their v1 payload is an internal
+chunk stream rather than one monolithic bincode value. The small identity header is authenticated,
+then deterministic batches of at most 2,048 records are independently bincode encoded, zstd
+compressed and (when enabled) AES-256-GCM authenticated. A batch that exceeds the 16 MiB decoded
+chunk cap is bisected deterministically; one record larger than that cap is rejected. Publication
+first creates a point-in-time SQLite copy, releases the live database lock, exports that copy in
+bounded batches to a temporary pack file, and performs one streaming S3 PUT. Pull performs one
+streaming GET to a temporary file and applies decoded batches inside one SQLite transaction; any
+late chunk, authentication, count or cursor failure rolls the entire snapshot/checkpoint back.
+Temporary files are removed on every success and failure path. Segments and small pointer objects
+retain the compact single-envelope encoding, so the ordinary 200-record daily path adds no S3
+requests and no chunk-container overhead.
+
 Binary resources use the same `CLPSYNC1` format version with an internal resource object kind, but
 are not bincode encoded or compressed. With a password they are streamed through fixed 1 MiB
 AES-256-GCM chunks: a 20-byte authenticated-format header records the plaintext size, and each
@@ -148,8 +161,8 @@ existing local collection is not confused with records downloaded during the sam
 
 1. acquire the process-wide sync lock and authenticate an existing canonical pointer when the v1
    namespace is non-empty;
-2. take a consistent SQLite view, assign the current device epoch and export active local records
-   plus known tombstones;
+2. create a point-in-time SQLite copy, release the live database lock, assign the current device
+   epoch and export active local records plus known tombstones in bounded batches;
 3. upload all missing content-addressed resources;
 4. upload one immutable bootstrap snapshot;
 5. publish the device head only after the snapshot and resources are durable;
@@ -251,8 +264,9 @@ A compactor:
 1. freezes the locally published device state plus every successfully applied peer cursor;
 2. reads and validates the current checkpoint pointer/body only when the local baseline says work
    is due, rejecting a candidate that drops a known device or regresses a sequence in the same epoch;
-3. exports the complete local materialized state, including tombstones, and uploads missing
-   content-addressed resources;
+3. creates a point-in-time SQLite copy, exports the complete materialized state including
+   tombstones in bounded batches, and uploads missing content-addressed resources without holding
+   the live database lock across network I/O;
 4. writes one immutable checkpoint containing that complete winning state and frozen vector;
 5. conditionally replaces `checkpoint.bin` with `If-Match` (or `If-None-Match: *` initially);
 6. only after the conditional publish succeeds, deletes snapshots and segments covered by the

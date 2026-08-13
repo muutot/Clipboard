@@ -58,11 +58,22 @@ impl Database {
     pub fn vacuum_into(&self, target_path: impl AsRef<Path>) -> Result<(), StorageError> {
         self.with_connection(|conn| {
             conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
-            let target = target_path.as_ref().to_string_lossy().replace('\\', "\\\\");
-            conn.execute_batch(&format!("VACUUM INTO '{}'", target.replace('\'', "''")))?;
-            Ok(())
+            vacuum_into_path(conn, target_path.as_ref())
         })
     }
+
+    /// Creates a transactionally consistent copy without forcing a WAL
+    /// checkpoint. Sync uses this for bounded export so normal backup and data
+    /// migration behavior retain their existing checkpoint semantics.
+    pub(crate) fn snapshot_into(&self, target_path: impl AsRef<Path>) -> Result<(), StorageError> {
+        self.with_connection(|conn| vacuum_into_path(conn, target_path.as_ref()))
+    }
+}
+
+fn vacuum_into_path(connection: &Connection, target_path: &Path) -> Result<(), StorageError> {
+    let target = target_path.to_string_lossy().replace('\\', "\\\\");
+    connection.execute_batch(&format!("VACUUM INTO '{}'", target.replace('\'', "''")))?;
+    Ok(())
 }
 
 fn configure_connection(connection: &Connection) -> Result<(), StorageError> {

@@ -112,6 +112,7 @@ The only wire namespace is `v1/`, and every object has the `CLPSYNC1` magic plus
 - There is one canonical layout per object kind and no reader fallback chain.
 - The decoder rejects unknown flags, wrong kinds/versions, trailing bytes, oversized stored or expanded payloads, authentication failure, and malformed identifiers.
 - Because bincode is positional, an incompatible struct change requires an intentional new protocol namespace; do not silently reinterpret v1 objects or add historical-layout decoders.
+- Snapshot/checkpoint v1 objects use one authenticated internal chunk stream: a fixed-int identity header plus deterministic mutation batches (target 2,048 records, hard 16 MiB decoded chunk cap), each independently bincode+zstd encoded and optionally AES-256-GCM authenticated. They are written/read through temporary files with one S3 PUT/GET, while segment and pointer objects retain the small single-envelope layout. Applying all chunks and the final cursor/checkpoint marker remains one SQLite transaction, so any late failure rolls back every earlier chunk.
 - Re-run the v1 wire round-trip, corruption, wrong-password, retry-determinism, and size-bound tests for every wire change.
 
 ## Tauri command contract
