@@ -273,14 +273,18 @@ A compactor:
    tombstones in bounded batches, and uploads missing content-addressed resources without holding
    the live database lock across network I/O;
 4. writes one immutable checkpoint containing that complete winning state and frozen vector;
-5. conditionally replaces `checkpoint.bin` with `If-Match` (or `If-None-Match: *` initially);
-6. only after the conditional publish succeeds, deletes snapshots and segments covered by the
+5. conditionally replaces `checkpoint.bin` with `If-Match` (or `If-None-Match: *` initially), then
+   immediately reads the pointer back and requires the exact published bytes (or observes a
+   strictly newer, non-regressing concurrent winner);
+6. only after that durable read-back succeeds, deletes snapshots and segments covered by the
    immediately previous checkpoint vector;
 7. retains the current and immediately previous checkpoints and atomically records the new local
    baseline only after cleanup completes.
 
-Concurrent compactors are safe: only the conditional pointer update winner may perform garbage
-collection. A delayed winner never prunes a checkpoint pack from its own or a higher generation;
+Concurrent compactors are safe: only a conditional pointer update winner whose pointer is durably
+read back may perform garbage collection. A provider that reports success but loses or changes the
+pointer causes a hard failure before any history deletion or local generation advance. A delayed
+winner never prunes a checkpoint pack from its own or a higher generation;
 same-generation losing candidates are therefore harmless and become eligible only after a later
 generation advances. Cleanup is restartable: if the pointer was published but the process stopped
 before GC/local-baseline recording, a later run with the same vector revalidates the checkpoint and

@@ -816,10 +816,11 @@ fn maybe_compact(
     };
     let encoded_head = super::encode_checkpoint_head(&head, session_key)?;
     let encoded_head_size = encoded_head.stored_size_bytes();
+    let expected_head_bytes = encoded_head.bytes;
     let condition = existing.as_ref().map_or(PutCondition::IfAbsent, |current| {
         PutCondition::IfMatch(current.etag.clone())
     });
-    match store.put(CHECKPOINT_HEAD_KEY, encoded_head.bytes, condition)? {
+    match store.put(CHECKPOINT_HEAD_KEY, expected_head_bytes.clone(), condition)? {
         PutOutcome::PreconditionFailed => return Ok(()),
         PutOutcome::Stored { .. } => {
             result.bytes_uploaded = checked_add(
@@ -828,6 +829,15 @@ fn maybe_compact(
                 "uploaded byte count",
             )?;
         }
+    }
+    if !checkpoint_pointer_is_durable(
+        store,
+        &head,
+        &expected_head_bytes,
+        session_key,
+        result,
+    )? {
+        return Ok(());
     }
     finalize_checkpoint_publication(
         store,
@@ -841,6 +851,34 @@ fn maybe_compact(
         &paths.temporary_directory,
         result,
     )
+}
+
+fn checkpoint_pointer_is_durable(
+    store: &impl ObjectStore,
+    expected: &CheckpointHead,
+    expected_bytes: &[u8],
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> Result<bool, String> {
+    let downloaded = store
+        .get(CHECKPOINT_HEAD_KEY)?
+        .ok_or_else(|| "checkpoint pointer disappeared after a successful conditional write".to_string())?;
+    result.bytes_downloaded = checked_add(
+        result.bytes_downloaded,
+        downloaded.bytes.len() as u64,
+        "downloaded byte count",
+    )?;
+    if downloaded.bytes == expected_bytes {
+        return Ok(true);
+    }
+
+    let observed = decode_checkpoint_head(&downloaded.bytes, session_key)?;
+    validate_checkpoint_head(&observed)?;
+    if observed.generation > expected.generation {
+        validate_compaction_vector(&expected.vector, &observed.vector)?;
+        return Ok(false);
+    }
+    Err("checkpoint pointer changed unexpectedly after a successful conditional write".to_string())
 }
 
 #[allow(clippy::too_many_arguments)]

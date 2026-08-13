@@ -18,6 +18,7 @@ const REMOTE_SCOPE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 struct MemoryStore {
     objects: Mutex<BTreeMap<String, Vec<u8>>>,
     fail_checkpoint_cas: Mutex<bool>,
+    drop_checkpoint_after_success: Mutex<bool>,
     list_without_etags: Mutex<bool>,
     deleted: Mutex<Vec<String>>,
     gets: Mutex<Vec<String>>,
@@ -122,6 +123,12 @@ impl ObjectStore for MemoryStore {
             if &actual != expected {
                 return Ok(PutOutcome::PreconditionFailed);
             }
+        }
+        if key == CHECKPOINT_HEAD_KEY && *self.drop_checkpoint_after_success.lock().unwrap() {
+            objects.remove(key);
+            return Ok(PutOutcome::Stored {
+                etag: Some("\"lost-checkpoint-pointer\"".to_string()),
+            });
         }
         let etag = format!("\"{}\"", hex::encode(Sha256::digest(&bytes)));
         objects.insert(key.to_string(), bytes);
@@ -434,6 +441,65 @@ fn independent_snapshots_and_incremental_segments_converge() {
     drop(second);
     fs::remove_dir_all(first_paths.project).unwrap();
     fs::remove_dir_all(second_paths.project).unwrap();
+}
+
+#[test]
+fn source_can_publish_after_an_empty_peer_advances_the_checkpoint() {
+    let store = MemoryStore::default();
+    let source_paths = temp_paths("empty-peer-source");
+    let target_paths = temp_paths("empty-peer-target");
+    let source = Database::open(&source_paths.database).unwrap();
+    let target = Database::open(&target_paths.database).unwrap();
+    source.save_item(&text_item("initial", "initial")).unwrap();
+
+    sync_database(
+        &store,
+        &source,
+        &source_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    sync_database(
+        &store,
+        &target,
+        &target_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+
+    source
+        .save_item(&text_item("immediate-incremental", "incremental"))
+        .unwrap();
+    let published = sync_database(
+        &store,
+        &source,
+        &source_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    assert_eq!(published.uploaded_entries, 1);
+
+    sync_database(
+        &store,
+        &target,
+        &target_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    assert!(target.get_item("immediate-incremental").unwrap().is_some());
+
+    drop(source);
+    drop(target);
+    fs::remove_dir_all(source_paths.project).unwrap();
+    fs::remove_dir_all(target_paths.project).unwrap();
 }
 
 #[test]
@@ -1105,6 +1171,62 @@ fn checkpoint_cas_loser_never_garbage_collects_history() {
         .lock()
         .unwrap()
         .contains_key(&protected_snapshot));
+
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
+fn checkpoint_pointer_must_be_readable_before_garbage_collection() {
+    let store = MemoryStore::default();
+    let paths = temp_paths("checkpoint-readback");
+    let database = Database::open(&paths.database).unwrap();
+    database
+        .save_item(&text_item("initial", "initial"))
+        .unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let previous_checkpoint = database
+        .get_sync_checkpoint_state(REMOTE_SCOPE)
+        .unwrap()
+        .unwrap();
+    database.save_item(&text_item("later", "later")).unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                [REMOTE_SCOPE],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    store.deleted.lock().unwrap().clear();
+    *store.drop_checkpoint_after_success.lock().unwrap() = true;
+
+    let mut result = SyncEngineResult::default();
+    let error = maybe_compact(
+        &store,
+        &database,
+        &paths,
+        REMOTE_SCOPE,
+        &database.get_sync_device_id().unwrap(),
+        &state,
+        None,
+        options().resource_limits,
+        &mut result,
+    )
+    .unwrap_err();
+
+    assert!(error.contains("disappeared after a successful conditional write"));
+    assert_eq!(result.deleted_remote_objects, 0);
+    assert!(store.deleted.lock().unwrap().is_empty());
+    assert_eq!(
+        database.get_sync_checkpoint_state(REMOTE_SCOPE).unwrap(),
+        Some(previous_checkpoint)
+    );
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();
