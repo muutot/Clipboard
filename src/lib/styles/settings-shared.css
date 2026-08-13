@@ -183,7 +183,7 @@ label.visually-hidden {
   border-color: var(--text-faint);
 }
 
-.setting-card-row button:not(.toggle-switch),
+.setting-card-row > button:not(.toggle-switch),
 .settings-action-btn {
   height: 34px;
   box-sizing: border-box;
@@ -202,13 +202,13 @@ label.visually-hidden {
     color 100ms ease;
 }
 
-.setting-card-row button:hover,
+.setting-card-row > button:hover,
 .settings-action-btn:hover {
   color: var(--text-primary);
   background: var(--hover-bg);
 }
 
-.setting-card-row button:disabled,
+.setting-card-row > button:disabled,
 .settings-action-btn:disabled {
   opacity: 0.55;
   cursor: default;
@@ -227,12 +227,6 @@ label.visually-hidden {
 
 .unit-select {
   width: 64px;
-}
-
-.unit-select .settings-select {
-  justify-content: center;
-  padding-right: 10px;
-  text-align: center;
 }
 
 .heading-inline {
