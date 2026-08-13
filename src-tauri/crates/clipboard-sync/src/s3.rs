@@ -11,7 +11,7 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::blocking::{Client, RequestBuilder};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ETAG};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, ETAG};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -745,7 +745,7 @@ pub fn head_s3_object(
 
     if response.status().is_success() {
         Ok(Some(S3ObjectMetadata {
-            size_bytes: response.content_length(),
+            size_bytes: response_content_length_header(response.headers())?,
             etag: response_etag(&response)?,
         }))
     } else if response.status().as_u16() == 404 {
@@ -1066,6 +1066,19 @@ fn response_etag(response: &reqwest::blocking::Response) -> Result<Option<String
         .transpose()
 }
 
+fn response_content_length_header(headers: &HeaderMap) -> Result<Option<u64>, String> {
+    headers
+        .get(CONTENT_LENGTH)
+        .map(|value| {
+            value
+                .to_str()
+                .map_err(|error| format!("S3 returned an invalid Content-Length header: {error}"))?
+                .parse::<u64>()
+                .map_err(|error| format!("S3 returned an invalid Content-Length value: {error}"))
+        })
+        .transpose()
+}
+
 struct S3ListPage {
     entries: Vec<S3Entry>,
     is_truncated: bool,
@@ -1250,6 +1263,17 @@ mod tests {
     #[test]
     fn content_md5_uses_the_s3_required_base64_encoding() {
         assert_eq!(content_md5_base64(b"hello"), "XUFAKrxLKna5cZ2REBfFkg==");
+    }
+
+    #[test]
+    fn head_metadata_reads_the_content_length_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_static("1048593"));
+
+        assert_eq!(
+            response_content_length_header(&headers).unwrap(),
+            Some(1_048_593)
+        );
     }
 
     #[test]
