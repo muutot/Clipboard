@@ -5,10 +5,10 @@
 //! the strict object layout and wire envelope stay independently testable.
 
 pub mod engine;
-pub mod layout;
-pub mod remote;
 pub mod resources;
 pub mod wire;
+
+pub use clipboard_sync::v1::{layout, remote};
 
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 

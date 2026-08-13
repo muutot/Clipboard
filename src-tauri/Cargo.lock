@@ -732,6 +732,7 @@ dependencies = [
  "base64 0.23.1",
  "bincode",
  "chrono",
+ "clipboard-sync",
  "ctrlc",
  "hex",
  "hmac",
@@ -760,6 +761,21 @@ dependencies = [
  "window-vibrancy",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "clipboard-sync"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "chrono",
+ "hex",
+ "hmac",
+ "md-5",
+ "reqwest",
+ "serde",
+ "sha2 0.10.9",
+ "uuid",
 ]
 
 [[package]]

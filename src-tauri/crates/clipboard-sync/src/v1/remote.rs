@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, path::Path};
 
-use crate::sync::s3::{
+use crate::s3::{
     delete_from_s3, get_s3_object, get_s3_object_to_file, head_s3_object, list_s3_objects_after,
     put_s3_file, put_s3_object, S3PutCondition, S3PutOutcome,
 };

@@ -1,0 +1,17 @@
+[package]
+name = "clipboard-sync"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "S3-first synchronization protocol and transport for Clipboard Desktop"
+
+[dependencies]
+base64 = "0.23"
+chrono = "0.4"
+hex = "0.4.3"
+hmac = "0.12"
+md-5 = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls", "blocking"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }

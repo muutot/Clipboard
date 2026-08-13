@@ -75,7 +75,11 @@ npm run format:check
 npm run verify
 ```
 
-Run the narrowest relevant checks during implementation. Run `npm run verify` at integration milestones or before a commit whose scope crosses frontend and backend. If an environment prevents a required runtime, visual, platform, packaging, or performance check, report the missing evidence and leave the corresponding TODO unverified.
+The Rust format, test, and Clippy scripts cover every Cargo workspace member, including the
+Tauri-independent sync crate. Run the narrowest relevant checks during implementation. Run
+`npm run verify` at integration milestones or before a commit whose scope crosses frontend and
+backend. If an environment prevents a required runtime, visual, platform, packaging, or performance
+check, report the missing evidence and leave the corresponding TODO unverified.
 
 The pre-release gate additionally runs the extreme-release build (see `skills/version-release/SKILL.md`); the local build profile itself stays fast.
 
