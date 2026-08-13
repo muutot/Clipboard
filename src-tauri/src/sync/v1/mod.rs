@@ -10,6 +10,7 @@ mod engine_tests;
 pub use clipboard_sync::v1::{engine, layout, remote, repository, resources, wire};
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 
+pub use clipboard_sync::s3::{S3RequestMetrics, S3RequestMetricsSnapshot};
 pub use layout::{
     checkpoint_object_key, head_object_key, obsolete_object_candidate, parse_checkpoint_key,
     parse_head_key, parse_resource_key, parse_segment_key, resource_object_key, segment_object_key,

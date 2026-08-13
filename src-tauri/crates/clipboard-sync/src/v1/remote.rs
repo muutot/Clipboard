@@ -1,8 +1,9 @@
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, path::Path, time::Instant};
 
 use crate::s3::{
-    delete_from_s3, get_s3_object, get_s3_object_to_file, head_s3_object, list_s3_objects_after,
-    put_s3_file, put_s3_object, S3PutCondition, S3PutOutcome,
+    delete_from_s3, get_s3_object, get_s3_object_to_file, head_s3_object,
+    list_s3_objects_after_with_metrics, put_s3_file, put_s3_object, S3PutCondition, S3PutOutcome,
+    S3RequestMetrics,
 };
 
 use super::layout::obsolete_object_candidate;
@@ -85,6 +86,7 @@ pub struct S3ObjectStore {
     access_key: String,
     secret_key: String,
     remote_prefix: String,
+    metrics: Option<S3RequestMetrics>,
 }
 
 impl S3ObjectStore {
@@ -121,7 +123,13 @@ impl S3ObjectStore {
             access_key,
             secret_key,
             remote_prefix: normalize_remote_prefix(remote_prefix.as_ref())?,
+            metrics: None,
         })
+    }
+
+    pub fn with_metrics(mut self, metrics: S3RequestMetrics) -> Self {
+        self.metrics = Some(metrics);
+        self
     }
 
     pub fn remote_prefix(&self) -> &str {
@@ -184,7 +192,8 @@ impl ObjectStore for S3ObjectStore {
                 Ok(self.join_relative(cursor))
             })
             .transpose()?;
-        list_s3_objects_after(
+        let started = Instant::now();
+        let result = list_s3_objects_after_with_metrics(
             &self.endpoint,
             &self.region,
             &self.bucket,
@@ -192,22 +201,31 @@ impl ObjectStore for S3ObjectStore {
             full_start_after.as_deref(),
             &self.access_key,
             &self.secret_key,
-        )?
-        .into_iter()
-        .map(|entry| {
-            Ok(ObjectInfo {
-                key: self.relative_object_key(&entry.object_key)?,
-                size_bytes: entry.size_bytes,
-                modified_ms: entry.modified_ms,
-                etag: entry.etag,
-            })
-        })
-        .collect()
+            self.metrics.as_ref(),
+        )
+        .and_then(|entries| {
+            entries
+                .into_iter()
+                .map(|entry| {
+                    Ok(ObjectInfo {
+                        key: self.relative_object_key(&entry.object_key)?,
+                        size_bytes: entry.size_bytes,
+                        modified_ms: entry.modified_ms,
+                        etag: entry.etag,
+                    })
+                })
+                .collect()
+        });
+        if let Some(metrics) = &self.metrics {
+            metrics.record_list_elapsed(started.elapsed());
+        }
+        result
     }
 
     fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
         let full_key = self.full_object_key(key)?;
-        get_s3_object(
+        let started = Instant::now();
+        let result = get_s3_object(
             &self.endpoint,
             &self.region,
             &self.bucket,
@@ -220,12 +238,22 @@ impl ObjectStore for S3ObjectStore {
                 bytes: object.bytes,
                 etag: object.etag,
             })
-        })
+        });
+        if let Some(metrics) = &self.metrics {
+            let downloaded_bytes = result
+                .as_ref()
+                .ok()
+                .and_then(|object| object.as_ref())
+                .map_or(0, |object| object.bytes.len() as u64);
+            metrics.record_get(downloaded_bytes, started.elapsed());
+        }
+        result
     }
 
     fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
         let full_key = self.full_object_key(key)?;
-        head_s3_object(
+        let started = Instant::now();
+        let result = head_s3_object(
             &self.endpoint,
             &self.region,
             &self.bucket,
@@ -238,7 +266,11 @@ impl ObjectStore for S3ObjectStore {
                 size_bytes: metadata.size_bytes,
                 etag: metadata.etag,
             })
-        })
+        });
+        if let Some(metrics) = &self.metrics {
+            metrics.record_head(started.elapsed());
+        }
+        result
     }
 
     fn get_to_file(
@@ -248,7 +280,8 @@ impl ObjectStore for S3ObjectStore {
         max_bytes: u64,
     ) -> Result<Option<DownloadedFile>, String> {
         let full_key = self.full_object_key(key)?;
-        get_s3_object_to_file(
+        let started = Instant::now();
+        let result = get_s3_object_to_file(
             &self.endpoint,
             &self.region,
             &self.bucket,
@@ -264,7 +297,16 @@ impl ObjectStore for S3ObjectStore {
                 sha256: download.sha256,
                 etag: download.etag,
             })
-        })
+        });
+        if let Some(metrics) = &self.metrics {
+            let downloaded_bytes = result
+                .as_ref()
+                .ok()
+                .and_then(|download| download.as_ref())
+                .map_or(0, |download| download.size_bytes);
+            metrics.record_get(downloaded_bytes, started.elapsed());
+        }
+        result
     }
 
     fn put(
@@ -279,7 +321,9 @@ impl ObjectStore for S3ObjectStore {
             PutCondition::IfAbsent => S3PutCondition::IfAbsent,
             PutCondition::IfMatch(etag) => S3PutCondition::IfMatch(etag),
         };
-        put_s3_object(
+        let uploaded_bytes = bytes.len() as u64;
+        let started = Instant::now();
+        let result = put_s3_object(
             &self.endpoint,
             &self.region,
             &self.bucket,
@@ -292,7 +336,11 @@ impl ObjectStore for S3ObjectStore {
         .map(|outcome| match outcome {
             S3PutOutcome::Stored { etag } => PutOutcome::Stored { etag },
             S3PutOutcome::PreconditionFailed => PutOutcome::PreconditionFailed,
-        })
+        });
+        if let Some(metrics) = &self.metrics {
+            metrics.record_put(uploaded_bytes, started.elapsed());
+        }
+        result
     }
 
     fn put_file(
@@ -309,7 +357,8 @@ impl ObjectStore for S3ObjectStore {
             PutCondition::IfAbsent => S3PutCondition::IfAbsent,
             PutCondition::IfMatch(etag) => S3PutCondition::IfMatch(etag),
         };
-        put_s3_file(
+        let started = Instant::now();
+        let result = put_s3_file(
             &self.endpoint,
             &self.region,
             &self.bucket,
@@ -324,19 +373,28 @@ impl ObjectStore for S3ObjectStore {
         .map(|outcome| match outcome {
             S3PutOutcome::Stored { etag } => PutOutcome::Stored { etag },
             S3PutOutcome::PreconditionFailed => PutOutcome::PreconditionFailed,
-        })
+        });
+        if let Some(metrics) = &self.metrics {
+            metrics.record_put(size_bytes, started.elapsed());
+        }
+        result
     }
 
     fn delete(&self, key: &str) -> Result<(), String> {
         let full_key = self.full_object_key(key)?;
-        delete_from_s3(
+        let started = Instant::now();
+        let result = delete_from_s3(
             &self.endpoint,
             &self.region,
             &self.bucket,
             &full_key,
             &self.access_key,
             &self.secret_key,
-        )
+        );
+        if let Some(metrics) = &self.metrics {
+            metrics.record_delete(started.elapsed());
+        }
+        result
     }
 }
 

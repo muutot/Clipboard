@@ -2,6 +2,10 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::Path,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -69,6 +73,129 @@ pub enum S3PutCondition {
 pub enum S3PutOutcome {
     Stored { etag: Option<String> },
     PreconditionFailed,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct S3RequestMetricsSnapshot {
+    pub put_requests: u64,
+    pub get_requests: u64,
+    pub head_requests: u64,
+    pub list_requests: u64,
+    pub delete_requests: u64,
+    pub uploaded_bytes: u64,
+    pub downloaded_bytes: u64,
+    pub put_elapsed_ns: u64,
+    pub get_elapsed_ns: u64,
+    pub head_elapsed_ns: u64,
+    pub list_elapsed_ns: u64,
+    pub delete_elapsed_ns: u64,
+}
+
+#[derive(Debug, Default)]
+struct S3RequestMetricsInner {
+    put_requests: AtomicU64,
+    get_requests: AtomicU64,
+    head_requests: AtomicU64,
+    list_requests: AtomicU64,
+    delete_requests: AtomicU64,
+    uploaded_bytes: AtomicU64,
+    downloaded_bytes: AtomicU64,
+    put_elapsed_ns: AtomicU64,
+    get_elapsed_ns: AtomicU64,
+    head_elapsed_ns: AtomicU64,
+    list_elapsed_ns: AtomicU64,
+    delete_elapsed_ns: AtomicU64,
+}
+
+/// Optional transport diagnostics for benchmarks and runtime observability.
+/// Clones share the same atomics. A normal `S3ObjectStore` does not allocate or
+/// update these counters unless metrics are explicitly attached.
+#[derive(Debug, Clone, Default)]
+pub struct S3RequestMetrics {
+    inner: Arc<S3RequestMetricsInner>,
+}
+
+impl S3RequestMetrics {
+    pub fn snapshot(&self) -> S3RequestMetricsSnapshot {
+        let load = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
+        S3RequestMetricsSnapshot {
+            put_requests: load(&self.inner.put_requests),
+            get_requests: load(&self.inner.get_requests),
+            head_requests: load(&self.inner.head_requests),
+            list_requests: load(&self.inner.list_requests),
+            delete_requests: load(&self.inner.delete_requests),
+            uploaded_bytes: load(&self.inner.uploaded_bytes),
+            downloaded_bytes: load(&self.inner.downloaded_bytes),
+            put_elapsed_ns: load(&self.inner.put_elapsed_ns),
+            get_elapsed_ns: load(&self.inner.get_elapsed_ns),
+            head_elapsed_ns: load(&self.inner.head_elapsed_ns),
+            list_elapsed_ns: load(&self.inner.list_elapsed_ns),
+            delete_elapsed_ns: load(&self.inner.delete_elapsed_ns),
+        }
+    }
+
+    pub fn reset(&self) {
+        for counter in [
+            &self.inner.put_requests,
+            &self.inner.get_requests,
+            &self.inner.head_requests,
+            &self.inner.list_requests,
+            &self.inner.delete_requests,
+            &self.inner.uploaded_bytes,
+            &self.inner.downloaded_bytes,
+            &self.inner.put_elapsed_ns,
+            &self.inner.get_elapsed_ns,
+            &self.inner.head_elapsed_ns,
+            &self.inner.list_elapsed_ns,
+            &self.inner.delete_elapsed_ns,
+        ] {
+            counter.store(0, Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn record_list_page(&self, downloaded_bytes: u64) {
+        self.inner.list_requests.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .downloaded_bytes
+            .fetch_add(downloaded_bytes, Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_list_elapsed(&self, elapsed: Duration) {
+        add_duration(&self.inner.list_elapsed_ns, elapsed);
+    }
+
+    pub(crate) fn record_get(&self, downloaded_bytes: u64, elapsed: Duration) {
+        self.inner.get_requests.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .downloaded_bytes
+            .fetch_add(downloaded_bytes, Ordering::Relaxed);
+        add_duration(&self.inner.get_elapsed_ns, elapsed);
+    }
+
+    pub(crate) fn record_head(&self, elapsed: Duration) {
+        self.inner.head_requests.fetch_add(1, Ordering::Relaxed);
+        add_duration(&self.inner.head_elapsed_ns, elapsed);
+    }
+
+    pub(crate) fn record_put(&self, uploaded_bytes: u64, elapsed: Duration) {
+        self.inner.put_requests.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .uploaded_bytes
+            .fetch_add(uploaded_bytes, Ordering::Relaxed);
+        add_duration(&self.inner.put_elapsed_ns, elapsed);
+    }
+
+    pub(crate) fn record_delete(&self, elapsed: Duration) {
+        self.inner.delete_requests.fetch_add(1, Ordering::Relaxed);
+        add_duration(&self.inner.delete_elapsed_ns, elapsed);
+    }
+}
+
+fn add_duration(counter: &AtomicU64, elapsed: Duration) {
+    counter.fetch_add(
+        elapsed.as_nanos().min(u64::MAX as u128) as u64,
+        Ordering::Relaxed,
+    );
 }
 
 /// A shared request-signing client. Rebuilt only once, then reused so every
@@ -754,6 +881,22 @@ pub fn list_s3_objects_after(
     access_key: &str,
     secret_key: &str,
 ) -> Result<Vec<S3Entry>, String> {
+    list_s3_objects_after_with_metrics(
+        endpoint, region, bucket, prefix, start_after, access_key, secret_key, None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn list_s3_objects_after_with_metrics(
+    endpoint: &str,
+    region: &str,
+    bucket: &str,
+    prefix: Option<&str>,
+    start_after: Option<&str>,
+    access_key: &str,
+    secret_key: &str,
+    metrics: Option<&S3RequestMetrics>,
+) -> Result<Vec<S3Entry>, String> {
     let client = shared_client()?;
     let (scheme, host) = parse_endpoint(endpoint);
     let mut entries = Vec::new();
@@ -790,6 +933,9 @@ pub fn list_s3_objects_after(
         }
 
         let xml = resp.text().map_err(|e| e.to_string())?;
+        if let Some(metrics) = metrics {
+            metrics.record_list_page(xml.len() as u64);
+        }
         let page = parse_s3_list_page(&xml);
         entries.extend(page.entries);
         if !page.is_truncated {
@@ -1184,6 +1330,39 @@ mod tests {
         assert_eq!(streaming_timeout(0), Duration::from_secs(60));
         assert_eq!(streaming_timeout(64 * 1024), Duration::from_secs(61));
         assert_eq!(streaming_timeout(u64::MAX), Duration::from_secs(30 * 60));
+    }
+
+    #[test]
+    fn request_metrics_are_shared_and_resettable() {
+        let metrics = S3RequestMetrics::default();
+        let shared = metrics.clone();
+        metrics.record_put(11, Duration::from_nanos(13));
+        shared.record_get(17, Duration::from_nanos(19));
+        metrics.record_head(Duration::from_nanos(23));
+        metrics.record_list_page(29);
+        metrics.record_list_elapsed(Duration::from_nanos(31));
+        metrics.record_delete(Duration::from_nanos(37));
+
+        assert_eq!(
+            shared.snapshot(),
+            S3RequestMetricsSnapshot {
+                put_requests: 1,
+                get_requests: 1,
+                head_requests: 1,
+                list_requests: 1,
+                delete_requests: 1,
+                uploaded_bytes: 11,
+                downloaded_bytes: 46,
+                put_elapsed_ns: 13,
+                get_elapsed_ns: 19,
+                head_elapsed_ns: 23,
+                list_elapsed_ns: 31,
+                delete_elapsed_ns: 37,
+            }
+        );
+
+        shared.reset();
+        assert_eq!(metrics.snapshot(), S3RequestMetricsSnapshot::default());
     }
 
     #[test]

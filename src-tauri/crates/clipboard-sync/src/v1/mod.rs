@@ -18,6 +18,7 @@ pub use remote::{
     cleanup_obsolete_objects, DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata,
     ObjectStore, ObsoleteCleanupReport, PutCondition, PutOutcome, S3ObjectStore,
 };
+pub use crate::s3::{S3RequestMetrics, S3RequestMetricsSnapshot};
 pub use repository::{
     SyncEnginePaths, SyncHeadCache, SyncIncomingBatch, SyncOutboxBatch, SyncRemoteState,
     SyncRepository, SyncResourceReferences, SyncSnapshot, SyncSnapshotExport,
