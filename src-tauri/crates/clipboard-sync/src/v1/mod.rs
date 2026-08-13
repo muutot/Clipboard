@@ -1,11 +1,13 @@
 //! Provider-neutral object-store and namespace primitives for sync protocol v1.
 
+pub mod engine;
 pub mod layout;
 pub mod remote;
 pub mod repository;
 pub mod resources;
 pub mod wire;
 
+pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 pub use layout::{
     checkpoint_object_key, head_object_key, obsolete_object_candidate, parse_checkpoint_key,
     parse_head_key, parse_resource_key, parse_segment_key, resource_object_key, segment_object_key,

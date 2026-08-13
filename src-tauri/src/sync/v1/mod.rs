@@ -4,10 +4,10 @@
 //! and oplog implementation. Transport orchestration is added separately so
 //! the strict object layout and wire envelope stay independently testable.
 
-pub mod engine;
+#[cfg(test)]
+mod engine_tests;
 
-pub use clipboard_sync::v1::{layout, remote, repository, resources, wire};
-
+pub use clipboard_sync::v1::{engine, layout, remote, repository, resources, wire};
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 
 pub use layout::{

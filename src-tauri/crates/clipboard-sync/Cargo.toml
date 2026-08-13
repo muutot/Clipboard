@@ -5,6 +5,9 @@ edition = "2021"
 license = "AGPL-3.0-only"
 description = "S3-first synchronization protocol and transport for Clipboard Desktop"
 
+[features]
+engine-test-support = []
+
 [dependencies]
 aes-gcm = "0.10"
 base64 = "0.23"

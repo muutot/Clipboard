@@ -53,6 +53,9 @@ rand = "0.9"
 uuid = { version = "1", features = ["v4"] }
 bincode = { version = "2", features = ["serde"] }
 
+[dev-dependencies]
+clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }
+
 # Dev-profile tuning for the fastest possible local `tauri dev` builds:
 # - dependencies stay unoptimized (opt-level 0) with no debug symbols, so the
 #   existing cached artifacts are reused and compile/link is as fast as possible.
