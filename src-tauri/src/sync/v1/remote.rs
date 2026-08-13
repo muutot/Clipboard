@@ -13,6 +13,8 @@ pub struct ObjectInfo {
     pub key: String,
     pub size_bytes: Option<u64>,
     pub modified_ms: Option<i64>,
+    /// Raw ETag returned by object listing, including quotes when supplied.
+    pub etag: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,6 +199,7 @@ impl ObjectStore for S3ObjectStore {
                 key: self.relative_object_key(&entry.object_key)?,
                 size_bytes: entry.size_bytes,
                 modified_ms: entry.modified_ms,
+                etag: entry.etag,
             })
         })
         .collect()
@@ -453,6 +456,7 @@ mod tests {
                     key: key.clone(),
                     size_bytes: Some(bytes.len() as u64),
                     modified_ms: None,
+                    etag: Some(Self::etag(bytes)),
                 })
                 .collect())
         }

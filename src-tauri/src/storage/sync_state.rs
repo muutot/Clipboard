@@ -1,18 +1,52 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{params, params_from_iter, OptionalExtension, Row, Transaction};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Database, StorageError};
 use crate::{
     domain::{ClipboardItem, ClipboardKind},
     sync::v1::{
-        checkpoint_object_key, parse_segment_key, DeviceCursor, DeviceHead, MutationBatch,
-        ObjectRef, RecordVersion, ReplicatedItem, SyncResourceRef, Tombstone,
+        checkpoint_object_key, parse_segment_key, snapshot_object_key, DeviceCursor, DeviceHead,
+        MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, SyncResourceRef, Tombstone,
     },
 };
 
 const LOOKUP_CHUNK_SIZE: usize = 500;
+const SYNC_HEAD_CACHE_PREFIX: &str = "sync_head_cache:";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SyncHeadCache {
+    pub etag: String,
+    pub stored_size_bytes: u64,
+    pub modified_ms: Option<i64>,
+    pub epoch: String,
+    pub snapshot_key: String,
+    pub snapshot_sha256: String,
+    pub snapshot_size_bytes: u64,
+    pub snapshot_record_count: u64,
+    pub published_sequence: u64,
+    pub last_segment_key: Option<String>,
+}
+
+impl SyncHeadCache {
+    pub(crate) fn matches_head(&self, head: &DeviceHead) -> bool {
+        self.epoch == head.epoch
+            && self.snapshot_key == head.snapshot.key
+            && self.snapshot_sha256 == head.snapshot.sha256
+            && self.snapshot_size_bytes == head.snapshot.stored_size_bytes
+            && self.snapshot_record_count == head.snapshot.record_count
+            && self.published_sequence == head.published_sequence
+            && self.last_segment_key == head.last_segment_key
+    }
+
+    pub(crate) fn matches_cursor(&self, cursor: &DeviceCursor) -> bool {
+        self.epoch == cursor.epoch
+            && self.published_sequence == cursor.sequence
+            && self.last_segment_key == cursor.last_segment_key
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyncSnapshot {
@@ -262,6 +296,11 @@ impl Database {
                  DELETE FROM sync_checkpoint_state;
                  DELETE FROM sync_resource_scopes;
                  DELETE FROM sqlite_sequence WHERE name = 'sync_outbox';",
+            )?;
+            transaction.execute(
+                "DELETE FROM sync_metadata
+                  WHERE substr(key, 1, length(?1)) = ?1",
+                [SYNC_HEAD_CACHE_PREFIX],
             )?;
             transaction.execute(
                 "INSERT INTO sync_tombstones
@@ -1016,6 +1055,69 @@ impl Database {
         })
     }
 
+    pub(crate) fn get_sync_head_cache(
+        &self,
+        remote_scope: &str,
+        device_id: &str,
+    ) -> Result<Option<SyncHeadCache>, StorageError> {
+        let key = sync_head_cache_key(remote_scope, device_id)?;
+        self.with_connection(|connection| {
+            let value = connection
+                .query_row(
+                    "SELECT value FROM sync_metadata WHERE key = ?1",
+                    [&key],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            Ok(value
+                .and_then(|value| serde_json::from_str::<SyncHeadCache>(&value).ok())
+                .filter(|cache| valid_sync_head_cache(cache, device_id)))
+        })
+    }
+
+    pub(crate) fn record_sync_head_cache(
+        &self,
+        remote_scope: &str,
+        device_id: &str,
+        etag: &str,
+        stored_size_bytes: u64,
+        modified_ms: Option<i64>,
+        head: &DeviceHead,
+    ) -> Result<(), StorageError> {
+        let key = sync_head_cache_key(remote_scope, device_id)?;
+        if head.device_id != device_id || !valid_head_etag(etag) {
+            return Err(StorageError::InvalidSyncState(
+                "sync head cache identity or ETag is invalid".to_string(),
+            ));
+        }
+        let cache = SyncHeadCache {
+            etag: etag.to_string(),
+            stored_size_bytes,
+            modified_ms,
+            epoch: head.epoch.clone(),
+            snapshot_key: head.snapshot.key.clone(),
+            snapshot_sha256: head.snapshot.sha256.clone(),
+            snapshot_size_bytes: head.snapshot.stored_size_bytes,
+            snapshot_record_count: head.snapshot.record_count,
+            published_sequence: head.published_sequence,
+            last_segment_key: head.last_segment_key.clone(),
+        };
+        if !valid_sync_head_cache(&cache, device_id) {
+            return Err(StorageError::InvalidSyncState(
+                "sync head cache payload is invalid".to_string(),
+            ));
+        }
+        let value = serde_json::to_string(&cache)?;
+        self.with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, value],
+            )?;
+            Ok(())
+        })
+    }
+
     pub fn get_sync_checkpoint_state(
         &self,
         remote_scope: &str,
@@ -1321,6 +1423,48 @@ fn validate_remote_scope(remote_scope: &str) -> Result<(), StorageError> {
         ));
     }
     Ok(())
+}
+
+fn sync_head_cache_key(remote_scope: &str, device_id: &str) -> Result<String, StorageError> {
+    validate_remote_scope(remote_scope)?;
+    let parsed = Uuid::parse_str(device_id).map_err(|_| {
+        StorageError::InvalidSyncState("sync head cache device is not a UUID".into())
+    })?;
+    if parsed.to_string() != device_id {
+        return Err(StorageError::InvalidSyncState(
+            "sync head cache device is not canonical lowercase".to_string(),
+        ));
+    }
+    Ok(format!(
+        "{SYNC_HEAD_CACHE_PREFIX}{remote_scope}:{device_id}"
+    ))
+}
+
+fn valid_head_etag(etag: &str) -> bool {
+    !etag.is_empty() && etag.len() <= 256 && !etag.bytes().any(|byte| byte.is_ascii_control())
+}
+
+fn valid_sync_head_cache(cache: &SyncHeadCache, device_id: &str) -> bool {
+    if !valid_head_etag(&cache.etag)
+        || cache.stored_size_bytes == 0
+        || cache.snapshot_size_bytes == 0
+        || Uuid::parse_str(&cache.epoch).is_err()
+        || Uuid::parse_str(&cache.epoch).is_ok_and(|epoch| epoch.to_string() != cache.epoch)
+        || snapshot_object_key(device_id, &cache.epoch, &cache.snapshot_sha256)
+            .ok()
+            .as_deref()
+            != Some(cache.snapshot_key.as_str())
+    {
+        return false;
+    }
+    match cache.last_segment_key.as_deref() {
+        None => true,
+        Some(key) => parse_segment_key(key).is_ok_and(|parsed| {
+            parsed.device_id == device_id
+                && parsed.epoch == cache.epoch
+                && parsed.last_sequence == cache.published_sequence
+        }),
+    }
 }
 
 fn sequence_to_i64(value: u64, field: &'static str) -> Result<i64, StorageError> {
@@ -2662,6 +2806,10 @@ mod tests {
                      VALUES (?1, 1, ?2)",
                     params![REMOTE_SCOPE, "a".repeat(64)],
                 )?;
+                connection.execute(
+                    "INSERT INTO sync_metadata (key, value) VALUES (?1, 'stale')",
+                    [sync_head_cache_key(REMOTE_SCOPE, REMOTE_DEVICE)?],
+                )?;
                 Ok(())
             })
             .unwrap();
@@ -2710,6 +2858,68 @@ mod tests {
 
         database.save_item(&item("new", "hash-new", "new")).unwrap();
         assert_eq!(database.count_sync_outbox().unwrap(), 1);
+    }
+
+    #[test]
+    fn sync_head_cache_round_trips_and_ignores_corrupt_values() {
+        let database = Database::open_in_memory().unwrap();
+        let snapshot_sha256 = "b".repeat(64);
+        let head = DeviceHead {
+            device_id: REMOTE_DEVICE.to_string(),
+            epoch: REMOTE_EPOCH.to_string(),
+            snapshot: ObjectRef {
+                key: snapshot_object_key(REMOTE_DEVICE, REMOTE_EPOCH, &snapshot_sha256).unwrap(),
+                sha256: snapshot_sha256,
+                stored_size_bytes: 123,
+                record_count: 4,
+            },
+            published_sequence: 5,
+            last_segment_key: None,
+            updated_at_ms: 10,
+        };
+        database
+            .record_sync_head_cache(
+                REMOTE_SCOPE,
+                REMOTE_DEVICE,
+                "\"etag-one\"",
+                88,
+                Some(1234),
+                &head,
+            )
+            .unwrap();
+
+        let cached = database
+            .get_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE)
+            .unwrap()
+            .unwrap();
+        assert_eq!(cached.etag, "\"etag-one\"");
+        assert_eq!(cached.stored_size_bytes, 88);
+        assert_eq!(cached.modified_ms, Some(1234));
+        assert!(cached.matches_head(&head));
+        assert!(cached.matches_cursor(&DeviceCursor {
+            device_id: REMOTE_DEVICE.to_string(),
+            epoch: REMOTE_EPOCH.to_string(),
+            sequence: 5,
+            last_segment_key: None,
+        }));
+
+        let key = sync_head_cache_key(REMOTE_SCOPE, REMOTE_DEVICE).unwrap();
+        database
+            .with_connection(|connection| {
+                connection.execute(
+                    "UPDATE sync_metadata SET value = '{broken' WHERE key = ?1",
+                    [&key],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        assert!(database
+            .get_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE)
+            .unwrap()
+            .is_none());
+        assert!(database
+            .record_sync_head_cache(REMOTE_SCOPE, REMOTE_DEVICE, "bad\netag", 88, None, &head)
+            .is_err());
     }
 
     #[test]

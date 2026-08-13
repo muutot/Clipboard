@@ -21,6 +21,9 @@ pub struct S3Entry {
     pub is_directory: bool,
     pub size_bytes: Option<u64>,
     pub modified_ms: Option<i64>,
+    /// Raw ETag text from ListObjectsV2, including quotes when supplied.
+    #[serde(skip_serializing)]
+    pub etag: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -940,6 +943,9 @@ fn parse_s3_list_page(xml: &str) -> S3ListPage {
                 .ok()
                 .map(|dt| dt.timestamp_millis())
         });
+        let etag = extract_tag(block, "ETag")
+            .map(decode_xml_text)
+            .filter(|value| !value.is_empty());
 
         if !key.is_empty() {
             entries.push(S3Entry {
@@ -948,6 +954,7 @@ fn parse_s3_list_page(xml: &str) -> S3ListPage {
                 is_directory: false,
                 size_bytes: size,
                 modified_ms: modified,
+                etag,
             });
             search_start = abs_pos + end;
         } else {
@@ -1411,6 +1418,7 @@ mod tests {
                 <Contents>
                     <Key>v1/heads/device&amp;a.bin</Key>
                     <LastModified>2026-08-10T12:00:00Z</LastModified>
+                    <ETag>&quot;abc123&quot;</ETag>
                     <Size>42</Size>
                 </Contents>
             </ListBucketResult>"#,
@@ -1421,5 +1429,6 @@ mod tests {
         assert_eq!(page.entries[0].object_key, "v1/heads/device&a.bin");
         assert_eq!(page.entries[0].name, "device&a.bin");
         assert_eq!(page.entries[0].size_bytes, Some(42));
+        assert_eq!(page.entries[0].etag.as_deref(), Some("\"abc123\""));
     }
 }

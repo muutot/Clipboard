@@ -59,9 +59,16 @@ v1/
   preview is rebuilt.
 - Fixed-width sequence numbers preserve lexical and numeric order for S3 `start-after` listing.
 
-Normal discovery lists `v1/heads/`, which is O(device count). Segment listing starts after the
-last applied object key for that device and is O(new segment count), including when a namespace
-contains more than S3's 1,000-object page size.
+Normal discovery performs one paginated `v1/heads/` listing, which is O(device count). The client
+retains a disposable per-scope/device head cache only after that head has been fully validated and
+its advertised state has been published or applied. A later listing can skip the head body GET only
+when its ETag and size match the cache and the cached epoch/sequence/segment still exactly match the
+authoritative local publication state or peer cursor. `LastModified` is an additional mismatch
+signal when both values are available, never the sole content identity. A missing ETag/size,
+corrupt cache, changed listing metadata, restored SQLite state, or cursor mismatch falls back to a
+normal GET/decode/validation. Segment listing starts after the last applied object key for that
+device and is O(new segment count), including when a namespace contains more than S3's 1,000-object
+page size.
 
 ## Wire envelopes
 
@@ -154,12 +161,14 @@ existing local collection is not confused with records downloaded during the sam
 The snapshot pack contains resource references only. A failed resource upload aborts publication;
 the head can never point to a snapshot with dangling resources.
 
-Before any bootstrap or incremental publication, a device reads and validates its own remote head.
-If the local publication state was restored, lost, or otherwise differs from that head, the client
-first applies the remote device history back into SQLite, rotates to a new epoch, and publishes one
-replacement bootstrap snapshot. It never overwrites a newer or divergent remote head with an older
-local sequence. If the local state claims initialization but the remote head is missing, the same
-epoch-rotation/bootstrap path recreates it from the complete local materialized state.
+Before any bootstrap or incremental publication, a device reconciles its own remote head. An exact
+LIST ETag/size plus cached logical-head/local-publication-state match can prove it unchanged without
+another body GET; otherwise the client reads and validates it. If the local publication state was
+restored, lost, or otherwise differs from that head, the client first applies the remote device
+history back into SQLite, rotates to a new epoch, and publishes one replacement bootstrap snapshot.
+It never overwrites a newer or divergent remote head with an older local sequence. If the local
+state claims initialization but the remote head is missing, the same epoch-rotation/bootstrap path
+recreates it from the complete local materialized state.
 
 ## Incremental push
 
@@ -181,15 +190,18 @@ logical range under the same content-addressed name; receivers remain idempotent
 
 ## Incremental pull
 
-For each remote head:
+For each listed remote head:
 
-1. reject malformed ids, epochs, keys, hashes or sequence regressions;
+1. skip the body GET only when listing ETag/size, cached logical state and the applied cursor all
+   match; otherwise GET/decode the head and reject malformed ids, epochs, keys, hashes or sequence
+   regressions;
 2. if the epoch changed or the local cursor predates the advertised snapshot, apply that snapshot;
 3. list segment keys strictly after the saved key and at or below the head's published sequence;
 4. verify object-name hash, decrypt, decompress and decode with bounded limits;
 5. validate canonical resource keys, strip them from device-local path fields, and stage compact
    per-item resource references without downloading blob bodies;
-6. apply all mutations, resource references and the device cursor in one SQLite transaction.
+6. apply all mutations, resource references and the device cursor in one SQLite transaction, then
+   best-effort persist the new disposable head cache.
 
 An unmaterialized item can still be published in a later segment or checkpoint: scope-aware export
 restores its stored canonical keys. Local image/file paths remain either usable paths on this device
@@ -285,7 +297,9 @@ records per device. It records both raw and compressed sizes and counts every si
 
 The implementation is accepted only when:
 
-- an idle sync reads O(device count) heads and transfers no snapshot/segment/resource bodies;
+- after cache warmup, an idle sync performs one O(device count) head listing, zero head body GETs,
+  and transfers no snapshot/segment/resource bodies; stores without listing ETags safely fall back
+  to head GETs;
 - one device's incremental sync transfers only its new segment, changed head and new resources;
 - another device downloads only that segment and resources it does not already have;
 - first convergence produces the 300,000-record union without echo-generated outbox rows;

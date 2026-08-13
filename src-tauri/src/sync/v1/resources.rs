@@ -1297,6 +1297,7 @@ mod tests {
                     key: key.clone(),
                     size_bytes: Some(bytes.len() as u64),
                     modified_ms: None,
+                    etag: Some(format!("\"{}\"", hex::encode(Sha256::digest(bytes)))),
                 })
                 .collect())
         }

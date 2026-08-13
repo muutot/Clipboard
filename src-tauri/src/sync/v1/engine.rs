@@ -11,8 +11,8 @@ use super::{
     defer_mutation_resources, encode_device_head, encode_segment, encode_snapshot, head_object_key,
     parse_checkpoint_key, parse_head_key, parse_segment_key, prepare_mutation_resources,
     segment_object_key, segment_prefix, snapshot_object_key, Checkpoint, CheckpointHead,
-    DeviceCursor, DeviceHead, EncodedObject, ObjectRef, ObjectStore, PutCondition, PutOutcome,
-    ResourceLimits, Segment, SessionKey, Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    DeviceCursor, DeviceHead, EncodedObject, ObjectInfo, ObjectRef, ObjectStore, PutCondition,
+    PutOutcome, ResourceLimits, Segment, SessionKey, Snapshot, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
@@ -74,6 +74,9 @@ pub fn sync_database(
             .map_err(|error| error.to_string())?;
     }
 
+    let mut heads = store.list(HEADS_PREFIX, None)?;
+    heads.sort_by(|left, right| left.key.cmp(&right.key));
+
     state = reconcile_local_device_head(
         store,
         database,
@@ -81,12 +84,13 @@ pub fn sync_database(
         remote_scope,
         &device_id,
         state,
+        &heads,
         session_key,
         options.resource_limits,
         &mut result,
     )?;
 
-    validate_remote_access_before_first_publish(store, &state, session_key, &mut result)?;
+    validate_remote_access_before_first_publish(store, &state, &heads, session_key, &mut result)?;
 
     if !state.initialized {
         state = publish_bootstrap(
@@ -137,6 +141,7 @@ pub fn sync_database(
         paths,
         remote_scope,
         &device_id,
+        &heads,
         session_key,
         options.resource_limits,
         &mut result,
@@ -163,6 +168,7 @@ pub fn sync_database(
 fn validate_remote_access_before_first_publish(
     store: &impl ObjectStore,
     state: &crate::storage::SyncRemoteState,
+    heads: &[ObjectInfo],
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
@@ -173,8 +179,6 @@ fn validate_remote_access_before_first_publish(
     let mut canonical_pointers = 0u64;
     let mut valid_pointers = 0u64;
     let mut last_error = None::<String>;
-    let mut heads = store.list(HEADS_PREFIX, None)?;
-    heads.sort_by(|left, right| left.key.cmp(&right.key));
     for info in heads {
         let Ok(device_id) = parse_head_key(&info.key) else {
             continue;
@@ -251,11 +255,21 @@ fn reconcile_local_device_head(
     remote_scope: &str,
     device_id: &str,
     state: crate::storage::SyncRemoteState,
+    heads: &[ObjectInfo],
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<crate::storage::SyncRemoteState, String> {
     let key = head_object_key(device_id)?;
+    let listed = heads.iter().find(|info| info.key == key);
+    if state.initialized
+        && listed.is_some_and(|info| {
+            local_head_cache_matches(database, remote_scope, device_id, &state, info)
+                .unwrap_or(false)
+        })
+    {
+        return Ok(state);
+    }
     let Some(downloaded) = store.get(&key)? else {
         if state.initialized {
             return database
@@ -272,6 +286,15 @@ fn reconcile_local_device_head(
     let remote_head = decode_device_head(&downloaded.bytes, session_key)?;
     validate_head(&key, device_id, &remote_head)?;
     if local_publication_matches_remote(&state, &remote_head) {
+        record_head_cache(
+            database,
+            remote_scope,
+            device_id,
+            listed,
+            downloaded.etag.as_deref(),
+            downloaded.bytes.len() as u64,
+            &remote_head,
+        );
         return Ok(state);
     }
 
@@ -308,6 +331,84 @@ fn local_publication_matches_remote(
         && state.snapshot.as_ref() == Some(&head.snapshot)
         && state.published_sequence == head.published_sequence
         && state.last_segment_key == head.last_segment_key
+}
+
+fn listed_head_identity(info: &ObjectInfo) -> Option<(&str, u64)> {
+    Some((info.etag.as_deref()?, info.size_bytes?))
+}
+
+fn cache_matches_listing(cache: &crate::storage::SyncHeadCache, info: &ObjectInfo) -> bool {
+    listed_head_identity(info).is_some_and(|(etag, size)| {
+        cache.etag == etag
+            && cache.stored_size_bytes == size
+            && cache
+                .modified_ms
+                .zip(info.modified_ms)
+                .is_none_or(|(cached, listed)| cached == listed)
+    })
+}
+
+fn local_head_cache_matches(
+    database: &Database,
+    remote_scope: &str,
+    device_id: &str,
+    state: &crate::storage::SyncRemoteState,
+    info: &ObjectInfo,
+) -> Result<bool, String> {
+    let Some(cache) = database
+        .get_sync_head_cache(remote_scope, device_id)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(false);
+    };
+    let head = state
+        .device_head(device_id)
+        .map_err(|error| error.to_string())?;
+    Ok(cache_matches_listing(&cache, info) && cache.matches_head(&head))
+}
+
+fn peer_head_cache_matches(
+    database: &Database,
+    remote_scope: &str,
+    device_id: &str,
+    info: &ObjectInfo,
+) -> Result<bool, String> {
+    let Some(cache) = database
+        .get_sync_head_cache(remote_scope, device_id)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(false);
+    };
+    let Some(cursor) = database
+        .get_sync_cursor(remote_scope, device_id)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(false);
+    };
+    Ok(cache_matches_listing(&cache, info) && cache.matches_cursor(&cursor))
+}
+
+fn record_head_cache(
+    database: &Database,
+    remote_scope: &str,
+    device_id: &str,
+    listed: Option<&ObjectInfo>,
+    downloaded_etag: Option<&str>,
+    stored_size_bytes: u64,
+    head: &DeviceHead,
+) {
+    let etag = downloaded_etag.or_else(|| listed.and_then(|info| info.etag.as_deref()));
+    if let Some(etag) = etag {
+        let modified_ms = listed.and_then(|info| info.modified_ms);
+        let _ = database.record_sync_head_cache(
+            remote_scope,
+            device_id,
+            etag,
+            stored_size_bytes,
+            modified_ms,
+            head,
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -961,20 +1062,30 @@ fn publish_bootstrap(
         last_segment_key: None,
         updated_at_ms: current_time_ms(),
     };
-    publish_head(store, &head, session_key, result)?;
+    let published_head = publish_head(store, &head, session_key, result)?;
     result.uploaded_entries = checked_add(
         result.uploaded_entries,
         snapshot.mutations.len() as u64,
         "uploaded entry count",
     )?;
-    database
+    let state = database
         .commit_sync_bootstrap_published(
             remote_scope,
             &state.epoch,
             &snapshot_ref,
             snapshot.through_sequence,
         )
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    record_head_cache(
+        database,
+        remote_scope,
+        device_id,
+        None,
+        published_head.etag.as_deref(),
+        published_head.stored_size_bytes,
+        &head,
+    );
+    Ok(state)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1031,20 +1142,30 @@ fn publish_segment(
     let head = next_state
         .device_head(device_id)
         .map_err(|error| error.to_string())?;
-    publish_head(store, &head, session_key, result)?;
+    let published_head = publish_head(store, &head, session_key, result)?;
     result.uploaded_entries = checked_add(
         result.uploaded_entries,
         segment.mutations.len() as u64,
         "uploaded entry count",
     )?;
-    database
+    let state = database
         .commit_sync_segment_published(
             remote_scope,
             &state.epoch,
             &segment_key,
             segment.last_sequence,
         )
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    record_head_cache(
+        database,
+        remote_scope,
+        device_id,
+        None,
+        published_head.etag.as_deref(),
+        published_head.stored_size_bytes,
+        &head,
+    );
+    Ok(state)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1054,16 +1175,18 @@ fn pull_remote_devices(
     paths: &StoragePaths,
     remote_scope: &str,
     local_device_id: &str,
+    heads: &[ObjectInfo],
     session_key: Option<&SessionKey>,
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
-    let mut heads = store.list(HEADS_PREFIX, None)?;
-    heads.sort_by(|left, right| left.key.cmp(&right.key));
     for info in heads {
         let peer_result = (|| -> Result<(), String> {
             let device_id = parse_head_key(&info.key)?;
             if device_id == local_device_id {
+                return Ok(());
+            }
+            if peer_head_cache_matches(database, remote_scope, &device_id, info)? {
                 return Ok(());
             }
             let downloaded = store
@@ -1085,7 +1208,17 @@ fn pull_remote_devices(
                 session_key,
                 resource_limits,
                 result,
-            )
+            )?;
+            record_head_cache(
+                database,
+                remote_scope,
+                &device_id,
+                Some(info),
+                downloaded.etag.as_deref(),
+                downloaded.bytes.len() as u64,
+                &head,
+            );
+            Ok(())
         })();
         if let Err(error) = peer_result {
             result.failed_peers = checked_add(result.failed_peers, 1, "failed peer count")?;
@@ -1299,20 +1432,28 @@ fn validate_head(key: &str, device_id: &str, head: &DeviceHead) -> Result<(), St
     }
 }
 
+struct PublishedHead {
+    etag: Option<String>,
+    stored_size_bytes: u64,
+}
+
 fn publish_head(
     store: &impl ObjectStore,
     head: &DeviceHead,
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
-) -> Result<(), String> {
+) -> Result<PublishedHead, String> {
     let key = head_object_key(&head.device_id)?;
     let encoded = encode_device_head(head, session_key)?;
     let stored_size = encoded.stored_size_bytes();
     match store.put(&key, encoded.bytes, PutCondition::Unconditional)? {
-        PutOutcome::Stored { .. } => {
+        PutOutcome::Stored { etag } => {
             result.bytes_uploaded =
                 checked_add(result.bytes_uploaded, stored_size, "uploaded byte count")?;
-            Ok(())
+            Ok(PublishedHead {
+                etag,
+                stored_size_bytes: stored_size,
+            })
         }
         PutOutcome::PreconditionFailed => {
             Err("unconditional device-head write failed its precondition".to_string())
@@ -1439,13 +1580,17 @@ mod tests {
     struct MemoryStore {
         objects: Mutex<BTreeMap<String, Vec<u8>>>,
         fail_checkpoint_cas: Mutex<bool>,
+        list_without_etags: Mutex<bool>,
         deleted: Mutex<Vec<String>>,
         gets: Mutex<Vec<String>>,
+        lists: Mutex<Vec<String>>,
         puts: Mutex<Vec<String>>,
     }
 
     impl ObjectStore for MemoryStore {
         fn list(&self, prefix: &str, start_after: Option<&str>) -> Result<Vec<ObjectInfo>, String> {
+            self.lists.lock().unwrap().push(prefix.to_string());
+            let include_etags = !*self.list_without_etags.lock().unwrap();
             Ok(self
                 .objects
                 .lock()
@@ -1457,6 +1602,8 @@ mod tests {
                     key: key.clone(),
                     size_bytes: Some(bytes.len() as u64),
                     modified_ms: None,
+                    etag: include_etags
+                        .then(|| format!("\"{}\"", hex::encode(Sha256::digest(bytes)))),
                 })
                 .collect())
         }
@@ -2229,6 +2376,149 @@ mod tests {
             .unwrap()
             .iter()
             .any(|key| key == CHECKPOINT_HEAD_KEY || key.starts_with("v1/checkpoints/")));
+
+        drop(database);
+        fs::remove_dir_all(paths.project).unwrap();
+    }
+
+    #[test]
+    fn idle_sync_uses_one_head_listing_and_zero_head_gets_after_cache_warmup() {
+        let store = MemoryStore::default();
+        let first_paths = temp_paths("head-cache-first");
+        let second_paths = temp_paths("head-cache-second");
+        let first = Database::open(&first_paths.database).unwrap();
+        let second = Database::open(&second_paths.database).unwrap();
+        first.save_item(&text_item("first", "first")).unwrap();
+        second.save_item(&text_item("second", "second")).unwrap();
+
+        sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+        sync_database(
+            &store,
+            &second,
+            &second_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+        store.gets.lock().unwrap().clear();
+        store.lists.lock().unwrap().clear();
+
+        let idle =
+            sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert_eq!(idle.uploaded_entries, 0);
+        assert_eq!(idle.downloaded_entries, 0);
+        assert_eq!(idle.bytes_downloaded, 0);
+        assert_eq!(
+            store
+                .lists
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|prefix| prefix.as_str() == HEADS_PREFIX)
+                .count(),
+            1
+        );
+        assert!(!store
+            .gets
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|key| key.starts_with(HEADS_PREFIX)));
+
+        drop(first);
+        drop(second);
+        fs::remove_dir_all(first_paths.project).unwrap();
+        fs::remove_dir_all(second_paths.project).unwrap();
+    }
+
+    #[test]
+    fn changed_head_etag_invalidates_cache_and_applies_the_new_segment() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("head-cache-change-source");
+        let target_paths = temp_paths("head-cache-change-target");
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        source.save_item(&text_item("initial", "initial")).unwrap();
+
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        source.save_item(&text_item("later", "later")).unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        let source_head = head_object_key(&source.get_sync_device_id().unwrap()).unwrap();
+        store.gets.lock().unwrap().clear();
+
+        let pulled = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+
+        assert_eq!(pulled.downloaded_entries, 1);
+        assert!(target.get_item("later").unwrap().is_some());
+        assert!(store.gets.lock().unwrap().contains(&source_head));
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn missing_list_etag_falls_back_to_head_gets() {
+        let store = MemoryStore::default();
+        let paths = temp_paths("head-cache-no-etag");
+        let database = Database::open(&paths.database).unwrap();
+        database
+            .save_item(&text_item("initial", "initial"))
+            .unwrap();
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+        let local_head = head_object_key(&database.get_sync_device_id().unwrap()).unwrap();
+        *store.list_without_etags.lock().unwrap() = true;
+        store.gets.lock().unwrap().clear();
+
+        sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+
+        assert!(store.gets.lock().unwrap().contains(&local_head));
 
         drop(database);
         fs::remove_dir_all(paths.project).unwrap();

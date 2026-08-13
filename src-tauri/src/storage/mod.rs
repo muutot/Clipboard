@@ -25,4 +25,5 @@ pub use repository::{
     StorageFileReferences, TagInfo, TextItemUpdate,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};
+pub(crate) use sync_state::SyncHeadCache;
 pub use sync_state::{SyncOutboxBatch, SyncRemoteState, SyncSnapshot};
