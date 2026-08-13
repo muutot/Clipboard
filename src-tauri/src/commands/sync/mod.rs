@@ -777,7 +777,7 @@ mod tests {
                 &"b".repeat(64),
                 &v1::MutationBatch {
                     upserts: vec![ReplicatedItem {
-                        item: item.clone(),
+                        item: item.clone().into(),
                         version: RecordVersion {
                             modified_at_ms: 2,
                             writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),
@@ -891,7 +891,7 @@ mod tests {
                 &"d".repeat(64),
                 &v1::MutationBatch {
                     upserts: vec![ReplicatedItem {
-                        item,
+                        item: item.into(),
                         version: RecordVersion {
                             modified_at_ms: 2,
                             writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),

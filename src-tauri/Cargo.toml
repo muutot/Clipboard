@@ -49,13 +49,9 @@ hex = "0.4.3"
 zip = "2"
 walkdir = "2"
 chrono = "0.4"
-hmac = "0.12"
-aes-gcm = "0.10"
-pbkdf2 = "0.11"
 rand = "0.9"
 uuid = { version = "1", features = ["v4"] }
 bincode = { version = "2", features = ["serde"] }
-zstd = "0.13"
 
 # Dev-profile tuning for the fastest possible local `tauri dev` builds:
 # - dependencies stay unoptimized (opt-level 0) with no debug symbols, so the

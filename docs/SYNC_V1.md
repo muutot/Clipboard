@@ -79,6 +79,10 @@ payload is bincode encoded, zstd compressed and then optionally AES-256-GCM encr
 magic | version | kind | flags | nonce? | compressed-or-encrypted payload
 ```
 
+The frozen wire DTOs and codecs live in the Tauri-independent `clipboard-sync` crate. The desktop
+application converts its storage/domain record into that DTO explicitly; future local schema
+migrations must not silently change the positional v1 bincode layout.
+
 - One sync run derives the encryption key once and reuses that key for all object envelopes.
 - Immutable encrypted objects derive their nonce from the authenticated header and compressed
   plaintext. The same logical retry therefore produces the same ciphertext and content-addressed

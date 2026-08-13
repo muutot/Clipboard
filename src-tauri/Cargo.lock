@@ -728,20 +728,17 @@ dependencies = [
 name = "clipboard-desktop"
 version = "1.3.0"
 dependencies = [
- "aes-gcm",
  "base64 0.23.1",
  "bincode",
  "chrono",
  "clipboard-sync",
  "ctrlc",
  "hex",
- "hmac",
  "image",
  "md-5",
  "oar-ocr",
  "open",
  "ort",
- "pbkdf2 0.11.0",
  "rand 0.9.5",
  "regex-lite",
  "reqwest",
@@ -760,22 +757,26 @@ dependencies = [
  "walkdir",
  "window-vibrancy",
  "zip",
- "zstd",
 ]
 
 [[package]]
 name = "clipboard-sync"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "base64 0.23.1",
+ "bincode",
  "chrono",
  "hex",
  "hmac",
  "md-5",
+ "pbkdf2 0.11.0",
+ "rand 0.9.5",
  "reqwest",
  "serde",
  "sha2 0.10.9",
  "uuid",
+ "zstd",
 ]
 
 [[package]]

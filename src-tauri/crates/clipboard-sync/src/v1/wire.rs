@@ -10,9 +10,8 @@ use aes_gcm::{
 };
 use bincode::{Decode, Encode};
 use hmac::{Hmac, Mac};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-use crate::domain::{ClipboardItem, ClipboardKind};
 
 const MAGIC: &[u8; 8] = b"CLPSYNC1";
 const FORMAT_VERSION: u16 = 1;
@@ -34,8 +33,46 @@ const PACK_CHUNK_MAX_UNCOMPRESSED_BYTES: usize = 16 * 1024 * 1024;
 const PACK_CHUNK_MAX_ENTRIES: usize = 4096;
 const PACK_MAX_CHUNKS: u64 = 1_000_000;
 
-pub(super) const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
-pub(super) const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
+#[doc(hidden)]
+pub const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
+#[doc(hidden)]
+pub const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
+
+/// Protocol-owned clipboard category. Variant order is part of the v1 bincode contract.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncItemKind {
+    Text,
+    Link,
+    Image,
+    File,
+}
+
+/// Protocol-owned record DTO. Field order is frozen for the v1 bincode layout.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncItem {
+    pub id: String,
+    pub kind: SyncItemKind,
+    pub title: String,
+    pub text_content: Option<String>,
+    #[serde(default)]
+    pub html_content: Option<String>,
+    #[serde(default)]
+    pub rtf_content: Option<String>,
+    pub resource_path: Option<String>,
+    pub preview_path: Option<String>,
+    pub content_hash: String,
+    pub source_app: Option<String>,
+    pub icon_path: Option<String>,
+    pub size_bytes: u64,
+    pub created_at_ms: i64,
+    pub last_used_at_ms: Option<i64>,
+    pub is_favorite: bool,
+    pub metadata_json: Option<String>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LargePackKind {
@@ -151,7 +188,8 @@ impl SessionKey {
             .map_err(|_| "failed to initialize sync encryption".to_string())
     }
 
-    pub(super) fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
+    #[doc(hidden)]
+    pub fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
         let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.key)
             .expect("HMAC-SHA256 accepts a 256-bit key");
         mac.update(b"clipboard-sync-v1-resource-digest\0");
@@ -180,7 +218,8 @@ impl SessionKey {
         aad
     }
 
-    pub(super) fn encrypt_resource_chunk(
+    #[doc(hidden)]
+    pub fn encrypt_resource_chunk(
         &self,
         header: &[u8],
         object_key: &str,
@@ -200,7 +239,8 @@ impl SessionKey {
             .map_err(|_| "failed to encrypt sync v1 resource chunk".to_string())
     }
 
-    pub(super) fn decrypt_resource_chunk(
+    #[doc(hidden)]
+    pub fn decrypt_resource_chunk(
         &self,
         header: &[u8],
         object_key: &str,
@@ -238,14 +278,14 @@ pub struct RecordVersion {
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct ReplicatedItem {
-    pub item: ClipboardItem,
+    pub item: SyncItem,
     pub version: RecordVersion,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct Tombstone {
     pub item_id: String,
-    pub kind: ClipboardKind,
+    pub kind: SyncItemKind,
     pub content_hash: String,
     pub deleted_at_ms: i64,
     pub version: RecordVersion,
@@ -948,14 +988,16 @@ pub fn open_checkpoint_pack<'a>(
     LargePackReader::open(path, LargePackKind::Checkpoint, key)
 }
 
-pub(super) fn resource_header(plaintext_size: u64) -> Result<[u8; HEADER_LEN], String> {
+#[doc(hidden)]
+pub fn resource_header(plaintext_size: u64) -> Result<[u8; HEADER_LEN], String> {
     if plaintext_size > MAX_UNCOMPRESSED_BYTES {
         return Err("sync v1 resource exceeds the plaintext size limit".to_string());
     }
     Ok(header(ObjectKind::Resource, FLAG_ENCRYPTED, plaintext_size))
 }
 
-pub(super) fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
+#[doc(hidden)]
+pub fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
     if data.len() != HEADER_LEN || &data[..MAGIC.len()] != MAGIC {
         return Err("sync v1 resource header is invalid".to_string());
     }
@@ -980,7 +1022,8 @@ pub(super) fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
     Ok(plaintext_size)
 }
 
-pub(super) fn envelope_is_encrypted(data: &[u8]) -> Result<bool, String> {
+#[doc(hidden)]
+pub fn envelope_is_encrypted(data: &[u8]) -> Result<bool, String> {
     if data.len() < HEADER_LEN || data.len() > MAX_STORED_BYTES {
         return Err("sync v1 object has an invalid stored size".to_string());
     }
@@ -1178,10 +1221,10 @@ wire_functions!(
 mod tests {
     use super::*;
 
-    fn sample_item() -> ClipboardItem {
-        ClipboardItem {
+    fn sample_item() -> SyncItem {
+        SyncItem {
             id: "text-device-1".to_string(),
-            kind: ClipboardKind::Text,
+            kind: SyncItemKind::Text,
             title: "repetitive title ".repeat(10),
             text_content: Some("repetitive clipboard content ".repeat(50)),
             html_content: None,
@@ -1312,7 +1355,7 @@ mod tests {
             upserts: Vec::new(),
             tombstones: vec![Tombstone {
                 item_id: "deleted-item".to_string(),
-                kind: ClipboardKind::Text,
+                kind: SyncItemKind::Text,
                 content_hash: "deleted-hash".to_string(),
                 deleted_at_ms: 300,
                 version: sample_version(),

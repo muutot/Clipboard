@@ -2,6 +2,7 @@
 
 pub mod layout;
 pub mod remote;
+pub mod wire;
 
 pub use layout::{
     checkpoint_object_key, head_object_key, obsolete_object_candidate, parse_checkpoint_key,
@@ -12,4 +13,12 @@ pub use layout::{
 pub use remote::{
     cleanup_obsolete_objects, DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata,
     ObjectStore, ObsoleteCleanupReport, PutCondition, PutOutcome, S3ObjectStore,
+};
+pub use wire::{
+    decode_checkpoint_head, decode_device_head, decode_segment, encode_checkpoint_head,
+    encode_device_head, encode_segment, large_pack_chunk_limit_bytes, mutation_batch_encoded_size,
+    open_checkpoint_pack, open_snapshot_pack, CheckpointHead, CheckpointPackHeader,
+    CheckpointPackReader, DeviceCursor, DeviceHead, EncodedFile, EncodedObject, LargePackKind,
+    LargePackWriter, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, Segment, SessionKey,
+    SnapshotPackHeader, SnapshotPackReader, SyncItem, SyncItemKind, Tombstone,
 };

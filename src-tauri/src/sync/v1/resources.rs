@@ -11,9 +11,9 @@ use super::{
     layout::{parse_resource_key, resource_object_key, ResourceCategory},
     remote::{ObjectMetadata, ObjectStore, PutCondition, PutOutcome},
     wire::{resource_header, validate_resource_header, RESOURCE_AUTH_TAG_LEN, RESOURCE_HEADER_LEN},
-    MutationBatch, SessionKey,
+    MutationBatch, SessionKey, SyncItemKind,
 };
-use crate::{domain::ClipboardKind, storage::StoragePaths};
+use crate::storage::StoragePaths;
 
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
 const RESOURCE_CHUNK_BYTES: usize = 1024 * 1024;
@@ -317,7 +317,7 @@ pub fn prepare_mutation_resources(
         let item = &mut replicated.item;
         let mut path_map = BTreeMap::<String, Option<String>>::new();
         match item.kind {
-            ClipboardKind::Image => {
+            SyncItemKind::Image => {
                 item.resource_path = rewrite_outgoing_path(
                     item.resource_path.as_deref(),
                     &paths.images,
@@ -330,7 +330,7 @@ pub fn prepare_mutation_resources(
                 );
                 item.preview_path = None;
             }
-            ClipboardKind::File => {
+            SyncItemKind::File => {
                 item.resource_path = rewrite_outgoing_path(
                     item.resource_path.as_deref(),
                     &paths.files,
@@ -365,7 +365,7 @@ pub fn prepare_mutation_resources(
                     }
                 }
             }
-            ClipboardKind::Text | ClipboardKind::Link => {}
+            SyncItemKind::Text | SyncItemKind::Link => {}
         }
 
         item.icon_path = rewrite_outgoing_icon(
@@ -415,7 +415,7 @@ pub fn materialize_mutation_resources(
     for replicated in &mut mutations.upserts {
         let item = &mut replicated.item;
         match item.kind {
-            ClipboardKind::Image => {
+            SyncItemKind::Image => {
                 item.resource_path = rewrite_incoming_path(
                     store,
                     item.resource_path.as_deref(),
@@ -429,7 +429,7 @@ pub fn materialize_mutation_resources(
                 )?;
                 item.preview_path = None;
             }
-            ClipboardKind::File => {
+            SyncItemKind::File => {
                 item.resource_path = rewrite_incoming_path(
                     store,
                     item.resource_path.as_deref(),
@@ -469,7 +469,7 @@ pub fn materialize_mutation_resources(
                     }
                 }
             }
-            ClipboardKind::Text | ClipboardKind::Link => {}
+            SyncItemKind::Text | SyncItemKind::Link => {}
         }
 
         item.icon_path = rewrite_incoming_path(
@@ -507,7 +507,7 @@ pub fn defer_mutation_resources(
         let mut path_map = BTreeMap::<String, Option<String>>::new();
 
         match item.kind {
-            ClipboardKind::Image => {
+            SyncItemKind::Image => {
                 if let Some(object_key) = take_portable_resource(
                     item.resource_path.take(),
                     &[ResourceCategory::Image],
@@ -521,7 +521,7 @@ pub fn defer_mutation_resources(
                 item.resource_path = None;
                 item.preview_path = None;
             }
-            ClipboardKind::File => {
+            SyncItemKind::File => {
                 let primary = item.resource_path.take();
                 item.resource_path = None;
 
@@ -576,7 +576,7 @@ pub fn defer_mutation_resources(
                     path_map.insert(object_key, None);
                 }
             }
-            ClipboardKind::Text | ClipboardKind::Link => {}
+            SyncItemKind::Text | SyncItemKind::Link => {}
         }
 
         if let Some(object_key) = take_portable_resource(
@@ -610,14 +610,14 @@ pub fn collect_mutation_resource_refs(
         let item = &replicated.item;
         let mut references = Vec::new();
         match item.kind {
-            ClipboardKind::Image => collect_resource_ref(
+            SyncItemKind::Image => collect_resource_ref(
                 item.resource_path.as_deref(),
                 ResourceCategory::Image,
                 "image",
                 0,
                 &mut references,
             )?,
-            ClipboardKind::File => {
+            SyncItemKind::File => {
                 let portable_paths = item
                     .text_content
                     .as_deref()
@@ -644,7 +644,7 @@ pub fn collect_mutation_resource_refs(
                     )?;
                 }
             }
-            ClipboardKind::Text | ClipboardKind::Link => {}
+            SyncItemKind::Text | SyncItemKind::Link => {}
         }
         collect_resource_ref(
             item.icon_path.as_deref(),
@@ -1409,7 +1409,8 @@ mod tests {
                 last_used_at_ms: None,
                 is_favorite: false,
                 metadata_json: None,
-            },
+            }
+            .into(),
             version: RecordVersion {
                 modified_at_ms: 1,
                 writer_device_id: "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),

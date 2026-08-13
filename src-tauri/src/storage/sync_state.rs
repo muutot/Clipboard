@@ -5,12 +5,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Database, StorageError};
-use crate::{
-    domain::{ClipboardItem, ClipboardKind},
-    sync::v1::{
-        checkpoint_object_key, parse_segment_key, snapshot_object_key, DeviceCursor, DeviceHead,
-        MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, SyncResourceRef, Tombstone,
-    },
+use crate::sync::v1::{
+    checkpoint_object_key, parse_segment_key, snapshot_object_key, DeviceCursor, DeviceHead,
+    MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, SyncItem, SyncItemKind,
+    SyncResourceRef, Tombstone,
 };
 
 const LOOKUP_CHUNK_SIZE: usize = 500;
@@ -144,7 +142,7 @@ impl StoredReplicatedItem {
                 value: self.size_bytes,
             })?;
         Ok(ReplicatedItem {
-            item: ClipboardItem {
+            item: SyncItem {
                 id: self.id,
                 kind: kind_from_storage(&self.kind)?,
                 title: self.title,
@@ -1956,9 +1954,9 @@ fn apply_mutations(
             .unwrap_or_default();
         let old_refs = load_sync_resource_refs(transaction, remote_scope, &target_id)?;
         let content_slot = match replicated.item.kind {
-            ClipboardKind::Image => "image",
-            ClipboardKind::File => "file",
-            ClipboardKind::Text | ClipboardKind::Link => "",
+            SyncItemKind::Image => "image",
+            SyncItemKind::File => "file",
+            SyncItemKind::Text | SyncItemKind::Link => "",
         };
         let preserve_local_resource = exists
             && !content_slot.is_empty()
@@ -2004,7 +2002,7 @@ fn apply_mutations(
         } else {
             replicated.item.icon_path.as_ref()
         };
-        let text_content = if preserve_local_resource && replicated.item.kind == ClipboardKind::File
+        let text_content = if preserve_local_resource && replicated.item.kind == SyncItemKind::File
         {
             local_text.as_ref()
         } else {
@@ -2545,21 +2543,21 @@ fn replace_item_tags(
     Ok(())
 }
 
-fn kind_to_storage(kind: ClipboardKind) -> &'static str {
+fn kind_to_storage(kind: SyncItemKind) -> &'static str {
     match kind {
-        ClipboardKind::Text => "text",
-        ClipboardKind::Link => "link",
-        ClipboardKind::Image => "image",
-        ClipboardKind::File => "file",
+        SyncItemKind::Text => "text",
+        SyncItemKind::Link => "link",
+        SyncItemKind::Image => "image",
+        SyncItemKind::File => "file",
     }
 }
 
-fn kind_from_storage(kind: &str) -> Result<ClipboardKind, StorageError> {
+fn kind_from_storage(kind: &str) -> Result<SyncItemKind, StorageError> {
     match kind {
-        "text" => Ok(ClipboardKind::Text),
-        "link" => Ok(ClipboardKind::Link),
-        "image" => Ok(ClipboardKind::Image),
-        "file" => Ok(ClipboardKind::File),
+        "text" => Ok(SyncItemKind::Text),
+        "link" => Ok(SyncItemKind::Link),
+        "image" => Ok(SyncItemKind::Image),
+        "file" => Ok(SyncItemKind::File),
         _ => Err(StorageError::InvalidClipboardKind(kind.to_string())),
     }
 }
@@ -2876,7 +2874,7 @@ fn restore_sync_resource_refs(
             .map_err(StorageError::InvalidSyncState)?;
         match slot {
             "image" if ordinal == 0 => {
-                if replicated.item.kind != ClipboardKind::Image
+                if replicated.item.kind != SyncItemKind::Image
                     || parsed.category != crate::sync::v1::ResourceCategory::Image
                 {
                     return Err(StorageError::InvalidSyncState(
@@ -2889,7 +2887,7 @@ fn restore_sync_resource_refs(
             }
             "file" => {
                 if parsed.category != crate::sync::v1::ResourceCategory::File
-                    || replicated.item.kind != ClipboardKind::File
+                    || replicated.item.kind != SyncItemKind::File
                 {
                     return Err(StorageError::InvalidSyncState(
                         "file sync resource category does not match item kind".to_string(),
@@ -3012,7 +3010,7 @@ fn set_file_metadata_path(metadata: &mut serde_json::Value, index: usize, value:
 mod tests {
     use super::*;
     use crate::{
-        domain::ClipboardKind,
+        domain::{ClipboardItem, ClipboardKind},
         storage::{ClipboardRepository, TextItemUpdate},
     };
 
@@ -3043,7 +3041,7 @@ mod tests {
 
     fn replicated(id: &str, hash: &str, text: &str, version: RecordVersion) -> ReplicatedItem {
         ReplicatedItem {
-            item: item(id, hash, text),
+            item: item(id, hash, text).into(),
             version,
         }
     }
@@ -3438,7 +3436,7 @@ mod tests {
                 writer_device_id: REMOTE_DEVICE.to_string(),
             },
         );
-        remote.item.kind = ClipboardKind::Image;
+        remote.item.kind = ClipboardKind::Image.into();
         remote.item.text_content = None;
         remote.item.resource_path = None;
         remote.item.metadata_json = Some("{}".to_string());
@@ -3528,7 +3526,7 @@ mod tests {
                 writer_device_id: REMOTE_DEVICE.to_string(),
             },
         );
-        remote.item.kind = ClipboardKind::File;
+        remote.item.kind = ClipboardKind::File.into();
         remote.item.resource_path = None;
         remote.item.text_content = Some("[\"\",\"\"]".to_string());
         remote.item.metadata_json = Some(
@@ -3654,7 +3652,7 @@ mod tests {
                 writer_device_id: REMOTE_DEVICE.to_string(),
             },
         );
-        remote.item.kind = ClipboardKind::Image;
+        remote.item.kind = ClipboardKind::Image.into();
         remote.item.text_content = None;
         remote.item.resource_path = None;
         database
@@ -3713,7 +3711,7 @@ mod tests {
                 writer_device_id: REMOTE_DEVICE.to_string(),
             },
         );
-        remote.item.kind = ClipboardKind::File;
+        remote.item.kind = ClipboardKind::File.into();
         remote.item.resource_path = None;
         remote.item.text_content = None;
         remote.item.metadata_json = Some(
@@ -3772,7 +3770,7 @@ mod tests {
                 writer_device_id: REMOTE_DEVICE.to_string(),
             },
         );
-        remote.item.kind = ClipboardKind::File;
+        remote.item.kind = ClipboardKind::File.into();
         remote.item.resource_path = Some(local_paths[0].to_string());
         remote.item.text_content = Some(serde_json::to_string(&local_paths).unwrap());
         remote.item.metadata_json = Some(
@@ -3897,7 +3895,7 @@ mod tests {
             upserts: Vec::new(),
             tombstones: vec![Tombstone {
                 item_id: "remote-deleted".to_string(),
-                kind: ClipboardKind::Text,
+                kind: ClipboardKind::Text.into(),
                 content_hash: "hash-remote-deleted".to_string(),
                 deleted_at_ms: remote_delete_version,
                 version: RecordVersion {
@@ -4210,7 +4208,7 @@ mod tests {
             .unwrap();
         let invalid = MutationBatch {
             upserts: vec![ReplicatedItem {
-                item: item("broken-checkpoint", "hash-broken-checkpoint", "broken"),
+                item: item("broken-checkpoint", "hash-broken-checkpoint", "broken").into(),
                 version: RecordVersion {
                     modified_at_ms: 600,
                     writer_device_id: "not-a-uuid".to_string(),
@@ -4271,7 +4269,7 @@ mod tests {
             upserts: Vec::new(),
             tombstones: vec![Tombstone {
                 item_id: "victim".to_string(),
-                kind: ClipboardKind::Text,
+                kind: ClipboardKind::Text.into(),
                 content_hash: "hash-victim".to_string(),
                 deleted_at_ms: 200,
                 version: RecordVersion {
@@ -4345,7 +4343,7 @@ mod tests {
                 writer_device_id: REMOTE_DEVICE.to_string(),
             },
         );
-        collision.item.kind = ClipboardKind::Image;
+        collision.item.kind = ClipboardKind::Image.into();
         let failed = MutationBatch {
             upserts: vec![first, collision],
             tombstones: Vec::new(),

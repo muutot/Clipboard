@@ -6,9 +6,8 @@
 
 pub mod engine;
 pub mod resources;
-pub mod wire;
 
-pub use clipboard_sync::v1::{layout, remote};
+pub use clipboard_sync::v1::{layout, remote, wire};
 
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 
@@ -34,5 +33,121 @@ pub use wire::{
     open_checkpoint_pack, open_snapshot_pack, CheckpointHead, CheckpointPackHeader,
     CheckpointPackReader, DeviceCursor, DeviceHead, EncodedFile, EncodedObject, LargePackKind,
     LargePackWriter, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, Segment, SessionKey,
-    SnapshotPackHeader, SnapshotPackReader, Tombstone,
+    SnapshotPackHeader, SnapshotPackReader, SyncItem, SyncItemKind, Tombstone,
 };
+
+use crate::domain::{ClipboardItem, ClipboardKind};
+
+impl From<ClipboardKind> for SyncItemKind {
+    fn from(kind: ClipboardKind) -> Self {
+        match kind {
+            ClipboardKind::Text => Self::Text,
+            ClipboardKind::Link => Self::Link,
+            ClipboardKind::Image => Self::Image,
+            ClipboardKind::File => Self::File,
+        }
+    }
+}
+
+impl From<SyncItemKind> for ClipboardKind {
+    fn from(kind: SyncItemKind) -> Self {
+        match kind {
+            SyncItemKind::Text => Self::Text,
+            SyncItemKind::Link => Self::Link,
+            SyncItemKind::Image => Self::Image,
+            SyncItemKind::File => Self::File,
+        }
+    }
+}
+
+impl From<ClipboardItem> for SyncItem {
+    fn from(item: ClipboardItem) -> Self {
+        Self {
+            id: item.id,
+            kind: item.kind.into(),
+            title: item.title,
+            text_content: item.text_content,
+            html_content: item.html_content,
+            rtf_content: item.rtf_content,
+            resource_path: item.resource_path,
+            preview_path: item.preview_path,
+            content_hash: item.content_hash,
+            source_app: item.source_app,
+            icon_path: item.icon_path,
+            size_bytes: item.size_bytes,
+            created_at_ms: item.created_at_ms,
+            last_used_at_ms: item.last_used_at_ms,
+            is_favorite: item.is_favorite,
+            metadata_json: item.metadata_json,
+        }
+    }
+}
+
+impl From<SyncItem> for ClipboardItem {
+    fn from(item: SyncItem) -> Self {
+        Self {
+            id: item.id,
+            kind: item.kind.into(),
+            title: item.title,
+            text_content: item.text_content,
+            html_content: item.html_content,
+            rtf_content: item.rtf_content,
+            resource_path: item.resource_path,
+            preview_path: item.preview_path,
+            content_hash: item.content_hash,
+            source_app: item.source_app,
+            icon_path: item.icon_path,
+            size_bytes: item.size_bytes,
+            created_at_ms: item.created_at_ms,
+            last_used_at_ms: item.last_used_at_ms,
+            is_favorite: item.is_favorite,
+            metadata_json: item.metadata_json,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn application_item(kind: ClipboardKind) -> ClipboardItem {
+        ClipboardItem {
+            id: "wire-compatible-item".to_string(),
+            kind,
+            title: "title".to_string(),
+            text_content: Some("text".to_string()),
+            html_content: Some("<b>text</b>".to_string()),
+            rtf_content: Some(r"{\rtf1 text}".to_string()),
+            resource_path: Some("v1/resources/file/sha256-deadbeef.bin".to_string()),
+            preview_path: None,
+            content_hash: "hash".to_string(),
+            source_app: Some("test".to_string()),
+            icon_path: None,
+            size_bytes: 4,
+            created_at_ms: 100,
+            last_used_at_ms: None,
+            is_favorite: true,
+            metadata_json: Some("{}".to_string()),
+        }
+    }
+
+    #[test]
+    fn protocol_dto_preserves_the_original_v1_bincode_layout() {
+        for kind in [
+            ClipboardKind::Text,
+            ClipboardKind::Link,
+            ClipboardKind::Image,
+            ClipboardKind::File,
+        ] {
+            let application = application_item(kind);
+            let protocol = SyncItem::from(application.clone());
+            let application_bytes =
+                bincode::encode_to_vec(&application, bincode::config::standard()).unwrap();
+            let protocol_bytes =
+                bincode::encode_to_vec(&protocol, bincode::config::standard()).unwrap();
+
+            assert_eq!(protocol_bytes, application_bytes);
+            assert_eq!(ClipboardItem::from(protocol), application);
+        }
+    }
+}

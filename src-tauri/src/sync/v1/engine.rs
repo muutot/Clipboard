@@ -2105,7 +2105,7 @@ mod tests {
         writer_device_id: &str,
     ) -> super::super::ReplicatedItem {
         super::super::ReplicatedItem {
-            item: text_item(id, text),
+            item: text_item(id, text).into(),
             version: super::super::RecordVersion {
                 modified_at_ms,
                 writer_device_id: writer_device_id.to_string(),
