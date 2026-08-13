@@ -10,10 +10,11 @@ use sha2::{Digest, Sha256};
 use super::{
     layout::{parse_resource_key, resource_object_key, ResourceCategory},
     remote::{ObjectMetadata, ObjectStore, PutCondition, PutOutcome},
-    wire::{resource_header, validate_resource_header, RESOURCE_AUTH_TAG_LEN, RESOURCE_HEADER_LEN},
-    MutationBatch, SessionKey, SyncItemKind,
+    wire::{
+        resource_header, validate_resource_header, MutationBatch, SessionKey, SyncItemKind,
+        RESOURCE_AUTH_TAG_LEN, RESOURCE_HEADER_LEN,
+    },
 };
-use crate::storage::StoragePaths;
 
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
 const RESOURCE_CHUNK_BYTES: usize = 1024 * 1024;
@@ -60,6 +61,23 @@ pub struct ResourceLimits {
     pub image_bytes: u64,
     pub file_bytes: u64,
     pub icon_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceRoots {
+    pub images: PathBuf,
+    pub files: PathBuf,
+    pub icons: PathBuf,
+}
+
+impl ResourceRoots {
+    pub fn new(images: PathBuf, files: PathBuf, icons: PathBuf) -> Self {
+        Self {
+            images,
+            files,
+            icons,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -306,7 +324,7 @@ pub fn verify_local_resource(
 pub fn prepare_mutation_resources(
     store: &impl ObjectStore,
     mutations: &mut MutationBatch,
-    paths: &StoragePaths,
+    roots: &ResourceRoots,
     limits: ResourceLimits,
     session_key: Option<&SessionKey>,
 ) -> Result<ResourceTransferStats, String> {
@@ -320,7 +338,7 @@ pub fn prepare_mutation_resources(
             SyncItemKind::Image => {
                 item.resource_path = rewrite_outgoing_path(
                     item.resource_path.as_deref(),
-                    &paths.images,
+                    &roots.images,
                     ResourceCategory::Image,
                     limits.image_bytes,
                     &mut descriptors,
@@ -333,7 +351,7 @@ pub fn prepare_mutation_resources(
             SyncItemKind::File => {
                 item.resource_path = rewrite_outgoing_path(
                     item.resource_path.as_deref(),
-                    &paths.files,
+                    &roots.files,
                     ResourceCategory::File,
                     limits.file_bytes,
                     &mut descriptors,
@@ -348,7 +366,7 @@ pub fn prepare_mutation_resources(
                             .filter_map(|local_path| {
                                 rewrite_outgoing_path(
                                     Some(local_path),
-                                    &paths.files,
+                                    &roots.files,
                                     ResourceCategory::File,
                                     limits.file_bytes,
                                     &mut descriptors,
@@ -370,7 +388,7 @@ pub fn prepare_mutation_resources(
 
         item.icon_path = rewrite_outgoing_icon(
             item.icon_path.as_deref(),
-            paths,
+            roots,
             limits.icon_bytes,
             &mut descriptors,
             &mut path_map,
@@ -405,7 +423,7 @@ pub fn prepare_mutation_resources(
 pub fn materialize_mutation_resources(
     store: &impl ObjectStore,
     mutations: &mut MutationBatch,
-    paths: &StoragePaths,
+    roots: &ResourceRoots,
     limits: ResourceLimits,
     session_key: Option<&SessionKey>,
 ) -> Result<ResourceTransferStats, String> {
@@ -420,7 +438,7 @@ pub fn materialize_mutation_resources(
                     store,
                     item.resource_path.as_deref(),
                     &[ResourceCategory::Image],
-                    paths,
+                    roots,
                     limits,
                     false,
                     &mut materialized,
@@ -434,7 +452,7 @@ pub fn materialize_mutation_resources(
                     store,
                     item.resource_path.as_deref(),
                     &[ResourceCategory::File],
-                    paths,
+                    roots,
                     limits,
                     false,
                     &mut materialized,
@@ -450,7 +468,7 @@ pub fn materialize_mutation_resources(
                                     store,
                                     Some(portable_path),
                                     &[ResourceCategory::File],
-                                    paths,
+                                    roots,
                                     limits,
                                     false,
                                     &mut materialized,
@@ -476,7 +494,7 @@ pub fn materialize_mutation_resources(
             store,
             item.icon_path.as_deref(),
             &[ResourceCategory::Icon],
-            paths,
+            roots,
             limits,
             true,
             &mut materialized,
@@ -768,7 +786,7 @@ fn rewrite_outgoing_path(
 
 fn rewrite_outgoing_icon(
     value: Option<&str>,
-    paths: &StoragePaths,
+    roots: &ResourceRoots,
     max_bytes: u64,
     descriptors: &mut BTreeMap<String, ResourceDescriptor>,
     path_map: &mut BTreeMap<String, Option<String>>,
@@ -785,7 +803,7 @@ fn rewrite_outgoing_icon(
         *skipped_resources = skipped_resources.saturating_add(1);
         return None;
     }
-    let icon_root = paths.storage.join("icons");
+    let icon_root = &roots.icons;
     let source = if Path::new(value).is_absolute() {
         PathBuf::from(value)
     } else if is_safe_file_name(value) {
@@ -797,7 +815,7 @@ fn rewrite_outgoing_icon(
     };
     rewrite_outgoing_path(
         source.to_str(),
-        &icon_root,
+        icon_root,
         ResourceCategory::Icon,
         max_bytes,
         descriptors,
@@ -812,7 +830,7 @@ fn rewrite_incoming_path(
     store: &impl ObjectStore,
     value: Option<&str>,
     allowed_categories: &[ResourceCategory],
-    paths: &StoragePaths,
+    roots: &ResourceRoots,
     limits: ResourceLimits,
     bare_file_name: bool,
     materialized: &mut BTreeMap<String, String>,
@@ -840,7 +858,7 @@ fn rewrite_incoming_path(
             parsed.category
         ));
     }
-    let (destination_root, max_bytes) = resource_destination(paths, parsed.category, limits);
+    let (destination_root, max_bytes) = resource_destination(roots, parsed.category, limits);
     let result = materialize_resource(store, value, &destination_root, max_bytes, session_key)?;
     let local = result.path.to_string_lossy().to_string();
     if !result.reused_local_file {
@@ -864,14 +882,14 @@ fn rewrite_incoming_path(
 }
 
 fn resource_destination(
-    paths: &StoragePaths,
+    roots: &ResourceRoots,
     category: ResourceCategory,
     limits: ResourceLimits,
 ) -> (PathBuf, u64) {
     match category {
-        ResourceCategory::Image => (paths.images.clone(), limits.image_bytes),
-        ResourceCategory::File => (paths.files.clone(), limits.file_bytes),
-        ResourceCategory::Icon => (paths.storage.join("icons"), limits.icon_bytes),
+        ResourceCategory::Image => (roots.images.clone(), limits.image_bytes),
+        ResourceCategory::File => (roots.files.clone(), limits.file_bytes),
+        ResourceCategory::Icon => (roots.icons.clone(), limits.icon_bytes),
     }
 }
 
@@ -1272,10 +1290,9 @@ mod tests {
     };
 
     use super::*;
-    use crate::sync::v1::remote::{DownloadedFile, DownloadedObject, ObjectInfo};
-    use crate::{
-        domain::{ClipboardItem, ClipboardKind},
-        sync::v1::{MutationBatch, RecordVersion, ReplicatedItem},
+    use crate::v1::{
+        remote::{DownloadedFile, DownloadedObject, ObjectInfo},
+        MutationBatch, RecordVersion, ReplicatedItem, SyncItem, SyncItemKind,
     };
 
     #[derive(Default)]
@@ -1390,9 +1407,9 @@ mod tests {
         path
     }
 
-    fn sample_item(id: &str, kind: ClipboardKind) -> ReplicatedItem {
+    fn sample_item(id: &str, kind: SyncItemKind) -> ReplicatedItem {
         ReplicatedItem {
-            item: ClipboardItem {
+            item: SyncItem {
                 id: id.to_string(),
                 kind,
                 title: id.to_string(),
@@ -1409,8 +1426,7 @@ mod tests {
                 last_used_at_ms: None,
                 is_favorite: false,
                 metadata_json: None,
-            }
-            .into(),
+            },
             version: RecordVersion {
                 modified_at_ms: 1,
                 writer_device_id: "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
@@ -1728,19 +1744,38 @@ mod tests {
     #[test]
     fn mutation_resources_round_trip_without_machine_local_paths() {
         let root = temporary_directory("mutation-round-trip");
-        let source_paths = StoragePaths::initialize(root.join("source")).unwrap();
-        let target_paths = StoragePaths::initialize(root.join("target")).unwrap();
-        let image_path = source_paths.images.join("image.png");
-        let preview_path = source_paths.previews.join("image.jpg");
-        let file_path = source_paths.files.join("document.txt");
-        let icon_dir = source_paths.storage.join("icons");
-        fs::create_dir_all(&icon_dir).unwrap();
+        let source_root = root.join("source");
+        let target_root = root.join("target");
+        let source_roots = ResourceRoots::new(
+            source_root.join("images"),
+            source_root.join("files"),
+            source_root.join("icons"),
+        );
+        let target_roots = ResourceRoots::new(
+            target_root.join("images"),
+            target_root.join("files"),
+            target_root.join("icons"),
+        );
+        for directory in [
+            &source_roots.images,
+            &source_roots.files,
+            &source_roots.icons,
+            &target_roots.images,
+            &target_roots.files,
+            &target_roots.icons,
+        ] {
+            fs::create_dir_all(directory).unwrap();
+        }
+        let image_path = source_roots.images.join("image.png");
+        let preview_path = source_root.join("previews/image.jpg");
+        let file_path = source_roots.files.join("document.txt");
+        fs::create_dir_all(preview_path.parent().unwrap()).unwrap();
         fs::write(&image_path, b"image-bytes").unwrap();
         fs::write(&preview_path, b"preview-bytes").unwrap();
         fs::write(&file_path, b"file-bytes").unwrap();
-        fs::write(icon_dir.join("app.png"), b"icon-bytes").unwrap();
+        fs::write(source_roots.icons.join("app.png"), b"icon-bytes").unwrap();
 
-        let mut image = sample_item("image", ClipboardKind::Image);
+        let mut image = sample_item("image", SyncItemKind::Image);
         image.item.resource_path = Some(image_path.to_string_lossy().to_string());
         image.item.preview_path = Some(preview_path.to_string_lossy().to_string());
         image.item.icon_path = Some("app.png".to_string());
@@ -1753,7 +1788,7 @@ mod tests {
             .to_string(),
         );
 
-        let mut file = sample_item("file", ClipboardKind::File);
+        let mut file = sample_item("file", SyncItemKind::File);
         let source_file = file_path.to_string_lossy().to_string();
         file.item.resource_path = Some(source_file.clone());
         file.item.text_content = Some(serde_json::to_string(&[&source_file]).unwrap());
@@ -1779,7 +1814,7 @@ mod tests {
             tombstones: Vec::new(),
         };
         let uploaded =
-            prepare_mutation_resources(&store, &mut batch, &source_paths, limits, None).unwrap();
+            prepare_mutation_resources(&store, &mut batch, &source_roots, limits, None).unwrap();
         assert_eq!(uploaded.referenced_resources, 3);
         assert_eq!(uploaded.transferred_resources, 3);
         assert!(batch.upserts.iter().all(|item| {
@@ -1802,13 +1837,13 @@ mod tests {
             .starts_with("v1/resources/icon/"));
 
         let downloaded =
-            materialize_mutation_resources(&store, &mut batch, &target_paths, limits, None)
+            materialize_mutation_resources(&store, &mut batch, &target_roots, limits, None)
                 .unwrap();
         assert_eq!(downloaded.referenced_resources, 3);
         assert_eq!(downloaded.transferred_resources, 3);
         assert!(batch.upserts[0].item.preview_path.is_none());
-        let target_images = fs::canonicalize(&target_paths.images).unwrap();
-        let target_files = fs::canonicalize(&target_paths.files).unwrap();
+        let target_images = fs::canonicalize(&target_roots.images).unwrap();
+        let target_files = fs::canonicalize(&target_roots.files).unwrap();
         assert!(
             Path::new(batch.upserts[0].item.resource_path.as_deref().unwrap())
                 .starts_with(&target_images)

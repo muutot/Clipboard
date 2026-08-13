@@ -2,6 +2,7 @@
 
 pub mod layout;
 pub mod remote;
+pub mod resources;
 pub mod wire;
 
 pub use layout::{
@@ -13,6 +14,12 @@ pub use layout::{
 pub use remote::{
     cleanup_obsolete_objects, DownloadedFile, DownloadedObject, ObjectInfo, ObjectMetadata,
     ObjectStore, ObsoleteCleanupReport, PutCondition, PutOutcome, S3ObjectStore,
+};
+pub use resources::{
+    collect_mutation_resource_refs, defer_mutation_resources, ensure_resource_uploaded,
+    fingerprint_resource, materialize_mutation_resources, materialize_resource,
+    prepare_mutation_resources, verify_local_resource, MaterializedResource, ResourceDescriptor,
+    ResourceLimits, ResourceRoots, ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
 };
 pub use wire::{
     decode_checkpoint_head, decode_device_head, decode_segment, encode_checkpoint_head,

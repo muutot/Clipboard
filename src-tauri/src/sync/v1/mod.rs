@@ -5,9 +5,8 @@
 //! the strict object layout and wire envelope stay independently testable.
 
 pub mod engine;
-pub mod resources;
 
-pub use clipboard_sync::v1::{layout, remote, wire};
+pub use clipboard_sync::v1::{layout, remote, resources, wire};
 
 pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
 
@@ -25,7 +24,7 @@ pub use resources::{
     collect_mutation_resource_refs, defer_mutation_resources, ensure_resource_uploaded,
     fingerprint_resource, materialize_mutation_resources, materialize_resource,
     prepare_mutation_resources, verify_local_resource, MaterializedResource, ResourceDescriptor,
-    ResourceLimits, ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
+    ResourceLimits, ResourceRoots, ResourceTransferStats, ResourceUploadResult, SyncResourceRef,
 };
 pub use wire::{
     decode_checkpoint_head, decode_device_head, decode_segment, encode_checkpoint_head,

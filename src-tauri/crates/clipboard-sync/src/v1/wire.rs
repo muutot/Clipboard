@@ -33,10 +33,8 @@ const PACK_CHUNK_MAX_UNCOMPRESSED_BYTES: usize = 16 * 1024 * 1024;
 const PACK_CHUNK_MAX_ENTRIES: usize = 4096;
 const PACK_MAX_CHUNKS: u64 = 1_000_000;
 
-#[doc(hidden)]
-pub const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
-#[doc(hidden)]
-pub const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
+pub(crate) const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
+pub(crate) const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
 
 /// Protocol-owned clipboard category. Variant order is part of the v1 bincode contract.
 #[derive(
@@ -188,8 +186,7 @@ impl SessionKey {
             .map_err(|_| "failed to initialize sync encryption".to_string())
     }
 
-    #[doc(hidden)]
-    pub fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
+    pub(crate) fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
         let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.key)
             .expect("HMAC-SHA256 accepts a 256-bit key");
         mac.update(b"clipboard-sync-v1-resource-digest\0");
@@ -218,8 +215,7 @@ impl SessionKey {
         aad
     }
 
-    #[doc(hidden)]
-    pub fn encrypt_resource_chunk(
+    pub(crate) fn encrypt_resource_chunk(
         &self,
         header: &[u8],
         object_key: &str,
@@ -239,8 +235,7 @@ impl SessionKey {
             .map_err(|_| "failed to encrypt sync v1 resource chunk".to_string())
     }
 
-    #[doc(hidden)]
-    pub fn decrypt_resource_chunk(
+    pub(crate) fn decrypt_resource_chunk(
         &self,
         header: &[u8],
         object_key: &str,
@@ -988,16 +983,14 @@ pub fn open_checkpoint_pack<'a>(
     LargePackReader::open(path, LargePackKind::Checkpoint, key)
 }
 
-#[doc(hidden)]
-pub fn resource_header(plaintext_size: u64) -> Result<[u8; HEADER_LEN], String> {
+pub(crate) fn resource_header(plaintext_size: u64) -> Result<[u8; HEADER_LEN], String> {
     if plaintext_size > MAX_UNCOMPRESSED_BYTES {
         return Err("sync v1 resource exceeds the plaintext size limit".to_string());
     }
     Ok(header(ObjectKind::Resource, FLAG_ENCRYPTED, plaintext_size))
 }
 
-#[doc(hidden)]
-pub fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
+pub(crate) fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
     if data.len() != HEADER_LEN || &data[..MAGIC.len()] != MAGIC {
         return Err("sync v1 resource header is invalid".to_string());
     }

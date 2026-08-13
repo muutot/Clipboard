@@ -13,13 +13,21 @@ use super::{
     parse_segment_key, prepare_mutation_resources, segment_object_key, segment_prefix,
     snapshot_object_key, CheckpointHead, CheckpointPackHeader, DeviceCursor, DeviceHead,
     EncodedFile, EncodedObject, LargePackKind, LargePackWriter, MutationBatch, ObjectInfo,
-    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
-    SnapshotPackHeader, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, ResourceRoots, Segment,
+    SessionKey, SnapshotPackHeader, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
 const LARGE_PACK_BATCH_ENTRIES: usize = 2048;
 const MAX_LARGE_PACK_STORED_BYTES: u64 = 1024 * 1024 * 1024;
+
+fn resource_roots(paths: &StoragePaths) -> ResourceRoots {
+    ResourceRoots::new(
+        paths.images.clone(),
+        paths.files.clone(),
+        paths.storage.join("icons"),
+    )
+}
 
 fn write_large_pack_batch(
     writer: &mut LargePackWriter<'_>,
@@ -714,6 +722,7 @@ fn encode_database_pack(
     let database_snapshot = TemporaryDatabaseSnapshot::create(database, &paths.data_directory)?;
     let export_database =
         Database::open(&database_snapshot.path).map_err(|error| error.to_string())?;
+    let resource_roots = resource_roots(paths);
     let mut writer = match kind {
         LargePackKind::Snapshot => LargePackWriter::new(
             &paths.data_directory,
@@ -733,7 +742,7 @@ fn encode_database_pack(
             let resources = prepare_mutation_resources(
                 store,
                 &mut mutations,
-                paths,
+                &resource_roots,
                 resource_limits,
                 session_key,
             )
@@ -1253,10 +1262,11 @@ fn publish_segment(
         last_sequence: batch.last_sequence,
         mutations: batch.mutations,
     };
+    let resource_roots = resource_roots(paths);
     let resources = prepare_mutation_resources(
         store,
         &mut segment.mutations,
-        paths,
+        &resource_roots,
         resource_limits,
         session_key,
     )?;
