@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 
 use crate::storage::{Database, StoragePaths};
 
+use super::wire::envelope_is_encrypted;
 use super::{
     cleanup_obsolete_objects, collect_mutation_resource_refs, decode_checkpoint,
     decode_checkpoint_head, decode_device_head, decode_segment, decode_snapshot,
@@ -85,6 +86,8 @@ pub fn sync_database(
         &mut result,
     )?;
 
+    validate_remote_access_before_first_publish(store, &state, session_key, &mut result)?;
+
     if !state.initialized {
         state = publish_bootstrap(
             store,
@@ -155,6 +158,89 @@ pub fn sync_database(
         )?;
     }
     Ok(result)
+}
+
+fn validate_remote_access_before_first_publish(
+    store: &impl ObjectStore,
+    state: &crate::storage::SyncRemoteState,
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> Result<(), String> {
+    if state.initialized {
+        return Ok(());
+    }
+
+    let mut canonical_pointers = 0u64;
+    let mut valid_pointers = 0u64;
+    let mut last_error = None::<String>;
+    let mut heads = store.list(HEADS_PREFIX, None)?;
+    heads.sort_by(|left, right| left.key.cmp(&right.key));
+    for info in heads {
+        let Ok(device_id) = parse_head_key(&info.key) else {
+            continue;
+        };
+        let Some(downloaded) = store.get(&info.key)? else {
+            continue;
+        };
+        canonical_pointers = canonical_pointers.saturating_add(1);
+        result.bytes_downloaded = checked_add(
+            result.bytes_downloaded,
+            downloaded.bytes.len() as u64,
+            "downloaded byte count",
+        )?;
+        let validation = envelope_is_encrypted(&downloaded.bytes).and_then(|encrypted| {
+            if encrypted != session_key.is_some() {
+                return Err(
+                    "sync v1 namespace encryption mode does not match the configuration"
+                        .to_string(),
+                );
+            }
+            decode_device_head(&downloaded.bytes, session_key)
+                .and_then(|head| validate_head(&info.key, &device_id, &head))
+        });
+        match validation {
+            Ok(()) => valid_pointers = valid_pointers.saturating_add(1),
+            Err(error) if error.contains("namespace encryption mode") => {
+                return Err(remote_access_error(error));
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    if let Some(downloaded) = store.get(CHECKPOINT_HEAD_KEY)? {
+        canonical_pointers = canonical_pointers.saturating_add(1);
+        result.bytes_downloaded = checked_add(
+            result.bytes_downloaded,
+            downloaded.bytes.len() as u64,
+            "downloaded byte count",
+        )?;
+        envelope_is_encrypted(&downloaded.bytes)
+            .and_then(|encrypted| {
+                if encrypted != session_key.is_some() {
+                    return Err(
+                        "sync v1 namespace encryption mode does not match the configuration"
+                            .to_string(),
+                    );
+                }
+                decode_checkpoint_head(&downloaded.bytes, session_key)
+                    .and_then(|head| validate_checkpoint_head(&head))
+            })
+            .map_err(remote_access_error)?;
+        valid_pointers = valid_pointers.saturating_add(1);
+    }
+
+    if canonical_pointers == 0 || valid_pointers > 0 {
+        return Ok(());
+    }
+    Err(remote_access_error(last_error.unwrap_or_else(|| {
+        "no valid remote pointer was found".to_string()
+    })))
+}
+
+fn remote_access_error(error: String) -> String {
+    format!(
+        "cannot authenticate the existing sync v1 namespace before first publication; verify the encryption password or use a dedicated remote-scope reset workflow: {error}"
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -492,7 +578,8 @@ fn maybe_compact(
         return Ok(());
     }
     let mut mutations = snapshot.mutations;
-    let resources = prepare_mutation_resources(store, &mut mutations, paths, resource_limits)?;
+    let resources =
+        prepare_mutation_resources(store, &mut mutations, paths, resource_limits, session_key)?;
     result.uploaded_resources += resources.transferred_resources;
     result.bytes_uploaded = checked_add(
         result.bytes_uploaded,
@@ -839,8 +926,13 @@ fn publish_bootstrap(
         through_sequence: exported.through_sequence,
         mutations: exported.mutations,
     };
-    let resources =
-        prepare_mutation_resources(store, &mut snapshot.mutations, paths, resource_limits)?;
+    let resources = prepare_mutation_resources(
+        store,
+        &mut snapshot.mutations,
+        paths,
+        resource_limits,
+        session_key,
+    )?;
     result.uploaded_resources += resources.transferred_resources;
     result.bytes_uploaded = checked_add(
         result.bytes_uploaded,
@@ -905,8 +997,13 @@ fn publish_segment(
         last_sequence: batch.last_sequence,
         mutations: batch.mutations,
     };
-    let resources =
-        prepare_mutation_resources(store, &mut segment.mutations, paths, resource_limits)?;
+    let resources = prepare_mutation_resources(
+        store,
+        &mut segment.mutations,
+        paths,
+        resource_limits,
+        session_key,
+    )?;
     result.uploaded_resources += resources.transferred_resources;
     result.bytes_uploaded = checked_add(
         result.bytes_uploaded,
@@ -1726,6 +1823,182 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains(resource_key.as_str()));
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn encrypted_resource_stays_private_and_materializes_only_on_demand() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("encrypted-resource-source");
+        let target_paths = temp_paths("encrypted-resource-target");
+        fs::create_dir_all(&source_paths.images).unwrap();
+        let source_image = source_paths.images.join("private.png");
+        let plaintext = b"private-image-fragment".repeat(4096);
+        fs::write(&source_image, &plaintext).unwrap();
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        let key = SessionKey::derive("password", REMOTE_SCOPE).unwrap();
+        source
+            .save_item(&image_item("encrypted-image", &source_image))
+            .unwrap();
+
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            Some(&key),
+            options(),
+        )
+        .unwrap();
+        let resource_key = store
+            .objects
+            .lock()
+            .unwrap()
+            .keys()
+            .find(|key| key.starts_with("v1/resources/image/"))
+            .cloned()
+            .unwrap();
+        let stored_resource = store
+            .objects
+            .lock()
+            .unwrap()
+            .get(&resource_key)
+            .cloned()
+            .unwrap();
+        assert_ne!(stored_resource, plaintext);
+        assert!(!stored_resource
+            .windows(b"private-image-fragment".len())
+            .any(|window| window == b"private-image-fragment"));
+        store.gets.lock().unwrap().clear();
+
+        let pulled = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            Some(&key),
+            options(),
+        )
+        .unwrap();
+        assert_eq!(pulled.downloaded_resources, 0);
+        assert!(!store.gets.lock().unwrap().contains(&resource_key));
+        assert!(target
+            .get_item("encrypted-image")
+            .unwrap()
+            .unwrap()
+            .resource_path
+            .is_none());
+
+        let exported = target.export_sync_snapshot_for_scope(REMOTE_SCOPE).unwrap();
+        let forwarded = exported
+            .mutations
+            .upserts
+            .iter()
+            .find(|item| item.item.id == "encrypted-image")
+            .unwrap();
+        assert_eq!(
+            forwarded.item.resource_path.as_deref(),
+            Some(resource_key.as_str())
+        );
+
+        let materialized = super::super::materialize_resource(
+            &store,
+            &resource_key,
+            &target_paths.images,
+            options().resource_limits.image_bytes,
+            Some(&key),
+        )
+        .unwrap();
+        assert_eq!(fs::read(materialized.path).unwrap(), plaintext);
+        assert_eq!(materialized.transferred_bytes, stored_resource.len() as u64);
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn wrong_password_is_rejected_before_a_new_device_publishes() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("password-source");
+        let target_paths = temp_paths("password-target");
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        source.save_item(&text_item("private", "private")).unwrap();
+        let right = SessionKey::derive("right", REMOTE_SCOPE).unwrap();
+        let wrong = SessionKey::derive("wrong", REMOTE_SCOPE).unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            Some(&right),
+            options(),
+        )
+        .unwrap();
+        let target_device_id = target.get_sync_device_id().unwrap();
+        let target_head_key = head_object_key(&target_device_id).unwrap();
+        store.puts.lock().unwrap().clear();
+
+        let error = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            Some(&wrong),
+            options(),
+        )
+        .unwrap_err();
+        assert!(error.contains("cannot authenticate the existing sync v1 namespace"));
+        assert!(store.puts.lock().unwrap().is_empty());
+        assert!(!store.objects.lock().unwrap().contains_key(&target_head_key));
+
+        drop(source);
+        drop(target);
+        fs::remove_dir_all(source_paths.project).unwrap();
+        fs::remove_dir_all(target_paths.project).unwrap();
+    }
+
+    #[test]
+    fn encryption_mode_change_is_rejected_before_a_new_device_publishes() {
+        let store = MemoryStore::default();
+        let source_paths = temp_paths("plaintext-source");
+        let target_paths = temp_paths("encrypted-target");
+        let source = Database::open(&source_paths.database).unwrap();
+        let target = Database::open(&target_paths.database).unwrap();
+        source.save_item(&text_item("public", "public")).unwrap();
+        sync_database(
+            &store,
+            &source,
+            &source_paths,
+            REMOTE_SCOPE,
+            None,
+            options(),
+        )
+        .unwrap();
+        let key = SessionKey::derive("password", REMOTE_SCOPE).unwrap();
+        let target_device_id = target.get_sync_device_id().unwrap();
+        let target_head_key = head_object_key(&target_device_id).unwrap();
+        store.puts.lock().unwrap().clear();
+
+        let error = sync_database(
+            &store,
+            &target,
+            &target_paths,
+            REMOTE_SCOPE,
+            Some(&key),
+            options(),
+        )
+        .unwrap_err();
+        assert!(error.contains("namespace encryption mode does not match"));
+        assert!(store.puts.lock().unwrap().is_empty());
+        assert!(!store.objects.lock().unwrap().contains_key(&target_head_key));
 
         drop(source);
         drop(target);

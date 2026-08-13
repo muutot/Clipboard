@@ -5,7 +5,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use bincode::{Decode, Encode};
-use hmac::Hmac;
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
@@ -24,6 +24,9 @@ const MAX_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_STORED_BYTES: usize = 1024 * 1024 * 1024;
 const BINCODE_LIMIT_BYTES: usize = MAX_UNCOMPRESSED_BYTES as usize;
 
+pub(super) const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
+pub(super) const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 enum ObjectKind {
@@ -32,6 +35,7 @@ enum ObjectKind {
     Segment = 3,
     Checkpoint = 4,
     CheckpointHead = 5,
+    Resource = 6,
 }
 
 impl TryFrom<u8> for ObjectKind {
@@ -44,6 +48,7 @@ impl TryFrom<u8> for ObjectKind {
             3 => Ok(Self::Segment),
             4 => Ok(Self::Checkpoint),
             5 => Ok(Self::CheckpointHead),
+            6 => Ok(Self::Resource),
             _ => Err(format!("unknown sync v1 object kind {value}")),
         }
     }
@@ -85,6 +90,77 @@ impl SessionKey {
     fn cipher(&self) -> Result<Aes256Gcm, String> {
         Aes256Gcm::new_from_slice(&self.key)
             .map_err(|_| "failed to initialize sync encryption".to_string())
+    }
+
+    pub(super) fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.key)
+            .expect("HMAC-SHA256 accepts a 256-bit key");
+        mac.update(b"clipboard-sync-v1-resource-digest\0");
+        mac.update(plaintext_sha256);
+        hex::encode(mac.finalize().into_bytes())
+    }
+
+    fn resource_nonce(&self, object_key: &str, chunk_index: u64) -> [u8; NONCE_LEN] {
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.key)
+            .expect("HMAC-SHA256 accepts a 256-bit key");
+        mac.update(b"clipboard-sync-v1-resource-nonce\0");
+        mac.update(object_key.as_bytes());
+        mac.update(&chunk_index.to_le_bytes());
+        let digest = mac.finalize().into_bytes();
+        let mut nonce = [0u8; NONCE_LEN];
+        nonce.copy_from_slice(&digest[..NONCE_LEN]);
+        nonce
+    }
+
+    fn resource_aad(header: &[u8], object_key: &str, chunk_index: u64) -> Vec<u8> {
+        let mut aad = Vec::with_capacity(header.len() + object_key.len() + 9);
+        aad.extend_from_slice(header);
+        aad.push(0);
+        aad.extend_from_slice(object_key.as_bytes());
+        aad.extend_from_slice(&chunk_index.to_le_bytes());
+        aad
+    }
+
+    pub(super) fn encrypt_resource_chunk(
+        &self,
+        header: &[u8],
+        object_key: &str,
+        chunk_index: u64,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        let nonce = self.resource_nonce(object_key, chunk_index);
+        let aad = Self::resource_aad(header, object_key, chunk_index);
+        self.cipher()?
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| "failed to encrypt sync v1 resource chunk".to_string())
+    }
+
+    pub(super) fn decrypt_resource_chunk(
+        &self,
+        header: &[u8],
+        object_key: &str,
+        chunk_index: u64,
+        ciphertext: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        let nonce = self.resource_nonce(object_key, chunk_index);
+        let aad = Self::resource_aad(header, object_key, chunk_index);
+        self.cipher()?
+            .decrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: ciphertext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| {
+                "failed to decrypt sync v1 resource: wrong password or corrupted data".to_string()
+            })
     }
 }
 
@@ -201,6 +277,57 @@ fn header(kind: ObjectKind, flags: u8, uncompressed_size: u64) -> [u8; HEADER_LE
     header
 }
 
+pub(super) fn resource_header(plaintext_size: u64) -> Result<[u8; HEADER_LEN], String> {
+    if plaintext_size > MAX_UNCOMPRESSED_BYTES {
+        return Err("sync v1 resource exceeds the plaintext size limit".to_string());
+    }
+    Ok(header(ObjectKind::Resource, FLAG_ENCRYPTED, plaintext_size))
+}
+
+pub(super) fn validate_resource_header(data: &[u8]) -> Result<u64, String> {
+    if data.len() != HEADER_LEN || &data[..MAGIC.len()] != MAGIC {
+        return Err("sync v1 resource header is invalid".to_string());
+    }
+    let version = u16::from_le_bytes([data[8], data[9]]);
+    if version != FORMAT_VERSION {
+        return Err(format!("unsupported sync v1 format version {version}"));
+    }
+    if ObjectKind::try_from(data[10])? != ObjectKind::Resource {
+        return Err("sync v1 resource object kind does not match".to_string());
+    }
+    if data[11] != FLAG_ENCRYPTED {
+        return Err("sync v1 resource must use authenticated encryption".to_string());
+    }
+    let plaintext_size = u64::from_le_bytes(
+        data[12..20]
+            .try_into()
+            .map_err(|_| "sync v1 resource header is truncated".to_string())?,
+    );
+    if plaintext_size > MAX_UNCOMPRESSED_BYTES {
+        return Err("sync v1 resource exceeds the plaintext size limit".to_string());
+    }
+    Ok(plaintext_size)
+}
+
+pub(super) fn envelope_is_encrypted(data: &[u8]) -> Result<bool, String> {
+    if data.len() < HEADER_LEN || data.len() > MAX_STORED_BYTES {
+        return Err("sync v1 object has an invalid stored size".to_string());
+    }
+    if &data[..MAGIC.len()] != MAGIC {
+        return Err("sync v1 object magic does not match".to_string());
+    }
+    let version = u16::from_le_bytes([data[8], data[9]]);
+    if version != FORMAT_VERSION {
+        return Err(format!("unsupported sync v1 format version {version}"));
+    }
+    ObjectKind::try_from(data[10])?;
+    let flags = data[11];
+    if flags & !KNOWN_FLAGS != 0 {
+        return Err("sync v1 object contains unknown flags".to_string());
+    }
+    Ok(flags & FLAG_ENCRYPTED != 0)
+}
+
 fn encode_value<T: Encode>(
     kind: ObjectKind,
     value: &T,
@@ -299,25 +426,34 @@ fn decode_value<T: Decode<()>>(
     }
     let header = &data[..HEADER_LEN];
     let payload = &data[HEADER_LEN..];
-    let compressed = if flags & FLAG_ENCRYPTED != 0 {
-        if payload.len() < NONCE_LEN + AUTH_TAG_LEN {
-            return Err("encrypted sync v1 object is truncated".to_string());
+    let encrypted = flags & FLAG_ENCRYPTED != 0;
+    let compressed = match (encrypted, key) {
+        (true, None) => {
+            return Err("sync v1 object requires an encryption password".to_string());
         }
-        let key =
-            key.ok_or_else(|| "sync v1 object requires an encryption password".to_string())?;
-        key.cipher()?
-            .decrypt(
-                Nonce::from_slice(&payload[..NONCE_LEN]),
-                Payload {
-                    msg: &payload[NONCE_LEN..],
-                    aad: header,
-                },
-            )
-            .map_err(|_| {
-                "failed to decrypt sync v1 object: wrong password or corrupted data".to_string()
-            })?
-    } else {
-        payload.to_vec()
+        (false, Some(_)) => {
+            return Err(
+                "sync v1 object is unencrypted but this remote scope requires encryption"
+                    .to_string(),
+            );
+        }
+        (true, Some(key)) => {
+            if payload.len() < NONCE_LEN + AUTH_TAG_LEN {
+                return Err("encrypted sync v1 object is truncated".to_string());
+            }
+            key.cipher()?
+                .decrypt(
+                    Nonce::from_slice(&payload[..NONCE_LEN]),
+                    Payload {
+                        msg: &payload[NONCE_LEN..],
+                        aad: header,
+                    },
+                )
+                .map_err(|_| {
+                    "failed to decrypt sync v1 object: wrong password or corrupted data".to_string()
+                })?
+        }
+        (false, None) => payload.to_vec(),
     };
 
     let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed))
@@ -476,5 +612,14 @@ mod tests {
         assert!(decode_segment(&encoded.bytes, None)
             .unwrap_err()
             .contains("requires an encryption password"));
+    }
+
+    #[test]
+    fn encrypted_scope_rejects_plaintext_objects() {
+        let key = SessionKey::derive("password", "remote-a").unwrap();
+        let encoded = encode_segment(&sample_segment(), None).unwrap();
+        assert!(decode_segment(&encoded.bytes, Some(&key))
+            .unwrap_err()
+            .contains("requires encryption"));
     }
 }

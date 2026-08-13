@@ -49,8 +49,11 @@ v1/
 - `epoch` changes only when that device must publish a replacement bootstrap snapshot.
 - A device writes only its own head, snapshot and segment namespace.
 - Snapshot, segment and checkpoint names are content addressed and immutable.
-- Resource names are content addressed over the raw bytes. Packs contain references, never a
-  second inline copy of an uploaded resource.
+- Resource names are content addressed over the raw bytes when encryption is disabled. With a
+  sync password, the digest is `HMAC-SHA256(session_key, plaintext_sha256)`, so devices using the
+  same remote scope/password still deduplicate while the bucket does not expose the raw content
+  hash and a different password cannot collide with the old resource namespace. Packs contain
+  references, never a second inline copy of an uploaded resource.
 - Preview images are device-local derived data: packs clear `preview_path` and `previewPath`, never
   create `resources/preview/` objects, and receivers can display the original image until a local
   preview is rebuilt.
@@ -62,7 +65,7 @@ contains more than S3's 1,000-object page size.
 
 ## Wire envelopes
 
-Every binary object begins with an explicit magic, format version and object kind. The logical
+Every metadata object begins with an explicit magic, format version and object kind. The logical
 payload is bincode encoded, zstd compressed and then optionally AES-256-GCM encrypted:
 
 ```text
@@ -76,9 +79,34 @@ magic | version | kind | flags | nonce? | compressed-or-encrypted payload
   Equality is already visible from the immutable object key.
 - A password mismatch or authentication failure is a hard error. Ciphertext is never retried as
   plaintext.
+- Encrypted and unencrypted metadata objects are mutually exclusive for one configured scope: a
+  client with a password rejects plaintext envelopes, and a client without one rejects encrypted
+  envelopes. Before an uninitialized device publishes any bootstrap object, it authenticates an
+  existing canonical device/checkpoint pointer when the namespace is non-empty. A wrong, removed,
+  or changed password therefore fails before the new device writes a head.
 - SHA-256 in an object name is computed over the final stored bytes, allowing corruption checks
   before decoding.
 - Decoders enforce size, entry-count and decompression limits before allocating untrusted sizes.
+
+Binary resources use the same `CLPSYNC1` format version with an internal resource object kind, but
+are not bincode encoded or compressed. With a password they are streamed through fixed 1 MiB
+AES-256-GCM chunks: a 20-byte authenticated-format header records the plaintext size, and each
+non-empty chunk adds a 16-byte authentication tag. The nonce is deterministically derived from the
+session key, canonical resource object key and chunk index; AAD binds the header, object key and
+chunk index. This keeps retries byte-identical without loading the whole resource into memory.
+Upload encryption writes a ciphertext temporary file and then uses the streaming S3 file PUT;
+download writes a bounded ciphertext temporary file, authenticates/decrypts one chunk at a time to
+a plaintext temporary file, verifies the keyed content identity, and only then atomically publishes
+the local cache. Wrong passwords, truncation, header/size disagreement and modified chunks are hard
+failures with no plaintext fallback. Reported resource traffic counts actual stored ciphertext
+bytes, including header and tags.
+
+Changing, adding or removing the password of an already initialized remote scope is not an in-place
+operation. The existing namespace remains bound to its original encryption mode/key. The current
+settings surface intentionally rejects such a change before publication; a future dedicated,
+destructive rotation workflow must first materialize every referenced resource, delete the old v1
+namespace, clear scope-local sync state, and republish under the new key. Merely editing the setting
+never creates a mixed or partly unreadable namespace.
 
 ## Replicated record version
 
@@ -108,11 +136,13 @@ replicated delete so non-recycle-bin cleanup paths cannot silently lose converge
 
 ## Bootstrap
 
-Bootstrap order is intentionally upload-first so an existing local collection is not confused
-with records downloaded during the same first sync:
+Bootstrap order is intentionally upload-first after remote access has been authenticated, so an
+existing local collection is not confused with records downloaded during the same first sync:
 
-1. acquire the process-wide sync lock and take a consistent SQLite view;
-2. assign the current device epoch and export active local records plus known tombstones;
+1. acquire the process-wide sync lock and authenticate an existing canonical pointer when the v1
+   namespace is non-empty;
+2. take a consistent SQLite view, assign the current device epoch and export active local records
+   plus known tombstones;
 3. upload all missing content-addressed resources;
 4. upload one immutable bootstrap snapshot;
 5. publish the device head only after the snapshot and resources are durable;

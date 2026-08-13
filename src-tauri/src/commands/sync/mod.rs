@@ -337,6 +337,7 @@ pub fn materialize_clipboard_item(
         return Ok(current);
     }
     let store = settings.object_store()?;
+    let session_key = settings.session_key(&remote_scope)?;
     let (updated, changed) = materialize_item_resources(
         &store,
         database.inner(),
@@ -345,6 +346,7 @@ pub fn materialize_clipboard_item(
         &remote_scope,
         &id,
         refs,
+        session_key.as_ref(),
     )?;
 
     if changed && updated.kind == ClipboardKind::Image {
@@ -369,6 +371,7 @@ fn resource_destination(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn materialize_item_resources(
     store: &impl v1::ObjectStore,
     database: &Database,
@@ -377,6 +380,7 @@ fn materialize_item_resources(
     remote_scope: &str,
     id: &str,
     refs: Vec<v1::SyncResourceRef>,
+    session_key: Option<&v1::SessionKey>,
 ) -> Result<(ClipboardItem, bool), String> {
     let mut materialized = Vec::with_capacity(refs.len());
     for reference in refs {
@@ -393,7 +397,8 @@ fn materialize_item_resources(
                 }
             });
         let cache_path = if let Some(path) = existing.as_ref().filter(|path| {
-            v1::verify_local_resource(path, &reference.object_key, max_bytes).unwrap_or(false)
+            v1::verify_local_resource(path, &reference.object_key, max_bytes, session_key)
+                .unwrap_or(false)
         }) {
             path.clone()
         } else {
@@ -413,15 +418,22 @@ fn materialize_item_resources(
                     }
                 });
             if let Some(path) = rechecked.as_ref().filter(|path| {
-                v1::verify_local_resource(path, &reference.object_key, max_bytes).unwrap_or(false)
+                v1::verify_local_resource(path, &reference.object_key, max_bytes, session_key)
+                    .unwrap_or(false)
             }) {
                 path.clone()
             } else {
-                v1::materialize_resource(store, &reference.object_key, &destination_root, max_bytes)
-                    .map_err(|error| {
-                        format!("failed to materialize {}: {error}", reference.object_key)
-                    })?
-                    .path
+                v1::materialize_resource(
+                    store,
+                    &reference.object_key,
+                    &destination_root,
+                    max_bytes,
+                    session_key,
+                )
+                .map_err(|error| {
+                    format!("failed to materialize {}: {error}", reference.object_key)
+                })?
+                .path
             }
         };
         materialized.push((reference, cache_path.to_string_lossy().to_string()));
@@ -792,6 +804,7 @@ mod tests {
             &"a".repeat(64),
             "remote-image",
             vec![reference.clone()],
+            None,
         )
         .unwrap();
         assert!(changed);
@@ -807,6 +820,7 @@ mod tests {
             &"a".repeat(64),
             "remote-image",
             vec![reference.clone()],
+            None,
         )
         .unwrap();
         assert!(!changed);
@@ -821,6 +835,7 @@ mod tests {
             &"a".repeat(64),
             "remote-image",
             vec![reference],
+            None,
         )
         .unwrap();
         assert_eq!(store.gets.load(Ordering::Relaxed), 2);
@@ -909,6 +924,7 @@ mod tests {
                     &remote_scope,
                     "concurrent-image",
                     vec![reference],
+                    None,
                 )
                 .unwrap();
             }));

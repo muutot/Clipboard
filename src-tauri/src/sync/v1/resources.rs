@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File},
-    io::{ErrorKind, Read},
+    io::{ErrorKind, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -10,18 +10,20 @@ use sha2::{Digest, Sha256};
 use super::{
     layout::{parse_resource_key, resource_object_key, ResourceCategory},
     remote::{ObjectMetadata, ObjectStore, PutCondition, PutOutcome},
-    MutationBatch,
+    wire::{resource_header, validate_resource_header, RESOURCE_AUTH_TAG_LEN, RESOURCE_HEADER_LEN},
+    MutationBatch, SessionKey,
 };
 use crate::{domain::ClipboardKind, storage::StoragePaths};
 
 const HASH_BUFFER_BYTES: usize = 256 * 1024;
+const RESOURCE_CHUNK_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceDescriptor {
     pub category: ResourceCategory,
     pub source_path: PathBuf,
     pub object_key: String,
-    pub sha256: String,
+    pub plaintext_sha256: String,
     pub extension: String,
     pub size_bytes: u64,
 }
@@ -37,7 +39,20 @@ pub struct ResourceUploadResult {
 pub struct MaterializedResource {
     pub path: PathBuf,
     pub size_bytes: u64,
+    pub transferred_bytes: u64,
     pub reused_local_file: bool,
+}
+
+struct EncryptedResourceTemp {
+    path: PathBuf,
+    sha256: String,
+    size_bytes: u64,
+}
+
+impl Drop for EncryptedResourceTemp {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +84,7 @@ pub fn fingerprint_resource(
     source_path: &Path,
     category: ResourceCategory,
     max_bytes: u64,
+    session_key: Option<&SessionKey>,
 ) -> Result<ResourceDescriptor, String> {
     let canonical_root = fs::canonicalize(managed_root)
         .map_err(|error| format!("failed to resolve managed resource root: {error}"))?;
@@ -86,14 +102,15 @@ pub fn fingerprint_resource(
         .strip_prefix(&canonical_root)
         .map_err(|_| "managed resource is outside its configured root".to_string())?;
 
-    let (sha256, size_bytes) = hash_regular_file(&canonical_source, max_bytes)?;
+    let (plaintext_sha256, size_bytes) = hash_regular_file(&canonical_source, max_bytes)?;
     let extension = portable_extension(&canonical_source);
-    let object_key = resource_object_key(category, &sha256, &extension)?;
+    let object_digest = resource_object_digest(&plaintext_sha256, session_key)?;
+    let object_key = resource_object_key(category, &object_digest, &extension)?;
     Ok(ResourceDescriptor {
         category,
         source_path: canonical_source,
         object_key,
-        sha256,
+        plaintext_sha256,
         extension,
         size_bytes,
     })
@@ -104,21 +121,42 @@ pub fn fingerprint_resource(
 pub fn ensure_resource_uploaded(
     store: &impl ObjectStore,
     resource: &ResourceDescriptor,
+    session_key: Option<&SessionKey>,
 ) -> Result<ResourceUploadResult, String> {
+    let stored_size_bytes = resource_stored_size(resource.size_bytes, session_key.is_some())?;
     if let Some(metadata) = store.head(&resource.object_key)? {
-        validate_remote_size(&resource.object_key, resource.size_bytes, &metadata)?;
+        validate_remote_size(&resource.object_key, stored_size_bytes, &metadata)?;
         return Ok(ResourceUploadResult {
             object_key: resource.object_key.clone(),
-            size_bytes: resource.size_bytes,
+            size_bytes: stored_size_bytes,
             uploaded: false,
         });
     }
 
+    let encrypted_upload = session_key
+        .map(|key| encrypt_resource_to_temp(resource, key))
+        .transpose()?;
+    let (upload_path, upload_sha256, upload_size) = encrypted_upload.as_ref().map_or_else(
+        || {
+            (
+                resource.source_path.as_path(),
+                resource.plaintext_sha256.as_str(),
+                resource.size_bytes,
+            )
+        },
+        |upload| {
+            (
+                upload.path.as_path(),
+                upload.sha256.as_str(),
+                upload.size_bytes,
+            )
+        },
+    );
     let uploaded = match store.put_file(
         &resource.object_key,
-        &resource.source_path,
-        &resource.sha256,
-        resource.size_bytes,
+        upload_path,
+        upload_sha256,
+        upload_size,
         PutCondition::IfAbsent,
     )? {
         PutOutcome::Stored { .. } => true,
@@ -129,14 +167,14 @@ pub fn ensure_resource_uploaded(
                     resource.object_key
                 )
             })?;
-            validate_remote_size(&resource.object_key, resource.size_bytes, &metadata)?;
+            validate_remote_size(&resource.object_key, stored_size_bytes, &metadata)?;
             false
         }
     };
 
     Ok(ResourceUploadResult {
         object_key: resource.object_key.clone(),
-        size_bytes: resource.size_bytes,
+        size_bytes: stored_size_bytes,
         uploaded,
     })
 }
@@ -149,6 +187,7 @@ pub fn materialize_resource(
     object_key: &str,
     destination_root: &Path,
     max_bytes: u64,
+    session_key: Option<&SessionKey>,
 ) -> Result<MaterializedResource, String> {
     let parsed = parse_resource_key(object_key)?;
     let category_root = prepare_destination_root(destination_root)?;
@@ -161,54 +200,78 @@ pub fn materialize_resource(
         }
         if metadata.len() <= max_bytes {
             let (sha256, size_bytes) = hash_regular_file(&final_path, max_bytes)?;
-            if sha256 == parsed.sha256 {
+            if resource_object_digest(&sha256, session_key)? == parsed.sha256 {
                 return Ok(MaterializedResource {
                     path: final_path,
                     size_bytes,
+                    transferred_bytes: 0,
                     reused_local_file: true,
                 });
             }
         }
     }
 
-    let temp_path = category_root.join(format!(
+    let download_path = category_root.join(format!(
         ".download-{}-{:016x}.tmp",
         std::process::id(),
         rand::random::<u64>()
     ));
-    let download = match store.get_to_file(object_key, &temp_path, max_bytes) {
+    let stored_limit = resource_stored_size(max_bytes, session_key.is_some())?;
+    let download = match store.get_to_file(object_key, &download_path, stored_limit) {
         Ok(Some(download)) => download,
         Ok(None) => {
-            let _ = fs::remove_file(&temp_path);
+            let _ = fs::remove_file(&download_path);
             return Err(format!("remote resource {object_key:?} does not exist"));
         }
         Err(error) => {
-            let _ = fs::remove_file(&temp_path);
+            let _ = fs::remove_file(&download_path);
             return Err(error);
         }
     };
-    if download.sha256 != parsed.sha256 {
-        let _ = fs::remove_file(&temp_path);
-        return Err(format!(
-            "remote resource digest mismatch for {object_key:?}: expected {}, got {}",
-            parsed.sha256, download.sha256
+    let (verified_path, plaintext_size) = if let Some(key) = session_key {
+        let plaintext_path = category_root.join(format!(
+            ".plaintext-{}-{:016x}.tmp",
+            std::process::id(),
+            rand::random::<u64>()
         ));
-    }
-    if download.size_bytes > max_bytes {
-        let _ = fs::remove_file(&temp_path);
-        return Err(format!(
-            "remote resource {object_key:?} exceeds the {max_bytes}-byte limit"
-        ));
-    }
+        match decrypt_resource_to_file(&download_path, &plaintext_path, object_key, key, max_bytes)
+        {
+            Ok(size_bytes) => {
+                let _ = fs::remove_file(&download_path);
+                (plaintext_path, size_bytes)
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&download_path);
+                let _ = fs::remove_file(&plaintext_path);
+                return Err(error);
+            }
+        }
+    } else {
+        if download.sha256 != parsed.sha256 {
+            let _ = fs::remove_file(&download_path);
+            return Err(format!(
+                "remote resource digest mismatch for {object_key:?}: expected {}, got {}",
+                parsed.sha256, download.sha256
+            ));
+        }
+        if download.size_bytes > max_bytes {
+            let _ = fs::remove_file(&download_path);
+            return Err(format!(
+                "remote resource {object_key:?} exceeds the {max_bytes}-byte limit"
+            ));
+        }
+        (download_path, download.size_bytes)
+    };
 
-    if let Err(error) = publish_verified_file(&temp_path, &final_path) {
-        let _ = fs::remove_file(&temp_path);
+    if let Err(error) = publish_verified_file(&verified_path, &final_path) {
+        let _ = fs::remove_file(&verified_path);
         return Err(error);
     }
 
     Ok(MaterializedResource {
         path: final_path,
-        size_bytes: download.size_bytes,
+        size_bytes: plaintext_size,
+        transferred_bytes: download.size_bytes,
         reused_local_file: false,
     })
 }
@@ -221,6 +284,7 @@ pub fn verify_local_resource(
     path: &Path,
     object_key: &str,
     max_bytes: u64,
+    session_key: Option<&SessionKey>,
 ) -> Result<bool, String> {
     let parsed = parse_resource_key(object_key)?;
     let metadata = match symlink_metadata_if_exists(path)? {
@@ -231,7 +295,7 @@ pub fn verify_local_resource(
         return Ok(false);
     }
     let (sha256, _) = hash_regular_file(path, max_bytes)?;
-    Ok(sha256 == parsed.sha256)
+    Ok(resource_object_digest(&sha256, session_key)? == parsed.sha256)
 }
 
 /// Rewrites local managed paths in a mutation batch to canonical v1 resource
@@ -244,6 +308,7 @@ pub fn prepare_mutation_resources(
     mutations: &mut MutationBatch,
     paths: &StoragePaths,
     limits: ResourceLimits,
+    session_key: Option<&SessionKey>,
 ) -> Result<ResourceTransferStats, String> {
     let mut descriptors = BTreeMap::<String, ResourceDescriptor>::new();
     let mut skipped_resources = 0u64;
@@ -261,6 +326,7 @@ pub fn prepare_mutation_resources(
                     &mut descriptors,
                     &mut path_map,
                     &mut skipped_resources,
+                    session_key,
                 );
                 item.preview_path = None;
             }
@@ -273,6 +339,7 @@ pub fn prepare_mutation_resources(
                     &mut descriptors,
                     &mut path_map,
                     &mut skipped_resources,
+                    session_key,
                 );
                 if let Some(json) = item.text_content.as_deref() {
                     if let Ok(local_paths) = serde_json::from_str::<Vec<String>>(json) {
@@ -287,6 +354,7 @@ pub fn prepare_mutation_resources(
                                     &mut descriptors,
                                     &mut path_map,
                                     &mut skipped_resources,
+                                    session_key,
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -307,6 +375,7 @@ pub fn prepare_mutation_resources(
             &mut descriptors,
             &mut path_map,
             &mut skipped_resources,
+            session_key,
         );
         rewrite_metadata_paths(item.metadata_json.as_mut(), &path_map, true)?;
         remove_preview_metadata(item.metadata_json.as_mut())?;
@@ -318,7 +387,7 @@ pub fn prepare_mutation_resources(
         ..ResourceTransferStats::default()
     };
     for descriptor in descriptors.values() {
-        let result = ensure_resource_uploaded(store, descriptor)?;
+        let result = ensure_resource_uploaded(store, descriptor, session_key)?;
         if result.uploaded {
             stats.transferred_resources += 1;
             stats.transferred_bytes = stats
@@ -338,6 +407,7 @@ pub fn materialize_mutation_resources(
     mutations: &mut MutationBatch,
     paths: &StoragePaths,
     limits: ResourceLimits,
+    session_key: Option<&SessionKey>,
 ) -> Result<ResourceTransferStats, String> {
     let mut materialized = BTreeMap::<String, String>::new();
     let mut stats = ResourceTransferStats::default();
@@ -355,6 +425,7 @@ pub fn materialize_mutation_resources(
                     false,
                     &mut materialized,
                     &mut stats,
+                    session_key,
                 )?;
                 item.preview_path = None;
             }
@@ -368,6 +439,7 @@ pub fn materialize_mutation_resources(
                     false,
                     &mut materialized,
                     &mut stats,
+                    session_key,
                 )?;
                 if let Some(json) = item.text_content.as_deref() {
                     if let Ok(portable_paths) = serde_json::from_str::<Vec<String>>(json) {
@@ -383,6 +455,7 @@ pub fn materialize_mutation_resources(
                                     false,
                                     &mut materialized,
                                     &mut stats,
+                                    session_key,
                                 )?
                                 .ok_or_else(|| {
                                     "portable file path unexpectedly disappeared".to_string()
@@ -408,6 +481,7 @@ pub fn materialize_mutation_resources(
             true,
             &mut materialized,
             &mut stats,
+            session_key,
         )?;
         rewrite_metadata_paths(
             item.metadata_json.as_mut(),
@@ -646,6 +720,7 @@ fn take_portable_resource(
     Ok(Some(value))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn rewrite_outgoing_path(
     value: Option<&str>,
     managed_root: &Path,
@@ -654,6 +729,7 @@ fn rewrite_outgoing_path(
     descriptors: &mut BTreeMap<String, ResourceDescriptor>,
     path_map: &mut BTreeMap<String, Option<String>>,
     skipped_resources: &mut u64,
+    session_key: Option<&SessionKey>,
 ) -> Option<String> {
     let value = value?.to_string();
     if let Some(existing) = path_map.get(&value) {
@@ -668,7 +744,13 @@ fn rewrite_outgoing_path(
         path_map.insert(value, None);
         return None;
     }
-    let descriptor = fingerprint_resource(managed_root, Path::new(&value), category, max_bytes);
+    let descriptor = fingerprint_resource(
+        managed_root,
+        Path::new(&value),
+        category,
+        max_bytes,
+        session_key,
+    );
     match descriptor {
         Ok(descriptor) => {
             let object_key = descriptor.object_key.clone();
@@ -691,6 +773,7 @@ fn rewrite_outgoing_icon(
     descriptors: &mut BTreeMap<String, ResourceDescriptor>,
     path_map: &mut BTreeMap<String, Option<String>>,
     skipped_resources: &mut u64,
+    session_key: Option<&SessionKey>,
 ) -> Option<String> {
     let value = value?;
     if let Ok(parsed) = parse_resource_key(value) {
@@ -720,6 +803,7 @@ fn rewrite_outgoing_icon(
         descriptors,
         path_map,
         skipped_resources,
+        session_key,
     )
 }
 
@@ -733,6 +817,7 @@ fn rewrite_incoming_path(
     bare_file_name: bool,
     materialized: &mut BTreeMap<String, String>,
     stats: &mut ResourceTransferStats,
+    session_key: Option<&SessionKey>,
 ) -> Result<Option<String>, String> {
     let Some(value) = value else {
         return Ok(None);
@@ -756,13 +841,13 @@ fn rewrite_incoming_path(
         ));
     }
     let (destination_root, max_bytes) = resource_destination(paths, parsed.category, limits);
-    let result = materialize_resource(store, value, &destination_root, max_bytes)?;
+    let result = materialize_resource(store, value, &destination_root, max_bytes, session_key)?;
     let local = result.path.to_string_lossy().to_string();
     if !result.reused_local_file {
         stats.transferred_resources += 1;
         stats.transferred_bytes = stats
             .transferred_bytes
-            .checked_add(result.size_bytes)
+            .checked_add(result.transferred_bytes)
             .ok_or_else(|| "downloaded resource byte count overflowed".to_string())?;
     }
     materialized.insert(value.to_string(), local.clone());
@@ -904,6 +989,191 @@ fn validate_remote_size(
         ));
     }
     Ok(())
+}
+
+fn resource_object_digest(
+    plaintext_sha256: &str,
+    session_key: Option<&SessionKey>,
+) -> Result<String, String> {
+    let digest = hex::decode(plaintext_sha256)
+        .map_err(|error| format!("resource SHA-256 is not hexadecimal: {error}"))?;
+    let digest: [u8; 32] = digest
+        .try_into()
+        .map_err(|_| "resource SHA-256 must contain 32 bytes".to_string())?;
+    Ok(session_key.map_or_else(
+        || plaintext_sha256.to_string(),
+        |key| key.resource_digest(&digest),
+    ))
+}
+
+fn resource_stored_size(plaintext_size: u64, encrypted: bool) -> Result<u64, String> {
+    if !encrypted {
+        return Ok(plaintext_size);
+    }
+    let chunk_size = RESOURCE_CHUNK_BYTES as u64;
+    let chunks = plaintext_size
+        .checked_add(chunk_size.saturating_sub(1))
+        .ok_or_else(|| "resource chunk count overflowed".to_string())?
+        / chunk_size;
+    (RESOURCE_HEADER_LEN as u64)
+        .checked_add(plaintext_size)
+        .and_then(|size| size.checked_add(chunks.saturating_mul(RESOURCE_AUTH_TAG_LEN as u64)))
+        .ok_or_else(|| "encrypted resource size overflowed".to_string())
+}
+
+fn encrypt_resource_to_temp(
+    resource: &ResourceDescriptor,
+    session_key: &SessionKey,
+) -> Result<EncryptedResourceTemp, String> {
+    let temp_path = std::env::temp_dir().join(format!(
+        ".sync-encrypted-{}-{:016x}.tmp",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    let result = (|| {
+        let mut source = File::open(&resource.source_path)
+            .map_err(|error| format!("failed to open resource for encryption: {error}"))?;
+        let metadata = source
+            .metadata()
+            .map_err(|error| format!("failed to inspect resource for encryption: {error}"))?;
+        if !metadata.is_file() || metadata.len() != resource.size_bytes {
+            return Err("resource changed after fingerprinting".to_string());
+        }
+        let mut destination = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|error| format!("failed to create encrypted resource: {error}"))?;
+        let header = resource_header(resource.size_bytes)?;
+        destination
+            .write_all(&header)
+            .map_err(|error| format!("failed to write encrypted resource header: {error}"))?;
+        let mut stored_hasher = Sha256::new();
+        stored_hasher.update(header);
+        let mut plaintext_hasher = Sha256::new();
+        let mut plaintext_size = 0u64;
+        let mut chunk_index = 0u64;
+        let mut buffer = vec![0u8; RESOURCE_CHUNK_BYTES];
+        loop {
+            let read = source
+                .read(&mut buffer)
+                .map_err(|error| format!("failed to read resource for encryption: {error}"))?;
+            if read == 0 {
+                break;
+            }
+            plaintext_size = plaintext_size
+                .checked_add(read as u64)
+                .ok_or_else(|| "resource plaintext size overflowed".to_string())?;
+            if plaintext_size > resource.size_bytes {
+                return Err("resource grew while it was encrypted".to_string());
+            }
+            plaintext_hasher.update(&buffer[..read]);
+            let encrypted = session_key.encrypt_resource_chunk(
+                &header,
+                &resource.object_key,
+                chunk_index,
+                &buffer[..read],
+            )?;
+            destination
+                .write_all(&encrypted)
+                .map_err(|error| format!("failed to write encrypted resource: {error}"))?;
+            stored_hasher.update(&encrypted);
+            chunk_index = chunk_index
+                .checked_add(1)
+                .ok_or_else(|| "resource chunk index overflowed".to_string())?;
+        }
+        destination
+            .flush()
+            .map_err(|error| format!("failed to flush encrypted resource: {error}"))?;
+        if plaintext_size != resource.size_bytes
+            || hex::encode(plaintext_hasher.finalize()) != resource.plaintext_sha256
+        {
+            return Err("resource changed while it was encrypted".to_string());
+        }
+        let size_bytes = resource_stored_size(resource.size_bytes, true)?;
+        let actual_size = destination
+            .metadata()
+            .map_err(|error| format!("failed to inspect encrypted resource: {error}"))?
+            .len();
+        if actual_size != size_bytes {
+            return Err("encrypted resource size does not match its format".to_string());
+        }
+        Ok(EncryptedResourceTemp {
+            path: temp_path.clone(),
+            sha256: hex::encode(stored_hasher.finalize()),
+            size_bytes,
+        })
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result
+}
+
+fn decrypt_resource_to_file(
+    encrypted_path: &Path,
+    plaintext_path: &Path,
+    object_key: &str,
+    session_key: &SessionKey,
+    max_bytes: u64,
+) -> Result<u64, String> {
+    let parsed = parse_resource_key(object_key)?;
+    let mut source = File::open(encrypted_path)
+        .map_err(|error| format!("failed to open encrypted resource: {error}"))?;
+    let source_size = source
+        .metadata()
+        .map_err(|error| format!("failed to inspect encrypted resource: {error}"))?
+        .len();
+    let mut header = [0u8; RESOURCE_HEADER_LEN];
+    source
+        .read_exact(&mut header)
+        .map_err(|error| format!("failed to read encrypted resource header: {error}"))?;
+    let plaintext_size = validate_resource_header(&header)?;
+    if plaintext_size > max_bytes {
+        return Err(format!(
+            "remote resource {object_key:?} exceeds the {max_bytes}-byte limit"
+        ));
+    }
+    if source_size != resource_stored_size(plaintext_size, true)? {
+        return Err("encrypted resource size does not match its header".to_string());
+    }
+
+    let mut destination = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(plaintext_path)
+        .map_err(|error| format!("failed to create decrypted resource: {error}"))?;
+    let mut plaintext_hasher = Sha256::new();
+    let mut remaining = plaintext_size;
+    let mut chunk_index = 0u64;
+    while remaining > 0 {
+        let chunk_plaintext_size = remaining.min(RESOURCE_CHUNK_BYTES as u64) as usize;
+        let mut ciphertext = vec![0u8; chunk_plaintext_size + RESOURCE_AUTH_TAG_LEN];
+        source
+            .read_exact(&mut ciphertext)
+            .map_err(|error| format!("failed to read encrypted resource chunk: {error}"))?;
+        let plaintext =
+            session_key.decrypt_resource_chunk(&header, object_key, chunk_index, &ciphertext)?;
+        if plaintext.len() != chunk_plaintext_size {
+            return Err("decrypted resource chunk has an invalid size".to_string());
+        }
+        destination
+            .write_all(&plaintext)
+            .map_err(|error| format!("failed to write decrypted resource: {error}"))?;
+        plaintext_hasher.update(&plaintext);
+        remaining -= chunk_plaintext_size as u64;
+        chunk_index = chunk_index
+            .checked_add(1)
+            .ok_or_else(|| "resource chunk index overflowed".to_string())?;
+    }
+    destination
+        .flush()
+        .map_err(|error| format!("failed to flush decrypted resource: {error}"))?;
+    let plaintext_sha256 = hex::encode(plaintext_hasher.finalize());
+    if resource_object_digest(&plaintext_sha256, Some(session_key))? != parsed.sha256 {
+        return Err("decrypted resource digest does not match its object key".to_string());
+    }
+    Ok(plaintext_size)
 }
 
 fn symlink_metadata_if_exists(path: &Path) -> Result<Option<fs::Metadata>, String> {
@@ -1155,25 +1425,201 @@ mod tests {
         let bytes = vec![0x4d; 2 * 1024 * 1024 + 3];
         fs::write(&source, &bytes).unwrap();
 
-        let resource =
-            fingerprint_resource(&managed, &source, ResourceCategory::File, 3 * 1024 * 1024)
-                .unwrap();
+        let resource = fingerprint_resource(
+            &managed,
+            &source,
+            ResourceCategory::File,
+            3 * 1024 * 1024,
+            None,
+        )
+        .unwrap();
         assert_eq!(resource.extension, "data");
         assert_eq!(resource.size_bytes, bytes.len() as u64);
 
         let store = MemoryStore::default();
         assert!(
-            ensure_resource_uploaded(&store, &resource)
+            ensure_resource_uploaded(&store, &resource, None)
                 .unwrap()
                 .uploaded
         );
         assert!(
-            !ensure_resource_uploaded(&store, &resource)
+            !ensure_resource_uploaded(&store, &resource, None)
                 .unwrap()
                 .uploaded
         );
         assert_eq!(store.file_puts.get(), 1);
         assert_eq!(store.objects.borrow().len(), 1);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn encrypted_resources_are_deterministic_private_and_password_scoped() {
+        let root = temporary_directory("encrypted-upload");
+        let managed = root.join("managed");
+        fs::create_dir_all(&managed).unwrap();
+        let source = managed.join("private.bin");
+        let plaintext = b"clipboard secret body".repeat(96 * 1024);
+        fs::write(&source, &plaintext).unwrap();
+        let first_key = SessionKey::derive("password", "scope-a").unwrap();
+        let same_key = SessionKey::derive("password", "scope-a").unwrap();
+        let other_key = SessionKey::derive("different", "scope-a").unwrap();
+
+        let first = fingerprint_resource(
+            &managed,
+            &source,
+            ResourceCategory::File,
+            plaintext.len() as u64,
+            Some(&first_key),
+        )
+        .unwrap();
+        let same = fingerprint_resource(
+            &managed,
+            &source,
+            ResourceCategory::File,
+            plaintext.len() as u64,
+            Some(&same_key),
+        )
+        .unwrap();
+        let other = fingerprint_resource(
+            &managed,
+            &source,
+            ResourceCategory::File,
+            plaintext.len() as u64,
+            Some(&other_key),
+        )
+        .unwrap();
+        assert_eq!(first.object_key, same.object_key);
+        assert_ne!(first.object_key, other.object_key);
+
+        let store = MemoryStore::default();
+        let uploaded = ensure_resource_uploaded(&store, &first, Some(&first_key)).unwrap();
+        assert!(uploaded.uploaded);
+        let stored = store
+            .objects
+            .borrow()
+            .get(&first.object_key)
+            .cloned()
+            .unwrap();
+        assert_eq!(stored.len() as u64, uploaded.size_bytes);
+        assert_ne!(stored, plaintext);
+        assert!(!stored
+            .windows(b"clipboard secret body".len())
+            .any(|window| window == b"clipboard secret body"));
+
+        let retry_store = MemoryStore::default();
+        ensure_resource_uploaded(&retry_store, &same, Some(&same_key)).unwrap();
+        assert_eq!(
+            retry_store.objects.borrow().get(&same.object_key),
+            Some(&stored)
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn encrypted_resource_round_trip_rejects_wrong_password_and_corruption() {
+        let root = temporary_directory("encrypted-round-trip");
+        let managed = root.join("managed");
+        let cache = root.join("cache");
+        let wrong_cache = root.join("wrong-cache");
+        let corrupt_cache = root.join("corrupt-cache");
+        fs::create_dir_all(&managed).unwrap();
+        let source = managed.join("private.bin");
+        let plaintext = b"authenticated remote resource".repeat(80 * 1024);
+        fs::write(&source, &plaintext).unwrap();
+        let key = SessionKey::derive("password", "scope-a").unwrap();
+        let wrong = SessionKey::derive("wrong", "scope-a").unwrap();
+        let descriptor = fingerprint_resource(
+            &managed,
+            &source,
+            ResourceCategory::Image,
+            plaintext.len() as u64,
+            Some(&key),
+        )
+        .unwrap();
+        let store = MemoryStore::default();
+        ensure_resource_uploaded(&store, &descriptor, Some(&key)).unwrap();
+
+        let materialized = materialize_resource(
+            &store,
+            &descriptor.object_key,
+            &cache,
+            plaintext.len() as u64,
+            Some(&key),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&materialized.path).unwrap(), plaintext);
+        assert!(verify_local_resource(
+            &materialized.path,
+            &descriptor.object_key,
+            plaintext.len() as u64,
+            Some(&key),
+        )
+        .unwrap());
+        assert!(!verify_local_resource(
+            &materialized.path,
+            &descriptor.object_key,
+            plaintext.len() as u64,
+            Some(&wrong),
+        )
+        .unwrap());
+
+        assert!(materialize_resource(
+            &store,
+            &descriptor.object_key,
+            &wrong_cache,
+            plaintext.len() as u64,
+            Some(&wrong),
+        )
+        .is_err());
+        assert!(fs::read_dir(&wrong_cache).unwrap().next().is_none());
+
+        let corrupt_store = MemoryStore::default();
+        let mut corrupted = store
+            .objects
+            .borrow()
+            .get(&descriptor.object_key)
+            .cloned()
+            .unwrap();
+        let middle = corrupted.len() / 2;
+        corrupted[middle] ^= 0x80;
+        corrupt_store
+            .objects
+            .borrow_mut()
+            .insert(descriptor.object_key.clone(), corrupted);
+        assert!(materialize_resource(
+            &corrupt_store,
+            &descriptor.object_key,
+            &corrupt_cache,
+            plaintext.len() as u64,
+            Some(&key),
+        )
+        .is_err());
+        assert!(fs::read_dir(&corrupt_cache).unwrap().next().is_none());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn encrypted_empty_resource_round_trips_without_phantom_chunks() {
+        let root = temporary_directory("encrypted-empty");
+        let managed = root.join("managed");
+        let cache = root.join("cache");
+        fs::create_dir_all(&managed).unwrap();
+        let source = managed.join("empty.bin");
+        fs::write(&source, []).unwrap();
+        let key = SessionKey::derive("password", "scope-a").unwrap();
+        let descriptor =
+            fingerprint_resource(&managed, &source, ResourceCategory::File, 0, Some(&key)).unwrap();
+        let store = MemoryStore::default();
+        let uploaded = ensure_resource_uploaded(&store, &descriptor, Some(&key)).unwrap();
+        assert_eq!(uploaded.size_bytes, RESOURCE_HEADER_LEN as u64);
+        let materialized =
+            materialize_resource(&store, &descriptor.object_key, &cache, 0, Some(&key)).unwrap();
+        assert_eq!(materialized.size_bytes, 0);
+        assert_eq!(materialized.transferred_bytes, RESOURCE_HEADER_LEN as u64);
+        assert!(fs::read(materialized.path).unwrap().is_empty());
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -1191,21 +1637,22 @@ mod tests {
             .borrow_mut()
             .insert(key.clone(), bytes.clone());
 
-        let first = materialize_resource(&store, &key, &cache, 1024 * 1024).unwrap();
+        let first = materialize_resource(&store, &key, &cache, 1024 * 1024, None).unwrap();
         assert!(!first.reused_local_file);
         assert_eq!(fs::read(&first.path).unwrap(), bytes);
-        let second = materialize_resource(&store, &key, &cache, 1024 * 1024).unwrap();
+        let second = materialize_resource(&store, &key, &cache, 1024 * 1024, None).unwrap();
         assert!(second.reused_local_file);
         assert_eq!(store.file_gets.get(), 1);
 
         fs::write(&first.path, b"corrupt").unwrap();
-        let repaired = materialize_resource(&store, &key, &cache, 1024 * 1024).unwrap();
+        let repaired = materialize_resource(&store, &key, &cache, 1024 * 1024, None).unwrap();
         assert!(!repaired.reused_local_file);
         assert_eq!(fs::read(&repaired.path).unwrap(), bytes);
         assert_eq!(store.file_gets.get(), 2);
 
         fs::write(&first.path, vec![0u8; 2 * 1024 * 1024]).unwrap();
-        let repaired_oversized = materialize_resource(&store, &key, &cache, 1024 * 1024).unwrap();
+        let repaired_oversized =
+            materialize_resource(&store, &key, &cache, 1024 * 1024, None).unwrap();
         assert!(!repaired_oversized.reused_local_file);
         assert_eq!(fs::read(&repaired_oversized.path).unwrap(), bytes);
         assert_eq!(store.file_gets.get(), 3);
@@ -1225,12 +1672,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(verify_local_resource(&path, &key, 1024).unwrap());
+        assert!(verify_local_resource(&path, &key, 1024, None).unwrap());
         fs::write(&path, b"corrupt").unwrap();
-        assert!(!verify_local_resource(&path, &key, 1024).unwrap());
-        assert!(!verify_local_resource(&path, &key, 3).unwrap());
+        assert!(!verify_local_resource(&path, &key, 1024, None).unwrap());
+        assert!(!verify_local_resource(&path, &key, 3, None).unwrap());
         fs::remove_file(&path).unwrap();
-        assert!(!verify_local_resource(&path, &key, 1024).unwrap());
+        assert!(!verify_local_resource(&path, &key, 1024, None).unwrap());
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -1242,11 +1689,15 @@ mod tests {
         fs::create_dir_all(&managed).unwrap();
         let outside = root.join("outside.bin");
         fs::write(&outside, vec![0u8; 32]).unwrap();
-        assert!(fingerprint_resource(&managed, &outside, ResourceCategory::File, 1024).is_err());
+        assert!(
+            fingerprint_resource(&managed, &outside, ResourceCategory::File, 1024, None).is_err()
+        );
 
         let oversized = managed.join("oversized.bin");
         fs::write(&oversized, vec![0u8; 2048]).unwrap();
-        assert!(fingerprint_resource(&managed, &oversized, ResourceCategory::File, 1024).is_err());
+        assert!(
+            fingerprint_resource(&managed, &oversized, ResourceCategory::File, 1024, None).is_err()
+        );
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -1264,7 +1715,7 @@ mod tests {
             .borrow_mut()
             .insert(key.clone(), b"corrupt".to_vec());
 
-        assert!(materialize_resource(&store, &key, &cache, 1024).is_err());
+        assert!(materialize_resource(&store, &key, &cache, 1024, None).is_err());
         let parsed = parse_resource_key(&key).unwrap();
         let expected_path = cache.join(format!("sha256-{}.{}", parsed.sha256, parsed.extension));
         assert!(!expected_path.exists());
@@ -1326,7 +1777,7 @@ mod tests {
             tombstones: Vec::new(),
         };
         let uploaded =
-            prepare_mutation_resources(&store, &mut batch, &source_paths, limits).unwrap();
+            prepare_mutation_resources(&store, &mut batch, &source_paths, limits, None).unwrap();
         assert_eq!(uploaded.referenced_resources, 3);
         assert_eq!(uploaded.transferred_resources, 3);
         assert!(batch.upserts.iter().all(|item| {
@@ -1349,7 +1800,8 @@ mod tests {
             .starts_with("v1/resources/icon/"));
 
         let downloaded =
-            materialize_mutation_resources(&store, &mut batch, &target_paths, limits).unwrap();
+            materialize_mutation_resources(&store, &mut batch, &target_paths, limits, None)
+                .unwrap();
         assert_eq!(downloaded.referenced_resources, 3);
         assert_eq!(downloaded.transferred_resources, 3);
         assert!(batch.upserts[0].item.preview_path.is_none());
