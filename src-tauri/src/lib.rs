@@ -359,6 +359,7 @@ pub fn run() {
                 config.max_file_copy_size_bytes(),
                 config.max_text_capture_bytes(),
             );
+            capture_state.set_capture_sensitive_sources(config.privacy_capture_sensitive_sources());
             app.manage(capture_state.clone());
 
             let self_trigger_guard = Arc::new(Mutex::new(self_trigger::SelfTriggerGuard::new()));
@@ -601,6 +602,8 @@ pub fn run() {
             check_sensitive_content,
             check_password_manager,
             get_privacy_status,
+            get_privacy_settings,
+            set_privacy_settings,
             check_for_update,
             get_release,
             export_clipboard_items,

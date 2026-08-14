@@ -199,6 +199,57 @@ impl ConfigStore {
         self.save()
     }
 
+    /// When local-only mode is on, the app must not make outbound network
+    /// requests on its own (update checks and similar background calls).
+    pub fn privacy_local_only(&self) -> bool {
+        self.config.privacy.local_only
+    }
+
+    pub fn set_privacy_local_only(&mut self, value: bool) -> Result<(), StorageError> {
+        self.config.privacy.local_only = value;
+        self.save()
+    }
+
+    /// When true, content copied from password managers and other sensitive
+    /// source apps is still recorded. Explicitly ignored applications keep
+    /// being skipped either way.
+    pub fn privacy_capture_sensitive_sources(&self) -> bool {
+        self.config.privacy.capture_sensitive_sources
+    }
+
+    pub fn set_privacy_capture_sensitive_sources(
+        &mut self,
+        value: bool,
+    ) -> Result<(), StorageError> {
+        self.config.privacy.capture_sensitive_sources = value;
+        self.save()
+    }
+
+    pub fn sensitive_patterns(&self) -> &[String] {
+        &self.config.privacy.sensitive_patterns
+    }
+
+    /// Persists the sensitive-content pattern list after trimming blanks and
+    /// dropping duplicates (first occurrence wins). Invalid regexes are kept
+    /// as-is here; callers validate before persisting.
+    pub fn set_sensitive_patterns(
+        &mut self,
+        patterns: Vec<String>,
+    ) -> Result<Vec<String>, StorageError> {
+        let mut normalized: Vec<String> = Vec::new();
+        for pattern in patterns {
+            let pattern = pattern.trim();
+            if pattern.is_empty() || normalized.iter().any(|existing| existing == pattern) {
+                continue;
+            }
+            normalized.push(pattern.to_owned());
+        }
+
+        self.config.privacy.sensitive_patterns = normalized.clone();
+        self.save()?;
+        Ok(normalized)
+    }
+
     pub fn schedule_auto_export(&self) -> Option<&str> {
         self.config.export.schedule_auto_export.as_deref()
     }

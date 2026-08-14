@@ -117,6 +117,33 @@ mod capture_tests {
     }
 
     #[test]
+    fn capture_sensitive_sources_allows_password_managers_but_not_ignored_apps() {
+        let state = capture_state();
+
+        state.set_capture_sensitive_sources(true);
+        assert!(!state.should_skip(Some("1Password"), None));
+        assert!(!state.should_skip(Some("KeePass"), None));
+        // The explicit ignore list still wins.
+        assert!(state.should_skip(Some("ignoredapp.exe"), None));
+        // Sensitive content patterns are unaffected by the flag.
+        assert!(state.should_skip(Some("Notepad"), Some("password=supersecret123")));
+
+        state.set_capture_sensitive_sources(false);
+        assert!(state.should_skip(Some("1Password"), None));
+    }
+
+    #[test]
+    fn sensitive_pattern_updates_apply_without_worker_restart() {
+        let state = capture_state();
+        assert!(state.should_skip(Some("Notepad"), Some("secret=hunter2")));
+
+        state.set_sensitive_patterns(vec![regex_lite::Regex::new("internal-id-\\d+").unwrap()]);
+
+        assert!(!state.should_skip(Some("Notepad"), Some("secret=hunter2")));
+        assert!(state.should_skip(Some("Notepad"), Some("internal-id-42")));
+    }
+
+    #[test]
     fn ignored_application_updates_are_deduplicated_and_immediately_visible() {
         let state = capture_state();
         let stored = state.set_ignored_apps(vec![
@@ -363,7 +390,13 @@ mod capture_tests {
         privacy.sensitive_patterns = vec![regex_lite::Regex::new("secret").unwrap()];
         let state = CaptureState::new(&privacy, Vec::new(), 100 * 1024 * 1024, 500_000);
 
-        assert_eq!(state.policy.sensitive_patterns.len(), 1);
+        let pattern_count = state
+            .policy
+            .sensitive_patterns
+            .read()
+            .map(|patterns| patterns.len())
+            .unwrap_or(0);
+        assert_eq!(pattern_count, 1);
         assert!(state.should_skip(Some("Notepad"), Some("a secret value")));
         assert!(!state.should_skip(Some("Notepad"), Some("ordinary text")));
     }

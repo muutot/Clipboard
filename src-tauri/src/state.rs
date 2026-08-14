@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -12,6 +12,7 @@ use crate::privacy::PrivacyManager;
 #[derive(Clone)]
 pub struct CaptureState {
     pub paused: Arc<AtomicBool>,
+    pub(crate) capture_sensitive_sources: Arc<AtomicBool>,
     pub(crate) max_file_copy_size_bytes: Arc<AtomicU64>,
     pub(crate) max_text_capture_bytes: Arc<AtomicU64>,
     pub(crate) ignored_apps: Arc<Mutex<Vec<String>>>,
@@ -22,7 +23,7 @@ pub struct CaptureState {
 
 #[derive(Clone)]
 pub struct CapturePolicy {
-    pub sensitive_patterns: Arc<Vec<regex_lite::Regex>>,
+    pub sensitive_patterns: Arc<RwLock<Vec<regex_lite::Regex>>>,
     pub password_manager_apps: Arc<Vec<String>>,
 }
 
@@ -46,11 +47,12 @@ impl CaptureState {
         let sensitive_patterns = privacy.sensitive_patterns.clone();
         Self {
             paused: Arc::new(AtomicBool::new(privacy.is_paused())),
+            capture_sensitive_sources: Arc::new(AtomicBool::new(false)),
             max_file_copy_size_bytes: Arc::new(AtomicU64::new(max_file_copy_size_bytes)),
             max_text_capture_bytes: Arc::new(AtomicU64::new(max_text_capture_bytes)),
             ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
             policy: Arc::new(CapturePolicy {
-                sensitive_patterns: Arc::new(sensitive_patterns),
+                sensitive_patterns: Arc::new(RwLock::new(sensitive_patterns)),
                 password_manager_apps: Arc::new(privacy.password_manager_apps.clone()),
             }),
             ingestion_guard: Arc::new(Mutex::new(())),
@@ -64,6 +66,24 @@ impl CaptureState {
 
     pub(crate) fn is_paused(&self) -> bool {
         self.paused.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn set_capture_sensitive_sources(&self, value: bool) {
+        self.capture_sensitive_sources
+            .store(value, Ordering::SeqCst);
+    }
+
+    pub(crate) fn capture_sensitive_sources(&self) -> bool {
+        self.capture_sensitive_sources.load(Ordering::SeqCst)
+    }
+
+    /// Swaps the sensitive-content regex list at runtime. The capture thread
+    /// reads the patterns through the same `RwLock`, so the change applies to
+    /// the next clipboard event without a worker restart.
+    pub(crate) fn set_sensitive_patterns(&self, patterns: Vec<regex_lite::Regex>) {
+        if let Ok(mut guard) = self.policy.sensitive_patterns.write() {
+            *guard = patterns;
+        }
     }
 
     pub(crate) fn set_max_file_copy_size_bytes(&self, value: u64) {
@@ -106,7 +126,8 @@ impl CaptureState {
             Ok(apps) => apps,
             Err(poisoned) => poisoned.into_inner(),
         };
-        self.policy.should_skip(&ignored, source_app, text)
+        self.policy
+            .should_skip(&ignored, self.capture_sensitive_sources(), source_app, text)
     }
 
     pub fn install_worker(&self, worker: CaptureWorker) {
@@ -143,19 +164,28 @@ impl CapturePolicy {
     fn should_skip(
         &self,
         ignored_apps: &[String],
+        capture_sensitive_sources: bool,
         source_app: Option<&str>,
         text: Option<&str>,
     ) -> bool {
-        if source_app.is_some_and(|app| {
-            app_matches(app, ignored_apps) || app_matches(app, &self.password_manager_apps)
-        }) {
+        // The user-managed ignore list always wins.
+        if source_app.is_some_and(|app| app_matches(app, ignored_apps)) {
+            return true;
+        }
+
+        // Password managers and similar sensitive sources are skipped unless
+        // the user opted into capturing them.
+        if !capture_sensitive_sources
+            && source_app.is_some_and(|app| app_matches(app, &self.password_manager_apps))
+        {
             return true;
         }
 
         text.is_some_and(|text| {
             self.sensitive_patterns
-                .iter()
-                .any(|pattern| pattern.is_match(text))
+                .read()
+                .map(|patterns| patterns.iter().any(|pattern| pattern.is_match(text)))
+                .unwrap_or(false)
         })
     }
 }

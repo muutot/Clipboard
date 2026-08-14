@@ -134,3 +134,13 @@ pub struct PrivacyStatus {
     password_manager_apps: Vec<String>,
     master_password_hash_set: bool,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivacySettings {
+    pub paused: bool,
+    pub local_only: bool,
+    pub capture_sensitive_sources: bool,
+    pub sensitive_patterns: Vec<String>,
+    pub password_manager_apps: Vec<String>,
+}

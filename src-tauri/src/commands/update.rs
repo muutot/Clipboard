@@ -89,10 +89,13 @@ async fn fetch_release(url: String) -> Result<Release, String> {
 pub async fn check_for_update(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<UpdateInfo, String> {
-    let source = {
+    let (source, local_only) = {
         let guard = config.lock().map_err(|e| format!("config lock: {e}"))?;
-        guard.update_source()
+        (guard.update_source(), guard.privacy_local_only())
     };
+    if local_only {
+        return Err("update check is disabled: local-only mode is on".to_owned());
+    }
     let release = fetch_release(source.latest_api_url()).await?;
 
     let current_version = env!("CARGO_PKG_VERSION").to_owned();
@@ -115,10 +118,13 @@ pub async fn get_release(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     version: String,
 ) -> Result<UpdateInfo, String> {
-    let source = {
+    let (source, local_only) = {
         let guard = config.lock().map_err(|e| format!("config lock: {e}"))?;
-        guard.update_source()
+        (guard.update_source(), guard.privacy_local_only())
     };
+    if local_only {
+        return Err("release notes are unavailable: local-only mode is on".to_owned());
+    }
     let tag = if version.starts_with('v') {
         version
     } else {

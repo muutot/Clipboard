@@ -1,5 +1,17 @@
 use crate::config::ConfigStore;
 
+/// Default sensitive-content regex patterns. Matching content is skipped by
+/// the capture pipeline unless the user overrides the list in settings.
+pub const DEFAULT_SENSITIVE_PATTERNS: &[&str] = &[
+    r"\b\d{3}-\d{2}-\d{4}\b",
+    r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b",
+    r"\bpassword\s*[=:]\s*\S+",
+    r"\bsecret\s*[=:]\s*\S+",
+    r"\bapi[_-]?key\s*[=:]\s*\S+",
+    r"\btoken\s*[=:]\s*\S+",
+    r"-----BEGIN\s+(RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----",
+];
+
 pub struct PrivacyManager {
     pub paused: bool,
     pub sensitive_patterns: Vec<regex_lite::Regex>,
@@ -14,16 +26,7 @@ impl Default for PrivacyManager {
 
 impl PrivacyManager {
     pub fn new() -> Self {
-        let string_patterns: Vec<String> = vec![
-            r"\b\d{3}-\d{2}-\d{4}\b".to_owned(),
-            r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b".to_owned(),
-            r"\bpassword\s*[=:]\s*\S+".to_owned(),
-            r"\bsecret\s*[=:]\s*\S+".to_owned(),
-            r"\bapi[_-]?key\s*[=:]\s*\S+".to_owned(),
-            r"\btoken\s*[=:]\s*\S+".to_owned(),
-            r"-----BEGIN\s+(RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----".to_owned(),
-        ];
-        let sensitive_patterns = string_patterns
+        let sensitive_patterns = DEFAULT_SENSITIVE_PATTERNS
             .iter()
             .filter_map(|p| regex_lite::Regex::new(p).ok())
             .collect();
@@ -64,6 +67,11 @@ impl PrivacyManager {
 
     pub fn sync_with_config(&mut self, config: &ConfigStore) {
         self.paused = config.privacy_paused();
+        self.sensitive_patterns = config
+            .sensitive_patterns()
+            .iter()
+            .filter_map(|pattern| regex_lite::Regex::new(pattern).ok())
+            .collect();
     }
 }
 

@@ -20,7 +20,13 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["history"]["favoritesExempt"], true);
     assert_eq!(saved["history"]["recycleBinDays"], 7);
     assert_eq!(saved["privacy"]["localOnly"], true);
-    assert_eq!(saved["privacy"]["telemetryEnabled"], false);
+    assert_eq!(saved["privacy"]["captureSensitiveSources"], false);
+    assert_eq!(
+        saved["privacy"]["sensitivePatterns"]
+            .as_array()
+            .map(|patterns| patterns.len()),
+        Some(7)
+    );
     assert_eq!(saved["privacy"]["paused"], false);
     assert_eq!(saved["permissions"]["allowNetworkAccess"], false);
     assert_eq!(saved["window"]["launchAtStartup"], false);
@@ -330,6 +336,60 @@ fn persists_privacy_settings() {
     let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
     assert_eq!(saved["privacy"]["paused"], true);
     assert_eq!(saved["privacy"]["masterPasswordHash"], "hash123");
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn persists_privacy_flags_and_sensitive_patterns() {
+    let project = temporary_test_directory("privacy-patterns");
+    let mut store = ConfigStore::load(&project).unwrap();
+
+    assert!(store.privacy_local_only());
+    assert!(!store.privacy_capture_sensitive_sources());
+    assert_eq!(store.sensitive_patterns().len(), 7);
+
+    store.set_privacy_local_only(false).unwrap();
+    store.set_privacy_capture_sensitive_sources(true).unwrap();
+    let stored = store
+        .set_sensitive_patterns(vec![
+            "  \\bpassword\\s*[=:]\\s*\\S+  ".to_owned(),
+            "".to_owned(),
+            "   ".to_owned(),
+            "\\bpassword\\s*[=:]\\s*\\S+".to_owned(),
+            "internal-id-\\d+".to_owned(),
+        ])
+        .unwrap();
+
+    // Trimming, blank dropping and deduplication all apply; order is kept.
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0], r"\bpassword\s*[=:]\s*\S+");
+    assert_eq!(stored[1], r"internal-id-\d+");
+
+    let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+    assert_eq!(saved["privacy"]["localOnly"], false);
+    assert_eq!(saved["privacy"]["captureSensitiveSources"], true);
+    assert_eq!(
+        saved["privacy"]["sensitivePatterns"]
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn legacy_config_with_removed_telemetry_flag_still_loads() {
+    let project = temporary_test_directory("privacy-legacy");
+    let config_directory = project.join("conf");
+    fs::create_dir_all(&config_directory).unwrap();
+    fs::write(
+        config_directory.join("conf.json"),
+        r#"{"privacy":{"telemetryEnabled":true,"localOnly":false}}"#,
+    )
+    .unwrap();
+
+    let store = ConfigStore::load(&project).unwrap();
+    assert!(!store.privacy_local_only());
     fs::remove_dir_all(project).unwrap();
 }
 

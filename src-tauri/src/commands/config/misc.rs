@@ -12,7 +12,7 @@ use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database};
 use crate::{resolve_toggle_hotkeys, CaptureState, TOGGLE_WINDOW_ACTION};
 
-use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacyStatus};
+use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacySettings, PrivacyStatus};
 
 #[tauri::command]
 pub fn get_runtime_info() -> RuntimeInfo {
@@ -84,6 +84,105 @@ pub fn get_privacy_status(
         paused: privacy.is_paused(),
         password_manager_apps: privacy.password_manager_apps.clone(),
         master_password_hash_set: config.privacy_master_password_hash().is_some(),
+    })
+}
+
+#[tauri::command]
+pub fn get_privacy_settings(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+) -> Result<PrivacySettings, String> {
+    let privacy = privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+
+    Ok(PrivacySettings {
+        paused: privacy.is_paused(),
+        local_only: config.privacy_local_only(),
+        capture_sensitive_sources: config.privacy_capture_sensitive_sources(),
+        sensitive_patterns: config.sensitive_patterns().to_vec(),
+        password_manager_apps: privacy.password_manager_apps.clone(),
+    })
+}
+
+#[tauri::command]
+pub fn set_privacy_settings(
+    app: tauri::AppHandle,
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
+    capture: tauri::State<'_, CaptureState>,
+    local_only: Option<bool>,
+    capture_sensitive_sources: Option<bool>,
+    sensitive_patterns: Option<Vec<String>>,
+) -> Result<PrivacySettings, String> {
+    // Validate the pattern list up front so nothing is persisted when one of
+    // the regexes fails to compile.
+    if let Some(patterns) = sensitive_patterns.as_ref() {
+        for pattern in patterns {
+            if let Err(error) = regex_lite::Regex::new(pattern.trim()) {
+                return Err(format!("invalid sensitive pattern {pattern:?}: {error}"));
+            }
+        }
+    }
+
+    let persisted_patterns: Option<Vec<String>> = {
+        let mut config = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        if let Some(value) = local_only {
+            config
+                .set_privacy_local_only(value)
+                .map_err(|error| error.to_string())?;
+        }
+        if let Some(value) = capture_sensitive_sources {
+            config
+                .set_privacy_capture_sensitive_sources(value)
+                .map_err(|error| error.to_string())?;
+        }
+        sensitive_patterns
+            .map(|patterns| {
+                config
+                    .set_sensitive_patterns(patterns)
+                    .map_err(|error| error.to_string())
+            })
+            .transpose()?
+    };
+
+    // Mirror the persisted values into the runtime managers so the running
+    // capture worker picks them up without a restart.
+    if let Some(patterns) = persisted_patterns {
+        let compiled: Vec<regex_lite::Regex> = patterns
+            .iter()
+            .filter_map(|pattern| regex_lite::Regex::new(pattern).ok())
+            .collect();
+        privacy
+            .lock()
+            .map_err(|_| "privacy manager lock is poisoned".to_owned())?
+            .sensitive_patterns = compiled.clone();
+        capture.set_sensitive_patterns(compiled);
+    }
+    if let Some(value) = capture_sensitive_sources {
+        capture.set_capture_sensitive_sources(value);
+    }
+
+    let _ = app.emit("privacy-settings-changed", ());
+
+    let privacy = privacy
+        .lock()
+        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+    let config = config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+
+    Ok(PrivacySettings {
+        paused: privacy.is_paused(),
+        local_only: config.privacy_local_only(),
+        capture_sensitive_sources: config.privacy_capture_sensitive_sources(),
+        sensitive_patterns: config.sensitive_patterns().to_vec(),
+        password_manager_apps: privacy.password_manager_apps.clone(),
     })
 }
 
