@@ -78,6 +78,16 @@ pub fn set_clipboard_item_tags(
 }
 
 #[tauri::command]
+pub fn set_clipboard_item_last_used(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<bool, String> {
+    database
+        .set_last_used(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn list_all_tags(database: tauri::State<'_, Database>) -> Result<Vec<TagInfo>, String> {
     database.list_all_tags().map_err(|error| error.to_string())
 }

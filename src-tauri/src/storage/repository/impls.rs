@@ -331,6 +331,15 @@ impl ClipboardRepository for Database {
         })
     }
 
+    fn set_last_used(&self, id: &str) -> Result<bool, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.execute(
+                "UPDATE clipboard_items SET last_used_at_ms = ?2 WHERE id = ?1",
+                params![id, current_time_ms()],
+            )? > 0)
+        })
+    }
+
     fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
             let existing: Option<Option<String>> = connection

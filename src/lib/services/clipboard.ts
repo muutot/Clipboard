@@ -210,6 +210,14 @@ export async function persistTags(id: string, tags: string[]): Promise<boolean |
   return invoke<boolean>("set_clipboard_item_tags", { id, tags });
 }
 
+/** Records that a record was reused (copied/pasted out from history) so the
+ * optional `LastUsedAt` search sort reflects actual usage. Fire-and-forget. */
+export async function persistLastUsed(id: string): Promise<boolean | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<boolean>("set_clipboard_item_last_used", { id });
+}
+
 export interface TagInfo {
   name: string;
   count: number;

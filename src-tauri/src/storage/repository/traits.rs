@@ -117,6 +117,10 @@ pub trait ClipboardRepository {
         &self,
     ) -> Result<Vec<(String, Option<String>)>, StorageError>;
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError>;
+    /// Record that a record was reused by the user (copied/pasted out from
+    /// history). Updates `last_used_at_ms` without touching the capture time so
+    /// the optional `LastUsedAt` search sort reflects actual usage.
+    fn set_last_used(&self, id: &str) -> Result<bool, StorageError>;
     /// Replace the tag list for a record. Tags are stored inside `metadata_json`
     /// under the `tags` key; an empty list removes the key.
     fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError>;

@@ -48,6 +48,32 @@ fn saves_and_lists_items_by_recency() {
 }
 
 #[test]
+fn set_last_used_records_usage_without_changing_capture_time() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("used", "hash-1", 100))
+        .unwrap();
+    assert_eq!(database.get_item("used").unwrap().unwrap().last_used_at_ms, None);
+
+    // A re-copy bumps created_at_ms but last_used stays independent of capture.
+    let recaptured = text_item("used", "hash-1", 500);
+    database.save_item(&recaptured).unwrap();
+    assert_eq!(database.get_item("used").unwrap().unwrap().created_at_ms, 500);
+    assert_eq!(database.get_item("used").unwrap().unwrap().last_used_at_ms, None);
+
+    let updated = database.set_last_used("used").unwrap();
+    assert!(updated);
+    let loaded = database.get_item("used").unwrap().unwrap();
+    assert!(loaded.last_used_at_ms.is_some());
+    assert!(loaded.last_used_at_ms.unwrap() >= 500);
+    // Capture time must remain untouched by the usage stamp.
+    assert_eq!(loaded.created_at_ms, 500);
+
+    // Unknown ids are a no-op.
+    assert!(!database.set_last_used("missing").unwrap());
+}
+
+#[test]
 fn list_recent_filters_by_tag_and_paginates_matching_records() {
     let database = Database::open_in_memory().unwrap();
     for (id, hash, ts) in [("a", "h-a", 100), ("b", "h-b", 200), ("c", "h-c", 300)] {

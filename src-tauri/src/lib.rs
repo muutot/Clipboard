@@ -577,6 +577,7 @@ pub fn run() {
             list_clipboard_items,
             set_clipboard_item_favorite,
             set_clipboard_item_tags,
+            set_clipboard_item_last_used,
             list_all_tags,
             rename_tag,
             delete_tag,
