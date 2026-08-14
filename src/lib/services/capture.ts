@@ -25,3 +25,37 @@ export async function configureIgnoredApplications(applications: string[]): Prom
 
   return invoke<string[]>("configure_ignored_applications", { applications });
 }
+
+export interface PrivacySettings {
+  paused: boolean;
+  localOnly: boolean;
+  captureSensitiveSources: boolean;
+  sensitivePatterns: string[];
+  passwordManagerApps: string[];
+}
+
+export async function getPrivacySettings(): Promise<PrivacySettings> {
+  if (!isTauriRuntime()) {
+    return {
+      paused: false,
+      localOnly: true,
+      captureSensitiveSources: false,
+      sensitivePatterns: [],
+      passwordManagerApps: [],
+    };
+  }
+
+  return invoke<PrivacySettings>("get_privacy_settings");
+}
+
+export async function setPrivacySettings(settings: {
+  localOnly?: boolean;
+  captureSensitiveSources?: boolean;
+  sensitivePatterns?: string[];
+}): Promise<PrivacySettings> {
+  if (!isTauriRuntime()) {
+    throw new Error("Privacy settings are only available in the desktop app");
+  }
+
+  return invoke<PrivacySettings>("set_privacy_settings", settings);
+}

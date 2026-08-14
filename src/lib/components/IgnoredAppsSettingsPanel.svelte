@@ -5,7 +5,10 @@
   import {
     configureIgnoredApplications,
     getApplicationFilterSettings,
+    getPrivacySettings,
+    setPrivacySettings,
     type ApplicationFilterSettings,
+    type PrivacySettings,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
   import { convertFileSrc } from "@tauri-apps/api/core";
@@ -37,6 +40,10 @@
   let saving = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let privacy = $state<PrivacySettings | null>(null);
+  let patternsText = $state("");
+  let patternsSaving = $state(false);
+  let privacySaving = $state(false);
 
   const ignoredKeys = $derived(
     new Set((settings?.ignoredApplications ?? []).map(normalizeApplication)),
@@ -58,7 +65,66 @@
 
   onMount(() => {
     void loadSettings();
+    void loadPrivacySettings();
   });
+
+  async function loadPrivacySettings() {
+    try {
+      const settings = await getPrivacySettings();
+      privacy = settings;
+      patternsText = settings.sensitivePatterns.join("\n");
+    } catch (error) {
+      console.error("Unable to load privacy settings", error);
+    }
+  }
+
+  async function updatePrivacy(patch: { localOnly?: boolean; captureSensitiveSources?: boolean }) {
+    if (!privacy || privacySaving) return;
+    privacySaving = true;
+    feedback = "";
+    feedbackSuccess = false;
+    try {
+      const updated = await setPrivacySettings(patch);
+      privacy = updated;
+      patternsText = updated.sensitivePatterns.join("\n");
+    } catch (error) {
+      feedback = error instanceof Error ? error.message : String(error);
+    } finally {
+      privacySaving = false;
+    }
+  }
+
+  function toggleCaptureSensitiveSources() {
+    if (!privacy) return;
+    void updatePrivacy({ captureSensitiveSources: !privacy.captureSensitiveSources });
+  }
+
+  function toggleLocalOnly() {
+    if (!privacy) return;
+    void updatePrivacy({ localOnly: !privacy.localOnly });
+  }
+
+  async function savePatterns() {
+    if (!privacy || patternsSaving) return;
+    patternsSaving = true;
+    feedback = "";
+    feedbackSuccess = false;
+    const lines = patternsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    try {
+      const updated = await setPrivacySettings({ sensitivePatterns: lines });
+      privacy = updated;
+      patternsText = updated.sensitivePatterns.join("\n");
+      feedback = _t("capture.sensitivePatternsSaved");
+      feedbackSuccess = true;
+    } catch (error) {
+      feedback = error instanceof Error ? error.message : String(error);
+    } finally {
+      patternsSaving = false;
+    }
+  }
 
   async function loadSettings() {
     loading = true;
@@ -259,6 +325,70 @@
     </section>
 
     <p class="auto-save-note">{_t("capture.configNote")}</p>
+
+    {#if privacy}
+      <section class="privacy-block">
+        <h3>{_t("capture.sensitiveContentTitle")}</h3>
+        <p class="block-desc">{_t("capture.sensitiveContentDescription")}</p>
+
+        <div class="switch-row">
+          <div class="switch-text">
+            <strong>{_t("capture.captureSensitiveSources")}</strong>
+            <p>{_t("capture.captureSensitiveSourcesDescription")}</p>
+          </div>
+          <button
+            type="button"
+            class="toggle-switch"
+            class:active={privacy.captureSensitiveSources}
+            role="switch"
+            aria-checked={privacy.captureSensitiveSources}
+            aria-label={_t("capture.captureSensitiveSources")}
+            disabled={privacySaving}
+            onclick={toggleCaptureSensitiveSources}
+          >
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-text">
+            <strong>{_t("capture.localOnly")}</strong>
+            <p>{_t("capture.localOnlyDescription")}</p>
+          </div>
+          <button
+            type="button"
+            class="toggle-switch"
+            class:active={privacy.localOnly}
+            role="switch"
+            aria-checked={privacy.localOnly}
+            aria-label={_t("capture.localOnly")}
+            disabled={privacySaving}
+            onclick={toggleLocalOnly}
+          >
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+
+        <div class="patterns-editor">
+          <label for="sensitive-patterns">{_t("capture.sensitivePatternsLabel")}</label>
+          <textarea
+            id="sensitive-patterns"
+            class="patterns-textarea"
+            bind:value={patternsText}
+            placeholder={_t("capture.sensitivePatternsPlaceholder")}
+            spellcheck="false"
+            rows="6"></textarea>
+          <div class="patterns-actions">
+            <button
+              type="button"
+              class="patterns-save"
+              disabled={patternsSaving}
+              onclick={savePatterns}>{_t("actions.save")}</button
+            >
+          </div>
+        </div>
+      </section>
+    {/if}
   </div>
 {:else}
   <div class="settings-state">{feedback || _t("capture.captureUnavailable")}</div>
@@ -465,6 +595,134 @@
   }
   .auto-save-note {
     text-align: right;
+  }
+
+  .privacy-block {
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--settings-card-radius, 9px);
+    background: var(--surface-bg);
+  }
+  .privacy-block h3 {
+    margin: 0 0 4px;
+    color: var(--text-primary);
+    font-size: var(--settings-heading-size, 13px);
+  }
+  .block-desc {
+    margin: 0 0 12px;
+    color: var(--text-muted);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+    line-height: 1.5;
+  }
+  .switch-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .switch-text {
+    min-width: 0;
+  }
+  .switch-text strong {
+    color: var(--text-primary);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    font-weight: 600;
+  }
+  .switch-text p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+    line-height: 1.5;
+  }
+  .toggle-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 22px;
+    margin-top: 2px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--input-bg);
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    cursor: pointer;
+    transition: background 140ms ease;
+  }
+  .toggle-switch.active {
+    background: var(--selection-color);
+    box-shadow: inset 0 0 0 1px var(--selection-color);
+  }
+  .toggle-switch:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text-inverse, #fff);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: transform 140ms ease;
+  }
+  .toggle-switch.active .toggle-knob {
+    transform: translateX(16px);
+  }
+  .patterns-editor {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .patterns-editor label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    font-weight: 600;
+  }
+  .patterns-textarea {
+    width: 100%;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-family: var(--font-mono, ui-monospace, "SFMono-Regular", "Menlo", monospace);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    line-height: 1.5;
+    outline: none;
+    transition: border-color 120ms ease;
+  }
+  .patterns-textarea::placeholder {
+    color: var(--placeholder-color);
+  }
+  .patterns-textarea:focus {
+    border-color: var(--text-faint);
+  }
+  .patterns-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+  .patterns-save {
+    padding: 6px 16px;
+    border: 0;
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-inverse, #fff);
+    background: var(--selection-color);
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    transition: opacity 120ms ease;
+  }
+  .patterns-save:disabled {
+    cursor: default;
+    opacity: 0.5;
   }
 
   @media (max-width: 700px) {

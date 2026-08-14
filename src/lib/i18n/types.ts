@@ -488,6 +488,16 @@ export interface LocaleDefinition {
     saved: string;
     configNote: string;
     captureUnavailable: string;
+    sensitiveContentTitle: string;
+    sensitiveContentDescription: string;
+    sensitivePatternsLabel: string;
+    sensitivePatternsPlaceholder: string;
+    sensitivePatternsSaved: string;
+    sensitivePatternsInvalid: string;
+    captureSensitiveSources: string;
+    captureSensitiveSourcesDescription: string;
+    localOnly: string;
+    localOnlyDescription: string;
     pauseTitle: string;
     pauseDescription: string;
     pauseAction: string;
