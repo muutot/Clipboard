@@ -3,7 +3,8 @@ import type { LocaleDefinition } from "../types";
 const en: LocaleDefinition = {
   app: {
     name: "Clipboard",
-    searchPlaceholder: "Awaken old memories, rediscover forgotten snippets",
+    searchPlaceholder:
+      "Awaken old memories, rediscover forgotten snippets (supports today / yesterday / this week / this month)",
     clearSearch: "Clear search",
     recentRecords: "Recent",
     noRecords: "No clipboard records yet",

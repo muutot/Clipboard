@@ -24,7 +24,7 @@ pub fn build_schema() -> (Schema, SearchFields) {
         .set_index_option(IndexRecordOption::WithFreqs);
     let content_options = TextOptions::default().set_indexing_options(content_indexing);
     let content = builder.add_text_field("content", content_options);
-    let created_at_ms = builder.add_i64_field("created_at_ms", FAST | STORED);
+    let created_at_ms = builder.add_i64_field("created_at_ms", FAST | INDEXED | STORED);
     let is_favorite = builder.add_u64_field("is_favorite", INDEXED | FAST | STORED);
     let schema = builder.build();
 

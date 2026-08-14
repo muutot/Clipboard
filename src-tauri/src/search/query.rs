@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use super::date_parser::extract_date_range;
+
 /// A normalized, order-independent search query.
 ///
 /// Every term is required to match. The terms are sorted and deduplicated so
@@ -7,11 +9,13 @@ use std::collections::BTreeSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchQuery {
     terms: Vec<String>,
+    date_range: Option<(i64, i64)>,
 }
 
 impl SearchQuery {
     pub fn parse(input: &str) -> Self {
-        let mut terms = input
+        let (date_range, content) = extract_date_range(input);
+        let mut terms = content
             .split_whitespace()
             .map(str::trim)
             .filter(|term| !term.is_empty())
@@ -21,11 +25,17 @@ impl SearchQuery {
         terms.sort_unstable();
         terms.dedup();
 
-        Self { terms }
+        Self { terms, date_range }
     }
 
     pub fn terms(&self) -> &[String] {
         &self.terms
+    }
+
+    /// Optional `[start_ms, end_ms)` epoch-millisecond range parsed from a
+    /// relative-date phrase in the original query (e.g. `今天`), or `None`.
+    pub fn date_range(&self) -> Option<(i64, i64)> {
+        self.date_range
     }
 
     /// Returns the longest n-grams available in the 1-3 character index for

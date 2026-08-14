@@ -1,4 +1,5 @@
 use std::{
+    ops::Bound,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -9,7 +10,7 @@ use std::{
 use tantivy::{
     collector::TopDocs,
     directory::MmapDirectory,
-    query::{BooleanQuery, Query, TermQuery},
+    query::{BooleanQuery, Query, RangeQuery, TermQuery},
     schema::{IndexRecordOption, TantivyDocument, Value},
     Index, IndexReader, IndexWriter, ReloadPolicy, Term,
 };
@@ -157,20 +158,36 @@ impl SearchIndex {
     pub fn search(&self, input: &str, limit: usize) -> Result<Vec<SearchHit>, SearchError> {
         let query = SearchQuery::parse(input);
         let ngrams = query.required_ngrams();
-        if ngrams.is_empty() || limit == 0 {
+        let date_range = query.date_range();
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        // An empty content query is still valid when a date range narrows the
+        // result set (e.g. searching for "今天" alone).
+        if ngrams.is_empty() && date_range.is_none() {
             return Ok(Vec::new());
         }
 
-        let required_queries = ngrams
-            .into_iter()
-            .map(|ngram| {
-                Box::new(TermQuery::new(
-                    Term::from_field_text(self.fields.content, &ngram),
-                    IndexRecordOption::WithFreqs,
-                )) as Box<dyn Query>
-            })
-            .collect();
-        let query = BooleanQuery::intersection(required_queries);
+        let mut subqueries: Vec<Box<dyn Query>> = Vec::new();
+        if !ngrams.is_empty() {
+            let required_queries = ngrams
+                .into_iter()
+                .map(|ngram| {
+                    Box::new(TermQuery::new(
+                        Term::from_field_text(self.fields.content, &ngram),
+                        IndexRecordOption::WithFreqs,
+                    )) as Box<dyn Query>
+                })
+                .collect();
+            subqueries.push(Box::new(BooleanQuery::intersection(required_queries)));
+        }
+        if let Some((start, end)) = date_range {
+            subqueries.push(Box::new(RangeQuery::new(
+                Bound::Included(Term::from_field_i64(self.fields.created_at_ms, start)),
+                Bound::Excluded(Term::from_field_i64(self.fields.created_at_ms, end)),
+            )) as Box<dyn Query>);
+        }
+        let query = BooleanQuery::intersection(subqueries);
         let searcher = self.reader.searcher();
         let top_documents =
             searcher.search(&query, &TopDocs::with_limit(limit).order_by_score())?;
@@ -218,7 +235,8 @@ impl SearchIndex {
 
         let query = SearchQuery::parse(input);
         let ngrams = query.required_ngrams();
-        if ngrams.is_empty() {
+        let date_range = query.date_range();
+        if ngrams.is_empty() && date_range.is_none() {
             let mut cache = self
                 .cached_ids
                 .lock()
@@ -227,16 +245,26 @@ impl SearchIndex {
             return Ok((Vec::new(), 0));
         }
 
-        let required_queries = ngrams
-            .into_iter()
-            .map(|ngram| {
-                Box::new(TermQuery::new(
-                    Term::from_field_text(self.fields.content, &ngram),
-                    IndexRecordOption::WithFreqs,
-                )) as Box<dyn Query>
-            })
-            .collect();
-        let boolean_query = BooleanQuery::intersection(required_queries);
+        let mut subqueries: Vec<Box<dyn Query>> = Vec::new();
+        if !ngrams.is_empty() {
+            let required_queries = ngrams
+                .into_iter()
+                .map(|ngram| {
+                    Box::new(TermQuery::new(
+                        Term::from_field_text(self.fields.content, &ngram),
+                        IndexRecordOption::WithFreqs,
+                    )) as Box<dyn Query>
+                })
+                .collect();
+            subqueries.push(Box::new(BooleanQuery::intersection(required_queries)));
+        }
+        if let Some((start, end)) = date_range {
+            subqueries.push(Box::new(RangeQuery::new(
+                Bound::Included(Term::from_field_i64(self.fields.created_at_ms, start)),
+                Bound::Excluded(Term::from_field_i64(self.fields.created_at_ms, end)),
+            )) as Box<dyn Query>);
+        }
+        let boolean_query = BooleanQuery::intersection(subqueries);
         let searcher = self.reader.searcher();
         let top_documents = searcher.search(
             &boolean_query,
@@ -342,6 +370,61 @@ mod tests {
             created_at_ms: 100,
             is_favorite: false,
         }
+    }
+
+    fn document_with_time(item_id: &str, content: &str, created_at_ms: i64) -> SearchDocument {
+        SearchDocument {
+            item_id: item_id.to_owned(),
+            kind: "text".to_owned(),
+            content: content.to_owned(),
+            created_at_ms,
+            is_favorite: false,
+        }
+    }
+
+    #[test]
+    fn date_phrase_narrows_results_by_created_at() {
+        use chrono::{Duration, Local};
+
+        let index = in_memory_index();
+        let now = Local::now().timestamp_millis();
+        let old = (Local::now() - Duration::days(30)).timestamp_millis();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document_with_time("today", "发票", now)),
+                SearchIndexChange::Upsert(document_with_time("old", "发票", old)),
+            ])
+            .unwrap();
+        index.reload_reader().unwrap();
+
+        let hits = index.search("今天 发票", 20).unwrap();
+        let ids: Vec<&str> = hits.iter().map(|hit| hit.item_id.as_str()).collect();
+
+        assert!(ids.contains(&"today"));
+        assert!(!ids.contains(&"old"));
+    }
+
+    #[test]
+    fn date_only_query_returns_items_in_range() {
+        use chrono::{Duration, Local};
+
+        let index = in_memory_index();
+        let now = Local::now().timestamp_millis();
+        let old = (Local::now() - Duration::days(30)).timestamp_millis();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document_with_time("today", "任一内容", now)),
+                SearchIndexChange::Upsert(document_with_time("old", "任一内容", old)),
+            ])
+            .unwrap();
+        index.reload_reader().unwrap();
+
+        // "今天" alone has no content terms, only a date range.
+        let hits = index.search("今天", 20).unwrap();
+        let ids: Vec<&str> = hits.iter().map(|hit| hit.item_id.as_str()).collect();
+
+        assert!(ids.contains(&"today"));
+        assert!(!ids.contains(&"old"));
     }
 
     fn in_memory_index() -> SearchIndex {

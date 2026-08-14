@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::SearchError;
 
-pub const SEARCH_INDEX_VERSION: u32 = 1;
+pub const SEARCH_INDEX_VERSION: u32 = 2;
 
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 const TANTIVY_DIRECTORY_NAME: &str = "tantivy";
