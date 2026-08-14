@@ -1740,9 +1740,20 @@
   }
 
   .marker-filter-btn.active {
-    border-color: var(--selection-color);
+    border-color: var(--border-subtle);
     color: var(--selection-color);
     background: color-mix(in srgb, var(--selection-color) 14%, transparent);
+  }
+
+  /* Marker group chips: suppress the blue focus outline (no ring, consistent
+     with the group tabs). A non-active focused chip still gets a background
+     highlight so keyboard focus stays visible. */
+  .marker-filter-btn:focus-visible {
+    outline: none;
+  }
+  .marker-filter-btn:not(.active):focus-visible {
+    background: var(--hover-bg);
+    color: var(--text-primary);
   }
 
   .marker-item {
