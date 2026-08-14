@@ -15,7 +15,7 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
-    category?: "item" | "quick" | "system";
+    category?: "item" | "quick" | "system" | "switch";
     resetToken?: number;
   }
 
@@ -85,7 +85,7 @@
       description: "",
       icon: "arrow-up",
       defaults: ["Arrowup"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "moveSelectionDown",
@@ -94,7 +94,7 @@
       description: "",
       icon: "arrow-down",
       defaults: ["Arrowdown"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilterNext",
@@ -103,7 +103,7 @@
       description: "",
       icon: "arrow-right",
       defaults: ["Arrowright", "Tab"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilterPrev",
@@ -112,7 +112,7 @@
       description: "",
       icon: "arrow-left",
       defaults: ["Arrowleft", "Shift+Tab"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter1",
@@ -121,7 +121,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+1"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter2",
@@ -130,7 +130,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+2"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter3",
@@ -139,7 +139,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+3"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter4",
@@ -148,7 +148,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+4"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter5",
@@ -157,7 +157,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+5"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter6",
@@ -166,7 +166,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+6"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "switchFilter7",
@@ -175,7 +175,7 @@
       description: "",
       icon: "grid",
       defaults: ["Alt+7"],
-      cat: "item",
+      cat: "switch",
     },
     {
       id: "clearSelection",

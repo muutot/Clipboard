@@ -98,6 +98,8 @@ export interface LocaleDefinition {
     keyboardItemDescription: string;
     keyboardQuickDescription: string;
     keyboardSystemDescription: string;
+    keyboardSwitchTab: string;
+    keyboardSwitchDescription: string;
     storagePathsTab: string;
     storageLimitsTab: string;
     storageToolsTab: string;

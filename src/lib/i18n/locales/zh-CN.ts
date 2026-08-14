@@ -98,6 +98,8 @@ const zhCN: LocaleDefinition = {
     keyboardItemDescription: "复制、删除、收藏、编辑、粘贴、全选等条目操作的快捷键",
     keyboardQuickDescription: "快速复制列表前 9 个条目的快捷键，默认 Ctrl+1~9",
     keyboardSystemDescription: "唤起或隐藏主窗口的全局快捷键",
+    keyboardSwitchTab: "切换",
+    keyboardSwitchDescription: "移动选中条目与切换分类过滤器的快捷键",
     storagePathsTab: "存储路径",
     storageLimitsTab: "容量与清理",
     storageToolsTab: "维护工具",

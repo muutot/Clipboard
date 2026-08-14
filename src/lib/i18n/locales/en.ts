@@ -104,6 +104,8 @@ const en: LocaleDefinition = {
       "Shortcuts for copy, delete, favorite, edit, paste, select all and other item actions",
     keyboardQuickDescription: "Quick copy shortcuts for the first 9 list items, defaults Ctrl+1~9",
     keyboardSystemDescription: "Global shortcut for showing or hiding the main window",
+    keyboardSwitchTab: "Switch",
+    keyboardSwitchDescription: "Shortcuts for moving the selection and switching category filters",
     storagePathsTab: "Storage Paths",
     storageLimitsTab: "Limits & Cleanup",
     storageToolsTab: "Maintenance",

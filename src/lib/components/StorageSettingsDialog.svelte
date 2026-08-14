@@ -1728,7 +1728,7 @@
       {:catch}
         {@render settingsPanelLoadFailed()}
       {/await}
-    {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system"}
+    {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system" || activeSection === "keyboard_switch"}
       {#await loadKeyboardSettingsPanel()}
         {@render loadingSettingsPanel()}
       {:then module}
@@ -1740,7 +1740,9 @@
             ? "item"
             : activeSection === "keyboard_quick"
               ? "quick"
-              : "system"}
+              : activeSection === "keyboard_system"
+                ? "system"
+                : "switch"}
           showHeader={false}
         />
       {:catch}
