@@ -100,7 +100,7 @@ fn build_icon_cache(
     if let Ok(dir) = std::fs::read_dir(icons_dir) {
         for entry in dir.flatten() {
             let path = entry.path();
-            if !path.extension().is_some_and(|e| e == "png") {
+            if path.extension().is_none_or(|e| e != "png") {
                 continue;
             }
             let name = path
