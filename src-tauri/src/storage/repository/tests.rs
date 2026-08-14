@@ -53,13 +53,22 @@ fn set_last_used_records_usage_without_changing_capture_time() {
     database
         .save_item(&text_item("used", "hash-1", 100))
         .unwrap();
-    assert_eq!(database.get_item("used").unwrap().unwrap().last_used_at_ms, None);
+    assert_eq!(
+        database.get_item("used").unwrap().unwrap().last_used_at_ms,
+        None
+    );
 
     // A re-copy bumps created_at_ms but last_used stays independent of capture.
     let recaptured = text_item("used", "hash-1", 500);
     database.save_item(&recaptured).unwrap();
-    assert_eq!(database.get_item("used").unwrap().unwrap().created_at_ms, 500);
-    assert_eq!(database.get_item("used").unwrap().unwrap().last_used_at_ms, None);
+    assert_eq!(
+        database.get_item("used").unwrap().unwrap().created_at_ms,
+        500
+    );
+    assert_eq!(
+        database.get_item("used").unwrap().unwrap().last_used_at_ms,
+        None
+    );
 
     let updated = database.set_last_used("used").unwrap();
     assert!(updated);
@@ -77,17 +86,25 @@ fn set_last_used_records_usage_without_changing_capture_time() {
 fn list_recent_defaults_to_most_recently_used_with_capture_fallback() {
     let database = Database::open_in_memory().unwrap();
     // "old-used" captured long ago but used just now -> should still top the list.
-    database.save_item(&text_item("old-used", "hash-1", 100)).unwrap();
+    database
+        .save_item(&text_item("old-used", "hash-1", 100))
+        .unwrap();
     // "new-unused" just captured, never used -> falls back to created_at (top tier).
-    database.save_item(&text_item("new-unused", "hash-2", 500)).unwrap();
+    database
+        .save_item(&text_item("new-unused", "hash-2", 500))
+        .unwrap();
 
-    let before = database.list_recent(20, 0, &HistoryFilter::default()).unwrap();
+    let before = database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap();
     assert_eq!(before[0].id, "new-unused");
     assert_eq!(before[1].id, "old-used");
 
     database.set_last_used("old-used").unwrap();
 
-    let after = database.list_recent(20, 0, &HistoryFilter::default()).unwrap();
+    let after = database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap();
     // Using the older entry promotes it above the freshly captured (unused) one.
     assert_eq!(after[0].id, "old-used");
     assert_eq!(after[1].id, "new-unused");

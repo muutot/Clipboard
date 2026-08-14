@@ -2753,9 +2753,7 @@
     }
 
     if (
-      navigationBindings.moveSelectionDown.some((binding) =>
-        shortcutMatchesEvent(binding, event),
-      )
+      navigationBindings.moveSelectionDown.some((binding) => shortcutMatchesEvent(binding, event))
     ) {
       event.preventDefault();
       moveSelection(1);
@@ -2779,9 +2777,7 @@
     if (editableTarget && !isItemActionShortcut(event)) return;
 
     if (
-      navigationBindings.switchFilterNext.some((binding) =>
-        shortcutMatchesEvent(binding, event),
-      )
+      navigationBindings.switchFilterNext.some((binding) => shortcutMatchesEvent(binding, event))
     ) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
@@ -2799,9 +2795,7 @@
     }
 
     if (
-      navigationBindings.switchFilterPrev.some((binding) =>
-        shortcutMatchesEvent(binding, event),
-      )
+      navigationBindings.switchFilterPrev.some((binding) => shortcutMatchesEvent(binding, event))
     ) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
