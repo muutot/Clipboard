@@ -22,6 +22,7 @@
     persistBatchFavorite,
     persistBatchDelete,
     persistTags,
+    persistLastUsed,
     listAllTags,
     searchClipboardHistory,
     listSourceApplications,
@@ -825,12 +826,24 @@
       const newItem = toClipboardItem(record);
       const existingIdx = items.findIndex((i) => i.id === newItem.id);
       if (existingIdx >= 0) {
-        items[existingIdx] = newItem;
-        items = items;
+        // Re-copying an existing entry is de-duplicated on (kind, content_hash)
+        // and keeps the same row id with a bumped created_at_ms, but the list
+        // order is driven by array position rather than the timestamp. Promote
+        // it to the top so the just-copied entry is visibly pinned.
+        items.splice(existingIdx, 1);
+        items = [newItem, ...items];
+        selectedId = newItem.id;
       } else {
         items = [newItem, ...items];
         selectedId = newItem.id;
         invalidateActiveHistoryPagination();
+      }
+      if (indexedItems) {
+        const indexedIdx = indexedItems.findIndex((i) => i.id === newItem.id);
+        if (indexedIdx >= 0) {
+          indexedItems.splice(indexedIdx, 1);
+          indexedItems = [newItem, ...indexedItems];
+        }
       }
     });
 
@@ -1747,6 +1760,8 @@
 
     if ($generalSettings.pinCopiedToTop) moveToTop(id);
 
+    void persistLastUsed(id);
+
     if (item.kind === "image" && item.resourcePath) {
       try {
         const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
@@ -2072,6 +2087,7 @@
       showToast(_t(keys.failed), "error");
       return;
     }
+    void persistLastUsed(item.id);
 
     if (!isTauriRuntime()) {
       showToast(_t(keys.copy), "success");
@@ -3842,6 +3858,13 @@
 
   .filters button.active:first-child {
     color: var(--selection-color);
+  }
+
+  /* Group tabs use a roving tabindex, so the focused tab is always the active
+     one; its .active background already indicates state. Suppress the focus
+     outline so mouse-click and keyboard selection look identical (no ring). */
+  .filters button:focus-visible {
+    outline: none;
   }
 
   .filters button:nth-child(2) :global(svg) {
