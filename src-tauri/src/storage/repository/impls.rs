@@ -235,7 +235,7 @@ impl ClipboardRepository for Database {
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
                  WHERE {}
-                 ORDER BY created_at_ms DESC
+                 ORDER BY COALESCE(last_used_at_ms, created_at_ms) DESC, created_at_ms DESC
                  LIMIT ? OFFSET ?",
                 conditions.join(" AND ")
             );

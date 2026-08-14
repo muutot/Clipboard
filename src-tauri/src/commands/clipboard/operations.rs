@@ -551,7 +551,13 @@ pub fn cmp_by_field(
 ) -> std::cmp::Ordering {
     match field {
         SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
-        SearchSortField::LastUsedAt => b.last_used_at_ms.cmp(&a.last_used_at_ms),
+        // Items never used from history have `last_used_at_ms = NULL`. Fall back
+        // to `created_at_ms` so a freshly copied (but unused) entry still sorts
+        // to the top instead of sinking below used entries.
+        SearchSortField::LastUsedAt => b
+            .last_used_at_ms
+            .unwrap_or(b.created_at_ms)
+            .cmp(&a.last_used_at_ms.unwrap_or(a.created_at_ms)),
         SearchSortField::Title => a.title.cmp(&b.title),
         SearchSortField::Size => b.size_bytes.cmp(&a.size_bytes),
         SearchSortField::Kind => a.kind.cmp(&b.kind),

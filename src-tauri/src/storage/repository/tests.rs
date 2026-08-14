@@ -74,6 +74,26 @@ fn set_last_used_records_usage_without_changing_capture_time() {
 }
 
 #[test]
+fn list_recent_defaults_to_most_recently_used_with_capture_fallback() {
+    let database = Database::open_in_memory().unwrap();
+    // "old-used" captured long ago but used just now -> should still top the list.
+    database.save_item(&text_item("old-used", "hash-1", 100)).unwrap();
+    // "new-unused" just captured, never used -> falls back to created_at (top tier).
+    database.save_item(&text_item("new-unused", "hash-2", 500)).unwrap();
+
+    let before = database.list_recent(20, 0, &HistoryFilter::default()).unwrap();
+    assert_eq!(before[0].id, "new-unused");
+    assert_eq!(before[1].id, "old-used");
+
+    database.set_last_used("old-used").unwrap();
+
+    let after = database.list_recent(20, 0, &HistoryFilter::default()).unwrap();
+    // Using the older entry promotes it above the freshly captured (unused) one.
+    assert_eq!(after[0].id, "old-used");
+    assert_eq!(after[1].id, "new-unused");
+}
+
+#[test]
 fn list_recent_filters_by_tag_and_paginates_matching_records() {
     let database = Database::open_in_memory().unwrap();
     for (id, hash, ts) in [("a", "h-a", 100), ("b", "h-b", 200), ("c", "h-c", 300)] {

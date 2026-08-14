@@ -64,7 +64,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
   detailDisplayMode: "overlay",
-  searchSortRules: [{ field: "createdAt", direction: "desc" }],
+  searchSortRules: [{ field: "lastUsedAt", direction: "desc" }],
   pageSizeLimit: 500,
   searchPageSizeLimit: 500,
   maxTextCaptureBytes: 500000,
