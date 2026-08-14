@@ -297,6 +297,23 @@
     return map;
   });
 
+  // Configured navigation shortcuts (conf/keyboard.json), reusing the same
+  // action keys the settings panel exposes under the "切换" group. An absent
+  // action falls back to its default; an action explicitly configured to empty
+  // disables that navigation binding.
+  const navigationBindings = $derived.by(() => {
+    const read = (action: string, fallback: string[]): string[] => {
+      const hasAction = Object.prototype.hasOwnProperty.call(keyboardShortcuts, action);
+      return hasAction ? (keyboardShortcuts[action] ?? []) : fallback;
+    };
+    return {
+      moveSelectionUp: read("moveSelectionUp", ["ArrowUp"]),
+      moveSelectionDown: read("moveSelectionDown", ["ArrowDown"]),
+      switchFilterNext: read("switchFilterNext", ["ArrowRight", "Tab"]),
+      switchFilterPrev: read("switchFilterPrev", ["ArrowLeft", "Shift+Tab"]),
+    };
+  });
+
   async function loadKeyboardShortcuts() {
     try {
       const config = await getKeyboardConfig();
@@ -2645,6 +2662,15 @@
 
   let tagAddSignal = $state(0);
 
+  // Item-action shortcuts (Ctrl/⌘ + letter) that should still operate on the
+  // selected entry even when focus is in an editable target such as the search
+  // box. Ctrl+A is deliberately excluded so the search box keeps its native
+  // "select all text" behavior.
+  function isItemActionShortcut(event: KeyboardEvent): boolean {
+    if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return false;
+    return ["c", "d", "f", "e", "t", "s"].includes(event.key.toLowerCase());
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     const editableTarget = isEditableKeyboardTarget(event.target);
     const quickCopyIndex =
@@ -2710,21 +2736,37 @@
       }
     }
 
-    if (event.key === "ArrowDown") {
+    if (
+      navigationBindings.moveSelectionDown.some((binding) =>
+        shortcutMatchesEvent(binding, event),
+      )
+    ) {
       event.preventDefault();
       moveSelection(1);
       return;
     }
 
-    if (event.key === "ArrowUp") {
+    if (
+      navigationBindings.moveSelectionUp.some((binding) => shortcutMatchesEvent(binding, event))
+    ) {
       event.preventDefault();
       moveSelection(-1);
       return;
     }
 
-    if (editableTarget) return;
+    // Let the focused editable target (e.g. the search box) keep its own key
+    // combinations (Ctrl+A to select text, Ctrl+Z/X/V, etc.). The item-action
+    // shortcuts (Ctrl/⌘ + C/D/F/E/T/S) are exempted so they still operate on
+    // the selected entry even when the search box is focused — otherwise every
+    // Ctrl+<letter> silently no-ops after a search or filter switch moves focus
+    // into the search input.
+    if (editableTarget && !isItemActionShortcut(event)) return;
 
-    if (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) {
+    if (
+      navigationBindings.switchFilterNext.some((binding) =>
+        shortcutMatchesEvent(binding, event),
+      )
+    ) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();
@@ -2740,7 +2782,11 @@
       return;
     }
 
-    if (event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey)) {
+    if (
+      navigationBindings.switchFilterPrev.some((binding) =>
+        shortcutMatchesEvent(binding, event),
+      )
+    ) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();
@@ -2789,12 +2835,11 @@
       return;
     }
 
-    // Shortcuts for the focused item
+    // Shortcuts for the focused item. These reach here only when the event
+    // target is not an editable surface (the search box keeps its own Ctrl
+    // combinations via the exemption in `isItemActionShortcut`), so no extra
+    // input/textarea guard is needed.
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        // Let the input handle its own Ctrl+key combinations (Ctrl+A, Ctrl+C, etc.)
-        return;
-      }
       const item = filteredItems.find((i) => i.id === selectedId);
       if (!item) return;
 
