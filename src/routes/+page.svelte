@@ -2856,7 +2856,14 @@
     // combinations via the exemption in `isItemActionShortcut`), so no extra
     // input/textarea guard is needed.
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
-      const item = filteredItems.find((i) => i.id === selectedId);
+      let item = filteredItems.find((i) => i.id === selectedId);
+      if (!item && filteredItems.length > 0) {
+        // Heal a selection that no longer matches the active filter (e.g. after
+        // a search or group switch) so the shortcut operates on a visible entry
+        // instead of silently no-opping via the `if (!item) return` below.
+        item = filteredItems[0];
+        selectedId = item.id;
+      }
       if (!item) return;
 
       if (event.key === "c") {

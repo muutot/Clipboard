@@ -53,5 +53,5 @@ export function shortcutMatchesEvent(canonical: string, event: KeyboardEvent): b
     if (!actualModifiers.has(modifier)) return false;
   }
 
-  return normalizeKeyLabel(event.key) === keys[0];
+  return normalizeKeyLabel(event.key) === normalizeKeyLabel(keys[0]);
 }
