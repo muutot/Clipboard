@@ -6,8 +6,9 @@ use tauri::Emitter;
 use crate::commands::clipboard::ClipboardHistoryInvalidated;
 use crate::config::ConfigStore;
 use crate::export::{
-    export_database, import_from_json, import_from_plain_text, import_from_ppaste_backup,
-    write_export_file, ExportFormat, ExportOptions, ImportSummary, BACKUP_EXTENSION,
+    export_database, import_from_csv, import_from_json, import_from_plain_text,
+    import_from_ppaste_backup, write_export_file, ExportFormat, ExportOptions, ImportSummary,
+    BACKUP_EXTENSION,
 };
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
@@ -126,12 +127,23 @@ pub fn import_clipboard_items(
         .unwrap_or_else(|| {
             if json.trim_start().starts_with('[') {
                 "json".to_owned()
+            } else if json
+                .trim_start()
+                .to_ascii_lowercase()
+                .starts_with("id,kind,title")
+                || json.lines().next().is_some_and(|line| {
+                    line.split(',')
+                        .any(|column| column.trim().eq_ignore_ascii_case("text_content"))
+                })
+            {
+                "csv".to_owned()
             } else {
                 "plaintext".to_owned()
             }
         });
     match normalized.as_str() {
         "json" => import_from_json(&json, database.inner()),
+        "csv" => import_from_csv(&json, database.inner()),
         "text" | "txt" | "plain" | "plaintext" | "plain-text" => {
             import_from_plain_text(&json, database.inner())
         }
@@ -140,10 +152,15 @@ pub fn import_clipboard_items(
 }
 
 fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSummary, String> {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".csv") {
+        let content = std::fs::read_to_string(path)
+            .map_err(|error| format!("failed to read {path}: {error}"))?;
+        return import_from_csv(&content, database);
+    }
     let content =
         std::fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))?;
-    let is_json =
-        path.to_ascii_lowercase().ends_with(".json") || content.trim_start().starts_with('[');
+    let is_json = lower.ends_with(".json") || content.trim_start().starts_with('[');
     if is_json {
         import_from_json(&content, database)
     } else {
@@ -233,6 +250,11 @@ pub fn get_import_formats() -> Result<Vec<ImportFormatInfo>, String> {
             id: "json".to_owned(),
             label: "JSON".to_owned(),
             extension: ".json".to_owned(),
+        },
+        ImportFormatInfo {
+            id: "csv".to_owned(),
+            label: "CSV".to_owned(),
+            extension: ".csv".to_owned(),
         },
         ImportFormatInfo {
             id: "plainText".to_owned(),
@@ -391,14 +413,16 @@ mod tests {
     }
 
     #[test]
-    fn import_formats_cover_ppaste_json_and_plain_text() {
+    fn import_formats_cover_ppaste_json_csv_and_plain_text() {
         let formats = get_import_formats().unwrap();
-        assert_eq!(formats.len(), 3);
+        assert_eq!(formats.len(), 4);
         assert_eq!(formats[0].id, "pastebackup");
         assert_eq!(formats[0].extension, BACKUP_EXTENSION);
         assert_eq!(formats[1].id, "json");
         assert_eq!(formats[1].extension, ".json");
-        assert_eq!(formats[2].id, "plainText");
-        assert_eq!(formats[2].extension, ".txt");
+        assert_eq!(formats[2].id, "csv");
+        assert_eq!(formats[2].extension, ".csv");
+        assert_eq!(formats[3].id, "plainText");
+        assert_eq!(formats[3].extension, ".txt");
     }
 }

@@ -227,6 +227,161 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
     })
 }
 
+/// Imports the CSV produced by `export_items` (and any CSV with the same
+/// columns). The format does not carry binary resources, so image/file rows
+/// are reconstructed as placeholder items; text and link rows round-trip
+/// exactly.
+pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, String> {
+    let mut reader = CsvReader::new(csv);
+    let header = match reader.next_record() {
+        Some(record) => record,
+        None => {
+            return Ok(ImportSummary {
+                imported_count: 0,
+                skipped_count: 0,
+                errors: vec![],
+                pending_truncation: 0,
+                max_items: 0,
+            });
+        }
+    };
+
+    let column_index = |name: &str| -> Option<usize> {
+        header
+            .iter()
+            .position(|column| column.trim().eq_ignore_ascii_case(name))
+    };
+
+    let id_idx = column_index("id");
+    let kind_idx = column_index("kind");
+    let title_idx = column_index("title");
+    let text_idx = column_index("text_content");
+    let source_idx = column_index("source_app");
+    let created_idx = column_index("created_at_ms");
+    let favorite_idx = column_index("is_favorite");
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64;
+
+    let mut imported = 0u64;
+    let mut skipped = 0u64;
+    let mut errors = Vec::new();
+    let mut row_index = 0u64;
+
+    while let Some(record) = reader.next_record() {
+        if record.iter().all(|field| field.trim().is_empty()) {
+            continue;
+        }
+        row_index += 1;
+
+        let field = |index: Option<usize>| -> Option<&str> {
+            index
+                .and_then(|index| record.get(index))
+                .map(|value| value.as_str())
+        };
+
+        let kind = match field(kind_idx)
+            .unwrap_or("text")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "link" => crate::domain::ClipboardKind::Link,
+            "image" => crate::domain::ClipboardKind::Image,
+            "file" => crate::domain::ClipboardKind::File,
+            _ => crate::domain::ClipboardKind::Text,
+        };
+
+        let text_content = field(text_idx).map(|value| value.to_owned());
+        let size_bytes = text_content
+            .as_ref()
+            .map(|value| value.len() as u64)
+            .unwrap_or(0);
+        let title = field(title_idx)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_owned())
+            .or_else(|| {
+                text_content
+                    .as_ref()
+                    .map(|value| value.chars().take(120).collect())
+            })
+            .unwrap_or_else(|| "Imported item".to_owned());
+
+        let id = field(id_idx)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_owned())
+            .unwrap_or_else(|| {
+                let hash = crate::content::hash::compute_content_hash(
+                    clipboard_kind_name(kind),
+                    text_content.as_deref().unwrap_or(""),
+                    None,
+                );
+                format!("import-csv-{hash}-{row_index}")
+            });
+
+        let source_app = field(source_idx)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_owned());
+
+        let created_at_ms = field(created_idx)
+            .and_then(|value| value.trim().parse::<i64>().ok())
+            .unwrap_or(now_ms);
+
+        let is_favorite = field(favorite_idx)
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "true" | "1" | "yes" | "y"
+                )
+            })
+            .unwrap_or(false);
+
+        let content_hash = crate::content::hash::compute_content_hash(
+            clipboard_kind_name(kind),
+            text_content.as_deref().unwrap_or(""),
+            None,
+        );
+
+        let item = crate::domain::ClipboardItem {
+            id,
+            kind,
+            title,
+            text_content,
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash,
+            source_app,
+            size_bytes,
+            created_at_ms,
+            last_used_at_ms: None,
+            is_favorite,
+            icon_path: None,
+            metadata_json: None,
+        };
+
+        match crate::storage::ClipboardRepository::save_item(database, &item) {
+            Ok(_) => imported += 1,
+            Err(error) => {
+                skipped += 1;
+                errors.push(format!("failed to import row {row_index}: {error}"));
+            }
+        }
+    }
+
+    Ok(ImportSummary {
+        imported_count: imported,
+        skipped_count: skipped,
+        errors,
+        pending_truncation: 0,
+        max_items: 0,
+    })
+}
+
 pub(crate) fn write_export_file(path: &str, output: &str) -> Result<(), String> {
     let path = Path::new(path);
     if let Some(parent) = path
@@ -263,6 +418,92 @@ fn escape_csv(field: &str) -> String {
         format!("\"{}\"", field.replace('"', "\"\""))
     } else {
         field.to_owned()
+    }
+}
+
+/// Minimal RFC 4180-style CSV reader matching the quoting rules used by
+/// `escape_csv`. Operates on `char`s so multi-byte UTF-8 content (Chinese
+/// titles, emoji, etc.) is preserved without splitting code points.
+struct CsvReader {
+    chars: Vec<char>,
+    pos: usize,
+}
+
+impl CsvReader {
+    fn new(input: &str) -> Self {
+        Self {
+            chars: input.chars().collect(),
+            pos: 0,
+        }
+    }
+
+    fn peek(&self) -> Option<char> {
+        self.chars.get(self.pos).copied()
+    }
+
+    fn peek_next(&self) -> Option<char> {
+        self.chars.get(self.pos + 1).copied()
+    }
+
+    /// Returns the next record as a list of (unquoted) field values, or `None`
+    /// at end of input.
+    fn next_record(&mut self) -> Option<Vec<String>> {
+        if self.pos >= self.chars.len() {
+            return None;
+        }
+
+        let mut fields = Vec::new();
+        loop {
+            fields.push(self.read_field());
+            match self.peek() {
+                Some(',') => self.pos += 1,
+                Some('\n') => {
+                    self.pos += 1;
+                    break;
+                }
+                Some('\r') => {
+                    self.pos += 1;
+                    if self.peek() == Some('\n') {
+                        self.pos += 1;
+                    }
+                    break;
+                }
+                _ => break,
+            }
+        }
+        Some(fields)
+    }
+
+    fn read_field(&mut self) -> String {
+        if self.peek() == Some('"') {
+            self.pos += 1;
+            let mut value = String::new();
+            while let Some(character) = self.peek() {
+                if character == '"' {
+                    if self.peek_next() == Some('"') {
+                        value.push('"');
+                        self.pos += 2;
+                    } else {
+                        self.pos += 1;
+                        break;
+                    }
+                } else {
+                    value.push(character);
+                    self.pos += 1;
+                }
+            }
+            value
+        } else {
+            let mut value = String::new();
+            while let Some(character) = self.peek() {
+                if matches!(character, ',' | '\r' | '\n') {
+                    break;
+                }
+                value.push(character);
+                self.pos += 1;
+            }
+            value
+        }
     }
 }
 
@@ -524,5 +765,55 @@ mod tests {
         assert_eq!(escape_csv(" =SUM(A1)"), "\" =SUM(A1)\"");
         assert_eq!(escape_csv("a,b"), "\"a,b\"");
         assert_eq!(escape_csv("safe"), "safe");
+    }
+
+    #[test]
+    fn csv_reader_preserves_quoted_fields_with_separators_and_newlines() {
+        let mut reader = CsvReader::new("a,\"b,c\",\"line1\nline2\",d\n");
+        let record = reader.next_record().unwrap();
+        assert_eq!(record, vec!["a", "b,c", "line1\nline2", "d"]);
+        assert!(reader.next_record().is_none());
+    }
+
+    #[test]
+    fn csv_reader_unescapes_doubled_quotes() {
+        let mut reader = CsvReader::new("\"he said \"\"hi\"\"\",end\n");
+        let record = reader.next_record().unwrap();
+        assert_eq!(record, vec!["he said \"hi\"", "end"]);
+    }
+
+    #[test]
+    fn csv_export_import_round_trips_text_and_link_items() {
+        let items = sample_items();
+        let csv = export_items(
+            &items,
+            &ExportOptions {
+                format: ExportFormat::Csv,
+                include_favorites: true,
+                date_from_ms: None,
+                date_to_ms: None,
+                content_types: vec![],
+            },
+        )
+        .unwrap();
+
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let summary = import_from_csv(&csv, &database).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(summary.skipped_count, 0);
+        assert!(summary.errors.is_empty());
+
+        let text_item = database.get_item("item-1").unwrap().unwrap();
+        assert_eq!(text_item.kind, ClipboardKind::Text);
+        assert_eq!(text_item.text_content.as_deref(), Some("Hello, world!"));
+        assert_eq!(text_item.source_app.as_deref(), Some("Notepad"));
+        assert!(text_item.is_favorite);
+
+        let link_item = database.get_item("item-2").unwrap().unwrap();
+        assert_eq!(link_item.kind, ClipboardKind::Link);
+        assert_eq!(
+            link_item.text_content.as_deref(),
+            Some("https://example.com")
+        );
     }
 }
