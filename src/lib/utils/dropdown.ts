@@ -54,7 +54,11 @@ export function alignDropdownOptionText(container: HTMLElement): void {
 }
 
 function truncateToFit(button: HTMLElement, probe: HTMLElement): void {
-  const full = probe.textContent ?? "";
+  // Capture the original label once; reuse it on later runs so re-measuring the
+  // already-truncated text (e.g. while filtering the source-app list) does not
+  // shrink the label further on every keystroke.
+  const original = probe.dataset.fullLabel ?? (probe.dataset.fullLabel = probe.textContent ?? "");
+  const full = original;
   const chars = Array.from(full);
   if (chars.length <= 1) return;
   button.title = full;

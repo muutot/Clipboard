@@ -1,5 +1,4 @@
 <script lang="ts">
-  import "$lib/styles/settings-shared.css";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import StorageSettingsDialog from "$lib/components/StorageSettingsDialog.svelte";
   import { generalSettings } from "$lib/services/settings";

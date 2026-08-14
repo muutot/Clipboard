@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { get } from "svelte/store";
   import "../app.css";
+  import "$lib/styles/settings-shared.css";
   import { generalSettings } from "$lib/services/settings";
   import {
     applyGeneralSettingsToDocument,
