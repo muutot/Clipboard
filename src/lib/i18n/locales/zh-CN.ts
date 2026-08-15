@@ -3,7 +3,7 @@ import type { LocaleDefinition } from "../types";
 const zhCN: LocaleDefinition = {
   app: {
     name: "Clipboard",
-    searchPlaceholder: "唤醒记忆深处，拾起久违的片段（支持 今天 / 昨天 / 本周 / 本月）",
+    searchPlaceholder: "唤醒记忆深处，拾起久违的片段",
     clearSearch: "清除搜索",
     recentRecords: "最近记录",
     noRecords: "暂无剪贴板记录",
