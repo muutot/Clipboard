@@ -3496,31 +3496,33 @@ mod tests {
             })
             .unwrap();
 
+        let sep = std::path::MAIN_SEPARATOR_STR;
+        let first_path = format!("{sep}cache{sep}first.txt");
+        let second_path = format!("{sep}cache{sep}second.txt");
+        let icon_materialized_path = format!("{sep}cache{sep}icons{sep}source.png");
+
         assert!(database
             .mark_sync_resources_materialized(
                 REMOTE_SCOPE,
                 "materialized-files",
                 &[
-                    (refs[0].clone(), "C:\\cache\\first.txt".to_string()),
-                    (refs[1].clone(), "C:\\cache\\second.txt".to_string()),
-                    (refs[2].clone(), "C:\\cache\\icons\\source.png".to_string()),
+                    (refs[0].clone(), first_path.clone()),
+                    (refs[1].clone(), second_path.clone()),
+                    (refs[2].clone(), icon_materialized_path),
                 ],
             )
             .unwrap());
 
         let stored = database.get_item("materialized-files").unwrap().unwrap();
-        assert_eq!(
-            stored.resource_path.as_deref(),
-            Some("C:\\cache\\first.txt")
-        );
+        assert_eq!(stored.resource_path.as_deref(), Some(first_path.as_str()));
         assert_eq!(stored.icon_path.as_deref(), Some("source.png"));
         assert_eq!(
             serde_json::from_str::<Vec<String>>(stored.text_content.as_deref().unwrap()).unwrap(),
-            ["C:\\cache\\first.txt", "C:\\cache\\second.txt"]
+            [first_path.clone(), second_path.clone()]
         );
         let metadata: serde_json::Value =
             serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
-        assert_eq!(metadata["files"][1]["storagePath"], "C:\\cache\\second.txt");
+        assert_eq!(metadata["files"][1]["storagePath"], second_path.as_str());
         assert_eq!(metadata["iconPath"], "source.png");
         assert_eq!(database.count_sync_outbox().unwrap(), 0);
         assert_eq!(
