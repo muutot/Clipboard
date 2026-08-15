@@ -1,75 +1,63 @@
-﻿# Clipboard Desktop v1.3.0
+﻿# Clipboard Desktop v1.4.0
 
 > 剪贴板桌面管理工具，Windows 原生剪贴板监控、全文搜索、OCR 识别、多引擎支持
 >
-> Released: 2026-08-06
+> Released: 2026-08-15
 
 ---
 
 ## 版本说明
 
-v1.3.0 聚焦「标签管理」与「图标自定义」：新增完整标签系统（标签注册表、管理面板、彩色标签、卡片 / 详情内联编辑、Ctrl+T 快速加标签、主窗口联动）；图标支持彩色模式与逐图标自定义颜色；剪贴板新增 RTF 富文本采集与粘贴、双击粘贴、悬停粘贴子菜单、卡片 #N 序号角标；更新源可切换 GitHub / GitCode，并支持导入 PPaste 备份。同时优化历史分组与筛选的后端分页、标签索引与来源图标查询性能，并修复导入、DIB 解码、自触发守卫、软删除复活等一系列健壮性问题。
+v1.4.0 的核心是一套完整的**跨设备同步**系统：新增 S3 兼容对象存储与 WebDAV 两种同步后端，支持端到端加密（同步密码保护 baseline / oplog 载荷与资源对象）、真正的 AWS SigV4 签名、增量快照 / 段传输与按需物化远程资源；后台自动同步 worker 原子应用远端变更，并在应用后刷新本地历史。同步层经过大量安全加固（拒绝不安全备份文件名、保护资源路径与完整性、持久化稳定设备标识、从检查点恢复丢失历史）。此外新增自然语言日期搜索过滤（今天 / 昨天 / 本周 / 本月）、CSV 导入、可配置的敏感内容过滤（正则 + 采集面板 UI）、最近使用默认排序；设置系统重构为通用 SettingEntry 组件，并补全 Linux 平台的剪贴板文件路径 / HTML / RTF 采集。发布流程改为纯本地，构建仅由 GitHub Actions 在打 tag 后执行。
 
-## 标签系统
+## 跨设备同步
 
-- **标签注册表与管理命令** — 新增 tag 领域模型、标签注册 / 管理后端命令 | [`833ec0dc`](https://github.com/muutot/Clipboard/commit/833ec0dc)
-- **标签管理面板** — 设置中新增标签管理面板与彩色标签 chips | [`b51dde5f`](https://github.com/muutot/Clipboard/commit/b51dde5f) [`5f893c0c`](https://github.com/muutot/Clipboard/commit/5f893c0c)
-- **标签编辑对话框** — 支持重命名与每个标签独立配色 | [`72cdee54`](https://github.com/muutot/Clipboard/commit/72cdee54)
-- **条目标签** — 标签存储在 metadata_json，卡片与详情面板内联编辑 | [`dbf83608`](https://github.com/muutot/Clipboard/commit/dbf83608)
-- **Ctrl+T 快速加标签** — 为选中条目快速添加标签 | [`1528b8c5`](https://github.com/muutot/Clipboard/commit/1528b8c5)
-- **标签索引** — 通过派生 item_tags 联结表索引标签，检索性能优化 | [`ae7ce02d`](https://github.com/muutot/Clipboard/commit/ae7ce02d)
+- **S3 兼容对象存储后端** — 新增 S3 兼容远端存储，支持真正的 AWS SigV4 签名 | [`60ba6c7e`](https://github.com/muutot/Clipboard/commit/60ba6c7e) [`201ecbdf`](https://github.com/muutot/Clipboard/commit/201ecbdf)
+- **WebDAV 增量同步** — 云端备份与增量同步核心，复用共享 reqwest 客户端 | [`a508c5db`](https://github.com/muutot/Clipboard/commit/a508c5db) [`8e57c0c6`](https://github.com/muutot/Clipboard/commit/8e57c0c6)
+- **端到端加密** — 同步密码加密远程 baseline / oplog 与 S3 资源对象 | [`00ba4832`](https://github.com/muutot/Clipboard/commit/00ba4832) [`83999211`](https://github.com/muutot/Clipboard/commit/83999211) [`0ea0a36c`](https://github.com/muutot/Clipboard/commit/0ea0a36c)
+- **版本化快照与段引擎** — v1 快照 / 段引擎、流式资源缓存、版本化 oplog/baseline 线格式（proto 信封） | [`81e98a9f`](https://github.com/muutot/Clipboard/commit/81e98a9f) [`f1f1802c`](https://github.com/muutot/Clipboard/commit/f1f1802c) [`706fcd0c`](https://github.com/muutot/Clipboard/commit/706fcd0c)
+- **自动同步后台 worker** — 后台自动同步，原子应用远端变更并在应用后刷新历史 | [`0e792208`](https://github.com/muutot/Clipboard/commit/0e792208) [`c826f4ba`](https://github.com/muutot/Clipboard/commit/c826f4ba) [`66329fe0`](https://github.com/muutot/Clipboard/commit/66329fe0)
+- **远程压缩与稳定设备标识** — 手动远程压缩与建议提示、持久化稳定设备身份 | [`73d50547`](https://github.com/muutot/Clipboard/commit/73d50547) [`5e419576`](https://github.com/muutot/Clipboard/commit/5e419576)
+- **安全加固** — 保护资源路径与完整性、拒绝不安全备份文件名、加固 S3 对象写入、隔离远端 peer 失败 | [`929d63e8`](https://github.com/muutot/Clipboard/commit/929d63e8) [`7eeba18a`](https://github.com/muutot/Clipboard/commit/7eeba18a) [`b3bbe5c1`](https://github.com/muutot/Clipboard/commit/b3bbe5c1) [`3dcbc2bf`](https://github.com/muutot/Clipboard/commit/3dcbc2bf)
+- **可靠性** — 从检查点恢复丢失历史、合并独立捕获的文本、验证指针后再 gc、防止远端 head 回退 | [`4bde51a4`](https://github.com/muutot/Clipboard/commit/4bde51a4) [`52679ec9`](https://github.com/muutot/Clipboard/commit/52679ec9) [`0a84fbe7`](https://github.com/muutot/Clipboard/commit/0a84fbe7) [`c00b1806`](https://github.com/muutot/Clipboard/commit/c00b1806)
 
-## 图标自定义
+## 搜索与导入
 
-- **彩色图标模式** — 新增 color icon mode，设置中一键切换 | [`c74663ab`](https://github.com/muutot/Clipboard/commit/c74663ab)
-- **逐图标颜色定制** — Appearance Icons 下每个图标可独立配色 | [`df82a025`](https://github.com/muutot/Clipboard/commit/df82a025)
-- **图标缓存管理** — 图标缓存管理器支持按应用替换与去重视图 | [`9034b4c0`](https://github.com/muutot/Clipboard/commit/9034b4c0)
-- **复选框着色修复** — 彩色图标模式下复选框对勾保持 currentColor | [`ea66ab43`](https://github.com/muutot/Clipboard/commit/ea66ab43)
+- **自然语言日期过滤** — 搜索支持今天 / 昨天 / 本周 / 本月等自然语言日期 | [`bb1c16d3`](https://github.com/muutot/Clipboard/commit/bb1c16d3)
+- **CSV 导入** — 新增 CSV 格式导入 | [`afe3c7ac`](https://github.com/muutot/Clipboard/commit/afe3c7ac)
 
-## 剪贴板与粘贴
+## 隐私
 
-- **RTF 富文本** — 采集与粘贴 RTF 格式化内容 | [`11e93177`](https://github.com/muutot/Clipboard/commit/11e93177)
-- **双击粘贴** — 双击卡片直接粘贴，可在设置中开关 | [`eec30868`](https://github.com/muutot/Clipboard/commit/eec30868)
-- **悬停粘贴子菜单** — 右键菜单新增悬停粘贴子菜单，统一单菜单协调 | [`962cb40d`](https://github.com/muutot/Clipboard/commit/962cb40d)
-- **#N 序号角标** — 每张卡片固定右列显示 #N 位置标记 | [`80efcaa9`](https://github.com/muutot/Clipboard/commit/80efcaa9)
-- **净化粘贴统一** — 统一 clean-paste 文本键与粘贴路径，修复快速粘贴窗口还原 | [`4cdd2743`](https://github.com/muutot/Clipboard/commit/4cdd2743) [`56562b58`](https://github.com/muutot/Clipboard/commit/56562b58)
+- **可配置敏感内容过滤** — 采集面板新增敏感内容设置 UI，敏感内容正则可配置并接入休眠字段 | [`94fb0152`](https://github.com/muutot/Clipboard/commit/94fb0152) [`49024598`](https://github.com/muutot/Clipboard/commit/49024598)
 
-## 导入与更新
+## 历史与排序
 
-- **PPaste 备份导入** — 支持导入 PPaste .Pastebackup 备份，含大小上限与日期解析加固 | [`13e89afd`](https://github.com/muutot/Clipboard/commit/13e89afd) [`1e3bc782`](https://github.com/muutot/Clipboard/commit/1e3bc782)
-- **导入健壮性** — 跳过非便携记录、处理 zip 反斜杠路径、缺失图片友好提示、避免重复计数、超限警告 | [`3b93c61a`](https://github.com/muutot/Clipboard/commit/3b93c61a) [`5607102b`](https://github.com/muutot/Clipboard/commit/5607102b) [`4bcf5bb1`](https://github.com/muutot/Clipboard/commit/4bcf5bb1) [`fcaf9915`](https://github.com/muutot/Clipboard/commit/fcaf9915) [`fd148f82`](https://github.com/muutot/Clipboard/commit/fd148f82)
-- **可配置更新源** — 更新检查可在 GitHub / GitCode 之间切换 | [`1e8770af`](https://github.com/muutot/Clipboard/commit/1e8770af)
-- **关于面板** — 显示程序安装位置 | [`7e683bf8`](https://github.com/muutot/Clipboard/commit/7e683bf8)
+- **最近使用默认排序** — 默认排序改为最近使用，并在条目被使用时写入 last_used_at_ms | [`4ea1252a`](https://github.com/muutot/Clipboard/commit/4ea1252a) [`d23d0a6f`](https://github.com/muutot/Clipboard/commit/d23d0a6f)
 
 ## 设置与界面
 
-- **历史分组后端分页** — 分组与筛选轴改为后端分页，长列表更流畅 | [`384e1d66`](https://github.com/muutot/Clipboard/commit/384e1d66)
-- **转移卡片现代化** — 按格式导入与 DatePicker | [`63ea73df`](https://github.com/muutot/Clipboard/commit/63ea73df)
-- **快捷键设置对齐** — 键盘设置与实际实现的快捷键保持一致 | [`4fc71580`](https://github.com/muutot/Clipboard/commit/4fc71580)
-- **箭头按键显示** — 快捷键绑定中箭头显示为 ↑↓←→ 字形，支持 Tab / Shift+Tab | [`6d2e430e`](https://github.com/muutot/Clipboard/commit/6d2e430e) [`d6b5ec71`](https://github.com/muutot/Clipboard/commit/d6b5ec71)
-- **设置搜索精准定位** — 搜索结果可靠定位到目标设置卡片，路径与真实导航标签对齐 | [`73631ca9`](https://github.com/muutot/Clipboard/commit/73631ca9) [`007df845`](https://github.com/muutot/Clipboard/commit/007df845) [`2e84e8f5`](https://github.com/muutot/Clipboard/commit/2e84e8f5)
-- **统一 Checkbox 组件** — 复选框视觉统一为共享组件 | [`f1411d27`](https://github.com/muutot/Clipboard/commit/f1411d27)
+- **通用 SettingEntry 组件** — 通用设置项组件，支持自定义槽位与文本动作、配置类型与尺寸工具 | [`46a39b7f`](https://github.com/muutot/Clipboard/commit/46a39b7f) [`1f0d02c5`](https://github.com/muutot/Clipboard/commit/1f0d02c5)
+- **主题重置与预设编辑** — 新增深色 / 浅色重置按钮与内联预设编辑，默认强调色改为蓝 #2576f8 | [`60d618d4`](https://github.com/muutot/Clipboard/commit/60d618d4) [`f148d655`](https://github.com/muutot/Clipboard/commit/f148d655)
+- **窗口透明度** — 新增窗口透明度文本跟随开关，磨砂玻璃效果更明显 | [`79010056`](https://github.com/muutot/Clipboard/commit/79010056) [`2ce05fdc`](https://github.com/muutot/Clipboard/commit/2ce05fdc)
+- **标签颜色选择器** — 标签行新增颜色选择器弹层 | [`f0c32a98`](https://github.com/muutot/Clipboard/commit/f0c32a98)
+- **采集入口独立化** — 剪贴板录制作为独立采集项，可在托盘 / 设置 / 标签列表间同步暂停状态 | [`de807ca8`](https://github.com/muutot/Clipboard/commit/de807ca8) [`9f84431c`](https://github.com/muutot/Clipboard/commit/9f84431c)
 
-## 性能与健壮性
+## 平台支持
 
-- **来源图标查询重写** — 去除相关子查询，图标加载更快 | [`d2626372`](https://github.com/muutot/Clipboard/commit/d2626372)
-- **OCR 模型异步下载** — PP-OCR 模型下载改为异步文件 IO | [`c78d331e`](https://github.com/muutot/Clipboard/commit/c78d331e)
-- **列表索引映射** — 非虚拟列表渲染改用索引映射，大批量渲染更高效 | [`4acb3c5b`](https://github.com/muutot/Clipboard/commit/4acb3c5b)
-- **DIB 解码加固** — 对畸形 DIB 头做边界保护；CF_UNICODETEXT 终止符扫描受分配大小约束 | [`83966fd7`](https://github.com/muutot/Clipboard/commit/83966fd7) [`d4c4e8b6`](https://github.com/muutot/Clipboard/commit/d4c4e8b6)
-- **自触发守卫** — 毒锁自恢复，注册守卫保证复制永不中断 | [`cf9743ef`](https://github.com/muutot/Clipboard/commit/cf9743ef) [`e9e95a06`](https://github.com/muutot/Clipboard/commit/e9e95a06)
-- **软删除复活** — 内容重新复制时恢复已软删除的记录 | [`edd012af`](https://github.com/muutot/Clipboard/commit/edd012af)
-- **共享资源保护** — 条目重命名不再连带重命名共享资源文件 | [`1aeb5277`](https://github.com/muutot/Clipboard/commit/1aeb5277)
-- **搜索索引** — 应用索引变更后重载 reader；移除冗余 search_outbox_sequence 索引 | [`b2602b7c`](https://github.com/muutot/Clipboard/commit/b2602b7c) [`bd84568f`](https://github.com/muutot/Clipboard/commit/bd84568f)
-- **设置深拷贝** — 默认值深拷贝，克隆不再共享可变容器 | [`ed137353`](https://github.com/muutot/Clipboard/commit/ed137353)
-- **卡片高度估算** — 文本卡片高度估算与裁剪后预览对齐 | [`0a27444a`](https://github.com/muutot/Clipboard/commit/0a27444a)
+- **Linux 剪贴板** — 通过 text/uri-list 采集 Linux 剪贴板文件路径，接通 Linux HTML / RTF 剪贴板读取 | [`b201d705`](https://github.com/muutot/Clipboard/commit/b201d705) [`2c7ecc1a`](https://github.com/muutot/Clipboard/commit/2c7ecc1a)
 
-## 修复
+## 性能
 
-- **批量收藏切换** — 收藏组批量取消收藏时隐藏删除操作 | [`6be9a2df`](https://github.com/muutot/Clipboard/commit/6be9a2df)
-- **查看器保存失败** — 保存失败时提示，而非打开原始文件 | [`eae37200`](https://github.com/muutot/Clipboard/commit/eae37200)
-- **详情索引守卫** — 文件详情索引防陈旧选中 | [`ac7a2853`](https://github.com/muutot/Clipboard/commit/ac7a2853)
-- **清空历史文案** — 补全清空历史的 Toast 翻译 | [`5544087d`](https://github.com/muutot/Clipboard/commit/5544087d)
-- **DIB 测试平台门控** — dib_to_png 测试限定 Windows 目标 | [`e121afdb`](https://github.com/muutot/Clipboard/commit/e121afdb)
+- **同步流化与延迟** — 流化快照 / 检查点包、延迟远程资源下载、跳过未变 head 下载、预览保持设备本地 | [`6918bac0`](https://github.com/muutot/Clipboard/commit/6918bac0) [`1332ee9b`](https://github.com/muutot/Clipboard/commit/1332ee9b) [`26be2968`](https://github.com/muutot/Clipboard/commit/26be2968) [`51fe7009`](https://github.com/muutot/Clipboard/commit/51fe7009)
+- **设置懒加载** — 次级面板懒加载、实时统计刷新按范围收敛 | [`e3cd4b4e`](https://github.com/muutot/Clipboard/commit/e3cd4b4e) [`5ffb77ed`](https://github.com/muutot/Clipboard/commit/5ffb77ed)
+
+## 修复与健壮性
+
+- **键盘快捷键** — 修复方向键 / 导航快捷键与搜索框聚焦时的条目快捷键 | [`3aaddfe7`](https://github.com/muutot/Clipboard/commit/3aaddfe7) [`8c285725`](https://github.com/muutot/Clipboard/commit/8c285725)
+- **详情与主窗口** — 从索引与缓存条目解析详情查找，每次失效刷新历史分页 | [`9a1f04e0`](https://github.com/muutot/Clipboard/commit/9a1f04e0) [`3cf12e59`](https://github.com/muutot/Clipboard/commit/3cf12e59)
+- **单实例** — 重启时等待旧进程退出 | [`8abc66eb`](https://github.com/muutot/Clipboard/commit/8abc66eb)
+- **设置样式** — 对齐行下拉与共享图标 / 悬停样式，修正数值行溢出 | [`d335811e`](https://github.com/muutot/Clipboard/commit/d335811e) [`3757cd2a`](https://github.com/muutot/Clipboard/commit/3757cd2a) [`6e17c532`](https://github.com/muutot/Clipboard/commit/6e17c532)
+- **发布流程** — 发布流程改为纯本地，绝不推送远程；发布前门禁收敛为 format + check + lint | [`7b833782`](https://github.com/muutot/Clipboard/commit/7b833782) [`54a4b6b3`](https://github.com/muutot/Clipboard/commit/54a4b6b3)
 
 ---
 
