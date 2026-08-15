@@ -81,7 +81,7 @@ Tauri-independent sync crate. Run the narrowest relevant checks during implement
 backend. If an environment prevents a required runtime, visual, platform, packaging, or performance
 check, report the missing evidence and leave the corresponding TODO unverified.
 
-The pre-release gate additionally runs the extreme-release build (see `skills/version-release/SKILL.md`); the local build profile itself stays fast.
+The pre-release gate runs `format` + `check` + `lint:rust` and does **not** build locally (see `skills/version-release/SKILL.md`); building happens remotely in the GitHub Actions `release.yml` workflow on tag push, so the local build profile stays fast.
 
 ## Local build and run model
 
