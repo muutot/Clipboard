@@ -88,7 +88,13 @@ jobs:
           - platform: macos-arm64
             runner: macos-latest
             target: aarch64-apple-darwin
-            rustflags: -C target-cpu=native
+            # ring 0.17.x has a `const` assertion in cpu/arm/darwin.rs that
+            # requires the detected target features to EXACTLY equal its
+            # hardcoded baseline. `-C target-cpu=native` enables extra Apple
+            # Silicon features (lse/rdm/dotprod/...), breaking that assertion
+            # and panicking at compile time. Leave RUSTFLAGS empty so rustc
+            # uses the aarch64-apple-darwin baseline the crate expects.
+            rustflags: ""
           - platform: linux-x64
             runner: ubuntu-latest
             target: x86_64-unknown-linux-gnu
