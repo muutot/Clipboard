@@ -4,18 +4,18 @@
 
 ```sh
 # Normal release (bump version, generate changelog, build)
-node scripts/release.mjs 0.2.0
+node skills/version-release/scripts/release.mjs 0.2.0
 
 # Semantic version bump
-node scripts/release.mjs patch       # 0.1.0 → 0.1.1
-node scripts/release.mjs minor       # 0.1.0 → 0.2.0
-node scripts/release.mjs major       # 0.1.0 → 1.0.0
+node skills/version-release/scripts/release.mjs patch       # 0.1.0 → 0.1.1
+node skills/version-release/scripts/release.mjs minor       # 0.1.0 → 0.2.0
+node skills/version-release/scripts/release.mjs major       # 0.1.0 → 1.0.0
 
 # Dry run (preview without committing)
-node scripts/release.mjs --dry-run 0.2.0
+node skills/version-release/scripts/release.mjs --dry-run 0.2.0
 
 # Re-generate changelog from current content (re-release same version)
-node scripts/release.mjs --regenerate 0.1.0
+node skills/version-release/scripts/release.mjs --regenerate 0.1.0
 ```
 
 ## Prerequisites
@@ -53,9 +53,9 @@ Updates version in three files atomically:
 Can also be run standalone:
 
 ```sh
-node scripts/version.mjs 0.2.0          # to specific version
-node scripts/version.mjs patch          # semver bump
-node scripts/version.mjs --current      # show current version
+node skills/version-release/scripts/version.mjs 0.2.0          # to specific version
+node skills/version-release/scripts/version.mjs patch          # semver bump
+node skills/version-release/scripts/version.mjs --current      # show current version
 ```
 
 ### 4. Changelog Generation
@@ -77,10 +77,10 @@ Generates `CHANGELOG.md` from gitmoji commit messages since the last git tag. Co
 Standalone usage:
 
 ```sh
-node scripts/changelog.mjs              # since last tag
-node scripts/changelog.mjs --all        # full history
-node scripts/changelog.mjs --from v0.1.0  # since specific tag
-node scripts/changelog.mjs --preview    # preview only
+node skills/version-release/scripts/changelog.mjs              # since last tag
+node skills/version-release/scripts/changelog.mjs --all        # full history
+node skills/version-release/scripts/changelog.mjs --from v0.1.0  # since specific tag
+node skills/version-release/scripts/changelog.mjs --preview    # preview only
 ```
 
 ### 5. Commit & Tag
@@ -120,7 +120,7 @@ Pushing the tag triggers the CI/CD pipeline (`.github/workflows/release.yml`) wh
 `--regenerate` re-releases the specified version with updated content:
 
 ```sh
-node scripts/release.mjs --regenerate 0.1.0
+node skills/version-release/scripts/release.mjs --regenerate 0.1.0
 ```
 
 This is useful when:
@@ -164,15 +164,15 @@ git push origin v<version> --force
 | `src-tauri/tauri.conf.json` | `.version` | JSON string |
 | `src-tauri/Cargo.toml`      | `version`  | TOML string |
 
-All three must stay in sync. The `scripts/version.mjs` script ensures atomic updates.
+All three must stay in sync. The `skills/version-release/scripts/version.mjs` script ensures atomic updates.
 
 ### Pre-release Versions
 
 Semver pre-release tags are supported:
 
 ```sh
-node scripts/release.mjs 0.2.0-beta.1
-node scripts/release.mjs 0.2.0-rc.1
+node skills/version-release/scripts/release.mjs 0.2.0-beta.1
+node skills/version-release/scripts/release.mjs 0.2.0-rc.1
 ```
 
 Pre-release tags are marked as draft releases in CI/CD.
@@ -189,6 +189,6 @@ git tag -d v0.2.0
 git push --delete origin v0.2.0
 
 # Revert to previous version
-node scripts/version.mjs 0.1.0
+node skills/version-release/scripts/version.mjs 0.1.0
 git commit -m "⏪ revert[release]: rollback to v0.1.0"
 ```

@@ -16,19 +16,17 @@
  *   (preserving other commits' content and timestamps), then runs normal flow.
  *
  * Usage:
- *   node scripts/release.mjs <version|patch|minor|major>
- *   node scripts/release.mjs --regenerate <version>
- *   node scripts/release.mjs --dry-run <version>
+ *   node skills/version-release/scripts/release.mjs <version|patch|minor|major>
+ *   node skills/version-release/scripts/release.mjs --regenerate <version>
+ *   node skills/version-release/scripts/release.mjs --dry-run <version>
  */
 
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { argv, exit } from "node:process";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
 const RELEASE_PATH = resolve(ROOT, "RELEASE.md");
 const BRANCH = execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, encoding: "utf-8" }).trim();
 
@@ -65,7 +63,7 @@ const versionArg = args.filter((a) => !a.startsWith("--"))[0];
 
 if (!versionArg) {
   console.log(
-    `Usage: node scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`,
+    `Usage: node skills/version-release/scripts/release.mjs [--regenerate] [--dry-run] <version|patch|minor|major>`,
   );
   console.log(`Current version: ${getVersion()}`);
   exit(1);
@@ -237,7 +235,7 @@ let tagVersion = `v${currentVersion}`;
 // Step 1: Bump version
 console.log(`\n[1/6] Bumping version (${BRANCH})...`);
 if (currentVersion !== versionArg) {
-  run(`node scripts/version.mjs ${versionArg}`);
+  run(`node skills/version-release/scripts/version.mjs ${versionArg}`);
   currentVersion = getVersion();
   tagVersion = `v${currentVersion}`;
   run("cargo generate-lockfile --manifest-path src-tauri/Cargo.toml", { silent: true });
@@ -248,7 +246,7 @@ if (currentVersion !== versionArg) {
 
 // Step 2: Generate changelog
 console.log("\n[2/6] Generating changelog...");
-run("node scripts/changelog.mjs");
+run("node skills/version-release/scripts/changelog.mjs");
 
 // Step 3: RELEASE.md check
 console.log("\n[3/6] Checking RELEASE.md...");

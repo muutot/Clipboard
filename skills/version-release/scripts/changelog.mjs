@@ -3,19 +3,17 @@
  * changelog.mjs — Generate CHANGELOG.md from gitmoji commit history.
  *
  * Usage:
- *   node scripts/changelog.mjs                     # generate for latest version
- *   node scripts/changelog.mjs --from v0.1.0       # from a specific tag
- *   node scripts/changelog.mjs --all               # full history (first release)
- *   node scripts/changelog.mjs --preview           # preview without writing
+ *   node skills/version-release/scripts/changelog.mjs                     # generate for latest version
+ *   node skills/version-release/scripts/changelog.mjs --from v0.1.0       # from a specific tag
+ *   node skills/version-release/scripts/changelog.mjs --all               # full history (first release)
+ *   node skills/version-release/scripts/changelog.mjs --preview           # preview without writing
  */
 
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
 const CHANGELOG_PATH = resolve(ROOT, "CHANGELOG.md");
 
 // Gitmoji → changelog section mapping

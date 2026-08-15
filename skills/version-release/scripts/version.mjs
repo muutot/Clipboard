@@ -3,18 +3,16 @@
  * version.mjs — Bump version across all config files in one atomic operation.
  *
  * Usage:
- *   node scripts/version.mjs <new-version>          # bump to specific version
- *   node scripts/version.mjs patch|minor|major      # semantic bump
- *   node scripts/version.mjs --current              # print current version
+ *   node skills/version-release/scripts/version.mjs <new-version>          # bump to specific version
+ *   node skills/version-release/scripts/version.mjs patch|minor|major      # semantic bump
+ *   node skills/version-release/scripts/version.mjs --current              # print current version
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
 
 const VERSION_FILES = [
   { path: "package.json", key: "version", format: "json" },
@@ -120,7 +118,9 @@ if (!arg || arg === "--current") {
 }
 
 if (arg === "--help" || arg === "-h") {
-  console.log(`Usage: node scripts/version.mjs <new-version|patch|minor|major|--current>`);
+  console.log(
+    `Usage: node skills/version-release/scripts/version.mjs <new-version|patch|minor|major|--current>`,
+  );
   console.log(`Current version: ${getCurrentVersion()}`);
   process.exit(0);
 }

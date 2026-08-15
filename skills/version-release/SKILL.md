@@ -51,7 +51,7 @@ Any change to scripts, skills, references, tests, or other source files **must b
 Run:
 
 ```
-node scripts/release.mjs <version>
+node skills/version-release/scripts/release.mjs <version>
 ```
 
 The script does the following:
@@ -70,7 +70,7 @@ The script is **idempotent**: re-running with the same version skips already-don
 ### Pass 1 — Script bumps + generates changelog
 
 ```
-node scripts/release.mjs <version>
+node skills/version-release/scripts/release.mjs <version>
 ```
 
 Steps 1–2 run, then Step 3 detects stale `RELEASE.md` and exits.
@@ -93,7 +93,7 @@ Read `CHANGELOG.md` and use `skills/version-release/release_template.md` as a fo
 Re-run the **same** command — already-bumped steps skip, `RELEASE.md` check passes:
 
 ```
-node scripts/release.mjs <version>
+node skills/version-release/scripts/release.mjs <version>
 ```
 
 Steps 3–6 run: check, commit, tag. Remote push is the user's manual step (the script never pushes).
@@ -103,9 +103,9 @@ Steps 3–6 run: check, commit, tag. Remote push is the user's manual step (the 
 ### Semantic bump
 
 ```
-node scripts/release.mjs patch    # 0.1.0 → 0.1.1
-node scripts/release.mjs minor    # 0.1.0 → 0.2.0
-node scripts/release.mjs major    # 0.1.0 → 1.0.0
+node skills/version-release/scripts/release.mjs patch    # 0.1.0 → 0.1.1
+node skills/version-release/scripts/release.mjs minor    # 0.1.0 → 0.2.0
+node skills/version-release/scripts/release.mjs major    # 0.1.0 → 1.0.0
 ```
 
 Same two-pass flow applies.
@@ -115,7 +115,7 @@ Same two-pass flow applies.
 Re-releases the current version. **The first step must delete the old release commit + tag for that version** before re-running the normal flow:
 
 ```
-node scripts/release.mjs --regenerate <version>
+node skills/version-release/scripts/release.mjs --regenerate <version>
 ```
 
 The script locates the old release commit by the local tag **or** by scanning history (including remote-tracking refs) for `bump version to <version>`, then:
@@ -129,7 +129,7 @@ The normal flow then creates a fresh changelog, commit, and tag. Verify the dele
 ### Dry run
 
 ```
-node scripts/release.mjs --dry-run <version>
+node skills/version-release/scripts/release.mjs --dry-run <version>
 ```
 
 Previews the process without committing, tagging, or pushing (the script never pushes anyway).
@@ -139,15 +139,33 @@ Previews the process without committing, tagging, or pushing (the script never p
 These can be run independently:
 
 ```sh
-node scripts/version.mjs <version>        # bump version only
-node scripts/version.mjs patch|minor|major  # semantic bump
-node scripts/version.mjs --current         # show current version
+node skills/version-release/scripts/version.mjs <version>        # bump version only
+node skills/version-release/scripts/version.mjs patch|minor|major  # semantic bump
+node skills/version-release/scripts/version.mjs --current         # show current version
 
-node scripts/changelog.mjs                # generate changelog since last tag
-node scripts/changelog.mjs --all           # full history changelog
-node scripts/changelog.mjs --from v0.1.0   # from specific tag
-node scripts/changelog.mjs --preview       # preview without writing
+node skills/version-release/scripts/changelog.mjs                # generate changelog since last tag
+node skills/version-release/scripts/changelog.mjs --all           # full history changelog
+node skills/version-release/scripts/changelog.mjs --from v0.1.0   # from specific tag
+node skills/version-release/scripts/changelog.mjs --preview       # preview without writing
 ```
+
+### Delete a commit
+
+`skills/version-release/scripts/delete-commit.mjs` drops a single commit from the current branch by rewriting history locally (the same mechanism `--regenerate` uses internally). It is **local-only** — it never touches the remote.
+
+```sh
+node skills/version-release/scripts/delete-commit.mjs <commit>          # delete <commit> (rewrites history)
+node skills/version-release/scripts/delete-commit.mjs --dry-run <commit> # preview replay range; no changes
+node skills/version-release/scripts/delete-commit.mjs <commit> --branch <name>  # target a non-current branch
+```
+
+Behavior:
+
+- Requires a clean working tree; exits safely if `<commit>` does not exist or is not an ancestor of the branch tip.
+- Backs the branch tip up to `refs/backup/pre-delete-<sha>` before rewriting, so it can be restored with `git update-ref refs/heads/<branch> refs/backup/pre-delete-<sha>`.
+- Replays commits after `<commit>` with `--committer-date-is-author-date` (timestamps preserved when author date == committer date; warns otherwise).
+- On conflict it aborts the rebase and restores the previous tip automatically.
+- Only use this when the branch has **not** been pushed (or you will force-push afterward) — like `--regenerate`, it changes SHAs.
 
 ## Release body (`RELEASE.md`)
 
@@ -182,7 +200,7 @@ Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 | `src-tauri/tauri.conf.json` | `.version` |
 | `src-tauri/Cargo.toml`      | `version`  |
 
-All three are updated atomically by `scripts/version.mjs`.
+All three are updated atomically by `skills/version-release/scripts/version.mjs`.
 
 ## Error recovery
 
