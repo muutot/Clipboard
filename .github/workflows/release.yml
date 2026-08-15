@@ -43,6 +43,10 @@ jobs:
         with:
           workspaces: src-tauri
           env-cache-key: RUSTFLAGS
+          # The extreme release build (fat LTO, codegen-units=1) can push target/
+          # past GitHub's 10GB cache-entry limit. cache-on-failure keeps the job
+          # green even if the cache upload is refused; the build still succeeds.
+          cache-on-failure: true
 
       - name: Install system dependencies
         run: |
@@ -62,7 +66,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "true"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
           CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
-        run: cargo build -j 2 --profile release --manifest-path src-tauri/Cargo.toml
+        run: cargo build --profile release --manifest-path src-tauri/Cargo.toml
 
   build:
     name: Build (${{ matrix.platform }})
@@ -115,6 +119,10 @@ jobs:
         with:
           workspaces: src-tauri
           env-cache-key: CARGO_PROFILE_RELEASE_OPT_LEVEL CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS RUSTFLAGS
+          # Fat-LTO release artifacts per platform can be large; if the cache
+          # entry exceeds GitHub's 10GB limit the upload is skipped but the job
+          # still passes.
+          cache-on-failure: true
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
