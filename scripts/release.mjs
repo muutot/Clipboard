@@ -8,7 +8,7 @@
  *   3. Verify RELEASE.md references the target version (exit for LLM to curate)
  *   4. Commit version files + CHANGELOG.md + RELEASE.md
  *   5. Create git tag
- *   6. Push to origin (triggers CI/CD)
+ *   6. Local-only: NO remote push — print the push commands for the user to run manually
  *
  * Regenerate mode (--regenerate):
  *   Before normal flow, drops the old release commit + tag from history via
@@ -211,7 +211,7 @@ if (isRegenerate) {
         } else {
           console.log(
             `  Old release commit is not in the current branch (only on a remote ref); ` +
-              `it will be dropped by the forced push.`,
+              `drop it from the remote by force-pushing / deleting the remote tag manually.`,
           );
         }
         if (localTag) {
@@ -289,30 +289,21 @@ if (!isDryRun) {
   console.log("\n[5/6] Tag (skipped in dry-run mode)");
 }
 
-// Step 6: Push
+// Step 6: Remote push — local-only by design.
+// All git operations (bump, commit, tag, history rewrite) happen locally. This
+// script NEVER pushes to any remote. The user pushes manually when ready; doing so
+// triggers the GitHub Actions release workflow. After --regenerate (history rewrite)
+// the user must force-push.
 if (!isDryRun) {
-  console.log("\n[6/6] Pushing...");
-
-  // Auto-detect if force push is needed (regenerate rewrites history)
-  let needsForce = forcePush;
-  if (!needsForce) {
-    try {
-      const aheadBehind = execSync(`git rev-list --count --left-right origin/${BRANCH}...HEAD`, {
-        cwd: ROOT,
-        encoding: "utf-8",
-      }).trim();
-      const parts = aheadBehind.split(/\s+/).filter(Boolean);
-      if (parts.length > 1) needsForce = true;
-    } catch {
-      // remote branch doesn't exist — first push, no force needed
-    }
+  console.log("\n[6/6] Remote push — skipped (local-only by design)");
+  console.log("  The release commit and tag exist only locally. Push them yourself:");
+  console.log(`    git push origin ${BRANCH}`);
+  console.log(`    git push origin ${tagVersion}`);
+  if (forcePush) {
+    console.log("  History was rewritten by --regenerate; use --force-with-lease when pushing:");
+    console.log(`    git push origin ${BRANCH} --force-with-lease`);
+    console.log(`    git push origin ${tagVersion} --force`);
   }
-
-  const branchFlag = needsForce ? "--force-with-lease" : "";
-  const tagFlag = needsForce ? "--force" : "";
-  run(`git push origin ${BRANCH} ${branchFlag}`.trim());
-  run(`git push origin ${tagVersion} ${tagFlag}`.trim());
-  console.log(`  ✓ Pushed ${BRANCH} and ${tagVersion}`);
 } else {
   console.log("\n[6/6] Push (skipped in dry-run mode)");
 }

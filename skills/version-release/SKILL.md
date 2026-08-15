@@ -56,14 +56,14 @@ node scripts/release.mjs <version>
 
 The script does the following:
 
-| Step | What                                                                 |
-| ---- | -------------------------------------------------------------------- |
-| 1    | Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml`      |
-| 2    | Generate `CHANGELOG.md` from commits since last tag                  |
-| 3    | Check `RELEASE.md` — if stale, prints instructions and exits cleanly |
-| 4    | Commit version files + CHANGELOG.md + RELEASE.md                     |
-| 5    | Create git tag `vx.x.x`                                              |
-| 6    | Push to origin (triggers GitHub Actions release workflow)            |
+| Step | What                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------ |
+| 1    | Bump version in `package.json`, `tauri.conf.json`, `Cargo.toml`                            |
+| 2    | Generate `CHANGELOG.md` from commits since last tag                                        |
+| 3    | Check `RELEASE.md` — if stale, prints instructions and exits cleanly                       |
+| 4    | Commit version files + CHANGELOG.md + RELEASE.md                                           |
+| 5    | Create git tag `vx.x.x`                                                                    |
+| 6    | **Local-only: no remote push.** Print the `git push` commands for the user to run manually |
 
 The script is **idempotent**: re-running with the same version skips already-done steps.
 
@@ -96,7 +96,7 @@ Re-run the **same** command — already-bumped steps skip, `RELEASE.md` check pa
 node scripts/release.mjs <version>
 ```
 
-Steps 3–6 run: check, commit, tag, push to origin.
+Steps 3–6 run: check, commit, tag. Remote push is the user's manual step (the script never pushes).
 
 **Re-check formatting after curation.** `RELEASE.md` is written _after_ the pre-release gate. Before Pass 2, run `npm run format:prettier:check` (or `npm run format:prettier -- RELEASE.md` to fix) so the freshly curated `RELEASE.md` is prettier-clean. Fix any diff (`npx prettier --write RELEASE.md`), then commit it either as a separate `🎨 style[release]` commit or folded into the release commit — do **not** push a release whose `RELEASE.md` fails the format gate.
 
@@ -121,8 +121,8 @@ node scripts/release.mjs --regenerate <version>
 The script locates the old release commit by the local tag **or** by scanning history (including remote-tracking refs) for `bump version to <version>`, then:
 
 - if it is an ancestor of `HEAD`, drops it with the standard single-commit removal `git rebase --committer-date-is-author-date --onto <parent> <commit> <branch>`, which replays later commits onto the old release commit's parent while `--committer-date-is-author-date` preserves every surviving commit's original timestamp. Before rewriting, it requires a clean working tree, backs the branch tip up to `refs/backup/pre-release-delete-<sha>`, warns when a replayed commit's author date differs from its committer date, and on failure aborts the rebase and restores the previous tip;
-- otherwise (old release commit exists only on a remote ref), notes that the forced push will drop it;
-- deletes the old tag and sets the forced-push flag.
+- otherwise (old release commit exists only on a remote ref), notes that you must force-push / delete the remote tag manually to drop it;
+- deletes the old tag locally (you must also delete the remote tag manually), and records that history was rewritten so the printed push instructions include `--force-with-lease`.
 
 The normal flow then creates a fresh changelog, commit, and tag. Verify the deletion actually happened before Pass 1: `git log --oneline <branch> | findstr "bump version to <version>"` should show nothing, and the old tag should be gone. The pre-delete tip is kept as a recovery backup at `refs/backup/pre-release-delete-<sha>` (so the old release commit may still appear under `git log --all`); the script's own history scan excludes `refs/backup/*`, which is why re-running `--regenerate` for Pass 2 reports no old release commit.
 
@@ -132,7 +132,7 @@ The normal flow then creates a fresh changelog, commit, and tag. Verify the dele
 node scripts/release.mjs --dry-run <version>
 ```
 
-Previews the process without committing, tagging, or pushing.
+Previews the process without committing, tagging, or pushing (the script never pushes anyway).
 
 ## Standalone tools
 
@@ -153,19 +153,19 @@ node scripts/changelog.mjs --preview       # preview without writing
 
 `RELEASE.md` is the canonical release body for GitHub Releases. It is **manually curated** by the LLM during each release, following the format in `skills/version-release/release_template.md`.
 
-Pushing the tag triggers CI/CD which reads `RELEASE.md` automatically as the GitHub Release body.
+Pushing the tag (done manually by the user) triggers CI/CD which reads `RELEASE.md` automatically as the GitHub Release body.
 
 ## Post-release
 
-After a successful release, report:
+The release script is **local-only** — it performs no remote operations. After a successful run, report:
 
 1. New version number
-2. Tag created (`vx.x.x`)
-3. Release has been pushed to origin (GitHub Actions will build artifacts automatically)
+2. Tag created locally (`vx.x.x`)
+3. Release commit + tag exist only locally; **the user pushes to origin manually** to trigger GitHub Actions (which builds artifacts automatically)
 
 ## CI/CD
 
-The release commit push to the main branch does **not** trigger the CI workflow:
+When the release commit is pushed to the main branch (manually, by the user), it does **not** trigger the CI workflow:
 `ci.yml` ignores pushes that only touch release files (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `CHANGELOG.md`, `RELEASE.md`).
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
