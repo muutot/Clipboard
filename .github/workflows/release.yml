@@ -19,8 +19,6 @@ jobs:
     name: Verify
     runs-on: ubuntu-latest
     env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
       RUSTFLAGS: -C link-arg=-fuse-ld=mold
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +28,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node24-
 
       - uses: dtolnay/rust-toolchain@stable
-
-      - uses: mozilla-actions/sccache-action@v0.0.11
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -49,7 +52,7 @@ jobs:
             libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --frozen-lockfile
 
       - name: Verify
         run: npm run verify
@@ -70,8 +73,6 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
       CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
       RUSTFLAGS: ${{ matrix.rustflags }}
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -97,13 +98,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node24-
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      - uses: mozilla-actions/sccache-action@v0.0.11
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -119,7 +125,7 @@ jobs:
             libjavascriptcoregtk-4.1-dev libsoup-3.0-dev mold
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --frozen-lockfile
 
       - name: Prepare release body
         id: release_body
