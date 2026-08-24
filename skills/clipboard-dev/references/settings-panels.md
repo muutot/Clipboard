@@ -19,18 +19,18 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 `StorageSettingsDialog.svelte` is the parent shell for modal and standalone settings. Its primary categories and current secondary sections are:
 
-| Primary category | Secondary sections / implementation                                                                                                                                     |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| General          | General, Window, Search, Items → `GeneralSettingsPanel`; the General page includes the clipboard recording pause/resume toggle                                          |
-| Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`                                          |
+| Primary category | Secondary sections / implementation                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| General          | General, Window, Search, Items → `GeneralSettingsPanel`; the General page includes the clipboard recording pause/resume toggle                                                    |
+| Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`                                                    |
 | Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Sensitive content (local-only mode, sensitive patterns) → `SensitiveContentSettingsPanel`; Icon cache → built into the parent |
-| Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                   |
-| Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent |
-| Sync             | Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits) → built into the parent                     |
-| Keyboard         | Item, Quick, Global → `KeyboardSettingsPanel` with category prop                                                                                                        |
-| OCR              | Single current section → built into the parent                                                                                                                          |
-| Statistics       | Storage, Performance, Memory → built into the parent                                                                                                                    |
-| About            | Version, executable-path location, configurable update source dropdown, and update check (`check_for_update`) → built into the parent                                   |
+| Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                             |
+| Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent           |
+| Sync             | Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits) → built into the parent                               |
+| Keyboard         | Item, Quick, Global → `KeyboardSettingsPanel` with category prop                                                                                                                  |
+| OCR              | Single current section → built into the parent                                                                                                                                    |
+| Statistics       | Storage, Performance, Memory → built into the parent                                                                                                                              |
+| About            | Version, executable-path location, configurable update source dropdown, and update check (`check_for_update`) → built into the parent                                             |
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
