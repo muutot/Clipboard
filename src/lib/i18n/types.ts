@@ -489,13 +489,12 @@ export interface LocaleDefinition {
     configNote: string;
     captureUnavailable: string;
     sensitiveContentTitle: string;
+    sensitiveSectionDescription: string;
     sensitiveContentDescription: string;
     sensitivePatternsLabel: string;
     sensitivePatternsPlaceholder: string;
     sensitivePatternsSaved: string;
     sensitivePatternsInvalid: string;
-    captureSensitiveSources: string;
-    captureSensitiveSourcesDescription: string;
     localOnly: string;
     localOnlyDescription: string;
     pauseTitle: string;

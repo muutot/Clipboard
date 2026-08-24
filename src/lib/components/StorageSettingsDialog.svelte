@@ -95,6 +95,8 @@
     Promise<typeof import("$lib/components/IconColorsSettingsPanel.svelte")> | undefined;
   let ignoredAppsSettingsPanelModule:
     Promise<typeof import("$lib/components/IgnoredAppsSettingsPanel.svelte")> | undefined;
+  let sensitiveContentSettingsPanelModule:
+    Promise<typeof import("$lib/components/SensitiveContentSettingsPanel.svelte")> | undefined;
   let tagManagementSettingsPanelModule:
     Promise<typeof import("$lib/components/TagManagementSettingsPanel.svelte")> | undefined;
   let keyboardSettingsPanelModule:
@@ -126,6 +128,11 @@
   function loadIgnoredAppsSettingsPanel() {
     return (ignoredAppsSettingsPanelModule ??=
       import("$lib/components/IgnoredAppsSettingsPanel.svelte"));
+  }
+
+  function loadSensitiveContentSettingsPanel() {
+    return (sensitiveContentSettingsPanelModule ??=
+      import("$lib/components/SensitiveContentSettingsPanel.svelte"));
   }
 
   function loadTagManagementSettingsPanel() {
@@ -1714,6 +1721,15 @@
       {:then module}
         {@const Panel = module.default}
         <Panel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
+      {:catch}
+        {@render settingsPanelLoadFailed()}
+      {/await}
+    {:else if activeSection === "capture_privacy"}
+      {#await loadSensitiveContentSettingsPanel()}
+        {@render loadingSettingsPanel()}
+      {:then module}
+        {@const Panel = module.default}
+        <Panel {onclose} showHeader={false} />
       {:catch}
         {@render settingsPanelLoadFailed()}
       {/await}

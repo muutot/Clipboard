@@ -532,15 +532,14 @@ const en: LocaleDefinition = {
     configNote: "The left list will auto-populate once app source identification is connected.",
     captureUnavailable: "Desktop application filter service unavailable",
     sensitiveContentTitle: "Sensitive Content Filtering",
+    sensitiveSectionDescription:
+      "Local-only mode and sensitive-pattern filtering for captured clipboard text.",
     sensitiveContentDescription:
       "Clipboard text matching any of these regular expressions is not recorded. One pattern per line; leave empty to disable.",
     sensitivePatternsLabel: "Sensitive content patterns",
     sensitivePatternsPlaceholder: "e.g. password\\s*[=:]\\s*\\S+",
     sensitivePatternsSaved: "Sensitive content rules saved",
     sensitivePatternsInvalid: "Line {line} has an invalid regex: {error}",
-    captureSensitiveSources: "Capture password manager content",
-    captureSensitiveSourcesDescription:
-      "Password managers such as 1Password, Bitwarden and KeePass are skipped by default. Enable this to record their content too (apps in the ignore list are always skipped).",
     localOnly: "Local-only mode",
     localOnlyDescription:
       "When enabled the app makes no outbound network requests (such as version checks).",

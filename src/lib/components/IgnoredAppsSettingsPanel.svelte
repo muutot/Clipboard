@@ -1,14 +1,10 @@
 ﻿<script lang="ts">
   import { onMount } from "svelte";
-  import AppIcon from "$lib/components/AppIcon.svelte";
   import SearchField from "$lib/components/SearchField.svelte";
   import {
     configureIgnoredApplications,
     getApplicationFilterSettings,
-    getPrivacySettings,
-    setPrivacySettings,
     type ApplicationFilterSettings,
-    type PrivacySettings,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
   import { convertFileSrc } from "@tauri-apps/api/core";
@@ -40,10 +36,6 @@
   let saving = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let privacy = $state<PrivacySettings | null>(null);
-  let patternsText = $state("");
-  let patternsSaving = $state(false);
-  let privacySaving = $state(false);
 
   const ignoredKeys = $derived(
     new Set((settings?.ignoredApplications ?? []).map(normalizeApplication)),
@@ -65,66 +57,7 @@
 
   onMount(() => {
     void loadSettings();
-    void loadPrivacySettings();
   });
-
-  async function loadPrivacySettings() {
-    try {
-      const settings = await getPrivacySettings();
-      privacy = settings;
-      patternsText = settings.sensitivePatterns.join("\n");
-    } catch (error) {
-      console.error("Unable to load privacy settings", error);
-    }
-  }
-
-  async function updatePrivacy(patch: { localOnly?: boolean; captureSensitiveSources?: boolean }) {
-    if (!privacy || privacySaving) return;
-    privacySaving = true;
-    feedback = "";
-    feedbackSuccess = false;
-    try {
-      const updated = await setPrivacySettings(patch);
-      privacy = updated;
-      patternsText = updated.sensitivePatterns.join("\n");
-    } catch (error) {
-      feedback = error instanceof Error ? error.message : String(error);
-    } finally {
-      privacySaving = false;
-    }
-  }
-
-  function toggleCaptureSensitiveSources() {
-    if (!privacy) return;
-    void updatePrivacy({ captureSensitiveSources: !privacy.captureSensitiveSources });
-  }
-
-  function toggleLocalOnly() {
-    if (!privacy) return;
-    void updatePrivacy({ localOnly: !privacy.localOnly });
-  }
-
-  async function savePatterns() {
-    if (!privacy || patternsSaving) return;
-    patternsSaving = true;
-    feedback = "";
-    feedbackSuccess = false;
-    const lines = patternsText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    try {
-      const updated = await setPrivacySettings({ sensitivePatterns: lines });
-      privacy = updated;
-      patternsText = updated.sensitivePatterns.join("\n");
-      feedback = _t("capture.sensitivePatternsSaved");
-      feedbackSuccess = true;
-    } catch (error) {
-      feedback = error instanceof Error ? error.message : String(error);
-    } finally {
-      patternsSaving = false;
-    }
-  }
 
   async function loadSettings() {
     loading = true;
@@ -325,75 +258,6 @@
     </section>
 
     <p class="auto-save-note">{_t("capture.configNote")}</p>
-
-    {#if privacy}
-      <section class="setting-card privacy-card">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
-          <div>
-            <strong>{_t("capture.sensitiveContentTitle")}</strong>
-            <p>{_t("capture.sensitiveContentDescription")}</p>
-          </div>
-        </div>
-
-        <div class="privacy-row">
-          <div class="privacy-row-text">
-            <strong>{_t("capture.captureSensitiveSources")}</strong>
-            <p>{_t("capture.captureSensitiveSourcesDescription")}</p>
-          </div>
-          <button
-            type="button"
-            class="toggle-switch"
-            class:active={privacy.captureSensitiveSources}
-            role="switch"
-            aria-checked={privacy.captureSensitiveSources}
-            aria-label={_t("capture.captureSensitiveSources")}
-            disabled={privacySaving}
-            onclick={toggleCaptureSensitiveSources}
-          >
-            <span class="toggle-knob"></span>
-          </button>
-        </div>
-
-        <div class="privacy-row">
-          <div class="privacy-row-text">
-            <strong>{_t("capture.localOnly")}</strong>
-            <p>{_t("capture.localOnlyDescription")}</p>
-          </div>
-          <button
-            type="button"
-            class="toggle-switch"
-            class:active={privacy.localOnly}
-            role="switch"
-            aria-checked={privacy.localOnly}
-            aria-label={_t("capture.localOnly")}
-            disabled={privacySaving}
-            onclick={toggleLocalOnly}
-          >
-            <span class="toggle-knob"></span>
-          </button>
-        </div>
-
-        <div class="patterns-editor">
-          <label for="sensitive-patterns">{_t("capture.sensitivePatternsLabel")}</label>
-          <textarea
-            id="sensitive-patterns"
-            class="patterns-textarea"
-            bind:value={patternsText}
-            placeholder={_t("capture.sensitivePatternsPlaceholder")}
-            spellcheck="false"
-            rows="6"></textarea>
-          <div class="patterns-actions">
-            <button
-              type="button"
-              class="settings-action-btn"
-              disabled={patternsSaving}
-              onclick={savePatterns}>{_t("actions.save")}</button
-            >
-          </div>
-        </div>
-      </section>
-    {/if}
   </div>
 {:else}
   <div class="settings-state">{feedback || _t("capture.captureUnavailable")}</div>
@@ -600,71 +464,6 @@
   }
   .auto-save-note {
     text-align: right;
-  }
-
-  .privacy-card {
-    margin-top: 18px;
-    padding: 13px;
-  }
-  .privacy-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    margin-top: 10px;
-    padding: 10px 0 0;
-    border-top: 1px solid var(--border-subtle);
-  }
-  .privacy-row-text {
-    min-width: 0;
-  }
-  .privacy-row-text strong {
-    color: var(--text-primary);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    font-weight: 600;
-  }
-  .privacy-row-text p {
-    margin: 4px 0 0;
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    line-height: 1.5;
-  }
-  .patterns-editor {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-subtle);
-  }
-  .patterns-editor label {
-    display: block;
-    margin-bottom: 6px;
-    color: var(--text-primary);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    font-weight: 600;
-  }
-  .patterns-textarea {
-    width: 100%;
-    resize: vertical;
-    padding: 8px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font-family: var(--font-mono, ui-monospace, "SFMono-Regular", "Menlo", monospace);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    line-height: 1.5;
-    outline: none;
-    transition: border-color 120ms ease;
-  }
-  .patterns-textarea::placeholder {
-    color: var(--placeholder-color);
-  }
-  .patterns-textarea:focus {
-    border-color: var(--text-faint);
-  }
-  .patterns-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 8px;
   }
 
   @media (max-width: 700px) {

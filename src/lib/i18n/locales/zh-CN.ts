@@ -508,15 +508,13 @@ const zhCN: LocaleDefinition = {
     configNote: "应用来源识别接入后会自动补充左侧列表",
     captureUnavailable: "桌面端应用过滤服务不可用",
     sensitiveContentTitle: "敏感内容过滤",
+    sensitiveSectionDescription: "仅本地模式开关与敏感内容正则过滤。",
     sensitiveContentDescription:
       "匹配以下任意正则表达式的剪贴板文本不会被记录。每行一条，留空则关闭过滤。",
     sensitivePatternsLabel: "敏感内容正则",
     sensitivePatternsPlaceholder: "例如：password\\s*[=:]\\s*\\S+",
     sensitivePatternsSaved: "已保存敏感内容规则",
     sensitivePatternsInvalid: "第 {line} 行正则无效：{error}",
-    captureSensitiveSources: "记录密码管理器内容",
-    captureSensitiveSourcesDescription:
-      "默认跳过 1Password、Bitwarden、KeePass 等密码管理器来源。开启后仍会记录这些内容（忽略列表中的应用始终被跳过）。",
     localOnly: "仅本地模式",
     localOnlyDescription: "开启后应用不进行任何出站网络请求（如版本检查）。",
     pauseTitle: "剪切板记录",

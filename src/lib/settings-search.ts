@@ -83,6 +83,14 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "color",
   ],
   capture: [i18n("capture.title"), i18n("capture.settings"), "采集"],
+  capture_privacy: [
+    i18n("capture.settings"),
+    i18n("capture.sensitiveContentTitle"),
+    "敏感",
+    "隐私",
+    "正则",
+    "仅本地",
+  ],
   capture_icons: [
     i18n("capture.title"),
     i18n("capture.settings"),
@@ -495,6 +503,20 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
       i18n("capture.addManual"),
       "应用过滤",
     ],
+  ),
+  entry(
+    "capture.local-only",
+    { section: "capture_privacy" },
+    i18n("capture.localOnly"),
+    i18n("capture.localOnlyDescription"),
+    ["隐私", "网络", "离线", "privacy"],
+  ),
+  entry(
+    "capture.sensitive-patterns",
+    { section: "capture_privacy" },
+    i18n("capture.sensitivePatternsLabel"),
+    i18n("capture.sensitiveContentDescription"),
+    ["敏感内容过滤", "正则", "regex"],
   ),
   entry(
     "capture.icon-cache",

@@ -23,7 +23,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | General          | General, Window, Search, Items → `GeneralSettingsPanel`; the General page includes the clipboard recording pause/resume toggle                                          |
 | Appearance       | Theme, Font, Compact, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`                                          |
-| Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Icon cache → built into the parent                                                                                  |
+| Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Sensitive content (local-only mode, sensitive patterns) → `SensitiveContentSettingsPanel`; Icon cache → built into the parent |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                   |
 | Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent |
 | Sync             | Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits) → built into the parent                     |

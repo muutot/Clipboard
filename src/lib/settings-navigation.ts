@@ -10,6 +10,7 @@ export const SETTINGS_SECTIONS = [
   "theme",
   "icons",
   "capture",
+  "capture_privacy",
   "capture_icons",
   "storage_paths",
   "storage_limits",
@@ -130,6 +131,11 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
         section: "capture",
         labelKey: "capture.title",
         descriptionKey: "capture.description",
+      },
+      {
+        section: "capture_privacy",
+        labelKey: "capture.sensitiveContentTitle",
+        descriptionKey: "capture.sensitiveSectionDescription",
       },
       {
         section: "capture_icons",
