@@ -119,6 +119,7 @@
       if (iIdx >= 0) indexedItems[iIdx] = { ...indexedItems[iIdx], ...changes };
       indexedItems = indexedItems;
     }
+    searchCache = searchCache.map((item) => (item.id === id ? { ...item, ...changes } : item));
     if (detailItem?.id === id) detailItem = { ...detailItem, ...changes };
     return true;
   }
@@ -136,6 +137,7 @@
         indexedItems = indexedItems;
       }
     }
+    searchCache = searchCache.map((item) => (item.id === id ? { ...item, ...fields } : item));
   }
 
   function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
@@ -2055,13 +2057,9 @@
 
   async function saveTags(id: string, tags: string[]) {
     const deduped = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
-    items = items.map((item) => (item.id === id ? { ...item, tags: deduped } : item));
-    if (detailItem?.id === id) detailItem = { ...detailItem, tags: deduped };
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, tags: deduped } : item,
-      );
-    }
+    // updateItem fans the patch out to items, indexedItems, searchCache, and
+    // detailItem so no copy of the entry keeps stale tags.
+    updateItem(id, () => ({ tags: deduped }));
     const ok = await persistTags(id, deduped);
     if (ok === false) {
       showToast(_t("toast.saveFailed"), "error");
