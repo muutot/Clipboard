@@ -94,8 +94,10 @@ fn export_database_to_path(
     })
 }
 
+/// Async: large exports run on the async runtime instead of the main thread,
+/// which would otherwise freeze the window event loop.
 #[tauri::command]
-pub fn export_to_file(
+pub async fn export_to_file(
     database: tauri::State<'_, Database>,
     path: String,
     format: String,
@@ -168,8 +170,10 @@ fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSu
     }
 }
 
+/// Async: importing a large backup runs on the async runtime instead of the
+/// main thread, which would otherwise freeze the window event loop.
 #[tauri::command]
-pub fn import_from_file(
+pub async fn import_from_file(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     paths: tauri::State<'_, StoragePaths>,

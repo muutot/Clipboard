@@ -80,8 +80,10 @@ pub fn get_storage_kind_stats(
         .map_err(|error| error.to_string())
 }
 
+/// Async: the directory copy + VACUUM INTO can take minutes and would
+/// otherwise freeze the window event loop on the main thread.
 #[tauri::command]
-pub fn configure_storage_directory(
+pub async fn configure_storage_directory(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     active_paths: tauri::State<'_, StoragePaths>,
     database: tauri::State<'_, Database>,

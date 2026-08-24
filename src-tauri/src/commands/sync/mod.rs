@@ -274,8 +274,11 @@ pub fn set_sync_config(
 /// Tests the persisted S3 settings. The settings UI saves its current fields
 /// before invoking this command, so write-only secrets never cross back to the
 /// frontend after initial entry.
+///
+/// Async: the blocking S3 round-trip runs on the async runtime instead of the
+/// main thread, which would otherwise freeze the window event loop.
 #[tauri::command]
-pub fn test_sync_connection(
+pub async fn test_sync_connection(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<sync::S3TestResult, String> {
     let settings = {
@@ -294,8 +297,10 @@ pub fn test_sync_connection(
     ))
 }
 
+/// Async: a full sync run performs blocking S3 I/O and must not occupy the
+/// main thread, which would otherwise freeze the window event loop.
 #[tauri::command]
-pub fn sync_now(app: tauri::AppHandle) -> Result<SyncRunResult, String> {
+pub async fn sync_now(app: tauri::AppHandle) -> Result<SyncRunResult, String> {
     run_sync(&app)
 }
 
