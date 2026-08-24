@@ -245,6 +245,16 @@ pub fn run() {
                 config.image_storage_path().map(PathBuf::from),
                 config.file_storage_path().map(PathBuf::from),
             )?;
+            // The static asset scope in tauri.conf.json intentionally excludes
+            // a global "**" wildcard. Grant the webview read access only to
+            // the managed storage root — which follows the user's configured
+            // data directory, including after it changes — so image previews,
+            // file icons, and resource files render while arbitrary disk
+            // paths stay unreachable.
+            let asset_scope = app.asset_protocol_scope();
+            asset_scope
+                .allow_directory(&paths.storage, true)
+                .map_err(|error| -> String { format!("failed to grant asset access: {error}") })?;
             let recovery_report = recover_database_if_needed(&paths.database)?;
             if let Some(report) = &recovery_report {
                 eprintln!(
