@@ -459,6 +459,10 @@ pub fn rename_item(
     if new_name.trim().is_empty() {
         return Err("name cannot be empty".to_string());
     }
+    let sanitized_name = sanitize_file_stem(new_name.trim());
+    if sanitized_name.is_empty() {
+        return Err("name contains no usable characters".to_string());
+    }
     let mut updated = item.clone();
     if item.kind == ClipboardKind::Image || item.kind == ClipboardKind::File {
         if let Some(ref old_path) = item.resource_path {
@@ -475,7 +479,18 @@ pub fn rename_item(
             if old.exists() && !shared {
                 let ext = old.extension().unwrap_or_default().to_string_lossy();
                 let parent = old.parent().unwrap_or(std::path::Path::new("."));
-                let new_path = parent.join(format!("{}.{}", new_name.trim(), ext));
+                // The new name arrives from the webview and must never be able
+                // to escape the managed directory via separators or traversal.
+                let candidate = format!("{sanitized_name}.{ext}");
+                if std::path::Path::new(&candidate)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .as_deref()
+                    != Some(candidate.as_str())
+                {
+                    return Err("invalid file name".to_string());
+                }
+                let new_path = parent.join(candidate);
                 if new_path != old {
                     if new_path.exists() {
                         return Err(format!("file already exists: {}", new_path.display()));
@@ -496,6 +511,82 @@ pub fn rename_item(
     }
     database.save_item(&updated).map_err(|e| e.to_string())?;
     Ok(updated)
+}
+
+/// Restricts a webview-provided file name stem to characters that cannot
+/// alter the destination directory (`/`, `\`, `:`) or form a Windows device
+/// name, and strips trailing dots/spaces (illegal on Windows). Returns an
+/// empty string when nothing usable remains.
+fn sanitize_file_stem(name: &str) -> String {
+    let sanitized: String = name
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            character if (character as u32) < 0x20 || character == '\u{7f}' => '_',
+            other => other,
+        })
+        .collect();
+    let trimmed = sanitized.trim_end_matches(['.', ' ']);
+    if is_windows_reserved_device_name(trimmed) {
+        return "_".to_owned();
+    }
+    trimmed.to_owned()
+}
+
+fn is_windows_reserved_device_name(stem: &str) -> bool {
+    let upper = stem.to_ascii_uppercase();
+    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
+    }
+    ["COM", "LPT"].iter().any(|prefix| {
+        upper.starts_with(prefix)
+            && !upper[prefix.len()..].is_empty()
+            && upper[prefix.len()..]
+                .chars()
+                .all(|character| character.is_ascii_digit())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_file_stem;
+
+    #[test]
+    fn replaces_path_separators_and_windows_specials() {
+        // Separators become underscores, so the name can never traverse out
+        // of the managed directory; leading dots are harmless (same dir).
+        assert_eq!(sanitize_file_stem("..\\..\\evil"), ".._.._evil");
+        assert_eq!(
+            sanitize_file_stem("a/b:c*d?e\"f<g>h|i"),
+            "a_b_c_d_e_f_g_h_i"
+        );
+    }
+
+    #[test]
+    fn traversal_only_names_collapse_to_empty() {
+        assert_eq!(sanitize_file_stem(".."), "");
+        assert_eq!(sanitize_file_stem("."), "");
+        assert_eq!(sanitize_file_stem("..."), "");
+    }
+
+    #[test]
+    fn keeps_unicode_display_names() {
+        assert_eq!(sanitize_file_stem("截图 2026"), "截图 2026");
+        assert_eq!(sanitize_file_stem("report-v2_final"), "report-v2_final");
+    }
+
+    #[test]
+    fn rejects_windows_reserved_device_names() {
+        assert_eq!(sanitize_file_stem("CON"), "_");
+        assert_eq!(sanitize_file_stem("com1"), "_");
+        assert_eq!(sanitize_file_stem("LPT4"), "_");
+        assert_eq!(sanitize_file_stem("combo"), "combo");
+    }
+
+    #[test]
+    fn trims_trailing_dots_and_spaces() {
+        assert_eq!(sanitize_file_stem("name. "), "name");
+    }
 }
 
 #[tauri::command]
