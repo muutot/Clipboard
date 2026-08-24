@@ -403,16 +403,31 @@ pub(crate) fn run_capture_loop(
                     None
                 };
 
-                let text = platform::platform().read_clipboard_text();
+                let platform = platform::platform();
+                let sequence_before = platform.read_clipboard_sequence();
+                let text = platform.read_clipboard_text();
                 let max_text_capture_bytes = capture_state.max_text_capture_bytes() as usize;
-                let html = platform::platform()
+                let html = platform
                     .read_clipboard_html()
                     .filter(|html| !html.trim().is_empty() && html.len() <= max_text_capture_bytes);
-                let rtf = platform::platform()
+                let rtf = platform
                     .read_clipboard_rtf()
                     .filter(|rtf| !rtf.trim().is_empty() && rtf.len() <= max_text_capture_bytes);
-                let image_data = platform::platform().read_clipboard_image();
-                let file_paths = platform::platform().read_clipboard_file_paths();
+                let image_data = platform.read_clipboard_image();
+                let file_paths = platform.read_clipboard_file_paths();
+
+                // Each format read opens the clipboard separately, so another
+                // application can replace the contents mid-snapshot. A changed
+                // sequence number means this capture would mix content from
+                // two different writes — drop it and catch the new write on
+                // the next poll.
+                if let (Some(before), Some(after)) =
+                    (sequence_before, platform.read_clipboard_sequence())
+                {
+                    if before != after {
+                        continue;
+                    }
+                }
 
                 if capture_state.should_skip(source_app.as_deref(), text.as_deref()) {
                     continue;

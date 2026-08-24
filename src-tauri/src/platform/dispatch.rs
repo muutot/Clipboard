@@ -42,6 +42,13 @@ pub trait PlatformClipboard {
     fn read_clipboard_rtf(&self) -> Option<String> {
         None
     }
+
+    /// Monotonic clipboard revision used to detect the clipboard being
+    /// replaced while a multi-format capture read is in progress. Returns
+    /// `None` on platforms without a sequence counter (checking skipped).
+    fn read_clipboard_sequence(&self) -> Option<u32> {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------

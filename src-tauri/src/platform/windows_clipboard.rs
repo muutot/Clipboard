@@ -28,6 +28,10 @@ impl crate::platform::PlatformClipboard for WindowsPlatform {
         read_clipboard_rtf()
     }
 
+    fn read_clipboard_sequence(&self) -> Option<u32> {
+        read_clipboard_sequence()
+    }
+
     fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)> {
         read_clipboard_image()
     }
