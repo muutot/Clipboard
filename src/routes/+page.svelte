@@ -135,6 +135,18 @@
     }
   }
 
+  /// Removal counterpart of [`applyItemPatches`]: drops ids from every copy
+  /// (items, indexedItems, searchCache, detailItem) in one pass per list.
+  /// Purging searchCache here closes the gap where a permanently deleted
+  /// entry could later resurface from the spare-result cache.
+  function removeItems(ids: ReadonlySet<string>) {
+    if (ids.size === 0) return;
+    items = items.filter((item) => !ids.has(item.id));
+    if (indexedItems) indexedItems = indexedItems.filter((item) => !ids.has(item.id));
+    searchCache = searchCache.filter((item) => !ids.has(item.id));
+    if (detailItem && ids.has(detailItem.id)) detailItem = null;
+  }
+
   function revertItem(id: string, fields: Partial<ClipboardItem>) {
     applyItemPatches(new Map([[id, fields]]));
   }
@@ -2339,10 +2351,8 @@
     const previousSelectedIds = new Set(selectedIds);
     const previousDetailItem = detailItem;
     for (const id of ids) addSuppressedId(id);
-    items = items.filter((item) => !ids.includes(item.id));
-    if (indexedItems) indexedItems = indexedItems.filter((item) => !ids.includes(item.id));
+    removeItems(new Set(ids));
     selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
-    if (detailItem && ids.includes(detailItem.id)) detailItem = null;
 
     void persistBatchPermanentDelete(ids)
       .then((removed) => {
