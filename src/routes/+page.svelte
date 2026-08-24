@@ -3194,7 +3194,6 @@
       {#if query}
         <button
           class="clear-button"
-          tabindex="-1"
           type="button"
           aria-label={_t("app.clearSearch")}
           onclick={clearSearchQuery}>×</button
@@ -3247,10 +3246,11 @@
       <div class="dropdown-wrapper">
         <button
           type="button"
-          tabindex="-1"
           class="filter-dropdown-btn"
           onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
           aria-label={_t("sourceApp.all")}
+          aria-haspopup="menu"
+          aria-expanded={sourceAppDropdownOpen}
           title={_t("sourceApp.all")}
         >
           {#if !sourceAppFilter}
@@ -3311,10 +3311,11 @@
       <div class="dropdown-wrapper">
         <button
           type="button"
-          tabindex="-1"
           class="filter-dropdown-btn"
           onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
           aria-label={_t("dateFilter.all")}
+          aria-haspopup="menu"
+          aria-expanded={dateDropdownOpen}
           title={_t("dateFilter.all")}
         >
           {#if dateFilter === "all"}
@@ -3358,7 +3359,6 @@
     <div class="toolbar-actions">
       <button
         type="button"
-        tabindex="-1"
         class:active={$generalSettings.alwaysOnTop}
         aria-label={_t("toolbar.pinWindow")}
         title={_t("toolbar.pinWindow")}
@@ -3367,7 +3367,6 @@
       >
       <button
         type="button"
-        tabindex="-1"
         aria-label={_t("toolbar.settings")}
         title={_t("toolbar.settings")}
         onclick={openSettings}><AppIcon name="settings" size={17} /></button
