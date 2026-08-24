@@ -18,6 +18,16 @@
 
   let dialog = $state<HTMLDialogElement | null>(null);
 
+  // The release URL comes from the update API response; only real https links
+  // may become anchors so a compromised mirror cannot inject javascript:.
+  const safeReleaseUrl = $derived(
+    typeof result?.releaseUrl === "string" &&
+      result.releaseUrl.startsWith("https://") &&
+      !result.releaseUrl.includes('"')
+      ? result.releaseUrl
+      : null,
+  );
+
   function formatDate(value: string | null): string {
     if (!value) return "";
     const date = new Date(value);
@@ -77,10 +87,10 @@
     <button type="button" class="update-dialog-btn update-dialog-btn--secondary" onclick={onclose}>
       {_t("about.close")}
     </button>
-    {#if mode === "available"}
+    {#if mode === "available" && safeReleaseUrl}
       <a
         class="update-dialog-btn update-dialog-btn--primary"
-        href={result.releaseUrl}
+        href={safeReleaseUrl}
         target="_blank"
         rel="noopener noreferrer"
         onclick={onclose}

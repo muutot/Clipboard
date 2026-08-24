@@ -5,6 +5,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
   import { listAllTags, renameTag, setTagColor } from "$lib/services/clipboard";
+  import { validHexColor } from "$lib/services/settings";
   import { showToast } from "$lib/services/toast";
   import { emit } from "@tauri-apps/api/event";
 
@@ -82,7 +83,7 @@
     <div class="tag-edit-top">
       <span
         class="tag-edit-swatch"
-        style={currentColor ? `--tag-accent: ${currentColor}` : undefined}
+        style={currentColor ? `--tag-accent: ${validHexColor(currentColor, "#888888")}` : undefined}
         aria-hidden="true"
       ></span>
       <input

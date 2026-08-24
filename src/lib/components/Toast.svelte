@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import { onToast, type ToastType } from "$lib/services/toast";
 
@@ -16,12 +17,21 @@
 
   let toasts = $state<ToastState[]>([]);
   let toastNotificationsEnabled = $state(true);
+  const pendingTimers = new Set<number>();
+
+  function later(callback: () => void, delay: number): void {
+    const timer = setTimeout(() => {
+      pendingTimers.delete(timer);
+      callback();
+    }, delay);
+    pendingTimers.add(timer);
+  }
 
   function removeToast(id: number) {
     const t = toasts.find((t) => t.entry.id === id);
     if (t && !t.leaving) {
       t.leaving = true;
-      setTimeout(() => {
+      later(() => {
         toasts = toasts.filter((t) => t.entry.id !== id);
       }, 200);
     }
@@ -38,8 +48,13 @@
     return onToast((entry) => {
       if (!toastNotificationsEnabled) return;
       toasts = [...toasts, { entry, leaving: false }];
-      setTimeout(() => removeToast(entry.id), entry.duration);
+      later(() => removeToast(entry.id), entry.duration);
     });
+  });
+
+  onDestroy(() => {
+    for (const timer of pendingTimers) clearTimeout(timer);
+    pendingTimers.clear();
   });
 </script>
 

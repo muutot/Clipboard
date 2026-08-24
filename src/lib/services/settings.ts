@@ -119,7 +119,7 @@ function validTheme(value: unknown, fallback: GeneralSettings["theme"]): General
   return value === "dark" || value === "light" || value === "custom" ? value : fallback;
 }
 
-function validHexColor(value: unknown, fallback: string): string {
+export function validHexColor(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value)
     ? value
     : fallback;
