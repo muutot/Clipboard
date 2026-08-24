@@ -828,7 +828,7 @@
   }
 
   :global(.sort-drag-over) {
-    outline: 2px solid var(--accent) !important;
+    outline: 2px solid var(--selection-color) !important;
     outline-offset: 2px;
     border-radius: 6px;
     background: color-mix(in srgb, var(--selection-color) 15%, transparent);
