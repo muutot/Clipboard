@@ -1,7 +1,5 @@
 use std::process::Command;
 
-use crate::domain::OcrTextBlock;
-
 use super::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
 
 pub struct TesseractOcrEngine {
@@ -97,7 +95,11 @@ impl OcrEngine for TesseractOcrEngine {
 
         let full_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-        let blocks = parse_text_into_blocks(&full_text);
+        // Plain-text CLI output carries no geometry or confidence data, so no
+        // per-line blocks are produced: fabricating plausible-looking boxes
+        // (and a 0.0 confidence) would mislead any future block-level
+        // consumer. Search and display rely on `full_text`.
+        let blocks = Vec::new();
 
         Ok(OcrOutput {
             language: Some(self.languages.clone()),
@@ -114,45 +116,6 @@ fn detect_tesseract_version() -> Option<String> {
     let first_line = stdout.lines().next()?;
     let version = first_line.split_whitespace().nth(1).unwrap_or("unknown");
     Some(version.to_string())
-}
-
-fn parse_text_into_blocks(text: &str) -> Vec<OcrTextBlock> {
-    let mut blocks = Vec::new();
-    let line_height = 24u32;
-
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        let block = OcrTextBlock {
-            text: trimmed.to_string(),
-            confidence: 0.0,
-            left: 0,
-            top: index as u32 * line_height,
-            width: (trimmed.len() as u32).saturating_mul(10).max(100),
-            height: line_height,
-        };
-
-        blocks.push(block);
-    }
-
-    if blocks.is_empty() {
-        let trimmed = text.trim();
-        if !trimmed.is_empty() {
-            blocks.push(OcrTextBlock {
-                text: trimmed.to_string(),
-                confidence: 0.0,
-                left: 0,
-                top: 0,
-                width: (trimmed.len() as u32).saturating_mul(10).max(100),
-                height: line_height,
-            });
-        }
-    }
-
-    blocks
 }
 
 #[cfg(test)]
@@ -177,22 +140,6 @@ mod tests {
         };
         let result = engine.recognize(&input);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_text_into_blocks_splits_lines() {
-        let text = "line one\nline two\n\nline three";
-        let blocks = parse_text_into_blocks(text);
-        assert_eq!(blocks.len(), 3);
-        assert_eq!(blocks[0].text, "line one");
-        assert_eq!(blocks[1].text, "line two");
-        assert_eq!(blocks[2].text, "line three");
-    }
-
-    #[test]
-    fn parse_text_empty_string_returns_empty() {
-        let blocks = parse_text_into_blocks("  ");
-        assert!(blocks.is_empty());
     }
 
     #[test]

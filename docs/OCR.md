@@ -45,7 +45,7 @@ engine
 model_version
 language
 full_text
-blocks_json            文字、置信度和图片坐标
+blocks_json            文字、置信度和图片坐标（ppocr 引擎；tesseract 仅输出纯文本，无几何数据，故为空数组）
 image_hash
 created_at
 completed_at
