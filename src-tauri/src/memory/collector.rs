@@ -17,6 +17,14 @@ use crate::{config::ConfigStore, ocr, storage::StoragePaths};
 
 use super::types::*;
 
+/// Resident set size of the current process in bytes (Windows only).
+/// Exposed for the performance metrics panel so it can sample memory via
+/// `GetProcessMemoryInfo` instead of spawning a helper process per snapshot.
+#[cfg(target_os = "windows")]
+pub(crate) fn current_process_working_set_bytes() -> Option<u64> {
+    windows::current_process_working_set_bytes()
+}
+
 /// Returns a read-only snapshot of process-group and system memory usage.
 #[tauri::command]
 pub fn get_memory_diagnostics(
@@ -447,6 +455,13 @@ mod windows {
         ffi::c_void,
         mem::{size_of, zeroed},
     };
+
+    /// Resident set size of the current process via
+    /// `GetProcessMemoryInfo`, shared with the performance metrics panel so
+    /// it does not need to spawn a helper process per sample.
+    pub(super) fn current_process_working_set_bytes() -> Option<u64> {
+        current_process_memory().0
+    }
 
     type Handle = isize;
     const INVALID_HANDLE_VALUE: Handle = -1;

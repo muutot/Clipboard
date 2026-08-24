@@ -6,7 +6,7 @@ use std::{
 
 #[cfg(target_os = "linux")]
 use std::fs;
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 use serde::Serialize;
@@ -287,31 +287,11 @@ fn current_process_memory_bytes() -> u64 {
 
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("tasklist")
-            .args([
-                "/FI",
-                &format!("PID eq {}", std::process::id()),
-                "/FO",
-                "CSV",
-                "/NH",
-            ])
-            .output();
-        return output
-            .ok()
-            .filter(|result| result.status.success())
-            .and_then(|result| {
-                let line = String::from_utf8_lossy(&result.stdout);
-                let memory_field = line.trim().split(',').skip(4).collect::<Vec<_>>().join(",");
-                let digits = memory_field
-                    .chars()
-                    .filter(|character| character.is_ascii_digit())
-                    .collect::<String>();
-                digits
-                    .parse::<u64>()
-                    .ok()
-                    .map(|kilobytes| kilobytes.saturating_mul(1024))
-            })
-            .unwrap_or(0);
+        // Sample the working set via GetProcessMemoryInfo (shared with the
+        // memory diagnostics collector). Spawning tasklist.exe here cost
+        // 50-200ms per snapshot and its CSV output mis-parses locales that
+        // use '.' as the thousands separator.
+        return crate::memory::current_process_working_set_bytes().unwrap_or(0);
     }
 
     #[cfg(target_os = "macos")]
