@@ -295,7 +295,12 @@ pub fn run() {
             // `validate()` call here was a no-op (always returned `true`) and
             // has been removed. Use the `validate_search_index` Tauri command
             // for an on-demand health probe instead.
-            let _search_init_result = SearchSynchronizer::default().initialize(&database, &search_index);
+            if let Err(error) = SearchSynchronizer::default().initialize(&database, &search_index) {
+                // A failed initial sync leaves this session's search results
+                // empty (the manifest retries on the next start), so at least
+                // leave a diagnostic trail instead of failing silently.
+                eprintln!("[search] initial index sync failed: {error}");
+            }
             let search_init_duration = startup_timer.finish_segment();
 
             let startup_metrics = StartupMetrics {
