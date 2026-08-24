@@ -266,11 +266,13 @@
   });
 
   // Modal focus management (only in overlay mode; split mode has no
-  // backdrop and must not trap focus).
+  // backdrop and must not trap focus). Depend only on the derived boolean
+  // so item identity changes (e.g. OCR polling patches) don't steal focus.
   let panelEl = $state<HTMLElement | null>(null);
+  const overlayOpen = $derived(item !== null && mode !== "split");
 
   $effect(() => {
-    if (!item || mode === "split") return;
+    if (!overlayOpen) return;
     const restoreFocus = captureFocusRestore();
     tick().then(() => {
       if (panelEl) getFocusableElements(panelEl)[0]?.focus();
