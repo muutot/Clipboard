@@ -105,7 +105,11 @@
     deletedIds: string[];
   };
 
-  let items = $state<ClipboardItem[]>(demoClipboardItems.map((item) => ({ ...item })));
+  // Browser preview shows demo data; the Tauri runtime starts empty so real
+  // history load failures can never be masked by fake entries.
+  let items = $state<ClipboardItem[]>(
+    isTauriRuntime() ? [] : demoClipboardItems.map((item) => ({ ...item })),
+  );
 
   function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
     const idx = items.findIndex((i) => i.id === id);
@@ -193,7 +197,7 @@
   }
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
-  let selectedId = $state(demoClipboardItems[0]?.id ?? "");
+  let selectedId = $state(isTauriRuntime() ? "" : (demoClipboardItems[0]?.id ?? ""));
   let currentTime = $state(Date.now());
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
