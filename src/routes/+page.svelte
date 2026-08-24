@@ -833,6 +833,10 @@
         items.splice(existingIdx, 1);
         items = [newItem, ...items];
         selectedId = newItem.id;
+        // The timestamp bump shifts every row behind the OFFSET cursor just
+        // like a fresh insertion does. Rebuild the cursor so a later
+        // scroll-load cannot replay an already-loaded row as a duplicate.
+        invalidateActiveHistoryPagination();
       } else {
         items = [newItem, ...items];
         selectedId = newItem.id;
@@ -1264,7 +1268,12 @@
         const storedIds = new Set(page.map((item) => item.id));
         items = [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))];
       } else {
-        items = [...items, ...page];
+        // OFFSET pagination can replay rows after any out-of-band insertion
+        // (re-copy promotion, sync apply). Drop ids that are already loaded so
+        // the keyed each below never sees a duplicate key.
+        const knownIds = new Set(items.map((item) => item.id));
+        const freshPage = page.filter((item) => !knownIds.has(item.id));
+        items = [...items, ...freshPage];
       }
       activeHistoryOffset += page.length;
       activeHistoryHasMore = page.length === $generalSettings.display.pageSize;

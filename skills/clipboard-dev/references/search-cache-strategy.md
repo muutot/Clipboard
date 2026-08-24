@@ -80,7 +80,7 @@ When changing query, filter, sort, or mutation behavior, audit both first-page a
 
 Changing this logic requires checking selected/detail items, virtual-scroll height state, active/deleted offsets, and the spare-result cache. In-memory trimming must not be confused with database history cleanup.
 
-Active history is backed by `created_at_ms DESC LIMIT/OFFSET`. A committed insertion, soft/hard deletion, restore, bulk mutation, clear, or destructive invalidation can shift every later offset. Such paths call `invalidateActiveHistoryPagination()` to invalidate the in-flight request generation and reload page zero; do not merely append/remove locally and keep the old cursor.
+Active history is backed by `created_at_ms DESC LIMIT/OFFSET`. A committed insertion, re-copy dedup promotion (the timestamp bump shifts every later offset just like a fresh insert), soft/hard deletion, restore, bulk mutation, clear, or destructive invalidation can shift every later offset. Such paths call `invalidateActiveHistoryPagination()` to invalidate the in-flight request generation and reload page zero; do not merely append/remove locally and keep the old cursor. As a second line of defense, `loadActiveHistoryPage` drops ids that are already loaded when merging an offset>0 page, so a replayed row can never produce a duplicate keyed-each key even if a shift source is missed.
 
 ## Mutation invalidation
 
