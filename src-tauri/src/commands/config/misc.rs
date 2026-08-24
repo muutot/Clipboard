@@ -58,17 +58,6 @@ pub fn check_sensitive_content(
 }
 
 #[tauri::command]
-pub fn check_password_manager(
-    privacy: tauri::State<'_, Mutex<PrivacyManager>>,
-    app_name: String,
-) -> Result<bool, String> {
-    Ok(privacy
-        .lock()
-        .map_err(|_| "privacy manager lock is poisoned".to_owned())?
-        .is_password_manager(&app_name))
-}
-
-#[tauri::command]
 pub fn get_privacy_status(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
@@ -82,7 +71,6 @@ pub fn get_privacy_status(
 
     Ok(PrivacyStatus {
         paused: privacy.is_paused(),
-        password_manager_apps: privacy.password_manager_apps.clone(),
         master_password_hash_set: config.privacy_master_password_hash().is_some(),
     })
 }
@@ -102,9 +90,7 @@ pub fn get_privacy_settings(
     Ok(PrivacySettings {
         paused: privacy.is_paused(),
         local_only: config.privacy_local_only(),
-        capture_sensitive_sources: config.privacy_capture_sensitive_sources(),
         sensitive_patterns: config.sensitive_patterns().to_vec(),
-        password_manager_apps: privacy.password_manager_apps.clone(),
     })
 }
 
@@ -115,7 +101,6 @@ pub fn set_privacy_settings(
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
     capture: tauri::State<'_, CaptureState>,
     local_only: Option<bool>,
-    capture_sensitive_sources: Option<bool>,
     sensitive_patterns: Option<Vec<String>>,
 ) -> Result<PrivacySettings, String> {
     // Validate the pattern list up front so nothing is persisted when one of
@@ -135,11 +120,6 @@ pub fn set_privacy_settings(
         if let Some(value) = local_only {
             config
                 .set_privacy_local_only(value)
-                .map_err(|error| error.to_string())?;
-        }
-        if let Some(value) = capture_sensitive_sources {
-            config
-                .set_privacy_capture_sensitive_sources(value)
                 .map_err(|error| error.to_string())?;
         }
         sensitive_patterns
@@ -164,9 +144,6 @@ pub fn set_privacy_settings(
             .sensitive_patterns = compiled.clone();
         capture.set_sensitive_patterns(compiled);
     }
-    if let Some(value) = capture_sensitive_sources {
-        capture.set_capture_sensitive_sources(value);
-    }
 
     let _ = app.emit("privacy-settings-changed", ());
 
@@ -180,9 +157,7 @@ pub fn set_privacy_settings(
     Ok(PrivacySettings {
         paused: privacy.is_paused(),
         local_only: config.privacy_local_only(),
-        capture_sensitive_sources: config.privacy_capture_sensitive_sources(),
         sensitive_patterns: config.sensitive_patterns().to_vec(),
-        password_manager_apps: privacy.password_manager_apps.clone(),
     })
 }
 

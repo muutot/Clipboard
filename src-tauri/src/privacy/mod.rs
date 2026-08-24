@@ -2,11 +2,11 @@ use crate::config::ConfigStore;
 
 /// Canonical list of password-manager / credential-vault application names.
 ///
-/// Single source of truth consumed by both [`PrivacyManager`] (runtime
-/// sensitive-source filtering) and `PrivacyConfig::default` (the seed for the
-/// user-editable ignore list), so the docs, the settings UI, and capture
-/// behavior cannot drift apart. Sorted alphabetically; matching is
-/// case-insensitive and name-normalized by `state.rs`.
+/// Single source of truth consumed by `PrivacyConfig::default` as the seed
+/// for the user-editable ignore list (`ignored_applications`), so the docs,
+/// the settings UI, and capture behavior cannot drift apart. Sorted
+/// alphabetically; matching is case-insensitive and name-normalized by
+/// `state.rs`.
 pub const PASSWORD_MANAGER_APPS: &[&str] = &[
     "1Password",
     "Bitwarden",
@@ -41,7 +41,6 @@ pub const DEFAULT_SENSITIVE_PATTERNS: &[&str] = &[
 pub struct PrivacyManager {
     pub paused: bool,
     pub sensitive_patterns: Vec<regex_lite::Regex>,
-    pub password_manager_apps: Vec<String>,
 }
 
 impl Default for PrivacyManager {
@@ -59,7 +58,6 @@ impl PrivacyManager {
         Self {
             paused: false,
             sensitive_patterns,
-            password_manager_apps: default_password_manager_apps(),
         }
     }
 
@@ -73,13 +71,6 @@ impl PrivacyManager {
 
     pub fn is_sensitive_content(&self, text: &str) -> bool {
         self.sensitive_patterns.iter().any(|re| re.is_match(text))
-    }
-
-    pub fn is_password_manager(&self, app_name: &str) -> bool {
-        let normalized = app_name.trim().to_lowercase();
-        self.password_manager_apps
-            .iter()
-            .any(|name| name.to_lowercase() == normalized)
     }
 
     pub fn sync_with_config(&mut self, config: &ConfigStore) {
@@ -143,21 +134,6 @@ mod tests {
     fn detects_private_key_patterns() {
         let manager = PrivacyManager::new();
         assert!(manager.is_sensitive_content("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQE..."));
-    }
-
-    #[test]
-    fn detects_password_managers_case_insensitively() {
-        let manager = PrivacyManager::new();
-        assert!(manager.is_password_manager("1Password"));
-        assert!(manager.is_password_manager("1password"));
-        assert!(manager.is_password_manager("bitwarden"));
-        assert!(manager.is_password_manager("KeePass"));
-        // Regression: KeePassXC was documented as protected but missing from
-        // the runtime list while LastPass was protected but undocumented.
-        assert!(manager.is_password_manager("KeePassXC"));
-        assert!(manager.is_password_manager("keepassxc"));
-        assert!(manager.is_password_manager("LastPass"));
-        assert!(!manager.is_password_manager("Notepad"));
     }
 
     #[test]

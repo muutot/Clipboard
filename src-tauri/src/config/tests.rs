@@ -20,7 +20,6 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["history"]["favoritesExempt"], true);
     assert_eq!(saved["history"]["recycleBinDays"], 7);
     assert_eq!(saved["privacy"]["localOnly"], true);
-    assert_eq!(saved["privacy"]["captureSensitiveSources"], false);
     assert_eq!(
         saved["privacy"]["sensitivePatterns"]
             .as_array()
@@ -376,11 +375,9 @@ fn persists_privacy_flags_and_sensitive_patterns() {
     let mut store = ConfigStore::load(&project).unwrap();
 
     assert!(store.privacy_local_only());
-    assert!(!store.privacy_capture_sensitive_sources());
     assert_eq!(store.sensitive_patterns().len(), 7);
 
     store.set_privacy_local_only(false).unwrap();
-    store.set_privacy_capture_sensitive_sources(true).unwrap();
     let stored = store
         .set_sensitive_patterns(vec![
             "  \\bpassword\\s*[=:]\\s*\\S+  ".to_owned(),
@@ -398,7 +395,6 @@ fn persists_privacy_flags_and_sensitive_patterns() {
 
     let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
     assert_eq!(saved["privacy"]["localOnly"], false);
-    assert_eq!(saved["privacy"]["captureSensitiveSources"], true);
     assert_eq!(
         saved["privacy"]["sensitivePatterns"]
             .as_array()

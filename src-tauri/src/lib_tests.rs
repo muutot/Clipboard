@@ -107,29 +107,14 @@ mod capture_tests {
     }
 
     #[test]
-    fn ignored_and_password_manager_sources_are_rejected_case_insensitively() {
+    fn ignored_sources_are_rejected_case_insensitively() {
         let state = capture_state();
 
         assert!(state.should_skip(Some("ignoredapp.exe"), None));
-        assert!(state.should_skip(Some(r"C:\Program Files\KeePass\KeePass.exe"), None));
-        assert!(state.should_skip(Some("1PASSWORD"), None));
+        assert!(state.should_skip(Some("IGNOREDAPP.EXE"), None));
+        // Password managers are no longer special-cased at runtime: they are
+        // skipped because the seeded ignore list contains them by default.
         assert!(!state.should_skip(Some("notepad.exe"), None));
-    }
-
-    #[test]
-    fn capture_sensitive_sources_allows_password_managers_but_not_ignored_apps() {
-        let state = capture_state();
-
-        state.set_capture_sensitive_sources(true);
-        assert!(!state.should_skip(Some("1Password"), None));
-        assert!(!state.should_skip(Some("KeePass"), None));
-        // The explicit ignore list still wins.
-        assert!(state.should_skip(Some("ignoredapp.exe"), None));
-        // Sensitive content patterns are unaffected by the flag.
-        assert!(state.should_skip(Some("Notepad"), Some("password=supersecret123")));
-
-        state.set_capture_sensitive_sources(false);
-        assert!(state.should_skip(Some("1Password"), None));
     }
 
     #[test]

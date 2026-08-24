@@ -131,7 +131,6 @@ pub struct StorageConfigInfo {
 #[serde(rename_all = "camelCase")]
 pub struct PrivacyStatus {
     paused: bool,
-    password_manager_apps: Vec<String>,
     master_password_hash_set: bool,
 }
 
@@ -140,7 +139,5 @@ pub struct PrivacyStatus {
 pub struct PrivacySettings {
     pub paused: bool,
     pub local_only: bool,
-    pub capture_sensitive_sources: bool,
     pub sensitive_patterns: Vec<String>,
-    pub password_manager_apps: Vec<String>,
 }

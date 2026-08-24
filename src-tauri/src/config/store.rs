@@ -235,21 +235,6 @@ impl ConfigStore {
         self.save()
     }
 
-    /// When true, content copied from password managers and other sensitive
-    /// source apps is still recorded. Explicitly ignored applications keep
-    /// being skipped either way.
-    pub fn privacy_capture_sensitive_sources(&self) -> bool {
-        self.config.privacy.capture_sensitive_sources
-    }
-
-    pub fn set_privacy_capture_sensitive_sources(
-        &mut self,
-        value: bool,
-    ) -> Result<(), StorageError> {
-        self.config.privacy.capture_sensitive_sources = value;
-        self.save()
-    }
-
     pub fn sensitive_patterns(&self) -> &[String] {
         &self.config.privacy.sensitive_patterns
     }

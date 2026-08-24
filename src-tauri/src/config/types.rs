@@ -291,7 +291,6 @@ impl Default for HistoryConfig {
 #[serde(default, rename_all = "camelCase")]
 pub struct PrivacyConfig {
     pub local_only: bool,
-    pub capture_sensitive_sources: bool,
     pub sensitive_patterns: Vec<String>,
     pub ignored_applications: Vec<String>,
     pub paused: bool,
@@ -302,7 +301,6 @@ impl Default for PrivacyConfig {
     fn default() -> Self {
         Self {
             local_only: true,
-            capture_sensitive_sources: false,
             sensitive_patterns: crate::privacy::DEFAULT_SENSITIVE_PATTERNS
                 .iter()
                 .map(|pattern| (*pattern).to_owned())

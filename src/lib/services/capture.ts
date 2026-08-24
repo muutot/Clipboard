@@ -29,9 +29,7 @@ export async function configureIgnoredApplications(applications: string[]): Prom
 export interface PrivacySettings {
   paused: boolean;
   localOnly: boolean;
-  captureSensitiveSources: boolean;
   sensitivePatterns: string[];
-  passwordManagerApps: string[];
 }
 
 export async function getPrivacySettings(): Promise<PrivacySettings> {
@@ -39,9 +37,7 @@ export async function getPrivacySettings(): Promise<PrivacySettings> {
     return {
       paused: false,
       localOnly: true,
-      captureSensitiveSources: false,
       sensitivePatterns: [],
-      passwordManagerApps: [],
     };
   }
 
@@ -50,7 +46,6 @@ export async function getPrivacySettings(): Promise<PrivacySettings> {
 
 export async function setPrivacySettings(settings: {
   localOnly?: boolean;
-  captureSensitiveSources?: boolean;
   sensitivePatterns?: string[];
 }): Promise<PrivacySettings> {
   if (!isTauriRuntime()) {
