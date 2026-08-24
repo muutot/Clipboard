@@ -88,6 +88,7 @@ pub async fn configure_storage_directory(
     active_paths: tauri::State<'_, StoragePaths>,
     database: tauri::State<'_, Database>,
     capture: tauri::State<'_, CaptureState>,
+    app: tauri::AppHandle,
     data_directory: Option<String>,
 ) -> Result<StorageDirectoryUpdate, String> {
     let requested_directory = data_directory.map(PathBuf::from);
@@ -109,8 +110,23 @@ pub async fn configure_storage_directory(
     .map_err(|error| error.to_string())?;
 
     if target_paths.data_directory != active_paths.data_directory {
+        // Stop every background writer before taking the snapshot: OCR,
+        // thumbnail, search-sync, and cleanup workers hold their own database
+        // connections, so anything written after the snapshot would be left
+        // behind in the old location and silently lost. A restart is already
+        // mandatory after a successful migration.
+        crate::shutdown::stop_runtime_services(&app);
+        let previous_paused = capture.is_paused();
         capture.set_paused(true);
-        migrate_storage_data(&active_paths, &target_paths, &database)?;
+        if let Err(error) = migrate_storage_data(&active_paths, &target_paths, &database) {
+            // Restore the caller's pause preference where possible; services
+            // stay stopped because the database location may be half-moved.
+            capture.set_paused(previous_paused);
+            return Err(format!(
+                "{error}; background services were stopped during the failed \
+                 migration — restart the app before retrying"
+            ));
+        }
     }
 
     let saved_directory = target_paths
