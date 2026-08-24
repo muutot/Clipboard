@@ -110,7 +110,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 ### 🔌 扩展能力
 
 - **CLI 命令行**：`clipboard list / search / copy / paste / delete / export / stats`（复制、粘贴、删除、导出、统计）
-- **本地 API**：HTTP 接口供外部脚本调用
+- **本地 API**：HTTP 接口供外部脚本调用；需携带 `Authorization: Bearer <token>`（token 位于 `conf/api.token`），仅接受 `127.0.0.1`/`localhost` 的 Host 头并拒绝带 Origin 的浏览器请求
 - **导入导出**：JSON / CSV / 纯文本 GUI，支持收藏、内容类型与日期范围筛选；支持 **PPaste（.Pastebackup）备份导入**
 - **快捷键系统**：全局热键 + 应用内快捷键 + 双击修饰键（Shift+Shift）
 

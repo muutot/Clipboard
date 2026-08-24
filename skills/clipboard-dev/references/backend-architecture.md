@@ -36,7 +36,7 @@ Do not reorder recovery, search initialization, worker startup, or managed-state
 
 ## Managed runtime state
 
-The app manages `ConfigStore`, `StoragePaths`, `Database`, `SearchIndex`, `PerformanceTracker`, privacy/capture/self-trigger state, clipboard monitor, keyboard/hotkey managers, OCR and thumbnail workers, cleanup worker, local API server, and the optional single-instance guard.
+The app manages `ConfigStore`, `StoragePaths`, `Database`, `SearchIndex`, `PerformanceTracker`, privacy/capture/self-trigger state, clipboard monitor, keyboard/hotkey managers, OCR and thumbnail workers, cleanup worker, local API server, and the optional single-instance guard. The local API server requires every request to present the bearer token persisted at `conf/api.token` (created on first start by `commands/api.rs::load_or_create_api_token`), a loopback `Host` header, and rejects requests carrying an `Origin` header — see `cli/api.rs::authorize`; `/health` is the only endpoint exempt from the token.
 
 Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingestion lock across slow filesystem, network, or UI work unless the operation explicitly requires atomicity.
 

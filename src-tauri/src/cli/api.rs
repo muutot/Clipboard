@@ -18,6 +18,13 @@ const MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
 /// The server is opt-in from the Tauri command layer and never binds a public
 /// interface. It owns a separate SQLite connection wrapped in `Arc`, so API
 /// requests can safely run alongside the desktop UI.
+///
+/// Every request must present `Authorization: Bearer <token>` (the token is
+/// persisted beside the config at `conf/api.token`), must target
+/// `Host: 127.0.0.1:<port>` (or `localhost:<port>`), and must NOT carry an
+/// `Origin` header. The last rule is what keeps browser pages 閳?the CSRF and
+/// DNS-rebinding threat model 閳?unable to reach the clipboard history even
+/// from a malicious website running on the same machine.
 pub struct LocalApiServer {
     pub port: u16,
     database: Option<Arc<Database>>,
@@ -25,6 +32,7 @@ pub struct LocalApiServer {
     handle: Option<JoinHandle<()>>,
     page_size_limit: u32,
     search_page_size_limit: u32,
+    token: Option<Arc<String>>,
 }
 
 impl LocalApiServer {
@@ -36,6 +44,7 @@ impl LocalApiServer {
             handle: None,
             page_size_limit: 500,
             search_page_size_limit: 500,
+            token: None,
         }
     }
 
@@ -51,6 +60,11 @@ impl LocalApiServer {
         server
     }
 
+    /// Sets the bearer token clients must present. Required before start.
+    pub fn set_token(&mut self, token: String) {
+        self.token = Some(Arc::new(token));
+    }
+
     pub fn start(&mut self) -> Result<u16, String> {
         let database = self
             .database
@@ -63,6 +77,10 @@ impl LocalApiServer {
         if self.handle.is_some() {
             return Err("local API server is already running".to_owned());
         }
+        let token = self
+            .token
+            .clone()
+            .ok_or_else(|| "local API token is not configured".to_owned())?;
 
         let listener = TcpListener::bind(("127.0.0.1", self.port))
             .map_err(|error| format!("failed to bind local API: {error}"))?;
@@ -78,6 +96,7 @@ impl LocalApiServer {
         let (stop_sender, stop_receiver) = mpsc::channel();
         let page_size_limit = self.page_size_limit;
         let search_page_size_limit = self.search_page_size_limit;
+        let port = self.port;
         let handle = thread::Builder::new()
             .name("clipboard-local-api".to_owned())
             .spawn(move || {
@@ -87,6 +106,8 @@ impl LocalApiServer {
                     database,
                     page_size_limit,
                     search_page_size_limit,
+                    token,
+                    port,
                 )
             })
             .map_err(|error| format!("failed to start local API: {error}"))?;
@@ -139,6 +160,8 @@ fn serve(
     database: Arc<Database>,
     page_size_limit: u32,
     search_page_size_limit: u32,
+    token: Arc<String>,
+    port: u16,
 ) {
     loop {
         if matches!(
@@ -150,9 +173,14 @@ fn serve(
 
         match listener.accept() {
             Ok((stream, _peer)) => {
-                if let Err(error) =
-                    handle_connection(stream, &database, page_size_limit, search_page_size_limit)
-                {
+                if let Err(error) = handle_connection(
+                    stream,
+                    &database,
+                    page_size_limit,
+                    search_page_size_limit,
+                    &token,
+                    port,
+                ) {
                     eprintln!("[local-api] request failed: {error}");
                 }
             }
@@ -172,20 +200,95 @@ fn handle_connection(
     database: &Database,
     page_size_limit: u32,
     search_page_size_limit: u32,
+    token: &str,
+    port: u16,
 ) -> Result<(), String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|error| error.to_string())?;
     let request = read_request(&mut stream)?;
+    if let Some(rejection) = authorize(&request, token, port) {
+        return write_response(&mut stream, &rejection);
+    }
     let response = dispatch(&request, database, page_size_limit, search_page_size_limit);
     write_response(&mut stream, &response)
+}
+
+/// Loopback hardening applied before any endpoint logic:
+///
+/// 1. Requests carrying an `Origin` header come from a browser context 閳?///    exactly the CSRF/DNS-rebinding threat model 閳?and are rejected even
+///    with a valid token.
+/// 2. `Host` must name the loopback address the server actually bound, which
+///    defeats DNS-rebinding where a public hostname resolves to 127.0.0.1.
+/// 3. Everything except `/health` requires `Authorization: Bearer <token>`.
+fn authorize(request: &HttpRequest, token: &str, port: u16) -> Option<HttpResponse> {
+    if request.header("origin").is_some() {
+        return Some(error_response(
+            403,
+            "cross-origin browser requests are not allowed",
+        ));
+    }
+
+    match request.header("host") {
+        Some(host) => {
+            let loopback =
+                host == format!("127.0.0.1:{port}") || host == format!("localhost:{port}");
+            if !loopback {
+                return Some(error_response(
+                    400,
+                    "host header must target the loopback API",
+                ));
+            }
+        }
+        None => return Some(error_response(400, "missing host header")),
+    }
+
+    let path = request.target.split('?').next().unwrap_or("");
+    if path == "/health" {
+        return None;
+    }
+
+    let expected = format!("Bearer {token}");
+    let authorized = request
+        .header("authorization")
+        .is_some_and(|value| constant_time_eq(value.trim().as_bytes(), expected.as_bytes()));
+    if !authorized {
+        return Some(error_response(
+            401,
+            "missing or invalid bearer token (see conf/api.token)",
+        ));
+    }
+    None
+}
+
+/// Length-independent comparison so response timing cannot leak token bytes.
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut difference = 0u8;
+    for (a, b) in left.iter().zip(right.iter()) {
+        difference |= a ^ b;
+    }
+    difference == 0
 }
 
 #[derive(Debug)]
 struct HttpRequest {
     method: String,
     target: String,
+    headers: Vec<(String, String)>,
     body: Vec<u8>,
+}
+
+impl HttpRequest {
+    /// Case-insensitive header lookup; returns the first matching value.
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
 }
 
 fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
@@ -224,11 +327,18 @@ fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
         .next()
         .ok_or_else(|| "missing HTTP target".to_owned())?
         .to_owned();
-    let content_length = lines
-        .filter_map(|line| line.split_once(':'))
-        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
-        .unwrap_or(0);
+    let mut header_fields = Vec::new();
+    let mut content_length = 0usize;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        if name.eq_ignore_ascii_case("content-length") {
+            content_length = value.parse().unwrap_or(0);
+        }
+        header_fields.push((name.trim().to_owned(), value.to_owned()));
+    }
     if content_length > MAX_REQUEST_BYTES {
         return Err("request body is too large".to_owned());
     }
@@ -247,6 +357,7 @@ fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
     Ok(HttpRequest {
         method,
         target,
+        headers: header_fields,
         body: bytes[header_end..header_end + content_length].to_vec(),
     })
 }
@@ -263,6 +374,8 @@ fn write_response(stream: &mut TcpStream, response: &HttpResponse) -> Result<(),
         201 => "Created",
         204 => "No Content",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
@@ -524,15 +637,31 @@ mod tests {
     use super::*;
     use crate::domain::ClipboardKind;
 
+    fn request(method: &str, target: &str, body: &[u8]) -> HttpRequest {
+        HttpRequest {
+            method: method.to_owned(),
+            target: target.to_owned(),
+            headers: Vec::new(),
+            body: body.to_vec(),
+        }
+    }
+
+    fn authorized_request(method: &str, target: &str, token: &str, port: u16) -> HttpRequest {
+        let mut http = request(method, target, b"");
+        http.headers
+            .push(("Host".to_owned(), format!("127.0.0.1:{port}")));
+        if target != "/health" {
+            http.headers
+                .push(("Authorization".to_owned(), format!("Bearer {token}")));
+        }
+        http
+    }
+
     #[test]
     fn health_endpoint_is_real_json() {
         let database = Database::open_in_memory().unwrap();
-        let request = HttpRequest {
-            method: "GET".to_owned(),
-            target: "/health".to_owned(),
-            body: Vec::new(),
-        };
-        let response = dispatch(&request, &database, 500, 500);
+        let http = request("GET", "/health", b"");
+        let response = dispatch(&http, &database, 500, 500);
         assert_eq!(response.status, 200);
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&response.body).unwrap()["status"],
@@ -543,31 +672,19 @@ mod tests {
     #[test]
     fn paste_list_search_and_delete_endpoints_use_database() {
         let database = Database::open_in_memory().unwrap();
-        let paste = HttpRequest {
-            method: "POST".to_owned(),
-            target: "/paste".to_owned(),
-            body: br#"{"text":"api note"}"#.to_vec(),
-        };
+        let paste = request("POST", "/paste", br#"{"text":"api note"}"#);
         let response = dispatch(&paste, &database, 500, 500);
         assert_eq!(response.status, 201);
         let item: ClipboardItem = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(item.kind, ClipboardKind::Text);
 
-        let search = HttpRequest {
-            method: "GET".to_owned(),
-            target: "/search?q=api%20note".to_owned(),
-            body: Vec::new(),
-        };
+        let search = request("GET", "/search?q=api%20note", b"");
         let response = dispatch(&search, &database, 500, 500);
         assert_eq!(response.status, 200);
         let results: Vec<ClipboardItem> = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(results.len(), 1);
 
-        let delete = HttpRequest {
-            method: "DELETE".to_owned(),
-            target: format!("/items/{}", item.id),
-            body: Vec::new(),
-        };
+        let delete = request("DELETE", &format!("/items/{}", item.id), b"");
         assert_eq!(dispatch(&delete, &database, 500, 500).status, 200);
         assert!(database
             .list_recent(10, 0, &crate::storage::HistoryFilter::default())
@@ -576,9 +693,49 @@ mod tests {
     }
 
     #[test]
+    fn requests_without_token_are_unauthorized() {
+        let mut http = request("GET", "/items?limit=1", b"");
+        http.headers
+            .push(("Host".to_owned(), "127.0.0.1:8123".to_owned()));
+        let rejection = authorize(&http, "secret-token", 8123).expect("must reject");
+        assert_eq!(rejection.status, 401);
+    }
+
+    #[test]
+    fn valid_token_and_loopback_host_are_accepted() {
+        let http = authorized_request("GET", "/items?limit=1", "secret-token", 8123);
+        assert!(authorize(&http, "secret-token", 8123).is_none());
+    }
+
+    #[test]
+    fn non_loopback_host_headers_are_rejected() {
+        let mut http = authorized_request("GET", "/items", "secret-token", 8123);
+        http.headers[0] = ("Host".to_owned(), "evil.example.com:80".to_owned());
+        let rejection = authorize(&http, "secret-token", 8123).expect("must reject");
+        assert_eq!(rejection.status, 400);
+    }
+
+    #[test]
+    fn browser_origin_requests_are_rejected_even_with_valid_token() {
+        let mut http = authorized_request("GET", "/export", "secret-token", 8123);
+        http.headers
+            .push(("Origin".to_owned(), "https://evil.example".to_owned()));
+        let rejection = authorize(&http, "secret-token", 8123).expect("must reject");
+        assert_eq!(rejection.status, 403);
+    }
+
+    #[test]
+    fn wrong_token_is_unauthorized() {
+        let http = authorized_request("GET", "/items", "wrong-token", 8123);
+        let rejection = authorize(&http, "secret-token", 8123).expect("must reject");
+        assert_eq!(rejection.status, 401);
+    }
+
+    #[test]
     fn server_binds_loopback_and_stops_cleanly() {
         let database = Arc::new(Database::open_in_memory().unwrap());
         let mut server = LocalApiServer::with_database(0, database);
+        server.set_token("test-token".to_owned());
         let port = server.start().unwrap();
         assert!(server.is_running());
         assert!(port > 0);

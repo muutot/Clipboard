@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -5,6 +6,32 @@ use serde::Serialize;
 use crate::cli::{CliArgs, CliCommand, LocalApiServer};
 use crate::config::ConfigStore;
 use crate::storage::{Database, StoragePaths};
+
+const API_TOKEN_FILE_NAME: &str = "api.token";
+
+/// Loads the loopback API bearer token from `conf/api.token`, generating and
+/// persisting a fresh random token on first use so external scripts can read
+/// a stable credential instead of re-reading it after every app start.
+fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> {
+    let token_path = project_directory.join("conf").join(API_TOKEN_FILE_NAME);
+    if let Ok(existing) = std::fs::read_to_string(&token_path) {
+        let token = existing.trim();
+        if !token.is_empty() {
+            return Ok(token.to_owned());
+        }
+    }
+
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    let token = hex::encode(bytes);
+
+    if let Some(parent) = token_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(&token_path, format!("{token}\n")).map_err(|error| error.to_string())?;
+    Ok(token)
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,6 +106,7 @@ pub fn start_local_api(
             .map_err(|_| "configuration lock is poisoned".to_owned())?;
         api.set_limits(config.page_size_limit(), config.search_page_size_limit());
     }
+    api.set_token(load_or_create_api_token(&paths.project)?);
     let bound_port = api.start_with_database(database)?;
     Ok(LocalApiStatus {
         running: true,
