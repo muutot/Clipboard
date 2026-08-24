@@ -3,6 +3,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde_json::Value;
@@ -17,17 +18,28 @@ impl ConfigStore {
         fs::create_dir_all(&config_directory)?;
         let path = config_directory.join(CONFIG_FILE_NAME);
         let (config, general_settings_present) = if path.exists() {
-            let mut raw: Value = serde_json::from_slice(&fs::read(&path)?)?;
-            let general_settings_present =
-                raw.get("general").map(Value::is_object).unwrap_or(false);
-
-            if !general_settings_present {
-                if let Value::Object(object) = &mut raw {
-                    object.remove("general");
+            let bytes = fs::read(&path)?;
+            match Self::parse_saved_config(&bytes) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    // A truncated or otherwise unparsable file must not leave
+                    // the app unable to start. Quarantine the corrupt bytes
+                    // for inspection and continue with defaults.
+                    let stamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|elapsed| elapsed.as_secs())
+                        .unwrap_or(0);
+                    let quarantined =
+                        config_directory.join(format!("{CONFIG_FILE_NAME}.corrupt-{stamp}"));
+                    eprintln!(
+                        "[config] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
+                        path.display(),
+                        quarantined.display()
+                    );
+                    let _ = fs::rename(&path, &quarantined);
+                    (AppConfig::default(), true)
                 }
             }
-
-            (serde_json::from_value(raw)?, general_settings_present)
         } else {
             (AppConfig::default(), true)
         };
@@ -42,6 +54,19 @@ impl ConfigStore {
         }
 
         Ok(store)
+    }
+
+    fn parse_saved_config(bytes: &[u8]) -> Result<(AppConfig, bool), StorageError> {
+        let mut raw: Value = serde_json::from_slice(bytes)?;
+        let general_settings_present = raw.get("general").map(Value::is_object).unwrap_or(false);
+
+        if !general_settings_present {
+            if let Value::Object(object) = &mut raw {
+                object.remove("general");
+            }
+        }
+
+        Ok((serde_json::from_value(raw)?, general_settings_present))
     }
 
     pub fn path(&self) -> &Path {

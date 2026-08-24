@@ -71,7 +71,7 @@ Schema changes require a deliberate new schema marker, one registered adjacent m
 
 `src-tauri/src/config.rs` owns `AppConfig` groups: storage, history, privacy, permissions, window, general, export, and OCR. Config structs use `#[serde(default, rename_all = "camelCase")]`; several also flatten unknown fields so newer frontend settings survive round-trips.
 
-`ConfigStore` loads and saves `<project>/conf/conf.json`. Preserve the responsibility boundary: changing the data directory must not move `conf/`.
+`ConfigStore` loads and saves `<project>/conf/conf.json`. Preserve the responsibility boundary: changing the data directory must not move `conf/`. When the existing file cannot be parsed, `load` quarantines it as `conf.json.corrupt-<unix-seconds>`, logs the reason to stderr, and continues with defaults (rewriting a fresh `conf.json`) so a truncated config can never make the app unlaunchable — unlike the database, which has its own recovery module.
 
 ### General settings
 

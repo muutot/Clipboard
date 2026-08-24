@@ -53,6 +53,37 @@ fn creates_the_single_project_configuration_file() {
 }
 
 #[test]
+fn quarantines_a_corrupt_configuration_file_and_starts_with_defaults() {
+    let project = temporary_test_directory("corrupt");
+    let config_directory = project.join("conf");
+    fs::create_dir_all(&config_directory).unwrap();
+    fs::write(config_directory.join("conf.json"), b"{ not valid json").unwrap();
+
+    let store = ConfigStore::load(&project).unwrap();
+
+    // Defaults are active again and the rewritten file exists.
+    assert_eq!(store.general_settings().language, "zh-CN");
+    assert!(store.path().exists());
+
+    let entries: Vec<String> = fs::read_dir(&config_directory)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        entries
+            .iter()
+            .any(|name| name.starts_with("conf.json.corrupt-")),
+        "corrupt file was not quarantined: {entries:?}"
+    );
+    assert!(
+        entries.iter().any(|name| name == "conf.json"),
+        "default config file was not recreated: {entries:?}"
+    );
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn persists_general_settings_as_one_configuration_group() {
     let project = temporary_test_directory("general");
     let mut store = ConfigStore::load(&project).unwrap();
