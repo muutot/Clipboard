@@ -879,7 +879,7 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
         24 => {
             let rgb = bgr_to_rgb(pixel_data, width, height_abs);
             let mut buf = Vec::with_capacity(rgb.len());
-            for chunk in rgb.chunks_exact(3) {
+            for chunk in rgb.as_chunks::<3>().0 {
                 buf.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
             image::RgbaImage::from_raw(width, height_abs, buf)?
@@ -904,7 +904,7 @@ fn bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
     for y in (0..height).rev() {
         let start = (y as usize) * row_size;
         let row = &data[start..start + row_size];
-        for chunk in row.chunks_exact(4) {
+        for chunk in row.as_chunks::<4>().0 {
             out.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
         }
     }
@@ -918,7 +918,7 @@ fn bgr_to_rgb(data: &[u8], width: u32, height: u32) -> Vec<u8> {
     for y in (0..height).rev() {
         let start = (y as usize) * row_padded as usize;
         let row = &data[start..start + (width * 3) as usize];
-        for chunk in row.chunks_exact(3) {
+        for chunk in row.as_chunks::<3>().0 {
             out.push(chunk[2]);
             out.push(chunk[1]);
             out.push(chunk[0]);
@@ -1293,7 +1293,7 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
         ReleaseDC(0, dc);
 
         let mut rgba = vec![0u8; pixels.len()];
-        for (i, chunk) in pixels.chunks_exact(4).enumerate() {
+        for (i, chunk) in pixels.as_chunks::<4>().0.iter().enumerate() {
             let base = i * 4;
             rgba[base] = chunk[2];
             rgba[base + 1] = chunk[1];
