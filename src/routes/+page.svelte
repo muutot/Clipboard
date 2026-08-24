@@ -560,7 +560,6 @@
       showSecondaryText,
       maxTextLines,
       detailDisplayMode,
-      detailItem?.id ?? "",
       $generalSettings.fontSizes.cardTitle,
       $generalSettings.fontSizes.cardPreview,
       $generalSettings.fontSizes.secondary,
@@ -572,7 +571,13 @@
   function cardLayoutSignature(item: ClipboardItem): string {
     const text = item.textContent || item.title;
     const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
-    return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}`;
+    // Only the selected card's layout differs in split mode, so the detail
+    // selection participates in THIS card's signature instead of the global
+    // prefix — opening/closing the detail panel must not invalidate every
+    // measured height and cause a list-wide layout jitter.
+    const detailSelected =
+      detailDisplayMode === "split" && detailItem?.id === item.id ? "detail" : "";
+    return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}:${detailSelected}`;
   }
 
   function recordCardHeight(id: string, height: number) {
