@@ -144,6 +144,21 @@ mod capture_tests {
     }
 
     #[test]
+    fn sensitive_filter_fails_closed_after_lock_poisoning() {
+        let state = capture_state();
+        // Poison the pattern lock by panicking while a write guard is held.
+        let lock = Arc::clone(&state.policy.sensitive_patterns);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = lock.write().unwrap();
+            panic!("poison the sensitive-pattern lock");
+        }));
+
+        // The recovered list must still match: privacy filtering may not
+        // degrade into "allow everything" just because a writer panicked.
+        assert!(state.should_skip(Some("Notepad"), Some("password=hunter2")));
+    }
+
+    #[test]
     fn ignored_application_updates_are_deduplicated_and_immediately_visible() {
         let state = capture_state();
         let stored = state.set_ignored_apps(vec![

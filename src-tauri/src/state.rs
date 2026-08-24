@@ -79,11 +79,14 @@ impl CaptureState {
 
     /// Swaps the sensitive-content regex list at runtime. The capture thread
     /// reads the patterns through the same `RwLock`, so the change applies to
-    /// the next clipboard event without a worker restart.
+    /// the next clipboard event without a worker restart. A poisoned lock is
+    /// recovered via `into_inner` rather than silently dropping the update.
     pub(crate) fn set_sensitive_patterns(&self, patterns: Vec<regex_lite::Regex>) {
-        if let Ok(mut guard) = self.policy.sensitive_patterns.write() {
-            *guard = patterns;
-        }
+        let mut guard = match self.policy.sensitive_patterns.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *guard = patterns;
     }
 
     pub(crate) fn set_max_file_copy_size_bytes(&self, value: u64) {
@@ -182,10 +185,14 @@ impl CapturePolicy {
         }
 
         text.is_some_and(|text| {
-            self.sensitive_patterns
-                .read()
-                .map(|patterns| patterns.iter().any(|pattern| pattern.is_match(text)))
-                .unwrap_or(false)
+            // Privacy filtering must fail closed: if the lock was poisoned by
+            // a panicking writer, still evaluate the recovered pattern list
+            // instead of letting sensitive content through.
+            let patterns = match self.sensitive_patterns.read() {
+                Ok(patterns) => patterns,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            patterns.iter().any(|pattern| pattern.is_match(text))
         })
     }
 }
