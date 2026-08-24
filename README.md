@@ -139,7 +139,7 @@ Alt+V 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 
 ### 环境要求
 
-- **Node.js** >= 20（推荐 22 / 24）
+- **Node.js** >= 20.19（Vite 8 要求；推荐 22 / 24，CI 使用 24）
 - **Rust** 稳定版工具链
 - 对应平台的 [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)
 
