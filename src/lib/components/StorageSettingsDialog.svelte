@@ -1569,8 +1569,7 @@
       </div>
       {#if activeSettingsNavGroup?.id === "keyboard"}
         <section
-          class="setting-card toggle-card"
-          style="margin-top:3px"
+          class="setting-card toggle-card keyboard-config-card"
           data-settings-search-id="keyboard.config-file"
         >
           <div class="setting-heading">
@@ -1580,7 +1579,7 @@
               <p>{_t("storage.keyboardConfigNote")}</p>
             </div>
           </div>
-          <div style="display:flex;gap:6px;flex-shrink:0">
+          <div class="config-bar-actions">
             <button
               type="button"
               class="config-bar-btn"
@@ -3640,6 +3639,16 @@
     color: var(--text-primary);
     background: var(--hover-bg);
     border-color: var(--text-faint);
+  }
+
+  .keyboard-config-card {
+    margin-top: 3px;
+  }
+
+  .config-bar-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
   }
 
   .config-bar-btn {
