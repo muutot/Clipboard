@@ -1310,23 +1310,32 @@
     gap: 2px;
     margin-left: auto;
     opacity: 0;
+    /* Hidden also removes the buttons from the Tab order, so an invisible
+       control can never silently swallow keyboard focus (WCAG 2.4.7). */
+    visibility: hidden;
     pointer-events: auto;
-    transition: opacity 120ms ease;
+    transition:
+      opacity 120ms ease,
+      visibility 120ms ease;
   }
 
   .clip-card.actions-hidden .actions {
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
   }
 
   .clip-card:hover .actions,
   .clip-card.selected .actions,
+  .clip-card:focus-within .actions,
   .clip-card:hover .shortcut,
   .clip-card.selected .shortcut,
+  .clip-card:focus-within .shortcut,
   .clip-card.actions-always .actions,
   .clip-card.actions-always .shortcut,
   .clip-card .shortcut.shortcut-resident {
     opacity: 1;
+    visibility: visible;
   }
 
   .actions button {
