@@ -19,10 +19,9 @@
   interface Props {
     iconsDir: string;
     onfeedback: (message: string, success: boolean) => void;
-    onclose: () => void;
   }
 
-  let { iconsDir, onfeedback, onclose }: Props = $props();
+  let { iconsDir, onfeedback }: Props = $props();
 
   let iconFiles = $state<IconCacheEntry[]>([]);
   let loadingIcons = $state(false);
@@ -320,7 +319,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     line-height: 32px;
     cursor: pointer;
     white-space: nowrap;
@@ -328,7 +327,7 @@
   }
 
   .icon-file-count {
-    font-size: 11px;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     line-height: 32px;
     margin-top: 6px;
     color: var(--text-muted);
@@ -356,7 +355,7 @@
     padding: 6px 14px 6px 12px;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--input-bg);
-    font-size: 11px;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     color: var(--text-muted);
     text-transform: none;
   }
@@ -368,7 +367,7 @@
   .icon-file-item {
     border-bottom: 1px solid var(--border-subtle);
     padding: 6px 16px 6px 12px;
-    font-size: 12px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   }
 
   .icon-file-item:last-child {
@@ -410,7 +409,7 @@
 
   .icon-orphan-mark {
     flex-shrink: 0;
-    color: var(--danger-color, #e5484d);
+    color: var(--danger-color);
     font-weight: 600;
   }
 
@@ -418,7 +417,7 @@
     width: 24px;
     height: 24px;
     flex-shrink: 0;
-    border-radius: 4px;
+    border-radius: var(--settings-icon-radius, 7px);
     object-fit: contain;
   }
 
@@ -429,10 +428,10 @@
     width: 24px;
     height: 24px;
     flex-shrink: 0;
-    border-radius: 5px;
+    border-radius: var(--settings-icon-radius, 7px);
     background: color-mix(in srgb, var(--selection-color) 18%, transparent);
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: var(--settings-heading-size, 13px);
     font-weight: 600;
   }
 
@@ -443,7 +442,7 @@
   }
 
   .icon-col-size {
-    font-size: 11px;
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
     color: var(--text-muted);
     white-space: nowrap;
     text-align: right;
@@ -463,7 +462,7 @@
     color: var(--text-secondary);
     background: var(--hover-bg);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     cursor: pointer;
     white-space: nowrap;
     transition:
@@ -488,8 +487,8 @@
     display: grid;
     place-items: center;
     padding: 16px;
-    background: rgba(5, 5, 5, 0.6);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
   }
 
   .icon-replace-dialog {
@@ -498,7 +497,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid var(--border-color);
-    border-radius: 9px;
+    border-radius: var(--settings-card-radius, 9px);
     background: var(--surface-bg);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
     overflow: hidden;

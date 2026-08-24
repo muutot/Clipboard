@@ -1729,7 +1729,6 @@
             feedback = message;
             feedbackSuccess = success;
           }}
-          {onclose}
         />
       {:catch}
         {@render settingsPanelLoadFailed()}
