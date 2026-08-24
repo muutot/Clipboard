@@ -2270,13 +2270,6 @@
   function bulkFavorite() {
     const ids = [...selectedIds];
     const unfavorite = allSelectedFavorites;
-    // Full value snapshots (not reference captures): an in-place splice from
-    // the clipboard-item-added handler can land inside the async window, and
-    // a reference rollback would then silently keep the spliced state.
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSearchCache = searchCache.map((entry) => ({ ...entry }));
-    const previousDetailItem = detailItem;
 
     const patch = new Map<string, Partial<ClipboardItem>>();
     for (const id of ids) patch.set(id, { favorite: !unfavorite });
@@ -2295,10 +2288,10 @@
       })
       .catch((error) => {
         console.error("Bulk favorite failed", error);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
-        searchCache = previousSearchCache;
-        detailItem = previousDetailItem;
+        // Revert per-item through the shared funnel instead of restoring a
+        // whole-array snapshot: entries spliced in by clipboard-item-added
+        // during the async window must survive the rollback.
+        applyItemPatches(new Map(ids.map((id) => [id, { favorite: unfavorite }])));
         statusMessage = _t("app.favoriteFailed");
         showToast(_t("app.favoriteFailed"), "error");
       });
