@@ -91,6 +91,7 @@
     oncopyfilename: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
     onsavetags: (id: string, tags: string[]) => void;
+    onocrupdate: (id: string, patch: Partial<ClipboardItem>) => void;
     tagColors?: Record<string, string>;
   }
 
@@ -110,6 +111,7 @@
     oncopyfilename,
     onimagefullscreen,
     onsavetags,
+    onocrupdate,
     tagColors = {},
   }: Props = $props();
 
@@ -225,9 +227,10 @@
       const queued = await invoke<boolean>("regenerate_clipboard_item_ocr", { id: targetId });
       if (!queued) throw new Error(_t("detail.ocrUnavailable"));
 
-      targetItem.ocrStatus = "pending";
-      targetItem.ocrText = undefined;
-      targetItem.ocrError = undefined;
+      // Route the patch through the parent so every copy of the entry
+      // (items/indexedItems/searchCache/detailItem) stays in sync instead of
+      // relying on this prop being a live deep proxy.
+      onocrupdate(targetId, { ocrStatus: "pending", ocrText: undefined, ocrError: undefined });
       if (item?.id === targetId) {
         ocrFeedback = _t("detail.regenerationQueued");
       }
@@ -300,19 +303,22 @@
         .then((result) => {
           if (disposed) return;
           if (result) {
-            targetItem.ocrStatus = result.status;
-            targetItem.ocrError = result.errorMessage ?? undefined;
-            targetItem.ocrText = result.fullText || undefined;
+            onocrupdate(targetItem.id, {
+              ocrStatus: result.status,
+              ocrError: result.errorMessage ?? undefined,
+              ocrText: result.fullText || undefined,
+            });
           } else {
-            targetItem.ocrStatus = "none";
-            targetItem.ocrText = undefined;
-            targetItem.ocrError = undefined;
+            onocrupdate(targetItem.id, {
+              ocrStatus: "none",
+              ocrText: undefined,
+              ocrError: undefined,
+            });
           }
         })
         .catch(() => {
           if (disposed) return;
-          targetItem.ocrStatus = "failed";
-          targetItem.ocrError = _t("detail.ocrReadFailed");
+          onocrupdate(targetItem.id, { ocrStatus: "failed", ocrError: _t("detail.ocrReadFailed") });
         })
         .finally(() => {
           requestInFlight = false;

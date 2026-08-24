@@ -303,7 +303,7 @@
   });
 
   // Configured navigation shortcuts (conf/keyboard.json), reusing the same
-  // action keys the settings panel exposes under the "切换" group. An absent
+  // action keys the settings panel exposes under the "鍒囨崲" group. An absent
   // action falls back to its default; an action explicitly configured to empty
   // disables that navigation binding.
   const navigationBindings = $derived.by(() => {
@@ -437,7 +437,7 @@
     const dateRangeFromNl = !dateRange ? parseDateQuery(normalizedQuery) : null;
     const effectiveDateRange = dateRange ?? dateRangeFromNl;
     // A natural-language date token is a filter, not content that must occur
-    // in the record text (e.g. "昨天" should not be required in the title).
+    // in the record text (e.g. "鏄ㄥぉ" should not be required in the title).
     const keywords = dateRangeFromNl
       ? []
       : normalizedQuery.toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -2639,13 +2639,13 @@
     }
 
     selectedIds = new Set();
-    // Don't preventDefault — let the event continue so a single Esc
+    // Don't preventDefault 鈥?let the event continue so a single Esc
     // can clear bulk selection, close detail panel, or hide the window.
   }
 
   let tagAddSignal = $state(0);
 
-  // Item-action shortcuts (Ctrl/⌘ + letter) that should still operate on the
+  // Item-action shortcuts (Ctrl/鈱?+ letter) that should still operate on the
   // selected entry even when focus is in an editable target such as the search
   // box. Ctrl+A is deliberately excluded so the search box keeps its native
   // "select all text" behavior.
@@ -2656,7 +2656,7 @@
 
   // Native activatable controls fire their click action from the keydown
   // default behavior. When focus sits on one of them, Enter/Space must
-  // activate that control — not the list selection below. Note: history
+  // activate that control 鈥?not the list selection below. Note: history
   // cards are divs with role="option" and deliberately keep the hijacked
   // Enter/Space activation, so role="option" is intentionally absent here;
   // the search-suggestion options are real <button> elements and are covered.
@@ -2750,8 +2750,8 @@
 
     // Let the focused editable target (e.g. the search box) keep its own key
     // combinations (Ctrl+A to select text, Ctrl+Z/X/V, etc.). The item-action
-    // shortcuts (Ctrl/⌘ + C/D/F/E/T/S) are exempted so they still operate on
-    // the selected entry even when the search box is focused — otherwise every
+    // shortcuts (Ctrl/鈱?+ C/D/F/E/T/S) are exempted so they still operate on
+    // the selected entry even when the search box is focused 鈥?otherwise every
     // Ctrl+<letter> silently no-ops after a search or filter switch moves focus
     // into the search input.
     if (editableTarget && !isItemActionShortcut(event)) return;
@@ -3152,7 +3152,7 @@
           class="clear-button"
           type="button"
           aria-label={_t("app.clearSearch")}
-          onclick={clearSearchQuery}>×</button
+          onclick={clearSearchQuery}>脳</button
         >
       {/if}
     </div>
@@ -3528,6 +3528,7 @@
         oncleanpaste={cleanPaste}
         onduplicate={duplicateItem}
         onsaveasnew={saveAsNew}
+        onocrupdate={(id, patch) => updateItem(id, () => patch)}
         oncopyfilename={copyFilename}
         onimagefullscreen={handleImageFullscreen}
         onsavetags={saveTags}
@@ -3567,6 +3568,7 @@
     oncleanpaste={cleanPaste}
     onduplicate={duplicateItem}
     onsaveasnew={saveAsNew}
+    onocrupdate={(id, patch) => updateItem(id, () => patch)}
     oncopyfilename={copyFilename}
     onimagefullscreen={handleImageFullscreen}
     onsavetags={saveTags}
