@@ -40,6 +40,8 @@ jobs:
 
       - run: npm run format:check
 
+      - run: npm run test
+
       - run: npm run check
 
       - run: npm run build

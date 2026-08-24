@@ -14,7 +14,13 @@ const FOCUSABLE_SELECTOR = [
 /** Returns currently visible, keyboard-focusable elements inside `container`. */
 export function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => element.offsetParent !== null || element.getClientRects().length > 0,
+    (element) => {
+      if (element.getAttribute("aria-hidden") === "true") return false;
+      // Browsers expose a layout-aware visibility probe; environments without
+      // one (jsdom) fall back to inline styles.
+      if (typeof element.checkVisibility === "function") return element.checkVisibility();
+      return element.style.display !== "none";
+    },
   );
 }
 

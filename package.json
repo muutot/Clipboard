@@ -15,6 +15,8 @@
     "format:rust:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:rust": "cargo test -j 1 --manifest-path src-tauri/Cargo.toml --workspace",
     "lint:rust": "cargo clippy -j 1 --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings",
     "verify": "npm run format:check && npm run check && npm run build && npm run test:rust && npm run lint:rust",
@@ -31,11 +33,13 @@
     "@sveltejs/kit": "^2.70.1",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@tauri-apps/cli": "^2",
+    "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.56.8",
     "svelte-check": "^4.7.4",
     "typescript": "~6.0.3",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.1.11"
   }
 }
