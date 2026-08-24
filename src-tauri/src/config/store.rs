@@ -427,16 +427,9 @@ impl ConfigStore {
         let mut sync = self.config.sync.clone();
         // Secrets are stored as DPAPI envelopes; decrypt on read so callers
         // (S3 client, retain_secret) always work with plaintext in memory.
-        if let Some(stored) = &sync.s3_secret_key {
-            if let Some(plain) = crate::platform::dpapi::unprotect(stored) {
-                sync.s3_secret_key = Some(plain);
-            }
-        }
-        if let Some(stored) = &sync.sync_password {
-            if let Some(plain) = crate::platform::dpapi::unprotect(stored) {
-                sync.sync_password = Some(plain);
-            }
-        }
+        sync.s3_secret_key = decrypt_sync_secret(sync.s3_secret_key.as_deref(), "sync.s3SecretKey");
+        sync.sync_password =
+            decrypt_sync_secret(sync.sync_password.as_deref(), "sync.syncPassword");
         sync
     }
 
@@ -542,6 +535,27 @@ impl ConfigStore {
         }
         atomic_write_json(&self.path, serde_json::to_vec_pretty(&value)?)
     }
+}
+
+/// Decrypts one stored sync secret for in-memory use. Legacy plaintext values
+/// pass through untouched; an envelope that cannot be decrypted on this
+/// machine/user (e.g. the config was copied from another profile) is dropped
+/// with a prominent log line instead of handing ciphertext to the S3 client,
+/// which would only surface later as a baffling authentication failure.
+fn decrypt_sync_secret(stored: Option<&str>, label: &str) -> Option<String> {
+    let stored = stored?;
+    if crate::platform::dpapi::is_envelope(stored) {
+        return match crate::platform::dpapi::unprotect(stored) {
+            Some(plain) => Some(plain),
+            None => {
+                crate::log_event!(
+                    "[config] {label} is encrypted and cannot be decrypted on this machine or user profile; re-enter the credential in sync settings"
+                );
+                None
+            }
+        };
+    }
+    Some(stored.to_owned())
 }
 
 fn atomic_write_json(path: &Path, contents: Vec<u8>) -> Result<(), StorageError> {
