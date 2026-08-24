@@ -47,12 +47,10 @@
   import {
     createVirtualList,
     editHeight,
-    itemHeight,
-    measureVisualLines,
     buildPositions,
-    trimTrailingBlankLines,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
+  import { estimateCardHeight } from "$lib/utils/card-height";
   import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
   import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
@@ -523,66 +521,24 @@
   const doubleClickPaste = $derived($generalSettings.doubleClickPaste);
 
   function estimatedCardHeight(item: ClipboardItem): number {
-    if (compactMode && item.kind === "image") {
-      const metaHidden = detailDisplayMode === "split" && detailItem?.id === item.id;
-      return (
-        compactImage +
-        compactPaddingTop +
-        compactPaddingBottom +
-        4 +
-        (metaHidden ? 0 : 14) +
-        10 +
-        compactCardGap
-      );
-    }
-    if (item.kind !== "text" && item.kind !== "link") {
-      return itemHeight({
-        kind: item.kind,
-        compact: compactMode,
+    return estimateCardHeight(
+      item,
+      {
+        compactMode,
         compactImage,
         compactText,
         compactTallText,
         compactCustomTitle,
-        cardGap: compactCardGap,
-        showPreview: showSecondaryText,
-      });
-    }
-
-    let totalLines = 1;
-    if (item.customTitle) {
-      const bodyLines = showSecondaryText
-        ? measureVisualLines(
-            trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.preview),
-            $generalSettings.fontSizes.cardPreview,
-            Math.max(1, effectiveContainerWidth - 26 - 76),
-            maxTextLines,
-          )
-        : 0;
-      totalLines = 1 + bodyLines;
-    } else {
-      const previewText =
-        trimTrailingBlankLines(item.textContent) || trimTrailingBlankLines(item.title);
-      const bodyLines = showSecondaryText
-        ? measureVisualLines(
-            getDisplayRemainingLines(previewText),
-            $generalSettings.fontSizes.cardPreview,
-            Math.max(1, effectiveContainerWidth - 26 - 76),
-            maxTextLines,
-          )
-        : 0;
-      totalLines = 1 + bodyLines;
-    }
-
-    return itemHeight({
-      kind: item.kind,
-      textLines: totalLines,
-      compact: compactMode,
-      compactText,
-      compactTallText,
-      compactImage,
-      cardGap: compactCardGap,
-      showPreview: showSecondaryText,
-    });
+        compactCardGap,
+        compactPaddingTop,
+        compactPaddingBottom,
+        showSecondaryText,
+        maxTextLines,
+        previewFontSize: $generalSettings.fontSizes.cardPreview,
+        contentWidth: effectiveContainerWidth,
+      },
+      detailDisplayMode === "split" && detailItem?.id === item.id,
+    );
   }
 
   function compactCardHeightFor(item: ClipboardItem): number {
