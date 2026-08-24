@@ -150,6 +150,66 @@ pub fn model_file_is_installed(dir: &Path, file: &PpOcrModelFile) -> bool {
         .is_ok_and(|metadata| metadata.is_file() && metadata.len() == file.size_bytes)
 }
 
+/// Path of the locally recorded SHA-256 digest for an installed model file
+/// (trust-on-first-use pinning: written after every successful download).
+pub fn model_digest_path(dir: &Path, file: &PpOcrModelFile) -> PathBuf {
+    dir.join(format!("{}.sha256", file.filename))
+}
+
+fn compute_file_sha256(path: &Path) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let mut hasher = Sha256::new();
+    let mut source = std::fs::File::open(path)?;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = source.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// Hashes `path` and persists the digest next to the model file so later
+/// install attempts can detect on-disk corruption or replacement without
+/// relying on upstream-pinned hashes.
+pub fn record_model_digest(dir: &Path, file: &PpOcrModelFile) -> std::io::Result<()> {
+    let digest = compute_file_sha256(&dir.join(file.filename))?;
+    std::fs::write(model_digest_path(dir, file), digest)
+        .map_err(|error| error_with_path("record model digest", dir.join(file.filename), error))
+}
+
+/// Returns `false` when a locally recorded digest exists but the model file
+/// no longer matches it. Missing digests (models installed before TOFU
+/// pinning was introduced) fall back to the size-only check.
+pub fn model_digest_matches(dir: &Path, file: &PpOcrModelFile) -> bool {
+    let digest_path = model_digest_path(dir, file);
+    let Ok(recorded) = std::fs::read_to_string(&digest_path) else {
+        return true;
+    };
+    let recorded = recorded.trim();
+    match compute_file_sha256(&dir.join(file.filename)) {
+        Ok(actual) => actual.eq_ignore_ascii_case(recorded),
+        Err(error) => {
+            crate::log_event!(
+                "[ocr] cannot hash {} for digest verification: {error}",
+                file.filename
+            );
+            false
+        }
+    }
+}
+
+fn error_with_path(context: &str, path: PathBuf, error: std::io::Error) -> std::io::Error {
+    std::io::Error::new(
+        error.kind(),
+        format!("{context} {}: {error}", path.display()),
+    )
+}
+
 pub fn model_is_installed(dir: &Path, spec: &PpOcrModelSpec) -> bool {
     spec.files()
         .iter()
@@ -169,7 +229,9 @@ mod tests {
     use std::fs::{self, File};
     use std::time::SystemTime;
 
-    use super::{model_is_installed, model_spec, PpOcrModelFile};
+    use super::{
+        model_digest_matches, model_is_installed, model_spec, record_model_digest, PpOcrModelFile,
+    };
 
     #[test]
     fn maps_supported_and_legacy_variant_names_to_canonical_specs() {
@@ -200,6 +262,29 @@ mod tests {
             .set_len(tiny.detection.size_bytes - 1)
             .unwrap();
         assert!(!model_is_installed(&dir, tiny));
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn tofu_digest_detects_post_install_modification() {
+        let dir = temporary_test_directory("tofu-digest");
+        fs::create_dir_all(&dir).unwrap();
+        let file = model_spec("tiny").unwrap().dictionary;
+
+        create_sized_file(&dir, &file);
+        // No digest recorded yet (legacy install): size-only fallback applies.
+        assert!(model_digest_matches(&dir, &file));
+
+        record_model_digest(&dir, &file).unwrap();
+        assert!(model_digest_matches(&dir, &file));
+
+        // Flip one byte in place: same size, different content.
+        let path = dir.join(file.filename);
+        let mut bytes = fs::read(&path).unwrap();
+        bytes[0] ^= 0xff;
+        fs::write(&path, &bytes).unwrap();
+        assert!(!model_digest_matches(&dir, &file));
 
         fs::remove_dir_all(dir).unwrap();
     }

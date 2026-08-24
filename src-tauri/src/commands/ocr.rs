@@ -257,7 +257,17 @@ async fn download_ppocr_file(
     model_file: ocr::models::PpOcrModelFile,
 ) -> Result<(), String> {
     if ocr::models::model_file_is_installed(models_dir, &model_file) {
-        return Ok(());
+        // Trust-on-first-use integrity: when we recorded a digest at install
+        // time, re-verify the on-disk file before trusting it. A mismatch
+        // (corruption or replacement) forces a fresh download.
+        if ocr::models::model_digest_matches(models_dir, &model_file) {
+            return Ok(());
+        }
+        crate::log_event!(
+            "[ocr] {} no longer matches its recorded digest; redownloading",
+            model_file.filename
+        );
+        let _ = tokio::fs::remove_file(models_dir.join(model_file.filename)).await;
     }
 
     let destination = models_dir.join(model_file.filename);
@@ -335,6 +345,16 @@ async fn download_ppocr_file(
     tokio::fs::rename(&temporary, &destination)
         .await
         .map_err(|e| format!("install {}: {e}", model_file.filename))?;
+
+    // Pin the downloaded bytes trust-on-first-use so future installs can
+    // detect on-disk corruption without maintaining upstream hash pins.
+    let models_dir_owned = models_dir.to_path_buf();
+    let digest_result = tauri::async_runtime::spawn_blocking(move || {
+        ocr::models::record_model_digest(&models_dir_owned, &model_file)
+    })
+    .await
+    .map_err(|e| format!("record {} digest: {e}", model_file.filename))?;
+    digest_result.map_err(|e| format!("record {} digest: {e}", model_file.filename))?;
 
     Ok(())
 }

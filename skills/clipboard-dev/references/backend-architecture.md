@@ -79,7 +79,7 @@ Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLit
 
 ## OCR
 
-`OcrEngine` supports PP-OCR, Tesseract, and no-op implementations. `OcrWorkerManager` owns a replaceable worker so engine/model/threshold changes can restart OCR without restarting the app. OCR rows are recoverable jobs, share image-hash results, and feed search through the outbox. Keep config, model installation/status, fallback selection, worker lifecycle, database transitions, search synchronization, settings progress, and shutdown aligned.
+`OcrEngine` supports PP-OCR, Tesseract, and no-op implementations. `OcrWorkerManager` owns a replaceable worker so engine/model/threshold changes can restart OCR without restarting the app. OCR rows are recoverable jobs, share image-hash results, and feed search through the outbox. Model downloads verify size and a trust-on-first-use SHA-256: `download_ppocr_file` records the downloaded digest to `<model>.sha256` (`ocr/models.rs::record_model_digest`) and redownloads when a later install finds the on-disk file no longer matches. There are deliberately no upstream-pinned hashes — model updates must not require pin maintenance. Keep config, model installation/status, fallback selection, worker lifecycle, database transitions, search synchronization, settings progress, and shutdown aligned.
 
 ## Capture, content, and self-trigger suppression
 
