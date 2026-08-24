@@ -57,20 +57,25 @@ impl SearchIndex {
         let index = match Index::open_or_create(directory, schema) {
             Ok(index) => index,
             Err(error) => {
-                let msg = error.to_string();
-                if msg.contains("schema does not match") {
-                    std::fs::remove_dir_all(&layout.index_directory)
-                        .map_err(tantivy::TantivyError::from)?;
-                    std::fs::create_dir_all(&layout.index_directory)
-                        .map_err(tantivy::TantivyError::from)?;
-                    layout.rebuild_required = true;
-                    let directory = MmapDirectory::open(&layout.index_directory)
-                        .map_err(tantivy::TantivyError::from)?;
-                    let (schema2, _) = build_schema();
-                    Index::open_or_create(directory, schema2)?
-                } else {
-                    return Err(error.into());
-                }
+                // A schema/version mismatch surfaces as "schema does not
+                // match", but a corrupted or partially written directory can
+                // fail with other errors too. The index is fully derivable
+                // from the database (the manifest drives the re-index), so
+                // any open failure gets exactly one delete-and-recreate
+                // attempt instead of hard-failing startup.
+                eprintln!(
+                    "[search] opening index at {} failed ({error}); recreating it",
+                    layout.index_directory.display()
+                );
+                std::fs::remove_dir_all(&layout.index_directory)
+                    .map_err(tantivy::TantivyError::from)?;
+                std::fs::create_dir_all(&layout.index_directory)
+                    .map_err(tantivy::TantivyError::from)?;
+                layout.rebuild_required = true;
+                let directory = MmapDirectory::open(&layout.index_directory)
+                    .map_err(tantivy::TantivyError::from)?;
+                let (schema2, _) = build_schema();
+                Index::open_or_create(directory, schema2)?
             }
         };
 
@@ -380,6 +385,40 @@ mod tests {
             created_at_ms,
             is_favorite: false,
         }
+    }
+
+    #[test]
+    fn open_recreates_a_corrupt_index_directory() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-search-corrupt-{}-{unique}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(root.join("tantivy")).unwrap();
+        // The manifest claims a current, ready index so the layout check does
+        // not wipe the directory itself; the corrupt meta.json must instead be
+        // recovered by SearchIndex::open's recreate path.
+        std::fs::write(
+            root.join("manifest.json"),
+            br#"{"version":2,"state":"Ready"}"#,
+        )
+        .unwrap();
+        std::fs::write(root.join("tantivy").join("meta.json"), b"{ corrupt").unwrap();
+
+        let index = SearchIndex::open(&root).unwrap();
+        assert!(index.requires_full_rebuild());
+
+        // The recreated index must actually be usable.
+        index
+            .apply_changes(&[SearchIndexChange::Upsert(document("a", "hello"))])
+            .unwrap();
+        index.reload_reader().unwrap();
+        assert!(!index.search("hello", 10).unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
