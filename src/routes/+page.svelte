@@ -2696,6 +2696,19 @@
     return ["c", "d", "f", "e", "t", "s"].includes(event.key.toLowerCase());
   }
 
+  // Native activatable controls fire their click action from the keydown
+  // default behavior. When focus sits on one of them, Enter/Space must
+  // activate that control — not the list selection below. Note: history
+  // cards are divs with role="option" and deliberately keep the hijacked
+  // Enter/Space activation, so role="option" is intentionally absent here;
+  // the search-suggestion options are real <button> elements and are covered.
+  function isActivatableKeyboardTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return !!target.closest(
+      "button, a, link, select, summary, label, [role='tab'], [role='menuitem'], [role='button'], [role='link'], [role='checkbox']",
+    );
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     const editableTarget = isEditableKeyboardTarget(event.target);
     const quickCopyIndex =
@@ -2824,6 +2837,7 @@
     if (event.key === "Enter") {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
+      if (isActivatableKeyboardTarget(event.target)) return;
       event.preventDefault();
       activateSelected();
       return;
@@ -2834,6 +2848,7 @@
       !(event.target instanceof HTMLInputElement) &&
       !(event.target instanceof HTMLTextAreaElement)
     ) {
+      if (isActivatableKeyboardTarget(event.target)) return;
       event.preventDefault();
       if (selectedId) openDetail(selectedId);
       return;
