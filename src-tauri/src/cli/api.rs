@@ -173,15 +173,27 @@ fn serve(
 
         match listener.accept() {
             Ok((stream, _peer)) => {
-                if let Err(error) = handle_connection(
-                    stream,
-                    &database,
-                    page_size_limit,
-                    search_page_size_limit,
-                    &token,
-                    port,
-                ) {
-                    eprintln!("[local-api] request failed: {error}");
+                // One thread per connection so a slow or idle client cannot
+                // stall health checks and other callers behind it (the 2s
+                // read timeout plus the request-size cap bound each thread).
+                let database = Arc::clone(&database);
+                let token = Arc::clone(&token);
+                let spawned = thread::Builder::new()
+                    .name("clipboard-local-api-conn".to_owned())
+                    .spawn(move || {
+                        if let Err(error) = handle_connection(
+                            stream,
+                            &database,
+                            page_size_limit,
+                            search_page_size_limit,
+                            &token,
+                            port,
+                        ) {
+                            eprintln!("[local-api] request failed: {error}");
+                        }
+                    });
+                if let Err(error) = spawned {
+                    eprintln!("[local-api] failed to spawn connection thread: {error}");
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
