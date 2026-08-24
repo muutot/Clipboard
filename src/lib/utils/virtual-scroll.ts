@@ -130,6 +130,11 @@ export function measureVisualLines(
 
   const limit = Math.min(12, Math.max(1, maxLines));
   const clamped = text.length > 4000 ? text.slice(0, 4000) : text;
+  // Resolve the font family before consulting the cache: this is what
+  // triggers the periodic re-check that clears stale measurements when the
+  // theme or system font changes. Calling it only on cache misses would let
+  // a warm cache bypass font invalidation forever.
+  fontFamily();
   const cacheKey = `${fontSize}|${Math.round(maxWidth)}|${limit}|${clamped}`;
   const cached = _measureCache.get(cacheKey);
   if (cached !== undefined) return cached;
