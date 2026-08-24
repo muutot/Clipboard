@@ -91,10 +91,29 @@ function systemFontFamily(): string {
 }
 
 let _cachedFontFamily: string | null = null;
+let _fontFamilyCheckedAt = 0;
 function fontFamily(): string {
-  if (!_cachedFontFamily) _cachedFontFamily = systemFontFamily();
+  // Re-check the computed font family at most once per second so a theme or
+  // system font change invalidates stale caches without paying
+  // getComputedStyle on every measurement.
+  const now = Date.now();
+  if (!_cachedFontFamily || now - _fontFamilyCheckedAt > 1000) {
+    const computed = systemFontFamily();
+    if (_cachedFontFamily && computed !== _cachedFontFamily) {
+      _measureCache.clear();
+    }
+    _cachedFontFamily = computed;
+    _fontFamilyCheckedAt = now;
+  }
   return _cachedFontFamily;
 }
+
+// Memoized visual-line results. The virtual scroll estimator runs this for
+// every filtered item whenever layout inputs change; without the cache that
+// means O(n) canvas word-measurements per frame during window resizes or
+// setting tweaks. Keys are bounded (FIFO eviction) to control memory.
+const MEASURE_CACHE_LIMIT = 8192;
+const _measureCache = new Map<string, number>();
 
 /**
  * Count visual lines a text string occupies inside a given pixel width,
@@ -109,11 +128,16 @@ export function measureVisualLines(
   const ctx = measureCtx();
   if (!ctx || !text || maxWidth <= 0 || fontSize <= 0) return 0;
 
-  ctx.font = `${fontSize}px ${fontFamily()}`;
   const limit = Math.min(12, Math.max(1, maxLines));
+  const clamped = text.length > 4000 ? text.slice(0, 4000) : text;
+  const cacheKey = `${fontSize}|${Math.round(maxWidth)}|${limit}|${clamped}`;
+  const cached = _measureCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  ctx.font = `${fontSize}px ${fontFamily()}`;
 
   let totalLines = 0;
-  const clamped = text.length > 4000 ? text.slice(0, 4000) : text;
+
   const paragraphs = clamped.split("\n");
 
   for (const paragraph of paragraphs) {
@@ -167,7 +191,16 @@ export function measureVisualLines(
     }
   }
 
-  return Math.max(0, Math.min(limit, totalLines));
+  return rememberMeasurement(cacheKey, Math.max(0, Math.min(limit, totalLines)));
+}
+
+function rememberMeasurement(cacheKey: string, lines: number): number {
+  if (_measureCache.size >= MEASURE_CACHE_LIMIT) {
+    const oldest = _measureCache.keys().next().value;
+    if (oldest !== undefined) _measureCache.delete(oldest);
+  }
+  _measureCache.set(cacheKey, lines);
+  return lines;
 }
 
 // --- Virtual scrolling ---
