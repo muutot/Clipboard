@@ -825,6 +825,12 @@
           indexedItems = [newItem, ...indexedItems];
         }
       }
+      // A promoted entry may also sit in the spare search cache with its old
+      // created_at_ms; patch it so the search panel does not show a stale
+      // relative time until the next pagination-driven promoteFromCache.
+      if (searchCache.some((i) => i.id === newItem.id)) {
+        applyItemPatches(new Map([[newItem.id, newItem]]));
+      }
     });
 
     const unlistenHistoryInvalidated = listen<ClipboardHistoryInvalidation>(
