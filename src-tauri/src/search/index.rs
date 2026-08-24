@@ -49,6 +49,7 @@ pub struct SearchIndex {
 }
 
 impl SearchIndex {
+    /// Opens (or recreates) the on-disk Tantivy index under `path`, recovering from corrupt directories.
     pub fn open(path: &Path) -> Result<Self, SearchError> {
         let mut layout = SearchIndexLayout::prepare(path.to_path_buf())?;
         let (schema, fields) = build_schema();
@@ -82,15 +83,18 @@ impl SearchIndex {
         Self::from_index(index, fields, Some(layout))
     }
 
+    /// Creates a throwaway RAM-backed index used by tests and previews.
     pub fn in_memory() -> Result<Self, SearchError> {
         let (schema, fields) = build_schema();
         Self::from_index(Index::create_in_ram(schema), fields, None)
     }
 
+    /// True when the manifest flags the index as missing, outdated, or recreated.
     pub fn requires_full_rebuild(&self) -> bool {
         self.rebuild_required.load(Ordering::Acquire)
     }
 
+    /// Marks the manifest `building` and clears cached id snapshots before a full re-index.
     pub fn begin_full_rebuild(&self) -> Result<(), SearchError> {
         if let Some(layout) = &self.layout {
             layout.mark_building()?;
@@ -110,6 +114,7 @@ impl SearchIndex {
         Ok(())
     }
 
+    /// Marks the manifest `ready` once a full rebuild has been committed.
     pub fn mark_rebuild_complete(&self) -> Result<(), SearchError> {
         if let Some(layout) = &self.layout {
             layout.mark_ready()?;
@@ -118,6 +123,7 @@ impl SearchIndex {
         Ok(())
     }
 
+    /// Applies upsert/delete batches to the writer and commits them atomically.
     pub fn apply_changes(&self, changes: &[SearchIndexChange]) -> Result<(), SearchError> {
         if changes.is_empty() {
             return Ok(());
@@ -156,10 +162,12 @@ impl SearchIndex {
         Ok(())
     }
 
+    /// Refreshes the reader so subsequent searches observe committed changes.
     pub fn reload_reader(&self) -> Result<(), SearchError> {
         self.reader.reload().map_err(Into::into)
     }
 
+    /// Runs a full-text query and returns ranked hits within the caller's limit.
     pub fn search(&self, input: &str, limit: usize) -> Result<Vec<SearchHit>, SearchError> {
         let query = SearchQuery::parse(input);
         let ngrams = query.required_ngrams();
@@ -219,6 +227,7 @@ impl SearchIndex {
             .collect()
     }
 
+    /// Returns every indexed item id (paged internally) used for reconciliation sweeps.
     pub fn search_all_ids(
         &self,
         input: &str,
@@ -299,6 +308,7 @@ impl SearchIndex {
         Ok((ids, total))
     }
 
+    /// Drops the cached id snapshot so the next sweep repopulates it.
     pub fn clear_cached_ids(&self) {
         if let Ok(mut cache) = self.cached_ids.lock() {
             *cache = None;
@@ -331,6 +341,7 @@ impl SearchIndex {
         })
     }
 
+    /// Cheap health probe: true when the index opens and answers an empty query.
     pub fn validate(&self) -> bool {
         // Issue a trivial query so the searcher acquisition path is exercised
         // and any reader-side corruption surfaces as a hard error rather than

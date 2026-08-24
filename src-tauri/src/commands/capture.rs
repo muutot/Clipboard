@@ -21,6 +21,7 @@ use crate::storage::{ClipboardRepository, Database, OcrRepository, StoragePaths}
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+/// Normalizes a foreground application identity into the display name stored with captured records.
 pub fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
     if !app.exe_path.trim().is_empty() {
         let leaf = app
@@ -38,6 +39,7 @@ pub fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
     }
 }
 
+/// True when `content_hash` matches one of this app's recent clipboard writes.
 pub fn should_skip_self_triggered_hash(
     guard: &mut content::self_trigger::SelfTriggerGuard,
     content_hash: &str,
@@ -45,6 +47,7 @@ pub fn should_skip_self_triggered_hash(
     guard.is_self_triggered(content_hash)
 }
 
+/// True when capturing `text` of `kind` would re-record our own write-back.
 pub fn should_skip_self_triggered_text(
     guard: &mut content::self_trigger::SelfTriggerGuard,
     kind: ClipboardKind,
@@ -58,6 +61,7 @@ pub fn should_skip_self_triggered_text(
     guard.is_text_write_self_triggered(kind_name, text)
 }
 
+/// Registers hashes for an image this app just wrote so the capture loop can skip it.
 pub fn register_image_self_trigger(
     guard: &mut content::self_trigger::SelfTriggerGuard,
     resource_path: Option<&str>,
@@ -104,6 +108,7 @@ pub struct CapturedFileReference {
     pub(crate) copied: bool,
 }
 
+/// Persists CF_HDROP file references and materializes metadata for a file capture.
 pub fn store_captured_file_references(
     file_paths: &[String],
     file_storage_dir: &Path,
@@ -178,6 +183,7 @@ pub(crate) struct FileEntry {
     modified_at_ms: Option<i64>,
 }
 
+/// Serializes captured file references into the record `metadata_json` blob.
 pub fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
     let first = files.first();
     serde_json::to_string(&FileMetadata {
@@ -209,6 +215,7 @@ pub fn captured_file_metadata(files: &[CapturedFileReference]) -> String {
 }
 
 #[tauri::command]
+/// Starts (or restarts) the background clipboard polling worker.
 pub fn start_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     paths: tauri::State<'_, StoragePaths>,
@@ -282,6 +289,7 @@ pub fn start_clipboard_monitoring(
 }
 
 #[tauri::command]
+/// Stops the clipboard polling worker and joins its thread.
 pub fn stop_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     capture: tauri::State<'_, CaptureState>,
@@ -295,6 +303,7 @@ pub fn stop_clipboard_monitoring(
 }
 
 #[tauri::command]
+/// Reports whether the clipboard polling worker is alive for the UI.
 pub fn get_clipboard_monitor_status(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     capture: tauri::State<'_, CaptureState>,
@@ -316,6 +325,7 @@ pub struct ClipboardMonitorStatus {
 }
 
 #[tauri::command]
+/// Marks text written by this app as self-triggered for the suppression window.
 pub fn mark_self_triggered(
     self_trigger: tauri::State<'_, SelfTriggerState>,
     text: String,
@@ -329,6 +339,7 @@ pub fn mark_self_triggered(
 }
 
 #[tauri::command]
+/// Marks image bytes written by this app as self-triggered.
 pub fn mark_self_triggered_image(
     self_trigger: tauri::State<'_, SelfTriggerState>,
     resource_path: Option<String>,
