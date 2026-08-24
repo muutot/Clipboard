@@ -67,17 +67,42 @@ impl PrivacyManager {
 
     pub fn sync_with_config(&mut self, config: &ConfigStore) {
         self.paused = config.privacy_paused();
-        self.sensitive_patterns = config
-            .sensitive_patterns()
-            .iter()
-            .filter_map(|pattern| regex_lite::Regex::new(pattern).ok())
-            .collect();
+        self.sensitive_patterns = compile_sensitive_patterns(config.sensitive_patterns());
     }
+}
+
+/// Compiles the configured sensitive-content patterns, skipping (and loudly
+/// reporting) entries that fail to parse so a silently ignored rule cannot
+/// leave the user believing a pattern is protecting them.
+fn compile_sensitive_patterns(patterns: &[String]) -> Vec<regex_lite::Regex> {
+    let mut compiled = Vec::with_capacity(patterns.len());
+    for pattern in patterns {
+        match regex_lite::Regex::new(pattern) {
+            Ok(regex) => compiled.push(regex),
+            Err(error) => {
+                eprintln!("[privacy] ignoring invalid sensitive pattern {pattern:?}: {error}");
+            }
+        }
+    }
+    compiled
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PrivacyManager;
+    use super::{compile_sensitive_patterns, PrivacyManager};
+
+    #[test]
+    fn skips_invalid_patterns_without_dropping_valid_ones() {
+        let patterns = vec![
+            r"\btoken\s*[=:]\s*\S+".to_owned(),
+            "(unclosed[".to_owned(),
+            r"\bpassword\s*[=:]\s*\S+".to_owned(),
+        ];
+        let compiled = compile_sensitive_patterns(&patterns);
+        assert_eq!(compiled.len(), 2);
+        assert!(compiled.iter().any(|re| re.is_match("token: abc")));
+        assert!(compiled.iter().any(|re| re.is_match("password=x")));
+    }
 
     #[test]
     fn detects_credit_card_patterns() {
