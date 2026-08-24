@@ -1,5 +1,31 @@
 use crate::config::ConfigStore;
 
+/// Canonical list of password-manager / credential-vault application names.
+///
+/// Single source of truth consumed by both [`PrivacyManager`] (runtime
+/// sensitive-source filtering) and `PrivacyConfig::default` (the seed for the
+/// user-editable ignore list), so the docs, the settings UI, and capture
+/// behavior cannot drift apart. Sorted alphabetically; matching is
+/// case-insensitive and name-normalized by `state.rs`.
+pub const PASSWORD_MANAGER_APPS: &[&str] = &[
+    "1Password",
+    "Bitwarden",
+    "Dashlane",
+    "iCloud Keychain",
+    "KeePass",
+    "KeePassXC",
+    "LastPass",
+    "NordPass",
+    "Windows Credential Manager",
+];
+
+pub fn default_password_manager_apps() -> Vec<String> {
+    PASSWORD_MANAGER_APPS
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect()
+}
+
 /// Default sensitive-content regex patterns. Matching content is skipped by
 /// the capture pipeline unless the user overrides the list in settings.
 pub const DEFAULT_SENSITIVE_PATTERNS: &[&str] = &[
@@ -33,16 +59,7 @@ impl PrivacyManager {
         Self {
             paused: false,
             sensitive_patterns,
-            password_manager_apps: vec![
-                "1Password".to_owned(),
-                "Bitwarden".to_owned(),
-                "LastPass".to_owned(),
-                "KeePass".to_owned(),
-                "Dashlane".to_owned(),
-                "NordPass".to_owned(),
-                "iCloud Keychain".to_owned(),
-                "Windows Credential Manager".to_owned(),
-            ],
+            password_manager_apps: default_password_manager_apps(),
         }
     }
 
@@ -133,6 +150,11 @@ mod tests {
         assert!(manager.is_password_manager("1password"));
         assert!(manager.is_password_manager("bitwarden"));
         assert!(manager.is_password_manager("KeePass"));
+        // Regression: KeePassXC was documented as protected but missing from
+        // the runtime list while LastPass was protected but undocumented.
+        assert!(manager.is_password_manager("KeePassXC"));
+        assert!(manager.is_password_manager("keepassxc"));
+        assert!(manager.is_password_manager("LastPass"));
         assert!(!manager.is_password_manager("Notepad"));
     }
 

@@ -21,7 +21,7 @@
 
 ## 敏感内容
 
-默认不记录已知密码管理器来源，初始忽略列表包含 1Password、Bitwarden、KeePass 和 KeePassXC。来源应用识别尚不可用的平台不能假装已经完成敏感来源拦截，应允许用户暂停记录，并在平台能力接入后再执行忽略列表。
+默认不记录已知密码管理器来源。初始忽略列表与运行时识别名单共用同一份常量（`privacy::PASSWORD_MANAGER_APPS`），当前包含：1Password、Bitwarden、Dashlane、iCloud Keychain、KeePass、KeePassXC、LastPass、NordPass、Windows Credential Manager。来源应用识别尚不可用的平台不能假装已经完成敏感来源拦截，应允许用户暂停记录，并在平台能力接入后再执行忽略列表。
 
 敏感内容处理遵循以下顺序：
 

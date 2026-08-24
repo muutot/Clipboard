@@ -307,12 +307,7 @@ impl Default for PrivacyConfig {
                 .iter()
                 .map(|pattern| (*pattern).to_owned())
                 .collect(),
-            ignored_applications: vec![
-                "1Password".to_owned(),
-                "Bitwarden".to_owned(),
-                "KeePass".to_owned(),
-                "KeePassXC".to_owned(),
-            ],
+            ignored_applications: crate::privacy::default_password_manager_apps(),
             paused: false,
             master_password_hash: None,
         }
