@@ -32,6 +32,8 @@
 
 Do not reorder recovery, search initialization, worker startup, or managed-state installation without reviewing failure paths and shutdown.
 
+`logging::init` runs first in the setup hook (before config load): on Windows it redirects the process stderr handle into `<project>/logs/clipboard.log` (rotated to `clipboard.log.old` past 512 KiB), so every existing `eprintln!` diagnostic survives GUI-subsystem builds. Worker modules should prefer the timestamped `crate::log_event!` macro (`ocr/worker.rs`, `content/thumbnail.rs` already do).
+
 ## Managed runtime state
 
 The app manages `ConfigStore`, `StoragePaths`, `Database`, `SearchIndex`, `PerformanceTracker`, privacy/capture/self-trigger state, clipboard monitor, keyboard/hotkey managers, OCR and thumbnail workers, cleanup worker, local API server, and the optional single-instance guard.

@@ -33,6 +33,7 @@ pub mod domain;
 pub mod export;
 pub mod geometry;
 pub mod keyboard;
+pub mod logging;
 pub mod memory;
 pub mod ocr;
 pub mod performance;
@@ -210,6 +211,11 @@ pub fn run() {
                 .ok()
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_default());
+            // Redirect stderr into a rotating log file as early as possible so
+            // every eprintln! diagnostic survives in GUI-subsystem builds.
+            if let Some(log_path) = logging::init(&project_directory) {
+                eprintln!("[logging] writing diagnostics to {}", log_path.display());
+            }
             let config = ConfigStore::load(&project_directory)?;
             if config.single_instance() {
                 let mut guard = match SingleInstanceGuard::acquire(&project_directory) {
