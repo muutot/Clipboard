@@ -139,8 +139,8 @@
     height: 32px;
     flex-shrink: 0;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--info-color, #3e63dd) 14%, transparent);
-    color: var(--info-color, #3e63dd);
+    background: color-mix(in srgb, var(--selection-color) 14%, transparent);
+    color: var(--selection-color);
   }
 
   .update-dialog-header--current .update-dialog-icon {
@@ -247,8 +247,8 @@
 
   .update-dialog-btn--primary {
     color: #fff;
-    border-color: var(--info-color, #3e63dd);
-    background: var(--info-color, #3e63dd);
+    border-color: var(--selection-color);
+    background: var(--selection-color);
   }
 
   .update-dialog-btn--primary:hover {
