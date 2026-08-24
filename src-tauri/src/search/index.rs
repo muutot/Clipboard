@@ -57,26 +57,46 @@ impl SearchIndex {
             MmapDirectory::open(&layout.index_directory).map_err(tantivy::TantivyError::from)?;
         let index = match Index::open_or_create(directory, schema) {
             Ok(index) => index,
-            Err(error) => {
-                // A schema/version mismatch surfaces as "schema does not
-                // match", but a corrupted or partially written directory can
-                // fail with other errors too. The index is fully derivable
-                // from the database (the manifest drives the re-index), so
-                // any open failure gets exactly one delete-and-recreate
-                // attempt instead of hard-failing startup.
+            Err(first_error) => {
+                // Transient external interference (an antivirus scan holding
+                // meta.json, a brief permission hiccup) can fail an open even
+                // though the index is intact. A full rebuild of a large
+                // history costs minutes of I/O, so give the open exactly one
+                // short-delay retry before falling back to recreation.
                 crate::log_event!(
-                    "[search] opening index at {} failed ({error}); recreating it",
+                    "[search] opening index at {} failed ({first_error}); retrying once",
                     layout.index_directory.display()
                 );
-                std::fs::remove_dir_all(&layout.index_directory)
-                    .map_err(tantivy::TantivyError::from)?;
-                std::fs::create_dir_all(&layout.index_directory)
-                    .map_err(tantivy::TantivyError::from)?;
-                layout.rebuild_required = true;
-                let directory = MmapDirectory::open(&layout.index_directory)
-                    .map_err(tantivy::TantivyError::from)?;
-                let (schema2, _) = build_schema();
-                Index::open_or_create(directory, schema2)?
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let retried = MmapDirectory::open(&layout.index_directory)
+                    .map_err(tantivy::TantivyError::from)
+                    .and_then(|directory| Index::open_or_create(directory, build_schema().0));
+                let index = match retried {
+                    Ok(index) => index,
+                    Err(retry_error) => {
+                        // A schema/version mismatch surfaces as "schema does
+                        // not match", but a corrupted or partially written
+                        // directory can fail with other errors too. The index
+                        // is fully derivable from the database (the manifest
+                        // drives the re-index), so a persistent open failure
+                        // gets exactly one delete-and-recreate attempt
+                        // instead of hard-failing startup.
+                        crate::log_event!(
+                            "[search] retry failed ({retry_error}); recreating index at {}",
+                            layout.index_directory.display()
+                        );
+                        std::fs::remove_dir_all(&layout.index_directory)
+                            .map_err(tantivy::TantivyError::from)?;
+                        std::fs::create_dir_all(&layout.index_directory)
+                            .map_err(tantivy::TantivyError::from)?;
+                        layout.rebuild_required = true;
+                        let directory = MmapDirectory::open(&layout.index_directory)
+                            .map_err(tantivy::TantivyError::from)?;
+                        let (schema2, _) = build_schema();
+                        Index::open_or_create(directory, schema2)?
+                    }
+                };
+                index
             }
         };
 

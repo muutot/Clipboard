@@ -75,7 +75,7 @@ Changing data directories is a migration workflow, not a path-string edit. Keep 
 
 ## Search
 
-Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite search triggers append `search_outbox` operations; `SearchSynchronizer` drains them. Outbox draining runs lazily inside `search_clipboard_items` by default or in a startup `SearchSyncWorker` when `GeneralConfig.search_index_sync_mode` is `background`. Full rebuild clears/recreates derived index state and repopulates from SQLite. Read `search-cache-strategy.md` before changing pagination or query caching.
+Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite search triggers append `search_outbox` operations; `SearchSynchronizer` drains them. Outbox draining runs lazily inside `search_clipboard_items` by default or in a startup `SearchSyncWorker` when `GeneralConfig.search_index_sync_mode` is `background`. Full rebuild clears/recreates derived index state and repopulates from SQLite. `SearchIndex::open` retries a failed open once after a short delay before falling back to delete-and-recreate, so transient interference (antivirus locks, permission hiccups) does not trigger a minutes-long full re-index. Read `search-cache-strategy.md` before changing pagination or query caching.
 
 ## OCR
 
