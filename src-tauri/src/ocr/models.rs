@@ -8,6 +8,10 @@ pub struct PpOcrModelFile {
     pub label: &'static str,
     pub size_bytes: u64,
     pub url: &'static str,
+    /// SHA-256 of the exact upstream release artifact. Downloads whose digest
+    /// differs are rejected before activation, so a replaced or truncated
+    /// file can never reach the ONNX runtime.
+    pub sha256: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +40,7 @@ const TINY_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_tiny_det.onnx"
         ),
+        sha256: "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
     },
     recognition: PpOcrModelFile {
         filename: "pp-ocrv6_tiny_rec.onnx",
@@ -45,6 +50,7 @@ const TINY_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_tiny_rec.onnx"
         ),
+        sha256: "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
     },
     dictionary: PpOcrModelFile {
         filename: "ppocrv6_tiny_dict.txt",
@@ -54,6 +60,7 @@ const TINY_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/ppocrv6_tiny_dict.txt"
         ),
+        sha256: "c5cbe34ef40c29c4df07ed012bf96569cb69a2d2a01a07027e9f13cb832bd9cd",
     },
 };
 
@@ -68,6 +75,7 @@ const SMALL_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_small_det.onnx"
         ),
+        sha256: "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e",
     },
     recognition: PpOcrModelFile {
         filename: "pp-ocrv6_small_rec.onnx",
@@ -77,6 +85,7 @@ const SMALL_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_small_rec.onnx"
         ),
+        sha256: "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634",
     },
     dictionary: PpOcrModelFile {
         filename: "ppocrv6_dict.txt",
@@ -86,6 +95,7 @@ const SMALL_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/ppocrv6_dict.txt"
         ),
+        sha256: "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
     },
 };
 
@@ -100,6 +110,7 @@ const MEDIUM_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_medium_det.onnx"
         ),
+        sha256: "eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1",
     },
     recognition: PpOcrModelFile {
         filename: "pp-ocrv6_medium_rec.onnx",
@@ -109,6 +120,7 @@ const MEDIUM_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_medium_rec.onnx"
         ),
+        sha256: "9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba",
     },
     dictionary: PpOcrModelFile {
         filename: "ppocrv6_dict.txt",
@@ -118,6 +130,7 @@ const MEDIUM_MODEL: PpOcrModelSpec = PpOcrModelSpec {
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/ppocrv6_dict.txt"
         ),
+        sha256: "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
     },
 };
 

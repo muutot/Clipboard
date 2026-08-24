@@ -173,6 +173,22 @@ pub async fn install_ppocr(
 ) -> Result<String, String> {
     let model = ocr::models::model_spec(&variant)
         .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?;
+
+    // Model download is an explicit, user-initiated network fetch — the one
+    // OCR exception to "fully offline". It must still respect the stricter
+    // local-only privacy switch (same policy as update checks).
+    {
+        let config = config
+            .lock()
+            .map_err(|_| "config lock poisoned".to_owned())?;
+        if config.privacy_local_only() {
+            return Err(
+                "本地模式已开启：下载 OCR 模型需要访问网络，请先在隐私设置中关闭“仅本地模式”"
+                    .to_owned(),
+            );
+        }
+    }
+
     let models_dir = ocr::models::models_dir(&paths.storage);
     tokio::fs::create_dir_all(&models_dir)
         .await
@@ -180,6 +196,8 @@ pub async fn install_ppocr(
 
     let client = reqwest::Client::builder()
         .user_agent("clipboard-desktop")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(600))
         .build()
         .map_err(|e| format!("create client: {e}"))?;
 
@@ -309,6 +327,7 @@ async fn download_ppocr_file(
             model_file.filename, model_file.size_bytes, downloaded
         ));
     }
+    verify_ppocr_sha256(&temporary, model_file).await?;
     if tokio::fs::try_exists(&destination).await.unwrap_or(false) {
         tokio::fs::remove_file(&destination)
             .await
@@ -318,6 +337,42 @@ async fn download_ppocr_file(
         .await
         .map_err(|e| format!("install {}: {e}", model_file.filename))?;
 
+    Ok(())
+}
+
+/// Streams the downloaded file through SHA-256 and rejects any digest that
+/// does not match the pinned upstream artifact, so a poisoned or truncated
+/// release asset can never reach the ONNX runtime.
+async fn verify_ppocr_sha256(
+    temporary: &Path,
+    model_file: ocr::models::PpOcrModelFile,
+) -> Result<(), String> {
+    use sha2::Digest;
+    use tokio::io::AsyncReadExt;
+
+    let mut file = tokio::fs::File::open(temporary)
+        .await
+        .map_err(|e| format!("reopen {}: {e}", temporary.display()))?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = vec![0u8; 256 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .await
+            .map_err(|e| format!("hash {}: {e}", temporary.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let actual = hex::encode(hasher.finalize());
+    if actual != model_file.sha256 {
+        let _ = tokio::fs::remove_file(temporary).await;
+        return Err(format!(
+            "downloaded {} failed integrity check: expected sha256 {}, got {}",
+            model_file.filename, model_file.sha256, actual
+        ));
+    }
     Ok(())
 }
 
