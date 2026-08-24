@@ -666,7 +666,6 @@ pub fn run() {
             mark_self_triggered_image,
             open_external_url,
             reveal_in_explorer,
-            copy_file_to,
             rename_item,
             update_clipboard_text,
             set_history_config,

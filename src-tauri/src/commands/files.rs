@@ -157,7 +157,24 @@ pub fn delete_icon_files(
     let icons_dir = paths.storage.join("icons");
     let mut deleted = 0u64;
     for name in &names {
-        let path = icons_dir.join(name);
+        // Names arrive from the webview: strip any directory components and
+        // verify the resolved file stays inside the managed icons directory
+        // before deleting, so `..\..\x.png` or absolute paths cannot remove
+        // arbitrary `.png` files on disk.
+        let Some(file_name) = std::path::Path::new(name)
+            .file_name()
+            .and_then(|n| n.to_str())
+        else {
+            continue;
+        };
+        let path = icons_dir.join(file_name);
+        let in_icons_dir = path
+            .canonicalize()
+            .map(|resolved| resolved.starts_with(icons_dir.canonicalize().unwrap_or_default()))
+            .unwrap_or(false);
+        if !in_icons_dir {
+            continue;
+        }
         if path.extension().is_some_and(|e| e == "png") && path.exists() {
             std::fs::remove_file(&path).map_err(|e| e.to_string())?;
             deleted += 1;
@@ -189,12 +206,10 @@ pub fn replace_icon_file(
     Ok(())
 }
 
-#[tauri::command]
-pub fn copy_file_to(src: String, dst: String) -> Result<(), String> {
-    std::fs::copy(&src, &dst)
-        .map(|_| ())
-        .map_err(|e| format!("copy failed: {e}"))
-}
+// NOTE: the former `copy_file_to` command (an unrestricted src→dst file copy
+// reachable from the webview) was removed: it had no frontend caller and was
+// an arbitrary-file-copy primitive. `replace_icon_file` is the constrained
+// replacement for the one legitimate use case.
 
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
