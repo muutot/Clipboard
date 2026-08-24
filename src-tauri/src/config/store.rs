@@ -424,10 +424,40 @@ impl ConfigStore {
     }
 
     pub fn sync_config(&self) -> SyncConfig {
-        self.config.sync.clone()
+        let mut sync = self.config.sync.clone();
+        // Secrets are stored as DPAPI envelopes; decrypt on read so callers
+        // (S3 client, retain_secret) always work with plaintext in memory.
+        if let Some(stored) = &sync.s3_secret_key {
+            if let Some(plain) = crate::platform::dpapi::unprotect(stored) {
+                sync.s3_secret_key = Some(plain);
+            }
+        }
+        if let Some(stored) = &sync.sync_password {
+            if let Some(plain) = crate::platform::dpapi::unprotect(stored) {
+                sync.sync_password = Some(plain);
+            }
+        }
+        sync
     }
 
-    pub fn set_sync_config(&mut self, sync: SyncConfig) -> Result<(), StorageError> {
+    pub fn set_sync_config(&mut self, mut sync: SyncConfig) -> Result<(), StorageError> {
+        // Encrypt secrets before they reach disk. Failure to protect (e.g.
+        // non-Windows) keeps the previous plaintext behavior; legacy plaintext
+        // values are upgraded on their next save.
+        if let Some(secret) = &sync.s3_secret_key {
+            if !secret.is_empty() && !crate::platform::dpapi::is_envelope(secret) {
+                if let Some(protected) = crate::platform::dpapi::protect(secret) {
+                    sync.s3_secret_key = Some(protected);
+                }
+            }
+        }
+        if let Some(password) = &sync.sync_password {
+            if !password.is_empty() && !crate::platform::dpapi::is_envelope(password) {
+                if let Some(protected) = crate::platform::dpapi::protect(password) {
+                    sync.sync_password = Some(protected);
+                }
+            }
+        }
         let previous = self.config.sync.clone();
         self.config.sync = sync;
         if let Err(error) = self.save() {

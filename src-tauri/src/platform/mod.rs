@@ -33,6 +33,7 @@ pub mod windows_hotkey;
 
 pub mod autostart;
 pub mod dispatch;
+pub mod dpapi;
 pub mod monitor;
 pub mod platform_info;
 pub mod single_instance;
