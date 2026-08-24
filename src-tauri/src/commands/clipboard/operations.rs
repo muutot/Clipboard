@@ -495,10 +495,26 @@ pub fn rename_item(
                     if new_path.exists() {
                         return Err(format!("file already exists: {}", new_path.display()));
                     }
-                    std::fs::rename(old, &new_path).map_err(|e| format!("rename failed: {e}"))?;
+                    // Persist the new paths FIRST, then move the file. A
+                    // failed database write leaves the disk untouched; a
+                    // failed rename is rolled back in the database so the
+                    // record never points at a missing file.
+                    let rollback = updated.clone();
+                    updated.resource_path = Some(new_path.to_string_lossy().to_string());
+                    updated.preview_path = Some(new_path.to_string_lossy().to_string());
+                    database.save_item(&updated).map_err(|e| e.to_string())?;
+                    if let Err(e) = std::fs::rename(old, &new_path) {
+                        database.save_item(&rollback).map_err(|rollback_error| {
+                            format!(
+                                "rename failed ({e}) and the database rollback also failed ({rollback_error})"
+                            )
+                        })?;
+                        return Err(format!("rename failed: {e}"));
+                    }
+                } else {
+                    updated.resource_path = Some(new_path.to_string_lossy().to_string());
+                    updated.preview_path = Some(new_path.to_string_lossy().to_string());
                 }
-                updated.resource_path = Some(new_path.to_string_lossy().to_string());
-                updated.preview_path = Some(new_path.to_string_lossy().to_string());
             }
         }
     }
