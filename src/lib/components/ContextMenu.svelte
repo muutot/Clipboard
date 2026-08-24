@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { IconName } from "$lib/types/clipboard";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
@@ -60,6 +61,27 @@
     }
   }
 
+  // Keyboard support for submenu parents (they are plain divs, not buttons):
+  // Enter/Space/ArrowRight expand the submenu, ArrowLeft collapses it.
+  // (Escape intentionally keeps closing the entire context menu.)
+  function handleParentKeydown(e: KeyboardEvent, id: string) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openSub(id);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      openSub(id);
+      void tick().then(() => {
+        const first = menuEl?.querySelector<HTMLElement>(
+          '.submenu[role="menu"] button:not([disabled])',
+        );
+        first?.focus();
+      });
+    } else if (e.key === "ArrowLeft") {
+      closeSub(id);
+    }
+  }
+
   function handleClickOutside(e: MouseEvent) {
     if (menuEl && !menuEl.contains(e.target as Node)) {
       onclose();
@@ -87,6 +109,7 @@
         aria-expanded={activeSub === item.id}
         onmouseenter={() => openSub(item.id)}
         onmouseleave={() => closeSub(item.id)}
+        onkeydown={(e) => handleParentKeydown(e, item.id)}
       >
         <span class="menu-icon"><AppIcon name={item.icon} size={15} /></span>
         <span class="menu-label">{item.label}</span>
