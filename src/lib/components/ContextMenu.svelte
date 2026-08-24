@@ -68,6 +68,12 @@
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       openSub(id);
+      void tick().then(() => {
+        const first = menuEl?.querySelector<HTMLElement>(
+          '.submenu[role="menu"] button:not([disabled])',
+        );
+        first?.focus();
+      });
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       openSub(id);
