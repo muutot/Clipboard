@@ -58,14 +58,6 @@ pub fn should_skip_self_triggered_text(
     guard.is_text_write_self_triggered(kind_name, text)
 }
 
-pub fn should_skip_self_triggered_media(
-    guard: &mut content::self_trigger::SelfTriggerGuard,
-    kind: &str,
-    data: &[u8],
-) -> bool {
-    guard.is_media_write_self_triggered(kind, data)
-}
-
 pub fn register_image_self_trigger(
     guard: &mut content::self_trigger::SelfTriggerGuard,
     resource_path: Option<&str>,
@@ -430,16 +422,24 @@ pub(crate) fn run_capture_loop(
                     if stop_flag.load(Ordering::SeqCst) {
                         break;
                     }
-                    if should_skip_self_triggered_media(
-                        &mut self_trigger_guard
+                    // One pass computes the raw + normalized hashes and checks
+                    // them against recent self-writes; the raw hash doubles as
+                    // the stored identity, avoiding a second SHA-256 of the
+                    // same (potentially tens-of-MB) buffer below.
+                    let (self_triggered, img_hashes) = {
+                        let mut guard = self_trigger_guard
                             .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner()),
-                        "image",
-                        &img,
-                    ) {
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        let hashes = guard.media_write_hashes("image", &img);
+                        let triggered = hashes
+                            .iter()
+                            .any(|content_hash| guard.is_self_triggered(content_hash));
+                        (triggered, hashes)
+                    };
+                    if self_triggered {
                         continue;
                     }
-                    let img_hash = content::hash::compute_media_hash("image", &img);
+                    let img_hash = img_hashes[0].clone();
                     let now_ms = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()

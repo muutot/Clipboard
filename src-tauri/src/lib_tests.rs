@@ -374,11 +374,7 @@ mod capture_tests {
 
         let mut guard = content::self_trigger::SelfTriggerGuard::new();
         register_image_self_trigger(&mut guard, path.to_str(), None).unwrap();
-        assert!(should_skip_self_triggered_media(
-            &mut guard,
-            "image",
-            clipboard_bmp.get_ref()
-        ));
+        assert!(guard.is_media_write_self_triggered("image", clipboard_bmp.get_ref()));
 
         let _ = std::fs::remove_file(path);
     }

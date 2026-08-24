@@ -70,9 +70,17 @@ impl SelfTriggerGuard {
     }
 
     pub fn is_media_write_self_triggered(&mut self, kind: &str, data: &[u8]) -> bool {
-        compute_media_write_hashes(kind, data)
+        self.media_write_hashes(kind, data)
             .into_iter()
             .any(|content_hash| self.is_self_triggered(&content_hash))
+    }
+
+    /// The raw (byte-level) hashes behind [`SelfTriggerGuard::is_media_write_self_triggered`],
+    /// exposed so the capture path can reuse them for storage instead of
+    /// re-hashing the same buffer (for large screenshots this avoids a second
+    /// full SHA-256 pass per capture).
+    pub fn media_write_hashes(&self, kind: &str, data: &[u8]) -> Vec<String> {
+        compute_media_write_hashes(kind, data)
     }
 
     fn cleanup_expired(&mut self) {
