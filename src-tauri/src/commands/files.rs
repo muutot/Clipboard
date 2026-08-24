@@ -217,7 +217,12 @@ pub fn open_external_url(url: String) -> Result<(), String> {
     // from clipboard content, so anything else (`file://`, bare paths,
     // `javascript:`) must never be handed to `open::that`.
     let trimmed = url.trim();
-    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+    // RFC 3986 schemes are case-insensitive; accept any casing but still
+    // require an http(s) scheme.
+    let scheme_ok = ["http://", "https://"].iter().any(|scheme| {
+        trimmed.len() >= scheme.len() && trimmed[..scheme.len()].eq_ignore_ascii_case(scheme)
+    });
+    if !scheme_ok {
         return Err("only http(s) URLs can be opened".to_string());
     }
     open::that(trimmed).map_err(|e| format!("failed to open URL: {e}"))
