@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -12,6 +13,13 @@ use crate::export::{export_database, ExportFormat, ExportOptions};
 use crate::storage::{ClipboardRepository, Database};
 
 const MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
+/// Guardrail against local thread-exhaustion: beyond this many concurrent
+/// connection threads new connections receive an immediate 503.
+const MAX_CONCURRENT_CONNECTIONS: usize = 32;
+/// Writes must finish within this budget so a client that never reads its
+/// response cannot pin a connection thread forever.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// A loopback-only HTTP API for scripts and local automation.
 ///
@@ -94,22 +102,18 @@ impl LocalApiServer {
         self.database = Some(database.clone());
 
         let (stop_sender, stop_receiver) = mpsc::channel();
-        let page_size_limit = self.page_size_limit;
-        let search_page_size_limit = self.search_page_size_limit;
-        let port = self.port;
+        let active_connections = Arc::new(AtomicUsize::new(0));
+        let context = ServeContext {
+            database,
+            page_size_limit: self.page_size_limit,
+            search_page_size_limit: self.search_page_size_limit,
+            token,
+            port: self.port,
+            active_connections,
+        };
         let handle = thread::Builder::new()
             .name("clipboard-local-api".to_owned())
-            .spawn(move || {
-                serve(
-                    listener,
-                    stop_receiver,
-                    database,
-                    page_size_limit,
-                    search_page_size_limit,
-                    token,
-                    port,
-                )
-            })
+            .spawn(move || serve(listener, stop_receiver, context))
             .map_err(|error| format!("failed to start local API: {error}"))?;
         self.stop_sender = Some(stop_sender);
         self.handle = Some(handle);
@@ -154,15 +158,24 @@ impl Drop for LocalApiServer {
     }
 }
 
-fn serve(
-    listener: TcpListener,
-    stop_receiver: mpsc::Receiver<()>,
+struct ServeContext {
     database: Arc<Database>,
     page_size_limit: u32,
     search_page_size_limit: u32,
     token: Arc<String>,
     port: u16,
-) {
+    active_connections: Arc<AtomicUsize>,
+}
+
+fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: ServeContext) {
+    let ServeContext {
+        database,
+        page_size_limit,
+        search_page_size_limit,
+        token,
+        port,
+        active_connections,
+    } = context;
     loop {
         if matches!(
             stop_receiver.try_recv(),
@@ -173,11 +186,20 @@ fn serve(
 
         match listener.accept() {
             Ok((stream, _peer)) => {
+                if active_connections.load(Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
+                    let mut stream = stream;
+                    let rejection = error_response(503, "too many concurrent connections");
+                    let _ = write_response(&mut stream, &rejection);
+                    continue;
+                }
                 // One thread per connection so a slow or idle client cannot
-                // stall health checks and other callers behind it (the 2s
-                // read timeout plus the request-size cap bound each thread).
+                // stall health checks and other callers behind it (the read/
+                // write timeouts, the request-size cap, and the concurrency
+                // limit bound each thread).
                 let database = Arc::clone(&database);
                 let token = Arc::clone(&token);
+                active_connections.fetch_add(1, Ordering::SeqCst);
+                let connection_counter = Arc::clone(&active_connections);
                 let spawned = thread::Builder::new()
                     .name("clipboard-local-api-conn".to_owned())
                     .spawn(move || {
@@ -191,8 +213,10 @@ fn serve(
                         ) {
                             crate::log_event!("[local-api] request failed: {error}");
                         }
+                        connection_counter.fetch_sub(1, Ordering::SeqCst);
                     });
                 if let Err(error) = spawned {
+                    active_connections.fetch_sub(1, Ordering::SeqCst);
                     crate::log_event!("[local-api] failed to spawn connection thread: {error}");
                 }
             }
@@ -216,7 +240,10 @@ fn handle_connection(
     port: u16,
 ) -> Result<(), String> {
     stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
+        .set_read_timeout(Some(READ_TIMEOUT))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_write_timeout(Some(WRITE_TIMEOUT))
         .map_err(|error| error.to_string())?;
     let request = read_request(&mut stream)?;
     if let Some(rejection) = authorize(&request, token, port) {
