@@ -17,10 +17,10 @@ pub struct PpOcrEngine {
     unclip_ratio: f32,
 }
 
-// SAFETY: OAROCR wraps ort::Session internally. The OCR worker calls recognize
-// from a single thread at a time, and we protect access with a Mutex.
-unsafe impl Send for PpOcrEngine {}
-unsafe impl Sync for PpOcrEngine {}
+// NOTE: no manual unsafe impl Send/Sync here. `Mutex<Option<OAROCR>>` is
+// automatically Sync (and the engine Send) whenever `oar_ocr::OAROCR: Send`,
+// which ort guarantees for its sessions; letting the compiler derive this
+// keeps an upgrade from silently introducing a cross-thread data race.
 
 impl PpOcrEngine {
     pub fn new(
@@ -177,5 +177,22 @@ impl OcrEngine for PpOcrEngine {
             full_text,
             blocks,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PpOcrEngine;
+
+    fn assert_send<T: Send>() {}
+    fn assert_sync<T: Sync>() {}
+
+    /// Compile-time lock on the concurrency contract: the engine must keep
+    /// deriving Send+Sync from its `Mutex<Option<OAROCR>>` field rather than
+    /// relying on manual unsafe impls.
+    #[test]
+    fn engine_derives_send_and_sync_without_unsafe_impls() {
+        assert_send::<PpOcrEngine>();
+        assert_sync::<PpOcrEngine>();
     }
 }
