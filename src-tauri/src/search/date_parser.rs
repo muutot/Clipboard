@@ -48,13 +48,24 @@ pub fn extract_date_range(input: &str) -> (Option<(i64, i64)>, String) {
 }
 
 /// Local midnight (00:00:00.000) of `dt` as epoch milliseconds.
+///
+/// On DST-transition days local midnight may be ambiguous (clock repeated) or
+/// nonexistent (clock skipped). Both cases fall back to the current fixed
+/// offset instead of panicking inside a search command; the resulting range
+/// boundary can be off by at most one hour on those rare days.
 fn local_midnight(dt: DateTime<Local>) -> i64 {
-    dt.date_naive()
+    let naive = dt
+        .date_naive()
         .and_hms_opt(0, 0, 0)
-        .expect("midnight is always a valid time")
-        .and_local_timezone(Local)
-        .unwrap()
-        .timestamp_millis()
+        .expect("midnight is always a valid time");
+    match naive.and_local_timezone(Local) {
+        chrono::LocalResult::Single(midnight) => midnight.timestamp_millis(),
+        chrono::LocalResult::Ambiguous(_, _) | chrono::LocalResult::None => {
+            let offset = *Local::now().offset();
+            chrono::DateTime::<Local>::from_naive_utc_and_offset(naive - offset, offset)
+                .timestamp_millis()
+        }
+    }
 }
 
 /// `[start_ms, end_ms)` epoch-millisecond range for `period` in local time.
