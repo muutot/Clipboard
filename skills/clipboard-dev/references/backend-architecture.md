@@ -32,7 +32,7 @@
 
 Do not reorder recovery, search initialization, worker startup, or managed-state installation without reviewing failure paths and shutdown.
 
-`logging::init` runs first in the setup hook (before config load): on Windows it redirects the process stderr handle into `<project>/logs/clipboard.log` (rotated to `clipboard.log.old` past 512 KiB), so every diagnostic survives GUI-subsystem builds. All backend modules emit via the timestamped `crate::log_event!` macro; do not reintroduce bare `eprintln!` in library code (main.rs CLI paths keep raw output on purpose).
+`logging::init` runs first in the setup hook (before config load): on Windows it redirects the process stderr handle into `<project>/logs/clipboard.log` (renamed to `clipboard.log.old` past 512 KiB at startup), so every diagnostic survives GUI-subsystem builds. During runtime, `log_line` samples the log size at most every 30 s and truncates an oversized log in place — the append handle keeps writing at end-of-file, so renaming would detach it from the path. All backend modules emit via the timestamped `crate::log_event!` macro; do not reintroduce bare `eprintln!` in library code (main.rs CLI paths keep raw output on purpose).
 
 ## Managed runtime state
 

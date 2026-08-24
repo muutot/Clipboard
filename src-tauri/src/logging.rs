@@ -12,11 +12,20 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
 const LOG_DIRECTORY_NAME: &str = "logs";
 const LOG_FILE_NAME: &str = "clipboard.log";
 const OLD_LOG_FILE_NAME: &str = "clipboard.log.old";
 const MAX_LOG_BYTES: u64 = 512 * 1024;
+/// Long-running sessions must not grow the log without bound, but checking
+/// the file size on every line would dominate the cost of logging. Sample at
+/// most this often.
+const SIZE_CHECK_INTERVAL_MS: u64 = 30_000;
+
+static ACTIVE_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+static LAST_SIZE_CHECK_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Redirects process stderr into `<project>/logs/clipboard.log`, rotating the
 /// previous log aside when it exceeds [`MAX_LOG_BYTES`]. Returns the active
@@ -40,6 +49,7 @@ pub fn init(project_directory: &Path) -> Option<PathBuf> {
     // Keep the handle alive for the lifetime of the process; the OS closes
     // it on exit and dropping it here would invalidate the redirected handle.
     std::mem::forget(file);
+    let _ = ACTIVE_LOG_PATH.set(log_path.clone());
 
     eprintln!("[logging] session started {}", timestamp_now());
     Some(log_path)
@@ -49,6 +59,7 @@ pub fn init(project_directory: &Path) -> Option<PathBuf> {
 /// redirected log file when active). Prefer this over bare `eprintln!` in
 /// worker modules so production logs are attributable in time.
 pub fn log_line(message: &str) {
+    maybe_truncate_oversized_log();
     eprintln!("[{}] {message}", timestamp_now());
 }
 
@@ -72,6 +83,57 @@ fn rotate_if_oversized(log_path: &Path) {
         let _ = fs::remove_file(&old_path);
     }
     let _ = fs::rename(log_path, &old_path);
+}
+
+/// Runtime counterpart of [`rotate_if_oversized`]. The redirected stderr
+/// handle stays valid, so instead of renaming the file away (which would
+/// detach subsequent writes from the path) the oversized log is truncated in
+/// place: the append handle always writes at end-of-file, so after truncation
+/// logging simply restarts at offset 0. Throttled to one size sample per
+/// [`SIZE_CHECK_INTERVAL_MS`].
+fn maybe_truncate_oversized_log() {
+    const UNSET: u64 = 0;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as u64)
+        .unwrap_or(0);
+    if now == 0 {
+        return;
+    }
+    let last = LAST_SIZE_CHECK_MS.load(Ordering::Relaxed);
+    if last != UNSET && now.saturating_sub(last) < SIZE_CHECK_INTERVAL_MS {
+        return;
+    }
+    if LAST_SIZE_CHECK_MS
+        .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+        .is_err()
+    {
+        return;
+    }
+    let Some(log_path) = ACTIVE_LOG_PATH.get() else {
+        return;
+    };
+    truncate_log_if_oversized(log_path);
+}
+
+fn truncate_log_if_oversized(log_path: &Path) {
+    let oversized = fs::metadata(log_path)
+        .map(|meta| meta.len() > MAX_LOG_BYTES)
+        .unwrap_or(false);
+    if !oversized {
+        return;
+    }
+    if OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(log_path)
+        .is_ok()
+    {
+        eprintln!(
+            "[{}] [logging] log truncated after exceeding size cap",
+            timestamp_now()
+        );
+    }
 }
 
 fn open_log_file(log_path: &Path) -> Option<File> {
@@ -131,6 +193,32 @@ mod tests {
         assert!(log_path.exists());
         assert_eq!(fs::read(&log_path).unwrap(), b"session");
 
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn runtime_truncation_resets_oversized_log_in_place() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory =
+            std::env::temp_dir().join(format!("clipboard-logging-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let log_path = directory.join(LOG_FILE_NAME);
+        fs::write(&log_path, vec![b'x'; MAX_LOG_BYTES as usize + 1]).unwrap();
+
+        // Simulate the redirected append handle staying open while the file
+        // is truncated underneath it.
+        let append_handle = OpenOptions::new().append(true).open(&log_path).unwrap();
+        truncate_log_if_oversized(&log_path);
+
+        use std::io::Write;
+        writeln!(&append_handle, "after truncate").unwrap();
+        let content = fs::read_to_string(&log_path).unwrap();
+        assert_eq!(content, "after truncate\n");
+
+        drop(append_handle);
         let _ = fs::remove_dir_all(&directory);
     }
 }
