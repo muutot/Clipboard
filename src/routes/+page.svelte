@@ -1874,24 +1874,11 @@
     if (isMedia && content) {
       try {
         const updated = await invoke<ClipboardItem>("rename_item", { id, newName: content });
-        items = items.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                title: updated.title,
-                resourcePath: updated.resourcePath,
-                previewPath: updated.previewPath,
-              }
-            : item,
-        );
-        if (detailItem?.id === id) {
-          detailItem = {
-            ...detailItem,
-            title: updated.title,
-            resourcePath: updated.resourcePath,
-            previewPath: updated.previewPath,
-          };
-        }
+        updateItem(id, () => ({
+          title: updated.title,
+          resourcePath: updated.resourcePath,
+          previewPath: updated.previewPath,
+        }));
         editingId = null;
         showToast(_t("toast.editSaved"), "success");
         return true;
@@ -1920,42 +1907,13 @@
       }
     }
 
-    items = items.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            textContent: newTextContent,
-            preview: newPreview,
-            sizeBytes: newSizeBytes,
-            sizeLabel: newSizeLabel,
-            ...(item.customTitle ? {} : { title: newTitle }),
-          }
-        : item,
-    );
-    if (detailItem?.id === id) {
-      detailItem = {
-        ...detailItem,
-        textContent: newTextContent,
-        preview: newPreview,
-        sizeBytes: newSizeBytes,
-        sizeLabel: newSizeLabel,
-        ...(detailItem.customTitle ? {} : { title: newTitle }),
-      };
-    }
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              textContent: newTextContent,
-              preview: newPreview,
-              sizeBytes: newSizeBytes,
-              sizeLabel: newSizeLabel,
-              ...(item.customTitle ? {} : { title: newTitle }),
-            }
-          : item,
-      );
-    }
+    updateItem(id, (item) => ({
+      textContent: newTextContent,
+      preview: newPreview,
+      sizeBytes: newSizeBytes,
+      sizeLabel: newSizeLabel,
+      ...(item.customTitle ? {} : { title: newTitle }),
+    }));
     editingId = null;
     showToast(_t("toast.editSaved"), "success");
     return true;
@@ -1966,13 +1924,7 @@
   }
 
   function renameTitle(id: string, title: string) {
-    items = items.map((item) => (item.id === id ? { ...item, title, customTitle: true } : item));
-    if (detailItem?.id === id) detailItem = { ...detailItem, title, customTitle: true };
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        item.id === id ? { ...item, title, customTitle: true } : item,
-      );
-    }
+    updateItem(id, () => ({ title, customTitle: true }));
     invoke("rename_item", { id, newName: title }).catch((err) =>
       console.error("Rename item failed:", err),
     );
