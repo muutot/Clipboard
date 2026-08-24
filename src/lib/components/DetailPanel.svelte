@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
@@ -9,6 +10,7 @@
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
+  import { captureFocusRestore, getFocusableElements, trapTabFocus } from "$lib/utils/focus";
   import { formatRelativeTime } from "$lib/utils/time";
   import { formatBytes, assetUrl } from "$lib/utils/format";
   import {
@@ -258,6 +260,19 @@
         ocrFeedbackTimer = undefined;
       }
     };
+  });
+
+  // Modal focus management (only in overlay mode; split mode has no
+  // backdrop and must not trap focus).
+  let panelEl = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    if (!item || mode === "split") return;
+    const restoreFocus = captureFocusRestore();
+    tick().then(() => {
+      if (panelEl) getFocusableElements(panelEl)[0]?.focus();
+    });
+    return restoreFocus;
   });
 
   $effect(() => {
@@ -518,6 +533,10 @@
   <div
     class="detail-panel"
     class:inline={mode === "split"}
+    bind:this={panelEl}
+    onkeydowncapture={(event) => {
+      if (mode !== "split") trapTabFocus(panelEl, event);
+    }}
     role="dialog"
     aria-modal={mode !== "split"}
     aria-label={_t("detail.title")}

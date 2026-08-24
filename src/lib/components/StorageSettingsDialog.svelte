@@ -50,6 +50,7 @@
   } from "$lib/settings-navigation";
   import type { IconName } from "$lib/types/clipboard";
   import { formatBytes, updateSliderTrack } from "$lib/utils/format";
+  import { captureFocusRestore, trapTabFocus } from "$lib/utils/focus";
   import { endOfDay, startOfDay } from "$lib/utils/date-query";
   import {
     filterSettingsSearchItems,
@@ -221,6 +222,23 @@
       void loadSyncConfig();
     }
   });
+
+  // Modal focus management: only the overlay variant traps focus; the
+  // standalone window owns its whole document.
+  let dialogEl = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    if (!open || standalone) return;
+    const restoreFocus = captureFocusRestore();
+    tick().then(() => {
+      dialogEl?.focus();
+    });
+    return restoreFocus;
+  });
+
+  function handleDialogKeydown(event: KeyboardEvent) {
+    if (!standalone) trapTabFocus(dialogEl, event);
+  }
   let restartNeeded = $state(false);
   let activeSection = $state<SettingsSection>("general_general");
   let activeStatisticsTab = $state<StatisticsTab>("storage");
@@ -1425,6 +1443,8 @@
     <div class="settings-backdrop">
       <div
         class="settings-dialog"
+        bind:this={dialogEl}
+        onkeydowncapture={handleDialogKeydown}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"

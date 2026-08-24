@@ -39,7 +39,7 @@ Rules:
 
 ### `DetailPanel.svelte`
 
-Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste/format-paste/clean-paste callbacks.
+Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste/format-paste/clean-paste callbacks. In overlay (modal) mode it traps Tab focus via `$lib/utils/focus` (`trapTabFocus`) and restores focus to the trigger element on close; split mode deliberately does neither.
 
 Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimagefullscreen` callback; DetailPanel no longer owns the fullscreen viewer or WebviewWindow lifecycle.
 
