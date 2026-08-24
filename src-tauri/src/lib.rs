@@ -1,15 +1,22 @@
 pub mod cli;
 pub mod commands;
 
+/// Legacy quick-paste debug trace. Deliberately compiled out of release
+/// builds: an unconditionally appended, unbounded file in the user's temp
+/// directory is both a growth hazard and an unwanted diagnostic surface.
+#[allow(unused_variables)]
 pub fn dbg_log(msg: &str) {
-    use std::io::Write;
-    let path = std::env::temp_dir().join("paste_debug.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
+    #[cfg(debug_assertions)]
     {
-        let _ = writeln!(f, "{}", msg);
+        use std::io::Write;
+        let path = std::env::temp_dir().join("paste_debug.log");
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            let _ = writeln!(f, "{}", msg);
+        }
     }
 }
 use commands::capture::*;
