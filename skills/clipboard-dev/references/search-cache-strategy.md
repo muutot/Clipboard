@@ -84,7 +84,7 @@ Active history is backed by `created_at_ms DESC LIMIT/OFFSET`. A committed inser
 
 ## Mutation invalidation
 
-Create/update/favorite/delete/restore/permanent-delete flows update or invalidate `items` and `indexedItems` optimistically, then roll back on failure where implemented. Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs and resets affected deleted-history pagination.
+Single-entry patches MUST go through `updateItem`/`revertItem`, which delegate to `applyItemPatches` — the single funnel that maps a patch over `items`, `indexedItems`, `searchCache`, and `detailItem` in one pass per list (this funnel exists because a hand-rolled mapping loop once left `searchCache` with stale tags). Bulk mutations use the same helper or take full value snapshots of all four copies before mutating, and roll back all four on failure (see `bulkFavorite`). Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs and resets affected deleted-history pagination.
 
 Search index freshness still depends on SQLite outbox synchronization. When adding a mutation:
 

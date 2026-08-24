@@ -110,36 +110,33 @@
   );
 
   function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
-    const idx = items.findIndex((i) => i.id === id);
-    if (idx < 0) return false;
-    const original = items[idx];
-    const changes = mutator(original);
-    items[idx] = { ...original, ...changes };
-    items = items;
-    if (indexedItems) {
-      const iIdx = indexedItems.findIndex((i) => i.id === id);
-      if (iIdx >= 0) indexedItems[iIdx] = { ...indexedItems[iIdx], ...changes };
-      indexedItems = indexedItems;
-    }
-    searchCache = searchCache.map((item) => (item.id === id ? { ...item, ...changes } : item));
-    if (detailItem?.id === id) detailItem = { ...detailItem, ...changes };
+    const original = items.find((i) => i.id === id);
+    if (!original) return false;
+    applyItemPatches(new Map([[id, mutator(original)]]));
     return true;
   }
 
+  /// Fans one patch set out to every copy (items, indexedItems, searchCache,
+  /// detailItem) in a single pass over each list. THE funnel for item
+  /// mutations — direct per-copy mapping loops are how the searchCache drift
+  /// happened.
+  function applyItemPatches(patches: ReadonlyMap<string, Partial<ClipboardItem>>) {
+    if (patches.size === 0) return;
+    const apply = (entry: ClipboardItem): ClipboardItem => {
+      const patch = patches.get(entry.id);
+      return patch ? { ...entry, ...patch } : entry;
+    };
+    items = items.map(apply);
+    if (indexedItems) indexedItems = indexedItems.map(apply);
+    searchCache = searchCache.map(apply);
+    if (detailItem) {
+      const patch = patches.get(detailItem.id);
+      if (patch) detailItem = { ...detailItem, ...patch };
+    }
+  }
+
   function revertItem(id: string, fields: Partial<ClipboardItem>) {
-    const idx = items.findIndex((i) => i.id === id);
-    if (idx >= 0) {
-      items[idx] = { ...items[idx], ...fields };
-      items = items;
-    }
-    if (indexedItems) {
-      const iIdx = indexedItems.findIndex((i) => i.id === id);
-      if (iIdx >= 0) {
-        indexedItems[iIdx] = { ...indexedItems[iIdx], ...fields };
-        indexedItems = indexedItems;
-      }
-    }
-    searchCache = searchCache.map((item) => (item.id === id ? { ...item, ...fields } : item));
+    applyItemPatches(new Map([[id, fields]]));
   }
 
   function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
@@ -2302,16 +2299,18 @@
   function bulkFavorite() {
     const ids = [...selectedIds];
     const unfavorite = allSelectedFavorites;
-    const previousItems = items;
-    const previousIndexedItems = indexedItems;
-    items = items.map((item) =>
-      selectedIds.has(item.id) ? { ...item, favorite: !unfavorite } : item,
-    );
-    if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        selectedIds.has(item.id) ? { ...item, favorite: !unfavorite } : item,
-      );
-    }
+    // Full value snapshots (not reference captures): an in-place splice from
+    // the clipboard-item-added handler can land inside the async window, and
+    // a reference rollback would then silently keep the spliced state.
+    const previousItems = items.map((entry) => ({ ...entry }));
+    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSearchCache = searchCache.map((entry) => ({ ...entry }));
+    const previousDetailItem = detailItem;
+
+    const patch = new Map<string, Partial<ClipboardItem>>();
+    for (const id of ids) patch.set(id, { favorite: !unfavorite });
+    applyItemPatches(patch);
+
     void persistBatchFavorite(ids, !unfavorite)
       .then((updated) => {
         if (updated === false) throw new Error("batch favorite failed");
@@ -2327,6 +2326,8 @@
         console.error("Bulk favorite failed", error);
         items = previousItems;
         indexedItems = previousIndexedItems;
+        searchCache = previousSearchCache;
+        detailItem = previousDetailItem;
         statusMessage = _t("app.favoriteFailed");
         showToast(_t("app.favoriteFailed"), "error");
       });
