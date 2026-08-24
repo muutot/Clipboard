@@ -213,7 +213,14 @@ pub fn replace_icon_file(
 
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
-    open::that(&url).map_err(|e| format!("failed to open URL: {e}"))
+    // Only real web URLs may reach the OS opener. The URL text can originate
+    // from clipboard content, so anything else (`file://`, bare paths,
+    // `javascript:`) must never be handed to `open::that`.
+    let trimmed = url.trim();
+    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return Err("only http(s) URLs can be opened".to_string());
+    }
+    open::that(trimmed).map_err(|e| format!("failed to open URL: {e}"))
 }
 
 #[tauri::command]
