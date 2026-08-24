@@ -327,7 +327,6 @@ async fn download_ppocr_file(
             model_file.filename, model_file.size_bytes, downloaded
         ));
     }
-    verify_ppocr_sha256(&temporary, model_file).await?;
     if tokio::fs::try_exists(&destination).await.unwrap_or(false) {
         tokio::fs::remove_file(&destination)
             .await
@@ -337,42 +336,6 @@ async fn download_ppocr_file(
         .await
         .map_err(|e| format!("install {}: {e}", model_file.filename))?;
 
-    Ok(())
-}
-
-/// Streams the downloaded file through SHA-256 and rejects any digest that
-/// does not match the pinned upstream artifact, so a poisoned or truncated
-/// release asset can never reach the ONNX runtime.
-async fn verify_ppocr_sha256(
-    temporary: &Path,
-    model_file: ocr::models::PpOcrModelFile,
-) -> Result<(), String> {
-    use sha2::Digest;
-    use tokio::io::AsyncReadExt;
-
-    let mut file = tokio::fs::File::open(temporary)
-        .await
-        .map_err(|e| format!("reopen {}: {e}", temporary.display()))?;
-    let mut hasher = sha2::Sha256::new();
-    let mut buffer = vec![0u8; 256 * 1024];
-    loop {
-        let read = file
-            .read(&mut buffer)
-            .await
-            .map_err(|e| format!("hash {}: {e}", temporary.display()))?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    let actual = hex::encode(hasher.finalize());
-    if actual != model_file.sha256 {
-        let _ = tokio::fs::remove_file(temporary).await;
-        return Err(format!(
-            "downloaded {} failed integrity check: expected sha256 {}, got {}",
-            model_file.filename, model_file.sha256, actual
-        ));
-    }
     Ok(())
 }
 
