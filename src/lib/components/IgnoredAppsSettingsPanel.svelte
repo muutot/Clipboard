@@ -327,12 +327,17 @@
     <p class="auto-save-note">{_t("capture.configNote")}</p>
 
     {#if privacy}
-      <section class="privacy-block">
-        <h3>{_t("capture.sensitiveContentTitle")}</h3>
-        <p class="block-desc">{_t("capture.sensitiveContentDescription")}</p>
+      <section class="setting-card privacy-card">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
+          <div>
+            <strong>{_t("capture.sensitiveContentTitle")}</strong>
+            <p>{_t("capture.sensitiveContentDescription")}</p>
+          </div>
+        </div>
 
-        <div class="switch-row">
-          <div class="switch-text">
+        <div class="privacy-row">
+          <div class="privacy-row-text">
             <strong>{_t("capture.captureSensitiveSources")}</strong>
             <p>{_t("capture.captureSensitiveSourcesDescription")}</p>
           </div>
@@ -350,8 +355,8 @@
           </button>
         </div>
 
-        <div class="switch-row">
-          <div class="switch-text">
+        <div class="privacy-row">
+          <div class="privacy-row-text">
             <strong>{_t("capture.localOnly")}</strong>
             <p>{_t("capture.localOnlyDescription")}</p>
           </div>
@@ -381,7 +386,7 @@
           <div class="patterns-actions">
             <button
               type="button"
-              class="patterns-save"
+              class="settings-action-btn"
               disabled={patternsSaving}
               onclick={savePatterns}>{_t("actions.save")}</button
             >
@@ -597,80 +602,32 @@
     text-align: right;
   }
 
-  .privacy-block {
+  .privacy-card {
     margin-top: 18px;
-    padding: 16px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius, 9px);
-    background: var(--surface-bg);
+    padding: 13px;
   }
-  .privacy-block h3 {
-    margin: 0 0 4px;
-    color: var(--text-primary);
-    font-size: var(--settings-heading-size, 13px);
-  }
-  .block-desc {
-    margin: 0 0 12px;
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    line-height: 1.5;
-  }
-  .switch-row {
+  .privacy-row {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding: 10px 0;
+    margin-top: 10px;
+    padding: 10px 0 0;
     border-top: 1px solid var(--border-subtle);
   }
-  .switch-text {
+  .privacy-row-text {
     min-width: 0;
   }
-  .switch-text strong {
+  .privacy-row-text strong {
     color: var(--text-primary);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
     font-weight: 600;
   }
-  .switch-text p {
+  .privacy-row-text p {
     margin: 4px 0 0;
     color: var(--text-muted);
     font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
     line-height: 1.5;
-  }
-  .toggle-switch {
-    position: relative;
-    flex: 0 0 auto;
-    width: 38px;
-    height: 22px;
-    margin-top: 2px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--input-bg);
-    box-shadow: inset 0 0 0 1px var(--border-color);
-    cursor: pointer;
-    transition: background 140ms ease;
-  }
-  .toggle-switch.active {
-    background: var(--selection-color);
-    box-shadow: inset 0 0 0 1px var(--selection-color);
-  }
-  .toggle-switch:disabled {
-    cursor: default;
-    opacity: 0.45;
-  }
-  .toggle-knob {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--text-inverse, #fff);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    transition: transform 140ms ease;
-  }
-  .toggle-switch.active .toggle-knob {
-    transform: translateX(16px);
   }
   .patterns-editor {
     margin-top: 12px;
@@ -708,21 +665,6 @@
     display: flex;
     justify-content: flex-end;
     margin-top: 8px;
-  }
-  .patterns-save {
-    padding: 6px 16px;
-    border: 0;
-    border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-inverse, #fff);
-    background: var(--selection-color);
-    font: inherit;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    transition: opacity 120ms ease;
-  }
-  .patterns-save:disabled {
-    cursor: default;
-    opacity: 0.5;
   }
 
   @media (max-width: 700px) {
