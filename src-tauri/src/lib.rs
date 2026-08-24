@@ -129,12 +129,18 @@ impl CleanupWorker {
                         SCHEDULED_ORPHAN_FILE_GRACE,
                     ) {
                         Ok(total_deleted) if total_deleted > 0 => {
-                            eprintln!("[cleanup] removed {total_deleted} expired history entries");
+                            crate::log_event!(
+                                "[cleanup] removed {total_deleted} expired history entries"
+                            );
                         }
                         Ok(_) => {}
-                        Err(error) => eprintln!("[cleanup] scheduled cleanup failed: {error}"),
+                        Err(error) => {
+                            crate::log_event!("[cleanup] scheduled cleanup failed: {error}")
+                        }
                     },
-                    Err(error) => eprintln!("[cleanup] failed to load configuration: {error}"),
+                    Err(error) => {
+                        crate::log_event!("[cleanup] failed to load configuration: {error}")
+                    }
                 }
 
                 if commands::signal::wait_for_stop(&stop_receiver, &worker_flag, interval) {
@@ -168,7 +174,7 @@ impl CleanupWorker {
             .take();
         if let Some(handle) = handle {
             if handle.thread().id() != thread::current().id() && handle.join().is_err() {
-                eprintln!("[cleanup] history cleanup thread terminated with a panic");
+                crate::log_event!("[cleanup] history cleanup thread terminated with a panic");
             }
         }
     }
@@ -214,7 +220,7 @@ pub fn run() {
             // Redirect stderr into a rotating log file as early as possible so
             // every eprintln! diagnostic survives in GUI-subsystem builds.
             if let Some(log_path) = logging::init(&project_directory) {
-                eprintln!("[logging] writing diagnostics to {}", log_path.display());
+                crate::log_event!("[logging] writing diagnostics to {}", log_path.display());
             }
             let config = ConfigStore::load(&project_directory)?;
             if config.single_instance() {
@@ -226,7 +232,7 @@ pub fn run() {
                                 &project_directory,
                                 *owner_pid,
                             ) {
-                                eprintln!(
+                                crate::log_event!(
                                     "[single-instance] failed to notify the existing process (PID: {owner_pid})"
                                 );
                             }
@@ -257,12 +263,12 @@ pub fn run() {
                 .map_err(|error| -> String { format!("failed to grant asset access: {error}") })?;
             let recovery_report = recover_database_if_needed(&paths.database)?;
             if let Some(report) = &recovery_report {
-                eprintln!(
+                crate::log_event!(
                     "[recovery] restored database from {}",
                     report.restored_from.display()
                 );
                 if let Some(quarantined_database) = &report.quarantined_database {
-                    eprintln!(
+                    crate::log_event!(
                         "[recovery] quarantined damaged database at {}",
                         quarantined_database.display()
                     );
@@ -271,7 +277,7 @@ pub fn run() {
             let database = Database::open(&paths.database)?;
 
             if database.schema_was_reset() {
-                eprintln!("[storage] initialized schema v1; reset derived and recovery state");
+                crate::log_event!("[storage] initialized schema v1; reset derived and recovery state");
                 discard_database_backups(&paths.database)?;
                 if let Some(quarantined_database) = recovery_report
                     .as_ref()
@@ -282,7 +288,7 @@ pub fn run() {
                 storage::reset_search_index(&paths.search_index)?;
             } else if recovery_report.is_some() {
                 if let Some(quarantined_index) = quarantine_search_index(&paths.search_index)? {
-                    eprintln!(
+                    crate::log_event!(
                         "[recovery] quarantined stale search index at {}",
                         quarantined_index.display()
                     );
@@ -298,7 +304,7 @@ pub fn run() {
                 .into());
             }
             if let Err(error) = refresh_database_backup(&database, &paths.database) {
-                eprintln!("[recovery] failed to refresh database backup: {error}");
+                crate::log_event!("[recovery] failed to refresh database backup: {error}");
             }
 
             database.requeue_interrupted_ocr()?;
@@ -306,8 +312,8 @@ pub fn run() {
             // Database::open creates the persistent sync UUID before any
             // capture worker can produce v1 outbox entries.
             match database.get_sync_device_id() {
-                Ok(device_id) => eprintln!("[sync] device_id = {device_id}"),
-                Err(error) => eprintln!("[sync] failed to read device_id: {error}"),
+                Ok(device_id) => crate::log_event!("[sync] device_id = {device_id}"),
+                Err(error) => crate::log_event!("[sync] failed to read device_id: {error}"),
             }
 
             let db_open_duration = startup_timer.finish_segment();
@@ -322,7 +328,7 @@ pub fn run() {
                 // A failed initial sync leaves this session's search results
                 // empty (the manifest retries on the next start), so at least
                 // leave a diagnostic trail instead of failing silently.
-                eprintln!("[search] initial index sync failed: {error}");
+                crate::log_event!("[search] initial index sync failed: {error}");
             }
             let search_init_duration = startup_timer.finish_segment();
 
@@ -356,10 +362,10 @@ pub fn run() {
             } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
             } else if TesseractOcrEngine::is_available() {
-                eprintln!("[ocr] falling back to Tesseract");
+                crate::log_event!("[ocr] falling back to Tesseract");
                 Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
             } else {
-                eprintln!("[ocr] no OCR engine available");
+                crate::log_event!("[ocr] no OCR engine available");
                 Arc::new(NoopOcrEngine)
             };
             let ocr_database = Database::open(&paths.database)?;
@@ -398,7 +404,7 @@ pub fn run() {
             // runtime service follows the same shutdown path.
             let app_handle_for_shutdown = app.handle().clone();
             ctrlc::set_handler(move || {
-                eprintln!("[shutdown] received interrupt signal");
+                crate::log_event!("[shutdown] received interrupt signal");
                 app_handle_for_shutdown.exit(0);
             })
             .ok();
@@ -418,7 +424,7 @@ pub fn run() {
                             let database = match Database::open(&db_path) {
                                 Ok(db) => db,
                                 Err(e) => {
-                                    eprintln!("[clipboard-worker] failed to open database: {e}");
+                                    crate::log_event!("[clipboard-worker] failed to open database: {e}");
                                     return;
                                 }
                             };
@@ -450,10 +456,10 @@ pub fn run() {
                         handle: Some(handle),
                     });
             } else {
-                eprintln!("[startup] clipboard monitor has no receiver");
+                crate::log_event!("[startup] clipboard monitor has no receiver");
             }
         } else {
-            eprintln!("[startup] failed to start clipboard monitor");
+            crate::log_event!("[startup] failed to start clipboard monitor");
         }
 
             let cleanup_database = Database::open(&paths.database)?;
@@ -481,11 +487,11 @@ pub fn run() {
                         on_changes_applied,
                     ) {
                         Ok(worker) => {
-                            eprintln!("[search-sync] background synchronizer started");
+                            crate::log_event!("[search-sync] background synchronizer started");
                             Some(worker)
                         }
                         Err(error) => {
-                            eprintln!("[search-sync] failed to start background synchronizer: {error}");
+                            crate::log_event!("[search-sync] failed to start background synchronizer: {error}");
                             None
                         }
                     }
@@ -524,18 +530,18 @@ pub fn run() {
             let auto_sync_worker = match commands::sync::AutoSyncWorker::start(app.handle().clone())
             {
                 Ok(worker) => {
-                    eprintln!("[auto-sync] background worker started");
+                    crate::log_event!("[auto-sync] background worker started");
                     Some(worker)
                 }
                 Err(error) => {
-                    eprintln!("[auto-sync] failed to start background worker: {error}");
+                    crate::log_event!("[auto-sync] failed to start background worker: {error}");
                     None
                 }
             };
             app.manage(Mutex::new(auto_sync_worker));
 
             if let Err(error) = sync_autostart(app.handle(), launch_at_startup) {
-                eprintln!("[autostart] failed to synchronize startup registration: {error}");
+                crate::log_event!("[autostart] failed to synchronize startup registration: {error}");
             }
 
             SystemTray::create(app.handle())?;
@@ -551,7 +557,7 @@ pub fn run() {
                         {
                             Ok(config) => config.close_to_tray(),
                             Err(_) => {
-                                eprintln!(
+                                crate::log_event!(
                                     "[tray] configuration lock is poisoned; allowing window close"
                                 );
                                 false
@@ -561,7 +567,7 @@ pub fn run() {
                         if close_to_tray {
                             api.prevent_close();
                             if let Err(error) = window_to_hide.hide() {
-                                eprintln!("[tray] failed to hide the main window: {error}");
+                                crate::log_event!("[tray] failed to hide the main window: {error}");
                             }
                         }
                     }
@@ -578,7 +584,7 @@ pub fn run() {
                 if !bindings.is_empty() || !double_modifiers.is_empty() {
                     hotkey_manager.start_with_hotkeys(bindings, double_modifiers, window.clone());
                 } else {
-                    eprintln!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+V");
+                    crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+V");
                     use platform::windows_clipboard;
                     hotkey_manager.start_with_window(windows_clipboard::MOD_ALT, windows_clipboard::VK_V, window.clone());
                 }

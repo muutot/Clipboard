@@ -59,11 +59,11 @@ pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
                 if let Err(error) =
                     crate::platform::apply_window_transparency(hwnd.0 as isize, percent)
                 {
-                    eprintln!("[window] failed to apply transparency: {error}");
+                    crate::log_event!("[window] failed to apply transparency: {error}");
                 }
             }
             Err(error) => {
-                eprintln!("[window] failed to resolve the main window handle: {error}");
+                crate::log_event!("[window] failed to resolve the main window handle: {error}");
             }
         }
     }
@@ -78,7 +78,7 @@ pub fn apply_window_effect_to_main(app: &tauri::AppHandle, effect: &str) {
         return;
     };
     if let Err(error) = crate::platform::apply_window_effect(&window, effect) {
-        eprintln!("[window] failed to apply window effect: {error}");
+        crate::log_event!("[window] failed to apply window effect: {error}");
     }
 }
 
@@ -230,7 +230,9 @@ pub fn restore_window_position(
             })
             .collect::<Vec<_>>(),
         Err(error) => {
-            eprintln!("[window] failed to enumerate monitors while restoring bounds: {error}");
+            crate::log_event!(
+                "[window] failed to enumerate monitors while restoring bounds: {error}"
+            );
             Vec::new()
         }
     };

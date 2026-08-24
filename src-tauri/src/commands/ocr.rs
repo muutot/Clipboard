@@ -12,7 +12,7 @@ use crate::storage::{Database, OcrRepository, StoragePaths};
 
 pub fn configured_ppocr_model(config: &ConfigStore) -> &'static ocr::models::PpOcrModelSpec {
     ocr::models::model_spec(config.ppocr_model_variant()).unwrap_or_else(|| {
-        eprintln!(
+        crate::log_event!(
             "[ocr] unsupported configured PP-OCR model variant '{}', using small",
             config.ppocr_model_variant()
         );

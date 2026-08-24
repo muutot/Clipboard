@@ -73,9 +73,11 @@ pub struct StartupMetrics {
 
 impl StartupMetrics {
     pub fn log_summary(&self) {
-        eprintln!(
+        crate::log_event!(
             "[perf] startup: {}ms (db: {}ms, search: {}ms)",
-            self.total_startup_ms, self.db_open_ms, self.search_init_ms
+            self.total_startup_ms,
+            self.db_open_ms,
+            self.search_init_ms
         );
     }
 }

@@ -166,7 +166,7 @@ fn spawn_hotkey_thread_with_registrations(
         let result = hotkey_message_loop(&registrations, &double_modifiers);
         clear_hotkey_state();
         if let Err(error) = result {
-            eprintln!("[hotkey] message loop exited with error: {error}");
+            crate::log_event!("[hotkey] message loop exited with error: {error}");
         }
         drop(tx);
     })
@@ -306,7 +306,7 @@ fn hotkey_message_loop(
             );
             if hook == 0 {
                 clear_double_modifier_tracker();
-                eprintln!(
+                crate::log_event!(
                     "[hotkey] failed to install the double-modifier keyboard hook (Windows error {})",
                     GetLastError()
                 );

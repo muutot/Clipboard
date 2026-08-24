@@ -64,7 +64,7 @@ impl SearchIndex {
                 // from the database (the manifest drives the re-index), so
                 // any open failure gets exactly one delete-and-recreate
                 // attempt instead of hard-failing startup.
-                eprintln!(
+                crate::log_event!(
                     "[search] opening index at {} failed ({error}); recreating it",
                     layout.index_directory.display()
                 );

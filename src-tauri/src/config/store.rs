@@ -31,7 +31,7 @@ impl ConfigStore {
                         .unwrap_or(0);
                     let quarantined =
                         config_directory.join(format!("{CONFIG_FILE_NAME}.corrupt-{stamp}"));
-                    eprintln!(
+                    crate::log_event!(
                         "[config] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
                         path.display(),
                         quarantined.display()

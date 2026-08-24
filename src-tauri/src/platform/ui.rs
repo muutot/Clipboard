@@ -127,7 +127,7 @@ impl SystemTray {
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
-        eprintln!("[tray] main window is unavailable");
+        crate::log_event!("[tray] main window is unavailable");
         return;
     };
 
@@ -144,13 +144,13 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 
     if let Err(error) = window.show() {
-        eprintln!("[tray] failed to show the main window: {error}");
+        crate::log_event!("[tray] failed to show the main window: {error}");
     }
     if let Err(error) = window.unminimize() {
-        eprintln!("[tray] failed to restore the main window: {error}");
+        crate::log_event!("[tray] failed to restore the main window: {error}");
     }
     if let Err(error) = window.set_focus() {
-        eprintln!("[tray] failed to focus the main window: {error}");
+        crate::log_event!("[tray] failed to focus the main window: {error}");
     }
 }
 

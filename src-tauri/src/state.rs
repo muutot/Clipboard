@@ -207,7 +207,7 @@ impl CaptureWorker {
         if let Some(handle) = self.handle.take() {
             if handle.thread().id() != thread::current().id() {
                 if handle.join().is_err() {
-                    eprintln!("[clipboard-worker] capture thread terminated with a panic");
+                    crate::log_event!("[clipboard-worker] capture thread terminated with a panic");
                 }
             } else {
                 self.handle = Some(handle);

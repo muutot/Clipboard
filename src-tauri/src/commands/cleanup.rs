@@ -87,7 +87,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
 
     for (dir, cleanup_enabled) in scan_dirs {
         if !cleanup_enabled {
-            eprintln!(
+            crate::log_event!(
                 "[cleanup] skipping unowned resource directory {}",
                 dir.display()
             );
@@ -124,7 +124,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
             }
             freed_bytes += metadata.len();
             if let Err(e) = std::fs::remove_file(&entry_path) {
-                eprintln!(
+                crate::log_event!(
                     "[cleanup] failed to remove orphan file {}: {e}",
                     entry_path.display()
                 );

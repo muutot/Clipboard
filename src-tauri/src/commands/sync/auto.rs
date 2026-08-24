@@ -33,7 +33,7 @@ impl AutoSyncWorker {
                         let config = app.state::<std::sync::Mutex<ConfigStore>>();
                         let lock_result = config.lock();
                         if let Err(e) = &lock_result {
-                            eprintln!("[auto-sync] config lock poisoned: {e}");
+                            crate::log_event!("[auto-sync] config lock poisoned: {e}");
                         }
                         let guard = match lock_result {
                             Ok(guard) => guard,
@@ -56,7 +56,7 @@ impl AutoSyncWorker {
                     if enabled && now_ms - last_sync_ms >= interval_secs as i64 * 1000 {
                         match run_sync(&app) {
                             Ok(result) => {
-                                eprintln!(
+                                crate::log_event!(
                                     "[auto-sync] done: {} uploaded, {} downloaded, {} applied, {} peers failed",
                                     result.uploaded_entries,
                                     result.downloaded_entries,
@@ -70,7 +70,7 @@ impl AutoSyncWorker {
                                     as i64;
                             }
                             Err(e) => {
-                                eprintln!("[auto-sync] failed: {e}");
+                                crate::log_event!("[auto-sync] failed: {e}");
                                 last_sync_ms = SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .unwrap_or_default()

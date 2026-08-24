@@ -32,7 +32,7 @@
 
 Do not reorder recovery, search initialization, worker startup, or managed-state installation without reviewing failure paths and shutdown.
 
-`logging::init` runs first in the setup hook (before config load): on Windows it redirects the process stderr handle into `<project>/logs/clipboard.log` (rotated to `clipboard.log.old` past 512 KiB), so every existing `eprintln!` diagnostic survives GUI-subsystem builds. Worker modules should prefer the timestamped `crate::log_event!` macro (`ocr/worker.rs`, `content/thumbnail.rs` already do).
+`logging::init` runs first in the setup hook (before config load): on Windows it redirects the process stderr handle into `<project>/logs/clipboard.log` (rotated to `clipboard.log.old` past 512 KiB), so every diagnostic survives GUI-subsystem builds. All backend modules emit via the timestamped `crate::log_event!` macro; do not reintroduce bare `eprintln!` in library code (main.rs CLI paths keep raw output on purpose).
 
 ## Managed runtime state
 

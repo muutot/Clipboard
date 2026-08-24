@@ -233,7 +233,9 @@ pub fn search_clipboard_items(
             {
                 Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
                 Ok(_) => {}
-                Err(error) => eprintln!("[search] outbox sync before search failed: {error}"),
+                Err(error) => {
+                    crate::log_event!("[search] outbox sync before search failed: {error}")
+                }
             }
         }
     }

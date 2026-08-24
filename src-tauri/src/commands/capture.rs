@@ -132,7 +132,7 @@ pub fn store_captured_file_references(
                     modified_at_ms: info.modified_at_ms,
                 },
                 Err(error) => {
-                    eprintln!(
+                    crate::log_event!(
                         "[clipboard-worker] failed to store file {}: {error}",
                         source_path.display()
                     );
@@ -255,7 +255,7 @@ pub fn start_clipboard_monitoring(
             let database = match Database::open(&db_path) {
                 Ok(db) => db,
                 Err(e) => {
-                    eprintln!("[clipboard-worker] failed to open database: {e}");
+                    crate::log_event!("[clipboard-worker] failed to open database: {e}");
                     return;
                 }
             };
@@ -475,7 +475,7 @@ pub(crate) fn run_capture_loop(
                     if let Err(e) = std::fs::create_dir_all(&image_dir) {
                         // Without the directory the write below reports a
                         // misleading error, so name the root cause here.
-                        eprintln!(
+                        crate::log_event!(
                             "[clipboard-worker] failed to create image directory {}: {}",
                             image_dir.display(),
                             e
@@ -484,9 +484,12 @@ pub(crate) fn run_capture_loop(
                     let img_path = image_dir.join(format!("{}.png", img_hash));
                     match std::fs::write(&img_path, &img) {
                         Ok(_) => {
-                            eprintln!("[clipboard-worker] saved image: {}", img_path.display())
+                            crate::log_event!(
+                                "[clipboard-worker] saved image: {}",
+                                img_path.display()
+                            )
                         }
-                        Err(e) => eprintln!(
+                        Err(e) => crate::log_event!(
                             "[clipboard-worker] failed to write image {}: {}",
                             img_path.display(),
                             e
@@ -539,7 +542,7 @@ pub(crate) fn run_capture_loop(
                             if let Err(e) = database.enqueue_ocr(&saved_id) {
                                 // A missed enqueue means the screenshot never
                                 // becomes searchable text; at least log it.
-                                eprintln!(
+                                crate::log_event!(
                                     "[clipboard-worker] failed to enqueue OCR for {saved_id}: {e}"
                                 );
                             }
@@ -550,7 +553,7 @@ pub(crate) fn run_capture_loop(
                             continue;
                         }
                         Err(e) => {
-                            eprintln!("[clipboard-worker] failed to save image: {e}");
+                            crate::log_event!("[clipboard-worker] failed to save image: {e}");
                         }
                     }
                     continue;
@@ -615,7 +618,7 @@ pub(crate) fn run_capture_loop(
                                 let _ = app_handle.emit("clipboard-item-added", &emit_item);
                             }
                             Err(e) => {
-                                eprintln!("[clipboard-worker] failed to save file: {e}");
+                                crate::log_event!("[clipboard-worker] failed to save file: {e}");
                             }
                         }
                     } else {
@@ -671,7 +674,9 @@ pub(crate) fn run_capture_loop(
                                 let _ = app_handle.emit("clipboard-item-added", &emit_item);
                             }
                             Err(e) => {
-                                eprintln!("[clipboard-worker] failed to save file batch: {e}");
+                                crate::log_event!(
+                                    "[clipboard-worker] failed to save file batch: {e}"
+                                );
                             }
                         }
                     }
@@ -751,10 +756,10 @@ pub(crate) fn run_capture_loop(
                         let _ = app_handle.emit("clipboard-item-added", &emit_item);
                     }
                     Err(e) => {
-                        eprintln!("[clipboard-worker] failed to save item: {e}");
+                        crate::log_event!("[clipboard-worker] failed to save item: {e}");
                         consecutive_errors += 1;
                         if consecutive_errors >= 10 {
-                            eprintln!("[clipboard-worker] too many errors, pausing");
+                            crate::log_event!("[clipboard-worker] too many errors, pausing");
                             if wait_for_stop(&stop_receiver, &stop_flag, Duration::from_secs(5)) {
                                 break;
                             }
@@ -765,7 +770,7 @@ pub(crate) fn run_capture_loop(
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                eprintln!("[clipboard-worker] monitor disconnected, stopping");
+                crate::log_event!("[clipboard-worker] monitor disconnected, stopping");
                 break;
             }
         }

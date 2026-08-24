@@ -97,7 +97,9 @@ fn compile_sensitive_patterns(patterns: &[String]) -> Vec<regex_lite::Regex> {
         match regex_lite::Regex::new(pattern) {
             Ok(regex) => compiled.push(regex),
             Err(error) => {
-                eprintln!("[privacy] ignoring invalid sensitive pattern {pattern:?}: {error}");
+                crate::log_event!(
+                    "[privacy] ignoring invalid sensitive pattern {pattern:?}: {error}"
+                );
             }
         }
     }

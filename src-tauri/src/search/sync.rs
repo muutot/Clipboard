@@ -204,7 +204,7 @@ impl SearchSyncWorker {
                             }
                             Ok(_) => {}
                             Err(error) => {
-                                eprintln!("[search-sync] background drain failed: {error}");
+                                crate::log_event!("[search-sync] background drain failed: {error}");
                             }
                         }
                     }
