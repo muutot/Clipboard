@@ -23,6 +23,6 @@ pub use recovery::{
 };
 pub use repository::{
     ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    StorageFileReferences, TagInfo, TextItemUpdate,
+    StorageFileReferences, TagInfo, TextItemUpdate, TransactionalSaveSummary,
 };
 pub use search_repository::{SearchDocument, SearchOperation, SearchOutboxEvent, SearchRepository};

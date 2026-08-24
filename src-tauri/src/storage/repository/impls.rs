@@ -3,13 +3,63 @@ use std::collections::HashMap;
 use rusqlite::{params, params_from_iter, OptionalExtension};
 
 use super::{
-    current_time_ms, delete_kind_records, kind_to_storage, query_kind_storage_stats, unique_ids,
-    ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    StorageFileReferences, StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS,
-    ITEM_LOOKUP_CHUNK_SIZE,
+    content_exists_on_connection, current_time_ms, delete_kind_records, insert_item_row,
+    kind_to_storage, query_kind_storage_stats, unique_ids, ClipboardRepository, HistoryFilter,
+    KindDeleteResult, KindDeleteScope, KindStorageStats, StorageFileReferences,
+    StoredClipboardItem, TagInfo, TextItemUpdate, ITEM_COLUMNS, ITEM_LOOKUP_CHUNK_SIZE,
 };
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{Database, StorageError};
+
+/// Outcome of [`Database::save_items_transactional`].
+#[derive(Debug, Default)]
+pub struct TransactionalSaveSummary {
+    pub imported_count: u64,
+    pub skipped_count: u64,
+    pub errors: Vec<String>,
+}
+
+impl Database {
+    /// Saves many items inside a single transaction so a bulk import commits
+    /// once instead of producing one fsync per row. Rows whose
+    /// `(kind, content_hash)` already exists are counted as skipped (a
+    /// duplicate import neither duplicates nor rewrites records); per-row
+    /// failures are collected instead of aborting the whole batch.
+    pub fn save_items_transactional(
+        &self,
+        entries: &[(String, ClipboardItem)],
+    ) -> Result<TransactionalSaveSummary, StorageError> {
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let mut summary = TransactionalSaveSummary::default();
+
+            for (label, item) in entries {
+                let size_bytes =
+                    i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+                        field: "size_bytes",
+                    })?;
+                let already_exists =
+                    content_exists_on_connection(&transaction, item.kind, &item.content_hash)?;
+                if already_exists {
+                    summary.skipped_count += 1;
+                    continue;
+                }
+                match insert_item_row(&transaction, item, size_bytes) {
+                    Ok(_) => summary.imported_count += 1,
+                    Err(error) => {
+                        summary.skipped_count += 1;
+                        summary
+                            .errors
+                            .push(format!("failed to import {label}: {error}"));
+                    }
+                }
+            }
+
+            transaction.commit()?;
+            Ok(summary)
+        })
+    }
+}
 
 impl ClipboardRepository for Database {
     fn save_item(&self, item: &ClipboardItem) -> Result<String, StorageError> {
@@ -18,84 +68,7 @@ impl ClipboardRepository for Database {
                 field: "size_bytes",
             })?;
 
-        self.with_connection(|connection| {
-            Ok(connection.query_row(
-                "INSERT INTO clipboard_items (
-                    id,
-                    kind,
-                    title,
-                    text_content,
-                    html_content,
-                    rtf_content,
-                    resource_path,
-                    preview_path,
-                    content_hash,
-                    source_app,
-                    size_bytes,
-                    created_at_ms,
-                    last_used_at_ms,
-                    is_favorite,
-                    icon_path,
-                    metadata_json
-                 ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
-                 )
-                 ON CONFLICT DO UPDATE SET
-                    title = excluded.title,
-                    text_content = excluded.text_content,
-                    html_content = COALESCE(
-                        excluded.html_content,
-                        clipboard_items.html_content
-                    ),
-                    rtf_content = COALESCE(
-                        excluded.rtf_content,
-                        clipboard_items.rtf_content
-                    ),
-                    resource_path = excluded.resource_path,
-                    preview_path = excluded.preview_path,
-                    source_app = excluded.source_app,
-                    size_bytes = excluded.size_bytes,
-                    created_at_ms = excluded.created_at_ms,
-                    last_used_at_ms = COALESCE(
-                        excluded.last_used_at_ms,
-                        clipboard_items.last_used_at_ms
-                    ),
-                    is_favorite = MAX(
-                        clipboard_items.is_favorite,
-                        excluded.is_favorite
-                    ),
-                    icon_path = COALESCE(
-                        excluded.icon_path,
-                        clipboard_items.icon_path
-                    ),
-                    metadata_json = COALESCE(
-                        excluded.metadata_json,
-                        clipboard_items.metadata_json
-                    ),
-                    deleted = 0,
-                    deleted_at_ms = NULL
-                 RETURNING id",
-                params![
-                    item.id,
-                    kind_to_storage(item.kind),
-                    item.title,
-                    item.text_content,
-                    item.html_content,
-                    item.rtf_content,
-                    item.resource_path,
-                    item.preview_path,
-                    item.content_hash,
-                    item.source_app,
-                    size_bytes,
-                    item.created_at_ms,
-                    item.last_used_at_ms,
-                    item.is_favorite,
-                    item.icon_path,
-                    item.metadata_json,
-                ],
-                |row| row.get(0),
-            )?)
-        })
+        self.with_connection(|connection| insert_item_row(connection, item, size_bytes))
     }
 
     fn content_exists(
@@ -104,14 +77,7 @@ impl ClipboardRepository for Database {
         content_hash: &str,
     ) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
-            Ok(connection.query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM clipboard_items
-                    WHERE kind = ?1 AND content_hash = ?2
-                 )",
-                params![kind_to_storage(kind), content_hash],
-                |row| row.get::<_, bool>(0),
-            )?)
+            content_exists_on_connection(connection, kind, content_hash)
         })
     }
 

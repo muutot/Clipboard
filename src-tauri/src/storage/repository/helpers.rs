@@ -23,6 +23,109 @@ pub(super) fn unique_ids(ids: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// Inserts or upserts one clipboard item row. Shared by the single-item
+/// [`ClipboardRepository::save_item`] and the bulk transactional import so
+/// both paths keep identical conflict semantics.
+pub(super) fn insert_item_row(
+    connection: &rusqlite::Connection,
+    item: &ClipboardItem,
+    size_bytes: i64,
+) -> Result<String, StorageError> {
+    Ok(connection.query_row(
+        "INSERT INTO clipboard_items (
+            id,
+            kind,
+            title,
+            text_content,
+            html_content,
+            rtf_content,
+            resource_path,
+            preview_path,
+            content_hash,
+            source_app,
+            size_bytes,
+            created_at_ms,
+            last_used_at_ms,
+            is_favorite,
+            icon_path,
+            metadata_json
+         ) VALUES (
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+         )
+         ON CONFLICT DO UPDATE SET
+            title = excluded.title,
+            text_content = excluded.text_content,
+            html_content = COALESCE(
+                excluded.html_content,
+                clipboard_items.html_content
+            ),
+            rtf_content = COALESCE(
+                excluded.rtf_content,
+                clipboard_items.rtf_content
+            ),
+            resource_path = excluded.resource_path,
+            preview_path = excluded.preview_path,
+            source_app = excluded.source_app,
+            size_bytes = excluded.size_bytes,
+            created_at_ms = excluded.created_at_ms,
+            last_used_at_ms = COALESCE(
+                excluded.last_used_at_ms,
+                clipboard_items.last_used_at_ms
+            ),
+            is_favorite = MAX(
+                clipboard_items.is_favorite,
+                excluded.is_favorite
+            ),
+            icon_path = COALESCE(
+                excluded.icon_path,
+                clipboard_items.icon_path
+            ),
+            metadata_json = COALESCE(
+                excluded.metadata_json,
+                clipboard_items.metadata_json
+            ),
+            deleted = 0,
+            deleted_at_ms = NULL
+         RETURNING id",
+        params![
+            item.id,
+            kind_to_storage(item.kind),
+            item.title,
+            item.text_content,
+            item.html_content,
+            item.rtf_content,
+            item.resource_path,
+            item.preview_path,
+            item.content_hash,
+            item.source_app,
+            size_bytes,
+            item.created_at_ms,
+            item.last_used_at_ms,
+            item.is_favorite,
+            item.icon_path,
+            item.metadata_json,
+        ],
+        |row| row.get(0),
+    )?)
+}
+
+/// Reports whether an item with the same `(kind, content_hash)` already
+/// exists. Shared by the dedup checks of single and transactional saves.
+pub(super) fn content_exists_on_connection(
+    connection: &rusqlite::Connection,
+    kind: ClipboardKind,
+    content_hash: &str,
+) -> Result<bool, StorageError> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM clipboard_items
+            WHERE kind = ?1 AND content_hash = ?2
+         )",
+        params![kind_to_storage(kind), content_hash],
+        |row| row.get::<_, bool>(0),
+    )?)
+}
+
 pub(super) fn query_kind_storage_stats(
     connection: &rusqlite::Connection,
     kind: ClipboardKind,

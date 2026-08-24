@@ -6,7 +6,7 @@ use crate::content::hash::compute_media_hash;
 use crate::content::resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::ImportSummary;
-use crate::storage::{ClipboardRepository, Database, StoragePaths};
+use crate::storage::{Database, StoragePaths};
 
 pub(crate) const BACKUP_EXTENSION: &str = ".pastebackup";
 
@@ -204,33 +204,17 @@ fn import_rows(
     database: &Database,
     paths: &StoragePaths,
 ) -> Result<ImportSummary, String> {
-    let mut imported = 0u64;
     let mut skipped = 0u64;
     let mut errors = Vec::new();
 
+    // First pass materializes resources (file I/O) before the write
+    // transaction opens, so slow disk work never blocks capture-thread
+    // database writes for the duration of a large import.
+    let mut prepared: Vec<(String, ClipboardItem)> = Vec::new();
     for (index, row) in rows.iter().enumerate() {
         let id = format!("ppaste_{index}");
         match build_item(row, &id, archive, paths) {
-            Ok(item) => {
-                let already_exists = database
-                    .content_exists(item.kind, &item.content_hash)
-                    .map_err(|error| {
-                        format!("failed to check existing record for {id}: {error}")
-                    })?;
-                if already_exists {
-                    // Same content already present: skip instead of upserting so a
-                    // duplicate import does not add or touch the existing record.
-                    skipped += 1;
-                    continue;
-                }
-                match ClipboardRepository::save_item(database, &item) {
-                    Ok(_) => imported += 1,
-                    Err(error) => {
-                        skipped += 1;
-                        errors.push(format!("failed to import {id}: {error}"));
-                    }
-                }
-            }
+            Ok(item) => prepared.push((id, item)),
             Err(error) => {
                 skipped += 1;
                 errors.push(format!("failed to import {id}: {error}"));
@@ -238,9 +222,17 @@ fn import_rows(
         }
     }
 
+    // Second pass deduplicates and inserts every row inside ONE transaction:
+    // thousands of independent commits each forced a WAL fsync, which made
+    // large backups take minutes on spinning disks.
+    let summary = database
+        .save_items_transactional(&prepared)
+        .map_err(|error| format!("failed to commit imported records: {error}"))?;
+
+    errors.extend(summary.errors);
     Ok(ImportSummary {
-        imported_count: imported,
-        skipped_count: skipped,
+        imported_count: summary.imported_count,
+        skipped_count: skipped + summary.skipped_count,
         errors,
         pending_truncation: 0,
         max_items: 0,
@@ -470,6 +462,7 @@ fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::ClipboardRepository;
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
