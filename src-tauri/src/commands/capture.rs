@@ -446,7 +446,15 @@ pub(crate) fn run_capture_loop(
                         .as_millis() as i64;
 
                     let image_dir = image_storage_path.clone();
-                    std::fs::create_dir_all(&image_dir).ok();
+                    if let Err(e) = std::fs::create_dir_all(&image_dir) {
+                        // Without the directory the write below reports a
+                        // misleading error, so name the root cause here.
+                        eprintln!(
+                            "[clipboard-worker] failed to create image directory {}: {}",
+                            image_dir.display(),
+                            e
+                        );
+                    }
                     let img_path = image_dir.join(format!("{}.png", img_hash));
                     match std::fs::write(&img_path, &img) {
                         Ok(_) => {
@@ -502,7 +510,13 @@ pub(crate) fn run_capture_loop(
                     match database.save_item(&item) {
                         Ok(saved_id) => {
                             consecutive_errors = 0;
-                            let _ = database.enqueue_ocr(&saved_id);
+                            if let Err(e) = database.enqueue_ocr(&saved_id) {
+                                // A missed enqueue means the screenshot never
+                                // becomes searchable text; at least log it.
+                                eprintln!(
+                                    "[clipboard-worker] failed to enqueue OCR for {saved_id}: {e}"
+                                );
+                            }
                             thumbnail_queue.enqueue(saved_id.clone(), img_path.clone());
                             let mut emit_item = item.clone();
                             emit_item.id = saved_id;
