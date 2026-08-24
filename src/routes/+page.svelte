@@ -1014,21 +1014,28 @@
 
     const unsubTagsChanged = listen<TagsChangedPayload>("tags-changed", (event) => {
       const { renamed, deleted } = event.payload;
+      if (!renamed && !deleted) return;
+      // Compute per-entry patches across every copy's members, then fan them
+      // out through the single funnel — including searchCache, which a
+      // hand-rolled loop once missed.
+      const transform = (entry: ClipboardItem) =>
+        renamed ? rewriteTags(entry, renamed.old, renamed.new) : removeTag(entry, deleted!);
+      const patches = new Map<string, Partial<ClipboardItem>>();
+      for (const entry of [
+        ...items,
+        ...(indexedItems ?? []),
+        ...searchCache,
+        ...(detailItem ? [detailItem] : []),
+      ]) {
+        if (patches.has(entry.id)) continue;
+        const rewritten = transform(entry);
+        if (rewritten !== entry) patches.set(entry.id, { tags: rewritten.tags });
+      }
+      applyItemPatches(patches);
       if (renamed) {
-        const { old, new: fresh } = renamed;
-        items = items.map((item) => rewriteTags(item, old, fresh));
-        if (detailItem) detailItem = rewriteTags(detailItem, old, fresh);
-        if (indexedItems) {
-          indexedItems = indexedItems.map((item) => rewriteTags(item, old, fresh));
-        }
-        if (tagFilter === old) tagFilter = fresh;
-      } else if (deleted) {
-        items = items.map((item) => removeTag(item, deleted));
-        if (detailItem) detailItem = removeTag(detailItem, deleted);
-        if (indexedItems) {
-          indexedItems = indexedItems.map((item) => removeTag(item, deleted));
-        }
-        if (tagFilter === deleted) tagFilter = null;
+        if (tagFilter === renamed.old) tagFilter = renamed.new;
+      } else if (tagFilter === deleted) {
+        tagFilter = null;
       }
       void refreshTagColors();
     });
