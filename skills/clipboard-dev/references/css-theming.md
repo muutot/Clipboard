@@ -126,7 +126,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 
 `src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `CompactSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
 
-Legacy/local duplication exists in the settings shell and ignored-app panel; it is recorded in `niche_ui_style.md` and is not a license to copy shared rules.
+Legacy/local duplication has been removed from the ignored-app panel (it now uses shared header, scroll, feedback, toggle, and card primitives); remaining shell-local rules are density/input-reset modifiers recorded in `niche_ui_style.md` and are not a license to copy shared rules.
 
 ## CSS ownership decision
 

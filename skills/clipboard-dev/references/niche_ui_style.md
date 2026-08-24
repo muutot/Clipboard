@@ -12,27 +12,28 @@
 
 ## 当前待审项
 
-| 状态   | 范围                 | 当前证据                                                                                                                                          | 后续审阅问题                                                                  |
-| ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 待审   | 代码与 Markdown 预览 | `CodeEditor.svelte`、`CodePreview.svelte`、`MarkdownPreview.svelte` 使用一套固定深色和语法色                                                      | 这些颜色是否应始终保持编辑器主题，还是需要支持亮色/自定义主题？               |
-| 待审   | 独立图片查看器       | `routes/viewer/+page.svelte` 的控制按钮、提示和遮罩使用固定 `#`/`rgba` 颜色                                                                       | 媒体查看器是否被定义为固定深色沉浸层；若是，应明确例外边界                    |
-| 待审   | 详情图片全屏         | `DetailPanel.svelte` 的图片遮罩和全屏控件仍有固定黑白透明色                                                                                       | 是否与独立 viewer 共用一套“媒体层 token”，还是保持局部固定色                  |
-| 待审   | 主界面分类色         | `+page.svelte` 的部分筛选图标、`ClipboardCard.svelte` 的 source-red/blue/violet 使用固定色                                                        | 这些是内容语义色还是主题色；是否需要独立语义变量                              |
-| 待审   | 主界面阴影           | 搜索建议、下拉框、卡片对话框、快捷键帽等使用固定黑色透明阴影                                                                                      | 是否需要通用 shadow token；当前不要为了消除字面量而机械替换                   |
-| 已处理 | 忽略应用面板         | `IgnoredAppsSettingsPanel.svelte` 已复用共享 header、scroll、feedback、auto-save 基础规则，仅保留传输面板布局和必要 modifier                      | 新增共享基础样式时继续放入 `settings-shared.css`，不要在此面板重新复制        |
-| 已处理 | 设置父容器           | `StorageSettingsDialog.svelte` 已复用共享 heading、scroll、slider、feedback、auto-save 等基础规则，仅保留内置模块的密度和输入 reset modifier      | 内置模块的新特例必须是 modifier，不得复制整套共享 primitive                   |
-| 已处理 | 未定义变量           | `UpdateDialog.svelte` 的次要按钮 hover 已改用现有语义变量 `--hover-bg`；仓库不再引用未定义的 `--row-hover`                                        | 保持 `--hover-bg` 为安静 hover 表面的唯一项目级变量                           |
-| 待审   | 非主题 fallback      | 侧栏用量条使用 `var(--accent-color, #746dff)`，仓库未定义 `--accent-color`                                                                        | 是否应统一到 `--accent` 或 `--selection-color`                                |
-| 待审   | 排序拖拽态           | `GeneralSettingsPanel.svelte` 的 `.sort-drag-over` 使用固定蓝色 rgba                                                                              | 是否改为 `color-mix(... var(--selection-color) ...)`                          |
-| 待审   | Select 箭头          | 设置父容器用 data URI 内嵌 `#999` 绘制下拉箭头，部分子面板则只隐藏原生箭头                                                                        | 需要统一的可主题化下拉箭头与无障碍策略                                        |
-| 待审   | 局部字号/圆角        | Keyboard、Theme、统计、图标管理等低频控件仍有 9/10/11/12/14/16/17px 或 4/7px 等固定值                                                             | 哪些属于真正的几何特例，哪些应映射到 `--settings-*`                           |
-| 待审   | 内联布局             | Keyboard 设置标题区存在 `margin-top:3px` 和 `display:flex;gap:6px` 内联样式                                                                       | 是否改为命名 class，且放回正确的设置层级                                      |
-| 待审   | Keyboard 层级        | Keyboard 配置操作卡目前位于 breadcrumb 行和二级导航之间                                                                                           | 是否移动到说明之后的内容区，以遵守统一 shell 顺序                             |
-| 待审   | 设置页硬编码文案     | 设置左侧“采集”、`OCR`、“统计”和部分 Keyboard/OCR 说明直接写在组件中                                                                               | 是否全部接入 i18n；这属于 UX 一致性，不应成为样式模板                         |
-| 待审   | 精简模式作用域       | `TODO.md` 仍记录“精简模式滑块同时影响设置窗口布局”                                                                                                | 需要真实运行设置窗口确认传播链路，再决定拆分主界面与设置界面变量              |
-| 待审   | 主题完成声明         | TODO 中存在“组件硬编码颜色已全部替换”的完成描述，但源码扫描仍能看到上述局部固定色                                                                 | 审阅时区分主题 UI、内容渲染、媒体遮罩和无障碍强制色，重新界定验收口径         |
-| 待审   | AppIcon/组件计数文档 | 旧 reference 曾记录固定 icon/组件/服务数量，容易迅速失效                                                                                          | 继续只记录职责与 source symbol，不再维护脆弱数量                              |
-| 待审   | 彩色图标模式         | `types/clipboard.ts::DEFAULT_ICON_COLORS` 为每个图标绑定默认十六进制色，`general.iconColors` 支持逐图标覆盖，仅在 `general.colorIcons` 开启时生效 | 这些默认色是否应改为语义/主题色，还是保持为可选的品牌风格色板（现已可自定义） |
+| 状态   | 范围                 | 当前证据                                                                                                                                                                     | 后续审阅问题                                                                  |
+| ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 待审   | 代码与 Markdown 预览 | `CodeEditor.svelte`、`CodePreview.svelte`、`MarkdownPreview.svelte` 使用一套固定深色和语法色                                                                                 | 这些颜色是否应始终保持编辑器主题，还是需要支持亮色/自定义主题？               |
+| 待审   | 独立图片查看器       | `routes/viewer/+page.svelte` 的控制按钮、提示和遮罩使用固定 `#`/`rgba` 颜色                                                                                                  | 媒体查看器是否被定义为固定深色沉浸层；若是，应明确例外边界                    |
+| 待审   | 详情图片全屏         | `DetailPanel.svelte` 的图片遮罩和全屏控件仍有固定黑白透明色                                                                                                                  | 是否与独立 viewer 共用一套“媒体层 token”，还是保持局部固定色                  |
+| 待审   | 主界面分类色         | `+page.svelte` 的部分筛选图标、`ClipboardCard.svelte` 的 source-red/blue/violet 使用固定色                                                                                   | 这些是内容语义色还是主题色；是否需要独立语义变量                              |
+| 待审   | 主界面阴影           | 搜索建议、下拉框、卡片对话框、快捷键帽等使用固定黑色透明阴影                                                                                                                 | 是否需要通用 shadow token；当前不要为了消除字面量而机械替换                   |
+| 已处理 | 忽略应用面板         | `IgnoredAppsSettingsPanel.svelte` 已复用共享 header、scroll、feedback、auto-save、toggle 基础规则，隐私设置改用标准 `setting-card` 结构，仅保留传输面板布局和必要 modifier   | 新增共享基础样式时继续放入 `settings-shared.css`，不要在此面板重新复制        |
+| 已处理 | 设置父容器           | `StorageSettingsDialog.svelte` 已复用共享 heading、scroll、slider、feedback、auto-save 等基础规则，仅保留内置模块的密度和输入 reset modifier                                 | 内置模块的新特例必须是 modifier，不得复制整套共享 primitive                   |
+| 已处理 | 未定义变量           | 仓库不再引用未定义变量：次要按钮 hover 改用 `--hover-bg`（原 `--row-hover`），更新对话框改用 `--selection-color`（原 `--info-color`），忽略应用面板不再使用 `--text-inverse` | 保持语义变量唯一拼写；新增颜色一律走 ThemeColors 契约                         |
+| 待审   | 非主题 fallback      | 侧栏用量条使用 `var(--accent-color, #746dff)`，仓库未定义 `--accent-color`                                                                                                   | 是否应统一到 `--accent` 或 `--selection-color`                                |
+| 已处理 | 排序拖拽态           | `GeneralSettingsPanel.svelte` 的 `.sort-drag-over` 轮廓与背景均已改用 `--selection-color`（背景经 `color-mix` 15%）                                                          | 已统一到选中态语义色；如需独立“拖拽目标”语义再议                              |
+| 待审   | Select 箭头          | 设置父容器用 data URI 内嵌 `#999` 绘制下拉箭头，部分子面板则只隐藏原生箭头                                                                                                   | 需要统一的可主题化下拉箭头与无障碍策略                                        |
+| 待审   | 局部字号/圆角        | Keyboard、Theme、统计等低频控件仍有 9/10/11/12/14/16/17px 或 4/7px 等固定值（图标缓存面板已 token 化）                                                                       | 哪些属于真正的几何特例，哪些应映射到 `--settings-*`                           |
+| 已处理 | 内联布局             | Keyboard 配置卡的内联样式已改为命名 class（`.keyboard-config-card`、`.config-bar-actions`，见 `StorageSettingsDialog.svelte`）                                               | 新布局样式一律使用命名 class 并放入正确设置层级                               |
+| 待审   | Keyboard 层级        | Keyboard 配置操作卡目前位于 breadcrumb 行和二级导航之间                                                                                                                      | 是否移动到说明之后的内容区，以遵守统一 shell 顺序                             |
+| 待审   | 设置页硬编码文案     | 设置左侧“采集”、`OCR`、“统计”和部分 Keyboard/OCR 说明直接写在组件中                                                                                                          | 是否全部接入 i18n；这属于 UX 一致性，不应成为样式模板                         |
+| 待审   | 精简模式作用域       | `TODO.md` 仍记录“精简模式滑块同时影响设置窗口布局”                                                                                                                           | 需要真实运行设置窗口确认传播链路，再决定拆分主界面与设置界面变量              |
+| 待审   | 主题完成声明         | TODO 中存在“组件硬编码颜色已全部替换”的完成描述，但源码扫描仍能看到上述局部固定色                                                                                            | 审阅时区分主题 UI、内容渲染、媒体遮罩和无障碍强制色，重新界定验收口径         |
+| 待审   | AppIcon/组件计数文档 | 旧 reference 曾记录固定 icon/组件/服务数量，容易迅速失效                                                                                                                     | 继续只记录职责与 source symbol，不再维护脆弱数量                              |
+| 待审   | 彩色图标模式         | `types/clipboard.ts::DEFAULT_ICON_COLORS` 为每个图标绑定默认十六进制色，`general.iconColors` 支持逐图标覆盖，仅在 `general.colorIcons` 开启时生效                            | 这些默认色是否应改为语义/主题色，还是保持为可选的品牌风格色板（现已可自定义） |
+| 待审   | 实心按钮文字色       | `--selection-color` 实心背景上的文字使用字面量 `#fff`（`IconCacheSettingsPanel.svelte` 确认按钮、`UpdateDialog.svelte` 主按钮）                                              | 是否需要 on-accent 语义 token，还是接受固定白色                               |
 
 ## 暂时接受但不可推广的局部写法
 
