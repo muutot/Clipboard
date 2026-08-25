@@ -1,11 +1,9 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { onDestroy, tick } from "svelte";
   import type { Component } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import Checkbox from "$lib/components/Checkbox.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
-  import DatePicker from "$lib/components/DatePicker.svelte";
   import SearchField from "$lib/components/SearchField.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -25,16 +23,10 @@
   } from "$lib/services/storage";
   import { isTauriRuntime, getRuntimeInfo } from "$lib/services/runtime";
   import {
-    exportToFile,
-    getExportFormats,
-    getImportFormats,
-    importFromFile,
     getSyncConfig,
     setSyncConfig,
     testSyncConnection,
     runSync,
-    type ExportFormatInfo,
-    type ImportFormatInfo,
     type SyncConfig,
   } from "$lib/services/storage";
   import { getVersion } from "@tauri-apps/api/app";
@@ -171,6 +163,18 @@
       }),
     },
     {
+      sections: ["storage_tools"],
+      load: () => import("$lib/components/TransferPanel.svelte"),
+      props: () => ({
+        maxItemCount,
+        onfeedback: (message: string, success: boolean) => {
+          feedback = message;
+          feedbackSuccess = success;
+        },
+        onadjustlimit: () => (activeSection = "storage_limits"),
+      }),
+    },
+    {
       sections: ["keyboard_item", "keyboard_quick", "keyboard_system", "keyboard_switch"],
       load: () => import("$lib/components/KeyboardSettingsPanel.svelte"),
       props: () => ({
@@ -218,8 +222,6 @@
   let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  let showLimitWarning = $state(false);
-  let importTruncationCount = $state(0);
   const storageKinds: readonly {
     kind: StorageKind;
     labelKey: "filter.text" | "filter.link" | "filter.image" | "filter.file";
@@ -238,33 +240,6 @@
   });
   let storageKindStatsAvailable = $state(false);
   let deletingStorageKind = $state<StorageKind | null>(null);
-  let exportFormats = $state<ExportFormatInfo[]>([]);
-  let exportFormat = $state("json");
-  let importFormats = $state<ImportFormatInfo[]>([]);
-  let importFormat = $state("pastebackup");
-  let exportIncludeFavorites = $state(true);
-  let exportContentTypes = $state<Set<string>>(new Set(["text", "link", "image", "file"]));
-  let exportDateFrom = $state("");
-  let exportDateTo = $state("");
-  let exporting = $state(false);
-  let importing = $state(false);
-
-  function toggleExportContentType(kind: string) {
-    const next = new Set(exportContentTypes);
-    if (next.has(kind)) {
-      next.delete(kind);
-    } else {
-      next.add(kind);
-    }
-    exportContentTypes = next;
-  }
-
-  function exportDateToMs(value: string, end: boolean): number | null {
-    if (!value) return null;
-    const timestamp = new Date(`${value}T00:00:00`).getTime();
-    if (Number.isNaN(timestamp)) return null;
-    return end ? endOfDay(timestamp) : startOfDay(timestamp);
-  }
 
   $effect(() => {
     if (feedback) {
@@ -561,6 +536,8 @@
 
   let repairResult = $state<RepairResult | null>(null);
   let repairLoading = $state(false);
+  let appVersion = $state("");
+  let appExecutablePath = $state("");
 
   async function loadStorageKindStats(): Promise<boolean> {
     try {
@@ -654,123 +631,6 @@
     }
   }
 
-  async function loadExportFormats(): Promise<void> {
-    try {
-      const formats = await getExportFormats();
-      exportFormats = formats;
-      if (formats.length > 0 && !formats.some((format) => format.id === exportFormat)) {
-        exportFormat = formats[0].id;
-      }
-    } catch (error) {
-      console.error("Unable to load export formats", error);
-      exportFormats = [];
-    }
-  }
-
-  async function loadImportFormats(): Promise<void> {
-    try {
-      const formats = await getImportFormats();
-      importFormats = formats;
-      if (formats.length > 0 && !formats.some((format) => format.id === importFormat)) {
-        importFormat = formats[0].id;
-      }
-    } catch (error) {
-      console.error("Unable to load import formats", error);
-      importFormats = [];
-    }
-  }
-
-  async function handleExport() {
-    if (!isTauriRuntime() || exporting || importing) return;
-    const format = exportFormats.find((entry) => entry.id === exportFormat);
-    if (!format) return;
-    exporting = true;
-    feedback = "";
-    feedbackSuccess = false;
-    try {
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const filePath = await save({
-        defaultPath: `clipboard-export${format.extension}`,
-        filters: [{ name: format.label, extensions: [format.extension.slice(1)] }],
-      });
-      if (!filePath) return;
-      const result = await exportToFile(filePath, format.id, {
-        includeFavorites: exportIncludeFavorites,
-        dateFromMs: exportDateToMs(exportDateFrom, false),
-        dateToMs: exportDateToMs(exportDateTo, true),
-        contentTypes: Array.from(exportContentTypes),
-      });
-      feedback = _t("storage.exportSuccess", {
-        path: result.path,
-        size: formatBytes(result.byteCount),
-      });
-      feedbackSuccess = true;
-    } catch (error) {
-      feedback = _t("storage.exportFailed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      exporting = false;
-    }
-  }
-
-  async function handleImport() {
-    if (!isTauriRuntime() || exporting || importing) return;
-    const format = importFormats.find((entry) => entry.id === importFormat);
-    if (!format) return;
-    importing = true;
-    feedback = "";
-    feedbackSuccess = false;
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const filePath = await open({
-        multiple: false,
-        directory: false,
-        filters: [
-          {
-            name: format.label,
-            extensions: [format.extension.slice(1)],
-          },
-        ],
-      });
-      if (!filePath) return;
-      const result = await importFromFile(filePath);
-      if (result.errors.length > 0) {
-        const detail = `${_t("storage.importErrorsN", {
-          count: result.errors.length,
-        })} ${result.errors[0]}`;
-        feedback = _t("storage.importPartial", {
-          imported: result.importedCount,
-          skipped: result.skippedCount,
-          error: detail,
-        });
-      } else {
-        feedback = _t("storage.importSuccess", {
-          imported: result.importedCount,
-          skipped: result.skippedCount,
-        });
-        feedbackSuccess = true;
-      }
-      if (result.pendingTruncation > 0) {
-        feedback = _t("storage.importTruncationWarning", {
-          max: result.maxItems,
-          count: result.pendingTruncation,
-        });
-        feedbackSuccess = false;
-        showLimitWarning = true;
-        importTruncationCount = result.pendingTruncation;
-      }
-    } catch (error) {
-      feedback = _t("storage.importFailed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      importing = false;
-    }
-  }
-
-  let appVersion = $state("");
-  let appExecutablePath = $state("");
   let syncProvider = $state<"off" | "s3">("off");
   let syncEndpoint = $state("");
   let syncRemotePath = $state("");
@@ -952,8 +812,6 @@
   $effect(() => {
     if (open) {
       void loadStatus();
-      void loadExportFormats();
-      void loadImportFormats();
       void loadAppVersion();
     }
   });
@@ -1388,119 +1246,6 @@
       {:else if status}
         <div class="settings-scroll">
           {#if activeSection === "storage_tools"}
-            <section class="setting-card">
-              <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-                <div>
-                  <strong>{_t("storage.transferTitle")}</strong>
-                  <p>{_t("storage.transferDesc")}</p>
-                </div>
-              </div>
-              <div class="transfer-actions">
-                <div class="transfer-group">
-                  <span class="transfer-label">{_t("storage.exportLabel")}</span>
-                  <CustomSelect
-                    value={exportFormat}
-                    disabled={exporting || importing || exportFormats.length === 0}
-                    ariaLabel={_t("storage.exportLabel")}
-                    options={exportFormats.map((format) => ({
-                      value: format.id,
-                      label: format.label,
-                    }))}
-                    onchange={(v) => (exportFormat = v as string)}
-                  />
-                  <button
-                    type="button"
-                    class="settings-action-btn"
-                    disabled={exporting || importing || exportFormats.length === 0}
-                    onclick={handleExport}
-                  >
-                    {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
-                  </button>
-                </div>
-                <div class="transfer-group">
-                  <span class="transfer-label">{_t("storage.importLabel")}</span>
-                  <CustomSelect
-                    value={importFormat}
-                    disabled={exporting || importing || importFormats.length === 0}
-                    ariaLabel={_t("storage.importLabel")}
-                    options={importFormats.map((format) => ({
-                      value: format.id,
-                      label: format.label,
-                    }))}
-                    onchange={(v) => (importFormat = v as string)}
-                  />
-                  <button
-                    type="button"
-                    class="settings-action-btn"
-                    disabled={exporting || importing || importFormats.length === 0}
-                    onclick={handleImport}
-                  >
-                    {importing ? _t("storage.importing") : _t("storage.importAction")}
-                  </button>
-                </div>
-              </div>
-              {#if showLimitWarning}
-                <div class="transfer-limit-warning">
-                  <span
-                    >{_t("storage.importTruncationWarning", {
-                      max: maxItemCount,
-                      count: importTruncationCount,
-                    })}</span
-                  >
-                  <button
-                    type="button"
-                    class="settings-action-btn"
-                    onclick={() => (activeSection = "storage_limits")}
-                  >
-                    {_t("storage.importAdjustLimit")}
-                  </button>
-                </div>
-              {/if}
-              <div class="export-options">
-                <div class="export-option-row">
-                  <span class="export-option-label">{_t("storage.exportFavorites")}</span>
-                  <label class="export-check">
-                    <Checkbox
-                      checked={exportIncludeFavorites}
-                      onchange={(checked) => (exportIncludeFavorites = checked)}
-                      size={15}
-                    />
-                    <span>{_t("storage.exportIncludeFavorites")}</span>
-                  </label>
-                </div>
-                <div class="export-option-row">
-                  <span class="export-option-label">{_t("storage.exportContentTypes")}</span>
-                  <div class="export-kind-checks">
-                    {#each storageKinds as kindInfo (kindInfo.kind)}
-                      <label class="export-check">
-                        <Checkbox
-                          checked={exportContentTypes.has(kindInfo.kind)}
-                          onchange={() => toggleExportContentType(kindInfo.kind)}
-                          size={15}
-                        />
-                        <span>{_t(kindInfo.labelKey)}</span>
-                      </label>
-                    {/each}
-                  </div>
-                </div>
-                <div class="export-option-row export-date-row">
-                  <span class="export-option-label">{_t("storage.exportDateRange")}</span>
-                  <DatePicker
-                    value={exportDateFrom}
-                    onchange={(v) => (exportDateFrom = v)}
-                    ariaLabel={_t("storage.exportDateFrom")}
-                  />
-                  <span class="export-date-separator">锟紺</span>
-                  <DatePicker
-                    value={exportDateTo}
-                    onchange={(v) => (exportDateTo = v)}
-                    ariaLabel={_t("storage.exportDateTo")}
-                  />
-                </div>
-              </div>
-            </section>
-
             <section class="setting-card toggle-card">
               <div class="setting-heading">
                 <span class="setting-icon"><AppIcon name="search" size={17} /></span>
@@ -2461,114 +2206,6 @@
   .danger-action:disabled {
     opacity: 0.45;
     cursor: default;
-  }
-
-  .transfer-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 12px;
-  }
-
-  .transfer-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .transfer-label {
-    flex: 0 0 auto;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  :global(.transfer-group .custom-select) {
-    flex-shrink: 0;
-  }
-
-  :global(.transfer-group .settings-select) {
-    width: 140px;
-    height: 34px;
-  }
-
-  .transfer-limit-warning {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 12px;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--warning-color) 35%, transparent);
-    border-radius: var(--settings-feedback-radius, 7px);
-    color: color-mix(in srgb, var(--warning-color) 75%, white);
-    background: color-mix(in srgb, var(--warning-color) 12%, var(--surface-bg));
-    font-size: var(--settings-feedback-size, var(--font-size-secondary, 11px));
-  }
-
-  .transfer-limit-warning button {
-    flex-shrink: 0;
-  }
-
-  .sync-last-info {
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  .setting-actions-row {
-    margin-top: 10px;
-  }
-
-  .export-options {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    margin-top: 12px;
-    padding-top: 11px;
-    border-top: 1px solid var(--border-subtle);
-  }
-
-  .export-option-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-
-  .export-option-row.export-date-row {
-    flex-wrap: nowrap;
-  }
-
-  .export-option-label {
-    flex: 0 0 auto;
-    min-width: 64px;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  .export-kind-checks {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-  }
-
-  .export-check {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .export-date-separator {
-    flex-shrink: 0;
-    color: var(--text-faint);
   }
 
   .keyboard-config-card {
