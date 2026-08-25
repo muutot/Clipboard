@@ -1,7 +1,7 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { getCurrentWindow, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
@@ -65,6 +65,7 @@
     persistSearchHistory as persistStoredSearchHistory,
     suggestionCandidate,
   } from "$lib/utils/search-history";
+  import { createWindowBoundsController } from "$lib/utils/window-bounds";
   import {
     applyGeneralSettingsToDocument,
     applyFontSizesToDocument,
@@ -99,7 +100,6 @@
   const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 150, overscan: 5 };
   const VIRTUAL_SCROLL_THRESHOLD = 50;
   const DELETED_HISTORY_PAGE_SIZE = 100;
-  const MAIN_WINDOW_MIN_WIDTH = 710;
 
   type SearchOption = {
     value: string;
@@ -125,7 +125,7 @@
 
   /// Fans one patch set out to every copy (items, indexedItems, searchCache,
   /// detailItem) in a single pass over each list. THE funnel for item
-  /// mutations — direct per-copy mapping loops are how the searchCache drift
+  /// mutations 鈥?direct per-copy mapping loops are how the searchCache drift
   /// happened.
   function applyItemPatches(patches: ReadonlyMap<string, Partial<ClipboardItem>>) {
     if (patches.size === 0) return;
@@ -319,7 +319,7 @@
   });
 
   // Configured navigation shortcuts (conf/keyboard.json), reusing the same
-  // action keys the settings panel exposes under the "鍒囨崲" group. An absent
+  // action keys the settings panel exposes under the "閸掑洦宕? group. An absent
   // action falls back to its default; an action explicitly configured to empty
   // disables that navigation binding.
   const navigationBindings = $derived.by(() => {
@@ -397,7 +397,7 @@
     const dateRangeFromNl = !dateRange ? parseDateQuery(normalizedQuery) : null;
     const effectiveDateRange = dateRange ?? dateRangeFromNl;
     // A natural-language date token is a filter, not content that must occur
-    // in the record text (e.g. "鏄ㄥぉ" should not be required in the title).
+    // in the record text (e.g. "閺勩劌銇? should not be required in the title).
     const keywords = dateRangeFromNl
       ? []
       : normalizedQuery.toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -533,7 +533,7 @@
     const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
     // Only the selected card's layout differs in split mode, so the detail
     // selection participates in THIS card's signature instead of the global
-    // prefix — opening/closing the detail panel must not invalidate every
+    // prefix 鈥?opening/closing the detail panel must not invalidate every
     // measured height and cause a list-wide layout jitter.
     const detailSelected =
       detailDisplayMode === "split" && detailItem?.id === item.id ? "detail" : "";
@@ -809,142 +809,15 @@
     });
 
     const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
-    let restoreAttempted = false;
     let previousRememberWindowPosition = false;
-    let boundsTimer: number | undefined;
-    let boundsWriteInFlight: Promise<void> | undefined;
-    let pendingBounds: WindowPosition | undefined;
 
-    function readLegacyWindowPosition(): { x: number; y: number } | null {
-      try {
-        const raw = localStorage.getItem("windowPosition");
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
-        if (
-          typeof parsed.x !== "number" ||
-          !Number.isFinite(parsed.x) ||
-          typeof parsed.y !== "number" ||
-          !Number.isFinite(parsed.y)
-        ) {
-          return null;
-        }
-        return { x: Math.round(parsed.x), y: Math.round(parsed.y) };
-      } catch {
-        return null;
-      }
-    }
-
-    async function captureWindowBounds(): Promise<WindowPosition> {
-      if (!appWindow) throw new Error("window bounds are only available in Tauri");
-      const [position, size] = await Promise.all([
-        appWindow.outerPosition(),
-        appWindow.outerSize(),
-      ]);
-      return {
-        x: position.x,
-        y: position.y,
-        width: Math.max(size.width, MAIN_WINDOW_MIN_WIDTH),
-        height: size.height,
-      };
-    }
-
-    function drainWindowBoundsWrites(): Promise<void> {
-      if (!appWindow) return Promise.resolve();
-      if (boundsWriteInFlight) return boundsWriteInFlight;
-
-      boundsWriteInFlight = (async () => {
-        while (pendingBounds) {
-          if (!$generalSettings.rememberWindowPosition) {
-            pendingBounds = undefined;
-            return;
-          }
-          const bounds = pendingBounds;
-          pendingBounds = undefined;
-          try {
-            await saveWindowPosition(bounds);
-          } catch (error) {
-            pendingBounds = bounds;
-            throw error;
-          }
-        }
-      })().finally(() => {
-        boundsWriteInFlight = undefined;
-      });
-      return boundsWriteInFlight;
-    }
-
-    function scheduleWindowBoundsSave() {
-      if (!appWindow || !$generalSettings.rememberWindowPosition) return;
-      if (boundsTimer !== undefined) window.clearTimeout(boundsTimer);
-      boundsTimer = window.setTimeout(() => {
-        boundsTimer = undefined;
-        void captureWindowBounds()
-          .then((bounds) => {
-            if (!$generalSettings.rememberWindowPosition) return;
-            pendingBounds = bounds;
-            return drainWindowBoundsWrites();
-          })
-          .catch(() => {});
-      }, 50);
-    }
-
-    async function flushWindowBounds() {
-      if (!appWindow || !$generalSettings.rememberWindowPosition) return;
-      if (boundsTimer !== undefined) {
-        window.clearTimeout(boundsTimer);
-        boundsTimer = undefined;
-        try {
-          pendingBounds = await captureWindowBounds();
-        } catch {
-          return;
-        }
-      }
-      await drainWindowBoundsWrites().catch(() => {});
-    }
-
-    async function restoreSavedWindowBounds() {
-      if (!appWindow || !$generalSettings.rememberWindowPosition || restoreAttempted) return;
-      restoreAttempted = true;
-      try {
-        const saved = await restoreWindowPosition();
-        if (!$generalSettings.rememberWindowPosition) return;
-        if (saved && saved.width > 0 && saved.height > 0) {
-          const width = Math.max(saved.width, MAIN_WINDOW_MIN_WIDTH);
-          await appWindow.setSize(new PhysicalSize(width, saved.height));
-          await appWindow.setPosition(new PhysicalPosition(saved.x, saved.y));
-          if (width !== saved.width) {
-            await saveWindowPosition({ ...saved, width });
-          }
-          try {
-            localStorage.removeItem("windowPosition");
-          } catch {}
-          return;
-        }
-
-        // Migrate the old x/y-only browser storage once the backend has no
-        // bounds yet. The current native size supplies the missing dimensions.
-        const legacy = readLegacyWindowPosition();
-        if (!legacy) return;
-        const size = await appWindow.outerSize();
-        const migrated: WindowPosition = {
-          x: legacy.x,
-          y: legacy.y,
-          width: Math.max(size.width, MAIN_WINDOW_MIN_WIDTH),
-          height: size.height,
-        };
-        if (!$generalSettings.rememberWindowPosition) return;
-        await saveWindowPosition(migrated);
-        if (!$generalSettings.rememberWindowPosition) return;
-        await appWindow.setPosition(new PhysicalPosition(migrated.x, migrated.y));
-        try {
-          localStorage.removeItem("windowPosition");
-        } catch {}
-      } catch {
-        // Keep the legacy key if restoring or migrating failed; retry on the
-        // next transition to rememberWindowPosition=true.
-        restoreAttempted = false;
-      }
-    }
+    const windowBounds = createWindowBoundsController({
+      appWindow,
+      isRemembered: () => $generalSettings.rememberWindowPosition,
+      savePosition: saveWindowPosition,
+      restorePosition: restoreWindowPosition,
+      storage: typeof window !== "undefined" ? window.localStorage : null,
+    });
 
     function applySettings(s: typeof $generalSettings) {
       applyGeneralSettingsToDocument(s);
@@ -952,9 +825,9 @@
         appWindow.setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
         appWindow.setDecorations(s.useSystemTitleBar).catch(() => {});
         if (!s.rememberWindowPosition) {
-          restoreAttempted = false;
+          windowBounds.resetRestoreAttempt();
         } else if (!previousRememberWindowPosition) {
-          void restoreSavedWindowBounds();
+          void windowBounds.restore();
         }
       }
       previousRememberWindowPosition = s.rememberWindowPosition;
@@ -985,7 +858,7 @@
       const { renamed, deleted } = event.payload;
       if (!renamed && !deleted) return;
       // Compute per-entry patches across every copy's members, then fan them
-      // out through the single funnel — including searchCache, which a
+      // out through the single funnel 鈥?including searchCache, which a
       // hand-rolled loop once missed.
       const transform = (entry: ClipboardItem) =>
         renamed ? rewriteTags(entry, renamed.old, renamed.new) : removeTag(entry, deleted!);
@@ -1025,7 +898,7 @@
         .catch(() => {});
       appWindow
         .onMoved(() => {
-          scheduleWindowBoundsSave();
+          windowBounds.scheduleSave();
         })
         .then((fn) => {
           if (listenersDisposed) fn();
@@ -1034,7 +907,7 @@
         .catch(() => {});
       appWindow
         .onResized(() => {
-          scheduleWindowBoundsSave();
+          windowBounds.scheduleSave();
         })
         .then((fn) => {
           if (listenersDisposed) fn();
@@ -1059,7 +932,7 @@
       if (scrollRaf) cancelAnimationFrame(scrollRaf);
       if (searchBlurTimer !== undefined) window.clearTimeout(searchBlurTimer);
       pendingHeights.clear();
-      void flushWindowBounds();
+      void windowBounds.flush();
     };
   });
 
@@ -2564,13 +2437,13 @@
     }
 
     selectedIds = new Set();
-    // Don't preventDefault —let the event continue so a single Esc
+    // Don't preventDefault 鈥攍et the event continue so a single Esc
     // can clear bulk selection, close detail panel, or hide the window.
   }
 
   let tagAddSignal = $state(0);
 
-  // Item-action shortcuts (Ctrl/⌘+ letter) that should still operate on the
+  // Item-action shortcuts (Ctrl/鈱? letter) that should still operate on the
   // selected entry even when focus is in an editable target such as the search
   // box. Ctrl+A is deliberately excluded so the search box keeps its native
   // "select all text" behavior.
@@ -2581,7 +2454,7 @@
 
   // Native activatable controls fire their click action from the keydown
   // default behavior. When focus sits on one of them, Enter/Space must
-  // activate that control —not the list selection below. Note: history
+  // activate that control 鈥攏ot the list selection below. Note: history
   // cards are divs with role="option" and deliberately keep the hijacked
   // Enter/Space activation, so role="option" is intentionally absent here;
   // the search-suggestion options are real <button> elements and are covered.
@@ -2675,8 +2548,8 @@
 
     // Let the focused editable target (e.g. the search box) keep its own key
     // combinations (Ctrl+A to select text, Ctrl+Z/X/V, etc.). The item-action
-    // shortcuts (Ctrl/⌘+ C/D/F/E/T/S) are exempted so they still operate on
-    // the selected entry even when the search box is focused —otherwise every
+    // shortcuts (Ctrl/鈱? C/D/F/E/T/S) are exempted so they still operate on
+    // the selected entry even when the search box is focused 鈥攐therwise every
     // Ctrl+<letter> silently no-ops after a search or filter switch moves focus
     // into the search input.
     if (editableTarget && !isItemActionShortcut(event)) return;
@@ -3077,7 +2950,7 @@
           class="clear-button"
           type="button"
           aria-label={_t("app.clearSearch")}
-          onclick={clearSearchQuery}>×</button
+          onclick={clearSearchQuery}>脳</button
         >
       {/if}
     </div>
