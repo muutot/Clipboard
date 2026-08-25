@@ -62,6 +62,7 @@
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
+  import { captureBulkSnapshot, planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
   import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
@@ -2039,17 +2040,19 @@
       .map((item) => item.id);
     if (ids.length === 0) return;
 
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSelectedIds = new Set(selectedIds);
+    const previousItems = captureBulkSnapshot({
+      items,
+      indexedItems,
+      selectedIds,
+      detailItem,
+    });
+    const idSet = new Set(ids);
     for (const id of ids) addSuppressedId(id);
-    items = items.map((item) => (ids.includes(item.id) ? { ...item, deleted: false } : item));
+    items = setDeletedFlags(items, idSet, false);
     if (indexedItems) {
-      indexedItems = indexedItems.map((item) =>
-        ids.includes(item.id) ? { ...item, deleted: false } : item,
-      );
+      indexedItems = setDeletedFlags(indexedItems, idSet, false);
     }
-    selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
+    selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchRestore(ids)
       .then((restored) => {
@@ -2061,9 +2064,9 @@
       .catch((error) => {
         console.error("Bulk restore failed", error);
         for (const id of ids) deletedHistorySuppressedIds.delete(id);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
-        selectedIds = previousSelectedIds;
+        items = previousItems.items;
+        indexedItems = previousItems.indexedItems;
+        selectedIds = previousItems.selectedIds;
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -2075,13 +2078,11 @@
       .map((item) => item.id);
     if (ids.length === 0) return;
 
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSelectedIds = new Set(selectedIds);
-    const previousDetailItem = detailItem;
+    const previous = captureBulkSnapshot({ items, indexedItems, selectedIds, detailItem });
+    const idSet = new Set(ids);
     for (const id of ids) addSuppressedId(id);
-    removeItems(new Set(ids));
-    selectedIds = new Set([...selectedIds].filter((id) => !ids.includes(id)));
+    removeItems(idSet);
+    selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchPermanentDelete(ids)
       .then((removed) => {
@@ -2092,10 +2093,10 @@
       .catch((error) => {
         console.error("Bulk permanent delete failed", error);
         for (const id of ids) deletedHistorySuppressedIds.delete(id);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
-        selectedIds = previousSelectedIds;
-        detailItem = previousDetailItem;
+        items = previous.items;
+        indexedItems = previous.indexedItems;
+        selectedIds = previous.selectedIds;
+        detailItem = previous.detailItem;
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -2106,37 +2107,28 @@
     if (selectedItems.length === 0) return;
 
     const useRecycleBin = $generalSettings.useRecycleBin;
-    const softIds: string[] = [];
-    const permanentIds: string[] = [];
-    const hardIds: string[] = [];
-    for (const item of selectedItems) {
-      if (item.deleted) {
-        permanentIds.push(item.id);
-      } else if (!item.favorite) {
-        (useRecycleBin ? softIds : hardIds).push(item.id);
-      }
-    }
+    const { softIds, permanentIds, hardIds } = planBulkDelete(selectedItems, useRecycleBin);
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSelectedIds = new Set(selectedIds);
-    const previousDetailItem = detailItem;
+    const previous = captureBulkSnapshot({ items, indexedItems, selectedIds, detailItem });
+    const softSet = new Set(softIds);
 
     for (const id of softIds) deletedHistorySuppressedIds.delete(id);
     for (const id of permanentIds) addSuppressedId(id);
 
+    const hardSet = new Set(hardIds);
+    const permanentSet = new Set(permanentIds);
     items = items
-      .filter((item) => !permanentIds.includes(item.id) && !hardIds.includes(item.id))
-      .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
+      .filter((item) => !permanentSet.has(item.id) && !hardSet.has(item.id))
+      .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
     if (indexedItems) {
       indexedItems = indexedItems
-        .filter((item) => !permanentIds.includes(item.id) && !hardIds.includes(item.id))
-        .map((item) => (softIds.includes(item.id) ? { ...item, deleted: true } : item));
+        .filter((item) => !permanentSet.has(item.id) && !hardSet.has(item.id))
+        .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
     }
     selectedIds = new Set();
-    if (detailItem && (permanentIds.includes(detailItem.id) || hardIds.includes(detailItem.id))) {
+    if (detailItem && (permanentSet.has(detailItem.id) || hardSet.has(detailItem.id))) {
       detailItem = null;
     }
 
