@@ -362,8 +362,9 @@ pub fn run() {
             } else if ocr_engine_name == "tesseract" && TesseractOcrEngine::is_available() {
                 Arc::new(TesseractOcrEngine::with_languages(config.tesseract_languages().to_string()))
             } else if TesseractOcrEngine::is_available() {
-                crate::log_event!("[ocr] falling back to Tesseract");
-                Arc::new(TesseractOcrEngine::with_languages("chi_sim"))
+                let fallback_languages = config.tesseract_languages().to_string();
+                crate::log_event!("[ocr] falling back to Tesseract ({fallback_languages})");
+                Arc::new(TesseractOcrEngine::with_languages(fallback_languages))
             } else {
                 crate::log_event!("[ocr] no OCR engine available");
                 Arc::new(NoopOcrEngine)
