@@ -58,7 +58,7 @@ When changing query, filter, sort, or mutation behavior, audit both first-page a
 
 ## Frontend spare-result cache
 
-`updateSearchCache(results)` stores first and subsequent-page search results that are not already in the loaded active-history `items` list.
+The pure maintenance logic lives in `src/lib/utils/search-cache.ts` (`mergeSearchCachePage`, `promoteFromCache`, `trimLoadedItems`) with Vitest coverage in `search-cache.test.ts`; the route's `updateSearchCache(results)` stores first and subsequent-page search results that are not already in the loaded active-history `items` list.
 
 - Capacity is `searchCacheSize` (normalized 200–2000; default 500).
 - `searchCacheAccessOrder` records insertion order.

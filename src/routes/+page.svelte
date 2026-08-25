@@ -53,6 +53,11 @@
   import { estimateCardHeight } from "$lib/utils/card-height";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { filterHistoryItems, resolveDateRange } from "$lib/utils/history-filter";
+  import {
+    mergeSearchCachePage,
+    promoteFromCache as promoteCachedEntries,
+    trimLoadedItems as trimLoadedHistory,
+  } from "$lib/utils/search-cache";
   import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
@@ -935,65 +940,34 @@
   }
 
   function updateSearchCache(results: ClipboardItem[]) {
-    const loadedIds = new Set(items.map((i) => i.id));
-    const policy = $generalSettings.searchCacheEviction;
-    const cacheById = new Map(searchCache.map((item) => [item.id, item]));
-    let accessOrder = searchCacheAccessOrder.filter((id) => cacheById.has(id));
-
-    for (const item of results) {
-      if (loadedIds.has(item.id)) {
-        cacheById.delete(item.id);
-        accessOrder = accessOrder.filter((id) => id !== item.id);
-        continue;
-      }
-
-      const cached = cacheById.has(item.id);
-      cacheById.set(item.id, item);
-      if (!cached) {
-        accessOrder.push(item.id);
-      } else if (policy === "lru") {
-        accessOrder = accessOrder.filter((id) => id !== item.id);
-        accessOrder.push(item.id);
-      }
-    }
-
-    const max = $generalSettings.searchCacheSize;
-    while (accessOrder.length > max) {
-      const id = accessOrder.shift();
-      if (id) cacheById.delete(id);
-    }
-
-    searchCacheAccessOrder = accessOrder;
-    searchCache = accessOrder.flatMap((id) => {
-      const item = cacheById.get(id);
-      return item ? [item] : [];
-    });
+    const next = mergeSearchCachePage(
+      { cache: searchCache, accessOrder: searchCacheAccessOrder },
+      {
+        results,
+        loadedIds: new Set(items.map((i) => i.id)),
+        policy: $generalSettings.searchCacheEviction,
+        max: $generalSettings.searchCacheSize,
+      },
+    );
+    searchCacheAccessOrder = next.accessOrder;
+    searchCache = next.cache;
   }
 
   function promoteFromCache(loadedIds: Set<string>) {
-    if (!loadedIds.size) return;
-    const promoted = new Set<string>();
-    for (const id of loadedIds) {
-      if (searchCache.some((c) => c.id === id)) promoted.add(id);
-    }
-    if (!promoted.size) return;
-    searchCache = searchCache.filter((c) => !promoted.has(c.id));
-    searchCacheAccessOrder = searchCacheAccessOrder.filter((id) => !promoted.has(id));
+    const next = promoteCachedEntries(
+      { cache: searchCache, accessOrder: searchCacheAccessOrder },
+      loadedIds,
+    );
+    searchCache = next.cache;
+    searchCacheAccessOrder = next.accessOrder;
   }
 
   function trimLoadedItems() {
-    const limit = $generalSettings.pageSizeLimit;
-    const tolerance = $generalSettings.loadTolerance;
-    const max = limit + tolerance;
-    if (items.length <= max) return;
-
-    const evictable = items
-      .filter((i) => !i.deleted && !i.favorite)
-      .sort((a, b) => a.createdAt - b.createdAt);
-
-    const toEvict = evictable.slice(0, tolerance);
-    const evictIds = new Set(toEvict.map((i) => i.id));
-    items = items.filter((i) => !evictIds.has(i.id));
+    items = trimLoadedHistory(
+      items,
+      $generalSettings.pageSizeLimit,
+      $generalSettings.loadTolerance,
+    );
   }
 
   async function loadActiveHistoryPage(): Promise<void> {
