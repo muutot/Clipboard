@@ -420,26 +420,3 @@
     }}
   />
 {/if}
-
-<style>
-  /* The shell's scoped base rules do not reach into this lazy panel; the
-     bespoke sync-now summary is the only remaining local layout here. */
-  .sync-now-info {
-    flex: 1;
-  }
-
-  .sync-now-desc {
-    margin: 2px 0 0;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  .sync-last-info {
-    color: var(--text-muted);
-    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
-  }
-
-  .setting-actions-row {
-    margin-top: 10px;
-  }
-</style>

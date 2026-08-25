@@ -58,11 +58,3 @@
     {#if children}{@render children()}{/if}
   </section>
 {/if}
-
-<style>
-  .setting-card-custom-column {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-</style>

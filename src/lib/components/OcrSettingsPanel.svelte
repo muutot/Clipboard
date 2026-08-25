@@ -323,11 +323,11 @@
         <p>{_t("storage.ocrDetectionDesc")}</p>
       </div>
     </div>
-    <div class="ocr-parameter-grid">
-      <div class="ocr-parameter">
-        <label class="ocr-parameter-label" for="det-score">
+    <div class="parameter-grid">
+      <div class="parameter-item">
+        <label class="parameter-label" for="det-score">
           <span>{_t("storage.ocrScoreThreshold")}</span>
-          <span class="ocr-parameter-value">{detScoreThreshold.toFixed(2)}</span>
+          <span class="parameter-value">{detScoreThreshold.toFixed(2)}</span>
         </label>
         <input
           id="det-score"
@@ -340,14 +340,14 @@
           bind:this={detScoreSlider}
           onchange={() => saveDetConfig()}
         />
-        <div class="ocr-parameter-scale">
+        <div class="parameter-scale">
           <span>{_t("storage.ocrLow")}</span><span>{_t("storage.ocrHigh")}</span>
         </div>
       </div>
-      <div class="ocr-parameter">
-        <label class="ocr-parameter-label" for="det-box">
+      <div class="parameter-item">
+        <label class="parameter-label" for="det-box">
           <span>{_t("storage.ocrBoxThreshold")}</span>
-          <span class="ocr-parameter-value">{detBoxThreshold.toFixed(2)}</span>
+          <span class="parameter-value">{detBoxThreshold.toFixed(2)}</span>
         </label>
         <input
           id="det-box"
@@ -360,14 +360,14 @@
           bind:this={detBoxSlider}
           onchange={() => saveDetConfig()}
         />
-        <div class="ocr-parameter-scale">
+        <div class="parameter-scale">
           <span>{_t("storage.ocrLow")}</span><span>{_t("storage.ocrHigh")}</span>
         </div>
       </div>
-      <div class="ocr-parameter">
-        <label class="ocr-parameter-label" for="det-unclip">
+      <div class="parameter-item">
+        <label class="parameter-label" for="det-unclip">
           <span>{_t("storage.ocrUnclip")}</span>
-          <span class="ocr-parameter-value">{detUnclipRatio.toFixed(1)}</span>
+          <span class="parameter-value">{detUnclipRatio.toFixed(1)}</span>
         </label>
         <input
           id="det-unclip"
@@ -380,7 +380,7 @@
           bind:this={detUnclipSlider}
           onchange={() => saveDetConfig()}
         />
-        <div class="ocr-parameter-scale">
+        <div class="parameter-scale">
           <span>{_t("storage.ocrSmall")}</span><span>{_t("storage.ocrLarge")}</span>
         </div>
       </div>
@@ -395,7 +395,7 @@
         <p>{_t("storage.ocrTaskStatusDesc")}</p>
       </div>
     </div>
-    <div class="ocr-stat-grid">
+    <div class="stats-grid">
       <div class="stat-item">
         <span class="stat-value">{ocrTotal}</span><span class="stat-label"
           >{_t("statistics.ocrTotal")}</span
@@ -417,10 +417,10 @@
         >
       </div>
     </div>
-    <div class:available={ocrEngineAvailable} class="ocr-engine-status">
-      <span class="ocr-engine-status-label">{_t("statistics.ocrEngine")}</span>
+    <div class:available={ocrEngineAvailable} class="status-pill">
+      <span class="status-pill-label">{_t("statistics.ocrEngine")}</span>
       <strong>{ocrEngine === "ppocr" ? "PP-OCRv6" : "Tesseract"}</strong>
-      <span class="ocr-engine-status-state">
+      <span class="status-pill-state">
         {ocrEngineAvailable
           ? _t("statistics.ocrEngineAvailable")
           : ocrHasEngine
@@ -432,115 +432,3 @@
 
   <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>
-
-<style>
-  :global(.ocr-model-select) {
-    flex: 1;
-    max-width: 200px;
-  }
-
-  .ocr-parameter-grid {
-    display: grid;
-    gap: 12px;
-  }
-
-  .ocr-parameter-label {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin: 0;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size);
-  }
-
-  .ocr-parameter-value {
-    flex-shrink: 0;
-    color: var(--text-secondary);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .ocr-parameter-scale {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    margin-top: 8px;
-    color: var(--text-faint);
-    font-size: var(--settings-note-size);
-  }
-
-  .transparency-slider {
-    box-sizing: border-box;
-    padding: 0;
-    border: 0;
-  }
-
-  .ocr-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .ocr-engine-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 9px 10px;
-    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
-    border-radius: var(--settings-card-radius);
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
-    font-size: var(--settings-description-size);
-  }
-
-  .ocr-engine-status.available {
-    border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
-    color: color-mix(in srgb, var(--success-color) 75%, white);
-    background: color-mix(in srgb, var(--success-color) 12%, var(--surface-bg));
-  }
-
-  .ocr-engine-status-label {
-    color: var(--text-muted);
-  }
-
-  .ocr-engine-status strong {
-    color: var(--text-primary);
-    font-size: var(--settings-control-size);
-    font-weight: 560;
-  }
-
-  .ocr-engine-status-state {
-    margin-left: auto;
-  }
-
-  .stat-item {
-    min-width: 0;
-    padding: 10px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius);
-    background: var(--input-bg);
-    text-align: center;
-  }
-
-  .stat-value {
-    display: block;
-    min-width: 0;
-    color: var(--text-primary);
-    font-size: 17px;
-    font-weight: 600;
-    margin-bottom: 4px;
-    overflow-wrap: anywhere;
-  }
-
-  .stat-label {
-    color: var(--text-muted);
-    font-size: var(--settings-description-size);
-  }
-
-  @media (max-width: 760px) {
-    .ocr-stat-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-</style>

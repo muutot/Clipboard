@@ -63,26 +63,3 @@
     />
   </section>
 {/if}
-
-<style>
-  .settings-text-input {
-    width: 100%;
-    margin-top: 12px;
-    padding: 7px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    outline: none;
-    transition: border-color 120ms ease;
-  }
-
-  .settings-text-input::placeholder {
-    color: var(--placeholder-color);
-  }
-
-  .settings-text-input:focus {
-    border-color: var(--text-faint);
-  }
-</style>
