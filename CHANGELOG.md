@@ -1,5 +1,215 @@
 # Changelog
 
+## 1.5.0 (2026-08-25)
+
+### ✨ Features
+
+- **privacy**: drop the redundant password-manager capture toggle layer (500aae38)
+- **settings**: give sensitive content filtering its own capture section (b0539ed2)
+- **ocr**: pin downloaded model digests trust-on-first-use instead of upstream hashes (9d35d4bd)
+- **logging**: route remaining backend diagnostics through the timestamped log_event channel (13c396fa)
+- **security**: restrict open_external_url to http(s) schemes (3c8abf25)
+- **security**: gate OCR downloads behind local-only mode and verify pinned SHA-256 with timeouts (40b52ade)
+- **security**: encrypt sync credentials at rest with DPAPI envelopes (5f8b300a)
+- **security**: remove unrestricted copy_file_to and confine icon deletion to the managed icons directory (a33b1fa0)
+- **clipboard**: sanitize webview-provided rename targets against path traversal and reserved device names (cfd80d0e)
+- **security**: replace global asset wildcard with scoped grants for the managed storage root (a3c66b06)
+- **api**: require bearer token, loopback Host header, and reject browser Origin on the local HTTP API (2e22c732)
+- **logging**: persist stderr diagnostics to a rotating log file in GUI builds (342bdb93)
+- **a11y**: expand context-menu submenus with keyboard (Enter/Space/ArrowRight) (b8116f96)
+- **a11y**: keep hidden card actions out of the Tab order until hover, selection, or focus (fbef1f4f)
+- **a11y**: trap focus in modal dialogs and restore focus on close (c5dfe87d)
+- **a11y**: make toolbar, filter dropdowns, and settings reachable by keyboard (c11a6241)
+
+### 🐛 Bug Fixes
+
+- **platform**: scope DPAPI FFI import and flag to the Windows module (5b43a0e3)
+- **ci**: derive the release tag from ref type so manual dispatch names releases correctly (3738a518)
+- **files**: match http(s) schemes case-insensitively in open_external_url (a341e4d4)
+- **config**: drop undecryptable DPAPI sync secrets with a clear log event (e1547247)
+- **search**: retry a failed index open before recreating the directory (59f5fe9f)
+- **logging**: truncate an oversized runtime log in place (1e1b88df)
+- **api**: cap concurrent connections and add response write timeout (54fc3437)
+- **a11y**: focus submenu on Enter/Space and drop invalid disabled selector (8c469ebc)
+- **frontend**: check font family before measurement cache hit (a017bc0d)
+- **viewer**: derive overlay-open state so OCR patches stop stealing focus (a1fbe554)
+- **frontend**: restore mojibake em-dash, cmd symbol, and clear-search button text (6a8c3162)
+- **frontend**: patch promoted re-copy entries into the spare search cache (d50c305c)
+- **frontend**: roll back bulk favorite per item through applyItemPatches (cb71fdae)
+- **update**: replace undefined --info-color with --selection-color (257c85a0)
+- **frontend**: scope detail-panel selection to the affected card's height signature (bc6bce14)
+- **ocr**: drop the post-download SHA-256 verification (99342b32)
+- **frontend**: clear toast timers on destroy, pin release links to https, and validate tag colors (9007f2ab)
+- **api**: handle each local API connection on its own thread so slow clients cannot stall others (9091875a)
+- **capture**: drop mixed clipboard snapshots when the sequence number changes mid-read (ce2b68ca)
+- **clipboard**: persist rename paths before moving the file and roll back on rename failure (58387627)
+- **storage**: stop background writers before directory migration and restore pause state on failure (48685f3a)
+- **commands**: run sync, export/import, and storage migration commands off the main thread (92bb973d)
+- **frontend**: start the desktop runtime with an empty list so demo data can never masquerade as history (e095f930)
+- **privacy**: single canonical password-manager list shared by config defaults, runtime filter, and docs (a618a3b3)
+- **ocr**: stop persisting fabricated block geometry from tesseract plain-text output (445f8b2c)
+- **search**: recreate the index on any open failure instead of relying on error-message matching (eb5de5e2)
+- **debug**: compile the legacy paste_debug.log trace out of release builds (a43e4312)
+- **capture**: log image-directory and OCR-enqueue failures instead of swallowing them (0327d034)
+- **search**: tolerate DST-ambiguous or skipped local midnight in relative date ranges (223af0eb)
+- **privacy**: fail closed on poisoned sensitive-pattern lock instead of allowing capture (68c08b0c)
+- **privacy**: warn when a configured sensitive pattern fails to compile instead of dropping it silently (7fc09100)
+- **config**: quarantine unparsable conf.json and start with defaults instead of refusing to launch (6b171105)
+- **search**: log initial index sync failure instead of dropping the result (54995f5f)
+- **frontend**: sync searchCache copy on item updates and tag saves (cd3fffbf)
+- **a11y**: let Enter/Space activate focused buttons instead of hijacking selection (f41db6ff)
+- **frontend**: dedupe OFFSET pages and rebuild cursor on re-copy promotion (06292de9)
+
+### 🚀 Performance
+
+- **frontend**: memoize visual-line measurements and invalidate font cache on change (ed2a348a)
+- **capture**: reuse self-trigger media hashes for storage instead of re-hashing each image (9f897f5a)
+- **export**: import PPaste backups in one transaction instead of one commit per row (6dc022e8)
+- **metrics**: sample working set via GetProcessMemoryInfo instead of spawning tasklist per snapshot (7ec57bc6)
+
+### ♻️ Refactoring
+
+- **frontend**: add removeItems funnel, purge spare cache on permanent delete (MAINT-02 phase 4) (a523df77)
+- **frontend**: route saveEdit and renameTitle through the applyItemPatches funnel (MAINT-02 phase 3) (4c5936eb)
+- **frontend**: migrate tags-changed fan-out to applyItemPatches, closing the searchCache gap (MAINT-02 phase 2) (8f378bfb)
+- **frontend**: funnel item mutations through applyItemPatches and make bulk favorite rollback symmetric (MAINT-02 phase 1) (8ede219b)
+- **frontend**: route OCR status updates through an onocrupdate callback instead of mutating props (c79579bb)
+- **frontend**: extract card height estimation into utils/card-height (+page.svelte phase 1) (d34ccdcc)
+- **ocr**: derive PpOcrEngine Send/Sync instead of blanket unsafe impls (4ea3e4c0)
+
+### 🎨 Styling
+
+- **ci**: format validate-release-version script (862a31ce)
+- **docs**: realign settings-panels table after capture section update (7d01c929)
+- **settings**: replace keyboard config bar inline styles with named classes (22e67595)
+- **settings**: use selection color for sort drag-over outline (27364ed3)
+- **settings**: token-ize icon-cache panel metrics and align dialog scrim; drop unused onclose (c185524b)
+- **settings**: unify ignored-apps privacy block with shared card/toggle primitives (fd0d104d)
+
+### 📝 Documentation
+
+- **skill**: record settings style-unification evidence in niche list and css reference (cb9ee694)
+- **capture**: document public capture and search-index APIs (b1d7a564)
+- **contrib**: unify Node.js requirement to >= 20.19 across README, CONTRIBUTING, and CI (527eadd6)
+- **readme**: align privacy promise with actual network surfaces and document sync module (f45ed1a7)
+
+### ✅ Testing
+
+- **frontend**: introduce Vitest with jsdom and cover virtual-scroll and focus-trap utilities (ac875779)
+
+### 🔧 Chores
+
+- **ci**: adopt sccache and npm ci in the release workflow (854ca713)
+- **ci**: validate release identity before the expensive release build (7f98ad9a)
+- **platform**: adopt as_chunks to satisfy the rustc 1.98 clippy lint (e918aa68)
+- **ci**: run CI for dependency and version manifest changes (4a620c1c)
+- **ci**: pin actions to commit SHAs, scope write permission to the build job, publish SHA-256 checksums (806ebaec)
+
+## 1.5.0 (2026-08-25)
+
+### ✨ Features
+
+- **privacy**: drop the redundant password-manager capture toggle layer (500aae38)
+- **settings**: give sensitive content filtering its own capture section (b0539ed2)
+- **ocr**: pin downloaded model digests trust-on-first-use instead of upstream hashes (9d35d4bd)
+- **logging**: route remaining backend diagnostics through the timestamped log_event channel (13c396fa)
+- **security**: restrict open_external_url to http(s) schemes (3c8abf25)
+- **security**: gate OCR downloads behind local-only mode and verify pinned SHA-256 with timeouts (40b52ade)
+- **security**: encrypt sync credentials at rest with DPAPI envelopes (5f8b300a)
+- **security**: remove unrestricted copy_file_to and confine icon deletion to the managed icons directory (a33b1fa0)
+- **clipboard**: sanitize webview-provided rename targets against path traversal and reserved device names (cfd80d0e)
+- **security**: replace global asset wildcard with scoped grants for the managed storage root (a3c66b06)
+- **api**: require bearer token, loopback Host header, and reject browser Origin on the local HTTP API (2e22c732)
+- **logging**: persist stderr diagnostics to a rotating log file in GUI builds (342bdb93)
+- **a11y**: expand context-menu submenus with keyboard (Enter/Space/ArrowRight) (b8116f96)
+- **a11y**: keep hidden card actions out of the Tab order until hover, selection, or focus (fbef1f4f)
+- **a11y**: trap focus in modal dialogs and restore focus on close (c5dfe87d)
+- **a11y**: make toolbar, filter dropdowns, and settings reachable by keyboard (c11a6241)
+
+### 🐛 Bug Fixes
+
+- **platform**: scope DPAPI FFI import and flag to the Windows module (5b43a0e3)
+- **ci**: derive the release tag from ref type so manual dispatch names releases correctly (3738a518)
+- **files**: match http(s) schemes case-insensitively in open_external_url (a341e4d4)
+- **config**: drop undecryptable DPAPI sync secrets with a clear log event (e1547247)
+- **search**: retry a failed index open before recreating the directory (59f5fe9f)
+- **logging**: truncate an oversized runtime log in place (1e1b88df)
+- **api**: cap concurrent connections and add response write timeout (54fc3437)
+- **a11y**: focus submenu on Enter/Space and drop invalid disabled selector (8c469ebc)
+- **frontend**: check font family before measurement cache hit (a017bc0d)
+- **viewer**: derive overlay-open state so OCR patches stop stealing focus (a1fbe554)
+- **frontend**: restore mojibake em-dash, cmd symbol, and clear-search button text (6a8c3162)
+- **frontend**: patch promoted re-copy entries into the spare search cache (d50c305c)
+- **frontend**: roll back bulk favorite per item through applyItemPatches (cb71fdae)
+- **update**: replace undefined --info-color with --selection-color (257c85a0)
+- **frontend**: scope detail-panel selection to the affected card's height signature (bc6bce14)
+- **ocr**: drop the post-download SHA-256 verification (99342b32)
+- **frontend**: clear toast timers on destroy, pin release links to https, and validate tag colors (9007f2ab)
+- **api**: handle each local API connection on its own thread so slow clients cannot stall others (9091875a)
+- **capture**: drop mixed clipboard snapshots when the sequence number changes mid-read (ce2b68ca)
+- **clipboard**: persist rename paths before moving the file and roll back on rename failure (58387627)
+- **storage**: stop background writers before directory migration and restore pause state on failure (48685f3a)
+- **commands**: run sync, export/import, and storage migration commands off the main thread (92bb973d)
+- **frontend**: start the desktop runtime with an empty list so demo data can never masquerade as history (e095f930)
+- **privacy**: single canonical password-manager list shared by config defaults, runtime filter, and docs (a618a3b3)
+- **ocr**: stop persisting fabricated block geometry from tesseract plain-text output (445f8b2c)
+- **search**: recreate the index on any open failure instead of relying on error-message matching (eb5de5e2)
+- **debug**: compile the legacy paste_debug.log trace out of release builds (a43e4312)
+- **capture**: log image-directory and OCR-enqueue failures instead of swallowing them (0327d034)
+- **search**: tolerate DST-ambiguous or skipped local midnight in relative date ranges (223af0eb)
+- **privacy**: fail closed on poisoned sensitive-pattern lock instead of allowing capture (68c08b0c)
+- **privacy**: warn when a configured sensitive pattern fails to compile instead of dropping it silently (7fc09100)
+- **config**: quarantine unparsable conf.json and start with defaults instead of refusing to launch (6b171105)
+- **search**: log initial index sync failure instead of dropping the result (54995f5f)
+- **frontend**: sync searchCache copy on item updates and tag saves (cd3fffbf)
+- **a11y**: let Enter/Space activate focused buttons instead of hijacking selection (f41db6ff)
+- **frontend**: dedupe OFFSET pages and rebuild cursor on re-copy promotion (06292de9)
+
+### 🚀 Performance
+
+- **frontend**: memoize visual-line measurements and invalidate font cache on change (ed2a348a)
+- **capture**: reuse self-trigger media hashes for storage instead of re-hashing each image (9f897f5a)
+- **export**: import PPaste backups in one transaction instead of one commit per row (6dc022e8)
+- **metrics**: sample working set via GetProcessMemoryInfo instead of spawning tasklist per snapshot (7ec57bc6)
+
+### ♻️ Refactoring
+
+- **frontend**: add removeItems funnel, purge spare cache on permanent delete (MAINT-02 phase 4) (a523df77)
+- **frontend**: route saveEdit and renameTitle through the applyItemPatches funnel (MAINT-02 phase 3) (4c5936eb)
+- **frontend**: migrate tags-changed fan-out to applyItemPatches, closing the searchCache gap (MAINT-02 phase 2) (8f378bfb)
+- **frontend**: funnel item mutations through applyItemPatches and make bulk favorite rollback symmetric (MAINT-02 phase 1) (8ede219b)
+- **frontend**: route OCR status updates through an onocrupdate callback instead of mutating props (c79579bb)
+- **frontend**: extract card height estimation into utils/card-height (+page.svelte phase 1) (d34ccdcc)
+- **ocr**: derive PpOcrEngine Send/Sync instead of blanket unsafe impls (4ea3e4c0)
+
+### 🎨 Styling
+
+- **ci**: format validate-release-version script (862a31ce)
+- **docs**: realign settings-panels table after capture section update (7d01c929)
+- **settings**: replace keyboard config bar inline styles with named classes (22e67595)
+- **settings**: use selection color for sort drag-over outline (27364ed3)
+- **settings**: token-ize icon-cache panel metrics and align dialog scrim; drop unused onclose (c185524b)
+- **settings**: unify ignored-apps privacy block with shared card/toggle primitives (fd0d104d)
+
+### 📝 Documentation
+
+- **skill**: record settings style-unification evidence in niche list and css reference (cb9ee694)
+- **capture**: document public capture and search-index APIs (b1d7a564)
+- **contrib**: unify Node.js requirement to >= 20.19 across README, CONTRIBUTING, and CI (527eadd6)
+- **readme**: align privacy promise with actual network surfaces and document sync module (f45ed1a7)
+
+### ✅ Testing
+
+- **frontend**: introduce Vitest with jsdom and cover virtual-scroll and focus-trap utilities (ac875779)
+
+### 🔧 Chores
+
+- **ci**: adopt sccache and npm ci in the release workflow (854ca713)
+- **ci**: validate release identity before the expensive release build (7f98ad9a)
+- **platform**: adopt as_chunks to satisfy the rustc 1.98 clippy lint (e918aa68)
+- **ci**: run CI for dependency and version manifest changes (4a620c1c)
+- **ci**: pin actions to commit SHAs, scope write permission to the build job, publish SHA-256 checksums (806ebaec)
+
 ## 1.4.0 (2026-08-15)
 
 ### ✨ Features
