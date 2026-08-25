@@ -300,7 +300,7 @@
           ? _t("storage.syncEncryptionStored")
           : _t("storage.syncEncryptionPlaceholder")}
         onblur={saveSyncConfig}
-        style="flex:1;min-width:0"
+        class="sync-encrypt-input"
       />
     </section>
 
@@ -341,11 +341,9 @@
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
-        <div style="flex:1">
+        <div class="sync-now-info">
           <strong>{_t("storage.syncNow")}</strong>
-          <p
-            style="margin:2px 0 0;font-size:var(--settings-description-size,var(--font-size-secondary,11px));color:var(--text-muted)"
-          >
+          <p class="sync-now-desc">
             {_t("storage.syncPendingCount", {
               count: syncPendingEntries,
             })}{#if syncLastMs}
@@ -432,6 +430,59 @@
 {/if}
 
 <style>
+  /* The shell's scoped label/input base rules do not reach into this lazy
+     panel, so the S3 form re-declares them here (same values as the shell). */
+  .setting-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .setting-row label {
+    flex: 0 0 auto;
+    min-width: 110px;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--settings-description-size);
+  }
+
+  .setting-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius);
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font-size: var(--settings-control-size);
+    transition: border-color 120ms ease;
+  }
+
+  .setting-row input:focus {
+    border-color: var(--text-faint);
+  }
+
+  .setting-actions-row {
+    margin-top: 10px;
+  }
+
+  .sync-encrypt-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sync-now-info {
+    flex: 1;
+  }
+
+  .sync-now-desc {
+    margin: 2px 0 0;
+    color: var(--text-muted);
+    font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  }
+
   .sync-last-info {
     color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
