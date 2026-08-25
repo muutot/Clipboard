@@ -567,7 +567,33 @@ fn is_windows_reserved_device_name(stem: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_file_stem;
+    use super::{
+        apply_sort_rules, cmp_by_field, generated_clipboard_title, metadata_custom_title,
+        resolve_custom_title, sanitize_file_stem, set_custom_title_metadata,
+    };
+    use crate::commands::clipboard::types::{SearchSortDirection, SearchSortField, SearchSortRule};
+    use crate::domain::{ClipboardItem, ClipboardKind};
+
+    fn item(id: &str, title: &str) -> ClipboardItem {
+        ClipboardItem {
+            id: id.to_owned(),
+            kind: ClipboardKind::Text,
+            title: title.to_owned(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path: None,
+            preview_path: None,
+            content_hash: format!("hash-{id}"),
+            source_app: None,
+            icon_path: None,
+            size_bytes: 0,
+            created_at_ms: 0,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json: None,
+        }
+    }
 
     #[test]
     fn replaces_path_separators_and_windows_specials() {
@@ -604,6 +630,216 @@ mod tests {
     #[test]
     fn trims_trailing_dots_and_spaces() {
         assert_eq!(sanitize_file_stem("name. "), "name");
+    }
+
+    fn rule(field: SearchSortField, direction: SearchSortDirection) -> SearchSortRule {
+        SearchSortRule { field, direction }
+    }
+
+    #[test]
+    fn cmp_by_field_orders_descending_by_default_for_recency_fields() {
+        let mut older = item("a", "a");
+        older.created_at_ms = 100;
+        let mut newer = item("b", "b");
+        newer.created_at_ms = 200;
+
+        assert_eq!(
+            cmp_by_field(&newer, &older, SearchSortField::CreatedAt),
+            std::cmp::Ordering::Less
+        );
+
+        // LastUsedAt falls back to created_at_ms for never-used entries so a
+        // fresh copy still outranks used entries.
+        newer.last_used_at_ms = Some(50);
+        older.last_used_at_ms = None;
+        older.created_at_ms = 300;
+        assert_eq!(
+            cmp_by_field(&older, &newer, SearchSortField::LastUsedAt),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_by_field(&newer, &older, SearchSortField::LastUsedAt),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn cmp_by_field_covers_title_size_kind_and_favorite() {
+        let mut small = item("s", "beta");
+        small.size_bytes = 10;
+        let mut big = item("b", "alpha");
+        big.size_bytes = 500;
+        big.is_favorite = true;
+        big.kind = ClipboardKind::Image;
+
+        assert_eq!(
+            cmp_by_field(&small, &big, SearchSortField::Title),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_by_field(&big, &small, SearchSortField::Size),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_by_field(&big, &small, SearchSortField::Kind),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_by_field(&big, &small, SearchSortField::Favorite),
+            std::cmp::Ordering::Less
+        );
+    }
+
+    #[test]
+    fn title_asc_sorts_lexicographically_after_the_direction_fix() {
+        let alpha = item("a", "Alpha");
+        let beta = item("b", "Beta");
+
+        // Asc must be A→Z now that every field shares a descending base.
+        let mut items = vec![beta.clone(), alpha.clone()];
+        apply_sort_rules(
+            &mut items,
+            &[rule(SearchSortField::Title, SearchSortDirection::Asc)],
+        );
+        assert_eq!(
+            items
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+
+        // Desc is Z→A.
+        let mut reversed = vec![alpha, beta];
+        apply_sort_rules(
+            &mut reversed,
+            &[rule(SearchSortField::Title, SearchSortDirection::Desc)],
+        );
+        assert_eq!(
+            reversed
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["b", "a"]
+        );
+    }
+
+    #[test]
+    fn apply_sort_rules_sorts_multi_key_with_direction() {
+        let mut first = item("1", "b");
+        first.created_at_ms = 100;
+        first.is_favorite = false;
+        let mut second = item("2", "a");
+        second.created_at_ms = 100;
+        second.is_favorite = true;
+        let mut third = item("3", "c");
+        third.created_at_ms = 300;
+
+        let mut items = vec![first, second, third];
+        apply_sort_rules(
+            &mut items,
+            &[rule(SearchSortField::CreatedAt, SearchSortDirection::Asc)],
+        );
+        // Ascending recency = oldest entries first.
+        assert_eq!(
+            items
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["1", "2", "3"]
+        );
+
+        // Favorite desc wins over the title asc tiebreak for items 1 and 2.
+        apply_sort_rules(
+            &mut items,
+            &[
+                rule(SearchSortField::Favorite, SearchSortDirection::Desc),
+                rule(SearchSortField::Title, SearchSortDirection::Asc),
+            ],
+        );
+        assert_eq!(
+            items
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["2", "1", "3"]
+        );
+    }
+
+    #[test]
+    fn apply_sort_rules_keeps_order_without_rules() {
+        let mut items = vec![item("x", "x"), item("a", "a")];
+        apply_sort_rules(&mut items, &[]);
+        assert_eq!(items[0].id, "x");
+    }
+
+    #[test]
+    fn generated_clipboard_title_truncates_by_chars_not_bytes() {
+        let ascii = "k".repeat(500);
+        assert_eq!(generated_clipboard_title(&ascii).len(), 200);
+
+        // 300 CJK characters (900 bytes): byte slicing would panic or split a
+        // code point; char-based truncation yields exactly 200 chars.
+        let cjk: String = "剪".repeat(300);
+        let title = generated_clipboard_title(&cjk);
+        assert_eq!(title.chars().count(), 200);
+    }
+
+    #[test]
+    fn metadata_custom_title_reads_only_boolean_flags() {
+        assert_eq!(metadata_custom_title(None), None);
+        assert_eq!(metadata_custom_title(Some("not-json")), None);
+        assert_eq!(
+            metadata_custom_title(Some(r#"{"customTitle":true}"#)),
+            Some(true)
+        );
+        assert_eq!(
+            metadata_custom_title(Some(r#"{"customTitle":false}"#)),
+            Some(false)
+        );
+        // Non-boolean values must not be coerced into a decision.
+        assert_eq!(
+            metadata_custom_title(Some(r#"{"customTitle":"yes"}"#)),
+            None
+        );
+    }
+
+    #[test]
+    fn resolve_custom_title_prefers_metadata_then_compares_titles() {
+        assert!(resolve_custom_title(
+            "My title",
+            "body",
+            Some(r#"{"customTitle":true}"#)
+        ));
+        assert!(!resolve_custom_title(
+            "My title",
+            "body",
+            Some(r#"{"customTitle":false}"#)
+        ));
+
+        // Without metadata the generated title decides.
+        let body = "hello";
+        assert!(!resolve_custom_title(body, body, None));
+        assert!(resolve_custom_title("edited", body, None));
+    }
+
+    #[test]
+    fn set_custom_title_metadata_preserves_existing_fields() {
+        let updated = set_custom_title_metadata(Some(r#"{"tags":["work"],"n":1}"#), true).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&updated).unwrap();
+        assert_eq!(value["customTitle"], serde_json::Value::Bool(true));
+        assert_eq!(value["tags"], serde_json::json!(["work"]));
+        assert_eq!(value["n"], serde_json::json!(1));
+
+        // A non-object payload is replaced rather than corrupted.
+        let replaced = set_custom_title_metadata(Some("[1,2]"), false).unwrap();
+        let replaced_value: serde_json::Value = serde_json::from_str(&replaced).unwrap();
+        assert_eq!(
+            replaced_value["customTitle"],
+            serde_json::Value::Bool(false)
+        );
+
+        assert!(set_custom_title_metadata(None, true).is_ok());
     }
 }
 
@@ -658,6 +894,10 @@ pub fn cmp_by_field(
     b: &ClipboardItem,
     field: SearchSortField,
 ) -> std::cmp::Ordering {
+    // Every field uses a descending base comparison so `apply_sort_rules`
+    // can treat Asc uniformly as "reverse of the natural desc order". The
+    // previous mixed convention (Title/Kind ascending bases) made a user's
+    // "title A→Z" (Asc) selection sort Z→A.
     match field {
         SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
         // Items never used from history have `last_used_at_ms = NULL`. Fall back
@@ -667,9 +907,9 @@ pub fn cmp_by_field(
             .last_used_at_ms
             .unwrap_or(b.created_at_ms)
             .cmp(&a.last_used_at_ms.unwrap_or(a.created_at_ms)),
-        SearchSortField::Title => a.title.cmp(&b.title),
+        SearchSortField::Title => b.title.cmp(&a.title),
         SearchSortField::Size => b.size_bytes.cmp(&a.size_bytes),
-        SearchSortField::Kind => a.kind.cmp(&b.kind),
+        SearchSortField::Kind => b.kind.cmp(&a.kind),
         SearchSortField::Favorite => b.is_favorite.cmp(&a.is_favorite),
     }
 }
