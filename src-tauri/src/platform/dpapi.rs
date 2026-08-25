@@ -9,14 +9,13 @@
 //! Non-Windows platforms intentionally return `None`: callers then store the
 //! value as before. This is a no-regression design 鈥?encryption is additive.
 
-use std::ffi::c_void;
-
 const ENVELOPE_PREFIX: &str = "dpapi1:";
-const CRYPTPROTECT_UI_FORBIDDEN: u32 = 0x1;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use super::*;
+    use std::ffi::c_void;
+
+    const CRYPTPROTECT_UI_FORBIDDEN: u32 = 0x1;
 
     #[repr(C)]
     pub(super) struct DataBlob {
