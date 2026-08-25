@@ -46,12 +46,13 @@ impl UpdateSource {
     }
 
     fn tag_api_url(self, tag: &str) -> String {
+        let encoded = urlencoding::encode(tag);
         match self {
             Self::Github => {
-                format!("https://api.github.com/repos/muutot/Clipboard/releases/tags/{tag}")
+                format!("https://api.github.com/repos/muutot/Clipboard/releases/tags/{encoded}")
             }
             Self::Gitcode => {
-                format!("https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/tags/{tag}")
+                format!("https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/tags/{encoded}")
             }
         }
     }
