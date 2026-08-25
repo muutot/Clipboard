@@ -79,6 +79,8 @@
     sections: readonly string[];
     load(): Promise<LazyPanelModule>;
     props(): Record<string, unknown>;
+    /** Shared module-cache key when one panel serves several sections. */
+    cacheKey?: string;
   }
 
   const lazyPanelModules = new Map<string, Promise<LazyPanelModule>>();
@@ -170,6 +172,7 @@
     },
     {
       sections: ["sync_cloud"],
+      cacheKey: "sync",
       load: () => import("$lib/components/SyncPanel.svelte"),
       props: () => ({
         advanced: false,
@@ -181,6 +184,7 @@
     },
     {
       sections: ["sync_advanced"],
+      cacheKey: "sync",
       load: () => import("$lib/components/SyncPanel.svelte"),
       props: () => ({
         advanced: true,
@@ -223,10 +227,11 @@
   function loadLazyPanelModule(section: string): Promise<LazyPanelModule> {
     const descriptor = LAZY_PANEL_DESCRIPTORS.find((entry) => entry.sections.includes(section));
     if (!descriptor) return Promise.reject(new Error(`no panel for ${section}`));
-    let promise = lazyPanelModules.get(section);
+    const cacheKey = descriptor.cacheKey ?? section;
+    let promise = lazyPanelModules.get(cacheKey);
     if (!promise) {
       promise = descriptor.load();
-      lazyPanelModules.set(section, promise);
+      lazyPanelModules.set(cacheKey, promise);
     }
     return promise;
   }
