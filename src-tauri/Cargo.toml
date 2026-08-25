@@ -47,7 +47,6 @@ tokio = { version = "1", features = ["fs", "io-util"] }
 ort = "=2.0.0-rc.12"
 hex = "0.4.3"
 zip = "2"
-walkdir = "2"
 chrono = "0.4"
 rand = "0.9"
 uuid = { version = "1", features = ["v4"] }

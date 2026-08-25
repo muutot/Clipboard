@@ -752,7 +752,6 @@ dependencies = [
  "tokio",
  "urlencoding",
  "uuid",
- "walkdir",
  "window-vibrancy",
  "zip",
 ]
