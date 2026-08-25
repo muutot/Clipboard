@@ -17,6 +17,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Tag push — use the pushed tag; manual dispatch — build the tag from the
+  # version input so `tauri-action` names the release/tag consistently.
+  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
+
 jobs:
   verify:
     name: Verify
@@ -163,11 +168,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ env.RELEASE_TAG }}
           releaseName: "v__VERSION__"
           releaseBody: ${{ steps.release_body.outputs.body }}
           releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
 
       # Publish SHA-256 checksums alongside the artifacts so downloads can be
@@ -178,6 +183,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           out="checksums-${{ matrix.platform }}.txt"
@@ -186,7 +192,7 @@ jobs:
             -name '*.app.tar.gz' -o -name '*.AppImage' -o \
             -name '*.deb' -o -name '*.rpm' \) \
             -not -path '*/deps/*' -not -path '*/build/*' -print0 \
-            | xargs -0 sha256sum > "$out"
+          | xargs -0 sha256sum > "$out"
           sort -k2 -u -o "$out" "$out"
           cat "$out"
-          gh release upload "${{ github.ref_name }}" "$out" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" "$out" --clobber --repo "$GITHUB_REPOSITORY"
