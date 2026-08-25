@@ -12,9 +12,8 @@ import { readFileSync } from "node:fs";
 const failures = [];
 const declared = {
   "package.json": JSON.parse(readFileSync("package.json", "utf8")).version,
-  "src-tauri/tauri.conf.json": JSON.parse(
-    readFileSync("src-tauri/tauri.conf.json", "utf8"),
-  ).version,
+  "src-tauri/tauri.conf.json": JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"))
+    .version,
   "src-tauri/Cargo.toml": readFileSync("src-tauri/Cargo.toml", "utf8").match(
     /^version\s*=\s*"([^"]+)"/m,
   )?.[1],
@@ -55,6 +54,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  `Release identity ok: v${expected} (${source ? `from ${source}` : "no source"})`,
-);
+console.log(`Release identity ok: v${expected} (${source ? `from ${source}` : "no source"})`);
