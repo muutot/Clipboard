@@ -66,6 +66,11 @@ jobs:
       - name: Install dependencies
         run: npm install --frozen-lockfile
 
+      - name: Validate release identity
+        run: node scripts/validate-release-version.mjs
+        env:
+          GITHUB_EVENT_INPUTS_VERSION: ${{ inputs.version }}
+
       - name: Verify
         run: npm run verify
 
