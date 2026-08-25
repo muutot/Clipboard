@@ -60,6 +60,7 @@ export interface ToggleEntryConfig {
   disabled?: () => boolean;
   onchange?: () => void;
   variant?: "row" | "card";
+  ariaLabel?: string;
 }
 
 export interface SelectEntryConfig {

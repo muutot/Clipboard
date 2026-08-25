@@ -1,8 +1,13 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import CustomSelect from "$lib/components/CustomSelect.svelte";
+  import SelectEntry from "$lib/components/settings-entries/SelectEntry.svelte";
+  import TextEntry from "$lib/components/settings-entries/TextEntry.svelte";
+  import ToggleEntry from "$lib/components/settings-entries/ToggleEntry.svelte";
+  import NumberEntry from "$lib/components/settings-entries/NumberEntry.svelte";
+  import SizeEntry from "$lib/components/settings-entries/SizeEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
   import {
     getSyncConfig,
     runSync,
@@ -10,7 +15,6 @@
     testSyncConnection,
     type SyncConfig,
   } from "$lib/services/storage";
-  import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -52,6 +56,14 @@
   $effect(() => {
     void loadSyncConfig();
   });
+
+  function updateSyncMaxImageFromDisplay() {
+    syncMaxImageBytes = fromDisplaySize(syncMaxImageDisplay, syncMaxImageUnit);
+  }
+
+  function updateSyncMaxFileFromDisplay() {
+    syncMaxFileBytes = fromDisplaySize(syncMaxFileDisplay, syncMaxFileUnit);
+  }
 
   async function loadSyncConfig() {
     if (!isTauriRuntime()) return;
@@ -172,43 +184,27 @@
       syncing = false;
     }
   }
-
-  function updateSyncMaxImageFromDisplay() {
-    syncMaxImageBytes = fromDisplaySize(syncMaxImageDisplay, syncMaxImageUnit);
-  }
-
-  function changeSyncMaxImageUnit(unit: "byte" | "KB" | "MB" | "GB") {
-    syncMaxImageUnit = unit;
-    syncMaxImageDisplay = toDisplaySize(syncMaxImageBytes, unit);
-  }
-
-  function updateSyncMaxFileFromDisplay() {
-    syncMaxFileBytes = fromDisplaySize(syncMaxFileDisplay, syncMaxFileUnit);
-  }
-
-  function changeSyncMaxFileUnit(unit: "byte" | "KB" | "MB" | "GB") {
-    syncMaxFileUnit = unit;
-    syncMaxFileDisplay = toDisplaySize(syncMaxFileBytes, unit);
-  }
 </script>
 
 {#if !advanced}
-  <section class="setting-card setting-card-row">
-    <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
-    <span class="setting-label">{_t("storage.syncProvider")}</span>
-    <CustomSelect
-      value={syncProvider}
-      ariaLabel={_t("storage.syncProvider")}
-      options={[
+  <SelectEntry
+    config={{
+      type: "select",
+      variant: "row",
+      icon: "cloud",
+      label: _t("storage.syncProvider"),
+      ariaLabel: _t("storage.syncProvider"),
+      options: [
         { value: "off", label: _t("storage.syncProviderOff") },
         { value: "s3", label: _t("storage.syncProviderS3") },
-      ]}
-      onchange={(v) => {
+      ],
+      get: () => syncProvider,
+      set: (v) => {
         syncProvider = v as "off" | "s3";
         void saveSyncConfig();
-      }}
-    />
-  </section>
+      },
+    }}
+  />
 
   {#if syncProvider === "s3"}
     <section class="setting-card">
@@ -216,66 +212,74 @@
         <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
         <div><strong>{_t("storage.syncS3Title")}</strong></div>
       </div>
-      <div class="setting-row">
-        <label for="sync-endpoint">{_t("storage.syncEndpoint")}</label>
-        <input
-          id="sync-endpoint"
-          type="url"
-          bind:value={syncEndpoint}
-          placeholder="http://127.0.0.1:9000"
-          onblur={saveSyncConfig}
-        />
-      </div>
-      <div class="setting-row">
-        <label for="sync-remote-path">{_t("storage.syncRemotePath")}</label>
-        <input
-          id="sync-remote-path"
-          type="text"
-          bind:value={syncRemotePath}
-          placeholder="clipboard-sync"
-          onblur={saveSyncConfig}
-        />
-      </div>
-      <div class="setting-row">
-        <label for="sync-s3-region">{_t("storage.syncS3Region")}</label>
-        <input
-          id="sync-s3-region"
-          type="text"
-          bind:value={syncS3Region}
-          placeholder="us-east-1"
-          onblur={saveSyncConfig}
-        />
-      </div>
-      <div class="setting-row">
-        <label for="sync-s3-bucket">{_t("storage.syncS3Bucket")}</label>
-        <input
-          id="sync-s3-bucket"
-          type="text"
-          bind:value={syncS3Bucket}
-          placeholder="clipboard"
-          onblur={saveSyncConfig}
-        />
-      </div>
-      <div class="setting-row">
-        <label for="sync-s3-access-key">{_t("storage.syncS3AccessKey")}</label>
-        <input
-          id="sync-s3-access-key"
-          type="text"
-          bind:value={syncS3AccessKey}
-          onblur={saveSyncConfig}
-        />
-      </div>
-      <div class="setting-row">
-        <label for="sync-s3-secret-key">{_t("storage.syncS3SecretKey")}</label>
-        <input
-          id="sync-s3-secret-key"
-          type="password"
-          bind:value={syncS3SecretKey}
-          placeholder={syncHasS3SecretKey ? _t("storage.syncSecretStored") : ""}
-          onblur={saveSyncConfig}
-        />
-      </div>
-      <div class="setting-row setting-actions-row">
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          label: _t("storage.syncEndpoint"),
+          inputType: "url",
+          placeholder: "http://127.0.0.1:9000",
+          get: () => syncEndpoint,
+          set: (v) => (syncEndpoint = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          label: _t("storage.syncRemotePath"),
+          placeholder: "clipboard-sync",
+          get: () => syncRemotePath,
+          set: (v) => (syncRemotePath = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          label: _t("storage.syncS3Region"),
+          placeholder: "us-east-1",
+          get: () => syncS3Region,
+          set: (v) => (syncS3Region = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          label: _t("storage.syncS3Bucket"),
+          placeholder: "clipboard",
+          get: () => syncS3Bucket,
+          set: (v) => (syncS3Bucket = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          label: _t("storage.syncS3AccessKey"),
+          get: () => syncS3AccessKey,
+          set: (v) => (syncS3AccessKey = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          label: _t("storage.syncS3SecretKey"),
+          inputType: "password",
+          placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
+          get: () => syncS3SecretKey,
+          set: (v) => (syncS3SecretKey = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <div class="setting-actions-row">
         <button
           type="button"
           class="settings-action-btn"
@@ -290,52 +294,50 @@
       </div>
     </section>
 
-    <section class="setting-card setting-card-row">
-      <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
-      <span class="setting-label">{_t("storage.syncEncryption")}</span>
-      <input
-        type="password"
-        bind:value={syncEncryptPassword}
-        placeholder={syncHasEncryptionPassword
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "lock",
+        label: _t("storage.syncEncryption"),
+        inputType: "password",
+        placeholder: syncHasEncryptionPassword
           ? _t("storage.syncEncryptionStored")
-          : _t("storage.syncEncryptionPlaceholder")}
-        onblur={saveSyncConfig}
-        class="sync-encrypt-input"
-      />
-    </section>
+          : _t("storage.syncEncryptionPlaceholder"),
+        get: () => syncEncryptPassword,
+        set: (v) => (syncEncryptPassword = v),
+        onblur: saveSyncConfig,
+      }}
+    />
 
-    <section class="setting-card setting-card-row">
-      <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-      <span class="setting-label">{_t("storage.syncAutoSync")}</span>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={syncAutoSync}
-        onclick={() => {
-          syncAutoSync = !syncAutoSync;
-          void saveSyncConfig();
-        }}
-        aria-checked={syncAutoSync}
-        aria-label={_t("storage.syncAutoSyncEnable")}
-        role="switch"
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </section>
+    <ToggleEntry
+      config={{
+        type: "toggle",
+        variant: "row",
+        icon: "settings",
+        label: _t("storage.syncAutoSync"),
+        ariaLabel: _t("storage.syncAutoSyncEnable"),
+        get: () => syncAutoSync,
+        set: (v) => (syncAutoSync = v),
+        onchange: () => void saveSyncConfig(),
+      }}
+    />
 
     {#if syncAutoSync}
-      <section class="setting-card setting-card-row">
-        <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
-        <span class="setting-label">{_t("storage.syncAutoInterval")}</span>
-        <input
-          type="number"
-          bind:value={syncAutoInterval}
-          min="10"
-          max="86400"
-          onblur={saveSyncConfig}
-        />
-        <span class="number-suffix">{_t("storage.syncSecondsUnit")}</span>
-      </section>
+      <NumberEntry
+        config={{
+          type: "number",
+          variant: "row",
+          icon: "clock",
+          label: _t("storage.syncAutoInterval"),
+          min: 10,
+          max: 86400,
+          suffix: _t("storage.syncSecondsUnit"),
+          get: () => syncAutoInterval,
+          set: (v) => (syncAutoInterval = v),
+          onblur: saveSyncConfig,
+        }}
+      />
     {/if}
 
     <section class="setting-card">
@@ -369,110 +371,59 @@
     </section>
   {/if}
 {:else}
-  <section class="setting-card setting-card-row">
-    <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-    <span class="setting-label">{_t("storage.syncSegmentMaxEntries")}</span>
-    <input
-      type="number"
-      bind:value={syncSegmentMaxEntries}
-      min="16"
-      max="10000"
-      onblur={saveSyncConfig}
-    />
-    <span class="number-suffix">{_t("storage.syncEntriesUnit")}</span>
-  </section>
+  <NumberEntry
+    config={{
+      type: "number",
+      variant: "row",
+      icon: "file",
+      label: _t("storage.syncSegmentMaxEntries"),
+      min: 16,
+      max: 10000,
+      suffix: _t("storage.syncEntriesUnit"),
+      get: () => syncSegmentMaxEntries,
+      set: (v) => (syncSegmentMaxEntries = v),
+      onblur: saveSyncConfig,
+    }}
+  />
 
-  <section class="setting-card setting-card-row">
-    <span class="setting-icon"><AppIcon name="image" size={17} /></span>
-    <span class="setting-label">{_t("storage.syncMaxImageBytes")}</span>
-    <input
-      type="number"
-      bind:value={syncMaxImageDisplay}
-      min="0"
-      oninput={updateSyncMaxImageFromDisplay}
-      onchange={saveSyncConfig}
-    />
-    <CustomSelect
-      className="unit-select"
-      value={syncMaxImageUnit}
-      options={[
-        { value: "byte", label: "B" },
-        { value: "KB", label: "KB" },
-        { value: "MB", label: "MB" },
-        { value: "GB", label: "GB" },
-      ]}
-      onchange={(v) => changeSyncMaxImageUnit(v as "byte" | "KB" | "MB" | "GB")}
-    />
-  </section>
+  <SizeEntry
+    config={{
+      type: "size",
+      icon: "image",
+      label: _t("storage.syncMaxImageBytes"),
+      min: 0,
+      get: () => syncMaxImageDisplay,
+      set: (v) => (syncMaxImageDisplay = v),
+      getUnit: () => syncMaxImageUnit,
+      setUnit: (u) => {
+        syncMaxImageUnit = u;
+        updateSyncMaxImageFromDisplay();
+      },
+      onchange: saveSyncConfig,
+    }}
+  />
 
-  <section class="setting-card setting-card-row">
-    <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-    <span class="setting-label">{_t("storage.syncMaxFileBytes")}</span>
-    <input
-      type="number"
-      bind:value={syncMaxFileDisplay}
-      min="0"
-      oninput={updateSyncMaxFileFromDisplay}
-      onchange={saveSyncConfig}
-    />
-    <CustomSelect
-      className="unit-select"
-      value={syncMaxFileUnit}
-      options={[
-        { value: "byte", label: "B" },
-        { value: "KB", label: "KB" },
-        { value: "MB", label: "MB" },
-        { value: "GB", label: "GB" },
-      ]}
-      onchange={(v) => changeSyncMaxFileUnit(v as "byte" | "KB" | "MB" | "GB")}
-    />
-  </section>
+  <SizeEntry
+    config={{
+      type: "size",
+      icon: "file",
+      label: _t("storage.syncMaxFileBytes"),
+      min: 0,
+      get: () => syncMaxFileDisplay,
+      set: (v) => (syncMaxFileDisplay = v),
+      getUnit: () => syncMaxFileUnit,
+      setUnit: (u) => {
+        syncMaxFileUnit = u;
+        updateSyncMaxFileFromDisplay();
+      },
+      onchange: saveSyncConfig,
+    }}
+  />
 {/if}
 
 <style>
-  /* The shell's scoped label/input base rules do not reach into this lazy
-     panel, so the S3 form re-declares them here (same values as the shell). */
-  .setting-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-  }
-
-  .setting-row label {
-    flex: 0 0 auto;
-    min-width: 110px;
-    margin: 0;
-    color: var(--text-muted);
-    font-size: var(--settings-description-size);
-  }
-
-  .setting-row input {
-    flex: 1;
-    min-width: 0;
-    padding: 7px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius);
-    outline: none;
-    color: var(--text-primary);
-    background: var(--input-bg);
-    font-size: var(--settings-control-size);
-    transition: border-color 120ms ease;
-  }
-
-  .setting-row input:focus {
-    border-color: var(--text-faint);
-  }
-
-  .setting-actions-row {
-    margin-top: 10px;
-  }
-
-  .sync-encrypt-input {
-    flex: 1;
-    min-width: 0;
-  }
-
+  /* The shell's scoped base rules do not reach into this lazy panel; the
+     bespoke sync-now summary is the only remaining local layout here. */
   .sync-now-info {
     flex: 1;
   }
@@ -486,5 +437,9 @@
   .sync-last-info {
     color: var(--text-muted);
     font-size: var(--settings-description-size, var(--font-size-secondary, 11px));
+  }
+
+  .setting-actions-row {
+    margin-top: 10px;
   }
 </style>
