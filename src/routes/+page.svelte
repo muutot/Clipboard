@@ -51,7 +51,8 @@
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
   import { estimateCardHeight } from "$lib/utils/card-height";
-  import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
+  import { parseDateQuery } from "$lib/utils/date-query";
+  import { filterHistoryItems, resolveDateRange } from "$lib/utils/history-filter";
   import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
@@ -345,28 +346,8 @@
   }
 
   // --- Date range resolution ---
-
-  function resolveDateRange(filter: string): { from: number; to: number } | null {
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1_000;
-
-    switch (filter) {
-      case "today":
-        return { from: startOfDay(now), to: endOfDay(now) };
-      case "yesterday":
-        return { from: startOfDay(now - dayMs), to: endOfDay(now - dayMs) };
-      case "week":
-        return { from: startOfWeek(now), to: endOfDay(now) };
-      case "month": {
-        const d = new Date(now);
-        d.setDate(1);
-        d.setHours(0, 0, 0, 0);
-        return { from: d.getTime(), to: endOfDay(now) };
-      }
-      default:
-        return null;
-    }
-  }
+  // resolveDateRange lives in $lib/utils/history-filter; the route only maps
+  // the dropdown id onto backend filter args below.
 
   function loadSearchHistory(): string[] {
     return loadStoredSearchHistory(typeof window !== "undefined" ? window.localStorage : null);
@@ -387,56 +368,18 @@
 
   // --- Filtering ---
 
-  const filteredItems = $derived.by(() => {
-    const normalizedQuery = query.trim();
-    const usesIndexedResults =
-      activeFilter !== "deleted" && indexedItems !== null && indexedQuery === normalizedQuery;
-    const candidates = usesIndexedResults ? (indexedItems ?? []) : items;
-
-    const dateRange = resolveDateRange(dateFilter);
-    const dateRangeFromNl = !dateRange ? parseDateQuery(normalizedQuery) : null;
-    const effectiveDateRange = dateRange ?? dateRangeFromNl;
-    // A natural-language date token is a filter, not content that must occur
-    // in the record text (e.g. "閺勩劌銇? should not be required in the title).
-    const keywords = dateRangeFromNl
-      ? []
-      : normalizedQuery.toLocaleLowerCase().split(/\s+/).filter(Boolean);
-
-    return candidates.filter((item) => {
-      const isDeleted = !!item.deleted;
-      const matchesFilter =
-        activeFilter === "all"
-          ? !isDeleted
-          : activeFilter === "deleted"
-            ? isDeleted
-            : activeFilter === "favorite"
-              ? !isDeleted && item.favorite
-              : !isDeleted && item.kind === activeFilter;
-
-      if (!matchesFilter) return false;
-
-      if (tagFilter && !(item.tags ?? []).includes(tagFilter)) return false;
-
-      if (
-        sourceAppFilter &&
-        !item.sourceApp.toLowerCase().includes(sourceAppFilter.toLowerCase())
-      ) {
-        return false;
-      }
-
-      if (effectiveDateRange) {
-        if (item.createdAt < effectiveDateRange.from || item.createdAt > effectiveDateRange.to) {
-          return false;
-        }
-      }
-
-      if (keywords.length === 0 || usesIndexedResults) {
-        return true;
-      }
-
-      return keywords.every((keyword) => (item.searchableText ?? "").includes(keyword));
-    });
-  });
+  const filteredItems = $derived(
+    filterHistoryItems(
+      { items, indexedItems, indexedQuery },
+      {
+        query,
+        activeFilter,
+        tagFilter,
+        sourceAppFilter,
+        dateFilter,
+      },
+    ),
+  );
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
   const selectedDeletedCount = $derived(
