@@ -9,18 +9,18 @@ description = "S3-first synchronization protocol and transport for Clipboard Des
 engine-test-support = []
 
 [dependencies]
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 base64 = "0.23"
 bincode = { version = "2", features = ["serde"] }
 chrono = "0.4"
 hex = "0.4.3"
-hmac = "0.12"
-md-5 = "0.10"
-pbkdf2 = "0.11"
-rand = "0.9"
+hmac = "0.13"
+md-5 = "0.11"
+pbkdf2 = "0.13"
+rand = "0.10"
 reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls", "blocking"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 uuid = { version = "1", features = ["v4"] }
 zstd = "0.13"

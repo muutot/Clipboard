@@ -238,8 +238,8 @@ struct SigV4<'a> {
 }
 
 fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
-    use hmac::{Hmac, Mac};
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(key).expect("hmac accepts any key len");
+    use hmac::{Hmac, KeyInit, Mac};
+    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(key).expect("hmac accepts any key len");
     mac.update(msg);
     mac.finalize().into_bytes().to_vec()
 }

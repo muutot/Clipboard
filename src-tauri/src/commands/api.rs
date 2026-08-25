@@ -21,7 +21,7 @@ fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> 
         }
     }
 
-    use rand::RngCore;
+    use rand::Rng;
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     let token = hex::encode(bytes);

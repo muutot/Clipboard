@@ -32,8 +32,8 @@ rusqlite = { version = "0.40.1", features = ["bundled"] }
 tantivy = "0.26.1"
 regex-lite = "0.1"
 base64 = "0.23"
-sha2 = "0.10"
-md-5 = "0.10"
+sha2 = "0.11"
+md-5 = "0.11"
 urlencoding = "2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
 ctrlc = "3"
@@ -48,7 +48,7 @@ ort = "=2.0.0-rc.13"
 hex = "0.4.3"
 zip = "2"
 chrono = "0.4"
-rand = "0.9"
+rand = "0.10"
 uuid = { version = "1", features = ["v4"] }
 bincode = { version = "2", features = ["serde"] }
 

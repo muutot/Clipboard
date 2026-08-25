@@ -1,4 +1,4 @@
-use std::{
+﻿use std::{
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Cursor, ErrorKind, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -177,17 +177,17 @@ impl SessionKey {
         salt_input.extend_from_slice(remote_scope.as_bytes());
         let salt = Sha256::digest(salt_input);
         let mut key = [0u8; KEY_LEN];
-        pbkdf2::pbkdf2::<Hmac<Sha256>>(password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut key);
+        pbkdf2::pbkdf2::<Hmac<Sha256>>(password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut key)
+            .expect("PBKDF2 output length matches the derived key size");
         Ok(Self { key })
     }
 
     fn cipher(&self) -> Result<Aes256Gcm, String> {
-        Aes256Gcm::new_from_slice(&self.key)
-            .map_err(|_| "failed to initialize sync encryption".to_string())
+        Ok(Aes256Gcm::new(&self.key.into()))
     }
 
     pub(crate) fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
-        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.key)
+        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&self.key)
             .expect("HMAC-SHA256 accepts a 256-bit key");
         mac.update(b"clipboard-sync-v1-resource-digest\0");
         mac.update(plaintext_sha256);
@@ -195,7 +195,7 @@ impl SessionKey {
     }
 
     fn resource_nonce(&self, object_key: &str, chunk_index: u64) -> [u8; NONCE_LEN] {
-        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.key)
+        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&self.key)
             .expect("HMAC-SHA256 accepts a 256-bit key");
         mac.update(b"clipboard-sync-v1-resource-nonce\0");
         mac.update(object_key.as_bytes());
@@ -226,7 +226,7 @@ impl SessionKey {
         let aad = Self::resource_aad(header, object_key, chunk_index);
         self.cipher()?
             .encrypt(
-                Nonce::from_slice(&nonce),
+                &Nonce::from(nonce),
                 Payload {
                     msg: plaintext,
                     aad: &aad,
@@ -246,7 +246,7 @@ impl SessionKey {
         let aad = Self::resource_aad(header, object_key, chunk_index);
         self.cipher()?
             .decrypt(
-                Nonce::from_slice(&nonce),
+                &Nonce::from(nonce),
                 Payload {
                     msg: ciphertext,
                     aad: &aad,
@@ -436,7 +436,7 @@ fn protect_pack_header(
     let ciphertext = key
         .cipher()?
         .encrypt(
-            Nonce::from_slice(nonce),
+            &Nonce::try_from(nonce).expect("derived nonce length"),
             Payload {
                 msg: header_bytes,
                 aad: &aad,
@@ -464,7 +464,7 @@ fn unprotect_pack_header(
     let aad = [b"clipboard-sync-v1-pack-header\0".as_slice(), &[kind as u8]].concat();
     key.cipher()?
         .decrypt(
-            Nonce::from_slice(nonce),
+            &Nonce::try_from(nonce).expect("derived nonce length"),
             Payload {
                 msg: &protected[NONCE_LEN..],
                 aad: &aad,
@@ -522,7 +522,7 @@ fn encode_pack_chunk(
         let ciphertext = key
             .cipher()?
             .encrypt(
-                Nonce::from_slice(&nonce),
+                &Nonce::from(nonce),
                 Payload {
                     msg: &compressed,
                     aad: &aad,
@@ -892,7 +892,7 @@ impl<T> Iterator for LargePackReader<'_, T> {
                 aad.extend_from_slice(nonce);
                 key.cipher()?
                     .decrypt(
-                        Nonce::from_slice(nonce),
+                        &Nonce::try_from(nonce).expect("derived nonce length"),
                         Payload {
                             msg: &stored[NONCE_LEN..],
                             aad: &aad,
@@ -1074,7 +1074,7 @@ fn encode_value<T: Encode>(
         let ciphertext = key
             .cipher()?
             .encrypt(
-                Nonce::from_slice(&nonce_bytes),
+                &Nonce::from(nonce_bytes),
                 Payload {
                     msg: &compressed,
                     aad: &header,
@@ -1150,7 +1150,8 @@ fn decode_value<T: Decode<()>>(
             }
             key.cipher()?
                 .decrypt(
-                    Nonce::from_slice(&payload[..NONCE_LEN]),
+                    &Nonce::try_from(&payload[..NONCE_LEN])
+                        .expect("nonce slice length is checked above"),
                     Payload {
                         msg: &payload[NONCE_LEN..],
                         aad: header,
