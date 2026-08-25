@@ -1,5 +1,6 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onDestroy, tick } from "svelte";
+  import type { Component } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import Checkbox from "$lib/components/Checkbox.svelte";
@@ -85,77 +86,110 @@
     tabs: SettingsNavTarget[];
   }
 
-  let compactSettingsPanelModule:
-    Promise<typeof import("$lib/components/CompactSettingsPanel.svelte")> | undefined;
-  let fontSizeSettingsPanelModule:
-    Promise<typeof import("$lib/components/FontSizeSettingsPanel.svelte")> | undefined;
-  let themeSettingsPanelModule:
-    Promise<typeof import("$lib/components/ThemeSettingsPanel.svelte")> | undefined;
-  let iconColorsSettingsPanelModule:
-    Promise<typeof import("$lib/components/IconColorsSettingsPanel.svelte")> | undefined;
-  let ignoredAppsSettingsPanelModule:
-    Promise<typeof import("$lib/components/IgnoredAppsSettingsPanel.svelte")> | undefined;
-  let sensitiveContentSettingsPanelModule:
-    Promise<typeof import("$lib/components/SensitiveContentSettingsPanel.svelte")> | undefined;
-  let tagManagementSettingsPanelModule:
-    Promise<typeof import("$lib/components/TagManagementSettingsPanel.svelte")> | undefined;
-  let keyboardSettingsPanelModule:
-    Promise<typeof import("$lib/components/KeyboardSettingsPanel.svelte")> | undefined;
-  let statisticsSettingsPanelModule:
-    Promise<typeof import("$lib/components/StatisticsSettingsPanel.svelte")> | undefined;
-  let aboutSettingsPanelModule:
-    Promise<typeof import("$lib/components/AboutSettingsPanel.svelte")> | undefined;
-  let iconCacheSettingsPanelModule:
-    Promise<typeof import("$lib/components/IconCacheSettingsPanel.svelte")> | undefined;
+  // Lazily loaded panels share one homogenized dispatch: a descriptor maps
+  // section ids onto a cached dynamic import plus a render-time props builder,
+  // and the template awaits through a single generic block.
+  type LazyPanelModule = { default: Component<any> };
 
-  function loadCompactSettingsPanel() {
-    return (compactSettingsPanelModule ??= import("$lib/components/CompactSettingsPanel.svelte"));
+  interface LazyPanelDescriptor {
+    sections: readonly string[];
+    load(): Promise<LazyPanelModule>;
+    props(): Record<string, unknown>;
   }
 
-  function loadFontSizeSettingsPanel() {
-    return (fontSizeSettingsPanelModule ??= import("$lib/components/FontSizeSettingsPanel.svelte"));
-  }
+  const lazyPanelModules = new Map<string, Promise<LazyPanelModule>>();
 
-  function loadThemeSettingsPanel() {
-    return (themeSettingsPanelModule ??= import("$lib/components/ThemeSettingsPanel.svelte"));
-  }
+  const LAZY_PANEL_DESCRIPTORS: LazyPanelDescriptor[] = [
+    {
+      sections: ["compact"],
+      load: () => import("$lib/components/CompactSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["font"],
+      load: () => import("$lib/components/FontSizeSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["theme"],
+      load: () => import("$lib/components/ThemeSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["icons"],
+      load: () => import("$lib/components/IconColorsSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["capture"],
+      load: () => import("$lib/components/IgnoredAppsSettingsPanel.svelte"),
+      props: () => ({ iconsDir: status?.iconsDir, onclose, showHeader: false }),
+    },
+    {
+      sections: ["capture_privacy"],
+      load: () => import("$lib/components/SensitiveContentSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["capture_icons"],
+      load: () => import("$lib/components/IconCacheSettingsPanel.svelte"),
+      props: () => ({
+        iconsDir: status?.iconsDir ?? "",
+        onfeedback: (message: string, success: boolean) => {
+          feedback = message;
+          feedbackSuccess = success;
+        },
+      }),
+    },
+    {
+      sections: ["tags"],
+      load: () => import("$lib/components/TagManagementSettingsPanel.svelte"),
+      props: () => ({
+        onclose,
+        showHeader: false,
+        tagSearch,
+        ontagSearchChange: (value: string) => (tagSearch = value),
+      }),
+    },
+    {
+      sections: ["keyboard_item", "keyboard_quick", "keyboard_system", "keyboard_switch"],
+      load: () => import("$lib/components/KeyboardSettingsPanel.svelte"),
+      props: () => ({
+        onclose,
+        resetToken: keyboardResetToken,
+        category: activeSection.startsWith("keyboard_")
+          ? (activeSection.slice("keyboard_".length) as "item" | "quick" | "system" | "switch")
+          : "item",
+        showHeader: false,
+      }),
+    },
+    {
+      sections: ["statistics"],
+      load: () => import("$lib/components/StatisticsSettingsPanel.svelte"),
+      props: () => ({
+        activeTab: activeStatisticsTab,
+        status,
+        loading,
+        onrefreshStatus: refreshStorageStats,
+        onclose,
+      }),
+    },
+    {
+      sections: ["about"],
+      load: () => import("$lib/components/AboutSettingsPanel.svelte"),
+      props: () => ({ appVersion, appExecutablePath, onclose }),
+    },
+  ];
 
-  function loadIconColorsSettingsPanel() {
-    return (iconColorsSettingsPanelModule ??=
-      import("$lib/components/IconColorsSettingsPanel.svelte"));
-  }
-
-  function loadIgnoredAppsSettingsPanel() {
-    return (ignoredAppsSettingsPanelModule ??=
-      import("$lib/components/IgnoredAppsSettingsPanel.svelte"));
-  }
-
-  function loadSensitiveContentSettingsPanel() {
-    return (sensitiveContentSettingsPanelModule ??=
-      import("$lib/components/SensitiveContentSettingsPanel.svelte"));
-  }
-
-  function loadTagManagementSettingsPanel() {
-    return (tagManagementSettingsPanelModule ??=
-      import("$lib/components/TagManagementSettingsPanel.svelte"));
-  }
-
-  function loadKeyboardSettingsPanel() {
-    return (keyboardSettingsPanelModule ??= import("$lib/components/KeyboardSettingsPanel.svelte"));
-  }
-
-  function loadStatisticsSettingsPanel() {
-    return (statisticsSettingsPanelModule ??=
-      import("$lib/components/StatisticsSettingsPanel.svelte"));
-  }
-
-  function loadAboutSettingsPanel() {
-    return (aboutSettingsPanelModule ??= import("$lib/components/AboutSettingsPanel.svelte"));
-  }
-
-  function loadIconCacheSettingsPanel() {
-    return (iconCacheSettingsPanelModule ??=
-      import("$lib/components/IconCacheSettingsPanel.svelte"));
+  function loadLazyPanelModule(section: string): Promise<LazyPanelModule> {
+    const descriptor = LAZY_PANEL_DESCRIPTORS.find((entry) => entry.sections.includes(section));
+    if (!descriptor) return Promise.reject(new Error(`no panel for ${section}`));
+    let promise = lazyPanelModules.get(section);
+    if (!promise) {
+      promise = descriptor.load();
+      lazyPanelModules.set(section, promise);
+    }
+    return promise;
   }
 
   let { open, onclose, standalone = false }: Props = $props();
@@ -248,6 +282,10 @@
   }
   let restartNeeded = $state(false);
   let activeSection = $state<SettingsSection>("general_general");
+  /** Descriptor for the current section when it is a lazily imported panel. */
+  const lazyPanel = $derived(
+    LAZY_PANEL_DESCRIPTORS.find((entry) => entry.sections.includes(activeSection)),
+  );
   let activeStatisticsTab = $state<StatisticsTab>("storage");
   let keyboardResetToken = $state(0);
 
@@ -1569,7 +1607,7 @@
               class="close-button"
               type="button"
               aria-label={_t("actions.close")}
-              onclick={onclose}>×</button
+              onclick={onclose}>脳</button
             >
           {/if}
         </div>
@@ -1679,106 +1717,12 @@
               : "window"}
         showHeader={false}
       />
-    {:else if activeSection === "compact"}
-      {#await loadCompactSettingsPanel()}
+    {:else if lazyPanel}
+      {#await loadLazyPanelModule(activeSection)}
         {@render loadingSettingsPanel()}
       {:then module}
         {@const Panel = module.default}
-        <Panel {onclose} showHeader={false} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "font"}
-      {#await loadFontSizeSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel {onclose} showHeader={false} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "theme"}
-      {#await loadThemeSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel {onclose} showHeader={false} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "icons"}
-      {#await loadIconColorsSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel {onclose} showHeader={false} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "capture"}
-      {#await loadIgnoredAppsSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel iconsDir={status?.iconsDir} {onclose} showHeader={false} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "capture_privacy"}
-      {#await loadSensitiveContentSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel {onclose} showHeader={false} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "capture_icons"}
-      {#await loadIconCacheSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel
-          iconsDir={status?.iconsDir ?? ""}
-          onfeedback={(message, success) => {
-            feedback = message;
-            feedbackSuccess = success;
-          }}
-        />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "tags"}
-      {#await loadTagManagementSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel
-          {onclose}
-          showHeader={false}
-          {tagSearch}
-          ontagSearchChange={(v) => (tagSearch = v)}
-        />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "keyboard_item" || activeSection === "keyboard_quick" || activeSection === "keyboard_system" || activeSection === "keyboard_switch"}
-      {#await loadKeyboardSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel
-          {onclose}
-          resetToken={keyboardResetToken}
-          category={activeSection === "keyboard_item"
-            ? "item"
-            : activeSection === "keyboard_quick"
-              ? "quick"
-              : activeSection === "keyboard_system"
-                ? "system"
-                : "switch"}
-          showHeader={false}
-        />
+        <Panel {...lazyPanel.props()} />
       {:catch}
         {@render settingsPanelLoadFailed()}
       {/await}
@@ -1962,30 +1906,6 @@
       {#if feedback}
         <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
       {/if}
-    {:else if activeSection === "statistics"}
-      {#await loadStatisticsSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel
-          activeTab={activeStatisticsTab}
-          {status}
-          {loading}
-          onrefreshStatus={refreshStorageStats}
-          {onclose}
-        />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
-    {:else if activeSection === "about"}
-      {#await loadAboutSettingsPanel()}
-        {@render loadingSettingsPanel()}
-      {:then module}
-        {@const Panel = module.default}
-        <Panel {appVersion} {appExecutablePath} {onclose} />
-      {:catch}
-        {@render settingsPanelLoadFailed()}
-      {/await}
     {:else}
       {#if loading}
         <div class="settings-state">{_t("storage.readingConfig")}</div>
@@ -2235,7 +2155,7 @@
                     onchange={(v) => (exportDateFrom = v)}
                     ariaLabel={_t("storage.exportDateFrom")}
                   />
-                  <span class="export-date-separator">�C</span>
+                  <span class="export-date-separator">锟紺</span>
                   <DatePicker
                     value={exportDateTo}
                     onchange={(v) => (exportDateTo = v)}
@@ -2369,7 +2289,7 @@
                               count: storageKindStats[entry.kind].itemCount,
                               size: formatBytes(storageKindStats[entry.kind].sizeBytes),
                             })
-                          : "��"}
+                          : "锟斤拷"}
                       </span>
                     </div>
                     <button
