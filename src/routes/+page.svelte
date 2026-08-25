@@ -2192,20 +2192,20 @@
 
       // Rebuild from the snapshot so a partially failed mixed batch mirrors
       // exactly which backend transaction succeeded.
-      items = previousItems
+      items = previous.items
         .filter((item) => !removedIds.has(item.id))
         .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
-      if (previousIndexedItems) {
-        indexedItems = previousIndexedItems
+      if (previous.indexedItems) {
+        indexedItems = previous.indexedItems
           .filter((item) => !removedIds.has(item.id))
           .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
       } else {
         indexedItems = null;
       }
-      selectedIds = new Set([...previousSelectedIds].filter((id) => !succeededIds.has(id)));
-      if (previousDetailItem && !removedIds.has(previousDetailItem.id)) {
-        detailItem = previousDetailItem;
-      } else if (removedIds.has(previousDetailItem?.id ?? "")) {
+      selectedIds = new Set([...previous.selectedIds].filter((id) => !succeededIds.has(id)));
+      if (previous.detailItem && !removedIds.has(previous.detailItem.id)) {
+        detailItem = previous.detailItem;
+      } else if (previous.detailItem && removedIds.has(previous.detailItem.id)) {
         detailItem = null;
       }
 
