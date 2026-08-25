@@ -2452,14 +2452,12 @@
     // into the search input.
     if (editableTarget && !isItemActionShortcut(event)) return;
 
-    if (
-      navigationBindings.switchFilterNext.some((binding) => shortcutMatchesEvent(binding, event))
-    ) {
+    const cycleFilter = (direction: 1 | -1) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();
       const idx = filters.findIndex((f) => f.id === activeFilter);
-      const next = (idx + 1) % filters.length;
+      const next = (idx + direction + filters.length) % filters.length;
       setFilter(filters[next].id);
       void tick().then(() => {
         const btn = document.querySelector<HTMLElement>(
@@ -2467,24 +2465,19 @@
         );
         btn?.focus();
       });
+    };
+
+    if (
+      navigationBindings.switchFilterNext.some((binding) => shortcutMatchesEvent(binding, event))
+    ) {
+      cycleFilter(1);
       return;
     }
 
     if (
       navigationBindings.switchFilterPrev.some((binding) => shortcutMatchesEvent(binding, event))
     ) {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
-      event.preventDefault();
-      const idx = filters.findIndex((f) => f.id === activeFilter);
-      const prev = (idx - 1 + filters.length) % filters.length;
-      setFilter(filters[prev].id);
-      void tick().then(() => {
-        const btn = document.querySelector<HTMLElement>(
-          `.filters [role="tab"][aria-selected="true"]`,
-        );
-        btn?.focus();
-      });
+      cycleFilter(-1);
       return;
     }
 
