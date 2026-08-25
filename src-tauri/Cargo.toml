@@ -46,7 +46,7 @@ reqwest = { version = "0.13", default-features = false, features = ["stream", "r
 tokio = { version = "1", features = ["fs", "io-util"] }
 ort = "=2.0.0-rc.13"
 hex = "0.4.3"
-zip = "2"
+zip = "8"
 chrono = "0.4"
 rand = "0.10"
 uuid = { version = "1", features = ["v4"] }
