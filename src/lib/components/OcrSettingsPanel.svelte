@@ -4,6 +4,7 @@
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
+  import SelectEntry from "$lib/components/settings-entries/SelectEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { updateSliderTrack } from "$lib/utils/format";
 
@@ -254,19 +255,21 @@
 </script>
 
 <div class="settings-scroll">
-  <section class="setting-card setting-card-row">
-    <span class="setting-icon"><AppIcon name="eye" size={17} /></span>
-    <span class="setting-label">{_t("storage.ocrEngineLabel")}</span>
-    <CustomSelect
-      className="ocr-engine-select"
-      value={ocrEngine}
-      options={[
+  <SelectEntry
+    searchId="ocr.engine"
+    config={{
+      type: "select",
+      variant: "row",
+      icon: "eye",
+      label: _t("storage.ocrEngineLabel"),
+      options: [
         { value: "ppocr", label: "PP-OCRv6" },
         { value: "tesseract", label: "Tesseract" },
-      ]}
-      onchange={(v) => saveOcrEngine(v as string)}
-    />
-  </section>
+      ],
+      get: () => ocrEngine,
+      set: (v) => saveOcrEngine(v as string),
+    }}
+  />
 
   <section class="setting-card setting-card-row" data-settings-search-id="ocr.model">
     <span class="setting-icon"><AppIcon name="download" size={17} /></span>
@@ -431,11 +434,6 @@
 </div>
 
 <style>
-  :global(.ocr-engine-select) {
-    flex: 1;
-    max-width: 180px;
-  }
-
   :global(.ocr-model-select) {
     flex: 1;
     max-width: 200px;
