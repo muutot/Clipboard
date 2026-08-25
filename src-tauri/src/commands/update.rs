@@ -52,7 +52,9 @@ impl UpdateSource {
                 format!("https://api.github.com/repos/muutot/Clipboard/releases/tags/{encoded}")
             }
             Self::Gitcode => {
-                format!("https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/tags/{encoded}")
+                format!(
+                    "https://api.gitcode.com/api/v5/repos/m2u/Clipboard/releases/tags/{encoded}"
+                )
             }
         }
     }
