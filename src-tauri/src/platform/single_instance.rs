@@ -337,3 +337,137 @@ fn is_process_running(pid: u32) -> bool {
         kill(pid as i32, 0) == 0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir() -> PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-single-instance-test-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&directory).expect("create temp dir");
+        directory
+    }
+
+    #[test]
+    fn create_instance_lock_writes_pid_exclusively() {
+        let directory = temp_dir();
+        let lock_path = directory.join("instance.lock");
+
+        create_instance_lock(&lock_path, 4242).expect("first lock must succeed");
+        assert_eq!(read_instance_lock_pid(&lock_path).unwrap(), Some(4242));
+
+        // The second acquire on the same path fails as already-exists, which
+        // is what drives the AlreadyRunning branch in `acquire`.
+        let error = create_instance_lock(&lock_path, 5).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        // Original content is untouched by the failed attempt.
+        assert_eq!(read_instance_lock_pid(&lock_path).unwrap(), Some(4242));
+
+        fs::remove_file(&lock_path).unwrap();
+        fs::remove_dir(&directory).unwrap();
+    }
+
+    #[test]
+    fn read_instance_lock_pid_rejects_invalid_and_zero_pids() {
+        let directory = temp_dir();
+
+        for (content, expected) in [
+            ("123\n", Some(123)),
+            ("  77 \n", Some(77)),
+            ("", None),
+            ("not-a-pid", None),
+            ("-1", None),
+            ("99999999999999", None),
+            ("0", None),
+        ] {
+            let lock_path = directory.join("instance.lock");
+            fs::write(&lock_path, content).unwrap();
+            assert_eq!(
+                read_instance_lock_pid(&lock_path).unwrap(),
+                expected,
+                "unexpected parse for {content:?}"
+            );
+            fs::remove_file(&lock_path).unwrap();
+        }
+
+        // A missing file reports NotFound rather than a usable pid.
+        let missing = directory.join("missing.lock");
+        assert_eq!(
+            read_instance_lock_pid(&missing).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+
+        fs::remove_dir(&directory).unwrap();
+    }
+
+    #[test]
+    fn current_process_detects_itself_as_running() {
+        assert!(is_process_running(std::process::id()));
+    }
+
+    #[test]
+    fn guard_acquire_creates_and_drop_removes_the_lock() {
+        let directory = temp_dir();
+        let lock_path = directory.join("instance.lock");
+
+        let guard = SingleInstanceGuard::acquire(&directory)
+            .expect("acquire must succeed in an empty directory");
+        assert!(read_instance_lock_pid(&lock_path).unwrap().is_some());
+        drop(guard);
+        assert!(!lock_path.exists(), "drop must remove the owned lock");
+
+        fs::remove_dir(&directory).unwrap();
+    }
+
+    #[test]
+    fn guard_acquire_reports_the_running_owner_after_retries() {
+        let directory = temp_dir();
+        let lock_path = directory.join("instance.lock");
+        create_instance_lock(&lock_path, std::process::id()).unwrap();
+
+        let acquired = SingleInstanceGuard::acquire(&directory);
+        match acquired {
+            Err(SingleInstanceError::AlreadyRunning(owner)) => {
+                assert_eq!(owner, std::process::id());
+            }
+            Ok(_) => panic!("expected AlreadyRunning for an owned lock"),
+            Err(error) => panic!("expected AlreadyRunning, got {error}"),
+        }
+
+        fs::remove_file(&lock_path).unwrap();
+        fs::remove_dir(&directory).unwrap();
+    }
+    #[test]
+    fn guard_acquire_takes_over_a_stale_lock_with_a_dead_owner() {
+        let directory = temp_dir();
+        let lock_path = directory.join("instance.lock");
+
+        // PID 0 never parses as a live owner; write a raw zero file so
+        // `read_instance_lock_pid` returns None and the stale lock is removed.
+        fs::write(&lock_path, b"0").unwrap();
+        let _guard = SingleInstanceGuard::acquire(&directory)
+            .expect("a stale lock with no owner pid must be taken over");
+        assert_eq!(
+            read_instance_lock_pid(&lock_path).unwrap(),
+            Some(std::process::id())
+        );
+
+        fs::remove_file(&lock_path).unwrap();
+        fs::remove_dir(&directory).unwrap();
+    }
+
+    #[test]
+    fn notify_existing_instance_returns_false_for_a_missing_event() {
+        let directory = temp_dir();
+        // No instance was acquired here, so the named wake event cannot exist.
+        assert!(!SingleInstanceGuard::notify_existing_instance(
+            &directory,
+            std::process::id()
+        ));
+        fs::remove_dir(&directory).unwrap();
+    }
+}
