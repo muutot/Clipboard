@@ -5,8 +5,8 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import SelectEntry from "$lib/components/settings-entries/SelectEntry.svelte";
+  import SliderEntry from "$lib/components/settings-entries/SliderEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import { updateSliderTrack } from "$lib/utils/format";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -39,9 +39,6 @@
   let detScoreThreshold = $state(0.3);
   let detBoxThreshold = $state(0.6);
   let detUnclipRatio = $state(1.5);
-  let detScoreSlider = $state<HTMLInputElement | null>(null);
-  let detBoxSlider = $state<HTMLInputElement | null>(null);
-  let detUnclipSlider = $state<HTMLInputElement | null>(null);
 
   interface OcrStatusResult {
     totalTasks: number;
@@ -73,15 +70,6 @@
     destroyed = true;
     ocrInstallRequestId += 1;
     releaseOcrDownloadListener();
-  });
-
-  $effect(() => {
-    detScoreThreshold;
-    detBoxThreshold;
-    detUnclipRatio;
-    updateSliderTrack(detScoreSlider);
-    updateSliderTrack(detBoxSlider);
-    updateSliderTrack(detUnclipSlider);
   });
 
   $effect(() => {
@@ -325,64 +313,52 @@
     </div>
     <div class="parameter-grid">
       <div class="parameter-item">
-        <label class="parameter-label" for="det-score">
-          <span>{_t("storage.ocrScoreThreshold")}</span>
-          <span class="parameter-value">{detScoreThreshold.toFixed(2)}</span>
-        </label>
-        <input
-          id="det-score"
-          class="transparency-slider"
-          type="range"
-          min="0.05"
-          max="0.95"
-          step="0.05"
-          bind:value={detScoreThreshold}
-          bind:this={detScoreSlider}
-          onchange={() => saveDetConfig()}
+        <SliderEntry
+          config={{
+            type: "slider",
+            label: _t("storage.ocrScoreThreshold"),
+            min: 0.05,
+            max: 0.95,
+            step: 0.05,
+            display: (v) => v.toFixed(2),
+            scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
+            get: () => detScoreThreshold,
+            set: (v) => (detScoreThreshold = v),
+            onchange: () => void saveDetConfig(),
+          }}
         />
-        <div class="parameter-scale">
-          <span>{_t("storage.ocrLow")}</span><span>{_t("storage.ocrHigh")}</span>
-        </div>
       </div>
       <div class="parameter-item">
-        <label class="parameter-label" for="det-box">
-          <span>{_t("storage.ocrBoxThreshold")}</span>
-          <span class="parameter-value">{detBoxThreshold.toFixed(2)}</span>
-        </label>
-        <input
-          id="det-box"
-          class="transparency-slider"
-          type="range"
-          min="0.1"
-          max="0.95"
-          step="0.05"
-          bind:value={detBoxThreshold}
-          bind:this={detBoxSlider}
-          onchange={() => saveDetConfig()}
+        <SliderEntry
+          config={{
+            type: "slider",
+            label: _t("storage.ocrBoxThreshold"),
+            min: 0.1,
+            max: 0.95,
+            step: 0.05,
+            display: (v) => v.toFixed(2),
+            scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
+            get: () => detBoxThreshold,
+            set: (v) => (detBoxThreshold = v),
+            onchange: () => void saveDetConfig(),
+          }}
         />
-        <div class="parameter-scale">
-          <span>{_t("storage.ocrLow")}</span><span>{_t("storage.ocrHigh")}</span>
-        </div>
       </div>
       <div class="parameter-item">
-        <label class="parameter-label" for="det-unclip">
-          <span>{_t("storage.ocrUnclip")}</span>
-          <span class="parameter-value">{detUnclipRatio.toFixed(1)}</span>
-        </label>
-        <input
-          id="det-unclip"
-          class="transparency-slider"
-          type="range"
-          min="1.0"
-          max="4.0"
-          step="0.1"
-          bind:value={detUnclipRatio}
-          bind:this={detUnclipSlider}
-          onchange={() => saveDetConfig()}
+        <SliderEntry
+          config={{
+            type: "slider",
+            label: _t("storage.ocrUnclip"),
+            min: 1.0,
+            max: 4.0,
+            step: 0.1,
+            display: (v) => v.toFixed(1),
+            scale: [_t("storage.ocrSmall"), _t("storage.ocrLarge")],
+            get: () => detUnclipRatio,
+            set: (v) => (detUnclipRatio = v),
+            onchange: () => void saveDetConfig(),
+          }}
         />
-        <div class="parameter-scale">
-          <span>{_t("storage.ocrSmall")}</span><span>{_t("storage.ocrLarge")}</span>
-        </div>
       </div>
     </div>
   </section>

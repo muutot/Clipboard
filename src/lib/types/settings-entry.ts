@@ -47,6 +47,11 @@ export interface SliderEntryConfig {
   step?: number;
   suffix?: string;
   oninput?: () => void;
+  onchange?: () => void;
+  /** Optional low/high scale labels rendered under the track. */
+  scale?: [string, string];
+  /** Optional display formatter for the current-value label. */
+  display?: (value: number) => string;
 }
 
 export interface ToggleEntryConfig {

@@ -18,7 +18,9 @@
 <section class="setting-card" data-settings-search-id={searchId ?? config.id ?? undefined}>
   <div class="setting-heading">
     {#snippet children()}
-      <span class="value-label">{config.get()}{config.suffix}</span>
+      <span class="value-label"
+        >{config.display ? config.display(config.get()) : config.get()}{config.suffix}</span
+      >
     {/snippet}
     <EntryHeading icon={config.icon} label={config.label} desc={config.desc} inline {children} />
   </div>
@@ -39,5 +41,11 @@
       config.set(Number((e.currentTarget as HTMLInputElement).value));
       config.oninput?.();
     }}
+    onchange={() => config.onchange?.()}
   />
+  {#if config.scale}
+    <div class="parameter-scale">
+      <span>{config.scale[0]}</span><span>{config.scale[1]}</span>
+    </div>
+  {/if}
 </section>
