@@ -36,7 +36,7 @@
       config.onchange?.();
     }}
     aria-checked={config.get()}
-    aria-label={config.label}
+    aria-label={config.ariaLabel ?? config.label}
     role="switch"
     disabled={config.disabled?.()}
   >
