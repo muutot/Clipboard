@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -136,7 +136,7 @@
 
   /// Fans one patch set out to every copy (items, indexedItems, searchCache,
   /// detailItem) in a single pass over each list. THE funnel for item
-  /// mutations 鈥?direct per-copy mapping loops are how the searchCache drift
+  /// mutations — direct per-copy mapping loops are how the searchCache drift
   /// happened.
   function applyItemPatches(patches: ReadonlyMap<string, Partial<ClipboardItem>>) {
     if (patches.size === 0) return;
@@ -471,7 +471,7 @@
     const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
     // Only the selected card's layout differs in split mode, so the detail
     // selection participates in THIS card's signature instead of the global
-    // prefix 鈥?opening/closing the detail panel must not invalidate every
+    // prefix — opening/closing the detail panel must not invalidate every
     // measured height and cause a list-wide layout jitter.
     const detailSelected =
       detailDisplayMode === "split" && detailItem?.id === item.id ? "detail" : "";
@@ -796,7 +796,7 @@
       const { renamed, deleted } = event.payload;
       if (!renamed && !deleted) return;
       // Compute per-entry patches across every copy's members, then fan them
-      // out through the single funnel 鈥?including searchCache, which a
+      // out through the single funnel — including searchCache, which a
       // hand-rolled loop once missed.
       const transform = (entry: ClipboardItem) =>
         renamed ? rewriteTags(entry, renamed.old, renamed.new) : removeTag(entry, deleted!);
@@ -2335,13 +2335,13 @@
     }
 
     selectedIds = new Set();
-    // Don't preventDefault 鈥攍et the event continue so a single Esc
+    // Don't preventDefault — let the event continue so a single Esc press
     // can clear bulk selection, close detail panel, or hide the window.
   }
 
   let tagAddSignal = $state(0);
 
-  // Item-action shortcuts (Ctrl/鈱? letter) that should still operate on the
+  // Item-action shortcuts (Ctrl/⌘ letter) that should still operate on the
   // selected entry even when focus is in an editable target such as the search
   // box. Ctrl+A is deliberately excluded so the search box keeps its native
   // "select all text" behavior.
@@ -2352,7 +2352,7 @@
 
   // Native activatable controls fire their click action from the keydown
   // default behavior. When focus sits on one of them, Enter/Space must
-  // activate that control 鈥攏ot the list selection below. Note: history
+  // activate that control — not the list selection below. Note: history
   // cards are divs with role="option" and deliberately keep the hijacked
   // Enter/Space activation, so role="option" is intentionally absent here;
   // the search-suggestion options are real <button> elements and are covered.
@@ -2446,8 +2446,8 @@
 
     // Let the focused editable target (e.g. the search box) keep its own key
     // combinations (Ctrl+A to select text, Ctrl+Z/X/V, etc.). The item-action
-    // shortcuts (Ctrl/鈱? C/D/F/E/T/S) are exempted so they still operate on
-    // the selected entry even when the search box is focused 鈥攐therwise every
+    // shortcuts (Ctrl/⌘ C/D/F/E/T/S) are exempted so they still operate on
+    // the selected entry even when the search box is focused — otherwise every
     // Ctrl+<letter> silently no-ops after a search or filter switch moves focus
     // into the search input.
     if (editableTarget && !isItemActionShortcut(event)) return;

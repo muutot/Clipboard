@@ -1217,7 +1217,7 @@
                               count: storageKindStats[entry.kind].itemCount,
                               size: formatBytes(storageKindStats[entry.kind].sizeBytes),
                             })
-                          : "锟斤拷"}
+                          : "—"}
                       </span>
                     </div>
                     <button
