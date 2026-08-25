@@ -51,6 +51,7 @@
   } from "$lib/settings-navigation";
   import type { IconName } from "$lib/types/clipboard";
   import { formatBytes } from "$lib/utils/format";
+  import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
   import { captureFocusRestore, trapTabFocus } from "$lib/utils/focus";
   import { endOfDay, startOfDay } from "$lib/utils/date-query";
   import {
@@ -515,21 +516,6 @@
     imageStoragePath: string;
     fileStoragePath: string;
   } | null>(null);
-
-  const unitMultipliers: Record<string, number> = {
-    byte: 1,
-    KB: 1024,
-    MB: 1048576,
-    GB: 1073741824,
-  };
-
-  function toDisplaySize(bytes: number, unit: string): number {
-    return Math.round(bytes / (unitMultipliers[unit] || 1));
-  }
-
-  function fromDisplaySize(value: number, unit: string): number {
-    return Math.round(value * (unitMultipliers[unit] || 1));
-  }
 
   function updateMaxFileSizeFromDisplay() {
     maxFileCopySize = fromDisplaySize(maxFileCopyDisplay, maxFileCopySizeUnit);
