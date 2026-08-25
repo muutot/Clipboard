@@ -177,7 +177,7 @@
   }
 
   .about-update-controls :global(.settings-select) {
-    height: 34px;
+    height: 28px;
   }
 
   .about-path {

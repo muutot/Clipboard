@@ -219,7 +219,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 34px;
+    height: 28px;
     padding: 0 16px;
     border: 1px solid var(--border-color);
     border-radius: var(--settings-control-radius);

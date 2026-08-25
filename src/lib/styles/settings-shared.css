@@ -156,7 +156,7 @@ label.visually-hidden {
 
 .setting-card-row input {
   width: 100px;
-  height: 34px;
+  height: 28px;
   box-sizing: border-box;
   flex-shrink: 0;
   padding: 7px 10px;
@@ -185,7 +185,7 @@ label.visually-hidden {
 
 .setting-card-row > button:not(.toggle-switch),
 .settings-action-btn {
-  height: 34px;
+  height: 28px;
   box-sizing: border-box;
   flex-shrink: 0;
   padding: 5px 12px;
@@ -215,7 +215,7 @@ label.visually-hidden {
 }
 
 .setting-card-row .settings-select {
-  height: 34px;
+  height: 28px;
   box-sizing: border-box;
 }
 
@@ -859,7 +859,7 @@ button {
 }
 .transfer-group .settings-select {
   width: 140px;
-  height: 34px;
+  height: 28px;
 }
 .transfer-label {
   flex: 0 0 auto;
