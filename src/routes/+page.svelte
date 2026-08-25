@@ -55,6 +55,17 @@
   import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
+    SEARCH_HISTORY_LIMIT,
+    SEARCH_HISTORY_STORAGE_KEY,
+    SEARCH_SUGGESTION_LIMIT,
+    SEARCH_TERM_MAX_LENGTH,
+    loadSearchHistory as loadStoredSearchHistory,
+    nextSearchHistory,
+    normalizeSearchTerm,
+    persistSearchHistory as persistStoredSearchHistory,
+    suggestionCandidate,
+  } from "$lib/utils/search-history";
+  import {
     applyGeneralSettingsToDocument,
     applyFontSizesToDocument,
   } from "$lib/services/settings-bootstrap";
@@ -89,10 +100,6 @@
   const VIRTUAL_SCROLL_THRESHOLD = 50;
   const DELETED_HISTORY_PAGE_SIZE = 100;
   const MAIN_WINDOW_MIN_WIDTH = 710;
-  const SEARCH_HISTORY_STORAGE_KEY = "clipboard.search-history.v1";
-  const SEARCH_HISTORY_LIMIT = 8;
-  const SEARCH_TERM_MAX_LENGTH = 120;
-  const SEARCH_SUGGESTION_LIMIT = 8;
 
   type SearchOption = {
     value: string;
@@ -361,77 +368,21 @@
     }
   }
 
-  function normalizeSearchTerm(value: string): string {
-    return value.trim().slice(0, SEARCH_TERM_MAX_LENGTH);
-  }
-
   function loadSearchHistory(): string[] {
-    try {
-      const raw = window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-
-      const seen = new Set<string>();
-      const result: string[] = [];
-      for (const value of parsed) {
-        if (typeof value !== "string") continue;
-        const term = normalizeSearchTerm(value);
-        const key = term.toLocaleLowerCase();
-        if (!term || seen.has(key)) continue;
-        seen.add(key);
-        result.push(term);
-        if (result.length >= SEARCH_HISTORY_LIMIT) break;
-      }
-      return result;
-    } catch {
-      return [];
-    }
+    return loadStoredSearchHistory(typeof window !== "undefined" ? window.localStorage : null);
   }
 
   function persistSearchHistory(history: string[]) {
-    try {
-      window.localStorage.setItem(
-        SEARCH_HISTORY_STORAGE_KEY,
-        JSON.stringify(history.slice(0, SEARCH_HISTORY_LIMIT)),
-      );
-    } catch {
-      // Browser privacy settings and desktop webview policies may disable
-      // localStorage. Search history remains available for this session.
-    }
+    persistStoredSearchHistory(typeof window !== "undefined" ? window.localStorage : null, history);
   }
 
   function rememberSearchTerm(value: string) {
     if (!$generalSettings.searchHistoryEnabled) return;
-    const term = normalizeSearchTerm(value);
-    if (!term) return;
-
-    const key = term.toLocaleLowerCase();
-    const next = [
-      term,
-      ...searchHistory.filter((entry) => entry.toLocaleLowerCase() !== key),
-    ].slice(0, SEARCH_HISTORY_LIMIT);
+    const next = nextSearchHistory(searchHistory, value);
+    if (next.length === searchHistory.length && next.every((v, i) => v === searchHistory[i]))
+      return;
     searchHistory = next;
     persistSearchHistory(next);
-  }
-
-  function suggestionCandidate(
-    value: string | null | undefined,
-    queryValue = "",
-    alignToQuery = false,
-  ): string | null {
-    if (!value) return null;
-    let candidate = value.replace(/\s+/g, " ").trim();
-    const normalizedQuery = queryValue.toLocaleLowerCase();
-    const matchIndex = normalizedQuery
-      ? candidate.toLocaleLowerCase().indexOf(normalizedQuery)
-      : -1;
-    if (normalizedQuery && matchIndex < 0) return null;
-    if (matchIndex > 0 && (alignToQuery || candidate.length > SEARCH_TERM_MAX_LENGTH)) {
-      candidate = candidate.slice(matchIndex);
-    }
-    candidate = candidate.slice(0, SEARCH_TERM_MAX_LENGTH).trim();
-    return candidate.length >= 2 ? candidate : null;
   }
 
   // --- Filtering ---
