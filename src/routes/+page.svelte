@@ -58,6 +58,10 @@
     promoteFromCache as promoteCachedEntries,
     trimLoadedItems as trimLoadedHistory,
   } from "$lib/utils/search-cache";
+  import {
+    resolveFilterShortcutBindings,
+    resolveNavigationBindings,
+  } from "$lib/utils/shortcut-bindings";
   import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
@@ -310,36 +314,21 @@
   ]);
 
   // Configured group-switch shortcuts (conf/keyboard.json), keyed by filter id.
-  // An absent action falls back to its default (Alt+<N>, one per filter
-  // position); an action explicitly configured to empty disables the shortcut.
+  // Resolution lives in $lib/utils/shortcut-bindings: an absent action falls
+  // back to its default (Alt+<N>); an action explicitly configured to empty
+  // disables the shortcut.
   let keyboardShortcuts = $state<Record<string, string[]>>({});
 
-  const filterShortcutBindings = $derived.by(() => {
-    const map: Record<string, string[]> = {};
-    filters.forEach((filter, index) => {
-      const actionKey = `switchFilter${index + 1}`;
-      const hasAction = Object.prototype.hasOwnProperty.call(keyboardShortcuts, actionKey);
-      map[filter.id] = hasAction ? (keyboardShortcuts[actionKey] ?? []) : [`Alt+${index + 1}`];
-    });
-    return map;
-  });
+  const filterShortcutBindings = $derived(
+    resolveFilterShortcutBindings(
+      keyboardShortcuts,
+      filters.map((filter) => filter.id),
+    ),
+  );
 
-  // Configured navigation shortcuts (conf/keyboard.json), reusing the same
-  // action keys the settings panel exposes under the "閸掑洦宕? group. An absent
-  // action falls back to its default; an action explicitly configured to empty
-  // disables that navigation binding.
-  const navigationBindings = $derived.by(() => {
-    const read = (action: string, fallback: string[]): string[] => {
-      const hasAction = Object.prototype.hasOwnProperty.call(keyboardShortcuts, action);
-      return hasAction ? (keyboardShortcuts[action] ?? []) : fallback;
-    };
-    return {
-      moveSelectionUp: read("moveSelectionUp", ["ArrowUp"]),
-      moveSelectionDown: read("moveSelectionDown", ["ArrowDown"]),
-      switchFilterNext: read("switchFilterNext", ["ArrowRight", "Tab"]),
-      switchFilterPrev: read("switchFilterPrev", ["ArrowLeft", "Shift+Tab"]),
-    };
-  });
+  // Configured navigation shortcuts (conf/keyboard.json); same fallback and
+  // disable rules as the group-switch bindings above.
+  const navigationBindings = $derived(resolveNavigationBindings(keyboardShortcuts));
 
   async function loadKeyboardShortcuts() {
     try {
