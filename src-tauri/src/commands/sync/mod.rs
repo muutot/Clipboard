@@ -123,6 +123,13 @@ impl SyncSettings {
         if sync.provider != SyncProvider::S3 {
             return Err("S3 sync is disabled".to_string());
         }
+        Self::validated_from_sync_config(sync)
+    }
+
+    /// The connection test must work before the user turns the sync switch
+    /// on, so it deliberately skips the provider gate while still validating
+    /// every required field.
+    fn validated_from_sync_config(sync: &SyncConfig) -> Result<Self, String> {
         Ok(Self {
             endpoint: required_value(sync.endpoint.as_deref(), "S3 endpoint")?,
             remote_path: sync
@@ -285,7 +292,7 @@ pub async fn test_sync_connection(
         let guard = config
             .lock()
             .map_err(|_| "configuration lock is poisoned".to_string())?;
-        SyncSettings::from_config(&guard)?
+        SyncSettings::validated_from_sync_config(&guard.sync_config())?
     };
     settings.object_store()?;
     Ok(sync::test_s3_connection(
@@ -705,6 +712,20 @@ mod tests {
         sync.provider = SyncProvider::S3;
         sync.s3_secret_key = None;
         assert!(SyncSettings::from_sync_config(&sync).is_err());
+    }
+
+    #[test]
+    fn connection_test_works_while_the_sync_switch_is_off() {
+        let mut sync = configured_sync();
+        sync.provider = SyncProvider::Off;
+        // The test must validate the entered fields without requiring the
+        // switch: users test before enabling.
+        let settings = SyncSettings::validated_from_sync_config(&sync).unwrap();
+        assert_eq!(settings.bucket, "clipboard");
+
+        // Incomplete fields are still rejected by the test path.
+        sync.s3_bucket = None;
+        assert!(SyncSettings::validated_from_sync_config(&sync).is_err());
     }
 
     #[test]

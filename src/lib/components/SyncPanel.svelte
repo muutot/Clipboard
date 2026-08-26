@@ -129,10 +129,7 @@
 
   async function handleTestConnection() {
     if (!isTauriRuntime() || syncTesting) return;
-    if (syncProvider !== "s3") {
-      onfeedback(_t("storage.syncTestDisabledHint"), false);
-      return;
-    }
+
     syncTesting = true;
     try {
       await persistSyncConfig();

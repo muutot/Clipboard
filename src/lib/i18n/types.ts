@@ -129,7 +129,6 @@ export interface LocaleDefinition {
     syncStatusFailed: string;
     syncCloudTab: string;
     syncS3Tab: string;
-    syncTestDisabledHint: string;
     syncS3Title: string;
     syncS3Region: string;
     syncS3Bucket: string;
