@@ -148,7 +148,7 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     id: "storage",
     icon: "file",
     labelKey: "storage.storageTab",
-    breadcrumbLabelKey: "storage.storageToolsTab",
+    breadcrumbLabelKey: "storage.storageTab",
     tabs: [
       {
         section: "storage_paths",
