@@ -192,111 +192,113 @@
   }
 </script>
 
-<section class="setting-card">
-  <div class="setting-heading">
-    <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-    <div>
-      <strong>{_t("storage.transferTitle")}</strong>
-      <p>{_t("storage.transferDesc")}</p>
-    </div>
-  </div>
-  <div class="transfer-actions">
-    <div class="transfer-group">
-      <span class="transfer-label">{_t("storage.exportLabel")}</span>
-      <CustomSelect
-        value={exportFormat}
-        disabled={exporting || importing || exportFormats.length === 0}
-        ariaLabel={_t("storage.exportLabel")}
-        options={exportFormats.map((format) => ({
-          value: format.id,
-          label: format.label,
-        }))}
-        onchange={(v) => (exportFormat = v as string)}
-      />
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={exporting || importing || exportFormats.length === 0}
-        onclick={handleExport}
-      >
-        {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
-      </button>
-    </div>
-    <div class="transfer-group">
-      <span class="transfer-label">{_t("storage.importLabel")}</span>
-      <CustomSelect
-        value={importFormat}
-        disabled={exporting || importing || importFormats.length === 0}
-        ariaLabel={_t("storage.importLabel")}
-        options={importFormats.map((format) => ({
-          value: format.id,
-          label: format.label,
-        }))}
-        onchange={(v) => (importFormat = v as string)}
-      />
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={exporting || importing || importFormats.length === 0}
-        onclick={handleImport}
-      >
-        {importing ? _t("storage.importing") : _t("storage.importAction")}
-      </button>
-    </div>
-  </div>
-  {#if showLimitWarning}
-    <div class="transfer-limit-warning">
-      <span
-        >{_t("storage.importTruncationWarning", {
-          max: maxItemCount,
-          count: importTruncationCount,
-        })}</span
-      >
-      <button type="button" class="settings-action-btn" onclick={onadjustlimit}>
-        {_t("storage.importAdjustLimit")}
-      </button>
-    </div>
-  {/if}
-  <div class="export-options">
-    <div class="export-option-row">
-      <span class="export-option-label">{_t("storage.exportFavorites")}</span>
-      <label class="export-check">
-        <Checkbox
-          checked={exportIncludeFavorites}
-          onchange={(checked) => (exportIncludeFavorites = checked)}
-          size={15}
-        />
-        <span>{_t("storage.exportIncludeFavorites")}</span>
-      </label>
-    </div>
-    <div class="export-option-row">
-      <span class="export-option-label">{_t("storage.exportContentTypes")}</span>
-      <div class="export-kind-checks">
-        {#each storageKinds as kindInfo (kindInfo.kind)}
-          <label class="export-check">
-            <Checkbox
-              checked={exportContentTypes.has(kindInfo.kind)}
-              onchange={() => toggleExportContentType(kindInfo.kind)}
-              size={15}
-            />
-            <span>{_t(kindInfo.labelKey)}</span>
-          </label>
-        {/each}
+<div class="settings-scroll">
+  <section class="setting-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+      <div>
+        <strong>{_t("storage.transferTitle")}</strong>
+        <p>{_t("storage.transferDesc")}</p>
       </div>
     </div>
-    <div class="export-option-row export-date-row">
-      <span class="export-option-label">{_t("storage.exportDateRange")}</span>
-      <DatePicker
-        value={exportDateFrom}
-        onchange={(v) => (exportDateFrom = v)}
-        ariaLabel={_t("storage.exportDateFrom")}
-      />
-      <span class="export-date-separator">–</span>
-      <DatePicker
-        value={exportDateTo}
-        onchange={(v) => (exportDateTo = v)}
-        ariaLabel={_t("storage.exportDateTo")}
-      />
+    <div class="transfer-actions">
+      <div class="transfer-group">
+        <span class="transfer-label">{_t("storage.exportLabel")}</span>
+        <CustomSelect
+          value={exportFormat}
+          disabled={exporting || importing || exportFormats.length === 0}
+          ariaLabel={_t("storage.exportLabel")}
+          options={exportFormats.map((format) => ({
+            value: format.id,
+            label: format.label,
+          }))}
+          onchange={(v) => (exportFormat = v as string)}
+        />
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={exporting || importing || exportFormats.length === 0}
+          onclick={handleExport}
+        >
+          {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
+        </button>
+      </div>
+      <div class="transfer-group">
+        <span class="transfer-label">{_t("storage.importLabel")}</span>
+        <CustomSelect
+          value={importFormat}
+          disabled={exporting || importing || importFormats.length === 0}
+          ariaLabel={_t("storage.importLabel")}
+          options={importFormats.map((format) => ({
+            value: format.id,
+            label: format.label,
+          }))}
+          onchange={(v) => (importFormat = v as string)}
+        />
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={exporting || importing || importFormats.length === 0}
+          onclick={handleImport}
+        >
+          {importing ? _t("storage.importing") : _t("storage.importAction")}
+        </button>
+      </div>
     </div>
-  </div>
-</section>
+    {#if showLimitWarning}
+      <div class="transfer-limit-warning">
+        <span
+          >{_t("storage.importTruncationWarning", {
+            max: maxItemCount,
+            count: importTruncationCount,
+          })}</span
+        >
+        <button type="button" class="settings-action-btn" onclick={onadjustlimit}>
+          {_t("storage.importAdjustLimit")}
+        </button>
+      </div>
+    {/if}
+    <div class="export-options">
+      <div class="export-option-row">
+        <span class="export-option-label">{_t("storage.exportFavorites")}</span>
+        <label class="export-check">
+          <Checkbox
+            checked={exportIncludeFavorites}
+            onchange={(checked) => (exportIncludeFavorites = checked)}
+            size={15}
+          />
+          <span>{_t("storage.exportIncludeFavorites")}</span>
+        </label>
+      </div>
+      <div class="export-option-row">
+        <span class="export-option-label">{_t("storage.exportContentTypes")}</span>
+        <div class="export-kind-checks">
+          {#each storageKinds as kindInfo (kindInfo.kind)}
+            <label class="export-check">
+              <Checkbox
+                checked={exportContentTypes.has(kindInfo.kind)}
+                onchange={() => toggleExportContentType(kindInfo.kind)}
+                size={15}
+              />
+              <span>{_t(kindInfo.labelKey)}</span>
+            </label>
+          {/each}
+        </div>
+      </div>
+      <div class="export-option-row export-date-row">
+        <span class="export-option-label">{_t("storage.exportDateRange")}</span>
+        <DatePicker
+          value={exportDateFrom}
+          onchange={(v) => (exportDateFrom = v)}
+          ariaLabel={_t("storage.exportDateFrom")}
+        />
+        <span class="export-date-separator">–</span>
+        <DatePicker
+          value={exportDateTo}
+          onchange={(v) => (exportDateTo = v)}
+          ariaLabel={_t("storage.exportDateTo")}
+        />
+      </div>
+    </div>
+  </section>
+</div>
