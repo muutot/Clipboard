@@ -989,6 +989,31 @@ button {
 }
 
 /* --- Text entry card input (from TextEntry template) --- */
+.entry-textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--settings-control-radius, 6px);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", "Menlo", monospace);
+  font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+.entry-textarea::placeholder {
+  color: var(--placeholder-color);
+}
+.entry-textarea:focus {
+  border-color: var(--text-faint);
+}
+.entry-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 .settings-text-input {
   width: 100%;
   margin-top: 12px;
