@@ -439,7 +439,6 @@ label.visually-hidden {
 /* ── transparency / range slider ── */
 .transparency-slider {
   width: 100%;
-  margin-top: 12px;
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
@@ -668,7 +667,6 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
 }
 .dir-input-row input {
   flex: 1;
@@ -761,7 +759,6 @@ button {
 .resource-path-grid {
   display: grid;
   gap: 9px;
-  margin-top: 10px;
 }
 .resource-path-grid label {
   margin: 0;
@@ -860,7 +857,6 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 12px;
 }
 .transfer-group {
   display: flex;
@@ -900,7 +896,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  margin-top: 12px;
   padding-top: 11px;
   border-top: 1px solid var(--border-subtle);
 }
@@ -942,34 +937,6 @@ button {
 }
 
 /* --- Sync form --- */
-.setting-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.setting-row label {
-  flex: 0 0 auto;
-  min-width: 110px;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--settings-description-size);
-}
-.setting-row input {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--settings-control-radius);
-  outline: none;
-  color: var(--text-primary);
-  background: var(--input-bg);
-  font-size: var(--settings-control-size);
-  transition: border-color 120ms ease;
-}
-.setting-row input:focus {
-  border-color: var(--text-faint);
-}
 .setting-actions-row {
   margin-top: 10px;
 }
@@ -993,7 +960,6 @@ button {
 .entry-textarea {
   width: 100%;
   resize: vertical;
-  margin-top: 12px;
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--settings-control-radius, 6px);
@@ -1018,7 +984,6 @@ button {
 }
 .settings-text-input {
   width: 100%;
-  margin-top: 12px;
   padding: 7px 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--settings-control-radius, 6px);
