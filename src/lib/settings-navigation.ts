@@ -16,7 +16,6 @@ export const SETTINGS_SECTIONS = [
   "storage_limits",
   "storage_tools",
   "sync_cloud",
-  "sync_advanced",
   "keyboard_item",
   "keyboard_quick",
   "keyboard_system",
@@ -173,12 +172,6 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
         titleKey: "storage.syncTitle",
         descriptionKey: "storage.syncDescription",
       },
-      {
-        section: "sync_advanced",
-        labelKey: "storage.syncAdvancedTab",
-        titleKey: "storage.syncTitle",
-        descriptionKey: "storage.syncDescription",
-      },
     ],
   },
   {
@@ -186,6 +179,12 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     icon: "keyboard",
     labelKey: "storage.keyboardTab",
     tabs: [
+      {
+        section: "keyboard_system",
+        labelKey: "storage.keyboardSystemTab",
+        titleKey: "keyboard.title",
+        descriptionKey: "storage.keyboardSystemDescription",
+      },
       {
         section: "keyboard_item",
         labelKey: "storage.keyboardItemTab",
@@ -197,12 +196,6 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
         labelKey: "storage.keyboardQuickTab",
         titleKey: "keyboard.title",
         descriptionKey: "storage.keyboardQuickDescription",
-      },
-      {
-        section: "keyboard_system",
-        labelKey: "storage.keyboardSystemTab",
-        titleKey: "keyboard.title",
-        descriptionKey: "storage.keyboardSystemDescription",
       },
       {
         section: "keyboard_switch",

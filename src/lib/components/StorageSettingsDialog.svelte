@@ -7,7 +7,6 @@
   import SearchField from "$lib/components/SearchField.svelte";
   import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { resetKeyboardConfig } from "$lib/services/keyboard";
   import { listen } from "@tauri-apps/api/event";
   import {
     getStorageKindStats,
@@ -175,19 +174,6 @@
       cacheKey: "sync",
       load: () => import("$lib/components/SyncPanel.svelte"),
       props: () => ({
-        advanced: false,
-        onfeedback: (message: string, success: boolean) => {
-          feedback = message;
-          feedbackSuccess = success;
-        },
-      }),
-    },
-    {
-      sections: ["sync_advanced"],
-      cacheKey: "sync",
-      load: () => import("$lib/components/SyncPanel.svelte"),
-      props: () => ({
-        advanced: true,
         onfeedback: (message: string, success: boolean) => {
           feedback = message;
           feedbackSuccess = success;
@@ -199,11 +185,11 @@
       load: () => import("$lib/components/KeyboardSettingsPanel.svelte"),
       props: () => ({
         onclose,
-        resetToken: keyboardResetToken,
         category: activeSection.startsWith("keyboard_")
           ? (activeSection.slice("keyboard_".length) as "item" | "quick" | "system" | "switch")
           : "item",
         showHeader: false,
+        configPath: status?.keyboardConfigPath ?? null,
       }),
     },
     {
@@ -298,16 +284,6 @@
     ),
   );
   let activeStatisticsTab = $state<StatisticsTab>("storage");
-  let keyboardResetToken = $state(0);
-
-  async function handleResetKeyboard() {
-    try {
-      await resetKeyboardConfig();
-      keyboardResetToken++;
-    } catch {
-      /* ignore */
-    }
-  }
 
   const settingsNavGroups = $derived.by((): SettingsNavGroup[] =>
     SETTINGS_NAV_GROUP_DEFINITIONS.map((group) => ({
@@ -980,37 +956,6 @@
           {/if}
         </div>
       </div>
-      {#if activeSettingsNavGroup?.id === "keyboard"}
-        <section
-          class="setting-card toggle-card keyboard-config-card"
-          data-settings-search-id="keyboard.config-file"
-        >
-          <div class="setting-heading">
-            <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
-            <div>
-              <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
-              <p>{_t("storage.keyboardConfigNote")}</p>
-            </div>
-          </div>
-          <div class="config-bar-actions">
-            <button
-              type="button"
-              class="config-bar-btn"
-              onclick={() =>
-                invoke("open_external_url", {
-                  url: status?.keyboardConfigPath ?? "conf/keyboard.json",
-                })}
-            >
-              <AppIcon name="file" size={13} />
-              {_t("keyboard.openFile")}
-            </button>
-            <button type="button" class="config-bar-btn" onclick={() => handleResetKeyboard()}>
-              <AppIcon name="restore" size={13} />
-              {_t("storage.resetAll")}
-            </button>
-          </div>
-        </section>
-      {/if}
       {#if activeSettingsNavGroup && activeSettingsNavGroup.tabs.length > 1}
         <nav class="settings-subnav" aria-label={activeSettingsNavGroup.ariaLabel}>
           {#each activeSettingsNavGroup.tabs as tab (`${tab.section}:${tab.statisticsTab ?? ""}`)}
@@ -1089,8 +1034,12 @@
       {#await loadLazyPanelModule(activeSection)}
         {@render loadingSettingsPanel()}
       {:then module}
-        {@const Panel = module.default}
-        <Panel {...lazyPanel.props()} />
+        {#if lazyPanel}
+          {@const Panel = module.default}
+          <Panel {...lazyPanel.props()} />
+        {:else}
+          {@render loadingSettingsPanel()}
+        {/if}
       {:catch}
         {@render settingsPanelLoadFailed()}
       {/await}
@@ -1819,35 +1768,5 @@
   .danger-action:disabled {
     opacity: 0.45;
     cursor: default;
-  }
-
-  .keyboard-config-card {
-    margin-top: 3px;
-  }
-
-  .config-bar-actions {
-    display: flex;
-    flex-shrink: 0;
-    gap: 6px;
-  }
-
-  .config-bar-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    color: var(--text-muted);
-    background: var(--card-bg);
-    font: inherit;
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .config-bar-btn:hover {
-    color: var(--text-secondary);
-    background: var(--hover-bg);
   }
 </style>

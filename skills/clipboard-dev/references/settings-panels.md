@@ -27,7 +27,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                             |
 | Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent           |
 | Sync             | Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits) → built into the parent                               |
-| Keyboard         | Item, Quick, Global → `KeyboardSettingsPanel` with category prop                                                                                                                  |
+| Keyboard         | Global, Item, Quick, Switch → `KeyboardSettingsPanel` with category prop                                                                                                          |
 | OCR              | Single current section → built into the parent                                                                                                                                    |
 | Statistics       | Storage, Performance, Memory → built into the parent                                                                                                                              |
 | About            | Version, executable-path location, configurable update source dropdown, and update check (`check_for_update`) → built into the parent                                             |
@@ -50,7 +50,7 @@ feedback overlay when needed
 
 The breadcrumb and description use `--settings-description-size`; secondary section labels and card headings use `--settings-heading-size`. Do not add a second page title inside a child when the parent owns the header.
 
-The current keyboard configuration bar is a local exception to this order and is listed in `niche_ui_style.md`; do not reproduce that placement in new categories.
+The keyboard configuration card ("独立快捷键配置") is not a shell-level element; it renders inside `KeyboardSettingsPanel.svelte` as the first card of the Global tab (with `data-settings-search-id="keyboard.config-file"`), keeping the parent hierarchy above authoritative.
 
 ## Child panel contract
 

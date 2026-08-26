@@ -125,7 +125,6 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "加密",
     "密码",
   ],
-  sync_advanced: [i18n("storage.syncAdvancedTab"), "高级设置", "分段", "阈值", "资源限制"],
   keyboard_item: [i18n("storage.keyboardTab"), i18n("storage.keyboardItemTab"), "快捷键", "條目"],
   keyboard_quick: [
     i18n("storage.keyboardTab"),
@@ -663,7 +662,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
 
   entry(
     "keyboard.config-file",
-    { section: "keyboard_item" },
+    { section: "keyboard_system" },
     i18n("keyboard.shortcutConfigTitle"),
     i18n("keyboard.shortcutConfigDesc"),
     ["keyboard.json", "配置文件"],

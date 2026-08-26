@@ -5,6 +5,7 @@
   import ToggleEntry from "$lib/components/settings-entries/ToggleEntry.svelte";
   import NumberEntry from "$lib/components/settings-entries/NumberEntry.svelte";
   import SizeEntry from "$lib/components/settings-entries/SizeEntry.svelte";
+  import HeadingEntry from "$lib/components/settings-entries/HeadingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
@@ -20,12 +21,10 @@
     resolvePath($messages, path, params);
 
   interface Props {
-    /** Renders the segment/resource limit rows instead of the connection card. */
-    advanced?: boolean;
     onfeedback: (message: string, success: boolean) => void;
   }
 
-  let { advanced = false, onfeedback }: Props = $props();
+  let { onfeedback }: Props = $props();
 
   let syncProvider = $state<"off" | "s3">("off");
   let syncEndpoint = $state("");
@@ -187,244 +186,250 @@
 </script>
 
 <div class="settings-scroll">
-  {#if !advanced}
-    <SelectEntry
-      config={{
-        type: "select",
-        variant: "row",
-        icon: "cloud",
-        label: _t("storage.syncProvider"),
-        ariaLabel: _t("storage.syncProvider"),
-        options: [
-          { value: "off", label: _t("storage.syncProviderOff") },
-          { value: "s3", label: _t("storage.syncProviderS3") },
-        ],
-        get: () => syncProvider,
-        set: (v) => {
-          syncProvider = v as "off" | "s3";
-          void saveSyncConfig();
-        },
-      }}
-    />
+  <SelectEntry
+    config={{
+      type: "select",
+      variant: "row",
+      icon: "cloud",
+      label: _t("storage.syncProvider"),
+      ariaLabel: _t("storage.syncProvider"),
+      options: [
+        { value: "off", label: _t("storage.syncProviderOff") },
+        { value: "s3", label: _t("storage.syncProviderS3") },
+      ],
+      get: () => syncProvider,
+      set: (v) => {
+        syncProvider = v as "off" | "s3";
+        void saveSyncConfig();
+      },
+    }}
+  />
 
-    {#if syncProvider === "s3"}
-      <section class="setting-card">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
-          <div><strong>{_t("storage.syncS3Title")}</strong></div>
-        </div>
-        <TextEntry
-          config={{
-            type: "text",
-            variant: "row",
-            icon: "globe",
-            label: _t("storage.syncEndpoint"),
-            inputType: "url",
-            placeholder: "http://127.0.0.1:9000",
-            get: () => syncEndpoint,
-            set: (v) => (syncEndpoint = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-        <TextEntry
-          config={{
-            type: "text",
-            variant: "row",
-            icon: "link",
-            label: _t("storage.syncRemotePath"),
-            placeholder: "clipboard-sync",
-            get: () => syncRemotePath,
-            set: (v) => (syncRemotePath = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-        <TextEntry
-          config={{
-            type: "text",
-            variant: "row",
-            icon: "cloud",
-            label: _t("storage.syncS3Region"),
-            placeholder: "us-east-1",
-            get: () => syncS3Region,
-            set: (v) => (syncS3Region = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-        <TextEntry
-          config={{
-            type: "text",
-            variant: "row",
-            icon: "layers",
-            label: _t("storage.syncS3Bucket"),
-            placeholder: "clipboard",
-            get: () => syncS3Bucket,
-            set: (v) => (syncS3Bucket = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-        <TextEntry
-          config={{
-            type: "text",
-            variant: "row",
-            icon: "type",
-            label: _t("storage.syncS3AccessKey"),
-            get: () => syncS3AccessKey,
-            set: (v) => (syncS3AccessKey = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-        <TextEntry
-          config={{
-            type: "text",
-            variant: "row",
-            icon: "lock",
-            label: _t("storage.syncS3SecretKey"),
-            inputType: "password",
-            placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
-            get: () => syncS3SecretKey,
-            set: (v) => (syncS3SecretKey = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-        <div class="setting-actions-row">
-          <button
-            type="button"
-            class="settings-action-btn"
-            disabled={syncTesting || syncing}
-            onclick={handleTestConnection}
-          >
-            {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
-          </button>
-          {#if syncTestResult}
-            <span class="sync-last-info">{syncTestResult.message}</span>
-          {/if}
-        </div>
-      </section>
-
+  {#if syncProvider === "s3"}
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
+        <div><strong>{_t("storage.syncS3Title")}</strong></div>
+      </div>
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          icon: "globe",
+          label: _t("storage.syncEndpoint"),
+          inputType: "url",
+          placeholder: "http://127.0.0.1:9000",
+          get: () => syncEndpoint,
+          set: (v) => (syncEndpoint = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          icon: "link",
+          label: _t("storage.syncRemotePath"),
+          placeholder: "clipboard-sync",
+          get: () => syncRemotePath,
+          set: (v) => (syncRemotePath = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          icon: "cloud",
+          label: _t("storage.syncS3Region"),
+          placeholder: "us-east-1",
+          get: () => syncS3Region,
+          set: (v) => (syncS3Region = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          icon: "layers",
+          label: _t("storage.syncS3Bucket"),
+          placeholder: "clipboard",
+          get: () => syncS3Bucket,
+          set: (v) => (syncS3Bucket = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+      <TextEntry
+        config={{
+          type: "text",
+          variant: "row",
+          icon: "type",
+          label: _t("storage.syncS3AccessKey"),
+          get: () => syncS3AccessKey,
+          set: (v) => (syncS3AccessKey = v),
+          onblur: saveSyncConfig,
+        }}
+      />
       <TextEntry
         config={{
           type: "text",
           variant: "row",
           icon: "lock",
-          label: _t("storage.syncEncryption"),
+          label: _t("storage.syncS3SecretKey"),
           inputType: "password",
-          placeholder: syncHasEncryptionPassword
-            ? _t("storage.syncEncryptionStored")
-            : _t("storage.syncEncryptionPlaceholder"),
-          get: () => syncEncryptPassword,
-          set: (v) => (syncEncryptPassword = v),
+          placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
+          get: () => syncS3SecretKey,
+          set: (v) => (syncS3SecretKey = v),
           onblur: saveSyncConfig,
         }}
       />
+      <div class="setting-actions-row">
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={syncTesting || syncing}
+          onclick={handleTestConnection}
+        >
+          {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
+        </button>
+        {#if syncTestResult}
+          <span class="sync-last-info">{syncTestResult.message}</span>
+        {/if}
+      </div>
+    </section>
 
-      <ToggleEntry
-        config={{
-          type: "toggle",
-          variant: "row",
-          icon: "settings",
-          label: _t("storage.syncAutoSync"),
-          ariaLabel: _t("storage.syncAutoSyncEnable"),
-          get: () => syncAutoSync,
-          set: (v) => (syncAutoSync = v),
-          onchange: () => void saveSyncConfig(),
-        }}
-      />
-
-      {#if syncAutoSync}
-        <NumberEntry
-          config={{
-            type: "number",
-            variant: "row",
-            icon: "clock",
-            label: _t("storage.syncAutoInterval"),
-            min: 10,
-            max: 86400,
-            suffix: _t("storage.syncSecondsUnit"),
-            get: () => syncAutoInterval,
-            set: (v) => (syncAutoInterval = v),
-            onblur: saveSyncConfig,
-          }}
-        />
-      {/if}
-
-      <section class="setting-card">
-        <div class="setting-heading">
-          <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
-          <div class="sync-now-info">
-            <strong>{_t("storage.syncNow")}</strong>
-            <p class="sync-now-desc">
-              {_t("storage.syncPendingCount", {
-                count: syncPendingEntries,
-              })}{#if syncLastMs}
-                | {_t("storage.syncLastTime", {
-                  time: new Date(syncLastMs).toLocaleString(),
-                })}{/if}{#if syncStatus}
-                | {syncStatus === "success"
-                  ? _t("storage.syncStatusSuccess")
-                  : syncStatus === "partial"
-                    ? _t("storage.syncStatusPartial")
-                    : _t("storage.syncStatusFailed")}{/if}
-            </p>
-          </div>
-          <button
-            type="button"
-            class="settings-action-btn"
-            disabled={syncing || syncTesting}
-            onclick={handleSyncNow}
-          >
-            {syncing ? _t("storage.syncing") : _t("storage.syncNow")}
-          </button>
-        </div>
-      </section>
-    {/if}
-  {:else}
-    <NumberEntry
+    <TextEntry
       config={{
-        type: "number",
+        type: "text",
         variant: "row",
-        icon: "file",
-        label: _t("storage.syncSegmentMaxEntries"),
-        min: 16,
-        max: 10000,
-        suffix: _t("storage.syncEntriesUnit"),
-        get: () => syncSegmentMaxEntries,
-        set: (v) => (syncSegmentMaxEntries = v),
+        icon: "lock",
+        label: _t("storage.syncEncryption"),
+        inputType: "password",
+        placeholder: syncHasEncryptionPassword
+          ? _t("storage.syncEncryptionStored")
+          : _t("storage.syncEncryptionPlaceholder"),
+        get: () => syncEncryptPassword,
+        set: (v) => (syncEncryptPassword = v),
         onblur: saveSyncConfig,
       }}
     />
 
-    <SizeEntry
+    <ToggleEntry
       config={{
-        type: "size",
-        icon: "image",
-        label: _t("storage.syncMaxImageBytes"),
-        min: 0,
-        get: () => syncMaxImageDisplay,
-        set: (v) => (syncMaxImageDisplay = v),
-        getUnit: () => syncMaxImageUnit,
-        setUnit: (u) => {
-          syncMaxImageUnit = u;
-          updateSyncMaxImageFromDisplay();
-        },
-        onchange: saveSyncConfig,
+        type: "toggle",
+        variant: "row",
+        icon: "settings",
+        label: _t("storage.syncAutoSync"),
+        ariaLabel: _t("storage.syncAutoSyncEnable"),
+        get: () => syncAutoSync,
+        set: (v) => (syncAutoSync = v),
+        onchange: () => void saveSyncConfig(),
       }}
     />
 
-    <SizeEntry
-      config={{
-        type: "size",
-        icon: "file",
-        label: _t("storage.syncMaxFileBytes"),
-        min: 0,
-        get: () => syncMaxFileDisplay,
-        set: (v) => (syncMaxFileDisplay = v),
-        getUnit: () => syncMaxFileUnit,
-        setUnit: (u) => {
-          syncMaxFileUnit = u;
-          updateSyncMaxFileFromDisplay();
-        },
-        onchange: saveSyncConfig,
-      }}
-    />
+    {#if syncAutoSync}
+      <NumberEntry
+        config={{
+          type: "number",
+          variant: "row",
+          icon: "clock",
+          label: _t("storage.syncAutoInterval"),
+          min: 10,
+          max: 86400,
+          suffix: _t("storage.syncSecondsUnit"),
+          get: () => syncAutoInterval,
+          set: (v) => (syncAutoInterval = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+    {/if}
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
+        <div class="sync-now-info">
+          <strong>{_t("storage.syncNow")}</strong>
+          <p class="sync-now-desc">
+            {_t("storage.syncPendingCount", {
+              count: syncPendingEntries,
+            })}{#if syncLastMs}
+              | {_t("storage.syncLastTime", {
+                time: new Date(syncLastMs).toLocaleString(),
+              })}{/if}{#if syncStatus}
+              | {syncStatus === "success"
+                ? _t("storage.syncStatusSuccess")
+                : syncStatus === "partial"
+                  ? _t("storage.syncStatusPartial")
+                  : _t("storage.syncStatusFailed")}{/if}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={syncing || syncTesting}
+          onclick={handleSyncNow}
+        >
+          {syncing ? _t("storage.syncing") : _t("storage.syncNow")}
+        </button>
+      </div>
+    </section>
   {/if}
+
+  <HeadingEntry
+    config={{
+      type: "heading",
+      icon: "sliders",
+      label: _t("storage.syncAdvancedTab"),
+      desc: _t("storage.syncAdvancedDesc"),
+    }}
+  />
+  <NumberEntry
+    config={{
+      type: "number",
+      variant: "row",
+      icon: "file",
+      label: _t("storage.syncSegmentMaxEntries"),
+      min: 16,
+      max: 10000,
+      suffix: _t("storage.syncEntriesUnit"),
+      get: () => syncSegmentMaxEntries,
+      set: (v) => (syncSegmentMaxEntries = v),
+      onblur: saveSyncConfig,
+    }}
+  />
+
+  <SizeEntry
+    config={{
+      type: "size",
+      icon: "image",
+      label: _t("storage.syncMaxImageBytes"),
+      min: 0,
+      get: () => syncMaxImageDisplay,
+      set: (v) => (syncMaxImageDisplay = v),
+      getUnit: () => syncMaxImageUnit,
+      setUnit: (u) => {
+        syncMaxImageUnit = u;
+        updateSyncMaxImageFromDisplay();
+      },
+      onchange: saveSyncConfig,
+    }}
+  />
+
+  <SizeEntry
+    config={{
+      type: "size",
+      icon: "file",
+      label: _t("storage.syncMaxFileBytes"),
+      min: 0,
+      get: () => syncMaxFileDisplay,
+      set: (v) => (syncMaxFileDisplay = v),
+      getUnit: () => syncMaxFileUnit,
+      setUnit: (u) => {
+        syncMaxFileUnit = u;
+        updateSyncMaxFileFromDisplay();
+      },
+      onchange: saveSyncConfig,
+    }}
+  />
 </div>

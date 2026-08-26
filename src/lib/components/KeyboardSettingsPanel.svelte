@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import {
     configureKeyboardShortcuts,
     getKeyboardConfig,
+    resetKeyboardConfig,
     type KeyboardConfig,
   } from "$lib/services/keyboard";
   import { messages, resolvePath } from "$lib/i18n";
@@ -17,9 +19,16 @@
     showHeader?: boolean;
     category?: "item" | "quick" | "system" | "switch";
     resetToken?: number;
+    configPath?: string | null;
   }
 
-  let { onclose, showHeader = true, category = "item", resetToken = 0 }: Props = $props();
+  let {
+    onclose,
+    showHeader = true,
+    category = "item",
+    resetToken = 0,
+    configPath = null,
+  }: Props = $props();
   let config = $state<KeyboardConfig | null>(null);
   let loading = $state(true);
   let feedback = $state("");
@@ -414,6 +423,18 @@
     }
   }
 
+  async function handleResetConfig() {
+    try {
+      const resetConfig = await resetKeyboardConfig();
+      if (componentDestroyed) return;
+      config = resetConfig;
+    } catch (error) {
+      if (!componentDestroyed) {
+        showFeedback(error instanceof Error ? error.message : String(error), false);
+      }
+    }
+  }
+
   function showFeedback(msg: string, success: boolean) {
     feedback = msg;
     feedbackSuccess = success;
@@ -531,6 +552,31 @@
   <div class="settings-state">{_t("keyboard.readingConfig")}</div>
 {:else if config}
   <div class="settings-scroll">
+    {#if category === "system"}
+      <section class="setting-card toggle-card" data-settings-search-id="keyboard.config-file">
+        <div class="setting-heading">
+          <span class="setting-icon"><AppIcon name="keyboard" size={17} /></span>
+          <div>
+            <strong>{_t("keyboard.shortcutConfigTitle")}</strong>
+            <p>{_t("storage.keyboardConfigNote")}</p>
+          </div>
+        </div>
+        <div class="config-bar-actions">
+          <button
+            type="button"
+            class="config-bar-btn"
+            onclick={() => invoke("open_external_url", { url: configPath ?? "conf/keyboard.json" })}
+          >
+            <AppIcon name="file" size={13} />
+            {_t("keyboard.openFile")}
+          </button>
+          <button type="button" class="config-bar-btn" onclick={() => void handleResetConfig()}>
+            <AppIcon name="restore" size={13} />
+            {_t("storage.resetAll")}
+          </button>
+        </div>
+      </section>
+    {/if}
     {#each categoryActions as action}
       <section
         class="setting-card toggle-card"
@@ -600,6 +646,32 @@
 {/if}
 
 <style>
+  .config-bar-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .config-bar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--settings-control-radius, 6px);
+    color: var(--text-muted);
+    background: var(--card-bg);
+    font: inherit;
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .config-bar-btn:hover {
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+  }
+
   .system-badge {
     display: inline-block;
     padding: 1px 5px;
