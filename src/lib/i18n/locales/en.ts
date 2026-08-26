@@ -120,7 +120,7 @@ const en: LocaleDefinition = {
     syncProvider: "Sync",
     syncProviderOff: "Off",
     syncProviderS3: "S3 Compatible",
-    syncEndpoint: "S3 Endpoint",
+    syncEndpoint: "Service Endpoint",
     syncRemotePath: "Object Prefix",
     syncTest: "Test Connection",
     syncTesting: "Testing...",
