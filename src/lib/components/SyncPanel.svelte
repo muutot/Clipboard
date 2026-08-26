@@ -194,8 +194,8 @@
         type: "select",
         variant: "row",
         icon: "cloud",
-        label: "Sync Provider",
-
+        label: _t("storage.syncProvider"),
+        ariaLabel: _t("storage.syncProvider"),
         options: [
           { value: "off", label: _t("storage.syncProviderOff") },
           { value: "s3", label: _t("storage.syncProviderS3") },
@@ -213,7 +213,7 @@
         type: "text",
         variant: "row",
         icon: "lock",
-        label: "Encryption Password",
+        label: _t("storage.syncEncryption"),
         inputType: "password",
         placeholder: syncHasEncryptionPassword
           ? _t("storage.syncEncryptionStored")
@@ -229,7 +229,7 @@
         type: "toggle",
         variant: "row",
         icon: "settings",
-        label: "Auto Sync",
+        label: _t("storage.syncAutoSync"),
         get: () => syncAutoSync,
         set: (v) => (syncAutoSync = v),
         onchange: () => void saveSyncConfig(),
@@ -242,7 +242,7 @@
           type: "number",
           variant: "row",
           icon: "clock",
-          label: "Auto Sync Interval",
+          label: _t("storage.syncAutoInterval"),
           min: 10,
           max: 86400,
           suffix: _t("storage.syncSecondsUnit"),
@@ -257,7 +257,7 @@
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
         <div class="sync-now-info">
-          <strong>Sync Now</strong>
+          <strong>{_t("storage.syncNow")}</strong>
           <p class="sync-now-desc">
             {_t("storage.syncPendingCount", {
               count: syncPendingEntries,
@@ -288,7 +288,7 @@
         type: "number",
         variant: "row",
         icon: "file",
-        label: "Max Entries per Segment",
+        label: _t("storage.syncSegmentMaxEntries"),
         min: 16,
         max: 10000,
         suffix: _t("storage.syncEntriesUnit"),
@@ -302,7 +302,7 @@
       config={{
         type: "size",
         icon: "image",
-        label: "Max Image Bytes",
+        label: _t("storage.syncMaxImageBytes"),
         min: 0,
         get: () => syncMaxImageDisplay,
         set: (v) => (syncMaxImageDisplay = v),
@@ -319,7 +319,7 @@
       config={{
         type: "size",
         icon: "file",
-        label: "Max File Bytes",
+        label: _t("storage.syncMaxFileBytes"),
         min: 0,
         get: () => syncMaxFileDisplay,
         set: (v) => (syncMaxFileDisplay = v),
@@ -334,7 +334,7 @@
   {:else if tab === "s3"}
     <section class="setting-card setting-card-row">
       <span class="setting-icon"><AppIcon name="link" size={17} /></span>
-      <span class="setting-label">Test Connection</span>
+      <span class="setting-label">{_t("storage.syncTest")}</span>
       <button
         type="button"
         class="settings-action-btn"
@@ -349,7 +349,7 @@
         type: "text",
         variant: "row",
         icon: "globe",
-        label: "Service Endpoint",
+        label: _t("storage.syncEndpoint"),
         inputType: "url",
         placeholder: "http://127.0.0.1:9000",
         get: () => syncEndpoint,
@@ -362,7 +362,7 @@
         type: "text",
         variant: "row",
         icon: "link",
-        label: "Object Prefix",
+        label: _t("storage.syncRemotePath"),
         placeholder: "clipboard-sync",
         get: () => syncRemotePath,
         set: (v) => (syncRemotePath = v),
@@ -374,7 +374,7 @@
         type: "text",
         variant: "row",
         icon: "cloud",
-        label: "Region",
+        label: _t("storage.syncS3Region"),
         placeholder: "us-east-1",
         get: () => syncS3Region,
         set: (v) => (syncS3Region = v),
@@ -386,7 +386,7 @@
         type: "text",
         variant: "row",
         icon: "layers",
-        label: "Bucket",
+        label: _t("storage.syncS3Bucket"),
         placeholder: "clipboard",
         get: () => syncS3Bucket,
         set: (v) => (syncS3Bucket = v),
@@ -398,7 +398,7 @@
         type: "text",
         variant: "row",
         icon: "type",
-        label: "Access Key",
+        label: _t("storage.syncS3AccessKey"),
         get: () => syncS3AccessKey,
         set: (v) => (syncS3AccessKey = v),
         onblur: saveSyncConfig,
@@ -409,7 +409,7 @@
         type: "text",
         variant: "row",
         icon: "lock",
-        label: "Secret Key",
+        label: _t("storage.syncS3SecretKey"),
         inputType: "password",
         placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
         get: () => syncS3SecretKey,
