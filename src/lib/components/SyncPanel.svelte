@@ -128,7 +128,11 @@
   }
 
   async function handleTestConnection() {
-    if (!isTauriRuntime() || syncTesting || syncProvider !== "s3") return;
+    if (!isTauriRuntime() || syncTesting) return;
+    if (syncProvider !== "s3") {
+      onfeedback(_t("storage.syncTestDisabledHint"), false);
+      return;
+    }
     syncTesting = true;
     try {
       await persistSyncConfig();
@@ -335,12 +339,7 @@
     <section class="setting-card setting-card-row">
       <span class="setting-icon"><AppIcon name="link" size={17} /></span>
       <span class="setting-label">{_t("storage.syncTest")}</span>
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={syncTesting || syncing || syncProvider !== "s3"}
-        onclick={handleTestConnection}
-      >
+      <button type="button" class="settings-action-btn" onclick={handleTestConnection}>
         {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
       </button>
     </section>

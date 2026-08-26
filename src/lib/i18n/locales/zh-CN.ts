@@ -130,6 +130,7 @@ const zhCN: LocaleDefinition = {
     syncStatusPartial: "部分成功",
     syncStatusFailed: "失败",
     syncS3Tab: "S3",
+    syncTestDisabledHint: "请先在「云端」页将同步开关切换为 S3 兼容存储",
     syncCloudTab: "云端",
     syncS3Title: "S3 存储配置",
     syncS3Region: "Region",

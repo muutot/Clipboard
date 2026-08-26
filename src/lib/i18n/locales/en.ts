@@ -139,6 +139,7 @@ const en: LocaleDefinition = {
     syncStatusFailed: "Failed",
     syncCloudTab: "Cloud",
     syncS3Tab: "S3",
+    syncTestDisabledHint: "Turn on S3-compatible storage on the Cloud tab first.",
     syncS3Title: "S3 Configuration",
     syncS3Region: "Region",
     syncS3Bucket: "Bucket",
