@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CustomEntry from "$lib/components/settings-entries/CustomEntry.svelte";
+  import ToggleEntry from "$lib/components/settings-entries/ToggleEntry.svelte";
   import {
     getPrivacySettings,
     setPrivacySettings,
@@ -20,7 +22,6 @@
 
   let privacy = $state<PrivacySettings | null>(null);
   let loading = $state(true);
-  let localOnlySaving = $state(false);
   let patternsText = $state("");
   let patternsSaving = $state(false);
   let feedback = $state("");
@@ -57,18 +58,16 @@
     }
   }
 
-  async function toggleLocalOnly() {
-    if (!privacy || localOnlySaving) return;
-    localOnlySaving = true;
-    const next = !privacy.localOnly;
+  async function applyLocalOnly(next: boolean): Promise<boolean> {
+    if (!privacy) return false;
     try {
       const updated = await setPrivacySettings({ localOnly: next });
       privacy = updated;
       patternsText = updated.sensitivePatterns.join("\n");
+      return true;
     } catch (error) {
       showFeedback(error instanceof Error ? error.message : String(error), false);
-    } finally {
-      localOnlySaving = false;
+      return false;
     }
   }
 
@@ -99,58 +98,55 @@
       <h2>{_t("capture.sensitiveContentTitle")}</h2>
       <p>{_t("capture.sensitiveSectionDescription")}</p>
     </div>
-    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}
-      >×</button
-    >
+    <button class="close-button" type="button" aria-label={_t("actions.close")} onclick={onclose}>
+      <AppIcon name="x" size={14} strokeWidth={2} />
+    </button>
   </header>
 {/if}
 
 <div class="settings-scroll">
-  <section class="setting-card toggle-card" data-settings-search-id="capture.local-only">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
-      <div>
-        <strong>{_t("capture.localOnly")}</strong>
-        <p>{_t("capture.localOnlyDescription")}</p>
-      </div>
-    </div>
-    <button
-      type="button"
-      class="toggle-switch"
-      class:active={privacy?.localOnly ?? false}
-      role="switch"
-      aria-checked={privacy?.localOnly ?? false}
-      aria-label={_t("capture.localOnly")}
-      disabled={!privacy || localOnlySaving || loading}
-      onclick={toggleLocalOnly}
-    >
-      <span class="toggle-knob"></span>
-    </button>
-  </section>
+  {#if loading || !privacy}
+    <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else}
+    <ToggleEntry
+      searchId="capture.local-only"
+      config={{
+        type: "toggle",
+        variant: "card",
+        icon: "lock",
+        label: _t("capture.localOnly"),
+        desc: _t("capture.localOnlyDescription"),
+        get: () => privacy!.localOnly,
+        set: (v) => void applyLocalOnly(v),
+      }}
+    />
 
-  <section class="setting-card" data-settings-search-id="capture.sensitive-patterns">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
-      <div>
-        <strong>{_t("capture.sensitivePatternsLabel")}</strong>
-        <p>{_t("capture.sensitiveContentDescription")}</p>
+    <CustomEntry
+      searchId="capture.sensitive-patterns"
+      config={{
+        type: "custom",
+        variant: "column",
+        icon: "filter",
+        label: _t("capture.sensitivePatternsLabel"),
+        desc: _t("capture.sensitiveContentDescription"),
+      }}
+    >
+      <textarea
+        class="entry-textarea"
+        bind:value={patternsText}
+        placeholder={_t("capture.sensitivePatternsPlaceholder")}
+        spellcheck="false"
+        rows="6"></textarea>
+      <div class="entry-actions">
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={patternsSaving}
+          onclick={savePatterns}>{_t("actions.save")}</button
+        >
       </div>
-    </div>
-    <textarea
-      class="patterns-textarea"
-      bind:value={patternsText}
-      placeholder={_t("capture.sensitivePatternsPlaceholder")}
-      spellcheck="false"
-      rows="6"></textarea>
-    <div class="patterns-actions">
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={!privacy || patternsSaving || loading}
-        onclick={savePatterns}>{_t("actions.save")}</button
-      >
-    </div>
-  </section>
+    </CustomEntry>
+  {/if}
 </div>
 
 {#if feedback && !loading}
@@ -160,31 +156,5 @@
 <style>
   header p {
     max-width: 570px;
-  }
-
-  .patterns-textarea {
-    width: 100%;
-    resize: vertical;
-    padding: 8px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--settings-control-radius, 6px);
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font-family: var(--font-mono, ui-monospace, "SFMono-Regular", "Menlo", monospace);
-    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-    line-height: 1.5;
-    outline: none;
-    transition: border-color 120ms ease;
-  }
-  .patterns-textarea::placeholder {
-    color: var(--placeholder-color);
-  }
-  .patterns-textarea:focus {
-    border-color: var(--text-faint);
-  }
-  .patterns-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 8px;
   }
 </style>
