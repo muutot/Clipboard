@@ -684,6 +684,11 @@ button {
 .dir-input-row input:focus {
   border-color: var(--text-faint);
 }
+/* Action rows that follow a content group inside one card keep their gap;
+   heading-followers stay tight via .setting-heading padding-bottom. */
+.resource-path-grid + .dir-input-row {
+  margin-top: 10px;
+}
 .dir-input-row button {
   padding: 7px 12px;
   border: 1px solid var(--border-color);
