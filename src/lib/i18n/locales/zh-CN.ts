@@ -129,6 +129,7 @@ const zhCN: LocaleDefinition = {
     syncStatusSuccess: "成功",
     syncStatusPartial: "部分成功",
     syncStatusFailed: "失败",
+    syncS3Tab: "S3",
     syncCloudTab: "云端",
     syncS3Title: "S3 存储配置",
     syncS3Region: "区域",
