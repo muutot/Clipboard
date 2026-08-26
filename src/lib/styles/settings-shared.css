@@ -106,6 +106,7 @@ label.visually-hidden {
   gap: 10px;
   min-width: 0;
   flex: 1;
+  padding-bottom: 6px;
 }
 
 .setting-icon {
@@ -992,6 +993,7 @@ button {
 .entry-textarea {
   width: 100%;
   resize: vertical;
+  margin-top: 12px;
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--settings-control-radius, 6px);
