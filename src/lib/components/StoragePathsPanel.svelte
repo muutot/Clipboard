@@ -38,7 +38,7 @@
   });
 
   function relativePath(absolute: string): string {
-    const bases = [status.dataDirectoryPath, status.storagePath, status.projectPath];
+    const bases = [status?.dataDirectoryPath, status?.storagePath, status?.projectPath];
     for (const basePath of bases) {
       if (!basePath) continue;
       const base = basePath.replace(/\\/g, "/");
@@ -123,11 +123,11 @@
   <section class="setting-card setting-card-row">
     <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
     <span class="setting-label">{_t("storage.currentProfile")}</span>
-    <span class="config-path">{relativePath(status.configPath)}</span>
+    <span class="config-path">{relativePath(status?.configPath ?? "")}</span>
     <button
       type="button"
       class="open-btn"
-      onclick={() => invoke("open_external_url", { url: status.configPath })}
+      onclick={() => invoke("open_external_url", { url: status?.configPath ?? "" })}
     >
       <AppIcon name="file" size={14} />
       {_t("storage.open")}
@@ -140,8 +140,8 @@
       <div>
         <strong>
           {_t("storage.dataDirectoryTitle")}
-          <span class:custom={status.usesCustomDataDirectory} class="inline-badge">
-            {status.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
+          <span class:custom={status?.usesCustomDataDirectory} class="inline-badge">
+            {status?.usesCustomDataDirectory ? _t("storage.custom") : _t("storage.default")}
           </span>
         </strong>
         <p>{_t("storage.dataDirectoryDesc")}</p>
@@ -192,7 +192,7 @@
           bind:value={imageStoragePath}
           autocomplete="off"
           spellcheck="false"
-          placeholder={status.imagePath}
+          placeholder={status?.imagePath ?? ""}
         />
       </label>
       <label for="file-storage-path">
@@ -202,7 +202,7 @@
           bind:value={fileStoragePath}
           autocomplete="off"
           spellcheck="false"
-          placeholder={status.filesPath}
+          placeholder={status?.filesPath ?? ""}
         />
       </label>
     </div>

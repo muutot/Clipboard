@@ -338,9 +338,13 @@
       : undefined,
   );
 
-  const settingsBreadcrumb = $derived(
-    resolveSettingsNavPath(_t, activeSection, activeStatisticsTab).join(" / "),
-  );
+  const settingsBreadcrumb = $derived.by(() => {
+    const group = activeSettingsNavGroup;
+    if (!group) return activeSection;
+    if (group.tabs.length === 1) return group.label;
+    const target = activeSettingsNavTarget;
+    return target ? `${group.label} / ${target.label}` : group.label;
+  });
   const settingsSectionTitle = $derived(settingsSectionMeta?.title);
   const settingsSectionDescription = $derived(settingsSectionMeta?.desc);
 
