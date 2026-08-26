@@ -16,6 +16,7 @@ export const SETTINGS_SECTIONS = [
   "storage_limits",
   "storage_tools",
   "sync_cloud",
+  "sync_s3",
   "keyboard_item",
   "keyboard_quick",
   "keyboard_system",
@@ -171,6 +172,10 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
         labelKey: "storage.syncCloudTab",
         titleKey: "storage.syncTitle",
         descriptionKey: "storage.syncDescription",
+      },
+      {
+        section: "sync_s3",
+        labelKey: "storage.syncS3Tab",
       },
     ],
   },

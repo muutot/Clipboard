@@ -21,10 +21,12 @@
     resolvePath($messages, path, params);
 
   interface Props {
+    /** Renders the S3-connection settings instead of the provider + limits. */
+    s3?: boolean;
     onfeedback: (message: string, success: boolean) => void;
   }
 
-  let { onfeedback }: Props = $props();
+  let { s3 = false, onfeedback }: Props = $props();
 
   let syncProvider = $state<"off" | "s3">("off");
   let syncEndpoint = $state("");
@@ -205,7 +207,64 @@
     }}
   />
 
-  {#if syncProvider === "s3"}
+  {#if !s3}
+    <HeadingEntry
+      config={{
+        type: "heading",
+        icon: "sliders",
+        label: _t("storage.syncAdvancedTab"),
+        desc: _t("storage.syncAdvancedDesc"),
+      }}
+    />
+    <NumberEntry
+      config={{
+        type: "number",
+        variant: "row",
+        icon: "file",
+        label: _t("storage.syncSegmentMaxEntries"),
+        min: 16,
+        max: 10000,
+        suffix: _t("storage.syncEntriesUnit"),
+        get: () => syncSegmentMaxEntries,
+        set: (v) => (syncSegmentMaxEntries = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+
+    <SizeEntry
+      config={{
+        type: "size",
+        icon: "image",
+        label: _t("storage.syncMaxImageBytes"),
+        min: 0,
+        get: () => syncMaxImageDisplay,
+        set: (v) => (syncMaxImageDisplay = v),
+        getUnit: () => syncMaxImageUnit,
+        setUnit: (u) => {
+          syncMaxImageUnit = u;
+          updateSyncMaxImageFromDisplay();
+        },
+        onchange: saveSyncConfig,
+      }}
+    />
+
+    <SizeEntry
+      config={{
+        type: "size",
+        icon: "file",
+        label: _t("storage.syncMaxFileBytes"),
+        min: 0,
+        get: () => syncMaxFileDisplay,
+        set: (v) => (syncMaxFileDisplay = v),
+        getUnit: () => syncMaxFileUnit,
+        setUnit: (u) => {
+          syncMaxFileUnit = u;
+          updateSyncMaxFileFromDisplay();
+        },
+        onchange: saveSyncConfig,
+      }}
+    />
+  {:else}
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
@@ -375,61 +434,4 @@
       </div>
     </section>
   {/if}
-
-  <HeadingEntry
-    config={{
-      type: "heading",
-      icon: "sliders",
-      label: _t("storage.syncAdvancedTab"),
-      desc: _t("storage.syncAdvancedDesc"),
-    }}
-  />
-  <NumberEntry
-    config={{
-      type: "number",
-      variant: "row",
-      icon: "file",
-      label: _t("storage.syncSegmentMaxEntries"),
-      min: 16,
-      max: 10000,
-      suffix: _t("storage.syncEntriesUnit"),
-      get: () => syncSegmentMaxEntries,
-      set: (v) => (syncSegmentMaxEntries = v),
-      onblur: saveSyncConfig,
-    }}
-  />
-
-  <SizeEntry
-    config={{
-      type: "size",
-      icon: "image",
-      label: _t("storage.syncMaxImageBytes"),
-      min: 0,
-      get: () => syncMaxImageDisplay,
-      set: (v) => (syncMaxImageDisplay = v),
-      getUnit: () => syncMaxImageUnit,
-      setUnit: (u) => {
-        syncMaxImageUnit = u;
-        updateSyncMaxImageFromDisplay();
-      },
-      onchange: saveSyncConfig,
-    }}
-  />
-
-  <SizeEntry
-    config={{
-      type: "size",
-      icon: "file",
-      label: _t("storage.syncMaxFileBytes"),
-      min: 0,
-      get: () => syncMaxFileDisplay,
-      set: (v) => (syncMaxFileDisplay = v),
-      getUnit: () => syncMaxFileUnit,
-      setUnit: (u) => {
-        syncMaxFileUnit = u;
-        updateSyncMaxFileFromDisplay();
-      },
-      onchange: saveSyncConfig,
-    }}
-  />
 </div>

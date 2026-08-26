@@ -181,6 +181,18 @@
       }),
     },
     {
+      sections: ["sync_s3"],
+      cacheKey: "sync",
+      load: () => import("$lib/components/SyncPanel.svelte"),
+      props: () => ({
+        s3: true,
+        onfeedback: (message: string, success: boolean) => {
+          feedback = message;
+          feedbackSuccess = success;
+        },
+      }),
+    },
+    {
       sections: ["keyboard_item", "keyboard_quick", "keyboard_system", "keyboard_switch"],
       load: () => import("$lib/components/KeyboardSettingsPanel.svelte"),
       props: () => ({
