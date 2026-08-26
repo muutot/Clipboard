@@ -59,8 +59,6 @@ export interface SettingsNavGroupDefinition {
   labelKey: string;
   displayLabel?: string;
   ariaLabelKey?: string;
-  breadcrumbLabelKey?: string;
-  includeTabInBreadcrumb?: boolean;
   preserveTabOnPrimary?: boolean;
   tabs: readonly SettingsNavTargetDefinition[];
 }
@@ -70,7 +68,6 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     id: "general",
     icon: "sliders",
     labelKey: "storage.generalTab",
-    includeTabInBreadcrumb: true,
     tabs: [
       {
         section: "general_general",
@@ -98,7 +95,6 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     id: "appearance",
     icon: "palette",
     labelKey: "storage.appearanceTab",
-    includeTabInBreadcrumb: true,
     tabs: [
       {
         section: "theme",
@@ -148,7 +144,6 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     id: "storage",
     icon: "file",
     labelKey: "storage.storageTab",
-    breadcrumbLabelKey: "storage.storageTab",
     tabs: [
       {
         section: "storage_paths",
@@ -241,7 +236,6 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     icon: "bar-chart",
     labelKey: "storage.statisticsTab",
     ariaLabelKey: "statistics.title",
-    includeTabInBreadcrumb: true,
     preserveTabOnPrimary: true,
     tabs: [
       {
@@ -288,8 +282,10 @@ export function resolveSettingsNavPath(
     );
     if (!tab) continue;
 
-    const groupLabel = group.displayLabel ?? translate(group.breadcrumbLabelKey ?? group.labelKey);
-    return group.includeTabInBreadcrumb ? [groupLabel, translate(tab.labelKey)] : [groupLabel];
+    const groupLabel = group.displayLabel ?? translate(group.labelKey);
+    // Canonical two-level crumb: every multi-tab group shows 组 / 页签;
+    // single-tab groups collapse to the group label alone.
+    return group.tabs.length > 1 ? [groupLabel, translate(tab.labelKey)] : [groupLabel];
   }
 
   return [section];
