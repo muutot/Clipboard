@@ -945,7 +945,6 @@ button {
 .setting-actions-row {
   margin-top: 10px;
 }
-.sync-last-info,
 .sync-now-desc {
   color: var(--text-muted);
   font-size: var(--settings-description-size, var(--font-size-secondary, 11px));

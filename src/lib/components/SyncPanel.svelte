@@ -34,7 +34,6 @@
   let syncEndpoint = $state("");
   let syncRemotePath = $state("");
   let syncTesting = $state(false);
-  let syncTestResult = $state<{ success: boolean; message: string } | null>(null);
   let syncing = $state(false);
   let syncLastMs = $state<number | null>(null);
   let syncStatus = $state<string | null>(null);
@@ -129,15 +128,14 @@
   }
 
   async function handleTestConnection() {
-    if (!isTauriRuntime() || syncTesting) return;
+    if (!isTauriRuntime() || syncTesting || syncProvider !== "s3") return;
     syncTesting = true;
-    syncTestResult = null;
     try {
       await persistSyncConfig();
       const result = await testSyncConnection();
-      syncTestResult = { success: result.success, message: result.message };
+      onfeedback(result.message, result.success);
     } catch (e) {
-      syncTestResult = { success: false, message: String(e) };
+      onfeedback(String(e), false);
     } finally {
       syncTesting = false;
     }
@@ -340,14 +338,11 @@
       <button
         type="button"
         class="settings-action-btn"
-        disabled={syncTesting || syncing}
+        disabled={syncTesting || syncing || syncProvider !== "s3"}
         onclick={handleTestConnection}
       >
         {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
       </button>
-      {#if syncTestResult}
-        <span class="sync-last-info">{syncTestResult.message}</span>
-      {/if}
     </section>
     <TextEntry
       config={{
