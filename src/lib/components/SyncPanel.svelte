@@ -285,14 +285,6 @@
       </div>
     </section>
   {:else if tab === "advanced"}
-    <HeadingEntry
-      config={{
-        type: "heading",
-        icon: "sliders",
-        label: _t("storage.syncAdvancedTab"),
-        desc: _t("storage.syncAdvancedDesc"),
-      }}
-    />
     <NumberEntry
       config={{
         type: "number",
@@ -342,97 +334,93 @@
       }}
     />
   {:else if tab === "s3"}
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
-        <div><strong>{_t("storage.syncS3Title")}</strong></div>
-      </div>
-      <TextEntry
-        config={{
-          type: "text",
-          variant: "row",
-          icon: "globe",
-          label: _t("storage.syncEndpoint"),
-          inputType: "url",
-          placeholder: "http://127.0.0.1:9000",
-          get: () => syncEndpoint,
-          set: (v) => (syncEndpoint = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-      <TextEntry
-        config={{
-          type: "text",
-          variant: "row",
-          icon: "link",
-          label: _t("storage.syncRemotePath"),
-          placeholder: "clipboard-sync",
-          get: () => syncRemotePath,
-          set: (v) => (syncRemotePath = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-      <TextEntry
-        config={{
-          type: "text",
-          variant: "row",
-          icon: "cloud",
-          label: _t("storage.syncS3Region"),
-          placeholder: "us-east-1",
-          get: () => syncS3Region,
-          set: (v) => (syncS3Region = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-      <TextEntry
-        config={{
-          type: "text",
-          variant: "row",
-          icon: "layers",
-          label: _t("storage.syncS3Bucket"),
-          placeholder: "clipboard",
-          get: () => syncS3Bucket,
-          set: (v) => (syncS3Bucket = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-      <TextEntry
-        config={{
-          type: "text",
-          variant: "row",
-          icon: "type",
-          label: _t("storage.syncS3AccessKey"),
-          get: () => syncS3AccessKey,
-          set: (v) => (syncS3AccessKey = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-      <TextEntry
-        config={{
-          type: "text",
-          variant: "row",
-          icon: "lock",
-          label: _t("storage.syncS3SecretKey"),
-          inputType: "password",
-          placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
-          get: () => syncS3SecretKey,
-          set: (v) => (syncS3SecretKey = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-      <div class="setting-actions-row">
-        <button
-          type="button"
-          class="settings-action-btn"
-          disabled={syncTesting || syncing}
-          onclick={handleTestConnection}
-        >
-          {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
-        </button>
-        {#if syncTestResult}
-          <span class="sync-last-info">{syncTestResult.message}</span>
-        {/if}
-      </div>
+    <section class="setting-card setting-card-row">
+      <span class="setting-icon"><AppIcon name="link" size={17} /></span>
+      <span class="setting-label">{_t("storage.syncTest")}</span>
+      <button
+        type="button"
+        class="settings-action-btn"
+        disabled={syncTesting || syncing}
+        onclick={handleTestConnection}
+      >
+        {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
+      </button>
+      {#if syncTestResult}
+        <span class="sync-last-info">{syncTestResult.message}</span>
+      {/if}
     </section>
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "globe",
+        label: _t("storage.syncEndpoint"),
+        inputType: "url",
+        placeholder: "http://127.0.0.1:9000",
+        get: () => syncEndpoint,
+        set: (v) => (syncEndpoint = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "link",
+        label: _t("storage.syncRemotePath"),
+        placeholder: "clipboard-sync",
+        get: () => syncRemotePath,
+        set: (v) => (syncRemotePath = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "cloud",
+        label: _t("storage.syncS3Region"),
+        placeholder: "us-east-1",
+        get: () => syncS3Region,
+        set: (v) => (syncS3Region = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "layers",
+        label: _t("storage.syncS3Bucket"),
+        placeholder: "clipboard",
+        get: () => syncS3Bucket,
+        set: (v) => (syncS3Bucket = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "type",
+        label: _t("storage.syncS3AccessKey"),
+        get: () => syncS3AccessKey,
+        set: (v) => (syncS3AccessKey = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "lock",
+        label: _t("storage.syncS3SecretKey"),
+        inputType: "password",
+        placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
+        get: () => syncS3SecretKey,
+        set: (v) => (syncS3SecretKey = v),
+        onblur: saveSyncConfig,
+      }}
+    />
   {/if}
 </div>
