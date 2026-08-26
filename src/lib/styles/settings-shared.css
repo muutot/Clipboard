@@ -778,6 +778,26 @@ button {
   color: var(--text-muted);
   font-size: var(--settings-description-size);
 }
+.resource-path-grid input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--settings-control-radius);
+  outline: none;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: var(--settings-control-size);
+  transition: border-color 120ms ease;
+}
+.resource-path-grid input::placeholder {
+  color: var(--placeholder-color);
+}
+.resource-path-grid input:focus {
+  border-color: var(--text-faint);
+}
 .resource-path-actions span {
   flex: 1;
   min-width: 0;
