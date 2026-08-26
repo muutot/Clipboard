@@ -34,7 +34,7 @@
   let resourceStorageRestartNeeded = $state(false);
 
   $effect(() => {
-    dataDirectory = status.dataDirectoryPath ?? "";
+    dataDirectory = status?.dataDirectoryPath ?? "";
   });
 
   function relativePath(absolute: string): string {
@@ -217,7 +217,7 @@
         >{savingResourceStorage ? _t("storage.saving") : _t("storage.saveDirectory")}</button
       >
     </div>
-    {#if !status.imageCleanupEnabled || !status.fileCleanupEnabled}
+    {#if !status?.imageCleanupEnabled || !status?.fileCleanupEnabled}
       <div class="resource-path-warning">
         <AppIcon name="info" size={14} />
         <span>{_t("storage.resourcePathsCleanupDisabled")}</span>
