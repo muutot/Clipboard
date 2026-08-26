@@ -590,8 +590,6 @@
         </div>
       </section>
     {/each}
-
-    <p class="auto-save-note">{_t("keyboard.autoSaveNote")}</p>
   </div>
 {:else}
   <div class="settings-state">{feedback || _t("keyboard.keyboardUnavailable")}</div>

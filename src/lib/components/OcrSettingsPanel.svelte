@@ -405,6 +405,4 @@
       </span>
     </div>
   </section>
-
-  <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>

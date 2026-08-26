@@ -755,8 +755,6 @@
       <SettingEntry {config} />
     {/each}
   {/if}
-
-  <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>
 
 {#if feedback}

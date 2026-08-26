@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import SettingEntry from "$lib/components/SettingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import { generalSettings } from "$lib/services/settings";
@@ -154,6 +154,4 @@
       <SettingEntry {config} />
     {/each}
   {/if}
-
-  <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
 </div>

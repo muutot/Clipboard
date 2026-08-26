@@ -1262,8 +1262,6 @@
               </div>
             {/if}
           {/if}
-
-          <p class="auto-save-note">{_t("general.autoSaveNote")}</p>
         </div>
       {:else}
         <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>

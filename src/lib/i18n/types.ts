@@ -447,7 +447,6 @@ export interface LocaleDefinition {
     addActionNamePlaceholder: string;
     cancel: string;
     deleteAction: string;
-    autoSaveNote: string;
     systemBadge: string;
     bindingDisabled: string;
     pressKey: string;
@@ -761,7 +760,6 @@ export interface LocaleDefinition {
     sortDragHandle: string;
     on: string;
     off: string;
-    autoSaveNote: string;
     detailDisplayMode: string;
     detailDisplayModeDescription: string;
     detailDisplayModeOverlay: string;

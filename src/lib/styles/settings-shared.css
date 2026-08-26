@@ -529,13 +529,6 @@ label.visually-hidden {
 }
 
 /* ── misc ── */
-.auto-save-note {
-  margin: 0;
-  padding: 8px 0 0;
-  color: var(--text-faint);
-  font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-  text-align: center;
-}
 
 .restart-note {
   margin: 4px 0 0;
@@ -1028,4 +1021,12 @@ button {
 .ocr-model-select {
   flex: 1;
   max-width: 200px;
+}
+/* Generic footnote/empty-state note reused by several panels */
+.auto-save-note {
+  margin: 0;
+  padding: 8px 0 0;
+  color: var(--text-faint);
+  font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+  text-align: center;
 }
