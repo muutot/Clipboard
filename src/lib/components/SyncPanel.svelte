@@ -7,6 +7,7 @@
   import SizeEntry from "$lib/components/settings-entries/SizeEntry.svelte";
   import HeadingEntry from "$lib/components/settings-entries/HeadingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
+  import { showToast } from "$lib/services/toast";
   import { isTauriRuntime } from "$lib/services/runtime";
   import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
   import {
@@ -134,11 +135,11 @@
     try {
       await persistSyncConfig();
       const result = await testSyncConnection();
-      onfeedback(result.message, result.success);
+      showToast(result.message, result.success ? "success" : "error");
     } catch (e) {
-      onfeedback(String(e), false);
+      showToast(String(e), "error");
     } finally {
-      syncTesting = false;
+      syncing = false;
     }
   }
 

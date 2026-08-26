@@ -186,6 +186,7 @@ label.visually-hidden {
 
 .setting-card-row > button:not(.toggle-switch),
 .settings-action-btn {
+  min-width: 96px;
   height: 28px;
   box-sizing: border-box;
   flex-shrink: 0;
