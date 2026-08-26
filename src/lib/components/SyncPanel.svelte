@@ -20,13 +20,15 @@
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
 
+  /** Which second-level sync page is being rendered. */
+  export type SyncTab = "cloud" | "advanced" | "s3";
+
   interface Props {
-    /** Renders the S3-connection settings instead of the provider + limits. */
-    s3?: boolean;
+    tab?: SyncTab;
     onfeedback: (message: string, success: boolean) => void;
   }
 
-  let { s3 = false, onfeedback }: Props = $props();
+  let { tab = "cloud", onfeedback }: Props = $props();
 
   let syncProvider = $state<"off" | "s3">("off");
   let syncEndpoint = $state("");
@@ -188,26 +190,101 @@
 </script>
 
 <div class="settings-scroll">
-  <SelectEntry
-    config={{
-      type: "select",
-      variant: "row",
-      icon: "cloud",
-      label: _t("storage.syncProvider"),
-      ariaLabel: _t("storage.syncProvider"),
-      options: [
-        { value: "off", label: _t("storage.syncProviderOff") },
-        { value: "s3", label: _t("storage.syncProviderS3") },
-      ],
-      get: () => syncProvider,
-      set: (v) => {
-        syncProvider = v as "off" | "s3";
-        void saveSyncConfig();
-      },
-    }}
-  />
+  {#if tab === "cloud"}
+    <SelectEntry
+      config={{
+        type: "select",
+        variant: "row",
+        icon: "cloud",
+        label: _t("storage.syncProvider"),
+        ariaLabel: _t("storage.syncProvider"),
+        options: [
+          { value: "off", label: _t("storage.syncProviderOff") },
+          { value: "s3", label: _t("storage.syncProviderS3") },
+        ],
+        get: () => syncProvider,
+        set: (v) => {
+          syncProvider = v as "off" | "s3";
+          void saveSyncConfig();
+        },
+      }}
+    />
 
-  {#if !s3}
+    <TextEntry
+      config={{
+        type: "text",
+        variant: "row",
+        icon: "lock",
+        label: _t("storage.syncEncryption"),
+        inputType: "password",
+        placeholder: syncHasEncryptionPassword
+          ? _t("storage.syncEncryptionStored")
+          : _t("storage.syncEncryptionPlaceholder"),
+        get: () => syncEncryptPassword,
+        set: (v) => (syncEncryptPassword = v),
+        onblur: saveSyncConfig,
+      }}
+    />
+
+    <ToggleEntry
+      config={{
+        type: "toggle",
+        variant: "row",
+        icon: "settings",
+        label: _t("storage.syncAutoSync"),
+        get: () => syncAutoSync,
+        set: (v) => (syncAutoSync = v),
+        onchange: () => void saveSyncConfig(),
+      }}
+    />
+
+    {#if syncAutoSync}
+      <NumberEntry
+        config={{
+          type: "number",
+          variant: "row",
+          icon: "clock",
+          label: _t("storage.syncAutoInterval"),
+          min: 10,
+          max: 86400,
+          suffix: _t("storage.syncSecondsUnit"),
+          get: () => syncAutoInterval,
+          set: (v) => (syncAutoInterval = v),
+          onblur: saveSyncConfig,
+        }}
+      />
+    {/if}
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
+        <div class="sync-now-info">
+          <strong>{_t("storage.syncNow")}</strong>
+          <p class="sync-now-desc">
+            {_t("storage.syncPendingCount", {
+              count: syncPendingEntries,
+            })}{#if syncLastMs}
+              | {_t("storage.syncLastTime", {
+                time: new Date(syncLastMs).toLocaleString(),
+              })}{/if}{#if syncStatus}
+              | {syncStatus === "success"
+                ? _t("storage.syncStatusSuccess")
+                : syncStatus === "partial"
+                  ? _t("storage.syncStatusPartial")
+                  : _t("storage.syncStatusFailed")}{/if}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="settings-action-btn"
+          disabled={syncing || syncTesting}
+          onclick={handleSyncNow}
+        >
+          {syncing ? _t("storage.syncing") : _t("storage.syncNow")}
+        </button>
+      </div>
+    </section>
+  {:else if tab === "advanced"}
     <HeadingEntry
       config={{
         type: "heading",
@@ -264,7 +341,7 @@
         onchange: saveSyncConfig,
       }}
     />
-  {:else}
+  {:else if tab === "s3"}
     <section class="setting-card">
       <div class="setting-heading">
         <span class="setting-icon"><AppIcon name="cloud" size={17} /></span>
@@ -355,82 +432,6 @@
         {#if syncTestResult}
           <span class="sync-last-info">{syncTestResult.message}</span>
         {/if}
-      </div>
-    </section>
-
-    <TextEntry
-      config={{
-        type: "text",
-        variant: "row",
-        icon: "lock",
-        label: _t("storage.syncEncryption"),
-        inputType: "password",
-        placeholder: syncHasEncryptionPassword
-          ? _t("storage.syncEncryptionStored")
-          : _t("storage.syncEncryptionPlaceholder"),
-        get: () => syncEncryptPassword,
-        set: (v) => (syncEncryptPassword = v),
-        onblur: saveSyncConfig,
-      }}
-    />
-
-    <ToggleEntry
-      config={{
-        type: "toggle",
-        variant: "row",
-        icon: "settings",
-        label: _t("storage.syncAutoSync"),
-        ariaLabel: _t("storage.syncAutoSyncEnable"),
-        get: () => syncAutoSync,
-        set: (v) => (syncAutoSync = v),
-        onchange: () => void saveSyncConfig(),
-      }}
-    />
-
-    {#if syncAutoSync}
-      <NumberEntry
-        config={{
-          type: "number",
-          variant: "row",
-          icon: "clock",
-          label: _t("storage.syncAutoInterval"),
-          min: 10,
-          max: 86400,
-          suffix: _t("storage.syncSecondsUnit"),
-          get: () => syncAutoInterval,
-          set: (v) => (syncAutoInterval = v),
-          onblur: saveSyncConfig,
-        }}
-      />
-    {/if}
-
-    <section class="setting-card">
-      <div class="setting-heading">
-        <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
-        <div class="sync-now-info">
-          <strong>{_t("storage.syncNow")}</strong>
-          <p class="sync-now-desc">
-            {_t("storage.syncPendingCount", {
-              count: syncPendingEntries,
-            })}{#if syncLastMs}
-              | {_t("storage.syncLastTime", {
-                time: new Date(syncLastMs).toLocaleString(),
-              })}{/if}{#if syncStatus}
-              | {syncStatus === "success"
-                ? _t("storage.syncStatusSuccess")
-                : syncStatus === "partial"
-                  ? _t("storage.syncStatusPartial")
-                  : _t("storage.syncStatusFailed")}{/if}
-          </p>
-        </div>
-        <button
-          type="button"
-          class="settings-action-btn"
-          disabled={syncing || syncTesting}
-          onclick={handleSyncNow}
-        >
-          {syncing ? _t("storage.syncing") : _t("storage.syncNow")}
-        </button>
       </div>
     </section>
   {/if}

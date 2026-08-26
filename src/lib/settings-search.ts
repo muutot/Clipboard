@@ -121,6 +121,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "移动",
     "备份",
   ],
+  sync_advanced: [i18n("storage.syncAdvancedTab"), "分段", "阈值", "资源限制", "上限"],
   sync_s3: [
     i18n("storage.syncS3Tab"),
     i18n("storage.syncTitle"),

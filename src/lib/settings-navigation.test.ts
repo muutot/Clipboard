@@ -29,6 +29,10 @@ describe("resolveSettingsNavPath", () => {
       "storage.syncTab",
       "storage.syncCloudTab",
     ]);
+    expect(resolveSettingsNavPath(t, "sync_advanced")).toEqual([
+      "storage.syncTab",
+      "storage.syncAdvancedTab",
+    ]);
     expect(resolveSettingsNavPath(t, "sync_s3")).toEqual(["storage.syncTab", "storage.syncS3Tab"]);
     expect(resolveSettingsNavPath(t, "capture_privacy")).toEqual([
       "storage.captureTab",

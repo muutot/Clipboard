@@ -174,6 +174,19 @@
       cacheKey: "sync",
       load: () => import("$lib/components/SyncPanel.svelte"),
       props: () => ({
+        tab: "cloud" as const,
+        onfeedback: (message: string, success: boolean) => {
+          feedback = message;
+          feedbackSuccess = success;
+        },
+      }),
+    },
+    {
+      sections: ["sync_advanced"],
+      cacheKey: "sync",
+      load: () => import("$lib/components/SyncPanel.svelte"),
+      props: () => ({
+        tab: "advanced" as const,
         onfeedback: (message: string, success: boolean) => {
           feedback = message;
           feedbackSuccess = success;
@@ -185,7 +198,7 @@
       cacheKey: "sync",
       load: () => import("$lib/components/SyncPanel.svelte"),
       props: () => ({
-        s3: true,
+        tab: "s3" as const,
         onfeedback: (message: string, success: boolean) => {
           feedback = message;
           feedbackSuccess = success;
