@@ -973,8 +973,10 @@
               class="close-button"
               type="button"
               aria-label={_t("actions.close")}
-              onclick={onclose}>脳</button
+              onclick={onclose}
             >
+              <AppIcon name="x" size={14} strokeWidth={2} />
+            </button>
           {/if}
         </div>
       </div>

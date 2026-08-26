@@ -216,6 +216,7 @@
         config={{
           type: "text",
           variant: "row",
+          icon: "globe",
           label: _t("storage.syncEndpoint"),
           inputType: "url",
           placeholder: "http://127.0.0.1:9000",
@@ -228,6 +229,7 @@
         config={{
           type: "text",
           variant: "row",
+          icon: "link",
           label: _t("storage.syncRemotePath"),
           placeholder: "clipboard-sync",
           get: () => syncRemotePath,
@@ -239,6 +241,7 @@
         config={{
           type: "text",
           variant: "row",
+          icon: "cloud",
           label: _t("storage.syncS3Region"),
           placeholder: "us-east-1",
           get: () => syncS3Region,
@@ -250,6 +253,7 @@
         config={{
           type: "text",
           variant: "row",
+          icon: "layers",
           label: _t("storage.syncS3Bucket"),
           placeholder: "clipboard",
           get: () => syncS3Bucket,
@@ -261,6 +265,7 @@
         config={{
           type: "text",
           variant: "row",
+          icon: "type",
           label: _t("storage.syncS3AccessKey"),
           get: () => syncS3AccessKey,
           set: (v) => (syncS3AccessKey = v),
@@ -271,6 +276,7 @@
         config={{
           type: "text",
           variant: "row",
+          icon: "lock",
           label: _t("storage.syncS3SecretKey"),
           inputType: "password",
           placeholder: syncHasS3SecretKey ? _t("storage.syncSecretStored") : "",
