@@ -212,6 +212,13 @@ fn shared_client() -> Result<Client, String> {
         .clone())
 }
 
+fn test_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| format!("failed to build S3 test client: {error}"))
+}
+
 /// Parses the user-provided endpoint into (scheme, host).
 /// Accepts `s3.amazonaws.com`, `https://s3.amazonaws.com`, `localhost:9000`,
 /// `http://127.0.0.1:9000`. Defaults to https when no scheme is present.
@@ -520,7 +527,7 @@ pub fn test_s3_connection(
     access_key: &str,
     secret_key: &str,
 ) -> S3TestResult {
-    let client = match shared_client() {
+    let client = match test_client() {
         Ok(c) => c,
         Err(e) => {
             return S3TestResult {
