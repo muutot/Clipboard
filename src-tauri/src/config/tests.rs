@@ -39,7 +39,16 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["windowTransparency"], 95);
     assert_eq!(saved["general"]["windowEffect"], "off");
     assert_eq!(saved["general"]["windowOpacityAffectsText"], false);
-    assert_eq!(saved["general"]["compactMode"], false);
+    assert_eq!(saved["general"]["compactMode"], true);
+    assert_eq!(saved["general"]["compactPaddingTop"], 1);
+    assert_eq!(saved["general"]["compactPaddingBottom"], 1);
+    assert_eq!(saved["general"]["compactCardGap"], 1);
+    assert_eq!(saved["general"]["compactTextHeight"], 44);
+    assert_eq!(saved["general"]["compactTallTextHeight"], 44);
+    assert_eq!(saved["general"]["compactImageHeight"], 80);
+    assert_eq!(saved["general"]["compactSearchHeight"], 30);
+    assert_eq!(saved["general"]["compactSearchFontSize"], 20);
+    assert_eq!(saved["general"]["compactCardBorderRadius"], 5);
     assert_eq!(saved["general"]["showToastNotifications"], true);
     assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
     assert_eq!(saved["general"]["searchSuggestionMode"], "off");

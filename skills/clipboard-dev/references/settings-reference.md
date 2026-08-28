@@ -37,17 +37,17 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 
 | Field                      | Default | Normalized range |
 | -------------------------- | ------- | ---------------- |
-| `compactMode`              | `false` | boolean          |
-| `compactPaddingTop`        | `6`     | 0–20             |
-| `compactPaddingBottom`     | `4`     | 0–20             |
-| `compactCardGap`           | `5`     | 0–20             |
-| `compactTextHeight`        | `58`    | 36–90            |
-| `compactTallTextHeight`    | `70`    | 44–100           |
-| `compactImageHeight`       | `130`   | 64–200           |
+| `compactMode`              | `true`  | boolean          |
+| `compactPaddingTop`        | `1`     | 0–20             |
+| `compactPaddingBottom`     | `1`     | 0–20             |
+| `compactCardGap`           | `1`     | 0–20             |
+| `compactTextHeight`        | `44`    | 36–90            |
+| `compactTallTextHeight`    | `44`    | 44–100           |
+| `compactImageHeight`       | `80`    | 64–200           |
 | `compactCustomTitleHeight` | `80`    | 40–120           |
-| `compactSearchHeight`      | `40`    | 28–56            |
-| `compactSearchFontSize`    | `14`    | 10–24            |
-| `compactCardBorderRadius`  | `10`    | 0–20             |
+| `compactSearchHeight`      | `30`    | 28–56            |
+| `compactSearchFontSize`    | `20`    | 10–24            |
+| `compactCardBorderRadius`  | `5`     | 0–20             |
 
 `CompactSettingsPanel` currently exposes nine sliders plus the enable switch; `compactCustomTitleHeight` is normalized and consumed by layout logic but is not present in that panel's slider array. Treat that as current behavior, not as proof that the field can be removed.
 

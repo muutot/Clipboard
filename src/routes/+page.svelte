@@ -3317,7 +3317,7 @@
   }
 
   :global(.app-shell.compact .search-header) {
-    padding: 6px 16px 2px;
+    padding: 6px 8px 2px;
     gap: 6px;
   }
 
@@ -3347,7 +3347,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 20px 4px;
+    padding: 14px 8px 4px;
     border-bottom: none;
   }
 
@@ -3482,7 +3482,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 2px 20px 4px 4px;
+    padding: 2px 8px 4px 8px;
   }
 
   .filters,
@@ -3704,7 +3704,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 0 7px 18px;
+    padding: 0 4px 18px;
   }
 
   .virtual-container {

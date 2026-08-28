@@ -995,7 +995,7 @@
 <style>
   .clip-card {
     position: relative;
-    padding: 0px 14px 0px 12px;
+    padding: 0px 8px 0px 8px;
     border: 1px solid transparent;
     border-radius: 10px;
     color: var(--text-primary);
@@ -1007,7 +1007,7 @@
   }
 
   .clip-card.compact {
-    padding: var(--cpt, 6px) 7px var(--cpb, 4px) 10px;
+    padding: var(--cpt, 6px) 8px var(--cpb, 4px) 8px;
     border-radius: var(--cbr, 7px);
     margin-bottom: var(--cg, 5px);
     box-sizing: border-box;
