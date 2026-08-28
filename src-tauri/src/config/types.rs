@@ -118,7 +118,7 @@ impl Default for GeneralConfig {
             window_transparency: 95,
             window_effect: "off".to_owned(),
             window_opacity_affects_text: false,
-            compact_mode: false,
+            compact_mode: true,
             compact_padding_top: 1,
             compact_padding_bottom: 1,
             compact_card_gap: 1,
