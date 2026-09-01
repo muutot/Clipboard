@@ -266,6 +266,9 @@ export type SearchSuggestionMode = "off" | "panel" | "inline";
 
 export type CardActionsDisplay = "hover" | "always";
 
+/** 分组筛选标签的显示方式：图标+文字 | 仅图标 | 仅文字 */
+export type GroupDisplayMode = "iconText" | "iconOnly" | "textOnly";
+
 export interface FontSizeSettings {
   base: number;
   secondary: number;
@@ -326,6 +329,8 @@ export interface GeneralSettings {
   cardActionsDisplay: CardActionsDisplay;
   quickCopyBadgeAlwaysVisible: boolean;
   showSettingsCloseButton: boolean;
+  /** 分组筛选标签的显示方式：'iconText' 图标+文字 | 'iconOnly' 仅图标 | 'textOnly' 仅文字 */
+  groupDisplayMode: GroupDisplayMode;
   /** 详情展示模式：'overlay' 同画布切入 | 'split' 左右分栏 */
   detailDisplayMode: "overlay" | "split";
   searchSortRules: SortRule[];

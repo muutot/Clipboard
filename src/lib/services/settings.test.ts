@@ -66,6 +66,12 @@ describe("generalSettings store normalization", () => {
     expect(get(generalSettings).searchCacheEviction).toBe(
       DEFAULT_GENERAL_SETTINGS.searchCacheEviction,
     );
+
+    generalSettings.updateSetting(
+      "groupDisplayMode",
+      "weird" as unknown as "iconText" | "iconOnly" | "textOnly",
+    );
+    expect(get(generalSettings).groupDisplayMode).toBe(DEFAULT_GENERAL_SETTINGS.groupDisplayMode);
   });
 
   it("normalizes partial fontSizes objects without dropping sibling keys", () => {

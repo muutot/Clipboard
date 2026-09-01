@@ -6,6 +6,7 @@ import { isTauriRuntime } from "$lib/services/runtime";
 import type {
   GeneralSettings,
   GeneralSettingsInfo,
+  GroupDisplayMode,
   Language,
   SortRule,
   ThemeColors,
@@ -64,6 +65,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   quickCopyBadgeAlwaysVisible: true,
   showSettingsCloseButton: true,
   detailDisplayMode: "overlay",
+  groupDisplayMode: "iconText",
   searchSortRules: [{ field: "lastUsedAt", direction: "desc" }],
   pageSizeLimit: 500,
   searchPageSizeLimit: 500,
@@ -195,6 +197,13 @@ function validDetailDisplayMode(
   fallback: GeneralSettings["detailDisplayMode"],
 ): GeneralSettings["detailDisplayMode"] {
   return value === "overlay" || value === "split" ? value : fallback;
+}
+
+function validGroupDisplayMode(
+  value: unknown,
+  fallback: GeneralSettings["groupDisplayMode"],
+): GeneralSettings["groupDisplayMode"] {
+  return value === "iconText" || value === "iconOnly" || value === "textOnly" ? value : fallback;
 }
 
 const SORT_FIELDS = ["createdAt", "lastUsedAt", "title", "size", "kind", "favorite"] as const;
@@ -481,6 +490,10 @@ function normalizeGeneralSettings(
   result.detailDisplayMode = validDetailDisplayMode(
     source.detailDisplayMode ?? fallback("detailDisplayMode"),
     defaultSettings.detailDisplayMode,
+  );
+  result.groupDisplayMode = validGroupDisplayMode(
+    source.groupDisplayMode ?? fallback("groupDisplayMode"),
+    defaultSettings.groupDisplayMode,
   );
   result.searchSortRules = validSortRules(
     source.searchSortRules ?? fallback("searchSortRules"),

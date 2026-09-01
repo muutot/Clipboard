@@ -199,6 +199,21 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     [i18n("general.cardActionsHover"), i18n("general.cardActionsAlways"), "操作按钮", "actions"],
   ),
   entry(
+    "general.group-display-mode",
+    { section: "general_items" },
+    i18n("general.groupDisplayMode"),
+    i18n("general.groupDisplayModeDescription"),
+    [
+      i18n("general.groupDisplayModeIconText"),
+      i18n("general.groupDisplayModeIconOnly"),
+      i18n("general.groupDisplayModeTextOnly"),
+      "分组",
+      "group",
+      "tab",
+      "筛选",
+    ],
+  ),
+  entry(
     "general.quick-copy-badge",
     { section: "general_items" },
     i18n("general.quickCopyBadge"),

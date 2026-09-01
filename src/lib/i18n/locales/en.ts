@@ -793,6 +793,11 @@ const en: LocaleDefinition = {
     cardActionsDisplayDescription: "Choose when quick action buttons appear on items",
     cardActionsHover: "On hover or selection",
     cardActionsAlways: "Always visible",
+    groupDisplayMode: "Group Tab Style",
+    groupDisplayModeDescription: "Choose how the group/filter tabs are displayed",
+    groupDisplayModeIconText: "Icon + Text",
+    groupDisplayModeIconOnly: "Icon only",
+    groupDisplayModeTextOnly: "Text only",
     quickCopyBadge: "Quick Copy #N Marks",
     quickCopyBadgeDescription:
       "Always show the #N marks on every item without focusing them first; the first nine items show ⌘1-⌘9 quick copy marks",

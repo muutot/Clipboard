@@ -2876,12 +2876,16 @@
             : filter.label}
           onclick={() => setFilter(filter.id)}
         >
-          <AppIcon
-            name={filter.icon}
-            size={16}
-            filled={filter.id === "favorite" && activeFilter === filter.id}
-          />
-          <span>{filter.label}</span>
+          {#if $generalSettings.groupDisplayMode !== "textOnly"}
+            <AppIcon
+              name={filter.icon}
+              size={16}
+              filled={filter.id === "favorite" && activeFilter === filter.id}
+            />
+          {/if}
+          {#if $generalSettings.groupDisplayMode !== "iconOnly"}
+            <span>{filter.label}</span>
+          {/if}
         </button>
       {/each}
     </div>

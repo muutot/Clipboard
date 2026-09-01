@@ -53,40 +53,41 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 
 ## General scalar/enum settings
 
-| Field                         | Type/allowed values                | Default     | Range when numeric                                                               |
-| ----------------------------- | ---------------------------------- | ----------- | -------------------------------------------------------------------------------- |
-| `language`                    | `"zh-CN"` or `"en"`                | `"zh-CN"`   | —                                                                                |
-| `windowTransparency`          | number                             | `95`        | 60–100                                                                           |
-| `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`  | `"off"`     | —                                                                                |
-| `windowOpacityAffectsText`    | boolean                            | `false`     | —                                                                                |
-| `pinCopiedToTop`              | boolean                            | `true`      | —                                                                                |
-| `useRecycleBin`               | boolean                            | `true`      | —                                                                                |
-| `pasteCleaningEnabled`        | boolean                            | `false`     | —                                                                                |
-| `doubleClickPaste`            | boolean                            | `true`      | —                                                                                |
-| `maxTextCaptureBytes`         | number (bytes)                     | `500_000`   | 10000–10000000                                                                   |
-| `showToastNotifications`      | boolean                            | `true`      | —                                                                                |
-| `rememberWindowPosition`      | boolean                            | `false`     | —                                                                                |
-| `alwaysOnTop`                 | boolean                            | `false`     | —                                                                                |
-| `useSystemTitleBar`           | boolean                            | `false`     | —                                                                                |
-| `theme`                       | `"dark"`, `"light"`, or `"custom"` | `"dark"`    | —                                                                                |
-| `imageFullscreenMode`         | `"overlay"` or `"desktop"`         | `"overlay"` | —                                                                                |
-| `viewerBackdropOpacity`       | number                             | `92`        | 0–100                                                                            |
-| `searchSuggestionMode`        | `"off"`, `"panel"`, or `"inline"`  | `"off"`     | —                                                                                |
-| `searchHistoryEnabled`        | boolean                            | `false`     | —                                                                                |
-| `searchPlaceholder`           | string                             | `""`        | trimmed, ≤80 chars; empty = use localized default text (`app.searchPlaceholder`) |
-| `cardActionsDisplay`          | `"hover"` or `"always"`            | `"hover"`   | —                                                                                |
-| `quickCopyBadgeAlwaysVisible` | boolean                            | `true`      | —                                                                                |
-| `showSettingsCloseButton`     | boolean                            | `true`      | —                                                                                |
-| `detailDisplayMode`           | `"overlay"` or `"split"`           | `"overlay"` | —                                                                                |
-| `pageSizeLimit`               | number                             | `500`       | 500–6000                                                                         |
-| `searchPageSizeLimit`         | number                             | `500`       | 50–1000                                                                          |
-| `searchCacheSize`             | number                             | `500`       | 200–2000                                                                         |
-| `searchCacheEviction`         | `"fifo"` or `"lru"`                | `"fifo"`    | —                                                                                |
-| `searchIndexSyncMode`         | `"lazy"` or `"background"`         | `"lazy"`    | —                                                                                |
-| `updateSource`                | `"github"` or `"gitcode"`          | `"gitcode"` | —                                                                                |
-| `colorIcons`                  | boolean                            | `false`     | —                                                                                |
-| `iconColors`                  | `IconColors` map (hex strings)     | `{}`        | keys limited to `ICON_NAMES`; values must be `#rrggbb`/`#rrggbbaa`               |
-| `loadTolerance`               | number                             | `100`       | 50–500                                                                           |
+| Field                         | Type/allowed values                         | Default      | Range when numeric                                                               |
+| ----------------------------- | ------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `language`                    | `"zh-CN"` or `"en"`                         | `"zh-CN"`    | —                                                                                |
+| `windowTransparency`          | number                                      | `95`         | 60–100                                                                           |
+| `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`           | `"off"`      | —                                                                                |
+| `windowOpacityAffectsText`    | boolean                                     | `false`      | —                                                                                |
+| `pinCopiedToTop`              | boolean                                     | `true`       | —                                                                                |
+| `useRecycleBin`               | boolean                                     | `true`       | —                                                                                |
+| `pasteCleaningEnabled`        | boolean                                     | `false`      | —                                                                                |
+| `doubleClickPaste`            | boolean                                     | `true`       | —                                                                                |
+| `maxTextCaptureBytes`         | number (bytes)                              | `500_000`    | 10000–10000000                                                                   |
+| `showToastNotifications`      | boolean                                     | `true`       | —                                                                                |
+| `rememberWindowPosition`      | boolean                                     | `false`      | —                                                                                |
+| `alwaysOnTop`                 | boolean                                     | `false`      | —                                                                                |
+| `useSystemTitleBar`           | boolean                                     | `false`      | —                                                                                |
+| `theme`                       | `"dark"`, `"light"`, or `"custom"`          | `"dark"`     | —                                                                                |
+| `imageFullscreenMode`         | `"overlay"` or `"desktop"`                  | `"overlay"`  | —                                                                                |
+| `viewerBackdropOpacity`       | number                                      | `92`         | 0–100                                                                            |
+| `searchSuggestionMode`        | `"off"`, `"panel"`, or `"inline"`           | `"off"`      | —                                                                                |
+| `searchHistoryEnabled`        | boolean                                     | `false`      | —                                                                                |
+| `searchPlaceholder`           | string                                      | `""`         | trimmed, ≤80 chars; empty = use localized default text (`app.searchPlaceholder`) |
+| `cardActionsDisplay`          | `"hover"` or `"always"`                     | `"hover"`    | —                                                                                |
+| `quickCopyBadgeAlwaysVisible` | boolean                                     | `true`       | —                                                                                |
+| `showSettingsCloseButton`     | boolean                                     | `true`       | —                                                                                |
+| `detailDisplayMode`           | `"overlay"` or `"split"`                    | `"overlay"`  | —                                                                                |
+| `groupDisplayMode`            | `"iconText"`, `"iconOnly"`, or `"textOnly"` | `"iconText"` | —                                                                                |
+| `pageSizeLimit`               | number                                      | `500`        | 500–6000                                                                         |
+| `searchPageSizeLimit`         | number                                      | `500`        | 50–1000                                                                          |
+| `searchCacheSize`             | number                                      | `500`        | 200–2000                                                                         |
+| `searchCacheEviction`         | `"fifo"` or `"lru"`                         | `"fifo"`     | —                                                                                |
+| `searchIndexSyncMode`         | `"lazy"` or `"background"`                  | `"lazy"`     | —                                                                                |
+| `updateSource`                | `"github"` or `"gitcode"`                   | `"gitcode"`  | —                                                                                |
+| `colorIcons`                  | boolean                                     | `false`      | —                                                                                |
+| `iconColors`                  | `IconColors` map (hex strings)              | `{}`         | keys limited to `ICON_NAMES`; values must be `#rrggbb`/`#rrggbbaa`               |
+| `loadTolerance`               | number                                      | `100`        | 50–500                                                                           |
 
 ## Theme and sort structures
 

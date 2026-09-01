@@ -739,6 +739,11 @@ export interface LocaleDefinition {
     cardActionsDisplayDescription: string;
     cardActionsHover: string;
     cardActionsAlways: string;
+    groupDisplayMode: string;
+    groupDisplayModeDescription: string;
+    groupDisplayModeIconText: string;
+    groupDisplayModeIconOnly: string;
+    groupDisplayModeTextOnly: string;
     quickCopyBadge: string;
     quickCopyBadgeDescription: string;
     searchHistory: string;

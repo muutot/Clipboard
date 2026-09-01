@@ -760,6 +760,11 @@ const zhCN: LocaleDefinition = {
     cardActionsDisplayDescription: "选择条目快捷操作按钮组的显示方式",
     cardActionsHover: "悬停或选中时显示",
     cardActionsAlways: "始终显示",
+    groupDisplayMode: "分组标签样式",
+    groupDisplayModeDescription: "选择分组/筛选标签的显示方式",
+    groupDisplayModeIconText: "图标 + 文字",
+    groupDisplayModeIconOnly: "仅图标",
+    groupDisplayModeTextOnly: "仅文字",
     quickCopyBadge: "快速复制 #N 标记",
     quickCopyBadgeDescription:
       "在每个条目右侧常驻显示 #N 标记，无需先悬停或选中；前九个条目显示 ⌘1-⌘9 快速复制标记",

@@ -6,6 +6,7 @@
   import type { Locale } from "$lib/i18n/types";
   import type {
     CardActionsDisplay,
+    GroupDisplayMode,
     SearchSuggestionMode,
     SortRule,
     WindowConfig,
@@ -369,6 +370,19 @@
         { value: "always", label: _t("general.cardActionsAlways") },
       ],
       set: (v) => generalSettings.updateSetting("cardActionsDisplay", v as CardActionsDisplay),
+    },
+    {
+      type: "select",
+      icon: "grid",
+      label: _t("general.groupDisplayMode"),
+      desc: _t("general.groupDisplayModeDescription"),
+      get: () => s.groupDisplayMode,
+      options: [
+        { value: "iconText", label: _t("general.groupDisplayModeIconText") },
+        { value: "iconOnly", label: _t("general.groupDisplayModeIconOnly") },
+        { value: "textOnly", label: _t("general.groupDisplayModeTextOnly") },
+      ],
+      set: (v) => generalSettings.updateSetting("groupDisplayMode", v as GroupDisplayMode),
     },
     {
       type: "toggle",
