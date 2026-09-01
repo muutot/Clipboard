@@ -1506,6 +1506,7 @@
   .detail-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     padding: 8px 14px;
     border: 1px solid var(--border-color);
@@ -1514,6 +1515,7 @@
     background: var(--card-bg);
     font: inherit;
     font-size: 11.5px;
+    line-height: 1;
     cursor: pointer;
     transition:
       background 100ms ease,
@@ -2032,11 +2034,13 @@
   .edit-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
     padding: 5px 12px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     color: var(--text-muted);
+    line-height: 1;
     background: var(--card-bg);
     font: inherit;
     font-size: 11.5px;

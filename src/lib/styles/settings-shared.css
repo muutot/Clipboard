@@ -645,6 +645,7 @@ button {
 .open-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   padding: 5px 10px;
   border: 1px solid var(--border-color);
@@ -653,6 +654,7 @@ button {
   background: var(--card-bg);
   font: inherit;
   font-size: var(--settings-control-size);
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;

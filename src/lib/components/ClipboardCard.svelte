@@ -1504,12 +1504,14 @@
   .edit-cancel {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
     padding: 5px 12px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
     font: inherit;
     font-size: 11.5px;
+    line-height: 1;
     cursor: pointer;
     transition:
       background 100ms ease,

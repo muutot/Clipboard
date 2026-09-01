@@ -3776,6 +3776,7 @@
   .bulk-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
     padding: 5px 12px;
     border: 1px solid var(--border-subtle);
@@ -3785,6 +3786,7 @@
     cursor: pointer;
     font-size: 11.5px;
     font-weight: 500;
+    line-height: 1;
     transition:
       background 100ms ease,
       color 100ms ease;

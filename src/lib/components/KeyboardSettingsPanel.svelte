@@ -655,6 +655,7 @@
   .config-bar-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
     padding: 5px 10px;
     border: 1px solid var(--border-color);
@@ -663,6 +664,7 @@
     background: var(--card-bg);
     font: inherit;
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+    line-height: 1;
     cursor: pointer;
     white-space: nowrap;
   }
