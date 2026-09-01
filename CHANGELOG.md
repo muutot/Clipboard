@@ -1,5 +1,193 @@
 # Changelog
 
+## 1.5.1 (2026-09-01)
+
+### ✨ Features
+
+- **settings**: add group tab display mode (icon+text / icon only / text only) (6e37bf23)
+- **compact**: default to enabled and tighten default compact metrics (e7202879)
+
+### 🐛 Bug Fixes
+
+- **compact**: set compact_mode default to true (reverted in prior commit) (b6b5d708)
+- **sync**: shorten S3 test connection timeout to 10s and use dedicated client (27ad0cee)
+- **sync**: let the connection test run before the sync switch is turned on (backend skips the provider gate; frontend guard and hint removed) (e7793f1a)
+- **settings**: explain the disabled test connection instead of failing silently, feedback via toast (d5f23663)
+- **i18n**: add the missing syncS3Tab label so the S3 tab is not a raw key (7b0a40d5)
+- **settings**: 面包屑跟随分组切换并加固存储状态空值访问 (22a883bb)
+- **settings**: null-safe status access in StoragePathsPanel (restore concurrent hardening) (12c233dd)
+- **settings**: use the storage group label instead of the tools tab label in breadcrumbs (66f4c054)
+- **settings**: restore the settings-scroll padding wrapper on sync and transfer panels (a659bc8c)
+- **settings**: honor ToggleEntry ariaLabel override (cb33af25)
+- **settings**: restore S3 form row styles in SyncPanel, tokenize inline styles, register new panels in references (33e5f5cc)
+- **frontend**: repair mojibake in comments and the delete-kind placeholder glyph (b3bba33e)
+- **frontend**: rename leftover snapshot references in bulkDelete outcomes (313a8b03)
+- **search**: honor ascending direction for title/kind sort rules and cover sort helpers with direct tests (417896db)
+- **ocr**: respect tesseract_languages in fallback engine instead of hardcoded chi_sim (d92a4098)
+- **update**: encode tag in release URL to prevent path injection (fbde0e29)
+
+### ♻️ Refactoring
+
+- **settings**: restructure sync s3 page — test connection as top entry, drop the wrapper card and the advanced heading (a024de97)
+- **settings**: organize sync into cloud / advanced / s3 second-level pages in that order (e9f0cab2)
+- **settings**: split sync into cloud + S3 second-level tabs under one group (7fe056ae)
+- **settings**: merge advanced sync limits into the cloud group and drop sync_advanced; fold in keyboard system-tab reorder (concurrent work) (d1716afe)
+- **settings**: gate sensitive-content panel on loaded config, migrate to entry templates, add breadcrumb path tests (ae36bd1a)
+- **settings**: derive breadcrumbs purely from navigation metadata, two-level for every multi-tab group (af7b99d7)
+- **settings**: migrate OCR detection sliders onto SliderEntry with display/scale/onchange support (498d0311)
+- **settings**: centralize all panel styles into settings-shared, panels carry zero scoped css (ad241b5c)
+- **settings**: OCR engine row onto SelectEntry template, restore checkmark glyphs in model options (fd06ac3b)
+- **settings**: rebuild SyncPanel rows from settings-entries templates (select/text/toggle/number/size) (d9bb9b36)
+- **settings**: split SettingEntry into a per-category settings-entries template folder (8549ea17)
+- **settings**: share one module-cache key across the two sync section descriptors (a0286ecd)
+- **frontend**: unify filter cycling guards into one cycleFilter helper (6661456d)
+- **frontend**: extract bulk delete planning and rollback snapshots into utils/bulk-actions with Vitest coverage (88f34430)
+- **settings**: extract S3 sync config into SyncPanel via lazy descriptors (c7d60141)
+- **settings**: extract transfer import/export into TransferPanel via lazy descriptor (31e6adbd)
+- **settings**: extract storage path management into StoragePathsPanel via lazy descriptor (a5d9772b)
+- **settings**: extract byte unit conversion into utils/unit-convert with tests (b3ae3c35)
+- **settings**: extract the inline OCR section into OcrSettingsPanel via lazy descriptor (1a4a6e5f)
+- **settings**: homogenize lazy panel dispatch into a descriptor table (e29f7306)
+- **frontend**: extract shortcut binding resolution into utils/shortcut-bindings (3eea9aab)
+- **frontend**: extract search cache maintenance into utils/search-cache with Vitest coverage (990906a8)
+- **frontend**: extract history filtering into utils/history-filter with Vitest coverage (ac11e58b)
+- **frontend**: extract window bounds persistence into utils/window-bounds with Vitest coverage (666c2f51)
+- **frontend**: extract search history helpers to utils/search-history and cover with Vitest (8f13e4c2)
+
+### 🎨 Styling
+
+- **ui**: center icon+text buttons horizontally and vertically (554a35a3)
+- **main**: remove 3px gap between toolbar button groups (5ec8e442)
+- **settings**: toast the connection-test result and pin entry button width to stop label-swap jitter (0b4b08c1)
+- **i18n**: show the six S3 credential labels in English across locales (d6f4eadb)
+- **settings**: use fixed English labels for sync entry rows (technical terms) (e3f98821)
+- **settings**: route test-connection feedback through toast and disable it until S3 is selected (a0ae9747)
+- **settings**: keep the gap between the resource path grid and its action row (66f1a6a0)
+- **settings**: drop heading-follower margin-tops, spacing now owned by heading padding; delete dead setting-row family (7f28870a)
+- **settings**: give setting headings a 6px bottom rhythm (08007763)
+- **settings**: add the missing shared entry-textarea/entry-actions rules (338233cf)
+- **settings**: iconify the settings close button and add sync row icons for visual parity (2994cb54)
+- **settings**: remove the auto-save footnote text and its i18n keys, keep generic note style for other footnotes (c46490ac)
+- **settings**: restore resource path grid inputs to the shared control look at 28px (71e5aa29)
+- **settings**: normalize all entry buttons and dropdowns to a fixed 28px height (60b80b42)
+- **skill**: realign utils table after search-cache entry (c8459843)
+- **update**: apply rustfmt to tag_api_url (a92b349b)
+
+### 📝 Documentation
+
+- **clipboard**: correct stale duplicate shared-file warning to match reference-counted cleanup (fe2cf119)
+- **sync**: remove S3_SYNC_TODO superseded by SYNC_V1 (363c4ad1)
+
+### ✅ Testing
+
+- **capture**: cover foreground naming, self-trigger registration, and file reference metadata (a942cb30)
+- **settings**: cover normalization clamps, union fallbacks, and browser persistence (2817f355)
+- **single-instance**: cover lock lifecycle, stale takeover, and pid parsing (df53b2ca)
+- **frontend**: cover keyboard target detection and shortcut matching (47cd5afd)
+- **frontend**: cover date-query boundaries and natural-language ranges (f866f408)
+- **frontend**: cover card height estimator, enable sveltekit alias in vitest (696959c1)
+
+### 🔧 Chores
+
+- **deps**: upgrade zip to 8 (f5cde221)
+- **deps**: upgrade RustCrypto family to 0.11/0.13 and rand to 0.10 (eb813364)
+- **deps**: upgrade oar-ocr to 0.9.2, ort to rc.13, window-vibrancy to 0.8 (942af689)
+- **deps**: drop unused walkdir, patch-level npm bumps, regenerate lockfile to fix rolldown optional binary (4f3d9b5c)
+
+## 1.5.1 (2026-09-01)
+
+### ✨ Features
+
+- **settings**: add group tab display mode (icon+text / icon only / text only) (6e37bf23)
+- **compact**: default to enabled and tighten default compact metrics (e7202879)
+
+### 🐛 Bug Fixes
+
+- **compact**: set compact_mode default to true (reverted in prior commit) (b6b5d708)
+- **sync**: shorten S3 test connection timeout to 10s and use dedicated client (27ad0cee)
+- **sync**: let the connection test run before the sync switch is turned on (backend skips the provider gate; frontend guard and hint removed) (e7793f1a)
+- **settings**: explain the disabled test connection instead of failing silently, feedback via toast (d5f23663)
+- **i18n**: add the missing syncS3Tab label so the S3 tab is not a raw key (7b0a40d5)
+- **settings**: 面包屑跟随分组切换并加固存储状态空值访问 (22a883bb)
+- **settings**: null-safe status access in StoragePathsPanel (restore concurrent hardening) (12c233dd)
+- **settings**: use the storage group label instead of the tools tab label in breadcrumbs (66f4c054)
+- **settings**: restore the settings-scroll padding wrapper on sync and transfer panels (a659bc8c)
+- **settings**: honor ToggleEntry ariaLabel override (cb33af25)
+- **settings**: restore S3 form row styles in SyncPanel, tokenize inline styles, register new panels in references (33e5f5cc)
+- **frontend**: repair mojibake in comments and the delete-kind placeholder glyph (b3bba33e)
+- **frontend**: rename leftover snapshot references in bulkDelete outcomes (313a8b03)
+- **search**: honor ascending direction for title/kind sort rules and cover sort helpers with direct tests (417896db)
+- **ocr**: respect tesseract_languages in fallback engine instead of hardcoded chi_sim (d92a4098)
+- **update**: encode tag in release URL to prevent path injection (fbde0e29)
+
+### ♻️ Refactoring
+
+- **settings**: restructure sync s3 page — test connection as top entry, drop the wrapper card and the advanced heading (a024de97)
+- **settings**: organize sync into cloud / advanced / s3 second-level pages in that order (e9f0cab2)
+- **settings**: split sync into cloud + S3 second-level tabs under one group (7fe056ae)
+- **settings**: merge advanced sync limits into the cloud group and drop sync_advanced; fold in keyboard system-tab reorder (concurrent work) (d1716afe)
+- **settings**: gate sensitive-content panel on loaded config, migrate to entry templates, add breadcrumb path tests (ae36bd1a)
+- **settings**: derive breadcrumbs purely from navigation metadata, two-level for every multi-tab group (af7b99d7)
+- **settings**: migrate OCR detection sliders onto SliderEntry with display/scale/onchange support (498d0311)
+- **settings**: centralize all panel styles into settings-shared, panels carry zero scoped css (ad241b5c)
+- **settings**: OCR engine row onto SelectEntry template, restore checkmark glyphs in model options (fd06ac3b)
+- **settings**: rebuild SyncPanel rows from settings-entries templates (select/text/toggle/number/size) (d9bb9b36)
+- **settings**: split SettingEntry into a per-category settings-entries template folder (8549ea17)
+- **settings**: share one module-cache key across the two sync section descriptors (a0286ecd)
+- **frontend**: unify filter cycling guards into one cycleFilter helper (6661456d)
+- **frontend**: extract bulk delete planning and rollback snapshots into utils/bulk-actions with Vitest coverage (88f34430)
+- **settings**: extract S3 sync config into SyncPanel via lazy descriptors (c7d60141)
+- **settings**: extract transfer import/export into TransferPanel via lazy descriptor (31e6adbd)
+- **settings**: extract storage path management into StoragePathsPanel via lazy descriptor (a5d9772b)
+- **settings**: extract byte unit conversion into utils/unit-convert with tests (b3ae3c35)
+- **settings**: extract the inline OCR section into OcrSettingsPanel via lazy descriptor (1a4a6e5f)
+- **settings**: homogenize lazy panel dispatch into a descriptor table (e29f7306)
+- **frontend**: extract shortcut binding resolution into utils/shortcut-bindings (3eea9aab)
+- **frontend**: extract search cache maintenance into utils/search-cache with Vitest coverage (990906a8)
+- **frontend**: extract history filtering into utils/history-filter with Vitest coverage (ac11e58b)
+- **frontend**: extract window bounds persistence into utils/window-bounds with Vitest coverage (666c2f51)
+- **frontend**: extract search history helpers to utils/search-history and cover with Vitest (8f13e4c2)
+
+### 🎨 Styling
+
+- **ui**: center icon+text buttons horizontally and vertically (554a35a3)
+- **main**: remove 3px gap between toolbar button groups (5ec8e442)
+- **settings**: toast the connection-test result and pin entry button width to stop label-swap jitter (0b4b08c1)
+- **i18n**: show the six S3 credential labels in English across locales (d6f4eadb)
+- **settings**: use fixed English labels for sync entry rows (technical terms) (e3f98821)
+- **settings**: route test-connection feedback through toast and disable it until S3 is selected (a0ae9747)
+- **settings**: keep the gap between the resource path grid and its action row (66f1a6a0)
+- **settings**: drop heading-follower margin-tops, spacing now owned by heading padding; delete dead setting-row family (7f28870a)
+- **settings**: give setting headings a 6px bottom rhythm (08007763)
+- **settings**: add the missing shared entry-textarea/entry-actions rules (338233cf)
+- **settings**: iconify the settings close button and add sync row icons for visual parity (2994cb54)
+- **settings**: remove the auto-save footnote text and its i18n keys, keep generic note style for other footnotes (c46490ac)
+- **settings**: restore resource path grid inputs to the shared control look at 28px (71e5aa29)
+- **settings**: normalize all entry buttons and dropdowns to a fixed 28px height (60b80b42)
+- **skill**: realign utils table after search-cache entry (c8459843)
+- **update**: apply rustfmt to tag_api_url (a92b349b)
+
+### 📝 Documentation
+
+- **clipboard**: correct stale duplicate shared-file warning to match reference-counted cleanup (fe2cf119)
+- **sync**: remove S3_SYNC_TODO superseded by SYNC_V1 (363c4ad1)
+
+### ✅ Testing
+
+- **capture**: cover foreground naming, self-trigger registration, and file reference metadata (a942cb30)
+- **settings**: cover normalization clamps, union fallbacks, and browser persistence (2817f355)
+- **single-instance**: cover lock lifecycle, stale takeover, and pid parsing (df53b2ca)
+- **frontend**: cover keyboard target detection and shortcut matching (47cd5afd)
+- **frontend**: cover date-query boundaries and natural-language ranges (f866f408)
+- **frontend**: cover card height estimator, enable sveltekit alias in vitest (696959c1)
+
+### 🔧 Chores
+
+- **deps**: upgrade zip to 8 (f5cde221)
+- **deps**: upgrade RustCrypto family to 0.11/0.13 and rand to 0.10 (eb813364)
+- **deps**: upgrade oar-ocr to 0.9.2, ort to rc.13, window-vibrancy to 0.8 (942af689)
+- **deps**: drop unused walkdir, patch-level npm bumps, regenerate lockfile to fix rolldown optional binary (4f3d9b5c)
+
 ## 1.5.0 (2026-08-25)
 
 ### ✨ Features
