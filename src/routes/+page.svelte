@@ -3494,7 +3494,6 @@
   .toolbar-actions {
     display: flex;
     align-items: center;
-    gap: 3px;
   }
 
   .filters {
