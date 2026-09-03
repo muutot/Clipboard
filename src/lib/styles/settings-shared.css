@@ -1029,3 +1029,14 @@ button {
   font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
   text-align: center;
 }
+
+.setting-card.empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 56px;
+  padding: 16px 13px;
+}
+
+.setting-card.empty-state .auto-save-note {
+  padding: 0;
+}

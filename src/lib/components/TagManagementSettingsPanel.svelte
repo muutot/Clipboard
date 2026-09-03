@@ -207,11 +207,11 @@
   {#if loading}
     <p class="auto-save-note">{_t("status.searching")}</p>
   {:else if tags.length === 0}
-    <section class="setting-card">
+    <section class="setting-card empty-state">
       <p class="auto-save-note">{_t("tags.empty")}</p>
     </section>
   {:else if filteredTags.length === 0}
-    <section class="setting-card">
+    <section class="setting-card empty-state">
       <p class="auto-save-note">{_t("tags.noResults")}</p>
     </section>
   {:else}
