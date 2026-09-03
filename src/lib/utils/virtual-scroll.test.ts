@@ -64,6 +64,35 @@ describe("itemHeight", () => {
       itemHeight({ kind: "text", textLines: 1 }),
     );
   });
+
+  it("expands every kind with the card padding externally", () => {
+    const padding = { cardPaddingTop: 1, cardPaddingBottom: 2 };
+    const image = itemHeight({ kind: "image", imageHeight: 80, cardGap: 1 });
+    expect(itemHeight({ kind: "image", imageHeight: 80, cardGap: 1, ...padding })).toBe(image + 3);
+
+    const shortText = itemHeight({ kind: "text", textLines: 1, textHeight: 42, cardGap: 1 });
+    expect(itemHeight({ kind: "text", textLines: 1, textHeight: 42, cardGap: 1, ...padding })).toBe(
+      shortText + 3,
+    );
+
+    const tallText = itemHeight({
+      kind: "text",
+      textLines: 3,
+      textHeight: 42,
+      tallTextHeight: 42,
+      cardGap: 1,
+    });
+    expect(
+      itemHeight({
+        kind: "text",
+        textLines: 3,
+        textHeight: 42,
+        tallTextHeight: 42,
+        cardGap: 1,
+        ...padding,
+      }),
+    ).toBe(tallText + 3);
+  });
 });
 
 describe("editHeight", () => {
@@ -78,6 +107,10 @@ describe("editHeight", () => {
 
   it("appends the card gap", () => {
     expect(editHeight(5, false, 7)).toBe(editHeight(5) + 7);
+  });
+
+  it("expands with the card padding externally", () => {
+    expect(editHeight(5, false, 0, 1, 2)).toBe(editHeight(5) + 3);
   });
 });
 

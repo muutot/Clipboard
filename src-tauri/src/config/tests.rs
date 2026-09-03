@@ -42,8 +42,8 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["cardPaddingTop"], 1);
     assert_eq!(saved["general"]["cardPaddingBottom"], 1);
     assert_eq!(saved["general"]["cardGap"], 1);
-    assert_eq!(saved["general"]["cardTextHeight"], 44);
-    assert_eq!(saved["general"]["cardTallTextHeight"], 44);
+    assert_eq!(saved["general"]["cardTextHeight"], 42);
+    assert_eq!(saved["general"]["cardTallTextHeight"], 42);
     assert_eq!(saved["general"]["cardImageHeight"], 80);
     assert_eq!(saved["general"]["searchHeight"], 30);
     assert_eq!(saved["general"]["searchFontSize"], 20);

@@ -2,6 +2,8 @@
 // evolve (and be tested) independently of component state. The estimator is
 // the fallback used when a card has no ResizeObserver measurement yet; keep
 // it in sync with the CSS-driven measurements recorded by `recordCardHeight`.
+// Every kind shares one contract: the *-height settings are content heights
+// and cardPaddingTop/Bottom expand the estimated card height externally.
 
 import { itemHeight, measureVisualLines, trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
 import { getDisplayRemainingLines } from "$lib/services/clipboard";
@@ -60,6 +62,8 @@ export function estimateCardHeight(
       tallTextHeight,
       customTitleHeight,
       cardGap,
+      cardPaddingTop,
+      cardPaddingBottom,
       showPreview: showSecondaryText,
     });
   }
@@ -96,6 +100,8 @@ export function estimateCardHeight(
     tallTextHeight,
     imageHeight,
     cardGap: cardGap,
+    cardPaddingTop,
+    cardPaddingBottom,
     showPreview: showSecondaryText,
   });
 }

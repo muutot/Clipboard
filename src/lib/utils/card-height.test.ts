@@ -33,6 +33,8 @@ describe("estimateCardHeight", () => {
         textHeight: baseInputs.textHeight,
         tallTextHeight: baseInputs.tallTextHeight,
         cardGap: baseInputs.cardGap,
+        cardPaddingTop: baseInputs.cardPaddingTop,
+        cardPaddingBottom: baseInputs.cardPaddingBottom,
         showPreview: baseInputs.showSecondaryText,
       }),
     );
@@ -53,6 +55,8 @@ describe("estimateCardHeight", () => {
         tallTextHeight: baseInputs.tallTextHeight,
         imageHeight: baseInputs.imageHeight,
         cardGap: baseInputs.cardGap,
+        cardPaddingTop: baseInputs.cardPaddingTop,
+        cardPaddingBottom: baseInputs.cardPaddingBottom,
         showPreview: false,
       }),
     );
@@ -82,6 +86,8 @@ describe("estimateCardHeight", () => {
         tallTextHeight: baseInputs.tallTextHeight,
         imageHeight: baseInputs.imageHeight,
         cardGap: baseInputs.cardGap,
+        cardPaddingTop: baseInputs.cardPaddingTop,
+        cardPaddingBottom: baseInputs.cardPaddingBottom,
         showPreview: false,
       }),
     );

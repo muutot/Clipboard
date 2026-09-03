@@ -36,8 +36,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   cardPaddingTop: 1,
   cardPaddingBottom: 1,
   cardGap: 1,
-  cardTextHeight: 44,
-  cardTallTextHeight: 44,
+  cardTextHeight: 42,
+  cardTallTextHeight: 42,
   cardImageHeight: 80,
   cardCustomTitleHeight: 80,
   searchHeight: 30,
@@ -376,7 +376,7 @@ function normalizeGeneralSettings(
   result.cardTallTextHeight = integerInRange(
     source.cardTallTextHeight ?? fallback("cardTallTextHeight"),
     defaultSettings.cardTallTextHeight,
-    44,
+    42,
     100,
   );
   result.cardImageHeight = integerInRange(

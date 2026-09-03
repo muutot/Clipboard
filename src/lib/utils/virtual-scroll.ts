@@ -26,11 +26,17 @@ export function estimateTextLines(text: string | null | undefined, maxLines: num
   return Math.min(limit, previewText.replace(/\r\n?/g, "\n").split("\n").length);
 }
 
-export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?: number): number {
+export function editHeight(
+  lineCount: number,
+  hasCustomTitle?: boolean,
+  cardGap?: number,
+  cardPaddingTop?: number,
+  cardPaddingBottom?: number,
+): number {
   const rows = Math.min(12, Math.max(3, lineCount));
   let h = 25 + 8 + rows * 20 + 36;
   if (hasCustomTitle) h += 34;
-  return h + (cardGap ?? 0);
+  return h + (cardGap ?? 0) + (cardPaddingTop ?? 0) + (cardPaddingBottom ?? 0);
 }
 
 export function itemHeight({
@@ -40,6 +46,8 @@ export function itemHeight({
   tallTextHeight,
   imageHeight,
   cardGap,
+  cardPaddingTop = 0,
+  cardPaddingBottom = 0,
   showPreview = true,
   customTitle = false,
   customTitleHeight,
@@ -50,19 +58,25 @@ export function itemHeight({
   tallTextHeight?: number;
   imageHeight?: number;
   cardGap?: number;
+  cardPaddingTop?: number;
+  cardPaddingBottom?: number;
   showPreview?: boolean;
   customTitle?: boolean;
   customTitleHeight?: number;
 }): number {
+  // Every kind shares the same contract: the *-height settings are content
+  // heights and card padding expands the estimated card height externally.
   const gap = cardGap ?? 5;
-  if (kind === "image") return (imageHeight ?? 130) + gap;
+  const padding = cardPaddingTop + cardPaddingBottom;
+  if (kind === "image") return (imageHeight ?? 130) + padding + gap;
 
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
-  if (visibleLines <= 1) return (textHeight ?? 58) + gap;
+  if (visibleLines <= 1) return (textHeight ?? 58) + padding + gap;
   return (
     (tallTextHeight ?? 70) +
     TEXT_LINE_HEIGHT +
     Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT +
+    padding +
     gap
   );
 }

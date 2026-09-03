@@ -32,10 +32,10 @@ virtualHeightFor(item)      →  measuredCardHeights[item.id] ?? estimatedCardHe
 Rules:
 
 - **`estimatedCardHeight`** is the single source of truth. It handles all item kinds (text, link, image, file). The returned value always includes `cardGap`.
-- **`cardHeightFor`** delegates to `estimatedCardHeight - cardGap`. It returns `0` in non-compact mode (card auto-sizes). Do not add independent logic to this function.
-- **`virtualHeightFor`** is the virtual-scroll estimator. It checks `measuredCardHeights` (populated by `ClipboardCard`'s `onheightchange` ResizeObserver) first, then falls back to `estimatedCardHeight`.
+- **`cardHeightFor`** delegates to `estimatedCardHeight - cardGap`. Do not add independent logic to this function.
+- **`virtualHeightFor`** is the virtual-scroll estimator. It checks `measuredCardHeights` (populated by `ClipboardCard`'s `onheightchange` ResizeObserver) first, then falls back to `estimatedCardHeight` (or `editHeight` for the card being edited).
 - Any future height-affecting change (new item kind, new layout option, layout metric) must be implemented in `estimatedCardHeight` only. The other functions will stay consistent automatically.
-- `itemHeight()` in `virtual-scroll.ts` is a shared helper used internally by `estimatedCardHeight` for text/image formula computation. It must match the card formula so that `estimatedCardHeight - cardGap` equals the CSS height set on `ClipboardCard`.
+- `itemHeight()` in `virtual-scroll.ts` is a shared helper used internally by `estimatedCardHeight` for text/image formula computation. It must match the card formula so that `estimatedCardHeight - cardGap` equals the CSS height set on `ClipboardCard`. All kinds share one contract: the `*Height` settings are content heights and `cardPaddingTop`/`cardPaddingBottom` expand the estimated card height externally.
 
 ### `DetailPanel.svelte`
 

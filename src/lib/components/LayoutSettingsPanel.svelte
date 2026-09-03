@@ -74,7 +74,7 @@
       desc: _t("layout.tallTextHeightDescription"),
       get: () => s.cardTallTextHeight,
       set: (v) => generalSettings.updateSetting("cardTallTextHeight", v),
-      min: 44,
+      min: 42,
       max: 100,
       suffix: "px",
     },

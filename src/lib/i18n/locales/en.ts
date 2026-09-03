@@ -880,13 +880,15 @@ const en: LocaleDefinition = {
     cardGap: "Card Gap",
     cardGapDescription: "Vertical spacing between adjacent items",
     shortTextHeight: "Short Text Height",
-    shortTextHeightDescription: "Height for single-line or no-preview items",
+    shortTextHeightDescription:
+      "Content height for single-line or no-preview items (excludes top/bottom padding)",
     tallTextHeight: "Tall Text Height",
-    tallTextHeightDescription: "Height for multi-line items with preview",
+    tallTextHeightDescription:
+      "Content height for multi-line items with preview (excludes top/bottom padding)",
     customTitleHeight: "Custom Title Height",
     customTitleHeightDescription: "Height for items with custom title",
     imageHeight: "Image Height",
-    imageHeightDescription: "Display height for image items",
+    imageHeightDescription: "Content height for image items (excludes top/bottom padding)",
     searchHeight: "Search Box Height",
     searchHeightDescription: "Height of the search input box",
     searchFontSize: "Search Font Size",

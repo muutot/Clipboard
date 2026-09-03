@@ -504,7 +504,13 @@
     const measured = measuredCardHeights[item.id];
     if (measured) return measured.height;
     if (editingId === item.id) {
-      return editHeight((item.textContent || "").split("\n").length, !!item.customTitle, cardGap);
+      return editHeight(
+        (item.textContent || "").split("\n").length,
+        !!item.customTitle,
+        cardGap,
+        cardPaddingTop,
+        cardPaddingBottom,
+      );
     }
     return estimatedCardHeight(item);
   }

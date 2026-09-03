@@ -37,13 +37,15 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 
 There is no layout-mode toggle: these fields are the always-on card/search sizing knobs. They were renamed from the historical `compact*` keys; the Rust config keeps serde aliases, so an existing `settings.json` written with old `compact*` keys still loads (values re-save under the new names).
 
+Every card kind shares one estimator contract: the `*Height` fields are content heights, and `cardPaddingTop`/`cardPaddingBottom` expand the estimated card height externally (image, text, file, and edit estimates alike). `cardTextHeight`/`cardTallTextHeight` were recalibrated from whole-card to content-height semantics (defaults 44 → 42); values saved under the old semantics stay loadable and only drift by the saved padding until the ResizeObserver measurement corrects them.
+
 | Field                   | Default | Normalized range |
 | ----------------------- | ------- | ---------------- |
 | `cardPaddingTop`        | `1`     | 0–20             |
 | `cardPaddingBottom`     | `1`     | 0–20             |
 | `cardGap`               | `1`     | 0–20             |
-| `cardTextHeight`        | `44`    | 36–90            |
-| `cardTallTextHeight`    | `44`    | 44–100           |
+| `cardTextHeight`        | `42`    | 36–90            |
+| `cardTallTextHeight`    | `42`    | 42–100           |
 | `cardImageHeight`       | `80`    | 64–200           |
 | `cardCustomTitleHeight` | `80`    | 40–120           |
 | `searchHeight`          | `30`    | 28–56            |
