@@ -133,11 +133,7 @@
 
   const isReadonly = $derived(s.theme !== "custom");
   const displayColors = $derived(
-    s.theme === "dark"
-      ? DARK_THEME_COLORS
-      : s.theme === "light"
-        ? LIGHT_THEME_COLORS
-        : themeColors,
+    s.theme === "dark" ? DARK_THEME_COLORS : s.theme === "light" ? LIGHT_THEME_COLORS : themeColors,
   );
 
   let editingId = $state<string | undefined>(undefined);
@@ -372,23 +368,23 @@
   {/if}
 
   {#each colorEntries as entry}
-      <section class="setting-card toggle-card">
-        <div class="setting-heading">
-          <span class="color-swatch" style="background-color: {displayColors[entry.key]}"></span>
-          <div>
-            <strong>{entry.label}</strong>
-            <p>{entry.desc}</p>
-          </div>
+    <section class="setting-card toggle-card">
+      <div class="setting-heading">
+        <span class="color-swatch" style="background-color: {displayColors[entry.key]}"></span>
+        <div>
+          <strong>{entry.label}</strong>
+          <p>{entry.desc}</p>
         </div>
-        <div class="color-input-group">
-          <ColorField
-            value={displayColors[entry.key]}
-            disabled={isReadonly}
-            onchange={(v) => updateColor(entry.key, v)}
-          />
-        </div>
-      </section>
-    {/each}
+      </div>
+      <div class="color-input-group">
+        <ColorField
+          value={displayColors[entry.key]}
+          disabled={isReadonly}
+          onchange={(v) => updateColor(entry.key, v)}
+        />
+      </div>
+    </section>
+  {/each}
 </div>
 
 {#if feedback}
