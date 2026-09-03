@@ -41,14 +41,22 @@ describe("estimateTextLines", () => {
 });
 
 describe("itemHeight", () => {
-  it("uses the compact image height in compact mode", () => {
-    expect(itemHeight({ kind: "image", compact: true, compactImage: 130, cardGap: 5 })).toBe(135);
+  it("uses the configured image height plus the card gap", () => {
+    expect(itemHeight({ kind: "image", compactImage: 130, cardGap: 5 })).toBe(135);
   });
 
-  it("adds one text line height per extra visible line outside compact mode", () => {
-    const base = itemHeight({ kind: "text", textLines: 1 });
-    expect(base).toBe(88);
-    expect(itemHeight({ kind: "text", textLines: 3 })).toBe(88 + 2 * 20);
+  it("uses the compact text height for single-line items and grows per extra line", () => {
+    const base = itemHeight({
+      kind: "text",
+      textLines: 1,
+      compactText: 44,
+      compactTallText: 44,
+      cardGap: 1,
+    });
+    expect(base).toBe(45);
+    expect(
+      itemHeight({ kind: "text", textLines: 3, compactText: 44, compactTallText: 44, cardGap: 1 }),
+    ).toBe(44 + 20 + 20 + 1);
   });
 
   it("ignores preview lines when the secondary text is hidden", () => {

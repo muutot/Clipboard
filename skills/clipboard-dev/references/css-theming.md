@@ -36,7 +36,7 @@ Preserve these characteristics unless the task explicitly requests a redesign:
 - Red `--accent` for product/focus emphasis, blue `--selection-color` for selection/current state, and semantic success/danger/warning colors.
 - Large, lightweight, borderless search input at the top; compact icon/text filters and icon-only window actions below it.
 - History cards are transparent at rest, use `--hover-bg` on hover/focus, and mix selection color into the selected+checked state. Do not turn every row into a permanently elevated card.
-- Card content hierarchy: title 闂?optional preview 闂?source/time/actions metadata. Keep truncation, compact mode, and virtual-scroll measurement aligned.
+- Card content hierarchy: title — optional preview — source/time/actions metadata. Keep truncation, card-layout sizing (`compact*` settings), and virtual-scroll measurement aligned.
 - Status bar is a low-contrast footer separated by one subtle border; popovers/context surfaces are elevated with a border plus shadow.
 - Motion is short and functional. Respect the global reduced-motion rule.
 

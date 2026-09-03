@@ -39,7 +39,6 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["windowTransparency"], 95);
     assert_eq!(saved["general"]["windowEffect"], "off");
     assert_eq!(saved["general"]["windowOpacityAffectsText"], false);
-    assert_eq!(saved["general"]["compactMode"], true);
     assert_eq!(saved["general"]["compactPaddingTop"], 1);
     assert_eq!(saved["general"]["compactPaddingBottom"], 1);
     assert_eq!(saved["general"]["compactCardGap"], 1);
@@ -100,7 +99,6 @@ fn persists_general_settings_as_one_configuration_group() {
     settings.font_sizes.base = 17;
     settings.display.show_secondary_text = false;
     settings.display.max_text_lines = 7;
-    settings.compact_mode = true;
     settings.show_toast_notifications = false;
     settings.theme = "light".to_owned();
     settings.image_fullscreen_mode = "desktop".to_owned();
@@ -126,7 +124,6 @@ fn persists_general_settings_as_one_configuration_group() {
     assert_eq!(saved["general"]["fontSizes"]["base"], 17);
     assert_eq!(saved["general"]["display"]["showSecondaryText"], false);
     assert_eq!(saved["general"]["display"]["maxTextLines"], 7);
-    assert_eq!(saved["general"]["compactMode"], true);
     assert_eq!(saved["general"]["showToastNotifications"], false);
     assert_eq!(saved["general"]["windowEffect"], "acrylic");
     assert_eq!(saved["general"]["theme"], "light");

@@ -24,14 +24,6 @@
 
   const compactEntries: SettingEntryConfig[] = $derived([
     {
-      type: "toggle",
-      icon: "grid",
-      label: _t("general.compactMode"),
-      desc: _t("general.compactModeDescription"),
-      get: () => s.compactMode,
-      set: (v) => generalSettings.updateSetting("compactMode", v),
-    },
-    {
       type: "slider",
       icon: "sliders",
       label: _t("compact.paddingTop"),
@@ -147,11 +139,7 @@
 {/if}
 
 <div class="settings-scroll">
-  <SettingEntry config={compactEntries[0]} />
-
-  {#if s.compactMode}
-    {#each compactEntries.slice(1) as config}
-      <SettingEntry {config} />
-    {/each}
-  {/if}
+  {#each compactEntries as config}
+    <SettingEntry {config} />
+  {/each}
 </div>

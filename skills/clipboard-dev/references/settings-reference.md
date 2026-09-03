@@ -33,11 +33,12 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `display.pageSize`          | `100`   | 50–500                  |
 | `display.searchPageSize`    | `100`   | 50–500                  |
 
-## Compact-mode settings
+## Card layout settings
+
+There is no compact-mode toggle: the compact layout is the always-on default and the fields below are the customizable knobs that drive card/search sizing. The `compact` prefix is historical naming kept for config compatibility.
 
 | Field                      | Default | Normalized range |
 | -------------------------- | ------- | ---------------- |
-| `compactMode`              | `true`  | boolean          |
 | `compactPaddingTop`        | `1`     | 0–20             |
 | `compactPaddingBottom`     | `1`     | 0–20             |
 | `compactCardGap`           | `1`     | 0–20             |
@@ -49,7 +50,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `compactSearchFontSize`    | `20`    | 10–24            |
 | `compactCardBorderRadius`  | `5`     | 0–20             |
 
-`CompactSettingsPanel` currently exposes nine sliders plus the enable switch; `compactCustomTitleHeight` is normalized and consumed by layout logic but is not present in that panel's slider array. Treat that as current behavior, not as proof that the field can be removed.
+`CompactSettingsPanel` (labeled "Layout" in the UI) exposes nine sliders; `compactCustomTitleHeight` is normalized and consumed by layout logic but is not present in that panel's slider array. Treat that as current behavior, not as proof that the field can be removed.
 
 ## General scalar/enum settings
 

@@ -3,7 +3,6 @@ import { estimateCardHeight, type CardEstimateInputs } from "./card-height";
 import { itemHeight } from "./virtual-scroll";
 
 const baseInputs: CardEstimateInputs = {
-  compactMode: false,
   compactImage: 130,
   compactText: 58,
   compactTallText: 70,
@@ -17,8 +16,8 @@ const baseInputs: CardEstimateInputs = {
 };
 
 describe("estimateCardHeight", () => {
-  it("returns compact image formula when kind is image and compactMode is true", () => {
-    const inputs: CardEstimateInputs = { ...baseInputs, compactMode: true, compactImage: 120 };
+  it("returns the image formula when kind is image", () => {
+    const inputs: CardEstimateInputs = { ...baseInputs, compactImage: 120 };
     const item = { kind: "image", title: "photo", textContent: null };
     // formula: compactImage + top + bottom +4 + (meta?14:0) +10 + gap
     expect(estimateCardHeight(item, inputs, false)).toBe(120 + 6 + 6 + 4 + 14 + 10 + 5);
@@ -30,20 +29,6 @@ describe("estimateCardHeight", () => {
     expect(estimateCardHeight(fileItem, baseInputs, false)).toBe(
       itemHeight({
         kind: "file",
-        compact: false,
-        compactImage: baseInputs.compactImage,
-        compactText: baseInputs.compactText,
-        compactTallText: baseInputs.compactTallText,
-        cardGap: baseInputs.compactCardGap,
-        showPreview: baseInputs.showSecondaryText,
-      }),
-    );
-
-    const compactFileInputs = { ...baseInputs, compactMode: true };
-    expect(estimateCardHeight(fileItem, compactFileInputs, false)).toBe(
-      itemHeight({
-        kind: "file",
-        compact: true,
         compactImage: baseInputs.compactImage,
         compactText: baseInputs.compactText,
         compactTallText: baseInputs.compactTallText,
@@ -64,7 +49,6 @@ describe("estimateCardHeight", () => {
       itemHeight({
         kind: "text",
         textLines: 1,
-        compact: false,
         compactText: baseInputs.compactText,
         compactTallText: baseInputs.compactTallText,
         compactImage: baseInputs.compactImage,
@@ -94,7 +78,6 @@ describe("estimateCardHeight", () => {
       itemHeight({
         kind: "text",
         textLines: 1,
-        compact: false,
         compactText: baseInputs.compactText,
         compactTallText: baseInputs.compactTallText,
         compactImage: baseInputs.compactImage,

@@ -7,7 +7,6 @@ import { itemHeight, measureVisualLines, trimTrailingBlankLines } from "$lib/uti
 import { getDisplayRemainingLines } from "$lib/services/clipboard";
 
 export interface CardEstimateInputs {
-  compactMode: boolean;
   compactImage: number;
   compactText: number;
   compactTallText: number;
@@ -35,7 +34,6 @@ export function estimateCardHeight(
   metaHidden: boolean,
 ): number {
   const {
-    compactMode,
     compactImage,
     compactText,
     compactTallText,
@@ -49,7 +47,7 @@ export function estimateCardHeight(
     contentWidth,
   } = inputs;
 
-  if (compactMode && item.kind === "image") {
+  if (item.kind === "image") {
     return (
       compactImage +
       compactPaddingTop +
@@ -63,7 +61,6 @@ export function estimateCardHeight(
   if (item.kind !== "text" && item.kind !== "link") {
     return itemHeight({
       kind: item.kind,
-      compact: compactMode,
       compactImage,
       compactText,
       compactTallText,
@@ -101,7 +98,6 @@ export function estimateCardHeight(
   return itemHeight({
     kind: item.kind,
     textLines: totalLines,
-    compact: compactMode,
     compactText,
     compactTallText,
     compactImage,

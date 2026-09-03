@@ -70,12 +70,3 @@ export function applyGeneralSettingsToDocument(settings: GeneralSettings): void 
   applyWindowEffectToDocument(settings.windowEffect);
   applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
 }
-
-export function syncCompactShellClass(compactMode: boolean): void {
-  if (typeof document === "undefined") return;
-
-  const shell = document.querySelector<HTMLElement>(".app-shell");
-  if (shell) {
-    shell.classList.toggle("compact", compactMode);
-  }
-}

@@ -69,7 +69,6 @@
     selected: boolean;
     checked: boolean;
     showCheckbox: boolean;
-    compact?: boolean;
     compactPaddingTop?: number;
     compactPaddingBottom?: number;
     compactCardGap?: number;
@@ -130,11 +129,10 @@
     selected,
     checked,
     showCheckbox,
-    compact = false,
-    compactPaddingTop = 6,
-    compactPaddingBottom = 4,
-    compactCardGap = 5,
-    compactCardBorderRadius = 10,
+    compactPaddingTop = 1,
+    compactPaddingBottom = 1,
+    compactCardGap = 1,
+    compactCardBorderRadius = 5,
     compactCardHeight = 0,
     maxTextLines = 3,
     showSecondaryText = true,
@@ -231,7 +229,7 @@
 
     let lastHeight = -1;
     const report = () => {
-      const height = Math.ceil(element.offsetHeight + (compact ? compactCardGap : 0));
+      const height = Math.ceil(element.offsetHeight + compactCardGap);
       if (height === lastHeight) return;
       lastHeight = height;
       reportHeight(item.id, height);
@@ -677,27 +675,22 @@
   aria-label={item.title}
   class:selected
   class:checked
-  class:compact
   class:editing
   class:actions-always={alwaysShowActions}
   class:actions-hidden={hideActions}
   class:no-meta={hideMetaRow}
-  class="clip-card"
+  class="clip-card compact"
   onmouseenter={handleMouseEnter}
   onfocus={handleFocus}
-  style:--cpt={compact ? `${compactPaddingTop}px` : undefined}
-  style:--cpb={compact ? `${compactPaddingBottom}px` : undefined}
-  style:--cg={compact ? `${compactCardGap}px` : undefined}
-  style:--cbr={compact ? `${compactCardBorderRadius}px` : undefined}
+  style:--cpt={`${compactPaddingTop}px`}
+  style:--cpb={`${compactPaddingBottom}px`}
+  style:--cg={`${compactCardGap}px`}
+  style:--cbr={`${compactCardBorderRadius}px`}
   style:--max-text-lines={`${showSecondaryText ? maxTextLines : 1}`}
-  style:--compact-image-preview-height={compact && compactCardHeight
+  style:--compact-image-preview-height={compactCardHeight
     ? `${Math.max(24, compactCardHeight - compactPaddingTop - compactPaddingBottom - 4 - (hideMetaRow ? 0 : 24))}px`
     : undefined}
-  style:height={editing
-    ? "auto"
-    : compact && compactCardHeight
-      ? `${compactCardHeight}px`
-      : undefined}
+  style:height={editing ? "auto" : compactCardHeight ? `${compactCardHeight}px` : undefined}
   tabindex="-1"
   data-id={item.id}
   draggable="true"

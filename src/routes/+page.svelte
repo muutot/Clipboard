@@ -399,7 +399,6 @@
 
   // --- Virtual scrolling ---
 
-  const compactMode = $derived($generalSettings.compactMode);
   const effectiveContainerWidth = $derived(Math.max(680, containerWidth));
   const compactText = $derived($generalSettings.compactTextHeight);
   const compactTallText = $derived($generalSettings.compactTallTextHeight);
@@ -422,7 +421,6 @@
     return estimateCardHeight(
       item,
       {
-        compactMode,
         compactImage,
         compactText,
         compactTallText,
@@ -440,14 +438,12 @@
   }
 
   function compactCardHeightFor(item: ClipboardItem): number {
-    if (!compactMode) return 0;
     return Math.max(0, estimatedCardHeight(item) - compactCardGap);
   }
 
   function cardLayoutSignaturePrefix(): string {
     return [
       containerWidth,
-      compactMode,
       compactText,
       compactTallText,
       compactImage,
@@ -769,10 +765,6 @@
         }
       }
       previousRememberWindowPosition = s.rememberWindowPosition;
-      const shell = appShellEl;
-      if (shell) {
-        shell.classList.toggle("compact", s.compactMode);
-      }
     }
     applySettings($generalSettings);
     const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
@@ -2740,7 +2732,7 @@
 <svelte:window onkeydowncapture={handleEscapePriority} onkeydown={handleGlobalKeydown} />
 
 <main
-  class="app-shell"
+  class="app-shell compact"
   class:split-detail={detailDisplayMode === "split" && detailItem != null}
   bind:this={appShellEl}
 >
@@ -2766,9 +2758,7 @@
         autocomplete="off"
         placeholder={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
         spellcheck="false"
-        style={compactMode
-          ? `height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;`
-          : undefined}
+        style={`height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;`}
         onfocus={() => (searchSuggestionsOpen = true)}
         oninput={() => {
           searchSuggestionsOpen = true;
@@ -2784,7 +2774,7 @@
         <span
           class="search-inline-hint"
           aria-hidden="true"
-          style={compactMode ? `font-size: ${compactSearchFontSize}px;` : undefined}
+          style={`font-size: ${compactSearchFontSize}px;`}
         >
           <span>{normalizeSearchTerm(query)}</span>{inlineSearchSuggestionSuffix}
         </span>
@@ -3067,7 +3057,6 @@
                     hideActions={selectedIds.size > 0 ||
                       (detailDisplayMode === "split" && detailItem != null)}
                     hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-                    compact={compactMode}
                     {compactPaddingTop}
                     {compactPaddingBottom}
                     {compactCardGap}
@@ -3117,7 +3106,6 @@
                   hideActions={selectedIds.size > 0 ||
                     (detailDisplayMode === "split" && detailItem != null)}
                   hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-                  compact={compactMode}
                   {compactPaddingTop}
                   {compactPaddingBottom}
                   {compactCardGap}

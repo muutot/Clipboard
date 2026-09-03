@@ -90,9 +90,8 @@ describe("generalSettings store normalization", () => {
   });
 
   it("merge applies several keys at once and normalizes them together", () => {
-    generalSettings.merge({ compactMode: true, compactImageHeight: 300 as unknown as number });
+    generalSettings.merge({ compactImageHeight: 300 as unknown as number });
     const settings = get(generalSettings);
-    expect(settings.compactMode).toBe(true);
     expect(settings.compactImageHeight).toBe(200); // clamped to max
     // Sibling keys survive a merge.
     expect(settings.language).toBe(get(generalSettings).language);

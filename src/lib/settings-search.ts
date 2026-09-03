@@ -283,13 +283,6 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["文字", "text", "opacity"],
   ),
   entry(
-    "general.compact-mode",
-    { section: "compact" },
-    i18n("general.compactMode"),
-    i18n("general.compactModeDescription"),
-    ["密度", "compact"],
-  ),
-  entry(
     "general.pin-copied-to-top",
     { section: "general_items" },
     i18n("general.pinCopiedToTop"),
@@ -414,12 +407,6 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     [i18n("general.themeDark"), i18n("general.themeLight"), "外观"],
   ),
 
-  entry(
-    "compact.enabled",
-    { section: "compact" },
-    i18n("general.compactMode"),
-    i18n("general.compactModeDescription"),
-  ),
   entry(
     "compact.padding-top",
     { section: "compact" },

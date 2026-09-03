@@ -33,7 +33,6 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   windowTransparency: 95,
   windowEffect: "off",
   windowOpacityAffectsText: false,
-  compactMode: false,
   compactPaddingTop: 1,
   compactPaddingBottom: 1,
   compactCardGap: 1,
@@ -349,10 +348,6 @@ function normalizeGeneralSettings(
   result.windowOpacityAffectsText = booleanValue(
     source.windowOpacityAffectsText ?? fallback("windowOpacityAffectsText"),
     defaultSettings.windowOpacityAffectsText,
-  );
-  result.compactMode = booleanValue(
-    source.compactMode ?? fallback("compactMode"),
-    defaultSettings.compactMode,
   );
   result.compactPaddingTop = integerInRange(
     source.compactPaddingTop ?? fallback("compactPaddingTop"),

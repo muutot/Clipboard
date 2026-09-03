@@ -1,4 +1,4 @@
-﻿export interface VirtualScrollConfig {
+export interface VirtualScrollConfig {
   itemHeight: number;
   overscan: number;
 }
@@ -36,7 +36,6 @@ export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?
 export function itemHeight({
   kind,
   textLines = 1,
-  compact = false,
   compactText,
   compactTallText,
   compactImage,
@@ -47,7 +46,6 @@ export function itemHeight({
 }: {
   kind: string;
   textLines?: number;
-  compact?: boolean;
   compactText?: number;
   compactTallText?: number;
   compactImage?: number;
@@ -57,19 +55,16 @@ export function itemHeight({
   compactCustomTitle?: number;
 }): number {
   const gap = cardGap ?? 5;
-  if (kind === "image") return compact ? (compactImage ?? 130) + gap : IMAGE_HEIGHT;
+  if (kind === "image") return (compactImage ?? 130) + gap;
 
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
-  if (compact) {
-    if (visibleLines <= 1) return (compactText ?? 58) + gap;
-    return (
-      (compactTallText ?? 70) +
-      TEXT_LINE_HEIGHT +
-      Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT +
-      gap
-    );
-  }
-  return TEXT_HEIGHT + Math.max(0, visibleLines - 1) * TEXT_LINE_HEIGHT;
+  if (visibleLines <= 1) return (compactText ?? 58) + gap;
+  return (
+    (compactTallText ?? 70) +
+    TEXT_LINE_HEIGHT +
+    Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT +
+    gap
+  );
 }
 
 // --- Canvas-based visual line measurement ---

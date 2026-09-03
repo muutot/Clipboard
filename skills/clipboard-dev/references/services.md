@@ -52,11 +52,11 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 
 ## UI-only services
 
-| Service                 | Responsibility                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `toast.ts`              | listener-based toast pub/sub; public producer is `showToast(message, type?, duration?)`           |
-| `paths.ts`              | writable `iconsDir` used to resolve source icon keys                                              |
-| `settings-bootstrap.ts` | applies font/theme variables to `document.documentElement` and toggles `.compact` on `.app-shell` |
+| Service                 | Responsibility                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `toast.ts`              | listener-based toast pub/sub; public producer is `showToast(message, type?, duration?)` |
+| `paths.ts`              | writable `iconsDir` used to resolve source icon keys                                    |
+| `settings-bootstrap.ts` | applies font/theme variables to `document.documentElement`                              |
 
 `settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping.
 

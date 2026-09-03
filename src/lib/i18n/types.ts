@@ -694,8 +694,6 @@ export interface LocaleDefinition {
     windowEffectOff: string;
     windowEffectAcrylic: string;
     windowEffectMica: string;
-    compactMode: string;
-    compactModeDescription: string;
     launchAtStartup: string;
     launchAtStartupDescription: string;
     closeToTray: string;
