@@ -3497,6 +3497,7 @@
   }
 
   .filters {
+    gap: 2px;
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
@@ -3560,7 +3561,7 @@
   }
 
   .filter-dropdowns {
-    gap: 4px;
+    gap: 6px;
   }
 
   .dropdown-wrapper {
@@ -3646,6 +3647,7 @@
 
   .toolbar-actions {
     flex: 0 0 auto;
+    gap: 2px;
   }
 
   .toolbar-actions button {
