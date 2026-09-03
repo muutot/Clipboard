@@ -103,7 +103,7 @@ Follow the gitmoji convention established by the earliest ~70 commits of this re
 - **gitmoji**: single emoji indicating the change category (see table below).
 - **type**: lowercase change type matching the emoji (e.g., `feat`, `fix`, `docs`, `refactor`).
 - **scope**: optional, lowercase, in **square brackets** (e.g., `[storage]`, `[settings]`, `[search]`).
-- **message**: concise imperative description, Chinese or English.
+- **message**: concise imperative description in **English only**. Chinese (or any non-English) descriptions are strictly forbidden — always write the message in English imperative (e.g., `add pagination`, `fix vertical centering`).
 
 ### Gitmoji mapping
 
@@ -154,5 +154,7 @@ Follow the gitmoji convention established by the earliest ~70 commits of this re
 1. Review `git diff` and `git diff --cached`; stage only the intended unit.
 2. Run the relevant verification and the mandatory documentation currency gate.
 3. Update matching TODO evidence in the same commit only when completion is directly proven.
-4. Write the commit message in the gitmoji format described above.
+4. Write the commit message in the gitmoji format described above — **message must be English only** (no Chinese). This is a strong constraint: any Chinese/non-English message is a violation and must be rewritten to English before committing, and existing history must be reworded to English without changing timestamps (`GIT_COMMITTER_DATE` preserved).
 5. Recheck `git status` after committing and report verification plus any evidence gaps.
+
+> ⚠️ **Strong constraint — English only:** All commit messages (including `feat`, `fix`, `style`, `docs`, etc.) must be written in English. Do not use Chinese for the message body. If a recent commit was made in Chinese, reword it to English immediately while preserving the original author/committer timestamps.
