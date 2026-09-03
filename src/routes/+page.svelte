@@ -3328,7 +3328,7 @@
   }
 
   :global(.app-shell.compact .search-header) {
-    padding: 6px 8px 2px;
+    padding: 4px 8px;
     gap: 6px;
   }
 
@@ -3358,7 +3358,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 8px 4px;
+    padding: 8px;
     border-bottom: none;
   }
 
