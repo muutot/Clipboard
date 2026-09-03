@@ -296,16 +296,16 @@ export interface GeneralSettings {
   windowEffect: WindowEffect;
   /** 文字是否随窗口不透明度/毛玻璃一并变透明；关闭时文字保持完全不透明 */
   windowOpacityAffectsText: boolean;
-  compactPaddingTop: number;
-  compactPaddingBottom: number;
-  compactCardGap: number;
-  compactTextHeight: number;
-  compactTallTextHeight: number;
-  compactImageHeight: number;
-  compactCustomTitleHeight: number;
-  compactSearchHeight: number;
-  compactSearchFontSize: number;
-  compactCardBorderRadius: number;
+  cardPaddingTop: number;
+  cardPaddingBottom: number;
+  cardGap: number;
+  cardTextHeight: number;
+  cardTallTextHeight: number;
+  cardImageHeight: number;
+  cardCustomTitleHeight: number;
+  searchHeight: number;
+  searchFontSize: number;
+  cardBorderRadius: number;
   pinCopiedToTop: boolean;
   useRecycleBin: boolean;
   pasteCleaningEnabled: boolean;

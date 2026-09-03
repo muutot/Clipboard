@@ -80,7 +80,7 @@ export interface LocaleDefinition {
     tagsTab: string;
     tagsDescription: string;
     tagsSectionTitle: string;
-    compactTab: string;
+    layoutTab: string;
     fontTab: string;
     themeTab: string;
     iconsTab: string;
@@ -808,7 +808,7 @@ export interface LocaleDefinition {
     loadToleranceDescription: string;
     loadToleranceUnit: string;
   };
-  compact: {
+  layout: {
     title: string;
     eyebrow: string;
     description: string;

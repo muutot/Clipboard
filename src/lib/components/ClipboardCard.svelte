@@ -69,11 +69,11 @@
     selected: boolean;
     checked: boolean;
     showCheckbox: boolean;
-    compactPaddingTop?: number;
-    compactPaddingBottom?: number;
-    compactCardGap?: number;
-    compactCardBorderRadius?: number;
-    compactCardHeight?: number;
+    cardPaddingTop?: number;
+    cardPaddingBottom?: number;
+    cardGap?: number;
+    cardBorderRadius?: number;
+    cardHeight?: number;
     maxTextLines?: number;
     showSecondaryText?: boolean;
     hideActions?: boolean;
@@ -129,11 +129,11 @@
     selected,
     checked,
     showCheckbox,
-    compactPaddingTop = 1,
-    compactPaddingBottom = 1,
-    compactCardGap = 1,
-    compactCardBorderRadius = 5,
-    compactCardHeight = 0,
+    cardPaddingTop = 1,
+    cardPaddingBottom = 1,
+    cardGap = 1,
+    cardBorderRadius = 5,
+    cardHeight = 0,
     maxTextLines = 3,
     showSecondaryText = true,
     hideActions = false,
@@ -229,7 +229,7 @@
 
     let lastHeight = -1;
     const report = () => {
-      const height = Math.ceil(element.offsetHeight + compactCardGap);
+      const height = Math.ceil(element.offsetHeight + cardGap);
       if (height === lastHeight) return;
       lastHeight = height;
       reportHeight(item.id, height);
@@ -679,18 +679,18 @@
   class:actions-always={alwaysShowActions}
   class:actions-hidden={hideActions}
   class:no-meta={hideMetaRow}
-  class="clip-card compact"
+  class="clip-card"
   onmouseenter={handleMouseEnter}
   onfocus={handleFocus}
-  style:--cpt={`${compactPaddingTop}px`}
-  style:--cpb={`${compactPaddingBottom}px`}
-  style:--cg={`${compactCardGap}px`}
-  style:--cbr={`${compactCardBorderRadius}px`}
+  style:--cpt={`${cardPaddingTop}px`}
+  style:--cpb={`${cardPaddingBottom}px`}
+  style:--cg={`${cardGap}px`}
+  style:--cbr={`${cardBorderRadius}px`}
   style:--max-text-lines={`${showSecondaryText ? maxTextLines : 1}`}
-  style:--compact-image-preview-height={compactCardHeight
-    ? `${Math.max(24, compactCardHeight - compactPaddingTop - compactPaddingBottom - 4 - (hideMetaRow ? 0 : 24))}px`
+  style:--image-preview-height={cardHeight
+    ? `${Math.max(24, cardHeight - cardPaddingTop - cardPaddingBottom - 4 - (hideMetaRow ? 0 : 24))}px`
     : undefined}
-  style:height={editing ? "auto" : compactCardHeight ? `${compactCardHeight}px` : undefined}
+  style:height={editing ? "auto" : cardHeight ? `${cardHeight}px` : undefined}
   tabindex="-1"
   data-id={item.id}
   draggable="true"
@@ -988,23 +988,17 @@
 <style>
   .clip-card {
     position: relative;
-    padding: 0px 8px 0px 8px;
+    padding: var(--cpt, 6px) 8px var(--cpb, 4px) 8px;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: var(--cbr, 7px);
     color: var(--text-primary);
     background: transparent;
     cursor: default;
     overflow: hidden;
     outline: none;
     transition: background 120ms ease;
-  }
-
-  .clip-card.compact {
-    padding: var(--cpt, 6px) 8px var(--cpb, 4px) 8px;
-    border-radius: var(--cbr, 7px);
     margin-bottom: var(--cg, 5px);
     box-sizing: border-box;
-    overflow: hidden;
   }
 
   .clip-card.editing {
@@ -1012,20 +1006,20 @@
     z-index: 2;
   }
 
-  .clip-card.compact .meta-row {
+  .clip-card .meta-row {
     margin-top: 0;
     gap: 5px;
   }
 
-  .clip-card.compact .meta-row span {
+  .clip-card .meta-row span {
     font-size: 12px;
   }
 
-  .clip-card.compact .content {
+  .clip-card .content {
     font-size: 12px;
   }
 
-  .clip-card.compact .text-preview {
+  .clip-card .text-preview {
     font-size: var(--font-size-cardTitle, 13px);
     line-height: 1.4;
   }
@@ -1191,8 +1185,8 @@
     box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
   }
 
-  .clip-card.compact .image-preview {
-    height: var(--compact-image-preview-height, 90px);
+  .clip-card .image-preview {
+    height: var(--image-preview-height, 90px);
   }
 
   .image-preview img {
@@ -1229,8 +1223,8 @@
     background: rgba(0, 0, 0, 0.75);
   }
 
-  .clip-card.compact .image-placeholder {
-    height: var(--compact-image-preview-height, 82px);
+  .clip-card .image-placeholder {
+    height: var(--image-preview-height, 82px);
   }
 
   .image-placeholder {

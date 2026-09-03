@@ -80,7 +80,7 @@ const zhCN: LocaleDefinition = {
     tagsTab: "标签",
     tagsDescription: "管理所有剪贴板条目标签，可批量重命名、删除或设置颜色。",
     tagsSectionTitle: "管理所有剪贴板条目标签",
-    compactTab: "布局",
+    layoutTab: "布局",
     fontTab: "字体",
     themeTab: "主题",
     iconsTab: "图标",
@@ -830,7 +830,7 @@ const zhCN: LocaleDefinition = {
     loadToleranceDescription: "列表条目超过「最大加载条目 + 此值」时，自动移除最早的一批条目",
     loadToleranceUnit: "条",
   },
-  compact: {
+  layout: {
     title: "布局设置",
     eyebrow: "设置 / 布局",
     description: "调整卡片间距、条目高度和搜索框尺寸。",

@@ -400,16 +400,16 @@
   // --- Virtual scrolling ---
 
   const effectiveContainerWidth = $derived(Math.max(680, containerWidth));
-  const compactText = $derived($generalSettings.compactTextHeight);
-  const compactTallText = $derived($generalSettings.compactTallTextHeight);
-  const compactImage = $derived($generalSettings.compactImageHeight);
-  const compactCustomTitle = $derived($generalSettings.compactCustomTitleHeight);
-  const compactCardGap = $derived($generalSettings.compactCardGap);
-  const compactPaddingTop = $derived($generalSettings.compactPaddingTop);
-  const compactPaddingBottom = $derived($generalSettings.compactPaddingBottom);
-  const compactSearchHeight = $derived($generalSettings.compactSearchHeight);
-  const compactSearchFontSize = $derived($generalSettings.compactSearchFontSize);
-  const compactCardBorderRadius = $derived($generalSettings.compactCardBorderRadius);
+  const cardTextHeight = $derived($generalSettings.cardTextHeight);
+  const cardTallTextHeight = $derived($generalSettings.cardTallTextHeight);
+  const cardImageHeight = $derived($generalSettings.cardImageHeight);
+  const cardCustomTitleHeight = $derived($generalSettings.cardCustomTitleHeight);
+  const cardGap = $derived($generalSettings.cardGap);
+  const cardPaddingTop = $derived($generalSettings.cardPaddingTop);
+  const cardPaddingBottom = $derived($generalSettings.cardPaddingBottom);
+  const searchHeight = $derived($generalSettings.searchHeight);
+  const searchFontSize = $derived($generalSettings.searchFontSize);
+  const cardBorderRadius = $derived($generalSettings.cardBorderRadius);
   const showSecondaryText = $derived($generalSettings.display.showSecondaryText);
   const maxTextLines = $derived($generalSettings.display.maxTextLines);
   const alwaysShowActions = $derived($generalSettings.cardActionsDisplay === "always");
@@ -421,13 +421,13 @@
     return estimateCardHeight(
       item,
       {
-        compactImage,
-        compactText,
-        compactTallText,
-        compactCustomTitle,
-        compactCardGap,
-        compactPaddingTop,
-        compactPaddingBottom,
+        imageHeight: cardImageHeight,
+        textHeight: cardTextHeight,
+        tallTextHeight: cardTallTextHeight,
+        customTitleHeight: cardCustomTitleHeight,
+        cardGap,
+        cardPaddingTop,
+        cardPaddingBottom,
         showSecondaryText,
         maxTextLines,
         previewFontSize: $generalSettings.fontSizes.cardPreview,
@@ -437,20 +437,20 @@
     );
   }
 
-  function compactCardHeightFor(item: ClipboardItem): number {
-    return Math.max(0, estimatedCardHeight(item) - compactCardGap);
+  function cardHeightFor(item: ClipboardItem): number {
+    return Math.max(0, estimatedCardHeight(item) - cardGap);
   }
 
   function cardLayoutSignaturePrefix(): string {
     return [
       containerWidth,
-      compactText,
-      compactTallText,
-      compactImage,
-      compactCustomTitle,
-      compactCardGap,
-      compactPaddingTop,
-      compactPaddingBottom,
+      cardTextHeight,
+      cardTallTextHeight,
+      cardImageHeight,
+      cardCustomTitleHeight,
+      cardGap,
+      cardPaddingTop,
+      cardPaddingBottom,
       showSecondaryText,
       maxTextLines,
       detailDisplayMode,
@@ -504,11 +504,7 @@
     const measured = measuredCardHeights[item.id];
     if (measured) return measured.height;
     if (editingId === item.id) {
-      return editHeight(
-        (item.textContent || "").split("\n").length,
-        !!item.customTitle,
-        compactCardGap,
-      );
+      return editHeight((item.textContent || "").split("\n").length, !!item.customTitle, cardGap);
     }
     return estimatedCardHeight(item);
   }
@@ -2732,7 +2728,7 @@
 <svelte:window onkeydowncapture={handleEscapePriority} onkeydown={handleGlobalKeydown} />
 
 <main
-  class="app-shell compact"
+  class="app-shell"
   class:split-detail={detailDisplayMode === "split" && detailItem != null}
   bind:this={appShellEl}
 >
@@ -2758,7 +2754,7 @@
         autocomplete="off"
         placeholder={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
         spellcheck="false"
-        style={`height: ${compactSearchHeight}px; font-size: ${compactSearchFontSize}px;`}
+        style={`height: ${searchHeight}px; font-size: ${searchFontSize}px;`}
         onfocus={() => (searchSuggestionsOpen = true)}
         oninput={() => {
           searchSuggestionsOpen = true;
@@ -2774,7 +2770,7 @@
         <span
           class="search-inline-hint"
           aria-hidden="true"
-          style={`font-size: ${compactSearchFontSize}px;`}
+          style={`font-size: ${searchFontSize}px;`}
         >
           <span>{normalizeSearchTerm(query)}</span>{inlineSearchSuggestionSuffix}
         </span>
@@ -3057,11 +3053,11 @@
                     hideActions={selectedIds.size > 0 ||
                       (detailDisplayMode === "split" && detailItem != null)}
                     hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-                    {compactPaddingTop}
-                    {compactPaddingBottom}
-                    {compactCardGap}
-                    {compactCardBorderRadius}
-                    compactCardHeight={compactCardHeightFor(item)}
+                    {cardPaddingTop}
+                    {cardPaddingBottom}
+                    {cardGap}
+                    {cardBorderRadius}
+                    cardHeight={cardHeightFor(item)}
                     {maxTextLines}
                     {showSecondaryText}
                     {alwaysShowActions}
@@ -3106,11 +3102,11 @@
                   hideActions={selectedIds.size > 0 ||
                     (detailDisplayMode === "split" && detailItem != null)}
                   hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-                  {compactPaddingTop}
-                  {compactPaddingBottom}
-                  {compactCardGap}
-                  {compactCardBorderRadius}
-                  compactCardHeight={compactCardHeightFor(item)}
+                  {cardPaddingTop}
+                  {cardPaddingBottom}
+                  {cardGap}
+                  {cardBorderRadius}
+                  cardHeight={cardHeightFor(item)}
                   {maxTextLines}
                   {showSecondaryText}
                   {alwaysShowActions}
@@ -3315,38 +3311,11 @@
     grid-row: 1 / -1;
   }
 
-  :global(.app-shell.compact .search-header) {
-    padding: 4px 8px;
-    gap: 6px;
-  }
-
-  :global(.app-shell.compact .search-box input) {
-    font-size: 12px;
-  }
-
-  :global(.app-shell.compact .toolbar) {
-    padding: 2px 8px 8px;
-  }
-
-  :global(.app-shell.compact .toolbar-actions button) {
-    width: 28px;
-    height: 28px;
-  }
-
-  :global(.app-shell.compact .filters button) {
-    padding: 3px 8px;
-    font-size: 12px;
-  }
-
-  :global(.app-shell.compact .history-list) {
-    padding: 0 4px 6px;
-  }
-
   .search-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px;
+    gap: 6px;
+    padding: 4px 8px;
     border-bottom: none;
   }
 
@@ -3481,7 +3450,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 2px 8px 4px 8px;
+    padding: 2px 8px 8px;
   }
 
   .filters,
@@ -3524,7 +3493,7 @@
   .filters button {
     gap: 5px;
     height: 31px;
-    padding: 0 8px;
+    padding: 3px 8px;
     border-radius: 6px;
     font-size: 12px;
   }
@@ -3653,8 +3622,8 @@
   }
 
   .toolbar-actions button {
-    width: 29px;
-    height: 29px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border-radius: 6px;
     color: var(--text-faint);
@@ -3711,7 +3680,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 0 4px 18px;
+    padding: 0 4px 6px;
   }
 
   .virtual-container {

@@ -33,16 +33,16 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   windowTransparency: 95,
   windowEffect: "off",
   windowOpacityAffectsText: false,
-  compactPaddingTop: 1,
-  compactPaddingBottom: 1,
-  compactCardGap: 1,
-  compactTextHeight: 44,
-  compactTallTextHeight: 44,
-  compactImageHeight: 80,
-  compactCustomTitleHeight: 80,
-  compactSearchHeight: 30,
-  compactSearchFontSize: 20,
-  compactCardBorderRadius: 5,
+  cardPaddingTop: 1,
+  cardPaddingBottom: 1,
+  cardGap: 1,
+  cardTextHeight: 44,
+  cardTallTextHeight: 44,
+  cardImageHeight: 80,
+  cardCustomTitleHeight: 80,
+  searchHeight: 30,
+  searchFontSize: 20,
+  cardBorderRadius: 5,
   pinCopiedToTop: true,
   useRecycleBin: true,
   pasteCleaningEnabled: false,
@@ -349,63 +349,63 @@ function normalizeGeneralSettings(
     source.windowOpacityAffectsText ?? fallback("windowOpacityAffectsText"),
     defaultSettings.windowOpacityAffectsText,
   );
-  result.compactPaddingTop = integerInRange(
-    source.compactPaddingTop ?? fallback("compactPaddingTop"),
-    defaultSettings.compactPaddingTop,
+  result.cardPaddingTop = integerInRange(
+    source.cardPaddingTop ?? fallback("cardPaddingTop"),
+    defaultSettings.cardPaddingTop,
     0,
     20,
   );
-  result.compactPaddingBottom = integerInRange(
-    source.compactPaddingBottom ?? fallback("compactPaddingBottom"),
-    defaultSettings.compactPaddingBottom,
+  result.cardPaddingBottom = integerInRange(
+    source.cardPaddingBottom ?? fallback("cardPaddingBottom"),
+    defaultSettings.cardPaddingBottom,
     0,
     20,
   );
-  result.compactCardGap = integerInRange(
-    source.compactCardGap ?? fallback("compactCardGap"),
-    defaultSettings.compactCardGap,
+  result.cardGap = integerInRange(
+    source.cardGap ?? fallback("cardGap"),
+    defaultSettings.cardGap,
     0,
     20,
   );
-  result.compactTextHeight = integerInRange(
-    source.compactTextHeight ?? fallback("compactTextHeight"),
-    defaultSettings.compactTextHeight,
+  result.cardTextHeight = integerInRange(
+    source.cardTextHeight ?? fallback("cardTextHeight"),
+    defaultSettings.cardTextHeight,
     36,
     90,
   );
-  result.compactTallTextHeight = integerInRange(
-    source.compactTallTextHeight ?? fallback("compactTallTextHeight"),
-    defaultSettings.compactTallTextHeight,
+  result.cardTallTextHeight = integerInRange(
+    source.cardTallTextHeight ?? fallback("cardTallTextHeight"),
+    defaultSettings.cardTallTextHeight,
     44,
     100,
   );
-  result.compactImageHeight = integerInRange(
-    source.compactImageHeight ?? fallback("compactImageHeight"),
-    defaultSettings.compactImageHeight,
+  result.cardImageHeight = integerInRange(
+    source.cardImageHeight ?? fallback("cardImageHeight"),
+    defaultSettings.cardImageHeight,
     64,
     200,
   );
-  result.compactCustomTitleHeight = integerInRange(
-    source.compactCustomTitleHeight ?? fallback("compactCustomTitleHeight"),
-    defaultSettings.compactCustomTitleHeight,
+  result.cardCustomTitleHeight = integerInRange(
+    source.cardCustomTitleHeight ?? fallback("cardCustomTitleHeight"),
+    defaultSettings.cardCustomTitleHeight,
     40,
     120,
   );
-  result.compactSearchHeight = integerInRange(
-    source.compactSearchHeight ?? fallback("compactSearchHeight"),
-    defaultSettings.compactSearchHeight,
+  result.searchHeight = integerInRange(
+    source.searchHeight ?? fallback("searchHeight"),
+    defaultSettings.searchHeight,
     28,
     56,
   );
-  result.compactSearchFontSize = integerInRange(
-    source.compactSearchFontSize ?? fallback("compactSearchFontSize"),
-    defaultSettings.compactSearchFontSize,
+  result.searchFontSize = integerInRange(
+    source.searchFontSize ?? fallback("searchFontSize"),
+    defaultSettings.searchFontSize,
     10,
     24,
   );
-  result.compactCardBorderRadius = integerInRange(
-    source.compactCardBorderRadius ?? fallback("compactCardBorderRadius"),
-    defaultSettings.compactCardBorderRadius,
+  result.cardBorderRadius = integerInRange(
+    source.cardBorderRadius ?? fallback("cardBorderRadius"),
+    defaultSettings.cardBorderRadius,
     0,
     20,
   );

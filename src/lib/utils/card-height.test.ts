@@ -3,12 +3,12 @@ import { estimateCardHeight, type CardEstimateInputs } from "./card-height";
 import { itemHeight } from "./virtual-scroll";
 
 const baseInputs: CardEstimateInputs = {
-  compactImage: 130,
-  compactText: 58,
-  compactTallText: 70,
-  compactCardGap: 5,
-  compactPaddingTop: 6,
-  compactPaddingBottom: 6,
+  imageHeight: 130,
+  textHeight: 58,
+  tallTextHeight: 70,
+  cardGap: 5,
+  cardPaddingTop: 6,
+  cardPaddingBottom: 6,
   showSecondaryText: true,
   maxTextLines: 3,
   previewFontSize: 13,
@@ -17,9 +17,9 @@ const baseInputs: CardEstimateInputs = {
 
 describe("estimateCardHeight", () => {
   it("returns the image formula when kind is image", () => {
-    const inputs: CardEstimateInputs = { ...baseInputs, compactImage: 120 };
+    const inputs: CardEstimateInputs = { ...baseInputs, imageHeight: 120 };
     const item = { kind: "image", title: "photo", textContent: null };
-    // formula: compactImage + top + bottom +4 + (meta?14:0) +10 + gap
+    // formula: imageHeight + top + bottom +4 + (meta?14:0) +10 + gap
     expect(estimateCardHeight(item, inputs, false)).toBe(120 + 6 + 6 + 4 + 14 + 10 + 5);
     expect(estimateCardHeight(item, inputs, true)).toBe(120 + 6 + 6 + 4 + 0 + 10 + 5);
   });
@@ -29,10 +29,10 @@ describe("estimateCardHeight", () => {
     expect(estimateCardHeight(fileItem, baseInputs, false)).toBe(
       itemHeight({
         kind: "file",
-        compactImage: baseInputs.compactImage,
-        compactText: baseInputs.compactText,
-        compactTallText: baseInputs.compactTallText,
-        cardGap: baseInputs.compactCardGap,
+        imageHeight: baseInputs.imageHeight,
+        textHeight: baseInputs.textHeight,
+        tallTextHeight: baseInputs.tallTextHeight,
+        cardGap: baseInputs.cardGap,
         showPreview: baseInputs.showSecondaryText,
       }),
     );
@@ -49,10 +49,10 @@ describe("estimateCardHeight", () => {
       itemHeight({
         kind: "text",
         textLines: 1,
-        compactText: baseInputs.compactText,
-        compactTallText: baseInputs.compactTallText,
-        compactImage: baseInputs.compactImage,
-        cardGap: baseInputs.compactCardGap,
+        textHeight: baseInputs.textHeight,
+        tallTextHeight: baseInputs.tallTextHeight,
+        imageHeight: baseInputs.imageHeight,
+        cardGap: baseInputs.cardGap,
         showPreview: false,
       }),
     );
@@ -78,10 +78,10 @@ describe("estimateCardHeight", () => {
       itemHeight({
         kind: "text",
         textLines: 1,
-        compactText: baseInputs.compactText,
-        compactTallText: baseInputs.compactTallText,
-        compactImage: baseInputs.compactImage,
-        cardGap: baseInputs.compactCardGap,
+        textHeight: baseInputs.textHeight,
+        tallTextHeight: baseInputs.tallTextHeight,
+        imageHeight: baseInputs.imageHeight,
+        cardGap: baseInputs.cardGap,
         showPreview: false,
       }),
     );

@@ -39,15 +39,15 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["windowTransparency"], 95);
     assert_eq!(saved["general"]["windowEffect"], "off");
     assert_eq!(saved["general"]["windowOpacityAffectsText"], false);
-    assert_eq!(saved["general"]["compactPaddingTop"], 1);
-    assert_eq!(saved["general"]["compactPaddingBottom"], 1);
-    assert_eq!(saved["general"]["compactCardGap"], 1);
-    assert_eq!(saved["general"]["compactTextHeight"], 44);
-    assert_eq!(saved["general"]["compactTallTextHeight"], 44);
-    assert_eq!(saved["general"]["compactImageHeight"], 80);
-    assert_eq!(saved["general"]["compactSearchHeight"], 30);
-    assert_eq!(saved["general"]["compactSearchFontSize"], 20);
-    assert_eq!(saved["general"]["compactCardBorderRadius"], 5);
+    assert_eq!(saved["general"]["cardPaddingTop"], 1);
+    assert_eq!(saved["general"]["cardPaddingBottom"], 1);
+    assert_eq!(saved["general"]["cardGap"], 1);
+    assert_eq!(saved["general"]["cardTextHeight"], 44);
+    assert_eq!(saved["general"]["cardTallTextHeight"], 44);
+    assert_eq!(saved["general"]["cardImageHeight"], 80);
+    assert_eq!(saved["general"]["searchHeight"], 30);
+    assert_eq!(saved["general"]["searchFontSize"], 20);
+    assert_eq!(saved["general"]["cardBorderRadius"], 5);
     assert_eq!(saved["general"]["showToastNotifications"], true);
     assert_eq!(saved["general"]["viewerBackdropOpacity"], 92);
     assert_eq!(saved["general"]["searchSuggestionMode"], "off");
@@ -155,6 +155,42 @@ fn existing_general_settings_default_search_preferences_to_disabled() {
     let store = ConfigStore::load(&project).unwrap();
     assert_eq!(store.general_settings().search_suggestion_mode, "off");
     assert!(!store.general_settings().search_history_enabled);
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn legacy_compact_layout_keys_still_load_after_rename() {
+    let project = temporary_test_directory("legacy-compact-keys");
+    let config_directory = project.join("conf");
+    fs::create_dir_all(&config_directory).unwrap();
+    fs::write(
+        config_directory.join("conf.json"),
+        serde_json::to_vec_pretty(&json!({
+            "general": {
+                "language": "en",
+                "compactMode": true,
+                "compactPaddingTop": 3,
+                "compactCardGap": 4,
+                "compactTextHeight": 50,
+                "compactImageHeight": 96,
+                "compactSearchHeight": 34,
+                "compactSearchFontSize": 18,
+                "compactCardBorderRadius": 8
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let store = ConfigStore::load(&project).unwrap();
+    let settings = store.general_settings();
+    assert_eq!(settings.card_padding_top, 3);
+    assert_eq!(settings.card_gap, 4);
+    assert_eq!(settings.card_text_height, 50);
+    assert_eq!(settings.card_image_height, 96);
+    assert_eq!(settings.search_height, 34);
+    assert_eq!(settings.search_font_size, 18);
+    assert_eq!(settings.card_border_radius, 8);
     fs::remove_dir_all(project).unwrap();
 }
 

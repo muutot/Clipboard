@@ -7,13 +7,13 @@ import { itemHeight, measureVisualLines, trimTrailingBlankLines } from "$lib/uti
 import { getDisplayRemainingLines } from "$lib/services/clipboard";
 
 export interface CardEstimateInputs {
-  compactImage: number;
-  compactText: number;
-  compactTallText: number;
-  compactCustomTitle?: number;
-  compactCardGap: number;
-  compactPaddingTop: number;
-  compactPaddingBottom: number;
+  imageHeight: number;
+  textHeight: number;
+  tallTextHeight: number;
+  customTitleHeight?: number;
+  cardGap: number;
+  cardPaddingTop: number;
+  cardPaddingBottom: number;
   showSecondaryText: boolean;
   maxTextLines: number;
   previewFontSize: number;
@@ -34,13 +34,13 @@ export function estimateCardHeight(
   metaHidden: boolean,
 ): number {
   const {
-    compactImage,
-    compactText,
-    compactTallText,
-    compactCustomTitle,
-    compactCardGap,
-    compactPaddingTop,
-    compactPaddingBottom,
+    imageHeight,
+    textHeight,
+    tallTextHeight,
+    customTitleHeight,
+    cardGap,
+    cardPaddingTop,
+    cardPaddingBottom,
     showSecondaryText,
     maxTextLines,
     previewFontSize,
@@ -49,23 +49,17 @@ export function estimateCardHeight(
 
   if (item.kind === "image") {
     return (
-      compactImage +
-      compactPaddingTop +
-      compactPaddingBottom +
-      4 +
-      (metaHidden ? 0 : 14) +
-      10 +
-      compactCardGap
+      imageHeight + cardPaddingTop + cardPaddingBottom + 4 + (metaHidden ? 0 : 14) + 10 + cardGap
     );
   }
   if (item.kind !== "text" && item.kind !== "link") {
     return itemHeight({
       kind: item.kind,
-      compactImage,
-      compactText,
-      compactTallText,
-      compactCustomTitle,
-      cardGap: compactCardGap,
+      imageHeight,
+      textHeight,
+      tallTextHeight,
+      customTitleHeight,
+      cardGap,
       showPreview: showSecondaryText,
     });
   }
@@ -98,10 +92,10 @@ export function estimateCardHeight(
   return itemHeight({
     kind: item.kind,
     textLines: totalLines,
-    compactText,
-    compactTallText,
-    compactImage,
-    cardGap: compactCardGap,
+    textHeight,
+    tallTextHeight,
+    imageHeight,
+    cardGap: cardGap,
     showPreview: showSecondaryText,
   });
 }

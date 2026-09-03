@@ -81,7 +81,7 @@ const en: LocaleDefinition = {
     tagsDescription:
       "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
     tagsSectionTitle: "Manage all clipboard tags",
-    compactTab: "Layout",
+    layoutTab: "Layout",
     fontTab: "Font",
     themeTab: "Theme",
     iconsTab: "Icons",
@@ -869,7 +869,7 @@ const en: LocaleDefinition = {
       'When loaded items exceed "Max Load Items" plus this value, the oldest batch is evicted',
     loadToleranceUnit: "items",
   },
-  compact: {
+  layout: {
     title: "Layout Settings",
     eyebrow: "Settings / Layout",
     description: "Adjust card spacing, item heights, and search box sizing.",

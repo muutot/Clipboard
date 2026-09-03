@@ -77,16 +77,26 @@ pub struct GeneralConfig {
     pub window_transparency: u8,
     pub window_effect: String,
     pub window_opacity_affects_text: bool,
-    pub compact_padding_top: u16,
-    pub compact_padding_bottom: u16,
-    pub compact_card_gap: u16,
-    pub compact_text_height: u16,
-    pub compact_tall_text_height: u16,
-    pub compact_image_height: u16,
-    pub compact_custom_title_height: u16,
-    pub compact_search_height: u16,
-    pub compact_search_font_size: u16,
-    pub compact_card_border_radius: u16,
+    #[serde(alias = "compactPaddingTop")]
+    pub card_padding_top: u16,
+    #[serde(alias = "compactPaddingBottom")]
+    pub card_padding_bottom: u16,
+    #[serde(alias = "compactCardGap")]
+    pub card_gap: u16,
+    #[serde(alias = "compactTextHeight")]
+    pub card_text_height: u16,
+    #[serde(alias = "compactTallTextHeight")]
+    pub card_tall_text_height: u16,
+    #[serde(alias = "compactImageHeight")]
+    pub card_image_height: u16,
+    #[serde(alias = "compactCustomTitleHeight")]
+    pub card_custom_title_height: u16,
+    #[serde(alias = "compactSearchHeight")]
+    pub search_height: u16,
+    #[serde(alias = "compactSearchFontSize")]
+    pub search_font_size: u16,
+    #[serde(alias = "compactCardBorderRadius")]
+    pub card_border_radius: u16,
     pub pin_copied_to_top: bool,
     pub use_recycle_bin: bool,
     pub show_toast_notifications: bool,
@@ -117,16 +127,16 @@ impl Default for GeneralConfig {
             window_transparency: 95,
             window_effect: "off".to_owned(),
             window_opacity_affects_text: false,
-            compact_padding_top: 1,
-            compact_padding_bottom: 1,
-            compact_card_gap: 1,
-            compact_text_height: 44,
-            compact_tall_text_height: 44,
-            compact_image_height: 80,
-            compact_custom_title_height: 80,
-            compact_search_height: 30,
-            compact_search_font_size: 20,
-            compact_card_border_radius: 5,
+            card_padding_top: 1,
+            card_padding_bottom: 1,
+            card_gap: 1,
+            card_text_height: 44,
+            card_tall_text_height: 44,
+            card_image_height: 80,
+            card_custom_title_height: 80,
+            search_height: 30,
+            search_font_size: 20,
+            card_border_radius: 5,
             pin_copied_to_top: true,
             use_recycle_bin: true,
             show_toast_notifications: true,

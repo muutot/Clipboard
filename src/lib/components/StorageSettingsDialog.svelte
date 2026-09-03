@@ -86,8 +86,8 @@
 
   const LAZY_PANEL_DESCRIPTORS: LazyPanelDescriptor[] = [
     {
-      sections: ["compact"],
-      load: () => import("$lib/components/CompactSettingsPanel.svelte"),
+      sections: ["layout"],
+      load: () => import("$lib/components/LayoutSettingsPanel.svelte"),
       props: () => ({ onclose, showHeader: false }),
     },
     {

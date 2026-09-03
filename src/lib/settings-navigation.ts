@@ -5,7 +5,7 @@ export const SETTINGS_SECTIONS = [
   "general_items",
   "general_window",
   "general_general",
-  "compact",
+  "layout",
   "font",
   "theme",
   "icons",
@@ -108,9 +108,9 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
         descriptionKey: "general.fontSizeDescription",
       },
       {
-        section: "compact",
-        labelKey: "storage.compactTab",
-        descriptionKey: "compact.description",
+        section: "layout",
+        labelKey: "storage.layoutTab",
+        descriptionKey: "layout.description",
       },
       {
         section: "icons",

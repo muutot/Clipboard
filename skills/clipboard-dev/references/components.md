@@ -6,36 +6,36 @@ Read each component's current `Props` interface before changing a call site. Thi
 
 ### `ClipboardCard.svelte`
 
-Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste/format-paste/clean-paste callbacks, compact layout, and measurement reporting.
+Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste/format-paste/clean-paste callbacks, card layout, and measurement reporting.
 
 Key contracts:
 
 - The route owns collection state and persistence decisions; the card emits controlled callbacks keyed by item ID.
-- `onheightchange` plus `heightMeasurementKey` feed virtual scrolling. Re-measure whenever visible content, compact metrics, action/meta visibility, title state, or line limits can alter height.
+- `onheightchange` plus `heightMeasurementKey` feed virtual scrolling. Re-measure whenever visible content, card layout metrics, action/meta visibility, title state, or line limits can alter height.
 - Resource previews use `convertFileSrc`; source app icons are resolved from the managed `iconsDir` store using the icon key, not an arbitrary full path.
 - Card action order and context-menu behavior must stay aligned. Reuse the same callback path rather than creating a second implementation.
 - Image/file copy, detail, fullscreen, save-as and first drag attempts may target an unmaterialized remote record. The route owns the async materialization decision; the card calls the controlled `oncopy`/`ondetail`/`onimagefullscreen`/`onsave` callbacks, and an initial drag without a local path calls `onmaterialize`, cancels that drag, and succeeds when the user retries. Hover/focus must not fetch the body resource.
 - Double-clicking a card calls `ondblclickpaste(item.id)` when the `doubleClickPaste` prop is true (route-side smart paste: format/plain text, image, file), otherwise it falls back to `ondetail`. Keep this toggle in sync with the `general.doubleClickPaste` setting.
-- Card layout dimensions come from `GeneralSettings` (the `compact*` fields are the always-on default sizing, not a mode), and must remain aligned with `virtual-scroll.ts` and route height calculations.
+- Card layout dimensions come from `GeneralSettings` (the `card*`/`search*` fields are the always-on default sizing), and must remain aligned with `virtual-scroll.ts` and route height calculations.
 - Tag chips share the title/file text line (right-aligned, `flex: 0 0 auto`), so adding tags does **not** add a new row and must not change card height. Chips render through the shared `TagChip.svelte` component (compact + hover-reveal remove); right-click `Add tag` toggles an inline input; a chip's `×` removes the tag via `onsavetags`; clicking a chip calls `ontoggleTagFilter`; right-clicking a chip calls `oneditTag(tag)` so the route can open `TagEditDialog` for that tag. Keep tag height changes out of `estimatedCardHeight`.
 
 ### Height calculation contract
 
-Card height for virtual-scroll positioning and compact rendering is governed by a **single canonical function** in `+page.svelte`:
+Card height for virtual-scroll positioning and fixed-height rendering is governed by a **single canonical function** in `+page.svelte`:
 
 ```
 estimatedCardHeight(item)   →  total occupied height (content + cardGap)
-compactCardHeightFor(item)  →  estimatedCardHeight(item) - compactCardGap   (CSS height for compact cards)
+cardHeightFor(item)  →  estimatedCardHeight(item) - cardGap   (CSS height for compact cards)
 virtualHeightFor(item)      →  measuredCardHeights[item.id] ?? estimatedCardHeight(item)
 ```
 
 Rules:
 
-- **`estimatedCardHeight`** is the single source of truth. It handles all item kinds (text, link, image, file) and both compact/non-compact modes. The returned value always includes `compactCardGap` in compact mode.
-- **`compactCardHeightFor`** delegates to `estimatedCardHeight - compactCardGap`. It returns `0` in non-compact mode (card auto-sizes). Do not add independent logic to this function.
+- **`estimatedCardHeight`** is the single source of truth. It handles all item kinds (text, link, image, file). The returned value always includes `cardGap`.
+- **`cardHeightFor`** delegates to `estimatedCardHeight - cardGap`. It returns `0` in non-compact mode (card auto-sizes). Do not add independent logic to this function.
 - **`virtualHeightFor`** is the virtual-scroll estimator. It checks `measuredCardHeights` (populated by `ClipboardCard`'s `onheightchange` ResizeObserver) first, then falls back to `estimatedCardHeight`.
-- Any future height-affecting change (new item kind, new layout option, compact metric) must be implemented in `estimatedCardHeight` only. The other functions will stay consistent automatically.
-- `itemHeight()` in `virtual-scroll.ts` is a shared helper used internally by `estimatedCardHeight` for text/image formula computation. It must match the compact-card formula so that `estimatedCardHeight - compactCardGap` equals the CSS height set on `ClipboardCard`.
+- Any future height-affecting change (new item kind, new layout option, layout metric) must be implemented in `estimatedCardHeight` only. The other functions will stay consistent automatically.
+- `itemHeight()` in `virtual-scroll.ts` is a shared helper used internally by `estimatedCardHeight` for text/image formula computation. It must match the card formula so that `estimatedCardHeight - cardGap` equals the CSS height set on `ClipboardCard`.
 
 ### `DetailPanel.svelte`
 
@@ -99,7 +99,7 @@ This is the settings shell and an integration hotspot. It owns:
 - primary navigation, global settings search, result targeting, breadcrumb, secondary row, description, count, and optional close button;
 - the typed `settings-navigation.ts::SETTINGS_NAV_GROUP_DEFINITIONS` descriptor that drives primary buttons, secondary tabs, active-group matching, section title/description metadata, and breadcrumb resolution; section state reuses its `SettingsSection`/`StatisticsTab` types rather than declaring a parallel union;
 - composition of child settings panels with `showHeader={false}`;
-- eager loading of the default `GeneralSettingsPanel`; compact/font/theme/icon-color/ignored-app/tag/keyboard/statistics/about/icon-cache panels are dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk;
+- eager loading of the default `GeneralSettingsPanel`; layout/font/theme/icon-color/ignored-app/tag/keyboard/statistics/about/icon-cache panels are dynamically imported on first visit with cached module promises and shared loading/error states, so their JavaScript and scoped CSS stay out of the initial settings chunk;
 - built-in storage, OCR, statistics/performance/memory, icon management, database/search tools, data import/export, and restart-required flows;
 - S3-only v1 configuration, connection testing, encryption, automatic/manual sync, immutable-segment sizing, and resource limits; no remote-backup or compaction UI remains;
 - the built-in About section: app version, an update-source dropdown (GitHub/GitCode, persisted via `updateSource`), and update check via `checkForUpdate()`/`update.ts`, with up-to-date/available/error states; when an update is available with release notes, a compact "View Details" button opens `UpdateDialog` to render the notes as markdown;
@@ -115,7 +115,7 @@ Do not treat its long scoped style block as a copy template. Use `settings-share
 | `ThemeSettingsPanel.svelte`            | Dark/light/custom modes and named preset CRUD                                                                                                                   | none beyond shell props                                                  |
 | `IconColorsSettingsPanel.svelte`       | Color-icon toggle and per-icon color grid                                                                                                                       | none beyond shell props                                                  |
 | `FontSizeSettingsPanel.svelte`         | Interface and card font controls                                                                                                                                | internal `interface`/`card` subview; emits `settings-font-changed`       |
-| `CompactSettingsPanel.svelte`          | Card layout dimensions (labeled "Layout" in the UI)                                                                                                             | relies entirely on shared CSS                                            |
+| `LayoutSettingsPanel.svelte`           | Card layout dimensions (labeled "Layout" in the UI)                                                                                                             | relies entirely on shared CSS                                            |
 | `KeyboardSettingsPanel.svelte`         | Multiple shortcuts per action and recording; owns the keyboard config-file card as the first card of the `"system"` (Global) category                           | `category`: `"system"`, `"item"`, `"quick"`, or `"switch"`; `configPath` |
 | `IgnoredAppsSettingsPanel.svelte`      | Discovered apps, ignore list, app icons                                                                                                                         | optional `iconsDir`                                                      |
 | `SensitiveContentSettingsPanel.svelte` | Local-only mode toggle, sensitive-content regex editor                                                                                                          | none beyond shell props                                                  |

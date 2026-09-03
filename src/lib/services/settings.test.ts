@@ -51,8 +51,8 @@ describe("generalSettings store normalization", () => {
     generalSettings.updateSetting("pageSizeLimit", 99_999 as unknown as number);
     expect(get(generalSettings).pageSizeLimit).toBe(6000);
 
-    generalSettings.updateSetting("compactCardGap", -5 as unknown as number);
-    expect(get(generalSettings).compactCardGap).toBe(0);
+    generalSettings.updateSetting("cardGap", -5 as unknown as number);
+    expect(get(generalSettings).cardGap).toBe(0);
   });
 
   it("falls back to defaults for invalid union values", () => {
@@ -90,9 +90,9 @@ describe("generalSettings store normalization", () => {
   });
 
   it("merge applies several keys at once and normalizes them together", () => {
-    generalSettings.merge({ compactImageHeight: 300 as unknown as number });
+    generalSettings.merge({ cardImageHeight: 300 as unknown as number });
     const settings = get(generalSettings);
-    expect(settings.compactImageHeight).toBe(200); // clamped to max
+    expect(settings.cardImageHeight).toBe(200); // clamped to max
     // Sibling keys survive a merge.
     expect(settings.language).toBe(get(generalSettings).language);
   });

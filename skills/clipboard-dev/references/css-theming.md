@@ -36,7 +36,7 @@ Preserve these characteristics unless the task explicitly requests a redesign:
 - Red `--accent` for product/focus emphasis, blue `--selection-color` for selection/current state, and semantic success/danger/warning colors.
 - Large, lightweight, borderless search input at the top; compact icon/text filters and icon-only window actions below it.
 - History cards are transparent at rest, use `--hover-bg` on hover/focus, and mix selection color into the selected+checked state. Do not turn every row into a permanently elevated card.
-- Card content hierarchy: title — optional preview — source/time/actions metadata. Keep truncation, card-layout sizing (`compact*` settings), and virtual-scroll measurement aligned.
+- Card content hierarchy: title — optional preview — source/time/actions metadata. Keep truncation, card-layout sizing (`card*`/`search*` settings), and virtual-scroll measurement aligned.
 - Status bar is a low-contrast footer separated by one subtle border; popovers/context surfaces are elevated with a border plus shadow.
 - Motion is short and functional. Respect the global reduced-motion rule.
 
@@ -124,7 +124,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.settings-state` loading/unavailable placeholder state (centered muted text), `.readonly-hint` (muted note under disabled color settings), `.visually-hidden` (offscreen label), `.auto-save-note`, and the default pointer cursor for buttons;
 - `.restart-note` for restart-required notices in general-settings cards.
 
-`src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `CompactSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
+`src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `LayoutSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
 
 Legacy/local duplication has been removed from the ignored-app panel (it now uses shared header, scroll, feedback, toggle, and card primitives); remaining shell-local rules are density/input-reset modifiers recorded in `niche_ui_style.md` and are not a license to copy shared rules.
 

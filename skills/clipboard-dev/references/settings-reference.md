@@ -35,22 +35,22 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 
 ## Card layout settings
 
-There is no compact-mode toggle: the compact layout is the always-on default and the fields below are the customizable knobs that drive card/search sizing. The `compact` prefix is historical naming kept for config compatibility.
+There is no layout-mode toggle: these fields are the always-on card/search sizing knobs. They were renamed from the historical `compact*` keys; the Rust config keeps serde aliases, so an existing `settings.json` written with old `compact*` keys still loads (values re-save under the new names).
 
-| Field                      | Default | Normalized range |
-| -------------------------- | ------- | ---------------- |
-| `compactPaddingTop`        | `1`     | 0–20             |
-| `compactPaddingBottom`     | `1`     | 0–20             |
-| `compactCardGap`           | `1`     | 0–20             |
-| `compactTextHeight`        | `44`    | 36–90            |
-| `compactTallTextHeight`    | `44`    | 44–100           |
-| `compactImageHeight`       | `80`    | 64–200           |
-| `compactCustomTitleHeight` | `80`    | 40–120           |
-| `compactSearchHeight`      | `30`    | 28–56            |
-| `compactSearchFontSize`    | `20`    | 10–24            |
-| `compactCardBorderRadius`  | `5`     | 0–20             |
+| Field                   | Default | Normalized range |
+| ----------------------- | ------- | ---------------- |
+| `cardPaddingTop`        | `1`     | 0–20             |
+| `cardPaddingBottom`     | `1`     | 0–20             |
+| `cardGap`               | `1`     | 0–20             |
+| `cardTextHeight`        | `44`    | 36–90            |
+| `cardTallTextHeight`    | `44`    | 44–100           |
+| `cardImageHeight`       | `80`    | 64–200           |
+| `cardCustomTitleHeight` | `80`    | 40–120           |
+| `searchHeight`          | `30`    | 28–56            |
+| `searchFontSize`        | `20`    | 10–24            |
+| `cardBorderRadius`      | `5`     | 0–20             |
 
-`CompactSettingsPanel` (labeled "Layout" in the UI) exposes nine sliders; `compactCustomTitleHeight` is normalized and consumed by layout logic but is not present in that panel's slider array. Treat that as current behavior, not as proof that the field can be removed.
+`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes nine sliders; `cardCustomTitleHeight` is normalized and consumed by layout logic but is not present in that panel's slider array. Treat that as current behavior, not as proof that the field can be removed.
 
 ## General scalar/enum settings
 

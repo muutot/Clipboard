@@ -22,7 +22,7 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | Primary category | Secondary sections / implementation                                                                                                                                               |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | General          | General, Window, Search, Items → `GeneralSettingsPanel`; the General page includes the clipboard recording pause/resume toggle                                                    |
-| Appearance       | Theme, Font, Layout, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `CompactSettingsPanel`, `IconColorsSettingsPanel`                                                     |
+| Appearance       | Theme, Font, Layout, Icons → `ThemeSettingsPanel`, `FontSizeSettingsPanel`, `LayoutSettingsPanel`, `IconColorsSettingsPanel`                                                      |
 | Capture          | Filter (ignored apps) → `IgnoredAppsSettingsPanel`; Sensitive content (local-only mode, sensitive patterns) → `SensitiveContentSettingsPanel`; Icon cache → built into the parent |
 | Tags             | Single current section → `TagManagementSettingsPanel`                                                                                                                             |
 | Storage          | Paths, Limits (retention, item count, recycle bin, max file copy size, text capture size), Tools (search index, database repair, import/export) → built into the parent           |
@@ -75,7 +75,7 @@ Render every child from `StorageSettingsDialog` with `showHeader={false}`. Condi
 
 Keep the default `GeneralSettingsPanel` eager. Non-default child panels (including `StatisticsSettingsPanel`, `AboutSettingsPanel`, and `IconCacheSettingsPanel`) use cached dynamic imports in `StorageSettingsDialog` so their component code and scoped CSS load on first visit; retain the shared loading/error states, concrete import types, and settings-search mount polling when adding another lazy panel. Lazy panels that show loading/unavailable states use the shared `.settings-state` rule from `settings-shared.css`.
 
-`CompactSettingsPanel.svelte` is the minimal structure reference because it uses shared styles without a local style block. Use other panels only for their genuinely specific controls.
+`LayoutSettingsPanel.svelte` is the minimal structure reference because it uses shared styles without a local style block. Use other panels only for their genuinely specific controls.
 
 ## Settings state pattern
 

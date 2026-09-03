@@ -36,31 +36,31 @@ export function editHeight(lineCount: number, hasCustomTitle?: boolean, cardGap?
 export function itemHeight({
   kind,
   textLines = 1,
-  compactText,
-  compactTallText,
-  compactImage,
+  textHeight,
+  tallTextHeight,
+  imageHeight,
   cardGap,
   showPreview = true,
   customTitle = false,
-  compactCustomTitle,
+  customTitleHeight,
 }: {
   kind: string;
   textLines?: number;
-  compactText?: number;
-  compactTallText?: number;
-  compactImage?: number;
+  textHeight?: number;
+  tallTextHeight?: number;
+  imageHeight?: number;
   cardGap?: number;
   showPreview?: boolean;
   customTitle?: boolean;
-  compactCustomTitle?: number;
+  customTitleHeight?: number;
 }): number {
   const gap = cardGap ?? 5;
-  if (kind === "image") return (compactImage ?? 130) + gap;
+  if (kind === "image") return (imageHeight ?? 130) + gap;
 
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
-  if (visibleLines <= 1) return (compactText ?? 58) + gap;
+  if (visibleLines <= 1) return (textHeight ?? 58) + gap;
   return (
-    (compactTallText ?? 70) +
+    (tallTextHeight ?? 70) +
     TEXT_LINE_HEIGHT +
     Math.max(0, visibleLines - 2) * TEXT_LINE_HEIGHT +
     gap
