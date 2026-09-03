@@ -2890,136 +2890,143 @@
       {/each}
     </div>
 
-    <div class="filter-dropdowns">
-      <!-- Source app filter -->
-      <div class="dropdown-wrapper">
-        <button
-          type="button"
-          class="filter-dropdown-btn"
-          onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
-          aria-label={_t("sourceApp.all")}
-          aria-haspopup="menu"
-          aria-expanded={sourceAppDropdownOpen}
-          title={_t("sourceApp.all")}
-        >
-          {#if !sourceAppFilter}
-            <AppIcon name="filter" size={15} />
-          {/if}
-          <span class="dropdown-label">{sourceAppFilter || _t("sourceApp.all")}</span>
-          {#if !sourceAppFilter}
-            <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
-          {/if}
-        </button>
-        {#if sourceAppDropdownOpen}
-          <div class="dropdown-popover popover-surface" role="menu" bind:this={sourceAppDropdownEl}>
+    <div class="toolbar-right">
+      <div class="filter-dropdowns">
+        <!-- Source app filter -->
+        <div class="dropdown-wrapper">
+          <button
+            type="button"
+            class="filter-dropdown-btn"
+            onclick={() => (sourceAppDropdownOpen = !sourceAppDropdownOpen)}
+            aria-label={_t("sourceApp.all")}
+            aria-haspopup="menu"
+            aria-expanded={sourceAppDropdownOpen}
+            title={_t("sourceApp.all")}
+          >
+            {#if !sourceAppFilter}
+              <AppIcon name="filter" size={15} />
+            {/if}
+            <span class="dropdown-label">{sourceAppFilter || _t("sourceApp.all")}</span>
+            {#if !sourceAppFilter}
+              <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+            {/if}
+          </button>
+          {#if sourceAppDropdownOpen}
             <div
-              class="dropdown-backdrop"
-              onclick={() => (sourceAppDropdownOpen = false)}
-              aria-hidden="true"
-            ></div>
-            <div class="dropdown-search">
-              <AppIcon name="search" size={13} />
-              <input
-                type="text"
-                bind:value={sourceAppSearch}
-                placeholder={_t("sourceApp.placeholder")}
-                autocomplete="off"
-              />
-            </div>
-            <div class="dropdown-items">
-              <button
-                type="button"
-                role="menuitem"
-                class:selected={sourceAppFilter === ""}
-                onclick={() => {
-                  sourceAppFilter = "";
-                  sourceAppDropdownOpen = false;
-                  resetHistoryScroll();
-                  void invalidateActiveHistoryPagination();
-                }}><span>{_t("sourceApp.all")}</span></button
-              >
-              {#each filteredSourceApps as app}
+              class="dropdown-popover popover-surface"
+              role="menu"
+              bind:this={sourceAppDropdownEl}
+            >
+              <div
+                class="dropdown-backdrop"
+                onclick={() => (sourceAppDropdownOpen = false)}
+                aria-hidden="true"
+              ></div>
+              <div class="dropdown-search">
+                <AppIcon name="search" size={13} />
+                <input
+                  type="text"
+                  bind:value={sourceAppSearch}
+                  placeholder={_t("sourceApp.placeholder")}
+                  autocomplete="off"
+                />
+              </div>
+              <div class="dropdown-items">
                 <button
                   type="button"
                   role="menuitem"
-                  class:selected={sourceAppFilter === app}
+                  class:selected={sourceAppFilter === ""}
                   onclick={() => {
-                    sourceAppFilter = app;
+                    sourceAppFilter = "";
                     sourceAppDropdownOpen = false;
                     resetHistoryScroll();
                     void invalidateActiveHistoryPagination();
-                  }}><span>{app}</span></button
+                  }}><span>{_t("sourceApp.all")}</span></button
+                >
+                {#each filteredSourceApps as app}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class:selected={sourceAppFilter === app}
+                    onclick={() => {
+                      sourceAppFilter = app;
+                      sourceAppDropdownOpen = false;
+                      resetHistoryScroll();
+                      void invalidateActiveHistoryPagination();
+                    }}><span>{app}</span></button
+                  >
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Date filter -->
+        <div class="dropdown-wrapper">
+          <button
+            type="button"
+            class="filter-dropdown-btn"
+            onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
+            aria-label={_t("dateFilter.all")}
+            aria-haspopup="menu"
+            aria-expanded={dateDropdownOpen}
+            title={_t("dateFilter.all")}
+          >
+            {#if dateFilter === "all"}
+              <AppIcon name="calendar" size={15} />
+            {/if}
+            <span class="dropdown-label"
+              >{dateFilter === "all"
+                ? _t("dateFilter.all")
+                : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
+                  _t("dateFilter.all"))}</span
+            >
+            {#if dateFilter === "all"}
+              <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
+            {/if}
+          </button>
+          {#if dateDropdownOpen}
+            <div class="dropdown-popover popover-surface" role="menu" bind:this={dateDropdownEl}>
+              <div
+                class="dropdown-backdrop"
+                onclick={() => (dateDropdownOpen = false)}
+                aria-hidden="true"
+              ></div>
+              {#each dateFilterOptions as option}
+                <button
+                  type="button"
+                  role="menuitem"
+                  class:selected={dateFilter === option.id}
+                  onclick={() => {
+                    dateFilter = option.id;
+                    dateDropdownOpen = false;
+                    resetHistoryScroll();
+                    void invalidateActiveHistoryPagination();
+                  }}><span>{option.label}</span></button
                 >
               {/each}
             </div>
-          </div>
-        {/if}
+          {/if}
+        </div>
       </div>
 
-      <!-- Date filter -->
-      <div class="dropdown-wrapper">
+      <div class="toolbar-actions">
         <button
           type="button"
-          class="filter-dropdown-btn"
-          onclick={() => (dateDropdownOpen = !dateDropdownOpen)}
-          aria-label={_t("dateFilter.all")}
-          aria-haspopup="menu"
-          aria-expanded={dateDropdownOpen}
-          title={_t("dateFilter.all")}
+          class:active={$generalSettings.alwaysOnTop}
+          aria-label={_t("toolbar.pinWindow")}
+          title={_t("toolbar.pinWindow")}
+          onclick={() =>
+            generalSettings.updateSetting("alwaysOnTop", !$generalSettings.alwaysOnTop)}
+          ><AppIcon name="window-top" size={17} /></button
         >
-          {#if dateFilter === "all"}
-            <AppIcon name="calendar" size={15} />
-          {/if}
-          <span class="dropdown-label"
-            >{dateFilter === "all"
-              ? _t("dateFilter.all")
-              : (dateFilterOptions.find((o) => o.id === dateFilter)?.label ??
-                _t("dateFilter.all"))}</span
-          >
-          {#if dateFilter === "all"}
-            <AppIcon name="chevron-down" size={12} strokeWidth={2.5} />
-          {/if}
-        </button>
-        {#if dateDropdownOpen}
-          <div class="dropdown-popover popover-surface" role="menu" bind:this={dateDropdownEl}>
-            <div
-              class="dropdown-backdrop"
-              onclick={() => (dateDropdownOpen = false)}
-              aria-hidden="true"
-            ></div>
-            {#each dateFilterOptions as option}
-              <button
-                type="button"
-                role="menuitem"
-                class:selected={dateFilter === option.id}
-                onclick={() => {
-                  dateFilter = option.id;
-                  dateDropdownOpen = false;
-                  resetHistoryScroll();
-                  void invalidateActiveHistoryPagination();
-                }}><span>{option.label}</span></button
-              >
-            {/each}
-          </div>
-        {/if}
+        <button
+          type="button"
+          aria-label={_t("toolbar.settings")}
+          title={_t("toolbar.settings")}
+          onclick={openSettings}><AppIcon name="settings" size={17} /></button
+        >
       </div>
-    </div>
-
-    <div class="toolbar-actions">
-      <button
-        type="button"
-        class:active={$generalSettings.alwaysOnTop}
-        aria-label={_t("toolbar.pinWindow")}
-        title={_t("toolbar.pinWindow")}
-        onclick={() => generalSettings.updateSetting("alwaysOnTop", !$generalSettings.alwaysOnTop)}
-        ><AppIcon name="window-top" size={17} /></button
-      >
-      <button
-        type="button"
-        aria-label={_t("toolbar.settings")}
-        title={_t("toolbar.settings")}
-        onclick={openSettings}><AppIcon name="settings" size={17} /></button
-      >
     </div>
   </div>
 
@@ -3491,9 +3498,16 @@
 
   .filters,
   .filter-dropdowns,
-  .toolbar-actions {
+  .toolbar-actions,
+  .toolbar-right {
     display: flex;
     align-items: center;
+  }
+
+  .toolbar-right {
+    gap: 8px;
+    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   .filters {
