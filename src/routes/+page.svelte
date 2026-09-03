@@ -3346,7 +3346,7 @@
   }
 
   :global(.app-shell.compact .filters button) {
-    padding: 3px 9px;
+    padding: 3px 8px;
     font-size: 12px;
   }
 
@@ -3536,7 +3536,7 @@
   .filters button {
     gap: 5px;
     height: 31px;
-    padding: 0 9px;
+    padding: 0 8px;
     border-radius: 6px;
     font-size: 12px;
   }
