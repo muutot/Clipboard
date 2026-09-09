@@ -36,7 +36,7 @@ xcode-select --install
 
 ```bash
 # Ubuntu/Debian
-sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
 
 # 如需 OCR 支持（Tesseract）
 sudo apt install tesseract-ocr tesseract-ocr-chi-sim

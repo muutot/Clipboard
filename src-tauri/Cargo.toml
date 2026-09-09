@@ -51,6 +51,16 @@ chrono = "0.4"
 rand = "0.10"
 uuid = { version = "1", features = ["v4"] }
 bincode = { version = "2", features = ["serde"] }
+keyring-core = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1", features = ["keychain"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# crypto-rust keeps crypto in pure Rust. OpenSSL and libdbus link against the
+# system libraries (libssl-dev is already required; libdbus-1-dev was added to
+# the CI/docs apt lists) so Linux builds stay fast: no vendored C compilation.
+dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] }
 
 [dev-dependencies]
 clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }

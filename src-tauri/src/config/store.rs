@@ -419,20 +419,28 @@ impl ConfigStore {
     }
 
     pub fn set_sync_config(&mut self, mut sync: SyncConfig) -> Result<(), StorageError> {
-        // Encrypt secrets before they reach disk. Failure to protect (e.g.
-        // non-Windows) keeps the previous plaintext behavior; legacy plaintext
-        // values are upgraded on their next save.
+        // Encrypt secrets before they reach disk. When no backend can protect
+        // (unreachable OS store), the previous plaintext behavior is kept and
+        // logged so the fallback is visible instead of silent; legacy
+        // plaintext values are upgraded on their next save.
+        use crate::platform::secret_store::{is_protected, protect_secret, SecretAccount};
         if let Some(secret) = &sync.s3_secret_key {
-            if !secret.is_empty() && !crate::platform::secret_store::is_protected(secret) {
-                if let Some(protected) = crate::platform::secret_store::protect_secret(secret) {
-                    sync.s3_secret_key = Some(protected);
+            if !secret.is_empty() && !is_protected(secret) {
+                match protect_secret(SecretAccount::S3SecretKey, secret) {
+                    Some(protected) => sync.s3_secret_key = Some(protected),
+                    None => crate::log_event!(
+                        "[config] credential store unavailable; keeping sync.s3SecretKey in plaintext"
+                    ),
                 }
             }
         }
         if let Some(password) = &sync.sync_password {
-            if !password.is_empty() && !crate::platform::secret_store::is_protected(password) {
-                if let Some(protected) = crate::platform::secret_store::protect_secret(password) {
-                    sync.sync_password = Some(protected);
+            if !password.is_empty() && !is_protected(password) {
+                match protect_secret(SecretAccount::SyncPassword, password) {
+                    Some(protected) => sync.sync_password = Some(protected),
+                    None => crate::log_event!(
+                        "[config] credential store unavailable; keeping sync.syncPassword in plaintext"
+                    ),
                 }
             }
         }
