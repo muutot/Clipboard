@@ -546,6 +546,8 @@ const en: LocaleDefinition = {
     pauseTitle: "Clipboard Recording",
     pauseDescription:
       "No new clipboard content is captured while paused; existing history is unchanged.",
+    pollingNote:
+      "On this platform the clipboard is polled rather than monitored natively, and pastes made by the app cannot be marked as its own — brief duplicate captures may occur.",
     pauseAction: "Pause recording",
     resumeAction: "Resume recording",
     paused: "Paused",

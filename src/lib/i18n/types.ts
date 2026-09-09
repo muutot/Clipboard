@@ -499,6 +499,7 @@ export interface LocaleDefinition {
     localOnlyDescription: string;
     pauseTitle: string;
     pauseDescription: string;
+    pollingNote: string;
     pauseAction: string;
     resumeAction: string;
     paused: string;

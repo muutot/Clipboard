@@ -519,6 +519,8 @@ const zhCN: LocaleDefinition = {
     localOnlyDescription: "开启后应用不进行任何出站网络请求（如版本检查）。",
     pauseTitle: "剪切板记录",
     pauseDescription: "暂停期间不会采集新的剪贴板内容，已有历史记录不受影响。",
+    pollingNote:
+      "在此平台上剪贴板采用轮询而非原生监控，且应用自身的粘贴无法被标记来源，可能会短暂重复采集。",
     pauseAction: "暂停记录",
     resumeAction: "恢复记录",
     paused: "已暂停",

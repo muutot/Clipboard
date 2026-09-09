@@ -16,7 +16,7 @@
   import { onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { isTauriRuntime } from "$lib/services/runtime";
+  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -37,6 +37,9 @@
   let feedbackSuccess = $state(false);
   let privacyPaused = $state(false);
   let privacyLoading = $state(true);
+  // True on desktop macOS/Linux, where clipboard capture polls instead of
+  // using native monitoring and self-trigger marking is unavailable.
+  let nonWindowsDesktop = $state(false);
   let windowConfig = $state<WindowConfig | null>(
     _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
   );
@@ -186,6 +189,11 @@
     let unlistenPrivacyPause: (() => void) | undefined;
     void loadPrivacyStatus();
     if (isTauriRuntime()) {
+      void getRuntimeInfo().then((runtime) => {
+        if (!disposed && runtime && runtime.operatingSystem !== "windows") {
+          nonWindowsDesktop = true;
+        }
+      });
       listen<boolean>("privacy-pause-changed", (event) => {
         privacyPaused = event.payload;
       }).then((unlisten) => {
@@ -760,6 +768,9 @@
                 <span class="toggle-knob"></span>
               </button>
             </div>
+            {#if nonWindowsDesktop}
+              <p class="polling-note">{_t("capture.pollingNote")}</p>
+            {/if}
           {/if}
         {/snippet}
       </SettingEntry>
@@ -818,6 +829,13 @@
   .pause-state {
     color: var(--text-muted);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  }
+
+  .polling-note {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+    line-height: 1.5;
   }
 
   .sort-rules-list {
