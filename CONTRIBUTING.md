@@ -105,6 +105,13 @@ src-tauri/              # 后端（Rust）
 - Tauri command 返回 `Result<T, String>`
 - 模块按功能划分：`storage/`、`search/`、`ocr/`、`keyboard/`
 
+### 日志红线（隐私）
+
+- 后端持久化日志（`log_event!`，落盘文件）**禁止**记录：剪贴板正文/HTML/RTF、图片字节、OCR 识别文本、同步秘密与口令、S3 凭据、API token、本地 API 请求体。
+- 允许记录：条目 id、文件路径、计数、配置键名、错误 `Display`（先确认错误类型不携带正文再插值）。
+- 唯一例外：用户配置的非法敏感正则原文（`[privacy] ignoring invalid sensitive pattern`）——可视化告警所需，记录的是规则形状而非秘密本身。
+- 前端 `console.*` 只进 DevTools 不落盘，同样不得插值剪贴板衍生内容；`dbg_log` 仅 debug 构建生效，不得记录正文。
+
 ### i18n
 
 - 键名使用点分路径：`"general.language"`

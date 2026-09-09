@@ -336,7 +336,9 @@
   async function showDateDialog(action: QuickAction) {
     const date = parseIsoDate(action.payload);
     if (!date) {
-      console.warn("Ignored invalid date action payload", action.payload);
+      // Never log the payload: it is clipboard-derived content and does not
+      // belong in diagnostics output.
+      console.warn("Ignored invalid date action payload");
       return;
     }
 
