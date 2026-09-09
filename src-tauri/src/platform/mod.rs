@@ -34,6 +34,7 @@ pub mod windows_hotkey;
 pub mod autostart;
 pub mod dispatch;
 pub mod dpapi;
+pub mod linux_icons;
 pub mod monitor;
 pub mod platform_info;
 pub mod secret_store;

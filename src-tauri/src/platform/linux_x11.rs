@@ -1008,14 +1008,15 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     crate::platform::ForegroundApp::empty()
 }
 
-/// Extracts an app icon – not supported via command-line tools on X11.
+/// Extracts an app icon via freedesktop `.desktop` lookup (see
+/// `platform::linux_icons`); previously unsupported on X11.
 #[cfg(target_os = "linux")]
 pub fn extract_app_icon(
-    _icon_dir: &std::path::Path,
-    _app_name: &str,
-    _exe_path: &str,
+    icon_dir: &std::path::Path,
+    app_name: &str,
+    exe_path: &str,
 ) -> Option<String> {
-    None
+    super::linux_icons::ensure_cached_app_icon(icon_dir, app_name, exe_path)
 }
 
 #[cfg(not(target_os = "linux"))]
