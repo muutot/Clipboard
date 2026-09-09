@@ -57,6 +57,30 @@ pub use ui::{
 };
 
 // ---------------------------------------------------------------------------
+//  Shared helpers
+// ---------------------------------------------------------------------------
+
+/// Parses `text/uri-list` clipboard output into local file paths.
+///
+/// Skips blank lines and `#` comments and keeps only `file://` entries with
+/// the scheme prefix stripped. Shared by the X11 (`xclip`) and Wayland
+/// (`wl-paste`) readers so both backends agree on edge cases.
+///
+/// Note: `file://host/path` prefixes and percent-encoding pass through
+/// unchanged; downstream storage treats the result as an opaque path hint.
+pub fn parse_uri_list(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                return None;
+            }
+            line.strip_prefix("file://").map(|p| p.to_owned())
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 //  Tests
 // ---------------------------------------------------------------------------
 
@@ -183,6 +207,20 @@ mod tests {
     #[test]
     fn disk_space_returns_none_for_a_missing_path() {
         assert!(disk_space(Path::new("Z:\\definitely\\missing\\path")).is_none());
+    }
+
+    #[test]
+    fn parse_uri_list_keeps_only_file_entries() {
+        let parsed = super::parse_uri_list(
+            "# comment\n\nfile:///home/user/a.txt\n  file:///home/user/b.txt  \nhttp://example.com/x\ntext/plain\n",
+        );
+        assert_eq!(parsed, vec!["/home/user/a.txt", "/home/user/b.txt"]);
+    }
+
+    #[test]
+    fn parse_uri_list_empty_input_yields_no_paths() {
+        assert!(super::parse_uri_list("").is_empty());
+        assert!(super::parse_uri_list("# only a comment\n   \n").is_empty());
     }
 
     #[test]

@@ -40,7 +40,7 @@
 - [ ] SEC-05 跨平台秘密存储：macOS Keychain / Linux Secret Service 接入，`conf.json` 全平台不断言出明文（Windows DPAPI 已有：`platform/dpapi.rs:121-132` 非 Windows 直接 `None` 回退明文）。验收：凭据设置后读回 `conf.json` 不含 secret 明文的单测（各平台门控）。
 - [ ] SEC-04 余量：`replace_icon_file` 的 `source_path` 仅 `is_file` 校验（`files.rs:201-205`），任意可读文件可被复制进受管目录并经 asset 读回。约束 source 容器或证明调用方已受信并记录结论。验收：负向单测（目录外 source 拒绝）或书面威胁模型结论。
 - [ ] REL-01 余量：产物只有 sha256sum，无 SBOM/签名。验收：release 产物附 SBOM（或明确记录不做的原因）。
-- [ ] Linux uri-list 解析回归测试：`linux_x11.rs:892-917` / `linux_wayland.rs:940-965` 有实现无解析单测（现有测试仅覆盖 monitor/tray，`linux_x11.rs:1382-1448`）。验收：`file://` 解码、换行分隔、非法行丢弃的纯函数单测。
+- [x] Linux uri-list 解析回归测试：`platform::parse_uri_list` 共享纯函数被 X11/Wayland 共用（`platform/mod.rs`），`file://` 解码、换行分隔、注释/非法行丢弃单测通过（`platform::tests::parse_uri_list_*`）。
 
 ## 1.5.3 — 性能 / 可观测余量
 

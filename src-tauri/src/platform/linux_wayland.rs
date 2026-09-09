@@ -946,16 +946,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).unwrap_or_default();
-            return text
-                .lines()
-                .filter_map(|line| {
-                    let line = line.trim();
-                    if line.is_empty() || line.starts_with('#') {
-                        return None;
-                    }
-                    line.strip_prefix("file://").map(|p| p.to_owned())
-                })
-                .collect();
+            return crate::platform::parse_uri_list(&text);
         }
     }
     vec![]
