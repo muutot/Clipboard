@@ -410,7 +410,7 @@ impl ConfigStore {
 
     pub fn sync_config(&self) -> SyncConfig {
         let mut sync = self.config.sync.clone();
-        // Secrets are stored as DPAPI envelopes; decrypt on read so callers
+        // Secrets are stored as secret-store envelopes; decrypt on read so callers
         // (S3 client, retain_secret) always work with plaintext in memory.
         sync.s3_secret_key = decrypt_sync_secret(sync.s3_secret_key.as_deref(), "sync.s3SecretKey");
         sync.sync_password =
@@ -423,15 +423,15 @@ impl ConfigStore {
         // non-Windows) keeps the previous plaintext behavior; legacy plaintext
         // values are upgraded on their next save.
         if let Some(secret) = &sync.s3_secret_key {
-            if !secret.is_empty() && !crate::platform::dpapi::is_envelope(secret) {
-                if let Some(protected) = crate::platform::dpapi::protect(secret) {
+            if !secret.is_empty() && !crate::platform::secret_store::is_protected(secret) {
+                if let Some(protected) = crate::platform::secret_store::protect_secret(secret) {
                     sync.s3_secret_key = Some(protected);
                 }
             }
         }
         if let Some(password) = &sync.sync_password {
-            if !password.is_empty() && !crate::platform::dpapi::is_envelope(password) {
-                if let Some(protected) = crate::platform::dpapi::protect(password) {
+            if !password.is_empty() && !crate::platform::secret_store::is_protected(password) {
+                if let Some(protected) = crate::platform::secret_store::protect_secret(password) {
                     sync.sync_password = Some(protected);
                 }
             }
@@ -529,8 +529,8 @@ impl ConfigStore {
 /// which would only surface later as a baffling authentication failure.
 fn decrypt_sync_secret(stored: Option<&str>, label: &str) -> Option<String> {
     let stored = stored?;
-    if crate::platform::dpapi::is_envelope(stored) {
-        return match crate::platform::dpapi::unprotect(stored) {
+    if crate::platform::secret_store::is_protected(stored) {
+        return match crate::platform::secret_store::unprotect_secret(stored) {
             Some(plain) => Some(plain),
             None => {
                 crate::log_event!(

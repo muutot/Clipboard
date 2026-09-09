@@ -36,6 +36,7 @@ pub mod dispatch;
 pub mod dpapi;
 pub mod monitor;
 pub mod platform_info;
+pub mod secret_store;
 pub mod single_instance;
 pub mod ui;
 
