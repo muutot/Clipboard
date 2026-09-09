@@ -298,24 +298,60 @@ fn current_process_memory_bytes() -> u64 {
 
     #[cfg(target_os = "macos")]
     {
-        let output = Command::new("ps")
-            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
-            .output();
-        return output
-            .ok()
-            .filter(|result| result.status.success())
-            .and_then(|result| {
-                String::from_utf8_lossy(&result.stdout)
-                    .trim()
-                    .parse::<u64>()
-                    .ok()
-            })
-            .map(|kilobytes| kilobytes.saturating_mul(1024))
+        // Prefer the in-process task_info query over forking ps(1) per
+        // snapshot; fall back to ps when the kernel denies the query so
+        // metrics stay best-effort.
+        return macos_current_process_rss_bytes()
+            .or_else(ps_current_process_rss_bytes)
             .unwrap_or(0);
     }
 
     #[allow(unreachable_code)]
     0
+}
+
+/// Resident set size of the current process via `task_info` with the 64-bit
+/// `MACH_TASK_BASIC_INFO` flavor. Binding shapes (`mach_task_basic_info`,
+/// flavor/count constants, `task_info_t`) come from the pinned libc crate, so
+/// no hand-rolled struct layout is involved.
+#[cfg(target_os = "macos")]
+fn macos_current_process_rss_bytes() -> Option<u64> {
+    // SAFETY: a zeroed info struct is valid task_info output; `resident_size`
+    // is read via addr_of + read_unaligned because the libc struct is
+    // repr(packed(4)).
+    unsafe {
+        let mut info: libc::mach_task_basic_info = std::mem::zeroed();
+        let mut count = libc::MACH_TASK_BASIC_INFO_COUNT;
+        let ret = libc::task_info(
+            libc::mach_task_self(),
+            libc::MACH_TASK_BASIC_INFO,
+            &mut info as *mut _ as libc::task_info_t,
+            &mut count,
+        );
+        if ret != libc::KERN_SUCCESS {
+            return None;
+        }
+        Some(std::ptr::addr_of!(info.resident_size).read_unaligned())
+    }
+}
+
+/// Previous per-snapshot implementation, kept as the fallback: forks ps(1)
+/// and parses its plain-integer `rss=` output (no locale-sensitive CSV).
+#[cfg(target_os = "macos")]
+fn ps_current_process_rss_bytes() -> Option<u64> {
+    let output = Command::new("ps")
+        .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+        .output();
+    output
+        .ok()
+        .filter(|result| result.status.success())
+        .and_then(|result| {
+            String::from_utf8_lossy(&result.stdout)
+                .trim()
+                .parse::<u64>()
+                .ok()
+        })
+        .map(|kilobytes| kilobytes.saturating_mul(1024))
 }
 
 impl Default for MemoryMonitor {
@@ -417,5 +453,26 @@ mod tests {
         assert!(json.contains("startup"));
         assert!(json.contains("searchLatency"));
         assert!(json.contains("memory"));
+    }
+
+    /// The native task_info probe and the ps fallback sample the same process
+    /// moments apart, so they must agree in magnitude. Either side may be
+    /// denied in a hardened sandbox; then the test passes vacuously and the
+    /// best-effort contract above covers the chain.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_native_probe_agrees_with_ps_fallback() {
+        let (Some(native), Some(fallback)) = (
+            macos_current_process_rss_bytes(),
+            ps_current_process_rss_bytes(),
+        ) else {
+            return;
+        };
+        assert!(native > 0 && fallback > 0);
+        let (low, high) = (native.min(fallback), native.max(fallback));
+        assert!(
+            high < low.saturating_mul(4),
+            "native={native} ps={fallback}"
+        );
     }
 }

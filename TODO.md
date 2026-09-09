@@ -44,7 +44,7 @@
 
 ## 1.5.3 — 性能 / 可观测余量
 
-- [ ] PERF-01 余量：macOS 仍每次 `spawn ps` 采样（`performance/mod.rs:299-315`），Windows 已原生化。验收：mac 改原生（libproc / mach）或证明开销可接受并记录结论。
+- [x] PERF-01 余量：macOS 改 `task_info`（`MACH_TASK_BASIC_INFO`）in-process 查询，`ps` 降级为兜底（`performance/mod.rs`）。绑定形状逐项对锁定的 libc 0.2.189 源码核实（含 `packed(4)` 非对齐读）；mac 一致性单测（原生 vs ps 4x 容差）由 mac CI 跑，Windows 侧回归全过。
 - [ ] 日志红线复核：抽查 `log_event!` 调用点，确认无剪贴板正文/秘密入日志；把红线写入 CONTRIBUTING。验收：`grep` 审计记录 + 文档一行。
 - [ ] 同步引擎真实 S3 冒烟：现有 `ObjectStore` 替身与真实语义偏差（etag 引号/list 分页）仅靠单测。验收：MinIO nightly 冒烟（手动或 CI 可选 job）或明确记录不做。
 

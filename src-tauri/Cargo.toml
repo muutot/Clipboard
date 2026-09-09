@@ -55,6 +55,10 @@ keyring-core = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
+# task_info RSS probe only; already in the tree transitively (72 dependents).
+# Pinned to 0.2: the 1.x line is still alpha, and the Apple bindings below
+# were verified against the 0.2.189 sources.
+libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # crypto-rust keeps crypto in pure Rust. OpenSSL and libdbus link against the

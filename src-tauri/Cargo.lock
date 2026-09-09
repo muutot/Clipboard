@@ -775,6 +775,7 @@ dependencies = [
  "hex",
  "image",
  "keyring-core",
+ "libc",
  "md-5",
  "oar-ocr",
  "open",
