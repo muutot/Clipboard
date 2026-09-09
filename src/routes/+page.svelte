@@ -63,7 +63,12 @@
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
   import { captureBulkSnapshot, planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
-  import { isEditableKeyboardTarget, shortcutMatchesEvent } from "$lib/utils/keyboard";
+  import {
+    isActivatableKeyboardTarget,
+    isEditableKeyboardTarget,
+    isItemActionShortcut,
+    shortcutMatchesEvent,
+  } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
     SEARCH_HISTORY_LIMIT,
@@ -2334,28 +2339,6 @@
   }
 
   let tagAddSignal = $state(0);
-
-  // Item-action shortcuts (Ctrl/⌘ letter) that should still operate on the
-  // selected entry even when focus is in an editable target such as the search
-  // box. Ctrl+A is deliberately excluded so the search box keeps its native
-  // "select all text" behavior.
-  function isItemActionShortcut(event: KeyboardEvent): boolean {
-    if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return false;
-    return ["c", "d", "f", "e", "t", "s"].includes(event.key.toLowerCase());
-  }
-
-  // Native activatable controls fire their click action from the keydown
-  // default behavior. When focus sits on one of them, Enter/Space must
-  // activate that control — not the list selection below. Note: history
-  // cards are divs with role="option" and deliberately keep the hijacked
-  // Enter/Space activation, so role="option" is intentionally absent here;
-  // the search-suggestion options are real <button> elements and are covered.
-  function isActivatableKeyboardTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    return !!target.closest(
-      "button, a, link, select, summary, label, [role='tab'], [role='menuitem'], [role='button'], [role='link'], [role='checkbox']",
-    );
-  }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     const editableTarget = isEditableKeyboardTarget(event.target);

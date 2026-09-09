@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isEditableKeyboardTarget, shortcutMatchesEvent } from "./keyboard";
+import {
+  isActivatableKeyboardTarget,
+  isEditableKeyboardTarget,
+  isItemActionShortcut,
+  shortcutMatchesEvent,
+} from "./keyboard";
 
 function keyEvent(init: Partial<KeyboardEvent> & { key: string }): KeyboardEvent {
   return new KeyboardEvent("keydown", {
@@ -95,5 +100,55 @@ describe("shortcutMatchesEvent", () => {
     expect(shortcutMatchesEvent("+", keyEvent({ key: "+" }))).toBe(false);
     expect(shortcutMatchesEvent("", keyEvent({ key: "a" }))).toBe(false);
     expect(shortcutMatchesEvent("Shift+", keyEvent({ key: "a", shiftKey: true }))).toBe(false);
+  });
+});
+
+describe("isItemActionShortcut", () => {
+  it("matches the Ctrl/⌘ letter set that operates on the selected entry", () => {
+    for (const key of ["c", "d", "f", "e", "t", "s"]) {
+      expect(isItemActionShortcut(keyEvent({ key, ctrlKey: true }))).toBe(true);
+      expect(isItemActionShortcut(keyEvent({ key: key.toUpperCase(), metaKey: true }))).toBe(true);
+    }
+  });
+
+  it("excludes Ctrl+A so the search box keeps native select-all", () => {
+    expect(isItemActionShortcut(keyEvent({ key: "a", ctrlKey: true }))).toBe(false);
+    expect(isItemActionShortcut(keyEvent({ key: "a", metaKey: true }))).toBe(false);
+  });
+
+  it("requires Ctrl/⌘ without Shift and rejects other keys", () => {
+    expect(isItemActionShortcut(keyEvent({ key: "c" }))).toBe(false);
+    expect(isItemActionShortcut(keyEvent({ key: "c", ctrlKey: true, shiftKey: true }))).toBe(false);
+    expect(isItemActionShortcut(keyEvent({ key: "x", ctrlKey: true }))).toBe(false);
+  });
+});
+
+describe("isActivatableKeyboardTarget", () => {
+  it("matches native controls and ARIA activatables", () => {
+    for (const tag of ["button", "a", "select"]) {
+      expect(isActivatableKeyboardTarget(document.createElement(tag))).toBe(true);
+    }
+    for (const role of ["tab", "menuitem", "button", "link", "checkbox"]) {
+      const el = document.createElement("div");
+      el.setAttribute("role", role);
+      expect(isActivatableKeyboardTarget(el)).toBe(true);
+    }
+  });
+
+  it("matches descendants of activatable ancestors", () => {
+    const button = document.createElement("button");
+    const span = document.createElement("span");
+    button.appendChild(span);
+    document.body.appendChild(button);
+    expect(isActivatableKeyboardTarget(span)).toBe(true);
+    button.remove();
+  });
+
+  it("leaves listbox cards (role=option) and plain divs to list activation", () => {
+    const option = document.createElement("div");
+    option.setAttribute("role", "option");
+    expect(isActivatableKeyboardTarget(option)).toBe(false);
+    expect(isActivatableKeyboardTarget(document.createElement("div"))).toBe(false);
+    expect(isActivatableKeyboardTarget(null)).toBe(false);
   });
 });
