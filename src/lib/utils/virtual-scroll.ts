@@ -9,8 +9,6 @@ export interface VirtualListResult {
   offsetY: number;
 }
 
-const TEXT_HEIGHT = 88;
-const IMAGE_HEIGHT = 150;
 export const TEXT_LINE_HEIGHT = 20;
 export const PREVIEW_LINE_HEIGHT = 16;
 export const CUSTOM_TITLE_BASE_HEIGHT = 80;
