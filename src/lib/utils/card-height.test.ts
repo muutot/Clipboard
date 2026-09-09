@@ -93,6 +93,29 @@ describe("estimateCardHeight", () => {
     );
   });
 
+  it("applies customTitleHeight as the content base for custom-title text cards", () => {
+    const inputs: CardEstimateInputs = { ...baseInputs, customTitleHeight: 80 };
+    const customItem = {
+      kind: "text",
+      title: "Search Query",
+      textContent: "Body line",
+      customTitle: true,
+    };
+    expect(estimateCardHeight(customItem, inputs, false)).toBe(
+      itemHeight({
+        kind: "text",
+        textLines: 1,
+        customTitle: true,
+        customTitleHeight: 80,
+        cardGap: baseInputs.cardGap,
+        cardPaddingTop: baseInputs.cardPaddingTop,
+        cardPaddingBottom: baseInputs.cardPaddingBottom,
+        showPreview: baseInputs.showSecondaryText,
+      }),
+    );
+    expect(estimateCardHeight(customItem, inputs, false)).toBe(80 + 6 + 6 + 5);
+  });
+
   it("covers link kind with the same text path", () => {
     const linkItem = {
       kind: "link",

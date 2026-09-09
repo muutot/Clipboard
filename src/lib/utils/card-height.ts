@@ -96,6 +96,8 @@ export function estimateCardHeight(
   return itemHeight({
     kind: item.kind,
     textLines: totalLines,
+    customTitle: item.customTitle === true,
+    customTitleHeight,
     textHeight,
     tallTextHeight,
     imageHeight,

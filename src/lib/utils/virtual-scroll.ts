@@ -13,6 +13,7 @@ const TEXT_HEIGHT = 88;
 const IMAGE_HEIGHT = 150;
 export const TEXT_LINE_HEIGHT = 20;
 export const PREVIEW_LINE_HEIGHT = 16;
+export const CUSTOM_TITLE_BASE_HEIGHT = 80;
 
 export function trimTrailingBlankLines(text: string | null | undefined): string {
   return (text ?? "").replace(/(?:\r\n?|\n)(?:[ \t]*(?:\r\n?|\n))*[ \t]*$/, "");
@@ -71,6 +72,10 @@ export function itemHeight({
   if (kind === "image") return (imageHeight ?? 130) + padding + gap;
 
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
+  if (customTitle) {
+    const baseHeight = customTitleHeight ?? CUSTOM_TITLE_BASE_HEIGHT;
+    return baseHeight + Math.max(0, visibleLines - 1) * TEXT_LINE_HEIGHT + padding + gap;
+  }
   if (visibleLines <= 1) return (textHeight ?? 58) + padding + gap;
   return (
     (tallTextHeight ?? 70) +

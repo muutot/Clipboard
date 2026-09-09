@@ -52,7 +52,7 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `searchFontSize`        | `20`    | 10–24            |
 | `cardBorderRadius`      | `5`     | 0–20             |
 
-`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes nine sliders; `cardCustomTitleHeight` is normalized and consumed by layout logic but is not present in that panel's slider array. Treat that as current behavior, not as proof that the field can be removed.
+`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes ten sliders. `cardCustomTitleHeight` is normalized, and the layout estimator consumes it as the content base for custom-title text/link cards (title line plus first content area), growing by one text line height per extra preview line; the estimator falls back to `customTitleHeight ?? 80` when the field is absent.
 
 ## General scalar/enum settings
 

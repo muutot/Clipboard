@@ -438,6 +438,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("layout.tallTextHeightDescription"),
   ),
   entry(
+    "layout.custom-title-height",
+    { section: "layout" },
+    i18n("layout.customTitleHeight"),
+    i18n("layout.customTitleHeightDescription"),
+    ["自定义标题", "custom title"],
+  ),
+  entry(
     "layout.image-height",
     { section: "layout" },
     i18n("layout.imageHeight"),
