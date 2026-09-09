@@ -63,12 +63,8 @@
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
   import { captureBulkSnapshot, planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
-  import {
-    isActivatableKeyboardTarget,
-    isEditableKeyboardTarget,
-    isItemActionShortcut,
-    shortcutMatchesEvent,
-  } from "$lib/utils/keyboard";
+  import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
+  import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
     SEARCH_HISTORY_LIMIT,
@@ -2340,211 +2336,119 @@
 
   let tagAddSignal = $state(0);
 
-  function handleGlobalKeydown(event: KeyboardEvent) {
-    const editableTarget = isEditableKeyboardTarget(event.target);
-    const quickCopyIndex =
-      (event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null;
+  function focusActiveFilterTab() {
+    void tick().then(() => {
+      const btn = document.querySelector<HTMLElement>(
+        `.filters [role="tab"][aria-selected="true"]`,
+      );
+      btn?.focus();
+    });
+  }
 
-    if (event.key === "Escape") {
-      if (event.defaultPrevented || editingId || fullscreenFilePath) return;
-      if (tagEditDialog) return;
-
-      const detailEditorTarget =
-        editableTarget &&
-        event.target instanceof Element &&
-        event.target.closest(".detail-panel") !== null;
-      if (detailEditorTarget) return;
-
-      if (detailItem) {
-        // DetailPanel handles its own Escape
-      } else if (tagFilter) {
-        toggleTagFilter(tagFilter);
-      } else if ("__TAURI_INTERNALS__" in window) {
+  function executeKeyAction(event: KeyboardEvent, action: KeyAction) {
+    if (action.prevent) event.preventDefault();
+    switch (action.type) {
+      case "none":
+        break;
+      case "focus-search":
+        searchInputEl?.focus();
+        break;
+      case "quick-copy": {
+        const item = filteredItems[action.index];
+        if (item) {
+          selectedId = item.id;
+          activateSelected();
+        }
+        break;
+      }
+      case "set-filter":
+        setFilter(action.filterId as ClipboardFilter);
+        if (action.focusTab) focusActiveFilterTab();
+        break;
+      case "move-selection":
+        moveSelection(action.delta);
+        break;
+      case "cycle-filter": {
+        const idx = filters.findIndex((f) => f.id === activeFilter);
+        const next = (idx + action.delta + filters.length) % filters.length;
+        setFilter(filters[next].id);
+        focusActiveFilterTab();
+        break;
+      }
+      case "activate-selected":
+        activateSelected();
+        break;
+      case "open-detail":
+        openDetail(action.id);
+        break;
+      case "clear-selection":
+        if (selectedIds.size > 0) selectedIds = new Set();
+        break;
+      case "select-all":
+        selectedIds = new Set(filteredItems.map((i) => i.id));
+        break;
+      case "escape-hide-window":
         getCurrentWindow()
           .hide()
           .catch(() => {});
-      }
-      return;
-    }
-
-    if (
-      (event.key === "/" && !editableTarget) ||
-      ((event.ctrlKey || event.metaKey) && event.key === "k")
-    ) {
-      event.preventDefault();
-      searchInputEl?.focus();
-      return;
-    }
-
-    if (quickCopyIndex !== null && (!editableTarget || event.target === searchInputEl)) {
-      event.preventDefault();
-      const item = filteredItems[quickCopyIndex];
-      if (item) {
-        selectedId = item.id;
-        activateSelected();
-      }
-      return;
-    }
-
-    const switchEditableTarget = !editableTarget || event.target === searchInputEl;
-    if (!editingId && switchEditableTarget) {
-      for (const [filterId, bindings] of Object.entries(filterShortcutBindings)) {
-        if (bindings.some((binding) => shortcutMatchesEvent(binding, event))) {
-          event.preventDefault();
-          setFilter(filterId as ClipboardFilter);
-          if (!editableTarget) {
-            void tick().then(() => {
-              const btn = document.querySelector<HTMLElement>(
-                `.filters [role="tab"][aria-selected="true"]`,
-              );
-              btn?.focus();
-            });
-          }
-          return;
-        }
-      }
-    }
-
-    if (
-      navigationBindings.moveSelectionDown.some((binding) => shortcutMatchesEvent(binding, event))
-    ) {
-      event.preventDefault();
-      moveSelection(1);
-      return;
-    }
-
-    if (
-      navigationBindings.moveSelectionUp.some((binding) => shortcutMatchesEvent(binding, event))
-    ) {
-      event.preventDefault();
-      moveSelection(-1);
-      return;
-    }
-
-    // Let the focused editable target (e.g. the search box) keep its own key
-    // combinations (Ctrl+A to select text, Ctrl+Z/X/V, etc.). The item-action
-    // shortcuts (Ctrl/⌘ C/D/F/E/T/S) are exempted so they still operate on
-    // the selected entry even when the search box is focused — otherwise every
-    // Ctrl+<letter> silently no-ops after a search or filter switch moves focus
-    // into the search input.
-    if (editableTarget && !isItemActionShortcut(event)) return;
-
-    const cycleFilter = (direction: 1 | -1) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
-      event.preventDefault();
-      const idx = filters.findIndex((f) => f.id === activeFilter);
-      const next = (idx + direction + filters.length) % filters.length;
-      setFilter(filters[next].id);
-      void tick().then(() => {
-        const btn = document.querySelector<HTMLElement>(
-          `.filters [role="tab"][aria-selected="true"]`,
-        );
-        btn?.focus();
-      });
-    };
-
-    if (
-      navigationBindings.switchFilterNext.some((binding) => shortcutMatchesEvent(binding, event))
-    ) {
-      cycleFilter(1);
-      return;
-    }
-
-    if (
-      navigationBindings.switchFilterPrev.some((binding) => shortcutMatchesEvent(binding, event))
-    ) {
-      cycleFilter(-1);
-      return;
-    }
-
-    if (event.key === "Enter") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
-      if (isActivatableKeyboardTarget(event.target)) return;
-      event.preventDefault();
-      activateSelected();
-      return;
-    }
-
-    if (
-      event.key === " " &&
-      !(event.target instanceof HTMLInputElement) &&
-      !(event.target instanceof HTMLTextAreaElement)
-    ) {
-      if (isActivatableKeyboardTarget(event.target)) return;
-      event.preventDefault();
-      if (selectedId) openDetail(selectedId);
-      return;
-    }
-
-    if (event.key === "Backspace") {
-      if (selectedIds.size > 0) {
-        selectedIds = new Set();
-      }
-      return;
-    }
-
-    if ((event.metaKey || event.ctrlKey) && event.key === "a") {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
-      event.preventDefault();
-      selectedIds = new Set(filteredItems.map((i) => i.id));
-      return;
-    }
-
-    // Shortcuts for the focused item. These reach here only when the event
-    // target is not an editable surface (the search box keeps its own Ctrl
-    // combinations via the exemption in `isItemActionShortcut`), so no extra
-    // input/textarea guard is needed.
-    if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
-      let item = filteredItems.find((i) => i.id === selectedId);
-      if (!item && filteredItems.length > 0) {
-        // Heal a selection that no longer matches the active filter (e.g. after
-        // a search or group switch) so the shortcut operates on a visible entry
-        // instead of silently no-opping via the `if (!item) return` below.
-        item = filteredItems[0];
-        selectedId = item.id;
-      }
-      if (!item) return;
-
-      if (event.key === "c") {
-        event.preventDefault();
-        if (selectedIds.size > 0) bulkCopy();
-        else copyItem(selectedId);
-        return;
-      }
-      if (event.key === "d") {
-        event.preventDefault();
-        if (selectedIds.size > 0) bulkDelete();
-        else if (!item.favorite) deleteItem(selectedId);
-        return;
-      }
-      if (event.key === "f") {
-        event.preventDefault();
-        if (selectedIds.size > 0) bulkFavorite();
-        else toggleFavorite(selectedId);
-        return;
-      }
-      if (event.key === "e") {
-        event.preventDefault();
-        openDetail(selectedId);
-        return;
-      }
-      if (event.key === "t") {
-        if (selectedIds.size > 0) return;
-        event.preventDefault();
+        break;
+      case "escape-toggle-tag":
+        toggleTagFilter(action.tag);
+        break;
+      case "bulk-copy":
+        bulkCopy();
+        break;
+      case "copy-item":
+        copyItem(action.id);
+        break;
+      case "bulk-delete":
+        bulkDelete();
+        break;
+      case "delete-item":
+        deleteItem(action.id);
+        break;
+      case "bulk-favorite":
+        bulkFavorite();
+        break;
+      case "toggle-favorite":
+        toggleFavorite(action.id);
+        break;
+      case "tag-add":
         tagAddSignal++;
-        return;
-      }
-      if (event.key === "s") {
-        if (item.kind === "image" || item.kind === "file") {
-          event.preventDefault();
-          saveItem(selectedId);
-        }
-        return;
-      }
+        break;
+      case "save-item":
+        saveItem(action.id);
+        break;
     }
+  }
+
+  function handleGlobalKeydown(event: KeyboardEvent) {
+    executeKeyAction(
+      event,
+      resolveKeyAction(event, {
+        hasEditing: !!editingId,
+        hasFullscreen: !!fullscreenFilePath,
+        hasTagDialog: !!tagEditDialog,
+        hasDetail: !!detailItem,
+        tagFilter,
+        isTauri: "__TAURI_INTERNALS__" in window,
+        detailEditor:
+          isEditableKeyboardTarget(event.target) &&
+          event.target instanceof Element &&
+          event.target.closest(".detail-panel") !== null,
+        isSearchInput: event.target === searchInputEl,
+        selectedId,
+        selectedCount: selectedIds.size,
+        filteredItems,
+        filters,
+        activeFilter,
+        filterShortcutBindings,
+        moveSelectionDown: navigationBindings.moveSelectionDown,
+        moveSelectionUp: navigationBindings.moveSelectionUp,
+        switchFilterNext: navigationBindings.switchFilterNext,
+        switchFilterPrev: navigationBindings.switchFilterPrev,
+      }),
+    );
   }
 
   let scrollRaf = 0;
