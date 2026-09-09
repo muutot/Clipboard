@@ -65,6 +65,12 @@
   } from "$lib/utils/shortcut-bindings";
   import { captureBulkSnapshot, planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
   import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
+  import {
+    applyItemPatchesToCopies,
+    findLoadedItemInCopies,
+    removeItemsFromCopies,
+    replaceItemInCopies,
+  } from "$lib/utils/item-sync";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
   import {
@@ -139,20 +145,18 @@
   /// Fans one patch set out to every copy (items, indexedItems, searchCache,
   /// detailItem) in a single pass over each list. THE funnel for item
   /// mutations — direct per-copy mapping loops are how the searchCache drift
-  /// happened.
+  /// happened. Pure logic lives in `utils/item-sync.ts` (covered by
+  /// `item-sync.test.ts`); this wrapper only reassigns route state.
   function applyItemPatches(patches: ReadonlyMap<string, Partial<ClipboardItem>>) {
     if (patches.size === 0) return;
-    const apply = (entry: ClipboardItem): ClipboardItem => {
-      const patch = patches.get(entry.id);
-      return patch ? { ...entry, ...patch } : entry;
-    };
-    items = items.map(apply);
-    if (indexedItems) indexedItems = indexedItems.map(apply);
-    searchCache = searchCache.map(apply);
-    if (detailItem) {
-      const patch = patches.get(detailItem.id);
-      if (patch) detailItem = { ...detailItem, ...patch };
-    }
+    const next = applyItemPatchesToCopies(
+      { items, indexedItems, searchCache, detailItem },
+      patches,
+    );
+    items = next.items;
+    indexedItems = next.indexedItems;
+    searchCache = next.searchCache;
+    detailItem = next.detailItem;
   }
 
   /// Removal counterpart of [`applyItemPatches`]: drops ids from every copy
@@ -161,10 +165,11 @@
   /// entry could later resurface from the spare-result cache.
   function removeItems(ids: ReadonlySet<string>) {
     if (ids.size === 0) return;
-    items = items.filter((item) => !ids.has(item.id));
-    if (indexedItems) indexedItems = indexedItems.filter((item) => !ids.has(item.id));
-    searchCache = searchCache.filter((item) => !ids.has(item.id));
-    if (detailItem && ids.has(detailItem.id)) detailItem = null;
+    const next = removeItemsFromCopies({ items, indexedItems, searchCache, detailItem }, ids);
+    items = next.items;
+    indexedItems = next.indexedItems;
+    searchCache = next.searchCache;
+    detailItem = next.detailItem;
   }
 
   function revertItem(id: string, fields: Partial<ClipboardItem>) {
@@ -172,21 +177,16 @@
   }
 
   function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
-    const replace = (item: ClipboardItem) => (item.id === updated.id ? updated : item);
-    items = items.map(replace);
-    if (indexedItems) indexedItems = indexedItems.map(replace);
-    searchCache = searchCache.map(replace);
-    if (detailItem?.id === updated.id) detailItem = updated;
+    const next = replaceItemInCopies({ items, indexedItems, searchCache, detailItem }, updated);
+    items = next.items;
+    indexedItems = next.indexedItems;
+    searchCache = next.searchCache;
+    detailItem = next.detailItem;
     return updated;
   }
 
   function findLoadedItem(id: string): ClipboardItem | undefined {
-    return (
-      items.find((item) => item.id === id) ??
-      indexedItems?.find((item) => item.id === id) ??
-      searchCache.find((item) => item.id === id) ??
-      (detailItem?.id === id ? detailItem : undefined)
-    );
+    return findLoadedItemInCopies({ items, indexedItems, searchCache, detailItem }, id);
   }
 
   async function ensureItemMaterialized(item: ClipboardItem): Promise<ClipboardItem> {
