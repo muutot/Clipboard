@@ -38,7 +38,7 @@
 ## 1.5.2 — 信任边界收尾 + 数据安全
 
 - [ ] SEC-05 跨平台秘密存储：macOS Keychain / Linux Secret Service 接入，`conf.json` 全平台不断言出明文（Windows DPAPI 已有：`platform/dpapi.rs:121-132` 非 Windows 直接 `None` 回退明文）。验收：凭据设置后读回 `conf.json` 不含 secret 明文的单测（各平台门控）。
-- [ ] SEC-04 余量：`replace_icon_file` 的 `source_path` 仅 `is_file` 校验（`files.rs:201-205`），任意可读文件可被复制进受管目录并经 asset 读回。约束 source 容器或证明调用方已受信并记录结论。验收：负向单测（目录外 source 拒绝）或书面威胁模型结论。
+- [x] SEC-04 余量：`replace_icon_file` 的 `source_path` 仅 `is_file` 校验。已加三重门（扩展名白名单对齐 dialog 过滤器 + 10MiB 上限 + 光栅可解码校验，`commands/files.rs::validate_replace_source`），4 个负向/正向单测通过；残余风险（被攻破渲染层搬运其他合法图片）已在注释记录，dialog 流程属用户显式同意。
 - [ ] REL-01 余量：产物只有 sha256sum，无 SBOM/签名。验收：release 产物附 SBOM（或明确记录不做的原因）。
 - [x] Linux uri-list 解析回归测试：`platform::parse_uri_list` 共享纯函数被 X11/Wayland 共用（`platform/mod.rs`），`file://` 解码、换行分隔、注释/非法行丢弃单测通过（`platform::tests::parse_uri_list_*`）。
 

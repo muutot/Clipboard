@@ -199,10 +199,47 @@ pub fn replace_icon_file(
         _ => return Err("icon filename must end in .png".to_string()),
     }
     let source = std::path::Path::new(&source_path);
+    // The source arrives from the webview (either a user-picked dialog path or
+    // an icons-dir path). Without validation this command is an arbitrary-file
+    // copy into the asset-served icons directory: a compromised renderer could
+    // stage any disk file there and fetch it back. Gate on real image content.
+    validate_replace_source(source)?;
+    std::fs::copy(source, &target).map_err(|e| format!("failed to replace icon: {e}"))?;
+    Ok(())
+}
+
+/// Mirrors the file-dialog filters in `IconCacheSettingsPanel.svelte`.
+const REPLACE_ALLOWED_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "ico", "webp", "svg"];
+/// Icons are small; refuse anything larger before touching the cache.
+const REPLACE_MAX_SOURCE_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Rejects non-image sources before they can be staged into the icons
+/// directory. Raster formats must header-decode via the `image` crate; `ico`
+/// and `svg` are extension-gated only (no decoder is bundled) and render inert
+/// inside `<img>`. Residual risk (a compromised renderer staging *other valid
+/// images*) is accepted: the dialog flow is explicit user consent.
+fn validate_replace_source(source: &std::path::Path) -> Result<(), String> {
     if !source.is_file() {
         return Err("source file not found".to_string());
     }
-    std::fs::copy(source, &target).map_err(|e| format!("failed to replace icon: {e}"))?;
+    let extension = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !REPLACE_ALLOWED_EXTENSIONS.contains(&extension.as_str()) {
+        return Err("only image files (png/jpg/jpeg/ico/webp/svg) can be used".to_string());
+    }
+    let size = std::fs::metadata(source)
+        .map(|m| m.len())
+        .map_err(|e| format!("cannot read source file: {e}"))?;
+    if size > REPLACE_MAX_SOURCE_BYTES {
+        return Err("source image exceeds the 10 MiB limit".to_string());
+    }
+    if extension != "svg" && extension != "ico" {
+        image::image_dimensions(source)
+            .map_err(|_| "source is not a decodable image".to_string())?;
+    }
     Ok(())
 }
 
@@ -272,6 +309,62 @@ mod tests {
     fn touch(dir: &std::path::Path, name: &str, bytes: &[u8]) {
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(dir.join(name), bytes).unwrap();
+    }
+
+    /// Minimal 1x1 transparent PNG used to prove the decode gate accepts real
+    /// raster images.
+    const TINY_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
+    fn replace_source_dir(label: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("icon-replace-test-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn validate_replace_source_accepts_a_decodable_png() {
+        let dir = replace_source_dir("ok");
+        touch(&dir, "pick.png", TINY_PNG);
+        assert!(validate_replace_source(&dir.join("pick.png")).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_replace_source_rejects_non_image_extension() {
+        let dir = replace_source_dir("ext");
+        touch(&dir, "notes.txt", b"secret");
+        let err = validate_replace_source(&dir.join("notes.txt")).unwrap_err();
+        assert!(err.contains("only image files"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_replace_source_rejects_undecodable_raster_bytes() {
+        let dir = replace_source_dir("bytes");
+        touch(&dir, "fake.png", b"this is not png data");
+        let err = validate_replace_source(&dir.join("fake.png")).unwrap_err();
+        assert!(err.contains("not a decodable image"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_replace_source_rejects_missing_and_oversized_files() {
+        let dir = replace_source_dir("size");
+        let missing = validate_replace_source(&dir.join("gone.png")).unwrap_err();
+        assert!(missing.contains("not found"));
+        let big = vec![0u8; (REPLACE_MAX_SOURCE_BYTES + 1) as usize];
+        touch(&dir, "big.png", &big);
+        let err = validate_replace_source(&dir.join("big.png")).unwrap_err();
+        assert!(err.contains("10 MiB"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
