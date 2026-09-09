@@ -182,6 +182,24 @@ mod objc {
         nsstring_to_str(result)
     }
 
+    /// `propertyListForType:` result (an `NSArray` for file lists, nil when
+    /// the pasteboard has no such type).
+    pub fn pasteboard_property_list_for_type(pb: Id, type_name: &str) -> Id {
+        let type_ns = nsstring_from_str(type_name);
+        let sel = unsafe { sel_registerName(c"propertyListForType:".as_ptr()) };
+        unsafe { msgSend_id_id(pb, sel, type_ns) }
+    }
+
+    pub fn array_count(array: Id) -> isize {
+        let sel = unsafe { sel_registerName(c"count".as_ptr()) };
+        unsafe { msgSend_isize(array, sel) }
+    }
+
+    pub fn array_object_at_index(array: Id, index: isize) -> Id {
+        let sel = unsafe { sel_registerName(c"objectAtIndex:".as_ptr()) };
+        unsafe { msgSend_id_Int(array, sel, index) }
+    }
+
     pub fn get_nsworkspace() -> Id {
         let cls = unsafe { objc_getClass(c"NSWorkspace".as_ptr()) };
         let sel = unsafe { sel_registerName(c"sharedWorkspace".as_ptr()) };
@@ -667,10 +685,35 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     None
 }
 
-/// Reads file paths – not supported via simple command-line tools.
+/// Reads file paths from files copied in Finder via the pasteboard's
+/// `NSFilenamesPboardType` list (still written alongside the modern
+/// `public.file-url` type). An absent list yields an empty vector — the
+/// previous behavior — so this can only add coverage, never regress.
 #[cfg(target_os = "macos")]
 pub fn read_clipboard_file_paths() -> Vec<String> {
-    vec![]
+    let pool = unsafe { objc::objc_autoreleasePoolPush() };
+    let paths = read_nsfilenames_paths();
+    unsafe { objc::objc_autoreleasePoolPop(pool) };
+    paths
+}
+
+#[cfg(target_os = "macos")]
+fn read_nsfilenames_paths() -> Vec<String> {
+    let pb = objc::get_nspasteboard();
+    if pb.is_null() {
+        return Vec::new();
+    }
+    let list = objc::pasteboard_property_list_for_type(pb, "NSFilenamesPboardType");
+    if list.is_null() {
+        return Vec::new();
+    }
+    let count = objc::array_count(list).max(0) as usize;
+    (0..count)
+        .filter_map(|index| {
+            let item = objc::array_object_at_index(list, index as isize);
+            objc::nsstring_to_str(item)
+        })
+        .collect()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1277,5 +1320,15 @@ mod tests {
         let mut tray = MacOSTrayManager::create().unwrap();
         let menu = MacOSTrayManager::default_menu();
         tray.set_menu(&menu).unwrap();
+    }
+
+    /// Smoke test for the `NSFilenamesPboardType` reader: it must never crash
+    /// the process regardless of pasteboard contents (an absent file list
+    /// yields an empty vector, the historical behavior). Only meaningful on
+    /// macOS; elsewhere the stub is compiled instead.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn file_paths_read_does_not_panic() {
+        let _ = read_clipboard_file_paths();
     }
 }

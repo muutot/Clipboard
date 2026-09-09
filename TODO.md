@@ -53,7 +53,6 @@
 - [ ] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 context/store 下发。验收：现有测试全过 + 键盘导航回归。
 - [ ] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步（当前 `updateItem` 漏斗仅是缓解）。验收：四副本一致性单测 + Svelte 5 深代理兼容验证记录。
 - [x] MAINT-03 公共 API 注释：已闭环（`b1d7a56`），逐函数复核 `capture.rs`/`search/index.rs` 全部 `pub fn` 均有 `///`，无遗漏。
-- [ ] 平台渐进（每项独立可验，不打包承诺）：
-  - [ ] macOS 文件路径捕获：当前返回空（`platform/macos.rs:670-679`），调研 NSPasteboard 实现或记录不做。
-  - [ ] Linux 图标提取：X11/Wayland `extract_app_icon` 均为 stub（`linux_x11.rs:1020-1032`），补实现或显式降级提示。
-  - [ ] Wayland 写入自触发标记缺失 + 非 Windows 500ms 轮询回环风险：文档化现状与用户可见提示。
+- [x] macOS 文件路径捕获：`NSPasteboard NSFilenamesPboardType` 原生读取已实现（`platform/macos.rs`，缺席回退空列表=旧行为；所用 FFI 形状复用既有模块）+ mac-only 防崩溃冒烟测试。**待 mac CI 变绿后**再把 README 平台矩阵该格从 `❌` 翻为 `✅`（本地无 mac，不可提前宣称）。
+- [x] Linux 图标提取：freedesktop `.desktop` + 图标主题查找已实现并接线 X11/Wayland（`platform/linux_icons.rs`，fixture 单测全平台可跑）。
+- [ ] Wayland 写入自触发标记缺失 + 非 Windows 500ms 轮询回环风险：文档化现状与用户可见提示。
