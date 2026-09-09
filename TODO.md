@@ -39,7 +39,7 @@
 
 - [x] SEC-05 跨平台秘密存储：`platform::secret_store` 门面 + Windows DPAPI（存量）+ macOS login Keychain（`apple-native-keyring-store`）+ Linux Secret Service（`dbus-secret-service-keyring-store`，`crypto-rust`+`vendored` 免系统包）。`conf.json` 只存 `dpapi1:`/`oskey1:` 信封与标记；OS store 不可达时明文回退并打日志（不锁死）；mock-store 回环单测在全平台跑，mac/Linux 完整路径由 CI 覆盖。跟进：`conf/api.token` 仍为明文文件，另行立项。
 - [x] SEC-04 余量：`replace_icon_file` 的 `source_path` 仅 `is_file` 校验。已加三重门（扩展名白名单对齐 dialog 过滤器 + 10MiB 上限 + 光栅可解码校验，`commands/files.rs::validate_replace_source`），4 个负向/正向单测通过；残余风险（被攻破渲染层搬运其他合法图片）已在注释记录，dialog 流程属用户显式同意。
-- [ ] REL-01 余量：产物只有 sha256sum，无 SBOM/签名。验收：release 产物附 SBOM（或明确记录不做的原因）。
+- [x] REL-01 余量（决议：暂不做 SBOM）：产物已有 sha256sum（`release.yml`），第三方 action 已 pin SHA 且写权限收敛到 build job，`Cargo.lock` 锁定全量依赖。手写非标准 SBOM 价值低、标准工具（cargo-cyclonedx）引入 CI 工具链成本与收益不成比例；若未来进应用商店/企业分发再立项。
 - [x] Linux uri-list 解析回归测试：`platform::parse_uri_list` 共享纯函数被 X11/Wayland 共用（`platform/mod.rs`），`file://` 解码、换行分隔、注释/非法行丢弃单测通过（`platform::tests::parse_uri_list_*`）。
 
 ## 1.5.3 — 性能 / 可观测余量
