@@ -3,6 +3,7 @@
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import BulkBar from "$lib/components/BulkBar.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
@@ -3047,49 +3048,19 @@
       {/if}
     </section>
 
-    {#if selectedIds.size > 0}
-      <div class="bulk-bar">
-        <button
-          type="button"
-          class="bulk-deselect"
-          onclick={() => (selectedIds = new Set())}
-          title={_t("bulk.deselectAll")}
-        >
-          <AppIcon name="x" size={14} strokeWidth={2.5} />
-          <span>{selectedIds.size}</span>
-        </button>
-        <div class="bulk-actions">
-          <button type="button" onclick={bulkCopy}>
-            <AppIcon name="copy" size={14} />
-            <span>{_t("bulk.copyN", { count: selectedIds.size })}</span>
-          </button>
-          {#if selectedActiveCount > 0 && activeFilter !== "favorite"}
-            <button type="button" class="danger" onclick={bulkDelete}>
-              <AppIcon name="trash" size={14} />
-              <span>{_t("bulk.deleteN", { count: selectedActiveCount })}</span>
-            </button>
-          {/if}
-          <button type="button" onclick={bulkFavorite}>
-            <AppIcon name="star" size={14} />
-            <span
-              >{allSelectedFavorites
-                ? _t("bulk.unfavoriteN", { count: selectedIds.size })
-                : _t("bulk.favoriteN", { count: selectedIds.size })}</span
-            >
-          </button>
-          {#if selectedDeletedCount > 0}
-            <button type="button" onclick={bulkRestore}>
-              <AppIcon name="restore" size={14} />
-              <span>{_t("bulk.restoreN", { count: selectedDeletedCount })}</span>
-            </button>
-            <button type="button" class="danger" onclick={bulkPermanentDelete}>
-              <AppIcon name="trash" size={14} />
-              <span>{_t("bulk.permanentDeleteN", { count: selectedDeletedCount })}</span>
-            </button>
-          {/if}
-        </div>
-      </div>
-    {/if}
+    <BulkBar
+      selectedCount={selectedIds.size}
+      {selectedActiveCount}
+      {selectedDeletedCount}
+      {activeFilter}
+      {allSelectedFavorites}
+      ondeselect={() => (selectedIds = new Set())}
+      oncopy={bulkCopy}
+      ondelete={bulkDelete}
+      onfavorite={bulkFavorite}
+      onrestore={bulkRestore}
+      onpermanentdelete={bulkPermanentDelete}
+    />
 
     {#if detailDisplayMode === "split" && detailItem}
       <DetailPanel
@@ -3604,74 +3575,6 @@
   .empty-state p {
     margin: 6px 0;
     font-size: 12px;
-  }
-
-  .bulk-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 14px;
-    border-top: 1px solid var(--border-subtle);
-    background: var(--input-bg);
-  }
-
-  .bulk-deselect {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    color: var(--text-muted);
-    background: transparent;
-    cursor: pointer;
-    font-size: 11.5px;
-    transition: color 100ms ease;
-  }
-
-  .bulk-deselect:hover {
-    color: var(--text-secondary);
-  }
-
-  .bulk-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .bulk-actions button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 5px 12px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    color: var(--text-secondary);
-    background: var(--card-bg);
-    cursor: pointer;
-    font-size: 11.5px;
-    font-weight: 500;
-    line-height: 1;
-    transition:
-      background 100ms ease,
-      color 100ms ease;
-  }
-
-  .bulk-actions button:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
-  .bulk-actions button.danger {
-    border-color: color-mix(in srgb, var(--danger-color) 30%, transparent);
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-  }
-
-  .bulk-actions button.danger:hover {
-    border-color: color-mix(in srgb, var(--danger-color) 50%, transparent);
-    background: color-mix(in srgb, var(--danger-color) 10%, transparent);
-    color: color-mix(in srgb, var(--danger-color) 85%, white);
   }
 
   .status-bar {
