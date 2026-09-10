@@ -73,6 +73,12 @@
     let unlistenAdded: (() => void) | undefined;
     let unlistenFocus: (() => void) | undefined;
     if (isTauriRuntime()) {
+      // The backend builds this window hidden so creation never races the
+      // webview init or steals focus mid-gesture (that race wedged the
+      // first paint as a stuck white window whenever the main window was
+      // in front). Reveal from here instead: onMount only runs once the JS
+      // runtime, DOM, and Tauri bridge are all live.
+      void revealFloatPanel(() => !disposed);
       listen("clipboard-item-added", reload).then((unlisten) => {
         if (disposed) unlisten();
         else unlistenAdded = unlisten;
@@ -135,6 +141,30 @@
       }
     }
     return floatWin;
+  }
+
+  /**
+   * Shows and focuses the own window. The backend builds it hidden (see
+   * `open_float_panel`), so the first reveal happens here on mount. A
+   * redundant show on an already-visible window is harmless: mount only
+   * runs at creation (or page reload), never on plain show/hide toggles.
+   * A refused focus is non-fatal: the visible panel stays usable and the
+   * next toggle focuses it.
+   */
+  async function revealFloatPanel(isAlive: () => boolean): Promise<void> {
+    const win = await resolveFloatWindow();
+    if (!win || !isAlive()) return;
+    try {
+      await win.show();
+    } catch (error) {
+      console.error("Unable to show the float panel", error);
+      return;
+    }
+    try {
+      await win.setFocus();
+    } catch {
+      // Foreground rules may refuse the steal; visibility is what matters.
+    }
   }
 
   /**

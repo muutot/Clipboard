@@ -38,9 +38,17 @@ pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
     result
 }
 
-/// Focuses the float panel, creating it at the configured initial position
-/// on first open. Closed windows are destroyed by the runtime, so a missing
-/// handle simply means "build it again".
+/// Builds the float panel at the configured initial position on first
+/// open. Closed windows are destroyed by the runtime, so a missing handle
+/// simply means "build it again".
+///
+/// The window is built hidden: the float page shows and focuses itself
+/// once its JS is mounted (see `revealFloatPanel` in
+/// `src/routes/float/+page.svelte`). Showing or focusing from here races
+/// WebView2 init and used to wedge the first paint as a stuck white window
+/// whenever the main window was in front (the tray path only worked because
+/// the main window happened to be hidden). Windows that already exist are
+/// shown and focused immediately.
 ///
 /// Must not run on the event-loop thread (e.g. directly inside a tray menu
 /// callback): window creation dispatches to the event loop and blocks for
@@ -65,6 +73,7 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
             .resizable(true)
             .decorations(false)
             .transparent(true)
+            .visible(false)
             .always_on_top(true);
     match float_initial_position(&app) {
         Some((x, y)) => {
@@ -75,15 +84,10 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
         }
     }
     crate::log_event!("[float] building window");
-    let window = builder
+    builder
         .build()
         .map_err(|error| format!("failed to open the float panel: {error}"))?;
     crate::log_event!("[float] window built");
-    // The previous frontend-owned creation passed focus:true; keep parity
-    // so the new window paints and receives input immediately.
-    if let Err(error) = window.set_focus() {
-        crate::log_event!("[float] failed to focus the new panel: {error}");
-    }
     Ok(())
 }
 
