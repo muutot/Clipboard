@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { createFeedback } from "$lib/utils/feedback.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
@@ -37,10 +38,8 @@
   }: Props = $props();
   let config = $state<KeyboardConfig | null>(null);
   let loading = $state(true);
-  let feedback = $state("");
-  let feedbackSuccess = $state(false);
+  const feedback = createFeedback(2000);
   let recordingAction = $state("");
-  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let recordingTimer: ReturnType<typeof setTimeout> | undefined;
   let configRequestId = 0;
   let componentDestroyed = false;
@@ -131,20 +130,16 @@
   async function loadConfig() {
     const requestId = ++configRequestId;
     loading = true;
-    if (feedbackTimer !== undefined) {
-      clearTimeout(feedbackTimer);
-      feedbackTimer = undefined;
-    }
-    feedback = "";
+    feedback.clear();
 
     try {
       const loadedConfig = await getKeyboardConfig();
       if (componentDestroyed || requestId !== configRequestId) return;
       config = loadedConfig;
-      if (!loadedConfig) feedback = _t("keyboard.browserUnavailable");
+      if (!loadedConfig) feedback.show(_t("keyboard.browserUnavailable"), false);
     } catch (error) {
       if (!componentDestroyed && requestId === configRequestId) {
-        feedback = error instanceof Error ? error.message : String(error);
+        feedback.show(error instanceof Error ? error.message : String(error), false);
       }
     } finally {
       if (!componentDestroyed && requestId === configRequestId) loading = false;
@@ -158,19 +153,9 @@
       config = resetConfig;
     } catch (error) {
       if (!componentDestroyed) {
-        showFeedback(error instanceof Error ? error.message : String(error), false);
+        feedback.show(error instanceof Error ? error.message : String(error), false);
       }
     }
-  }
-
-  function showFeedback(msg: string, success: boolean) {
-    feedback = msg;
-    feedbackSuccess = success;
-    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-      feedbackTimer = undefined;
-      feedback = "";
-    }, 2000);
   }
 
   async function addBinding(action: string, shortcut: string) {
@@ -182,7 +167,7 @@
       config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
       if (!componentDestroyed) {
-        showFeedback(error instanceof Error ? error.message : String(error), false);
+        feedback.show(error instanceof Error ? error.message : String(error), false);
       }
     }
   }
@@ -199,7 +184,7 @@
       config = { ...config, shortcuts: { ...config.shortcuts, [action]: normalized } };
     } catch (error) {
       if (!componentDestroyed) {
-        showFeedback(error instanceof Error ? error.message : String(error), false);
+        feedback.show(error instanceof Error ? error.message : String(error), false);
       }
     }
   }
@@ -257,7 +242,7 @@
   onDestroy(() => {
     componentDestroyed = true;
     configRequestId += 1;
-    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
+    feedback.dispose();
     if (recordingTimer !== undefined) clearTimeout(recordingTimer);
     window.removeEventListener("keydown", onRecordingKey);
   });
@@ -366,11 +351,11 @@
     {/each}
   </div>
 {:else}
-  <div class="settings-state">{feedback || _t("keyboard.keyboardUnavailable")}</div>
+  <div class="settings-state">{feedback.message || _t("keyboard.keyboardUnavailable")}</div>
 {/if}
 
-{#if feedback && config}
-  <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+{#if feedback.message && config}
+  <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
 {/if}
 
 <style>

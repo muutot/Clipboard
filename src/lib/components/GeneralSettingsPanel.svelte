@@ -18,6 +18,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
+  import { createFeedback } from "$lib/utils/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -34,8 +35,7 @@
   let { onclose, showHeader = true, section = "search" }: Props = $props();
 
   let s = $state($generalSettings);
-  let feedback = $state("");
-  let feedbackSuccess = $state(false);
+  let feedback = createFeedback(2000);
   let privacyPaused = $state(false);
   let privacyLoading = $state(true);
   // True on desktop macOS/Linux, where clipboard capture polls instead of
@@ -49,7 +49,6 @@
   let sortDragIdx = $state<number | null>(null);
   let sortDragOverIdx = $state<number | null>(null);
   let sortListEl = $state<HTMLDivElement | null>(null);
-  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let stopPointerDrag: (() => void) | undefined;
 
   const ALL_SORT_FIELDS: SortRule["field"][] = [
@@ -151,7 +150,7 @@
         }
       })
       .catch(() => {
-        if (!cancelled) showFeedback(_t("general.windowConfigLoadFailed"), false);
+        if (!cancelled) feedback.show(_t("general.windowConfigLoadFailed"), false);
       })
       .finally(() => {
         if (!cancelled) windowConfigLoading = false;
@@ -161,25 +160,15 @@
     };
   });
 
-  function showFeedback(message: string, success: boolean) {
-    feedback = message;
-    feedbackSuccess = success;
-    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-      feedbackTimer = undefined;
-      feedback = "";
-    }, 2000);
-  }
-
   onDestroy(() => {
     stopPointerDrag?.();
-    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
+    feedback.dispose();
   });
 
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);
     locale.set(lang);
-    showFeedback(
+    feedback.show(
       _t(lang === "zh-CN" ? "general.languageSwitchedZh" : "general.languageSwitchedEn"),
       true,
     );
@@ -230,10 +219,10 @@
 
     try {
       privacyPaused = await invoke<boolean>("toggle_privacy_pause");
-      showFeedback(_t(privacyPaused ? "capture.paused" : "capture.resumed"), true);
+      feedback.show(_t(privacyPaused ? "capture.paused" : "capture.resumed"), true);
     } catch (error) {
       console.error("Unable to toggle privacy pause", error);
-      showFeedback(error instanceof Error ? error.message : String(error), false);
+      feedback.show(error instanceof Error ? error.message : String(error), false);
     } finally {
       privacyLoading = false;
     }
@@ -248,7 +237,7 @@
       await setWindowConfig({ [key]: value });
     } catch {
       windowConfig = previous;
-      showFeedback(_t("general.windowConfigUpdateFailed"), false);
+      feedback.show(_t("general.windowConfigUpdateFailed"), false);
     } finally {
       windowConfigSaving = false;
     }
@@ -798,8 +787,8 @@
   {/if}
 </div>
 
-{#if feedback}
-  <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+{#if feedback.message}
+  <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
 {/if}
 
 <style>

@@ -9,6 +9,7 @@
     type PrivacySettings,
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
+  import { createFeedback } from "$lib/utils/feedback.svelte";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -24,26 +25,12 @@
   let loading = $state(true);
   let patternsText = $state("");
   let patternsSaving = $state(false);
-  let feedback = $state("");
-  let feedbackSuccess = $state(false);
-  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+  const feedback = createFeedback(3000);
 
   onMount(() => {
     void loadPrivacy();
-    return () => {
-      if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
-    };
+    return () => feedback.dispose();
   });
-
-  function showFeedback(message: string, success: boolean) {
-    feedback = message;
-    feedbackSuccess = success;
-    if (feedbackTimer !== undefined) clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-      feedbackTimer = undefined;
-      feedback = "";
-    }, 3000);
-  }
 
   async function loadPrivacy() {
     try {
@@ -52,7 +39,7 @@
       patternsText = loaded.sensitivePatterns.join("\n");
     } catch (error) {
       console.error("Unable to load privacy settings", error);
-      showFeedback(error instanceof Error ? error.message : String(error), false);
+      feedback.show(error instanceof Error ? error.message : String(error), false);
     } finally {
       loading = false;
     }
@@ -66,7 +53,7 @@
       patternsText = updated.sensitivePatterns.join("\n");
       return true;
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : String(error), false);
+      feedback.show(error instanceof Error ? error.message : String(error), false);
       return false;
     }
   }
@@ -82,9 +69,9 @@
       const updated = await setPrivacySettings({ sensitivePatterns: lines });
       privacy = updated;
       patternsText = updated.sensitivePatterns.join("\n");
-      showFeedback(_t("capture.sensitivePatternsSaved"), true);
+      feedback.show(_t("capture.sensitivePatternsSaved"), true);
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : String(error), false);
+      feedback.show(error instanceof Error ? error.message : String(error), false);
     } finally {
       patternsSaving = false;
     }
@@ -149,8 +136,8 @@
   {/if}
 </div>
 
-{#if feedback && !loading}
-  <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
+{#if feedback.message && !loading}
+  <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
 {/if}
 
 <style>
