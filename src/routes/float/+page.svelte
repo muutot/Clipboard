@@ -97,10 +97,25 @@
         .close()
         .catch(() => {});
   }
+
+  /**
+   * Header drag uses the programmatic API instead of relying solely on
+   * `data-tauri-drag-region`: presses on empty header space (title/gaps)
+   * must move the window, while buttons keep their own behavior.
+   */
+  function startHeaderDrag(event: MouseEvent) {
+    if (!isTauriRuntime()) return;
+    if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button")) return;
+    void getCurrentWindow()
+      .startDragging()
+      .catch(() => {});
+  }
 </script>
 
 <div class="float-shell">
-  <header class="float-header" data-tauri-drag-region>
+  <!-- svelte-ignore a11y_no_static_element_interactions: header is a window drag handle; inner buttons keep native semantics -->
+  <header class="float-header" data-tauri-drag-region onmousedown={startHeaderDrag}>
     <span class="float-title">{_t("float.title")}</span>
     <div class="float-tabs" role="tablist" aria-label={_t("float.title")}>
       <button
