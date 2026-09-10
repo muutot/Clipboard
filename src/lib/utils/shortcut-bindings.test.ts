@@ -63,11 +63,11 @@ describe("resolveNavigationBindings", () => {
 
 describe("resolveActionBindings", () => {
   it("falls back, honors overrides, and treats empty as disabled", () => {
-    expect(resolveActionBindings({}, "toggleFloatPanel", ["Alt+F"])).toEqual(["Alt+F"]);
+    expect(resolveActionBindings({}, "toggleFloatPanel", ["Alt+V"])).toEqual(["Alt+V"]);
     expect(
-      resolveActionBindings({ toggleFloatPanel: ["Ctrl+F"] }, "toggleFloatPanel", ["Alt+F"]),
+      resolveActionBindings({ toggleFloatPanel: ["Ctrl+F"] }, "toggleFloatPanel", ["Alt+V"]),
     ).toEqual(["Ctrl+F"]);
-    expect(resolveActionBindings({ toggleFloatPanel: [] }, "toggleFloatPanel", ["Alt+F"])).toEqual(
+    expect(resolveActionBindings({ toggleFloatPanel: [] }, "toggleFloatPanel", ["Alt+V"])).toEqual(
       [],
     );
   });

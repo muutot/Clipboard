@@ -40,7 +40,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     moveSelectionUp: ["ArrowUp"],
     switchFilterNext: ["Alt+ArrowRight"],
     switchFilterPrev: ["Alt+ArrowLeft"],
-    toggleFloatBindings: ["Alt+F"],
+    toggleFloatBindings: ["Alt+V"],
     ...overrides,
   };
 }
@@ -105,18 +105,18 @@ describe("resolveKeyAction — search and quick copy", () => {
   });
 
   it("toggles the float panel on its binding, winning over filter shortcuts", () => {
-    expect(resolveKeyAction(keyEvent({ key: "f", altKey: true }), ctx())).toEqual({
+    expect(resolveKeyAction(keyEvent({ key: "v", altKey: true }), ctx())).toEqual({
       type: "toggle-float",
       prevent: true,
     });
     expect(
       resolveKeyAction(
-        keyEvent({ key: "f", altKey: true }),
-        ctx({ filterShortcutBindings: { all: ["Alt+F"] } }),
+        keyEvent({ key: "v", altKey: true }),
+        ctx({ filterShortcutBindings: { all: ["Alt+V"] } }),
       ).type,
     ).toBe("toggle-float");
     expect(
-      resolveKeyAction(keyEvent({ key: "f", altKey: true }), ctx({ toggleFloatBindings: [] })).type,
+      resolveKeyAction(keyEvent({ key: "v", altKey: true }), ctx({ toggleFloatBindings: [] })).type,
     ).toBe("none");
   });
 });

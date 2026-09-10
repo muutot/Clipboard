@@ -335,9 +335,9 @@
   // disable rules as the group-switch bindings above.
   const navigationBindings = $derived(resolveNavigationBindings(keyboardShortcuts));
 
-  // Float-panel shortcut (default Alt+F); empty disables it.
+  // Float-panel shortcut (default Alt+V); empty disables it.
   const floatPanelBindings = $derived(
-    resolveActionBindings(keyboardShortcuts, "toggleFloatPanel", ["Alt+F"]),
+    resolveActionBindings(keyboardShortcuts, "toggleFloatPanel", ["Alt+V"]),
   );
 
   async function loadKeyboardShortcuts() {

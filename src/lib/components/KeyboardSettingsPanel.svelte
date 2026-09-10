@@ -309,7 +309,7 @@
       descKey: "keyboard.toggleWindowDesc",
       description: "",
       icon: "eye",
-      defaults: ["Alt+V"],
+      defaults: ["Alt+C"],
       cat: "system",
       system: true,
     },
@@ -319,7 +319,7 @@
       descKey: "keyboard.toggleFloatPanelDesc",
       description: "",
       icon: "layers",
-      defaults: ["Alt+F"],
+      defaults: ["Alt+V"],
       cat: "system",
     },
     {

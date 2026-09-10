@@ -15,7 +15,9 @@ use super::ShortcutBinding;
 const CONFIG_DIRECTORY_NAME: &str = "conf";
 const KEYBOARD_CONFIG_FILE_NAME: &str = "keyboard.json";
 const DEFAULT_TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
-const DEFAULT_TOGGLE_WINDOW_SHORTCUT: &str = "Alt+V";
+const DEFAULT_TOGGLE_WINDOW_SHORTCUT: &str = "Alt+C";
+const DEFAULT_TOGGLE_FLOAT_ACTION: &str = "toggleFloatPanel";
+const DEFAULT_TOGGLE_FLOAT_SHORTCUT: &str = "Alt+V";
 const DEFAULT_COPY_ITEM_SHORTCUT: &str = "Ctrl+C";
 const DEFAULT_COPY_ITEM_ACTIVATE_SHORTCUT: &str = "Enter";
 const DEFAULT_DELETE_ITEM_SHORTCUT: &str = "Ctrl+D";
@@ -44,6 +46,10 @@ impl Default for KeyboardConfig {
             (
                 DEFAULT_TOGGLE_WINDOW_ACTION.to_owned(),
                 vec![DEFAULT_TOGGLE_WINDOW_SHORTCUT.to_owned()],
+            ),
+            (
+                DEFAULT_TOGGLE_FLOAT_ACTION.to_owned(),
+                vec![DEFAULT_TOGGLE_FLOAT_SHORTCUT.to_owned()],
             ),
             (
                 "copyItem".to_owned(),
@@ -272,7 +278,8 @@ mod tests {
         let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
 
         assert_eq!(store.path(), project.join("conf/keyboard.json"));
-        assert_eq!(saved["shortcuts"]["toggleWindow"], json!(["Alt+V"]));
+        assert_eq!(saved["shortcuts"]["toggleWindow"], json!(["Alt+C"]));
+        assert_eq!(saved["shortcuts"]["toggleFloatPanel"], json!(["Alt+V"]));
         assert_eq!(saved["shortcuts"]["copyItem"], json!(["Ctrl+C", "Enter"]));
         assert_eq!(saved["shortcuts"]["deleteItem"], json!(["Ctrl+D"]));
         assert_eq!(saved["shortcuts"]["favoriteItem"], json!(["Ctrl+F"]));

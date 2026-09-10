@@ -82,7 +82,11 @@ mod tests {
             )
             .unwrap();
 
-        assert!(manager.match_chord([Modifier::Alt], "V").is_empty());
+        assert_eq!(
+            manager.match_chord([Modifier::Alt], "V"),
+            &["toggleFloatPanel"]
+        );
+        assert!(manager.match_chord([Modifier::Alt], "C").is_empty());
         assert_eq!(
             manager.match_chord([Modifier::Control], "Space"),
             &["toggleWindow"]
