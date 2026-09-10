@@ -964,6 +964,15 @@ export interface LocaleDefinition {
     deleted: string;
     colorSaved: string;
     saved: string;
+    autoTagTitle: string;
+    autoTagDescription: string;
+    autoTagPatternPlaceholder: string;
+    autoTagTagPlaceholder: string;
+    autoTagAdd: string;
+    autoTagSave: string;
+    autoTagSaved: string;
+    autoTagInvalid: string;
+    autoTagDelete: string;
   };
 }
 

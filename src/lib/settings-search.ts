@@ -828,7 +828,18 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "tags" },
     i18n("storage.tagsSectionTitle"),
     i18n("storage.tagsDescription"),
-    [i18n("storage.tagsTab"), i18n("tags.title"), "标签管理", "重命名", "删除", "颜色"],
+    [
+      i18n("storage.tagsTab"),
+      i18n("tags.title"),
+      i18n("tags.autoTagTitle"),
+      "标签管理",
+      "重命名",
+      "删除",
+      "颜色",
+      "自动标签",
+      "规则",
+      "正则",
+    ],
   ),
 
   entry(

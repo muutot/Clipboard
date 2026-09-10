@@ -248,6 +248,25 @@ export async function setTagColor(name: string, color: string): Promise<boolean 
   return invoke<boolean>("set_tag_color", { name, color });
 }
 
+export interface AutoTagRule {
+  pattern: string;
+  tag: string;
+}
+
+export async function getAutoTagRules(): Promise<AutoTagRule[] | null> {
+  if (!isTauriRuntime()) return null;
+
+  return invoke<AutoTagRule[]>("get_auto_tag_rules");
+}
+
+export async function setAutoTagRules(rules: AutoTagRule[]): Promise<AutoTagRule[] | null> {
+  if (!isTauriRuntime()) {
+    throw new Error("Auto-tag rules are only available in the desktop app");
+  }
+
+  return invoke<AutoTagRule[]>("set_auto_tag_rules", { rules });
+}
+
 export async function listSourceApplications(): Promise<string[] | null> {
   if (!isTauriRuntime()) return null;
 

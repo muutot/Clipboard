@@ -987,6 +987,15 @@ const zhCN: LocaleDefinition = {
     deleted: "标签已删除",
     colorSaved: "颜色已更新",
     saved: "已保存",
+    autoTagTitle: "自动标签规则",
+    autoTagDescription: "新采集内容命中正则时自动打标签。规则由你自己配置，无系统内置。",
+    autoTagPatternPlaceholder: "正则，例如 TODO|FIXME",
+    autoTagTagPlaceholder: "标签",
+    autoTagAdd: "添加规则",
+    autoTagSave: "保存规则",
+    autoTagSaved: "自动标签规则已保存",
+    autoTagInvalid: "第 {index} 条规则无效：{error}",
+    autoTagDelete: "删除规则",
   },
 };
 

@@ -69,7 +69,7 @@ Schema changes require a deliberate new schema marker, one registered adjacent m
 
 ### `conf/conf.json`
 
-`src-tauri/src/config.rs` owns `AppConfig` groups: storage, history, privacy, permissions, window, general, export, and OCR. Config structs use `#[serde(default, rename_all = "camelCase")]`; several also flatten unknown fields so newer frontend settings survive round-trips.
+`src-tauri/src/config.rs` owns `AppConfig` groups: storage, history, privacy, permissions, window, general, export, OCR, sync, and tags. Config structs use `#[serde(default, rename_all = "camelCase")]`; several also flatten unknown fields so newer frontend settings survive round-trips. The `tags` group holds `autoTagRules` (`{pattern, tag}` pairs, default empty): `set_auto_tag_rules` trims, drops blanks/duplicates, and caps at 100 rules after up-front regex validation; capture applies compiled rules to text/link records via the same `set_tags` path as manual tagging.
 
 `ConfigStore` loads and saves `<project>/conf/conf.json`. Preserve the responsibility boundary: changing the data directory must not move `conf/`. When the existing file cannot be parsed, `load` quarantines it as `conf.json.corrupt-<unix-seconds>`, logs the reason to stderr, and continues with defaults (rewriting a fresh `conf.json`) so a truncated config can never make the app unlaunchable — unlike the database, which has its own recovery module.
 

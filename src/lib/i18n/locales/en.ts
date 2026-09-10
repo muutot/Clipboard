@@ -1030,6 +1030,16 @@ const en: LocaleDefinition = {
     deleted: "Tag deleted",
     colorSaved: "Color updated",
     saved: "Saved",
+    autoTagTitle: "Auto-tag rules",
+    autoTagDescription:
+      "Tag new captures automatically when their text matches a pattern. Rules are your own; nothing is built in.",
+    autoTagPatternPlaceholder: "Pattern, e.g. TODO|FIXME",
+    autoTagTagPlaceholder: "Tag",
+    autoTagAdd: "Add rule",
+    autoTagSave: "Save rules",
+    autoTagSaved: "Auto-tag rules saved",
+    autoTagInvalid: "Rule {index} is invalid: {error}",
+    autoTagDelete: "Delete rule",
   },
 };
 
