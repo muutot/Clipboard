@@ -64,6 +64,7 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
             .min_inner_size(260.0, 320.0)
             .resizable(true)
             .decorations(false)
+            .transparent(true)
             .always_on_top(true);
     match float_initial_position(&app) {
         Some((x, y)) => {
