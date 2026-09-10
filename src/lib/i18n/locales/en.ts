@@ -70,6 +70,9 @@ const en: LocaleDefinition = {
     all: "All",
     favorites: "Favorites",
     empty: "No records yet",
+    openFailed: "Could not open the float panel",
+    toggleFailed: "Could not switch the float panel",
+    closeFailed: "Could not close the float panel",
   },
   status: {
     searching: "Searching...",
@@ -516,7 +519,8 @@ const en: LocaleDefinition = {
     toggleWindowDesc: "Show or hide main window (system global hotkey)",
     focusSearchDesc: "Focus search input",
     toggleFloatPanel: "Toggle float panel",
-    toggleFloatPanelDesc: "Show the float panel (works while the main window is focused)",
+    toggleFloatPanelDesc:
+      "Swap between the main window and the float panel (system global hotkey on Windows)",
   },
   capture: {
     settings: "Settings / Capture",

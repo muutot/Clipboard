@@ -104,9 +104,9 @@ describe("resolveKeyAction — search and quick copy", () => {
     });
   });
 
-  it("opens the float panel on its binding, winning over filter shortcuts", () => {
+  it("toggles the float panel on its binding, winning over filter shortcuts", () => {
     expect(resolveKeyAction(keyEvent({ key: "f", altKey: true }), ctx())).toEqual({
-      type: "open-float",
+      type: "toggle-float",
       prevent: true,
     });
     expect(
@@ -114,7 +114,7 @@ describe("resolveKeyAction — search and quick copy", () => {
         keyEvent({ key: "f", altKey: true }),
         ctx({ filterShortcutBindings: { all: ["Alt+F"] } }),
       ).type,
-    ).toBe("open-float");
+    ).toBe("toggle-float");
     expect(
       resolveKeyAction(keyEvent({ key: "f", altKey: true }), ctx({ toggleFloatBindings: [] })).type,
     ).toBe("none");

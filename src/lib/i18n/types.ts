@@ -70,6 +70,9 @@ export interface LocaleDefinition {
     all: string;
     favorites: string;
     empty: string;
+    openFailed: string;
+    toggleFailed: string;
+    closeFailed: string;
   };
   status: {
     searching: string;

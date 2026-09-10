@@ -36,7 +36,7 @@ export type KeyAction =
   | { type: "toggle-favorite"; id: string; prevent: boolean }
   | { type: "tag-add"; prevent: boolean }
   | { type: "save-item"; id: string; prevent: boolean }
-  | { type: "open-float"; prevent: boolean };
+  | { type: "toggle-float"; prevent: boolean };
 
 export interface KeyActionItem {
   id: string;
@@ -110,7 +110,7 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
 
   // Dedicated action bindings win over generic filter shortcuts below.
   if (ctx.toggleFloatBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
-    return { type: "open-float", prevent: true };
+    return { type: "toggle-float", prevent: true };
   }
 
   const switchEditableTarget = !editableTarget || ctx.isSearchInput;

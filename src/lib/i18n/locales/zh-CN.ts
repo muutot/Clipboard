@@ -70,6 +70,9 @@ const zhCN: LocaleDefinition = {
     all: "全部",
     favorites: "收藏",
     empty: "暂无记录",
+    openFailed: "悬浮窗口打开失败",
+    toggleFailed: "悬浮窗口切换失败",
+    closeFailed: "悬浮窗口关闭失败",
   },
   status: {
     searching: "搜索中…",
@@ -493,7 +496,7 @@ const zhCN: LocaleDefinition = {
     toggleWindowDesc: "唤起或隐藏主窗口（系统全局热键）",
     focusSearchDesc: "聚焦搜索输入框",
     toggleFloatPanel: "切换悬浮窗口",
-    toggleFloatPanelDesc: "打开悬浮窗口（主窗口聚焦时可用）",
+    toggleFloatPanelDesc: "在主窗口与悬浮窗口之间切换（Windows 上为系统全局热键）",
   },
   capture: {
     settings: "设置 / 采集",

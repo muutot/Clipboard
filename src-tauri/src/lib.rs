@@ -23,6 +23,7 @@ use commands::capture::*;
 use commands::clipboard::*;
 use commands::config::*;
 use commands::export::*;
+use commands::float::*;
 use commands::ocr::*;
 use commands::sync::*;
 use commands::system::*;
@@ -79,6 +80,7 @@ use storage::{
 use tauri::Manager;
 
 const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
+const TOGGLE_FLOAT_ACTION: &str = "toggleFloatPanel";
 pub(crate) const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
     include_favorites: false,
     include_deleted: true,
@@ -188,7 +190,20 @@ impl Drop for CleanupWorker {
 }
 
 fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> (Vec<(u32, u32)>, Vec<keyboard::Modifier>) {
-    let Some(shortcuts) = config.shortcuts.get(TOGGLE_WINDOW_ACTION) else {
+    resolve_action_hotkeys(config, TOGGLE_WINDOW_ACTION)
+}
+
+/// Chord bindings for one keyboard.json action. Double-tap-modifier
+/// bindings are toggle-only by design and never surface here.
+fn resolve_float_hotkeys(config: &KeyboardConfig) -> Vec<(u32, u32)> {
+    resolve_action_hotkeys(config, TOGGLE_FLOAT_ACTION).0
+}
+
+fn resolve_action_hotkeys(
+    config: &KeyboardConfig,
+    action: &str,
+) -> (Vec<(u32, u32)>, Vec<keyboard::Modifier>) {
+    let Some(shortcuts) = config.shortcuts.get(action) else {
         return (Vec::new(), Vec::new());
     };
 
@@ -201,6 +216,32 @@ fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> (Vec<(u32, u32)>, Vec<keyb
         shortcut_bindings_to_windows_hotkeys(&bindings),
         shortcut_bindings_to_double_modifiers(&bindings),
     )
+}
+
+/// Re-registers OS hotkeys for the toggle + float actions from the current
+/// keyboard config. Also fixes a latent gap where deleting the toggle
+/// binding left a stale registration until restart.
+pub(crate) fn refresh_hotkey_registrations(
+    keyboard: &Mutex<KeyboardManager>,
+    hotkey_manager: &Mutex<HotkeyManager>,
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
+    let config = keyboard
+        .lock()
+        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+        .config();
+    let (bindings, double_modifiers) = resolve_toggle_hotkeys(&config);
+    let float_bindings = resolve_float_hotkeys(&config);
+    let mut manager = hotkey_manager
+        .lock()
+        .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
+    if bindings.is_empty() && double_modifiers.is_empty() && float_bindings.is_empty() {
+        manager.stop();
+    } else {
+        manager.restart_with_hotkeys(bindings, double_modifiers);
+        manager.set_float_hotkeys(float_bindings, app.clone());
+    }
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -594,6 +635,12 @@ pub fn run() {
                     use platform::windows_clipboard;
                     hotkey_manager.start_with_window(windows_clipboard::MOD_ALT, windows_clipboard::VK_V, window.clone());
                 }
+                // Float-panel chords share the same message loop; an empty
+                // list simply registers nothing.
+                hotkey_manager.set_float_hotkeys(
+                    resolve_float_hotkeys(&kb_config),
+                    app.handle().clone(),
+                );
             }
             app.manage(Mutex::new(keyboard));
             app.manage(Mutex::new(hotkey_manager));
@@ -664,6 +711,8 @@ pub fn run() {
             get_window_config,
             set_window_config,
             get_export_config,
+            open_float_panel,
+            toggle_float_panel,
             set_export_config,
             run_cli_command,
             start_local_api,

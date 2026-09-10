@@ -153,8 +153,11 @@ impl SystemTray {
         if id == Self::SHOW_MENU_ID {
             show_main_window(app);
         } else if id == Self::FLOAT_MENU_ID {
-            show_main_window(app);
-            let _ = app.emit("tray-open-float", ());
+            // Same swap as every other entry point; never depends on the
+            // main window's frontend state.
+            if let Err(error) = crate::commands::float::toggle_float_panel(app.clone()) {
+                crate::log_event!("[tray] failed to toggle the float panel: {error}");
+            }
         } else if id == Self::SETTINGS_MENU_ID {
             show_main_window(app);
             let _ = app.emit("tray-open-settings", ());

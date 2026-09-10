@@ -48,6 +48,27 @@ impl QuickPasteTarget {
 
 type HotkeyRegistration = (i32, u32, u32);
 
+/// OS hotkey action selected by the fired registration id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HotkeyAction {
+    ToggleMain,
+    ToggleFloat,
+}
+
+/// Id base for float-panel registrations. Toggle registrations occupy
+/// `FIRST_HOTKEY_ID..`, so the ranges never overlap by construction.
+pub const FLOAT_HOTKEY_ID_BASE: i32 = 1000;
+
+/// Maps a fired `WM_HOTKEY` id onto its action. Pure so the routing is
+/// unit-testable without a message loop.
+pub fn action_for_hotkey_id(id: i32) -> HotkeyAction {
+    if id >= FLOAT_HOTKEY_ID_BASE {
+        HotkeyAction::ToggleFloat
+    } else {
+        HotkeyAction::ToggleMain
+    }
+}
+
 fn modifier_from_virtual_key(virtual_key: u32) -> Option<Modifier> {
     match virtual_key {
         0x10 | 0xA0 | 0xA1 => Some(Modifier::Shift),
@@ -141,25 +162,35 @@ fn deduplicate_hotkeys(bindings: &[(u32, u32)]) -> Vec<(u32, u32)> {
 }
 
 fn assign_hotkey_ids(bindings: &[(u32, u32)]) -> Vec<HotkeyRegistration> {
+    assign_hotkey_ids_with_base(bindings, FIRST_HOTKEY_ID)
+}
+
+fn assign_hotkey_ids_with_base(bindings: &[(u32, u32)], base: i32) -> Vec<HotkeyRegistration> {
     deduplicate_hotkeys(bindings)
         .into_iter()
         .enumerate()
-        .map(|(index, (modifiers, vk))| (FIRST_HOTKEY_ID + index as i32, modifiers, vk))
+        .map(|(index, (modifiers, vk))| (base + index as i32, modifiers, vk))
         .collect()
 }
 
-pub fn spawn_hotkey_thread_with_hotkeys(
-    bindings: Vec<(u32, u32)>,
-    double_modifiers: Vec<Modifier>,
-    tx: mpsc::Sender<()>,
-) -> thread::JoinHandle<()> {
-    spawn_hotkey_thread_with_registrations(assign_hotkey_ids(&bindings), double_modifiers, tx)
+/// Toggle plus float registrations for one shared message loop. Id ranges
+/// are disjoint by construction (see [`FLOAT_HOTKEY_ID_BASE`]).
+pub fn combined_hotkey_registrations(
+    toggle_bindings: &[(u32, u32)],
+    float_bindings: &[(u32, u32)],
+) -> Vec<HotkeyRegistration> {
+    let mut registrations = assign_hotkey_ids(toggle_bindings);
+    registrations.extend(assign_hotkey_ids_with_base(
+        float_bindings,
+        FLOAT_HOTKEY_ID_BASE,
+    ));
+    registrations
 }
 
 fn spawn_hotkey_thread_with_registrations(
     registrations: Vec<HotkeyRegistration>,
     double_modifiers: Vec<Modifier>,
-    tx: mpsc::Sender<()>,
+    tx: mpsc::Sender<HotkeyAction>,
 ) -> thread::JoinHandle<()> {
     set_hotkey_sender(&tx);
     thread::spawn(move || {
@@ -345,7 +376,7 @@ unsafe extern "system" fn hotkey_window_proc(
 ) -> isize {
     if msg == WM_HOTKEY && wparam != 0 {
         if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
-            let _ = tx.send(());
+            let _ = tx.send(action_for_hotkey_id(wparam as i32));
         }
         return 0;
     }
@@ -386,8 +417,10 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: usize, lparam: i
                 })
                 .unwrap_or(false);
             if fired {
+                // Double-tap modifiers always drive the main toggle; float
+                // chords are registered as plain hotkeys only.
                 if let Some(tx) = HOTKEY_SENDER.lock().ok().and_then(|g| g.clone()) {
-                    let _ = tx.send(());
+                    let _ = tx.send(HotkeyAction::ToggleMain);
                 }
             }
         }
@@ -396,7 +429,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: usize, lparam: i
     CallNextHookEx(0, code, wparam, lparam)
 }
 
-static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
+static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<HotkeyAction>>> = Mutex::new(None);
 static HOTKEY_HWND: Mutex<isize> = Mutex::new(0);
 static DOUBLE_MODIFIER_TRACKER: Mutex<Option<DoubleModifierTracker>> = Mutex::new(None);
 
@@ -412,7 +445,7 @@ fn clear_double_modifier_tracker() {
     }
 }
 
-pub fn set_hotkey_sender(tx: &mpsc::Sender<()>) {
+pub fn set_hotkey_sender(tx: &mpsc::Sender<HotkeyAction>) {
     if let Ok(mut guard) = HOTKEY_SENDER.lock() {
         *guard = Some(tx.clone());
     }
@@ -458,6 +491,10 @@ pub fn stop_hotkey_thread() {
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
+    toggle_bindings: Vec<(u32, u32)>,
+    toggle_doubles: Vec<Modifier>,
+    float_bindings: Vec<(u32, u32)>,
+    float_app: Option<tauri::AppHandle>,
     quick_paste_target: Arc<QuickPasteTarget>,
 }
 
@@ -472,6 +509,10 @@ impl HotkeyManager {
         Self {
             handle: None,
             window: None,
+            toggle_bindings: Vec::new(),
+            toggle_doubles: Vec::new(),
+            float_bindings: Vec::new(),
+            float_app: None,
             quick_paste_target: Arc::new(QuickPasteTarget::default()),
         }
     }
@@ -490,29 +531,72 @@ impl HotkeyManager {
         double_modifiers: Vec<Modifier>,
         window: tauri::WebviewWindow,
     ) {
-        self.stop();
+        self.toggle_bindings = bindings;
+        self.toggle_doubles = double_modifiers;
         self.window = Some(window.clone());
-        let (tx, rx) = mpsc::channel::<()>();
-        let handle = spawn_hotkey_thread_with_hotkeys(bindings, double_modifiers, tx);
+        self.restart_combined_thread();
+    }
+
+    /// Registers float-panel chord bindings on the same shared message loop.
+    /// The app handle opens the backend-owned float window without involving
+    /// any frontend state.
+    pub fn set_float_hotkeys(&mut self, bindings: Vec<(u32, u32)>, app: tauri::AppHandle) {
+        self.float_bindings = bindings;
+        self.float_app = Some(app);
+        self.restart_combined_thread();
+    }
+
+    /// (Re)builds the single hotkey thread from the stored toggle + float
+    /// bindings. Stopping first tears down the previous message window, so
+    /// re-registration never leaks hotkeys.
+    fn restart_combined_thread(&mut self) {
+        self.stop();
+        let Some(window) = self.window.clone() else {
+            return;
+        };
+        let registrations =
+            combined_hotkey_registrations(&self.toggle_bindings, &self.float_bindings);
+        if registrations.is_empty() && self.toggle_doubles.is_empty() {
+            return;
+        }
+        let (tx, rx) = mpsc::channel::<HotkeyAction>();
+        let handle =
+            spawn_hotkey_thread_with_registrations(registrations, self.toggle_doubles.clone(), tx);
         let quick_paste_target = Arc::clone(&self.quick_paste_target);
+        let float_app = self.float_app.clone();
 
         thread::spawn(move || {
-            while let Ok(()) = rx.recv() {
-                let is_visible = window.is_visible().unwrap_or(false);
-                let is_focused = window.is_focused().unwrap_or(false);
-                if !is_focused {
-                    if let Some(window_handle) = foreground_window_handle() {
-                        quick_paste_target.remember(window_handle);
+            while let Ok(action) = rx.recv() {
+                match action {
+                    HotkeyAction::ToggleMain => {
+                        let is_visible = window.is_visible().unwrap_or(false);
+                        let is_focused = window.is_focused().unwrap_or(false);
+                        if !is_focused {
+                            if let Some(window_handle) = foreground_window_handle() {
+                                quick_paste_target.remember(window_handle);
+                            }
+                        }
+                        if is_visible && is_focused {
+                            let _ = window.hide();
+                        } else {
+                            if !is_visible {
+                                let _ = window.show();
+                            }
+                            if !is_focused {
+                                let _ = window.set_focus();
+                            }
+                        }
                     }
-                }
-                if is_visible && is_focused {
-                    let _ = window.hide();
-                } else {
-                    if !is_visible {
-                        let _ = window.show();
-                    }
-                    if !is_focused {
-                        let _ = window.set_focus();
+                    HotkeyAction::ToggleFloat => {
+                        if let Some(app) = float_app.as_ref() {
+                            if let Err(error) =
+                                crate::commands::float::toggle_float_panel(app.clone())
+                            {
+                                crate::log_event!(
+                                    "[hotkey] failed to toggle the float panel: {error}"
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -797,9 +881,10 @@ mod tests {
     use crate::keyboard::{Modifier, ShortcutBinding};
 
     use super::{
-        assign_hotkey_ids, shortcut_bindings_to_double_modifiers,
-        shortcut_bindings_to_windows_hotkeys, shortcut_to_windows_hotkey, DoubleModifierTracker,
-        QuickPasteTarget, FIRST_HOTKEY_ID,
+        action_for_hotkey_id, assign_hotkey_ids, combined_hotkey_registrations,
+        shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys,
+        shortcut_to_windows_hotkey, DoubleModifierTracker, HotkeyAction, QuickPasteTarget,
+        FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE,
     };
 
     const VK_SHIFT: u32 = 0x10;
@@ -866,6 +951,60 @@ mod tests {
                 (FIRST_HOTKEY_ID + 1, 2, 0x20)
             ]
         );
+    }
+
+    #[test]
+    fn hotkey_ids_route_to_their_action() {
+        assert_eq!(
+            action_for_hotkey_id(FIRST_HOTKEY_ID),
+            HotkeyAction::ToggleMain
+        );
+        assert_eq!(
+            action_for_hotkey_id(FLOAT_HOTKEY_ID_BASE),
+            HotkeyAction::ToggleFloat
+        );
+        assert_eq!(
+            action_for_hotkey_id(FLOAT_HOTKEY_ID_BASE + 7),
+            HotkeyAction::ToggleFloat
+        );
+        // Unknown ids fail toward the main toggle, never toward float.
+        assert_eq!(action_for_hotkey_id(0), HotkeyAction::ToggleMain);
+        assert_eq!(action_for_hotkey_id(-3), HotkeyAction::ToggleMain);
+    }
+
+    #[test]
+    fn combined_registrations_keep_disjoint_id_ranges() {
+        let toggle = [(1, b'V' as u32)];
+        let float = [(4, b'F' as u32), (2, 0x20)];
+        let registrations = combined_hotkey_registrations(&toggle, &float);
+
+        assert_eq!(
+            registrations,
+            vec![
+                (FIRST_HOTKEY_ID, 1, b'V' as u32),
+                (FLOAT_HOTKEY_ID_BASE, 4, b'F' as u32),
+                (FLOAT_HOTKEY_ID_BASE + 1, 2, 0x20),
+            ]
+        );
+        for (id, _, _) in &registrations {
+            assert_eq!(
+                action_for_hotkey_id(*id),
+                if *id >= FLOAT_HOTKEY_ID_BASE {
+                    HotkeyAction::ToggleFloat
+                } else {
+                    HotkeyAction::ToggleMain
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn empty_sides_still_register_the_other_action() {
+        assert_eq!(
+            combined_hotkey_registrations(&[], &[(4, b'F' as u32)]).len(),
+            1
+        );
+        assert!(combined_hotkey_registrations(&[], &[]).is_empty());
     }
 
     #[test]

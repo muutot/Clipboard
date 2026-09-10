@@ -753,10 +753,6 @@
       openSettings();
     });
 
-    const unlistenTrayOpenFloat = listen("tray-open-float", () => {
-      void openFloatPanel();
-    });
-
     const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
     let previousRememberWindowPosition = false;
 
@@ -867,7 +863,6 @@
       void unlisten.then((fn) => fn()).catch(() => {});
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
-      void unlistenTrayOpenFloat.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
       unsubSettings();
@@ -1245,83 +1240,22 @@
       }
     }, 0);
   }
-
   let settingsWindowOpening = $state(false);
   let floatWindowOpening = $state(false);
-  async function openFloatPanel() {
+
+  async function toggleFloatPanel() {
     if (!("__TAURI_INTERNALS__" in window)) return;
     if (floatWindowOpening) return;
     floatWindowOpening = true;
     try {
-      const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-      const existing = await WebviewWindow.getByLabel("float");
-      if (existing) {
-        existing.setFocus();
-        return;
-      }
-      const floatBg =
-        getComputedStyle(document.documentElement).getPropertyValue("--bg-app").trim() || "#1b1b1b";
-      const floatWidth = 320;
-      const floatHeight = 480;
-      const position = await resolveFloatPanelPosition(floatWidth, floatHeight).catch(
-        () => undefined,
-      );
-      const floatWindow = new WebviewWindow("float", {
-        url: "/float",
-        title: "Float",
-        width: floatWidth,
-        height: floatHeight,
-        minWidth: 260,
-        minHeight: 320,
-        center: position === undefined,
-        x: position?.x,
-        y: position?.y,
-        resizable: true,
-        decorations: false,
-        alwaysOnTop: true,
-        focus: true,
-        backgroundColor: floatBg,
-      });
+      await invoke("toggle_float_panel");
+    } catch (error) {
+      console.error("Unable to toggle float panel", error);
+      showToast(_t("float.toggleFailed"), "error");
     } finally {
       floatWindowOpening = false;
     }
   }
-
-  /**
-   * Initial float-panel position from settings, resolved against the primary
-   * monitor's work area. Window creation takes logical pixels while monitor
-   * geometry is physical, so convert with the monitor scale factor. Returns
-   * undefined when the monitor is unavailable so the window falls back to
-   * centered.
-   */
-  async function resolveFloatPanelPosition(
-    width: number,
-    height: number,
-  ): Promise<{ x: number; y: number } | undefined> {
-    const { primaryMonitor } = await import("@tauri-apps/api/window");
-    const monitor = await primaryMonitor();
-    if (!monitor) return undefined;
-    const origin = monitor.workArea.position.toLogical(monitor.scaleFactor);
-    const area = monitor.workArea.size.toLogical(monitor.scaleFactor);
-    const place = $generalSettings.floatPanelPosition;
-    switch (place) {
-      case "topLeft":
-        return { x: origin.x, y: origin.y };
-      case "topRight":
-        return { x: origin.x + area.width - width, y: origin.y };
-      case "bottomLeft":
-        return { x: origin.x, y: origin.y + area.height - height };
-      case "center":
-        return {
-          x: Math.round(origin.x + (area.width - width) / 2),
-          y: Math.round(origin.y + (area.height - height) / 2),
-        };
-      case "bottomRight":
-      default:
-        return { x: origin.x + area.width - width, y: origin.y + area.height - height };
-    }
-  }
-
   async function openSettings() {
     if (!("__TAURI_INTERNALS__" in window)) return;
     if (settingsWindowOpening) return;
@@ -2445,8 +2379,8 @@
       case "save-item":
         saveItem(action.id);
         break;
-      case "open-float":
-        void openFloatPanel();
+      case "toggle-float":
+        void toggleFloatPanel();
         break;
     }
   }
@@ -2933,7 +2867,7 @@
           type="button"
           aria-label={_t("toolbar.floatPanel")}
           title={_t("toolbar.floatPanel")}
-          onclick={() => void openFloatPanel()}><AppIcon name="layers" size={17} /></button
+          onclick={() => void toggleFloatPanel()}><AppIcon name="layers" size={17} /></button
         >
         <button
           type="button"

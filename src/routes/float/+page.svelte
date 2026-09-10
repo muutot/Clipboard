@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
+  import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { PhysicalPosition } from "@tauri-apps/api/dpi";
+  import { showToast } from "$lib/services/toast";
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import Toast from "$lib/components/Toast.svelte";
@@ -75,15 +77,18 @@
         if (disposed) unlisten();
         else unlistenAdded = unlisten;
       });
-      getCurrentWindow()
-        .onFocusChanged(({ payload: focused }) => {
-          if (focused) reload();
-        })
-        .then((unlisten) => {
-          if (disposed) unlisten();
-          else unlistenFocus = unlisten;
-        })
-        .catch(() => {});
+      void resolveFloatWindow().then((win) => {
+        if (disposed || !win) return;
+        win
+          .onFocusChanged(({ payload: focused }) => {
+            if (focused) reload();
+          })
+          .then((unlisten) => {
+            if (disposed) unlisten();
+            else unlistenFocus = unlisten;
+          })
+          .catch(() => {});
+      });
     }
     return () => {
       disposed = true;
@@ -94,10 +99,39 @@
   });
 
   function close() {
-    if (isTauriRuntime())
-      void getCurrentWindow()
-        .close()
-        .catch(() => {});
+    void resolveFloatWindow().then((win) => {
+      if (!win) {
+        showToast(_t("float.closeFailed"), "error");
+        return;
+      }
+      return win.close().catch(() => showToast(_t("float.closeFailed"), "error"));
+    });
+  }
+
+  /**
+   * Own window handle, resolved by label rather than ambient context: the
+   * label lookup goes through invoke (proven working in this webview) while
+   * `getCurrentWindow()` metadata has proven unreliable here. Falls back to
+   * the ambient window, then to null with visible feedback at call sites.
+   */
+  let floatWin: Window | null = null;
+
+  async function resolveFloatWindow(): Promise<Window | null> {
+    if (floatWin) return floatWin;
+    if (!isTauriRuntime()) return null;
+    try {
+      floatWin = await WebviewWindow.getByLabel("float");
+    } catch {
+      floatWin = null;
+    }
+    if (!floatWin) {
+      try {
+        floatWin = getCurrentWindow();
+      } catch {
+        floatWin = null;
+      }
+    }
+    return floatWin;
   }
 
   /**
@@ -125,7 +159,8 @@
 
   async function startHeaderDrag(event: MouseEvent) {
     if (!isTauriRuntime() || event.button !== 0 || isButtonPress(event)) return;
-    const win = getCurrentWindow();
+    const win = await resolveFloatWindow();
+    if (!win) return;
     try {
       const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
       dragState = {
@@ -143,12 +178,10 @@
   }
 
   function onHeaderDragMove(event: MouseEvent) {
-    if (!dragState || !isTauriRuntime()) return;
+    if (!dragState || !floatWin) return;
     const x = Math.round(dragState.winX + (event.screenX - dragState.startX) * dragState.scale);
     const y = Math.round(dragState.winY + (event.screenY - dragState.startY) * dragState.scale);
-    void getCurrentWindow()
-      .setPosition(new PhysicalPosition(x, y))
-      .catch(() => {});
+    void floatWin.setPosition(new PhysicalPosition(x, y)).catch(() => {});
   }
 
   function endHeaderDrag() {

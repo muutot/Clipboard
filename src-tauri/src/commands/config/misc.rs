@@ -10,7 +10,7 @@ use crate::platform::windows_hotkey::HotkeyManager;
 use crate::platform::{self, ClipboardMonitor, RuntimeInfo};
 use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database};
-use crate::{resolve_toggle_hotkeys, CaptureState, TOGGLE_WINDOW_ACTION};
+use crate::{CaptureState, TOGGLE_FLOAT_ACTION, TOGGLE_WINDOW_ACTION};
 
 use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacySettings, PrivacyStatus};
 
@@ -217,6 +217,7 @@ pub fn get_keyboard_config(
 
 #[tauri::command]
 pub fn configure_keyboard_shortcuts(
+    app: tauri::AppHandle,
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
     action: String,
@@ -228,20 +229,8 @@ pub fn configure_keyboard_shortcuts(
         .set_action_shortcuts(action.clone(), shortcuts)
         .map_err(|error| error.to_string())?;
 
-    if action == TOGGLE_WINDOW_ACTION {
-        let config = keyboard
-            .lock()
-            .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
-            .config();
-        let (bindings, double_modifiers) = resolve_toggle_hotkeys(&config);
-        let mut hm = hotkey_manager
-            .lock()
-            .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
-        if bindings.is_empty() && double_modifiers.is_empty() {
-            hm.stop();
-        } else {
-            hm.restart_with_hotkeys(bindings, double_modifiers);
-        }
+    if action == TOGGLE_WINDOW_ACTION || action == TOGGLE_FLOAT_ACTION {
+        crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     }
 
     Ok(normalized)
@@ -249,18 +238,27 @@ pub fn configure_keyboard_shortcuts(
 
 #[tauri::command]
 pub fn delete_keyboard_action(
+    app: tauri::AppHandle,
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
+    hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
     action: String,
 ) -> Result<(), String> {
     keyboard
         .lock()
         .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
-        .delete_action(action)
-        .map_err(|error| error.to_string())
+        .delete_action(action.clone())
+        .map_err(|error| error.to_string())?;
+    // Deleting a binding must unregister it immediately instead of leaving
+    // a stale OS hotkey until restart.
+    if action == TOGGLE_WINDOW_ACTION || action == TOGGLE_FLOAT_ACTION {
+        crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub fn reset_keyboard_config(
+    app: tauri::AppHandle,
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
 ) -> Result<KeyboardConfig, String> {
@@ -274,15 +272,7 @@ pub fn reset_keyboard_config(
         .lock()
         .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
         .config();
-    let (bindings, double_modifiers) = resolve_toggle_hotkeys(&config);
-    let mut hm = hotkey_manager
-        .lock()
-        .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
-    if bindings.is_empty() && double_modifiers.is_empty() {
-        hm.stop();
-    } else {
-        hm.restart_with_hotkeys(bindings, double_modifiers);
-    }
+    crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     Ok(config)
 }
 
