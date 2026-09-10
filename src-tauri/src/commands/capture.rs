@@ -550,6 +550,7 @@ pub(crate) fn run_capture_loop(
                             let mut emit_item = item.clone();
                             emit_item.id = saved_id;
                             let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                            crate::platform::refresh_tray_recent_menu(&app_handle);
                             continue;
                         }
                         Err(e) => {
@@ -616,6 +617,7 @@ pub(crate) fn run_capture_loop(
                                 let mut emit_item = item.clone();
                                 emit_item.id = saved_id;
                                 let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
                                 crate::log_event!("[clipboard-worker] failed to save file: {e}");
@@ -672,6 +674,7 @@ pub(crate) fn run_capture_loop(
                                 let mut emit_item = item.clone();
                                 emit_item.id = saved_id;
                                 let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
                                 crate::log_event!(
@@ -754,6 +757,7 @@ pub(crate) fn run_capture_loop(
                         let mut emit_item = item.clone();
                         emit_item.id = saved_id;
                         let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                        crate::platform::refresh_tray_recent_menu(&app_handle);
                     }
                     Err(e) => {
                         crate::log_event!("[clipboard-worker] failed to save item: {e}");

@@ -545,6 +545,8 @@ pub fn run() {
             }
 
             SystemTray::create(app.handle())?;
+            // Populate the tray "recent" submenu once the database is managed.
+            crate::platform::refresh_tray_recent_menu(app.handle());
 
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();

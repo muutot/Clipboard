@@ -48,7 +48,9 @@
 - [x] 日志红线复核：全量审计 `log_event!`/`eprintln!`/`dbg_log` 插值——仅 id/路径/计数/配置键/错误展示，无剪贴板正文、OCR 文本、秘密、请求体（唯一例外：非法敏感正则原文的可视化警告，属设计意图）；前端 `console` 仅 DevTools，顺手去掉一处 clipboard 衍生 payload 插值（`ClipboardCard.svelte`）。红线写入 CONTRIBUTING。
 - [x] 同步引擎真实 S3 冒烟（决议：暂不做）：`MemoryStore` 替身已覆盖已知语义差（etag 引号/list 分页/CAS 失败注入，审计确认"已尽量模拟"）；应用内另有 against 用户真实桶的 `test_sync_connection`（10s 超时）。MinIO CI 矩阵本地无 docker 不可验证，违反"无证据不断言通过"原则；等同步 v2 动大手术时再立项。
 
-## 1.6 — 结构还债 + 平台渐进
+## 1.6 — 结构还债 + 平台渐进 + 用户功能
+
+> 1.6 功能阈值：除还债外，新增**托盘速粘**与**自动标签规则**两个用户可见功能（标签页新增用户可配规则区，非系统内置）。
 
 - [ ] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 context/store 下发。验收：现有测试全过 + 键盘导航回归。
 - [ ] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步（当前 `updateItem` 漏斗仅是缓解）。验收：四副本一致性单测 + Svelte 5 深代理兼容验证记录。
@@ -56,3 +58,6 @@
 - [x] macOS 文件路径捕获：`NSPasteboard NSFilenamesPboardType` 原生读取已实现（`platform/macos.rs`，缺席回退空列表=旧行为；所用 FFI 形状复用既有模块）+ mac-only 防崩溃冒烟测试。**待 mac CI 变绿后**再把 README 平台矩阵该格从 `❌` 翻为 `✅`（本地无 mac，不可提前宣称）。
 - [x] Linux 图标提取：freedesktop `.desktop` + 图标主题查找已实现并接线 X11/Wayland（`platform/linux_icons.rs`，fixture 单测全平台可跑）。
 - [x] Wayland 写入自触发标记缺失 + 非 Windows 500ms 轮询回环风险：README 平台矩阵与注释已覆盖现状；应用内在采集暂停开关下为非 Windows 桌面显示轮询说明（`GeneralSettingsPanel` + `capture.pollingNote` 中英双语，`getRuntimeInfo().operatingSystem` 判定）。
+- [x] 托盘速粘：托盘"最近复制"子菜单（近 10 条文本/链接，标题单行 40 字截断），点击经后端自触发标记路径写回剪贴板并记 `last_used`；菜单启动/每次采集/暂停翻转时全量重建（pause 复选框恒读实时状态，无句柄持有）；纯函数（标题截断/id 解析）单测通过。仅文本/链接，图片文件仍走主窗口。
+- [ ] 自动标签规则（后端）：`auto_tag_rules` 配置（pattern→tag，用户可配），采集期对文本/链接匹配打标（非法正则跳过+日志，沿 PRIV-01 模式），`tags` 表复用无迁移。验收：规则匹配/非法跳过/采集打标单测。
+- [ ] 自动标签规则（标签页设置项）：标签设置区新增规则编辑器（增删 + 中英文案），非内置写死。验收：`check` + 双语键齐 + 设置契约（类型/默认/校验/持久化）走完。
