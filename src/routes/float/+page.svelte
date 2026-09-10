@@ -138,10 +138,15 @@
   }
 
   /**
-   * Header drag uses manual mouse tracking instead of the native drag
+   * Header drag uses manual pointer tracking instead of the native drag
    * region: presses on empty header space (title/gaps) move the window via
    * `setPosition`, while presses resolving to a button keep native behavior
    * (target may be a text node, so walk up to the nearest element first).
+   * Pointer capture on the header guarantees `pointerup`/`pointercancel`
+   * delivery even when the cursor outruns the moving window (the async
+   * `setPosition` round-trip lags fast mouse movement, so a plain `mouseup`
+   * listener on the DOM window can miss the release and leave the panel
+   * stuck following the cursor).
    */
   function isButtonPress(event: MouseEvent): boolean {
     let node: Node | null = event.target instanceof Node ? event.target : null;
@@ -160,8 +165,15 @@
     scale: number;
   } | null = null;
 
-  async function startHeaderDrag(event: MouseEvent) {
-    if (!isTauriRuntime() || event.button !== 0 || isButtonPress(event)) return;
+  async function startHeaderDrag(event: PointerEvent) {
+    if (
+      !isTauriRuntime() ||
+      event.button !== 0 ||
+      event.isPrimary === false ||
+      isButtonPress(event)
+    )
+      return;
+    if (dragState) return;
     const win = await resolveFloatWindow();
     if (!win) return;
     try {
@@ -173,15 +185,30 @@
         winY: pos.y,
         scale,
       };
-      window.addEventListener("mousemove", onHeaderDragMove);
-      window.addEventListener("mouseup", endHeaderDrag, { once: true });
+      const header = event.currentTarget instanceof Element ? event.currentTarget : null;
+      try {
+        header?.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture is best-effort; the window-level listeners below
+        // still end the drag for releases inside the webview.
+      }
+      window.addEventListener("pointermove", onHeaderDragMove);
+      window.addEventListener("pointerup", endHeaderDrag);
+      window.addEventListener("pointercancel", endHeaderDrag);
+      window.addEventListener("lostpointercapture", endHeaderDrag);
     } catch {
       dragState = null;
     }
   }
 
-  function onHeaderDragMove(event: MouseEvent) {
+  function onHeaderDragMove(event: PointerEvent) {
     if (!dragState || !floatWin) return;
+    if (event.buttons === 0 && event.pointerType === "mouse") {
+      // Safety net: the release was missed (e.g. outside the webview), so a
+      // button-less move must end the drag instead of following the cursor.
+      endHeaderDrag();
+      return;
+    }
     const x = Math.round(dragState.winX + (event.screenX - dragState.startX) * dragState.scale);
     const y = Math.round(dragState.winY + (event.screenY - dragState.startY) * dragState.scale);
     void floatWin.setPosition(new PhysicalPosition(x, y)).catch(() => {});
@@ -189,13 +216,16 @@
 
   function endHeaderDrag() {
     dragState = null;
-    window.removeEventListener("mousemove", onHeaderDragMove);
+    window.removeEventListener("pointermove", onHeaderDragMove);
+    window.removeEventListener("pointerup", endHeaderDrag);
+    window.removeEventListener("pointercancel", endHeaderDrag);
+    window.removeEventListener("lostpointercapture", endHeaderDrag);
   }
 </script>
 
 <div class="float-shell">
   <!-- svelte-ignore a11y_no_static_element_interactions: header is a window drag handle; inner buttons keep native semantics -->
-  <header class="float-header" data-tauri-drag-region onmousedown={startHeaderDrag}>
+  <header class="float-header" data-tauri-drag-region onpointerdown={startHeaderDrag}>
     <span class="float-title">{_t("float.title")}</span>
     <div class="float-tabs" role="tablist" aria-label={_t("float.title")}>
       <button
