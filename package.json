@@ -1,6 +1,6 @@
 {
   "name": "clipboard-desktop",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "A high-performance cross-platform clipboard manager built with Tauri and Rust.",
   "type": "module",
   "scripts": {

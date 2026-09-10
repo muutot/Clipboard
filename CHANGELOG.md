@@ -1,5 +1,91 @@
 # Changelog
 
+## 1.5.2 (2026-09-10)
+
+### ✨ Features
+
+- **privacy**: audit log redline and drop clipboard payload from console (9e996f6b)
+- **security**: store sync secrets in the OS keychain on macOS and Linux (170765c6)
+- **security**: validate replace-icon sources as real images (bc0eb8c4)
+- **settings**: consume cardCustomTitleHeight for custom-title cards and expose its slider (b44e0863)
+- **settings**: treat card height settings as content heights expanded by padding for every kind (7aef5e93)
+- **settings**: make compact layout the always-on default and remove the compact mode toggle (a427b850)
+
+### 🐛 Bug Fixes
+
+- **macos**: replace deprecated libc mach_task_self with mach2 trap (ac5241fa)
+- **theme**: show readonly color list for built-in themes, restrict editing to custom theme (6fcd2049)
+
+### 🚀 Performance
+
+- **macos**: sample RSS via task_info with ps fallback (c1a8e0da)
+
+### ♻️ Refactoring
+
+- **security**: route sync secrets through a platform secret-store facade (2e720ca0)
+- **platform**: share uri-list parser between X11 and Wayland readers (30198682)
+- **layout**: remove unused TEXT_HEIGHT and IMAGE_HEIGHT constants (37c1f87e)
+- **settings**: rename compact layout fields to card/search names with serde aliases (589395d6)
+
+### 🎨 Styling
+
+- **theme**: apply prettier formatting (35248520)
+- **main**: adjust filter button padding from 0 9px to 0 8px (f5ec4c56)
+- **main**: make search-header vertical padding consistent (08a2ee2e)
+- **main**: group filter dropdowns with toolbar actions on right (0548502b)
+- **settings**: center tag empty-state and fix vertical centering (67841ba6)
+- **main**: add 2px gap to toolbar groups (f42eb8f1)
+
+### 📝 Documentation
+
+- **todo**: defer MinIO smoke with rationale, close 1.5.3 scope (89df4046)
+- **todo**: defer SBOM with rationale, close 1.5.2 scope (9fe097e9)
+- **todo**: add verified 1.5.2-1.6 roadmap with evidence (b1ee17fd)
+- **skill**: enforce English-only commit messages (0c321439)
+
+## 1.5.2 (2026-09-10)
+
+### ✨ Features
+
+- **privacy**: audit log redline and drop clipboard payload from console (9e996f6b)
+- **security**: store sync secrets in the OS keychain on macOS and Linux (170765c6)
+- **security**: validate replace-icon sources as real images (bc0eb8c4)
+- **settings**: consume cardCustomTitleHeight for custom-title cards and expose its slider (b44e0863)
+- **settings**: treat card height settings as content heights expanded by padding for every kind (7aef5e93)
+- **settings**: make compact layout the always-on default and remove the compact mode toggle (a427b850)
+
+### 🐛 Bug Fixes
+
+- **macos**: replace deprecated libc mach_task_self with mach2 trap (ac5241fa)
+- **theme**: show readonly color list for built-in themes, restrict editing to custom theme (6fcd2049)
+
+### 🚀 Performance
+
+- **macos**: sample RSS via task_info with ps fallback (c1a8e0da)
+
+### ♻️ Refactoring
+
+- **security**: route sync secrets through a platform secret-store facade (2e720ca0)
+- **platform**: share uri-list parser between X11 and Wayland readers (30198682)
+- **layout**: remove unused TEXT_HEIGHT and IMAGE_HEIGHT constants (37c1f87e)
+- **settings**: rename compact layout fields to card/search names with serde aliases (589395d6)
+
+### 🎨 Styling
+
+- **theme**: apply prettier formatting (35248520)
+- **main**: adjust filter button padding from 0 9px to 0 8px (f5ec4c56)
+- **main**: make search-header vertical padding consistent (08a2ee2e)
+- **main**: group filter dropdowns with toolbar actions on right (0548502b)
+- **settings**: center tag empty-state and fix vertical centering (67841ba6)
+- **main**: add 2px gap to toolbar groups (f42eb8f1)
+
+### 📝 Documentation
+
+- **todo**: defer MinIO smoke with rationale, close 1.5.3 scope (89df4046)
+- **todo**: defer SBOM with rationale, close 1.5.2 scope (9fe097e9)
+- **todo**: add verified 1.5.2-1.6 roadmap with evidence (b1ee17fd)
+- **skill**: enforce English-only commit messages (0c321439)
+
 ## 1.5.1 (2026-09-01)
 
 ### ✨ Features

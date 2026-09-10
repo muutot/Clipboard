@@ -1,51 +1,42 @@
-﻿# Clipboard Desktop v1.5.1
+﻿# Clipboard Desktop v1.5.2
 
-> 增量打磨：分组标签显示、同步链路与设置面板的细节修复
+> macOS 构建修复、密钥链存储与卡片高度打磨
 >
-> Released: 2026-09-01
+> Released: 2026-09-10
 
 ---
 
-## 分组与紧凑模式
+## macOS 构建与性能修复
 
-- **分组标签显示模式** — 新增图标+文字/仅图标/仅文字三档切换，适配紧凑与常规布局 | [`6e37bf2`](https://github.com/muutot/Clipboard/commit/6e37bf23)
-- **紧凑模式默认开启并收紧参数** — 默认启用紧凑布局，微调卡片与行高指标 | [`e720287`](https://github.com/muutot/Clipboard/commit/e7202879) [`b6b5d70`](https://github.com/muutot/Clipboard/commit/b6b5d708)
-
----
-
-## 同步与设置重构
-
-- **同步页面重构** — S3 页以“测试连接”为首项、移除外层卡片与 Advanced 标题，按 cloud / advanced / s3 重排为 cloud+S3 二级页 | [`a024de9`](https://github.com/muutot/Clipboard/commit/a024de97) [`e9f0cab`](https://github.com/muutot/Clipboard/commit/e9f0cab2) [`7fe056a`](https://github.com/muutot/Clipboard/commit/7fe056ae) [`d1716af`](https://github.com/muutot/Clipboard/commit/d1716afe)
-- **设置面板惰性化与入口收敛** — OCR/存储路径/传输/同步/S3 等抽取为独立惰性面板，统一经 `LAZY_PANEL_DESCRIPTORS` 描述表分发；S3 同步配置、传输导入导出、存储路径管理分别由 `SyncPanel`/`TransferPanel`/`StoragePathsPanel` 承载 | [`1a4a6e5`](https://github.com/muutot/Clipboard/commit/1a4a6e5f) [`a5d9772`](https://github.com/muutot/Clipboard/commit/a5d9772b) [`31e6adb`](https://github.com/muutot/Clipboard/commit/31e6adbd) [`c7d6014`](https://github.com/muutot/Clipboard/commit/c7d60141)
-- **面包屑与导航** — 面包屑完全由导航元数据推导，多标签组统一二级路径；修复分组切换与存储状态空值访问 | [`af7b99d`](https://github.com/muutot/Clipboard/commit/af7b99d7) [`22a883b`](https://github.com/muutot/Clipboard/commit/22a883bb) [`12c233d`](https://github.com/muutot/Clipboard/commit/12c233dd) [`66f4c05`](https://github.com/muutot/Clipboard/commit/66f4c054)
+- **构建修复** — `libc::mach_task_self` 已废弃，改用 `mach2` trap，修复 `-D warnings` 下 macOS 编译失败 | [`ac5241f`](https://github.com/muutot/Clipboard/commit/ac5241fad6f078991a3fd852f2c19e26bcc71cd5)
+- **内存采样** — 经 `task_info`（`MACH_TASK_BASIC_INFO`）进程内查询 RSS，失败时回退到 `ps`，替代每次快照 fork 与 CSV 解析 | [`c1a8e0d`](https://github.com/muutot/Clipboard/commit/c1a8e0da3bc95c519884249938c0eeb7bb01c4f7)
 
 ---
 
-## 样式与交互细节
+## 安全与隐私
 
-- **按钮居中与工具栏间距** — 图标+文字按钮在 5 处统一改为 `inline-flex + justify-center + line-height:1` 水平垂直居中；移除工具栏按钮组间 `3px` 间隙 | [`554a35a`](https://github.com/muutot/Clipboard/commit/554a35a3) [`5ec8e44`](https://github.com/muutot/Clipboard/commit/5ec8e442)
-- **设置条目 28px 规范化** — 统一入口按钮/下拉至固定 28px 高度，恢复资源路径网格输入的共享控件样式 | [`60b80b4`](https://github.com/muutot/Clipboard/commit/60b80b42) [`71e5aa2`](https://github.com/muutot/Clipboard/commit/71e5aa29)
-- **设置视觉打磨** — 补齐 `entry-textarea`/`entry-actions` 共享规则、资源路径与动作行间距、关闭按钮图标化及同步行图标等 | [`338233c`](https://github.com/muutot/Clipboard/commit/338233cf) [`0800776`](https://github.com/muutot/Clipboard/commit/08007763) [`7f28870`](https://github.com/muutot/Clipboard/commit/7f28870a) [`2994cb5`](https://github.com/muutot/Clipboard/commit/2994cb54)
-- **同步反馈** — S3 测试连接结果经 toast 展示并防标签抖动；未选 S3 时禁用测试并给出文案提示 | [`0b4b08c`](https://github.com/muutot/Clipboard/commit/0b4b08c1) [`a0ae974`](https://github.com/muutot/Clipboard/commit/a0ae9747) [`e3f9882`](https://github.com/muutot/Clipboard/commit/e3f98821)
-
----
-
-## 搜索、OCR 与稳定性
-
-- **搜索** — 标题/类型排序支持升序；标题排序与 `cycleFilter` 守卫、历史筛选、搜索缓存维护等抽取为独立工具并补 Vitest 覆盖 | [`417896d`](https://github.com/muutot/Clipboard/commit/417896db) [`6661456`](https://github.com/muutot/Clipboard/commit/6661456d) [`ac11e58`](https://github.com/muutot/Clipboard/commit/ac11e58b) [`990906a`](https://github.com/muutot/Clipboard/commit/990906a8)
-- **OCR** — 回退引擎使用 `tesseract_languages` 配置而非硬编码 `chi_sim`；检测滑条迁移至 `SliderEntry` | [`d92a409`](https://github.com/muutot/Clipboard/commit/d92a4098) [`498d031`](https://github.com/muutot/Clipboard/commit/498d0311) [`fd06ac3`](https://github.com/muutot/Clipboard/commit/fd06ac3b)
-- **前端一致性** — 修复注释与删除占位符乱码、批量删除结果重命名残留、窗口边界持久化与搜索历史帮助函数等 | [`b3bba33`](https://github.com/muutot/Clipboard/commit/b3bba33e) [`313a8b0`](https://github.com/muutot/Clipboard/commit/313a8b03) [`666c2f5`](https://github.com/muutot/Clipboard/commit/666c2f51) [`8f13e4c`](https://github.com/muutot/Clipboard/commit/8f13e4c2)
+- **密钥链存储** — 同步密钥在 macOS 走钥匙串、Linux 走 Secret Service，统一经平台 secret-store 门面路由 | [`170765c`](https://github.com/muutot/Clipboard/commit/170765c6b6b68078063074f559577b41178fbd21) [`2e720ca`](https://github.com/muutot/Clipboard/commit/2e720ca04e88ea48493f43b6717ea895278f2212)
+- **审计日志脱敏** — 审计日志打码，剪贴板原文不再输出到控制台 | [`9e996f6`](https://github.com/muutot/Clipboard/commit/9e996f6b9c7e8562cbf7171e7354bcf5a7372ebe)
+- **图标来源校验** — 替换图标仅接受真实图片输入 | [`bc0eb8c`](https://github.com/muutot/Clipboard/commit/bc0eb8c4c48e5b9ca06e3d7e35ad3196333ece71)
 
 ---
 
-## 工程与依赖
+## 设置与主题打磨
 
-- **依赖升级** — `zip 8`、`RustCrypto 0.11/0.13 + rand 0.10`、`oar-ocr 0.9.2 / ort rc.13 / window-vibrancy 0.8`；移除 `walkdir`，补 `lockfile` | [`f5cde22`](https://github.com/muutot/Clipboard/commit/f5cde221) [`eb81336`](https://github.com/muutot/Clipboard/commit/eb813364) [`942af68`](https://github.com/muutot/Clipboard/commit/942af689) [`4f3d9b5`](https://github.com/muutot/Clipboard/commit/4f3d9b5c)
-- **测试与工具抽取** — 快捷键目标检测、日期查询边界、卡片高度估算及批删规划/回滚快照等补单测 | [`47cd5af`](https://github.com/muutot/Clipboard/commit/47cd5afd) [`f866f40`](https://github.com/muutot/Clipboard/commit/f866f408) [`696959c`](https://github.com/muutot/Clipboard/commit/696959c1) [`88f3443`](https://github.com/muutot/Clipboard/commit/88f34430)
+- **卡片高度** — 紧凑布局改为常开默认并移除开关；卡片高度设置统一为内容高度+内边距展开，自定义标题卡片接入 `cardCustomTitleHeight` 滑条 | [`a427b85`](https://github.com/muutot/Clipboard/commit/a427b85057451fa303b46f4c8352bcd7eded12cf) [`7aef5e9`](https://github.com/muutot/Clipboard/commit/7aef5e93a744e0ab15e04d578889822237306228) [`b44e086`](https://github.com/muutot/Clipboard/commit/b44e0863cf473d12bbac53a1c599762adb2ba07b) [`589395d`](https://github.com/muutot/Clipboard/commit/589395d68870dd4aa8b90852fffd0667aa6479c4)
+- **主题** — 内置主题显示只读颜色列表，仅自定义主题可编辑；应用 prettier 格式化 | [`6fcd204`](https://github.com/muutot/Clipboard/commit/6fcd2049e2cb40ef371d189334514334abf013d8) [`3524852`](https://github.com/muutot/Clipboard/commit/35248520e0dd263765d29610b51a2a099457d57b)
+- **主界面** — 筛选按钮内边距、搜索头垂直内边距、工具栏分组间隙与筛选下拉右置分组等细节对齐 | [`f5ec4c5`](https://github.com/muutot/Clipboard/commit/f5ec4c562a5aca667d47deb53c1ce22709766b04) [`08a2ee2`](https://github.com/muutot/Clipboard/commit/08a2ee2e2b7bce757da73289d83aaf0c33eb669a) [`0548502`](https://github.com/muutot/Clipboard/commit/0548502bd4f52f0b518680f2befe3cb5cd281398) [`f42eb8f`](https://github.com/muutot/Clipboard/commit/f42eb8f1b3421ad38459691ab3b6c82eb1107425) [`67841ba`](https://github.com/muutot/Clipboard/commit/67841ba6585c5db60ddddd8726a0a3023123d73f)
+
+---
+
+## 工程与文档
+
+- **平台重构** — X11/Wayland 共用 uri-list 解析器；移除无用 `TEXT_HEIGHT`/`IMAGE_HEIGHT` 常量 | [`3019868`](https://github.com/muutot/Clipboard/commit/30198682f93c5b19f46ed74fa4cb6f587d459198) [`37c1f87`](https://github.com/muutot/Clipboard/commit/37c1f87ec423cd628b53c0b36d00eb6779e4fd16)
+- **路线图** — 落定 1.5.2–1.6 已验证路线，MinIO/SBOM 延期并注明原因；提交信息强制英文 | [`b1ee17f`](https://github.com/muutot/Clipboard/commit/b1ee17fd4b69d90cb3579492b96c232efb986e68) [`89df404`](https://github.com/muutot/Clipboard/commit/89df404650118a58fe5983c0f8f30315599bf4c8) [`9fe097e`](https://github.com/muutot/Clipboard/commit/9fe097e9562391cfa8ba0123b5674b6120074ccd) [`0c32143`](https://github.com/muutot/Clipboard/commit/0c3214396e5de2635e2d5004d29fdd0b24baba87)
 
 ---
 
 ## 构建产物
 
-- **MSI 安装包**: `Clipboard_1.5.1_x64_en-US.msi`
-- **NSIS 安装包**: `Clipboard_1.5.1_x64-setup.exe`
+- **MSI 安装包**: `Clipboard_1.5.2_x64_en-US.msi`
+- **NSIS 安装包**: `Clipboard_1.5.2_x64-setup.exe`
