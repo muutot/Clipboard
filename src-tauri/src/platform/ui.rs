@@ -154,10 +154,16 @@ impl SystemTray {
             show_main_window(app);
         } else if id == Self::FLOAT_MENU_ID {
             // Same swap as every other entry point; never depends on the
-            // main window's frontend state.
-            if let Err(error) = crate::commands::float::toggle_float_panel(app.clone()) {
-                crate::log_event!("[tray] failed to toggle the float panel: {error}");
-            }
+            // main window's frontend state. Window creation dispatches to
+            // the event loop and blocks for the response, while this menu
+            // callback itself runs on the event loop thread — building
+            // inline would self-deadlock. Offload to a worker thread.
+            let app = app.clone();
+            std::thread::spawn(move || {
+                if let Err(error) = crate::commands::float::toggle_float_panel(app) {
+                    crate::log_event!("[tray] failed to toggle the float panel: {error}");
+                }
+            });
         } else if id == Self::SETTINGS_MENU_ID {
             show_main_window(app);
             let _ = app.emit("tray-open-settings", ());

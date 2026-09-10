@@ -48,6 +48,11 @@ pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
 /// Focuses the float panel, creating it at the configured initial position
 /// on first open. Closed windows are destroyed by the runtime, so a missing
 /// handle simply means "build it again".
+///
+/// Must not run on the event-loop thread (e.g. directly inside a tray menu
+/// callback): window creation dispatches to the event loop and blocks for
+/// the response, which self-deadlocks there. Offload to a worker thread
+/// from such call sites.
 #[tauri::command]
 pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
