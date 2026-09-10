@@ -19,9 +19,11 @@ const FLOAT_HEIGHT: f64 = 480.0;
 /// in-app shortcut) funnels through this single swap so behavior is uniform.
 #[tauri::command]
 pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    crate::log_event!("[float] toggle requested");
     let float_visible = app
         .get_webview_window(FLOAT_WINDOW_LABEL)
         .is_some_and(|window| window.is_visible().unwrap_or(false));
+    crate::log_event!("[float] existing visible: {float_visible}");
     if float_visible {
         if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
             window
@@ -39,9 +41,11 @@ pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
         return Ok(());
     }
     open_float_panel(app.clone())?;
+    crate::log_event!("[float] panel shown, hiding main");
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
+    crate::log_event!("[float] toggle done");
     Ok(())
 }
 
@@ -80,9 +84,11 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
             builder = builder.center();
         }
     }
+    crate::log_event!("[float] building window");
     builder
         .build()
         .map_err(|error| format!("failed to open the float panel: {error}"))?;
+    crate::log_event!("[float] window built");
     Ok(())
 }
 
