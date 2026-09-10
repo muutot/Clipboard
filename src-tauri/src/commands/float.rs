@@ -40,10 +40,21 @@ pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result
         }
         return Ok(());
     }
-    open_float_panel(app.clone())?;
-    crate::log_event!("[float] panel shown, hiding main");
+    // Hide the main window BEFORE creating the float window so creation
+    // happens under the same conditions as the proven tray path (no
+    // visibility/focus overlap while the new webview paints). On failure the
+    // main window is restored so the user is never left with nothing.
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
+    }
+    if let Err(error) = open_float_panel(app.clone()) {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+        }
+        return Err(error);
+    }
+    if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
+        let _ = window.set_focus();
     }
     crate::log_event!("[float] toggle done");
     Ok(())
