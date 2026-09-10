@@ -102,6 +102,13 @@ fn float_initial_position<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Optio
         return None;
     }
     let area = monitor.work_area();
+    crate::log_event!(
+        "[float] monitor scale={scale} work_area=({},{} {}x{})",
+        area.position.x,
+        area.position.y,
+        area.size.width,
+        area.size.height
+    );
     let origin_x = area.position.x as f64 / scale;
     let origin_y = area.position.y as f64 / scale;
     let area_w = area.size.width as f64 / scale;
@@ -113,6 +120,9 @@ fn float_initial_position<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Optio
         area_w,
         area_h,
     ))
+    .inspect(|(x, y)| {
+        crate::log_event!("[float] place={place} at ({x},{y})");
+    })
 }
 
 /// Maps a configured position name onto a work-area origin. Unknown names
