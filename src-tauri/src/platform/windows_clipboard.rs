@@ -66,6 +66,7 @@ pub const MOD_SHIFT: u32 = 0x0004;
 pub const MOD_WIN: u32 = 0x0008;
 
 pub const VK_V: u32 = 0x56;
+pub const VK_C: u32 = 0x43;
 
 const APP_ICON_SIZE: u32 = 32;
 pub const SELF_TRIGGER_FORMAT_NAME: &str = "ClipboardDesktop.SelfTrigger.v1";

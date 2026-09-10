@@ -631,9 +631,9 @@ pub fn run() {
                 if !bindings.is_empty() || !double_modifiers.is_empty() {
                     hotkey_manager.start_with_hotkeys(bindings, double_modifiers, window.clone());
                 } else {
-                    crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+V");
+                    crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+C");
                     use platform::windows_clipboard;
-                    hotkey_manager.start_with_window(windows_clipboard::MOD_ALT, windows_clipboard::VK_V, window.clone());
+                    hotkey_manager.start_with_window(windows_clipboard::MOD_ALT, windows_clipboard::VK_C, window.clone());
                 }
                 // Float-panel chords share the same message loop; an empty
                 // list simply registers nothing.
