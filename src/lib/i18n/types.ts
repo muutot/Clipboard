@@ -62,7 +62,14 @@ export interface LocaleDefinition {
     clearHistory: string;
     help: string;
     pinWindow: string;
+    floatPanel: string;
     settings: string;
+  };
+  float: {
+    title: string;
+    all: string;
+    favorites: string;
+    empty: string;
   };
   status: {
     searching: string;

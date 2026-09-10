@@ -31,6 +31,7 @@
     generatedClipboardTitle,
     materializeClipboardItem,
     toClipboardItem,
+    copyClipboardItem,
     writeClipboardImage,
     writeClipboardText,
     writeClipboardHtml,
@@ -746,6 +747,10 @@
       openSettings();
     });
 
+    const unlistenTrayOpenFloat = listen("tray-open-float", () => {
+      void openFloatPanel();
+    });
+
     const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
     let previousRememberWindowPosition = false;
 
@@ -856,6 +861,7 @@
       void unlisten.then((fn) => fn()).catch(() => {});
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
+      void unlistenTrayOpenFloat.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
       unsubSettings();
@@ -1235,6 +1241,39 @@
   }
 
   let settingsWindowOpening = $state(false);
+  let floatWindowOpening = $state(false);
+
+  async function openFloatPanel() {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    if (floatWindowOpening) return;
+    floatWindowOpening = true;
+    try {
+      const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+      const existing = await WebviewWindow.getByLabel("float");
+      if (existing) {
+        existing.setFocus();
+        return;
+      }
+      const floatBg =
+        getComputedStyle(document.documentElement).getPropertyValue("--bg-app").trim() || "#1b1b1b";
+      const floatWindow = new WebviewWindow("float", {
+        url: "/float",
+        title: "Float",
+        width: 320,
+        height: 480,
+        minWidth: 260,
+        minHeight: 320,
+        center: true,
+        resizable: true,
+        decorations: false,
+        alwaysOnTop: true,
+        focus: true,
+        backgroundColor: floatBg,
+      });
+    } finally {
+      floatWindowOpening = false;
+    }
+  }
 
   async function openSettings() {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -1470,73 +1509,12 @@
   }
 
   async function copyItem(id: string) {
-    let item = findLoadedItem(id);
+    const item = findLoadedItem(id);
     if (!item) return;
-
-    if (item.kind === "image" || item.kind === "file") {
-      try {
-        item = await ensureItemMaterialized(item);
-      } catch (error) {
-        console.error("Unable to materialize clipboard item for copy", error);
-        showToast(_t("toast.copyFailed"), "error");
-        return;
-      }
-    }
-
-    if ($generalSettings.pinCopiedToTop) moveToTop(id);
-
-    void persistLastUsed(id);
-
-    if (item.kind === "image" && item.resourcePath) {
-      try {
-        const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
-        const response = await fetch(src);
-        const blob = await response.blob();
-        await writeClipboardImage(blob, item.resourcePath, item.contentHash);
-        statusMessage = _t("app.copiedItem", { title: getDisplayTitle(item.title) });
-        showToast(_t("toast.copySuccess"), "success");
-      } catch {
-        showToast(_t("toast.copyFailed"), "error");
-      }
-      return;
-    }
-
-    if (item.kind === "file") {
-      if (item.textContent && item.textContent.startsWith("[")) {
-        try {
-          const paths = JSON.parse(item.textContent) as string[];
-          if (paths.length > 1) {
-            await writeClipboardText(paths.join("\n"));
-            statusMessage = _t("app.copiedItem", { title: getDisplayTitle(item.title) });
-            showToast(_t("toast.copySuccess"), "success");
-            return;
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-      if (item.resourcePath) {
-        try {
-          await writeClipboardText(item.resourcePath);
-          statusMessage = _t("app.copiedItem", {
-            title: item.fileName || getDisplayTitle(item.title),
-          });
-          showToast(_t("toast.copySuccess"), "success");
-        } catch {
-          showToast(_t("toast.copyFailed"), "error");
-        }
-      }
-      return;
-    }
-
-    void writeClipboardText(item.textContent || item.title)
-      .then(() => {
-        statusMessage = _t("app.copiedItem", { title: getDisplayTitle(item.title) });
-        showToast(_t("toast.copySuccess"), "success");
-      })
-      .catch(() => {
-        showToast(_t("toast.copyFailed"), "error");
-      });
+    await copyClipboardItem(item, {
+      moveToTop: $generalSettings.pinCopiedToTop ? (mid) => moveToTop(mid) : undefined,
+      onstatus: (message) => (statusMessage = message),
+    });
   }
 
   async function openDetail(id: string) {
@@ -2899,6 +2877,12 @@
           onclick={() =>
             generalSettings.updateSetting("alwaysOnTop", !$generalSettings.alwaysOnTop)}
           ><AppIcon name="window-top" size={17} /></button
+        >
+        <button
+          type="button"
+          aria-label={_t("toolbar.floatPanel")}
+          title={_t("toolbar.floatPanel")}
+          onclick={() => void openFloatPanel()}><AppIcon name="layers" size={17} /></button
         >
         <button
           type="button"

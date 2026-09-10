@@ -62,7 +62,14 @@ const en: LocaleDefinition = {
     clearHistory: "Clear history",
     help: "Help",
     pinWindow: "Pin window",
+    floatPanel: "Float panel",
     settings: "Settings",
+  },
+  float: {
+    title: "Float",
+    all: "All",
+    favorites: "Favorites",
+    empty: "No records yet",
   },
   status: {
     searching: "Searching...",

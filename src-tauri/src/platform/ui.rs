@@ -20,6 +20,7 @@ pub struct SystemTray;
 
 impl SystemTray {
     const SHOW_MENU_ID: &'static str = "tray-show";
+    const FLOAT_MENU_ID: &'static str = "tray-float";
     const SETTINGS_MENU_ID: &'static str = "tray-settings";
     const PAUSE_MENU_ID: &'static str = "tray-pause";
     const RESTART_MENU_ID: &'static str = "tray-restart";
@@ -80,6 +81,9 @@ impl SystemTray {
         let settings_item =
             MenuItem::with_id(app, Self::SETTINGS_MENU_ID, "打开设置", true, None::<&str>)
                 .map_err(|error| format!("failed to create the tray settings item: {error}"))?;
+        let float_item =
+            MenuItem::with_id(app, Self::FLOAT_MENU_ID, "悬浮窗口", true, None::<&str>)
+                .map_err(|error| format!("failed to create the tray float item: {error}"))?;
         let recording_enabled = !app
             .try_state::<CaptureState>()
             .is_some_and(|c| c.is_paused());
@@ -102,6 +106,7 @@ impl SystemTray {
             app,
             &[
                 &show_item,
+                &float_item,
                 &settings_item,
                 &pause_item,
                 &recent_submenu,
@@ -147,6 +152,9 @@ impl SystemTray {
     fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
         if id == Self::SHOW_MENU_ID {
             show_main_window(app);
+        } else if id == Self::FLOAT_MENU_ID {
+            show_main_window(app);
+            let _ = app.emit("tray-open-float", ());
         } else if id == Self::SETTINGS_MENU_ID {
             show_main_window(app);
             let _ = app.emit("tray-open-settings", ());

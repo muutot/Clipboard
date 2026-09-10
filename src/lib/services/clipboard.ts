@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "$lib/services/runtime";
+import { showToast } from "$lib/services/toast";
 import type {
   ClipboardItem,
   ClipboardKind,
@@ -309,6 +310,94 @@ export function generatedClipboardTitle(text: string): string {
 export function getDisplayTitle(text: string): string {
   const match = /[^\r\n]+/.exec(text);
   return match ? match[0].trim() : "";
+}
+
+export interface CopyItemHooks {
+  /** Reorder callback (the main list pins the copied entry to the top). */
+  moveToTop?: (id: string) => void;
+  /** Status-line callback; the float panel has no status line. */
+  onstatus?: (message: string) => void;
+}
+
+/**
+ * Copies one history entry back to the system clipboard, shared by the main
+ * list and the float panel. Materializes remote image/file records first,
+ * registers self-trigger marks through the write helpers, and reports
+ * through toasts (plus the optional status hook).
+ */
+export async function copyClipboardItem(
+  item: ClipboardItem,
+  hooks: CopyItemHooks = {},
+): Promise<void> {
+  const locale = getLocale();
+  const messages = locales[locale] ?? locales.en;
+  const t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath(messages, path, params);
+
+  if (item.kind === "image" || item.kind === "file") {
+    try {
+      item = await materializeClipboardItem(item);
+    } catch (error) {
+      console.error("Unable to materialize clipboard item for copy", error);
+      showToast(t("toast.copyFailed"), "error");
+      return;
+    }
+  }
+
+  hooks.moveToTop?.(item.id);
+
+  void persistLastUsed(item.id);
+
+  if (item.kind === "image" && item.resourcePath) {
+    try {
+      const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
+      const response = await fetch(src);
+      const blob = await response.blob();
+      await writeClipboardImage(blob, item.resourcePath, item.contentHash);
+      hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
+      showToast(t("toast.copySuccess"), "success");
+    } catch {
+      showToast(t("toast.copyFailed"), "error");
+    }
+    return;
+  }
+
+  if (item.kind === "file") {
+    if (item.textContent && item.textContent.startsWith("[")) {
+      try {
+        const paths = JSON.parse(item.textContent) as string[];
+        if (paths.length > 1) {
+          await writeClipboardText(paths.join("\n"));
+          hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
+          showToast(t("toast.copySuccess"), "success");
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (item.resourcePath) {
+      try {
+        await writeClipboardText(item.resourcePath);
+        hooks.onstatus?.(
+          t("app.copiedItem", { title: item.fileName || getDisplayTitle(item.title) }),
+        );
+        showToast(t("toast.copySuccess"), "success");
+      } catch {
+        showToast(t("toast.copyFailed"), "error");
+      }
+    }
+    return;
+  }
+
+  void writeClipboardText(item.textContent || item.title)
+    .then(() => {
+      hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
+      showToast(t("toast.copySuccess"), "success");
+    })
+    .catch(() => {
+      showToast(t("toast.copyFailed"), "error");
+    });
 }
 
 export function getDisplayRemainingLines(text: string): string {

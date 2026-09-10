@@ -62,7 +62,14 @@ const zhCN: LocaleDefinition = {
     clearHistory: "清理记录",
     help: "帮助",
     pinWindow: "固定窗口",
+    floatPanel: "悬浮窗口",
     settings: "设置",
+  },
+  float: {
+    title: "悬浮",
+    all: "全部",
+    favorites: "收藏",
+    empty: "暂无记录",
   },
   status: {
     searching: "搜索中…",
