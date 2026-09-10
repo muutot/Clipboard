@@ -314,6 +314,15 @@
       system: true,
     },
     {
+      id: "toggleFloatPanel",
+      labelKey: "keyboard.toggleFloatPanel",
+      descKey: "keyboard.toggleFloatPanelDesc",
+      description: "",
+      icon: "layers",
+      defaults: ["Alt+F"],
+      cat: "system",
+    },
+    {
       id: "hideWindow",
       labelKey: "keyboard.hideWindow",
       descKey: "keyboard.hideWindowDesc",
@@ -358,6 +367,7 @@
       selectAll: "keyboard.select-all",
       quickPaste: "keyboard.quick-paste",
       toggleWindow: "keyboard.toggle-window",
+      toggleFloatPanel: "keyboard.toggle-float-panel",
     };
     return map[action.id] ?? null;
   }

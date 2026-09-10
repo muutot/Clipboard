@@ -35,7 +35,8 @@ export type KeyAction =
   | { type: "bulk-favorite"; prevent: boolean }
   | { type: "toggle-favorite"; id: string; prevent: boolean }
   | { type: "tag-add"; prevent: boolean }
-  | { type: "save-item"; id: string; prevent: boolean };
+  | { type: "save-item"; id: string; prevent: boolean }
+  | { type: "open-float"; prevent: boolean };
 
 export interface KeyActionItem {
   id: string;
@@ -69,6 +70,8 @@ export interface KeyActionContext {
   moveSelectionUp: string[];
   switchFilterNext: string[];
   switchFilterPrev: string[];
+  /** Bindings for the float-panel action (default Alt+F). */
+  toggleFloatBindings: string[];
 }
 
 function isTextInput(target: EventTarget | null): boolean {
@@ -103,6 +106,11 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
 
   if (quickCopyIndex !== null && (!editableTarget || ctx.isSearchInput)) {
     return { type: "quick-copy", index: quickCopyIndex, prevent: true };
+  }
+
+  // Dedicated action bindings win over generic filter shortcuts below.
+  if (ctx.toggleFloatBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
+    return { type: "open-float", prevent: true };
   }
 
   const switchEditableTarget = !editableTarget || ctx.isSearchInput;

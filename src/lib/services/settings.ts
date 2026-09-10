@@ -58,6 +58,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   imageFullscreenMode: "overlay",
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
+  floatPanelPosition: "bottomRight",
   searchHistoryEnabled: false,
   searchPlaceholder: "",
   cardActionsDisplay: "hover",
@@ -203,6 +204,19 @@ function validGroupDisplayMode(
   fallback: GeneralSettings["groupDisplayMode"],
 ): GeneralSettings["groupDisplayMode"] {
   return value === "iconText" || value === "iconOnly" || value === "textOnly" ? value : fallback;
+}
+
+function validFloatPanelPosition(
+  value: unknown,
+  fallback: GeneralSettings["floatPanelPosition"],
+): GeneralSettings["floatPanelPosition"] {
+  return value === "topLeft" ||
+    value === "topRight" ||
+    value === "bottomLeft" ||
+    value === "bottomRight" ||
+    value === "center"
+    ? value
+    : fallback;
 }
 
 const SORT_FIELDS = ["createdAt", "lastUsedAt", "title", "size", "kind", "favorite"] as const;
@@ -489,6 +503,10 @@ function normalizeGeneralSettings(
   result.groupDisplayMode = validGroupDisplayMode(
     source.groupDisplayMode ?? fallback("groupDisplayMode"),
     defaultSettings.groupDisplayMode,
+  );
+  result.floatPanelPosition = validFloatPanelPosition(
+    source.floatPanelPosition ?? fallback("floatPanelPosition"),
+    defaultSettings.floatPanelPosition,
   );
   result.searchSortRules = validSortRules(
     source.searchSortRules ?? fallback("searchSortRules"),

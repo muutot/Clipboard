@@ -473,6 +473,8 @@ export interface LocaleDefinition {
     quickCopyDesc: string;
     toggleWindowDesc: string;
     focusSearchDesc: string;
+    toggleFloatPanel: string;
+    toggleFloatPanelDesc: string;
   };
   capture: {
     settings: string;
@@ -776,6 +778,13 @@ export interface LocaleDefinition {
     detailDisplayModeDescription: string;
     detailDisplayModeOverlay: string;
     detailDisplayModeSplit: string;
+    floatPanelPosition: string;
+    floatPanelPositionDescription: string;
+    floatPanelTopLeft: string;
+    floatPanelTopRight: string;
+    floatPanelBottomLeft: string;
+    floatPanelBottomRight: string;
+    floatPanelCenter: string;
     imageFullscreenButton: string;
     showSecondaryText: string;
     showSecondaryTextDescription: string;

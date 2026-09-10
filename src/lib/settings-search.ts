@@ -739,6 +739,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["Alt+V", "toggle", "热键"],
   ),
   entry(
+    "keyboard.toggle-float-panel",
+    { section: "keyboard_system" },
+    i18n("keyboard.toggleFloatPanel"),
+    "设置打开悬浮窗口的快捷键（主窗口聚焦时可用）",
+    ["Alt+F", "悬浮", "float"],
+  ),
+  entry(
     "keyboard.quick-copy",
     { section: "keyboard_quick" },
     "快速复制第 N 条",

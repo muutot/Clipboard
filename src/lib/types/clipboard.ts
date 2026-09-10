@@ -269,6 +269,9 @@ export type CardActionsDisplay = "hover" | "always";
 /** 分组筛选标签的显示方式：图标+文字 | 仅图标 | 仅文字 */
 export type GroupDisplayMode = "iconText" | "iconOnly" | "textOnly";
 
+/** 悬浮窗口初始位置：左上/右上/左下/右下/中间 */
+export type FloatPanelPosition = "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "center";
+
 export interface FontSizeSettings {
   base: number;
   secondary: number;
@@ -321,6 +324,8 @@ export interface GeneralSettings {
   activePresetId?: string;
   imageFullscreenMode: "overlay" | "desktop";
   viewerBackdropOpacity: number;
+  /** 悬浮窗口初始位置，默认右下 */
+  floatPanelPosition: FloatPanelPosition;
   searchSuggestionMode: SearchSuggestionMode;
   searchHistoryEnabled: boolean;
   /** 搜索框自定义占位文案；空字符串表示使用默认（随语言本地化）文案 */

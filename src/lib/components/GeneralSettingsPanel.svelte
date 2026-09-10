@@ -6,6 +6,7 @@
   import type { Locale } from "$lib/i18n/types";
   import type {
     CardActionsDisplay,
+    FloatPanelPosition,
     GroupDisplayMode,
     SearchSuggestionMode,
     SortRule,
@@ -610,6 +611,21 @@
         { value: "split", label: _t("general.detailDisplayModeSplit") },
       ],
       set: (v) => generalSettings.updateSetting("detailDisplayMode", v as "overlay" | "split"),
+    },
+    {
+      type: "select",
+      icon: "layers",
+      label: _t("general.floatPanelPosition"),
+      desc: _t("general.floatPanelPositionDescription"),
+      get: () => s.floatPanelPosition,
+      options: [
+        { value: "topLeft", label: _t("general.floatPanelTopLeft") },
+        { value: "topRight", label: _t("general.floatPanelTopRight") },
+        { value: "bottomLeft", label: _t("general.floatPanelBottomLeft") },
+        { value: "bottomRight", label: _t("general.floatPanelBottomRight") },
+        { value: "center", label: _t("general.floatPanelCenter") },
+      ],
+      set: (v) => generalSettings.updateSetting("floatPanelPosition", v as FloatPanelPosition),
     },
     {
       type: "toggle",

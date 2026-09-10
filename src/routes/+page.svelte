@@ -61,6 +61,7 @@
     trimLoadedItems as trimLoadedHistory,
   } from "$lib/utils/search-cache";
   import {
+    resolveActionBindings,
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
@@ -333,6 +334,11 @@
   // Configured navigation shortcuts (conf/keyboard.json); same fallback and
   // disable rules as the group-switch bindings above.
   const navigationBindings = $derived(resolveNavigationBindings(keyboardShortcuts));
+
+  // Float-panel shortcut (default Alt+F); empty disables it.
+  const floatPanelBindings = $derived(
+    resolveActionBindings(keyboardShortcuts, "toggleFloatPanel", ["Alt+F"]),
+  );
 
   async function loadKeyboardShortcuts() {
     try {
@@ -1242,7 +1248,6 @@
 
   let settingsWindowOpening = $state(false);
   let floatWindowOpening = $state(false);
-
   async function openFloatPanel() {
     if (!("__TAURI_INTERNALS__" in window)) return;
     if (floatWindowOpening) return;
@@ -1256,14 +1261,21 @@
       }
       const floatBg =
         getComputedStyle(document.documentElement).getPropertyValue("--bg-app").trim() || "#1b1b1b";
+      const floatWidth = 320;
+      const floatHeight = 480;
+      const position = await resolveFloatPanelPosition(floatWidth, floatHeight).catch(
+        () => undefined,
+      );
       const floatWindow = new WebviewWindow("float", {
         url: "/float",
         title: "Float",
-        width: 320,
-        height: 480,
+        width: floatWidth,
+        height: floatHeight,
         minWidth: 260,
         minHeight: 320,
-        center: true,
+        center: position === undefined,
+        x: position?.x,
+        y: position?.y,
         resizable: true,
         decorations: false,
         alwaysOnTop: true,
@@ -1272,6 +1284,41 @@
       });
     } finally {
       floatWindowOpening = false;
+    }
+  }
+
+  /**
+   * Initial float-panel position from settings, resolved against the primary
+   * monitor's work area. Window creation takes logical pixels while monitor
+   * geometry is physical, so convert with the monitor scale factor. Returns
+   * undefined when the monitor is unavailable so the window falls back to
+   * centered.
+   */
+  async function resolveFloatPanelPosition(
+    width: number,
+    height: number,
+  ): Promise<{ x: number; y: number } | undefined> {
+    const { primaryMonitor } = await import("@tauri-apps/api/window");
+    const monitor = await primaryMonitor();
+    if (!monitor) return undefined;
+    const origin = monitor.workArea.position.toLogical(monitor.scaleFactor);
+    const area = monitor.workArea.size.toLogical(monitor.scaleFactor);
+    const place = $generalSettings.floatPanelPosition;
+    switch (place) {
+      case "topLeft":
+        return { x: origin.x, y: origin.y };
+      case "topRight":
+        return { x: origin.x + area.width - width, y: origin.y };
+      case "bottomLeft":
+        return { x: origin.x, y: origin.y + area.height - height };
+      case "center":
+        return {
+          x: Math.round(origin.x + (area.width - width) / 2),
+          y: Math.round(origin.y + (area.height - height) / 2),
+        };
+      case "bottomRight":
+      default:
+        return { x: origin.x + area.width - width, y: origin.y + area.height - height };
     }
   }
 
@@ -2398,6 +2445,9 @@
       case "save-item":
         saveItem(action.id);
         break;
+      case "open-float":
+        void openFloatPanel();
+        break;
     }
   }
 
@@ -2426,6 +2476,7 @@
         moveSelectionUp: navigationBindings.moveSelectionUp,
         switchFilterNext: navigationBindings.switchFilterNext,
         switchFilterPrev: navigationBindings.switchFilterPrev,
+        toggleFloatBindings: floatPanelBindings,
       }),
     );
   }

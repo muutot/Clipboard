@@ -43,3 +43,12 @@ export function resolveNavigationBindings(
   }
   return result;
 }
+
+/** Single-action binding with fallback default (absent) or disabled (empty). */
+export function resolveActionBindings(
+  shortcuts: Record<string, string[]>,
+  action: string,
+  fallback: string[],
+): string[] {
+  return readBinding(shortcuts, action, fallback);
+}

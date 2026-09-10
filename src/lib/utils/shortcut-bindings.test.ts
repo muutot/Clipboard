@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveFilterShortcutBindings, resolveNavigationBindings } from "./shortcut-bindings";
+import {
+  resolveActionBindings,
+  resolveFilterShortcutBindings,
+  resolveNavigationBindings,
+} from "./shortcut-bindings";
 
 describe("resolveFilterShortcutBindings", () => {
   it("falls back to Alt+position for absent actions", () => {
@@ -54,5 +58,17 @@ describe("resolveNavigationBindings", () => {
     expect(bindings.moveSelectionDown).toEqual(["ArrowDown"]);
     expect(bindings.switchFilterNext).toEqual([]);
     expect(bindings.switchFilterPrev).toEqual(["ArrowLeft", "Shift+Tab"]);
+  });
+});
+
+describe("resolveActionBindings", () => {
+  it("falls back, honors overrides, and treats empty as disabled", () => {
+    expect(resolveActionBindings({}, "toggleFloatPanel", ["Alt+F"])).toEqual(["Alt+F"]);
+    expect(
+      resolveActionBindings({ toggleFloatPanel: ["Ctrl+F"] }, "toggleFloatPanel", ["Alt+F"]),
+    ).toEqual(["Ctrl+F"]);
+    expect(resolveActionBindings({ toggleFloatPanel: [] }, "toggleFloatPanel", ["Alt+F"])).toEqual(
+      [],
+    );
   });
 });
