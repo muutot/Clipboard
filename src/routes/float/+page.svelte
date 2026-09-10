@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { PhysicalPosition } from "@tauri-apps/api/dpi";
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import Toast from "$lib/components/Toast.svelte";
@@ -86,6 +87,7 @@
     }
     return () => {
       disposed = true;
+      endHeaderDrag();
       unlistenAdded?.();
       unlistenFocus?.();
     };
@@ -99,17 +101,59 @@
   }
 
   /**
-   * Header drag uses the programmatic API instead of relying solely on
-   * `data-tauri-drag-region`: presses on empty header space (title/gaps)
-   * must move the window, while buttons keep their own behavior.
+   * Header drag uses manual mouse tracking instead of the native drag
+   * region: presses on empty header space (title/gaps) move the window via
+   * `setPosition`, while presses resolving to a button keep native behavior
+   * (target may be a text node, so walk up to the nearest element first).
    */
-  function startHeaderDrag(event: MouseEvent) {
-    if (!isTauriRuntime()) return;
-    if (event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest("button")) return;
+  function isButtonPress(event: MouseEvent): boolean {
+    let node: Node | null = event.target instanceof Node ? event.target : null;
+    while (node instanceof Element) {
+      if (node.tagName === "BUTTON" || node.closest("button")) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
+  let dragState: {
+    startX: number;
+    startY: number;
+    winX: number;
+    winY: number;
+    scale: number;
+  } | null = null;
+
+  async function startHeaderDrag(event: MouseEvent) {
+    if (!isTauriRuntime() || event.button !== 0 || isButtonPress(event)) return;
+    const win = getCurrentWindow();
+    try {
+      const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
+      dragState = {
+        startX: event.screenX,
+        startY: event.screenY,
+        winX: pos.x,
+        winY: pos.y,
+        scale,
+      };
+      window.addEventListener("mousemove", onHeaderDragMove);
+      window.addEventListener("mouseup", endHeaderDrag, { once: true });
+    } catch {
+      dragState = null;
+    }
+  }
+
+  function onHeaderDragMove(event: MouseEvent) {
+    if (!dragState || !isTauriRuntime()) return;
+    const x = Math.round(dragState.winX + (event.screenX - dragState.startX) * dragState.scale);
+    const y = Math.round(dragState.winY + (event.screenY - dragState.startY) * dragState.scale);
     void getCurrentWindow()
-      .startDragging()
+      .setPosition(new PhysicalPosition(x, y))
       .catch(() => {});
+  }
+
+  function endHeaderDrag() {
+    dragState = null;
+    window.removeEventListener("mousemove", onHeaderDragMove);
   }
 </script>
 
