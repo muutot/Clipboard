@@ -59,6 +59,8 @@ apple-native-keyring-store = { version = "1", features = ["keychain"] }
 # Pinned to 0.2: the 1.x line is still alpha, and the Apple bindings below
 # were verified against the 0.2.189 sources.
 libc = "0.2"
+# mach_task_self() is deprecated in libc; the Mach trap lives here now.
+mach2 = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # crypto-rust keeps crypto in pure Rust. OpenSSL and libdbus link against the

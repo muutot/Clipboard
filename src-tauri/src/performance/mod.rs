@@ -313,7 +313,8 @@ fn current_process_memory_bytes() -> u64 {
 /// Resident set size of the current process via `task_info` with the 64-bit
 /// `MACH_TASK_BASIC_INFO` flavor. Binding shapes (`mach_task_basic_info`,
 /// flavor/count constants, `task_info_t`) come from the pinned libc crate, so
-/// no hand-rolled struct layout is involved.
+/// no hand-rolled struct layout is involved. The task port trap itself comes
+/// from `mach2` because `libc::mach_task_self` is deprecated.
 #[cfg(target_os = "macos")]
 fn macos_current_process_rss_bytes() -> Option<u64> {
     // SAFETY: a zeroed info struct is valid task_info output; `resident_size`
@@ -323,7 +324,7 @@ fn macos_current_process_rss_bytes() -> Option<u64> {
         let mut info: libc::mach_task_basic_info = std::mem::zeroed();
         let mut count = libc::MACH_TASK_BASIC_INFO_COUNT;
         let ret = libc::task_info(
-            libc::mach_task_self(),
+            mach2::traps::mach_task_self(),
             libc::MACH_TASK_BASIC_INFO,
             &mut info as *mut _ as libc::task_info_t,
             &mut count,
