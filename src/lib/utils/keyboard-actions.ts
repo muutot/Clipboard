@@ -70,7 +70,7 @@ export interface KeyActionContext {
   moveSelectionUp: string[];
   switchFilterNext: string[];
   switchFilterPrev: string[];
-  /** Bindings for the float-panel action (default Alt+V). */
+  /** Bindings for the float-panel action (canonical default, empty disables). */
   toggleFloatBindings: string[];
 }
 

@@ -9,6 +9,7 @@
     resetKeyboardConfig,
     type KeyboardConfig,
   } from "$lib/services/keyboard";
+  import { defaultShortcutsFor } from "$lib/keyboard-defaults";
   import { messages, resolvePath } from "$lib/i18n";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -57,7 +58,7 @@
       descKey: "keyboard.copyItemDesc",
       description: "",
       icon: "copy",
-      defaults: ["Ctrl+C", "Enter"],
+      defaults: defaultShortcutsFor("copyItem"),
       cat: "item",
     },
     {
@@ -66,7 +67,7 @@
       descKey: "keyboard.deleteItemDesc",
       description: "",
       icon: "trash",
-      defaults: ["Ctrl+D"],
+      defaults: defaultShortcutsFor("deleteItem"),
       cat: "item",
     },
     {
@@ -75,7 +76,7 @@
       descKey: "keyboard.favoriteItemDesc",
       description: "",
       icon: "star",
-      defaults: ["Ctrl+F"],
+      defaults: defaultShortcutsFor("favoriteItem"),
       cat: "item",
     },
     {
@@ -84,7 +85,7 @@
       descKey: "keyboard.addTagDesc",
       description: "",
       icon: "tag",
-      defaults: ["Ctrl+T"],
+      defaults: defaultShortcutsFor("addTag"),
       cat: "item",
     },
     {
@@ -93,7 +94,7 @@
       descKey: "keyboard.moveSelectionDesc",
       description: "",
       icon: "arrow-up",
-      defaults: ["Arrowup"],
+      defaults: defaultShortcutsFor("moveSelectionUp"),
       cat: "switch",
     },
     {
@@ -102,7 +103,7 @@
       descKey: "keyboard.moveSelectionDesc",
       description: "",
       icon: "arrow-down",
-      defaults: ["Arrowdown"],
+      defaults: defaultShortcutsFor("moveSelectionDown"),
       cat: "switch",
     },
     {
@@ -111,7 +112,7 @@
       descKey: "keyboard.switchFilterDesc",
       description: "",
       icon: "arrow-right",
-      defaults: ["Arrowright", "Tab"],
+      defaults: defaultShortcutsFor("switchFilterNext"),
       cat: "switch",
     },
     {
@@ -120,7 +121,7 @@
       descKey: "keyboard.switchFilterDesc",
       description: "",
       icon: "arrow-left",
-      defaults: ["Arrowleft", "Shift+Tab"],
+      defaults: defaultShortcutsFor("switchFilterPrev"),
       cat: "switch",
     },
     {
@@ -129,7 +130,7 @@
       descKey: "keyboard.switchFilterAll",
       description: "",
       icon: "grid",
-      defaults: ["Alt+1"],
+      defaults: defaultShortcutsFor("switchFilter1"),
       cat: "switch",
     },
     {
@@ -138,7 +139,7 @@
       descKey: "keyboard.switchFilterText",
       description: "",
       icon: "grid",
-      defaults: ["Alt+2"],
+      defaults: defaultShortcutsFor("switchFilter2"),
       cat: "switch",
     },
     {
@@ -147,7 +148,7 @@
       descKey: "keyboard.switchFilterLink",
       description: "",
       icon: "grid",
-      defaults: ["Alt+3"],
+      defaults: defaultShortcutsFor("switchFilter3"),
       cat: "switch",
     },
     {
@@ -156,7 +157,7 @@
       descKey: "keyboard.switchFilterImage",
       description: "",
       icon: "grid",
-      defaults: ["Alt+4"],
+      defaults: defaultShortcutsFor("switchFilter4"),
       cat: "switch",
     },
     {
@@ -165,7 +166,7 @@
       descKey: "keyboard.switchFilterFile",
       description: "",
       icon: "grid",
-      defaults: ["Alt+5"],
+      defaults: defaultShortcutsFor("switchFilter5"),
       cat: "switch",
     },
     {
@@ -174,7 +175,7 @@
       descKey: "keyboard.switchFilterFavorite",
       description: "",
       icon: "grid",
-      defaults: ["Alt+6"],
+      defaults: defaultShortcutsFor("switchFilter6"),
       cat: "switch",
     },
     {
@@ -183,7 +184,7 @@
       descKey: "keyboard.switchFilterDeleted",
       description: "",
       icon: "grid",
-      defaults: ["Alt+7"],
+      defaults: defaultShortcutsFor("switchFilter7"),
       cat: "switch",
     },
     {
@@ -192,7 +193,7 @@
       descKey: "keyboard.clearSelectionDesc",
       description: "",
       icon: "x",
-      defaults: ["Backspace"],
+      defaults: defaultShortcutsFor("clearSelection"),
       cat: "item",
     },
     {
@@ -201,7 +202,7 @@
       descKey: "keyboard.viewDetailDesc",
       description: "",
       icon: "eye",
-      defaults: ["Space", "Ctrl+E"],
+      defaults: defaultShortcutsFor("openDetail"),
       cat: "item",
     },
     {
@@ -210,7 +211,7 @@
       descKey: "keyboard.saveItemDesc",
       description: "",
       icon: "download",
-      defaults: ["Ctrl+S"],
+      defaults: defaultShortcutsFor("downloadItem"),
       cat: "item",
     },
     {
@@ -219,7 +220,7 @@
       descKey: "keyboard.selectAllDesc",
       description: "",
       icon: "check",
-      defaults: ["Ctrl+A"],
+      defaults: defaultShortcutsFor("selectAll"),
       cat: "item",
     },
     {
@@ -228,7 +229,7 @@
       descKey: "keyboard.pasteToWindowDesc",
       description: "",
       icon: "clipboard",
-      defaults: [],
+      defaults: defaultShortcutsFor("quickPaste"),
       cat: "item",
     },
     {
@@ -236,7 +237,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+1"],
+      defaults: defaultShortcutsFor("quickCopy1"),
       cat: "quick",
     },
     {
@@ -244,7 +245,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+2"],
+      defaults: defaultShortcutsFor("quickCopy2"),
       cat: "quick",
     },
     {
@@ -252,7 +253,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+3"],
+      defaults: defaultShortcutsFor("quickCopy3"),
       cat: "quick",
     },
     {
@@ -260,7 +261,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+4"],
+      defaults: defaultShortcutsFor("quickCopy4"),
       cat: "quick",
     },
     {
@@ -268,7 +269,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+5"],
+      defaults: defaultShortcutsFor("quickCopy5"),
       cat: "quick",
     },
     {
@@ -276,7 +277,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+6"],
+      defaults: defaultShortcutsFor("quickCopy6"),
       cat: "quick",
     },
     {
@@ -284,7 +285,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+7"],
+      defaults: defaultShortcutsFor("quickCopy7"),
       cat: "quick",
     },
     {
@@ -292,7 +293,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+8"],
+      defaults: defaultShortcutsFor("quickCopy8"),
       cat: "quick",
     },
     {
@@ -300,7 +301,7 @@
       descKey: "keyboard.quickCopyDesc",
       description: "",
       icon: "clipboard",
-      defaults: ["Ctrl+9"],
+      defaults: defaultShortcutsFor("quickCopy9"),
       cat: "quick",
     },
     {
@@ -309,7 +310,7 @@
       descKey: "keyboard.toggleWindowDesc",
       description: "",
       icon: "eye",
-      defaults: ["Alt+C"],
+      defaults: defaultShortcutsFor("toggleWindow"),
       cat: "system",
       system: true,
     },
@@ -319,7 +320,7 @@
       descKey: "keyboard.toggleFloatPanelDesc",
       description: "",
       icon: "layers",
-      defaults: ["Alt+V"],
+      defaults: defaultShortcutsFor("toggleFloatPanel"),
       cat: "system",
     },
     {
@@ -328,7 +329,7 @@
       descKey: "keyboard.hideWindowDesc",
       description: "",
       icon: "eye",
-      defaults: ["Escape"],
+      defaults: defaultShortcutsFor("hideWindow"),
       cat: "system",
     },
     {
@@ -337,7 +338,7 @@
       descKey: "keyboard.focusSearchDesc",
       description: "",
       icon: "search",
-      defaults: ["/", "Ctrl+K"],
+      defaults: defaultShortcutsFor("focusSearch"),
       cat: "system",
     },
   ];

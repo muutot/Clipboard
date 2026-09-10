@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultShortcutsFor } from "../keyboard-defaults";
 import {
   resolveActionBindings,
   resolveFilterShortcutBindings,
@@ -42,10 +43,10 @@ describe("resolveFilterShortcutBindings", () => {
 describe("resolveNavigationBindings", () => {
   it("returns the canonical defaults without configuration", () => {
     expect(resolveNavigationBindings({})).toEqual({
-      moveSelectionUp: ["ArrowUp"],
-      moveSelectionDown: ["ArrowDown"],
-      switchFilterNext: ["ArrowRight", "Tab"],
-      switchFilterPrev: ["ArrowLeft", "Shift+Tab"],
+      moveSelectionUp: ["Arrowup"],
+      moveSelectionDown: ["Arrowdown"],
+      switchFilterNext: ["Arrowright", "Tab"],
+      switchFilterPrev: ["Arrowleft", "Shift+Tab"],
     });
   });
 
@@ -55,19 +56,20 @@ describe("resolveNavigationBindings", () => {
       switchFilterNext: [],
     });
     expect(bindings.moveSelectionUp).toEqual(["K"]);
-    expect(bindings.moveSelectionDown).toEqual(["ArrowDown"]);
+    expect(bindings.moveSelectionDown).toEqual(["Arrowdown"]);
     expect(bindings.switchFilterNext).toEqual([]);
-    expect(bindings.switchFilterPrev).toEqual(["ArrowLeft", "Shift+Tab"]);
+    expect(bindings.switchFilterPrev).toEqual(["Arrowleft", "Shift+Tab"]);
   });
 });
 
 describe("resolveActionBindings", () => {
   it("falls back, honors overrides, and treats empty as disabled", () => {
-    expect(resolveActionBindings({}, "toggleFloatPanel", ["Alt+V"])).toEqual(["Alt+V"]);
+    const fallback = defaultShortcutsFor("toggleFloatPanel");
+    expect(resolveActionBindings({}, "toggleFloatPanel", fallback)).toEqual(["Alt+V"]);
     expect(
-      resolveActionBindings({ toggleFloatPanel: ["Ctrl+F"] }, "toggleFloatPanel", ["Alt+V"]),
+      resolveActionBindings({ toggleFloatPanel: ["Ctrl+F"] }, "toggleFloatPanel", fallback),
     ).toEqual(["Ctrl+F"]);
-    expect(resolveActionBindings({ toggleFloatPanel: [] }, "toggleFloatPanel", ["Alt+V"])).toEqual(
+    expect(resolveActionBindings({ toggleFloatPanel: [] }, "toggleFloatPanel", fallback)).toEqual(
       [],
     );
   });

@@ -1,16 +1,20 @@
 // Shortcut binding resolution extracted from the main route. Maps the
 // persisted conf/keyboard.json actions onto runtime handlers: an absent
-// action falls back to its default, and an action explicitly configured to
-// empty disables that binding (the settings panel exposes the same keys).
+// action falls back to its canonical default (single source:
+// `keyboard-defaults.json` at the repo root), and an action explicitly
+// configured to empty disables that binding (the settings panel exposes
+// the same keys).
+
+import { defaultShortcutsFor } from "$lib/keyboard-defaults";
 
 export type NavigationAction =
   "moveSelectionUp" | "moveSelectionDown" | "switchFilterNext" | "switchFilterPrev";
 
 const NAVIGATION_DEFAULTS: Record<NavigationAction, string[]> = {
-  moveSelectionUp: ["ArrowUp"],
-  moveSelectionDown: ["ArrowDown"],
-  switchFilterNext: ["ArrowRight", "Tab"],
-  switchFilterPrev: ["ArrowLeft", "Shift+Tab"],
+  moveSelectionUp: defaultShortcutsFor("moveSelectionUp"),
+  moveSelectionDown: defaultShortcutsFor("moveSelectionDown"),
+  switchFilterNext: defaultShortcutsFor("switchFilterNext"),
+  switchFilterPrev: defaultShortcutsFor("switchFilterPrev"),
 };
 
 function readBinding(

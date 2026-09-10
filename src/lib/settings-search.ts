@@ -1,4 +1,5 @@
 import type { SettingsSection, StatisticsTab } from "$lib/settings-navigation";
+import { defaultShortcutsFor } from "$lib/keyboard-defaults";
 
 export {
   SETTINGS_SECTIONS,
@@ -736,14 +737,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "keyboard_system" },
     i18n("keyboard.toggleWindow"),
     "设置唤起或隐藏主窗口的全局快捷键",
-    ["Alt+C", "toggle", "热键"],
+    [...defaultShortcutsFor("toggleWindow"), "toggle", "热键"],
   ),
   entry(
     "keyboard.toggle-float-panel",
     { section: "keyboard_system" },
     i18n("keyboard.toggleFloatPanel"),
     "设置显示或隐藏悬浮窗口的快捷键（Windows 上为系统全局热键）",
-    ["Alt+V", "悬浮", "float"],
+    [...defaultShortcutsFor("toggleFloatPanel"), "悬浮", "float"],
   ),
   entry(
     "keyboard.quick-copy",

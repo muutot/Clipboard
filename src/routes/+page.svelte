@@ -42,6 +42,7 @@
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import { getKeyboardConfig } from "$lib/services/keyboard";
+  import { defaultShortcutsFor } from "$lib/keyboard-defaults";
   import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
   import type { IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
@@ -335,9 +336,14 @@
   // disable rules as the group-switch bindings above.
   const navigationBindings = $derived(resolveNavigationBindings(keyboardShortcuts));
 
-  // Float-panel shortcut (default Alt+V); empty disables it.
+  // Float-panel shortcut; absent actions fall back to the canonical default,
+  // empty disables it.
   const floatPanelBindings = $derived(
-    resolveActionBindings(keyboardShortcuts, "toggleFloatPanel", ["Alt+V"]),
+    resolveActionBindings(
+      keyboardShortcuts,
+      "toggleFloatPanel",
+      defaultShortcutsFor("toggleFloatPanel"),
+    ),
   );
 
   async function loadKeyboardShortcuts() {
