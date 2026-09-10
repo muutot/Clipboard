@@ -48,6 +48,14 @@
 - [x] 日志红线复核：全量审计 `log_event!`/`eprintln!`/`dbg_log` 插值——仅 id/路径/计数/配置键/错误展示，无剪贴板正文、OCR 文本、秘密、请求体（唯一例外：非法敏感正则原文的可视化警告，属设计意图）；前端 `console` 仅 DevTools，顺手去掉一处 clipboard 衍生 payload 插值（`ClipboardCard.svelte`）。红线写入 CONTRIBUTING。
 - [x] 同步引擎真实 S3 冒烟（决议：暂不做）：`MemoryStore` 替身已覆盖已知语义差（etag 引号/list 分页/CAS 失败注入，审计确认"已尽量模拟"）；应用内另有 against 用户真实桶的 `test_sync_connection`（10s 超时）。MinIO CI 矩阵本地无 docker 不可验证，违反"无证据不断言通过"原则；等同步 v2 动大手术时再立项。
 
+## 架构收敛（v1.6）
+
+- [x] 热键纯逻辑去重：已由并行工作完成（`platform/hotkey_common.rs`，比提案更通用：多动作注册表 + `Forward` 转发），本分支跳过。
+- [x] 服务调用收敛：`invokeTauri`/`invokeTauriRequired`（`services/runtime.ts`），63 处守卫→单行，对象字面量/void/throw 全形态覆盖。
+- [x] 命令锁样板收敛：`commands/lock.rs::lock_state`（Deref 泛型，State/Arc 通吃），69 处→单行，消息逐字保留；`MaterializationStore` 自定义 `lock()` 保持原样。
+- [x] 面板 feedback 收敛：`utils/feedback.svelte.ts` 工厂（Keyboard/Sensitive/General；TagManagement 的 `{message,kind}|null` 形态不同，明确除外）。
+- [ ] 不做（已决议）：config store 宏化（伤显式错误类型）、`_t` 收敛（丢语言切换响应式）、`sync_state.rs` 拆分（等同步 v2）。
+
 ## 1.6 — 结构还债 + 平台渐进 + 用户功能
 
 > 1.6 功能阈值：除还债外，新增**托盘速粘**、**自动标签规则**与**悬浮剪贴板**（置顶窄窗 + 默认位置五档 + 悬浮显隐 + 标题栏拖拽）三个用户可见功能（标签页新增用户可配规则区，非系统内置）。
