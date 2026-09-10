@@ -631,9 +631,17 @@ pub fn run() {
                 if !bindings.is_empty() || !double_modifiers.is_empty() {
                     hotkey_manager.start_with_hotkeys(bindings, double_modifiers, window.clone());
                 } else {
-                    crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using default Alt+C");
-                    use platform::windows_clipboard;
-                    hotkey_manager.start_with_window(windows_clipboard::MOD_ALT, windows_clipboard::VK_C, window.clone());
+                    // No usable toggle binding in config: fall back to the
+                    // canonical default from the shared bundle instead of a
+                    // hardcoded chord.
+                    let bundled = KeyboardConfig::default();
+                    let (fallback_bindings, _) = resolve_toggle_hotkeys(&bundled);
+                    if let Some((modifiers, vk)) = fallback_bindings.first() {
+                        crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using bundled default");
+                        hotkey_manager.start_with_window(*modifiers, *vk, window.clone());
+                    } else {
+                        crate::log_event!("[hotkey] no valid toggleWindow shortcut and no bundled default; global toggle disabled");
+                    }
                 }
                 // Float-panel chords share the same message loop; an empty
                 // list simply registers nothing.
