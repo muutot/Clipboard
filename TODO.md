@@ -59,5 +59,5 @@
 - [x] Linux 图标提取：freedesktop `.desktop` + 图标主题查找已实现并接线 X11/Wayland（`platform/linux_icons.rs`，fixture 单测全平台可跑）。
 - [x] Wayland 写入自触发标记缺失 + 非 Windows 500ms 轮询回环风险：README 平台矩阵与注释已覆盖现状；应用内在采集暂停开关下为非 Windows 桌面显示轮询说明（`GeneralSettingsPanel` + `capture.pollingNote` 中英双语，`getRuntimeInfo().operatingSystem` 判定）。
 - [x] 托盘速粘：托盘"最近复制"子菜单（近 10 条文本/链接，标题单行 40 字截断），点击经后端自触发标记路径写回剪贴板并记 `last_used`；菜单启动/每次采集/暂停翻转时全量重建（pause 复选框恒读实时状态，无句柄持有）；纯函数（标题截断/id 解析）单测通过。仅文本/链接，图片文件仍走主窗口。
-- [ ] 自动标签规则（后端）：`auto_tag_rules` 配置（pattern→tag，用户可配），采集期对文本/链接匹配打标（非法正则跳过+日志，沿 PRIV-01 模式），`tags` 表复用无迁移。验收：规则匹配/非法跳过/采集打标单测。
+- [x] 自动标签规则（后端）：`tags.autoTagRules` 配置（pattern→tag，用户可配，空/默认[]），采集期对文本/链接匹配打标（非法正则跳过+日志，沿 PRIV-01 模式；`set_tags` 复用手动路径，搜索时序一致），`get/set_auto_tag_rules` 命令已注册（前端 B2 接）。验收：规则匹配/非法跳过/归一化/采集打标单测通过。
 - [ ] 自动标签规则（标签页设置项）：标签设置区新增规则编辑器（增删 + 中英文案），非内置写死。验收：`check` + 双语键齐 + 设置契约（类型/默认/校验/持久化）走完。

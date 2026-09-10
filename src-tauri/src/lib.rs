@@ -44,6 +44,7 @@ pub mod shutdown;
 pub mod state;
 pub mod storage;
 pub mod sync;
+pub mod tags;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -394,6 +395,9 @@ pub fn run() {
                 config.max_file_copy_size_bytes(),
                 config.max_text_capture_bytes(),
             );
+            capture_state.set_auto_tag_rules(crate::tags::compile_auto_tag_rules(
+                config.auto_tag_rules(),
+            ));
             app.manage(capture_state.clone());
 
             let self_trigger_guard = Arc::new(Mutex::new(self_trigger::SelfTriggerGuard::new()));
@@ -639,6 +643,8 @@ pub fn run() {
             get_privacy_status,
             get_privacy_settings,
             set_privacy_settings,
+            get_auto_tag_rules,
+            set_auto_tag_rules,
             check_for_update,
             get_release,
             export_clipboard_items,

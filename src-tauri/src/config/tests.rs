@@ -447,6 +447,43 @@ fn persists_privacy_flags_and_sensitive_patterns() {
 }
 
 #[test]
+fn persists_auto_tag_rules_with_normalization() {
+    use super::types::AutoTagRule;
+
+    let project = temporary_test_directory("auto-tag-rules");
+    let mut store = ConfigStore::load(&project).unwrap();
+    assert!(store.auto_tag_rules().is_empty());
+
+    let rule = |pattern: &str, tag: &str| AutoTagRule {
+        pattern: pattern.to_owned(),
+        tag: tag.to_owned(),
+    };
+    let stored = store
+        .set_auto_tag_rules(vec![
+            rule("  TODO|FIXME  ", "  todo "),
+            rule("", "empty-pattern"),
+            rule("TODO|FIXME", "todo"),
+            rule("no-tag", "   "),
+            rule(r"BUG-\d+", "bug"),
+        ])
+        .unwrap();
+
+    // Trimming, blank dropping and pair deduplication apply; order is kept.
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0].pattern, "TODO|FIXME");
+    assert_eq!(stored[0].tag, "todo");
+    assert_eq!(stored[1].tag, "bug");
+
+    let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+    assert_eq!(
+        saved["tags"]["autoTagRules"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(saved["tags"]["autoTagRules"][0]["tag"], "todo");
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn legacy_config_with_removed_telemetry_flag_still_loads() {
     let project = temporary_test_directory("privacy-legacy");
     let config_directory = project.join("conf");

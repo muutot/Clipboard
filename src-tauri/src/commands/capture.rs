@@ -754,6 +754,18 @@ pub(crate) fn run_capture_loop(
                 match database.save_item(&item) {
                     Ok(saved_id) => {
                         consecutive_errors = 0;
+                        // Auto-tag rules apply to the stored row via the same
+                        // set_tags path as manual tagging (same search-index
+                        // timing: the background drain picks the row up after
+                        // this commit).
+                        let auto_tags = capture_state.match_auto_tags(&text);
+                        if !auto_tags.is_empty() {
+                            if let Err(error) = database.set_tags(&saved_id, &auto_tags) {
+                                crate::log_event!(
+                                    "[clipboard-worker] failed to apply auto tags for {saved_id}: {error}"
+                                );
+                            }
+                        }
                         let mut emit_item = item.clone();
                         emit_item.id = saved_id;
                         let _ = app_handle.emit("clipboard-item-added", &emit_item);

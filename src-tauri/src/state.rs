@@ -23,6 +23,7 @@ pub struct CaptureState {
 #[derive(Clone)]
 pub struct CapturePolicy {
     pub sensitive_patterns: Arc<RwLock<Vec<regex_lite::Regex>>>,
+    pub auto_tag_rules: Arc<RwLock<Vec<crate::tags::CompiledAutoTagRule>>>,
 }
 
 pub struct CaptureWorker {
@@ -50,6 +51,7 @@ impl CaptureState {
             ignored_apps: Arc::new(Mutex::new(normalize_app_list(&ignored_apps))),
             policy: Arc::new(CapturePolicy {
                 sensitive_patterns: Arc::new(RwLock::new(sensitive_patterns)),
+                auto_tag_rules: Arc::new(RwLock::new(Vec::new())),
             }),
             ingestion_guard: Arc::new(Mutex::new(())),
             worker: Arc::new(Mutex::new(None)),
@@ -74,6 +76,26 @@ impl CaptureState {
             Err(poisoned) => poisoned.into_inner(),
         };
         *guard = patterns;
+    }
+
+    /// Swaps the compiled auto-tag rules at runtime (same lock discipline as
+    /// [`Self::set_sensitive_patterns`]).
+    pub(crate) fn set_auto_tag_rules(&self, rules: Vec<crate::tags::CompiledAutoTagRule>) {
+        let mut guard = match self.policy.auto_tag_rules.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *guard = rules;
+    }
+
+    /// Tags whose rules match `text`. A poisoned lock is recovered via
+    /// `into_inner` like every other capture lock; tagging is best-effort
+    /// enrichment, so recovered stale rules are preferable to silent loss.
+    pub(crate) fn match_auto_tags(&self, text: &str) -> Vec<String> {
+        match self.policy.auto_tag_rules.read() {
+            Ok(rules) => crate::tags::match_auto_tags(&rules, text),
+            Err(poisoned) => crate::tags::match_auto_tags(&poisoned.into_inner(), text),
+        }
     }
 
     pub(crate) fn set_max_file_copy_size_bytes(&self, value: u64) {

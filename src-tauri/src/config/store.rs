@@ -260,6 +260,55 @@ impl ConfigStore {
         Ok(normalized)
     }
 
+    pub fn auto_tag_rules(&self) -> &[AutoTagRule] {
+        &self.config.tags.auto_tag_rules
+    }
+
+    /// Maximum auto-tag rules kept; bounds config growth and per-capture cost.
+    pub const MAX_AUTO_TAG_RULES: usize = 100;
+
+    /// Persists auto-tag rules after trimming, dropping blanks/duplicates
+    /// (first occurrence wins), and enforcing length caps. Invalid regexes
+    /// are kept as-is here; callers validate before persisting.
+    pub fn set_auto_tag_rules(
+        &mut self,
+        rules: Vec<AutoTagRule>,
+    ) -> Result<Vec<AutoTagRule>, StorageError> {
+        let mut normalized: Vec<AutoTagRule> = Vec::new();
+        for rule in rules {
+            if normalized.len() >= Self::MAX_AUTO_TAG_RULES {
+                break;
+            }
+            let pattern: String = rule
+                .pattern
+                .chars()
+                .take(500)
+                .collect::<String>()
+                .trim()
+                .to_owned();
+            let tag: String = rule
+                .tag
+                .chars()
+                .take(64)
+                .collect::<String>()
+                .trim()
+                .to_owned();
+            if pattern.is_empty()
+                || tag.is_empty()
+                || normalized
+                    .iter()
+                    .any(|existing| existing.pattern == pattern && existing.tag == tag)
+            {
+                continue;
+            }
+            normalized.push(AutoTagRule { pattern, tag });
+        }
+
+        self.config.tags.auto_tag_rules = normalized.clone();
+        self.save()?;
+        Ok(normalized)
+    }
+
     pub fn schedule_auto_export(&self) -> Option<&str> {
         self.config.export.schedule_auto_export.as_deref()
     }

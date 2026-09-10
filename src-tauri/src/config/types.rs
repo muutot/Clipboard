@@ -20,6 +20,7 @@ pub struct AppConfig {
     pub export: ExportConfig,
     pub ocr: OcrConfig,
     pub sync: SyncConfig,
+    pub tags: TagsConfig,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -318,6 +319,21 @@ impl Default for PrivacyConfig {
             master_password_hash: None,
         }
     }
+}
+
+/// One user-configured auto-tag rule: records whose captured text matches
+/// `pattern` are tagged with `tag` at capture time.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AutoTagRule {
+    pub pattern: String,
+    pub tag: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TagsConfig {
+    pub auto_tag_rules: Vec<AutoTagRule>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

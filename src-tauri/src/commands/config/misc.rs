@@ -162,6 +162,50 @@ pub fn set_privacy_settings(
 }
 
 #[tauri::command]
+pub fn get_auto_tag_rules(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+) -> Result<Vec<crate::config::AutoTagRule>, String> {
+    Ok(config
+        .lock()
+        .map_err(|_| "configuration lock is poisoned".to_owned())?
+        .auto_tag_rules()
+        .to_vec())
+}
+
+#[tauri::command]
+pub fn set_auto_tag_rules(
+    config: tauri::State<'_, Mutex<ConfigStore>>,
+    capture: tauri::State<'_, CaptureState>,
+    rules: Vec<crate::config::AutoTagRule>,
+) -> Result<Vec<crate::config::AutoTagRule>, String> {
+    // Validate up front so nothing is persisted when a pattern is invalid
+    // or a tag is blank (mirrors set_privacy_settings).
+    for rule in &rules {
+        if let Err(error) = regex_lite::Regex::new(rule.pattern.trim()) {
+            return Err(format!(
+                "invalid auto-tag pattern {:?}: {error}",
+                rule.pattern
+            ));
+        }
+        if rule.tag.trim().is_empty() {
+            return Err("auto-tag rule tag must not be empty".to_owned());
+        }
+    }
+
+    let persisted = {
+        config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?
+            .set_auto_tag_rules(rules)
+            .map_err(|error| error.to_string())?
+    };
+
+    // Mirror into the running capture worker without a restart.
+    capture.set_auto_tag_rules(crate::tags::compile_auto_tag_rules(&persisted));
+    Ok(persisted)
+}
+
+#[tauri::command]
 pub fn get_keyboard_config(
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
 ) -> Result<KeyboardConfig, String> {
