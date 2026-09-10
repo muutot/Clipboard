@@ -72,6 +72,19 @@ get(generalSettings).imageFullscreenMode; // 启动时快照，不会变
 get(generalSettings).someSetting; // 调用时读取，不是模块顶层
 ```
 
+### 新窗口必须登记 capability
+
+Tauri 2 的 capability 按窗口授权：`src-tauri/capabilities/default.json` 的 `windows` 数组没写的新窗口，其窗口类 IPC（`close`/`setPosition`/`outerPosition`/`startDragging`/`scaleFactor` 等）会被静默拒绝——列表类 `invoke` 可能正常，但拖拽和关闭全部失灵，看起来像窗口“假死”。
+
+```jsonc
+// BUG: 悬浮窗能渲染列表，但拖不动、关不掉
+"windows": ["main", "settings"],
+// FIX: 新窗口 label 必须加进去，用到的窗口权限也要补齐
+"windows": ["main", "settings", "float"],
+```
+
+新增窗口后对照该窗口用到的全部 `window.*` API 逐项核对 `core:window:allow-*` 权限。
+
 ### 图片预览全屏模式
 
 桌面全屏模式 (`imageFullscreenMode === "desktop"`) 使用 `element.requestFullscreen()` 填满物理屏幕。全屏状态通过监听 `fullscreenchange` 事件同步，不能仅依赖本地布尔变量，因为用户可通过浏览器 ESC 退出全屏。全屏时仅右上角 X 按钮和 ESC 可关闭。
