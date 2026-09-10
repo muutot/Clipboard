@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { invokeTauri, invokeTauriRequired } from "$lib/services/runtime";
 
 export interface DiscoveredApplication {
   name: string;
@@ -13,17 +12,15 @@ export interface ApplicationFilterSettings {
 }
 
 export async function getApplicationFilterSettings(): Promise<ApplicationFilterSettings | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<ApplicationFilterSettings>("get_application_filter_settings");
+  return invokeTauri<ApplicationFilterSettings>("get_application_filter_settings");
 }
 
 export async function configureIgnoredApplications(applications: string[]): Promise<string[]> {
-  if (!isTauriRuntime()) {
-    throw new Error("Application filters are only available in the desktop app");
-  }
-
-  return invoke<string[]>("configure_ignored_applications", { applications });
+  return invokeTauriRequired<string[]>(
+    "configure_ignored_applications",
+    { applications },
+    "Application filters are only available in the desktop app",
+  );
 }
 
 export interface PrivacySettings {
@@ -33,24 +30,20 @@ export interface PrivacySettings {
 }
 
 export async function getPrivacySettings(): Promise<PrivacySettings> {
-  if (!isTauriRuntime()) {
-    return {
-      paused: false,
-      localOnly: true,
-      sensitivePatterns: [],
-    };
-  }
-
-  return invoke<PrivacySettings>("get_privacy_settings");
+  return invokeTauri<PrivacySettings>("get_privacy_settings", undefined, {
+    paused: false,
+    localOnly: true,
+    sensitivePatterns: [],
+  });
 }
 
 export async function setPrivacySettings(settings: {
   localOnly?: boolean;
   sensitivePatterns?: string[];
 }): Promise<PrivacySettings> {
-  if (!isTauriRuntime()) {
-    throw new Error("Privacy settings are only available in the desktop app");
-  }
-
-  return invoke<PrivacySettings>("set_privacy_settings", settings);
+  return invokeTauriRequired<PrivacySettings>(
+    "set_privacy_settings",
+    settings,
+    "Privacy settings are only available in the desktop app",
+  );
 }

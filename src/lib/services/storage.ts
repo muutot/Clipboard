@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { invokeTauri, invokeTauriRequired } from "$lib/services/runtime";
 
 export interface StorageStatus {
   itemCount: number;
@@ -132,99 +131,79 @@ export interface StorageKindDeleteResult {
 }
 
 export async function getPerformanceMetrics(): Promise<PerformanceMetrics | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  return invoke<PerformanceMetrics>("get_performance_metrics");
+  return invokeTauri<PerformanceMetrics>("get_performance_metrics");
 }
 
 export async function repairDatabase(): Promise<RepairResult | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  return invoke<RepairResult>("repair_database");
+  return invokeTauri<RepairResult>("repair_database");
 }
 
 export async function validateSearchIndex(): Promise<boolean | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  return invoke<boolean>("validate_search_index");
+  return invokeTauri<boolean>("validate_search_index");
 }
 
 export async function getStorageStatus(): Promise<StorageStatus | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  return invoke<StorageStatus>("get_storage_status");
+  return invokeTauri<StorageStatus>("get_storage_status");
 }
 
 export async function getStorageKindStats(kind: StorageKind): Promise<StorageKindStats | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  return invoke<StorageKindStats>("get_storage_kind_stats", { kind });
+  return invokeTauri<StorageKindStats>("get_storage_kind_stats", { kind });
 }
 
 export async function permanentlyDeleteStorageKind(
   kind: StorageKind,
   expected: StorageKindStats,
 ): Promise<StorageKindDeleteResult> {
-  if (!isTauriRuntime()) {
-    throw new Error("Storage cleanup is only available in the desktop app");
-  }
-
-  return invoke<StorageKindDeleteResult>("permanently_delete_storage_kind", {
-    kind,
-    expected,
-  });
+  return invokeTauriRequired<StorageKindDeleteResult>(
+    "permanently_delete_storage_kind",
+    {
+      kind,
+      expected,
+    },
+    "Storage cleanup is only available in the desktop app",
+  );
 }
 
 export async function configureStorageDirectory(
   dataDirectory: string | null,
 ): Promise<StorageDirectoryUpdate> {
-  if (!isTauriRuntime()) {
-    throw new Error("Storage configuration is only available in the desktop app");
-  }
-
-  return invoke<StorageDirectoryUpdate>("configure_storage_directory", {
-    dataDirectory,
-  });
+  return invokeTauriRequired<StorageDirectoryUpdate>(
+    "configure_storage_directory",
+    {
+      dataDirectory,
+    },
+    "Storage configuration is only available in the desktop app",
+  );
 }
 
 export async function getStorageConfig(): Promise<StorageConfig> {
-  if (!isTauriRuntime()) {
-    throw new Error("Storage configuration is only available in the desktop app");
-  }
-
-  return invoke<StorageConfig>("get_storage_config");
+  return invokeTauriRequired<StorageConfig>(
+    "get_storage_config",
+    undefined,
+    "Storage configuration is only available in the desktop app",
+  );
 }
 
 export async function setResourceStoragePaths(
   imageStoragePath: string | null,
   fileStoragePath: string | null,
 ): Promise<ResourceStorageUpdate> {
-  if (!isTauriRuntime()) {
-    throw new Error("Storage configuration is only available in the desktop app");
-  }
-
-  return invoke<ResourceStorageUpdate>("set_resource_storage_paths", {
-    imageStoragePath,
-    fileStoragePath,
-  });
+  return invokeTauriRequired<ResourceStorageUpdate>(
+    "set_resource_storage_paths",
+    {
+      imageStoragePath,
+      fileStoragePath,
+    },
+    "Storage configuration is only available in the desktop app",
+  );
 }
 
 export async function rebuildSearchIndex(): Promise<SearchSyncSummary> {
-  if (!isTauriRuntime()) {
-    throw new Error("Search index rebuilding is only available in the desktop app");
-  }
-
-  return invoke<SearchSyncSummary>("rebuild_search_index");
+  return invokeTauriRequired<SearchSyncSummary>(
+    "rebuild_search_index",
+    undefined,
+    "Search index rebuilding is only available in the desktop app",
+  );
 }
 
 export interface IconCacheEntry {
@@ -238,43 +217,27 @@ export interface IconCacheEntry {
 }
 
 export async function listIconCache(): Promise<IconCacheEntry[]> {
-  if (!isTauriRuntime()) {
-    return [];
-  }
-
-  return invoke<IconCacheEntry[]>("list_icon_cache");
+  return invokeTauri<IconCacheEntry[]>("list_icon_cache", undefined, []);
 }
 
 export async function deleteIconFiles(names: string[]): Promise<number> {
-  if (!isTauriRuntime()) {
-    return 0;
-  }
-
-  return invoke<number>("delete_icon_files", { names });
+  return invokeTauri<number>("delete_icon_files", { names }, 0);
 }
 
 export async function replaceIconFile(name: string, sourcePath: string): Promise<void> {
-  if (!isTauriRuntime()) {
-    throw new Error("Icon replacement is only available in the desktop app");
-  }
-
-  return invoke<void>("replace_icon_file", { name, sourcePath });
+  return invokeTauriRequired<void>(
+    "replace_icon_file",
+    { name, sourcePath },
+    "Icon replacement is only available in the desktop app",
+  );
 }
 
 export async function getExportFormats(): Promise<ExportFormatInfo[]> {
-  if (!isTauriRuntime()) {
-    return [];
-  }
-
-  return invoke<ExportFormatInfo[]>("get_export_formats");
+  return invokeTauri<ExportFormatInfo[]>("get_export_formats", undefined, []);
 }
 
 export async function getImportFormats(): Promise<ImportFormatInfo[]> {
-  if (!isTauriRuntime()) {
-    return [];
-  }
-
-  return invoke<ImportFormatInfo[]>("get_import_formats");
+  return invokeTauri<ImportFormatInfo[]>("get_import_formats", undefined, []);
 }
 
 export async function exportToFile(
@@ -282,26 +245,26 @@ export async function exportToFile(
   format: string,
   options: ExportFileOptions,
 ): Promise<ExportFileResult> {
-  if (!isTauriRuntime()) {
-    throw new Error("Export is only available in the desktop app");
-  }
-
-  return invoke<ExportFileResult>("export_to_file", {
-    path,
-    format,
-    includeFavorites: options.includeFavorites,
-    dateFromMs: options.dateFromMs ?? null,
-    dateToMs: options.dateToMs ?? null,
-    contentTypes: options.contentTypes,
-  });
+  return invokeTauriRequired<ExportFileResult>(
+    "export_to_file",
+    {
+      path,
+      format,
+      includeFavorites: options.includeFavorites,
+      dateFromMs: options.dateFromMs ?? null,
+      dateToMs: options.dateToMs ?? null,
+      contentTypes: options.contentTypes,
+    },
+    "Export is only available in the desktop app",
+  );
 }
 
 export async function importFromFile(path: string): Promise<ImportSummary> {
-  if (!isTauriRuntime()) {
-    throw new Error("Import is only available in the desktop app");
-  }
-
-  return invoke<ImportSummary>("import_from_file", { path });
+  return invokeTauriRequired<ImportSummary>(
+    "import_from_file",
+    { path },
+    "Import is only available in the desktop app",
+  );
 }
 
 export interface SyncConfig {
@@ -346,32 +309,28 @@ export interface SyncConfigUpdate {
 }
 
 export async function getSyncConfig(): Promise<SyncConfig> {
-  if (!isTauriRuntime()) {
-    return {
-      provider: "off",
-      endpoint: null,
-      remotePath: "clipboard-sync",
-      lastSyncMs: null,
-      lastSyncStatus: null,
-      pendingEntries: 0,
-      autoSync: false,
-      autoSyncIntervalSecs: 300,
-      segmentMaxEntries: 512,
-      maxSyncImageBytes: 5242880,
-      maxSyncFileBytes: 10485760,
-      s3Region: "us-east-1",
-      s3Bucket: null,
-      s3AccessKey: null,
-      hasS3SecretKey: false,
-      hasSyncPassword: false,
-    };
-  }
-  return invoke<SyncConfig>("get_sync_config");
+  return invokeTauri<SyncConfig>("get_sync_config", undefined, {
+    provider: "off",
+    endpoint: null,
+    remotePath: "clipboard-sync",
+    lastSyncMs: null,
+    lastSyncStatus: null,
+    pendingEntries: 0,
+    autoSync: false,
+    autoSyncIntervalSecs: 300,
+    segmentMaxEntries: 512,
+    maxSyncImageBytes: 5242880,
+    maxSyncFileBytes: 10485760,
+    s3Region: "us-east-1",
+    s3Bucket: null,
+    s3AccessKey: null,
+    hasS3SecretKey: false,
+    hasSyncPassword: false,
+  });
 }
 
 export async function setSyncConfig(settings: SyncConfigUpdate): Promise<void> {
-  if (!isTauriRuntime()) return;
-  return invoke<void>("set_sync_config", {
+  await invokeTauri<void>("set_sync_config", {
     ...settings,
     s3SecretKey: settings.s3SecretKey ?? null,
     syncPassword: settings.syncPassword ?? null,
@@ -379,10 +338,11 @@ export async function setSyncConfig(settings: SyncConfigUpdate): Promise<void> {
 }
 
 export async function testSyncConnection(): Promise<S3TestResult> {
-  if (!isTauriRuntime()) {
-    return { success: false, message: "Not in desktop runtime", statusCode: null };
-  }
-  return invoke<S3TestResult>("test_sync_connection");
+  return invokeTauri<S3TestResult>("test_sync_connection", undefined, {
+    success: false,
+    message: "Not in desktop runtime",
+    statusCode: null,
+  });
 }
 
 export interface SyncRunResult {
@@ -398,6 +358,9 @@ export interface SyncRunResult {
 }
 
 export async function runSync(): Promise<SyncRunResult> {
-  if (!isTauriRuntime()) throw new Error("Sync is only available in the desktop app");
-  return invoke<SyncRunResult>("sync_now");
+  return invokeTauriRequired<SyncRunResult>(
+    "sync_now",
+    undefined,
+    "Sync is only available in the desktop app",
+  );
 }

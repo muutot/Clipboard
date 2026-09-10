@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "$lib/services/runtime";
 import { showToast } from "$lib/services/toast";
+import { invokeTauri, invokeTauriRequired, isTauriRuntime } from "$lib/services/runtime";
 import type {
   ClipboardItem,
   ClipboardKind,
@@ -88,11 +88,12 @@ export async function loadClipboardHistory(
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
 
-  const records = await invoke<PersistedClipboardItem[]>("list_clipboard_items", {
-    limit,
-    offset,
-    filter,
-  });
+  const records =
+    (await invokeTauri<PersistedClipboardItem[]>("list_clipboard_items", {
+      limit,
+      offset,
+      filter,
+    })) ?? [];
 
   return records.map(toClipboardItem);
 }
@@ -106,10 +107,11 @@ export async function loadDeletedClipboardHistory(
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
 
-  const records = await invoke<PersistedClipboardItem[]>("list_deleted_clipboard_items", {
-    limit,
-    offset,
-  });
+  const records =
+    (await invokeTauri<PersistedClipboardItem[]>("list_deleted_clipboard_items", {
+      limit,
+      offset,
+    })) ?? [];
 
   return records.map((record) => ({ ...toClipboardItem(record), deleted: true }));
 }
@@ -138,85 +140,64 @@ export async function searchClipboardHistory(
 ): Promise<ClipboardItem[] | null> {
   if (!isTauriRuntime()) return null;
 
-  const records = await invoke<PersistedClipboardItem[]>("search_clipboard_items", {
-    query,
-    limit,
-    offset,
-    sortRules,
-  });
+  const records =
+    (await invokeTauri<PersistedClipboardItem[]>("search_clipboard_items", {
+      query,
+      limit,
+      offset,
+      sortRules,
+    })) ?? [];
 
   return records.map(toClipboardItem);
 }
 
 export async function persistFavorite(id: string, isFavorite: boolean): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("set_clipboard_item_favorite", { id, isFavorite });
+  return invokeTauri<boolean>("set_clipboard_item_favorite", { id, isFavorite });
 }
 
 export async function persistDelete(id: string): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("soft_delete_clipboard_item", { id });
+  return invokeTauri<boolean>("soft_delete_clipboard_item", { id });
 }
 
 export async function persistHardDelete(id: string): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("delete_clipboard_item", { id });
+  return invokeTauri<boolean>("delete_clipboard_item", { id });
 }
 
 export async function persistRestore(id: string): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("restore_clipboard_item", { id });
+  return invokeTauri<boolean>("restore_clipboard_item", { id });
 }
 
 export async function persistBatchRestore(ids: string[]): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("batch_restore_clipboard_items", { ids });
+  return invokeTauri<boolean>("batch_restore_clipboard_items", { ids });
 }
 
 export async function persistPermanentDelete(id: string): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("permanently_delete_clipboard_item", { id });
+  return invokeTauri<boolean>("permanently_delete_clipboard_item", { id });
 }
 
 export async function persistBatchPermanentDelete(ids: string[]): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("batch_permanently_delete_clipboard_items", { ids });
+  return invokeTauri<boolean>("batch_permanently_delete_clipboard_items", { ids });
 }
 
 export async function persistBatchFavorite(
   ids: string[],
   isFavorite: boolean,
 ): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("batch_set_favorite", { ids, isFavorite });
+  return invokeTauri<boolean>("batch_set_favorite", { ids, isFavorite });
 }
 
 export async function persistBatchDelete(ids: string[]): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("batch_delete_clipboard_items", { ids });
+  return invokeTauri<boolean>("batch_delete_clipboard_items", { ids });
 }
 
 export async function persistTags(id: string, tags: string[]): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("set_clipboard_item_tags", { id, tags });
+  return invokeTauri<boolean>("set_clipboard_item_tags", { id, tags });
 }
 
 /** Records that a record was reused (copied/pasted out from history) so the
  * optional `LastUsedAt` search sort reflects actual usage. Fire-and-forget. */
 export async function persistLastUsed(id: string): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("set_clipboard_item_last_used", { id });
+  return invokeTauri<boolean>("set_clipboard_item_last_used", { id });
 }
 
 export interface TagInfo {
@@ -226,27 +207,19 @@ export interface TagInfo {
 }
 
 export async function listAllTags(): Promise<TagInfo[] | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<TagInfo[]>("list_all_tags");
+  return invokeTauri<TagInfo[]>("list_all_tags");
 }
 
 export async function renameTag(old: string, newName: string): Promise<number | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<number>("rename_tag", { old, new: newName });
+  return invokeTauri<number>("rename_tag", { old, new: newName });
 }
 
 export async function deleteTag(name: string): Promise<number | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<number>("delete_tag", { name });
+  return invokeTauri<number>("delete_tag", { name });
 }
 
 export async function setTagColor(name: string, color: string): Promise<boolean | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<boolean>("set_tag_color", { name, color });
+  return invokeTauri<boolean>("set_tag_color", { name, color });
 }
 
 export interface AutoTagRule {
@@ -255,23 +228,19 @@ export interface AutoTagRule {
 }
 
 export async function getAutoTagRules(): Promise<AutoTagRule[] | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<AutoTagRule[]>("get_auto_tag_rules");
+  return invokeTauri<AutoTagRule[]>("get_auto_tag_rules");
 }
 
 export async function setAutoTagRules(rules: AutoTagRule[]): Promise<AutoTagRule[] | null> {
-  if (!isTauriRuntime()) {
-    throw new Error("Auto-tag rules are only available in the desktop app");
-  }
-
-  return invoke<AutoTagRule[]>("set_auto_tag_rules", { rules });
+  return invokeTauriRequired<AutoTagRule[]>(
+    "set_auto_tag_rules",
+    { rules },
+    "Auto-tag rules are only available in the desktop app",
+  );
 }
 
 export async function listSourceApplications(): Promise<string[] | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<string[]>("list_source_applications");
+  return invokeTauri<string[]>("list_source_applications");
 }
 
 export interface QuickAction {
@@ -282,9 +251,7 @@ export interface QuickAction {
 }
 
 export async function detectContentActions(text: string): Promise<QuickAction[] | null> {
-  if (!isTauriRuntime()) return null;
-
-  return invoke<QuickAction[]>("detect_content_actions", { text });
+  return invokeTauri<QuickAction[]>("detect_content_actions", { text });
 }
 
 export function isCustomClipboardTitle(

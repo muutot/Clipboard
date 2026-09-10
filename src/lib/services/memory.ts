@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { invokeTauri } from "$lib/services/runtime";
 import type { MemoryDiagnostics } from "$lib/types/memory";
 
 /**
@@ -9,9 +8,5 @@ import type { MemoryDiagnostics } from "$lib/types/memory";
  * returns `null` instead of fabricating values.
  */
 export async function getMemoryDiagnostics(): Promise<MemoryDiagnostics | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  return invoke<MemoryDiagnostics>("get_memory_diagnostics");
+  return invokeTauri<MemoryDiagnostics>("get_memory_diagnostics");
 }

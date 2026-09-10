@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { invokeTauriRequired } from "$lib/services/runtime";
 
 export interface UpdateInfo {
   currentVersion: string;
@@ -12,17 +11,17 @@ export interface UpdateInfo {
 }
 
 export async function checkForUpdate(): Promise<UpdateInfo> {
-  if (!isTauriRuntime()) {
-    throw new Error("Update checking is only available in the desktop app");
-  }
-
-  return invoke<UpdateInfo>("check_for_update");
+  return invokeTauriRequired<UpdateInfo>(
+    "check_for_update",
+    undefined,
+    "Update checking is only available in the desktop app",
+  );
 }
 
 export async function getRelease(version: string): Promise<UpdateInfo> {
-  if (!isTauriRuntime()) {
-    throw new Error("Release lookup is only available in the desktop app");
-  }
-
-  return invoke<UpdateInfo>("get_release", { version });
+  return invokeTauriRequired<UpdateInfo>(
+    "get_release",
+    { version },
+    "Release lookup is only available in the desktop app",
+  );
 }

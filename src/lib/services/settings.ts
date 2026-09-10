@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { get, writable } from "svelte/store";
 import { setLocale } from "$lib/i18n";
-import { isTauriRuntime } from "$lib/services/runtime";
+import { invokeTauri, isTauriRuntime } from "$lib/services/runtime";
 import type {
   GeneralSettings,
   GeneralSettingsInfo,
@@ -614,35 +614,27 @@ function saveBrowserSettings(value: GeneralSettings): void {
 }
 
 export async function getGeneralSettings(): Promise<GeneralSettingsInfo> {
-  if (!isTauriRuntime()) {
-    return {
-      settings: cloneDefaults(),
-      legacyMigrationRequired: false,
-    };
-  }
-  return invoke<GeneralSettingsInfo>("get_general_settings");
+  return invokeTauri<GeneralSettingsInfo>("get_general_settings", undefined, {
+    settings: cloneDefaults(),
+    legacyMigrationRequired: false,
+  });
 }
 
 export async function setGeneralSettings(value: GeneralSettings): Promise<GeneralSettings> {
   const settings = normalizeGeneralSettings(value);
-  if (!isTauriRuntime()) return settings;
-  return invoke<GeneralSettings>("set_general_settings", { settings });
+  return invokeTauri<GeneralSettings>("set_general_settings", { settings }, settings);
 }
 
 export async function getWindowConfig(): Promise<WindowConfig> {
-  if (!isTauriRuntime()) {
-    return {
-      launchAtStartup: false,
-      closeToTray: true,
-      singleInstance: true,
-    };
-  }
-  return invoke<WindowConfig>("get_window_config");
+  return invokeTauri<WindowConfig>("get_window_config", undefined, {
+    launchAtStartup: false,
+    closeToTray: true,
+    singleInstance: true,
+  });
 }
 
 export async function setWindowConfig(settings: Partial<WindowConfig>): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("set_window_config", {
+  await invokeTauri<void>("set_window_config", {
     launchAtStartup: settings.launchAtStartup ?? null,
     closeToTray: settings.closeToTray ?? null,
     singleInstance: settings.singleInstance ?? null,
@@ -650,13 +642,11 @@ export async function setWindowConfig(settings: Partial<WindowConfig>): Promise<
 }
 
 export async function restoreWindowPosition(): Promise<WindowPosition | null> {
-  if (!isTauriRuntime()) return null;
-  return invoke<WindowPosition | null>("restore_window_position");
+  return invokeTauri<WindowPosition>("restore_window_position");
 }
 
 export async function saveWindowPosition(position: WindowPosition): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("save_window_position", { ...position });
+  await invokeTauri<void>("save_window_position", { ...position });
 }
 
 function applyDirtySettings(
