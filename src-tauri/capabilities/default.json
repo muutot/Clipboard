@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main", "settings"],
+  "description": "Capability for the main, settings, and float windows",
+  "windows": ["main", "settings", "float"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",
@@ -14,6 +14,7 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-outer-position",
     "core:window:allow-outer-size",
+    "core:window:allow-scale-factor",
     "core:window:allow-current-monitor",
     "core:window:allow-start-dragging",
     "core:webview:allow-create-webview-window",

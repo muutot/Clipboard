@@ -104,7 +104,10 @@
         showToast(_t("float.closeFailed"), "error");
         return;
       }
-      return win.close().catch(() => showToast(_t("float.closeFailed"), "error"));
+      return win.close().catch((error) => {
+        console.error("Unable to close the float panel", error);
+        showToast(_t("float.closeFailed"), "error");
+      });
     });
   }
 
