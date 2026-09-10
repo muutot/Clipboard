@@ -8,14 +8,13 @@ use crate::platform::{sync_autostart, WindowManager};
 use crate::state::CaptureState;
 
 use super::{ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo};
+use crate::commands::lock::lock_state;
 
 #[tauri::command]
 pub fn get_general_settings(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<GeneralSettingsInfo, String> {
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
     Ok(GeneralSettingsInfo {
         settings: config.general_settings().clone(),
         legacy_migration_required: !config.has_general_settings(),
@@ -30,9 +29,7 @@ pub fn set_general_settings(
     settings: GeneralConfig,
 ) -> Result<GeneralConfig, String> {
     let saved = {
-        let mut config = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        let mut config = lock_state(&config, "configuration lock is poisoned")?;
         config
             .set_general_settings(settings)
             .map_err(|error| error.to_string())?;
@@ -86,9 +83,7 @@ pub fn apply_window_effect_to_main(app: &tauri::AppHandle, effect: &str) {
 pub fn get_history_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<HistoryConfigInfo, String> {
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
     Ok(HistoryConfigInfo {
         max_items: config.max_items(),
         retention_days: config.retention_days(),
@@ -103,9 +98,7 @@ pub fn set_history_config(
     retention_days: Option<u32>,
     recycle_bin_days: Option<u32>,
 ) -> Result<(), String> {
-    let mut config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let mut config = lock_state(&config, "configuration lock is poisoned")?;
     if let Some(v) = max_items {
         config.set_max_items(v).map_err(|e| e.to_string())?;
     }
@@ -122,9 +115,7 @@ pub fn set_history_config(
 pub fn get_export_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<ExportConfigInfo, String> {
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
     Ok(ExportConfigInfo {
         schedule_auto_export: config.schedule_auto_export().map(|s| s.to_owned()),
     })
@@ -135,9 +126,7 @@ pub fn set_export_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     schedule_auto_export: Option<String>,
 ) -> Result<(), String> {
-    config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    lock_state(&config, "configuration lock is poisoned")?
         .set_schedule_auto_export(schedule_auto_export)
         .map_err(|e| e.to_string())
 }
@@ -146,9 +135,7 @@ pub fn set_export_config(
 pub fn get_window_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<WindowConfigInfo, String> {
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
     Ok(WindowConfigInfo {
         launch_at_startup: config.launch_at_startup(),
         close_to_tray: config.close_to_tray(),
@@ -164,9 +151,7 @@ pub fn set_window_config(
     close_to_tray: Option<bool>,
     single_instance: Option<bool>,
 ) -> Result<(), String> {
-    let mut config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let mut config = lock_state(&config, "configuration lock is poisoned")?;
     if let Some(v) = launch_at_startup {
         config.set_launch_at_startup(v).map_err(|e| e.to_string())?;
     }
@@ -193,9 +178,7 @@ pub fn save_window_position(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
-    let mut guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let mut guard = lock_state(&config, "configuration lock is poisoned")?;
     WindowManager::save_position(&mut guard, x, y, width, height)
 }
 
@@ -204,9 +187,7 @@ pub fn restore_window_position(
     window: tauri::Window,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<Option<WindowPosition>, String> {
-    let mut config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let mut config = lock_state(&config, "configuration lock is poisoned")?;
     let Some((x, y, width, height)) = WindowManager::restore_position(&config) else {
         return Ok(None);
     };

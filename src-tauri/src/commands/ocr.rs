@@ -6,6 +6,7 @@ use tokio::io::AsyncWriteExt;
 use serde::Serialize;
 use tauri::Emitter;
 
+use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::ocr::{self, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use crate::storage::{Database, OcrRepository, StoragePaths};
@@ -37,9 +38,7 @@ pub fn apply_ocr_runtime_settings(
     worker: &OcrWorkerManager,
     update: OcrConfigUpdate,
 ) -> Result<OcrConfigResponse, String> {
-    let mut cfg = config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_owned())?;
+    let mut cfg = lock_state(&config, "config lock poisoned")?;
     let engine = update.engine.unwrap_or_else(|| cfg.ocr_engine().to_owned());
     let model = match update.ppocr_model_variant {
         Some(variant) => ocr::models::model_spec(&variant)
@@ -100,9 +99,7 @@ pub fn get_ocr_status(
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
     let failed = database.count_failed_ocr().map_err(|e| e.to_string())?;
-    let cfg = config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_owned())?;
+    let cfg = lock_state(&config, "config lock poisoned")?;
     let engine = cfg.ocr_engine().to_string();
     let models_dir = ocr::models::models_dir(&paths.storage);
     let model = configured_ppocr_model(&cfg);
@@ -134,9 +131,7 @@ pub fn get_ocr_status(
 pub fn get_ocr_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<OcrConfigResponse, String> {
-    let config = config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_owned())?;
+    let config = lock_state(&config, "config lock poisoned")?;
     Ok(ocr_config_response(&config))
 }
 
@@ -178,9 +173,7 @@ pub async fn install_ppocr(
     // OCR exception to "fully offline". It must still respect the stricter
     // local-only privacy switch (same policy as update checks).
     {
-        let config = config
-            .lock()
-            .map_err(|_| "config lock poisoned".to_owned())?;
+        let config = lock_state(&config, "config lock poisoned")?;
         if config.privacy_local_only() {
             return Err(
                 "本地模式已开启：下载 OCR 模型需要访问网络，请先在隐私设置中关闭“仅本地模式”"
@@ -228,9 +221,7 @@ pub fn check_ppocr_status(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<PpOcrStatus, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
-    let config = config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_owned())?;
+    let config = lock_state(&config, "config lock poisoned")?;
     let active_model = configured_ppocr_model(&config);
     Ok(PpOcrStatus {
         available: ocr::models::model_is_installed(&models_dir, active_model),

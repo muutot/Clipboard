@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use super::signal::{stop_signal_requested, wait_for_stop};
+use crate::commands::lock::lock_state;
 use crate::content;
 use crate::content::self_trigger::SelfTriggerGuard;
 use crate::content::RESOURCE_METADATA_SCHEMA_VERSION;
@@ -224,9 +225,7 @@ pub fn start_clipboard_monitoring(
     thumbnail_worker: tauri::State<'_, Mutex<crate::content::ThumbnailWorker>>,
     app_handle: tauri::AppHandle,
 ) -> Result<bool, String> {
-    let mut guard = monitor
-        .lock()
-        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
+    let mut guard = lock_state(&monitor, "clipboard monitor lock is poisoned")?;
     guard.start()?;
 
     let receiver = guard
@@ -241,10 +240,8 @@ pub fn start_clipboard_monitoring(
     let file_storage_path = paths.files.clone();
     let self_trigger_clone = self_trigger.0.clone();
     let capture_for_thread = capture.inner().clone();
-    let thumbnail_queue = thumbnail_worker
-        .lock()
-        .map_err(|_| "thumbnail worker lock is poisoned".to_owned())?
-        .queue();
+    let thumbnail_queue =
+        lock_state(&thumbnail_worker, "thumbnail worker lock is poisoned")?.queue();
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_for_thread = Arc::clone(&stop_flag);
     let (stop_sender, stop_receiver) = mpsc::channel();
@@ -294,10 +291,7 @@ pub fn stop_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     capture: tauri::State<'_, CaptureState>,
 ) -> Result<bool, String> {
-    monitor
-        .lock()
-        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?
-        .stop()?;
+    lock_state(&monitor, "clipboard monitor lock is poisoned")?.stop()?;
     capture.stop_worker();
     Ok(true)
 }
@@ -308,9 +302,7 @@ pub fn get_clipboard_monitor_status(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     capture: tauri::State<'_, CaptureState>,
 ) -> Result<ClipboardMonitorStatus, String> {
-    let monitor = monitor
-        .lock()
-        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
+    let monitor = lock_state(&monitor, "clipboard monitor lock is poisoned")?;
     Ok(ClipboardMonitorStatus {
         running: monitor.running && capture.worker_running(),
         ignored_applications: capture.ignored_apps(),

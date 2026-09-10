@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::storage::{
     ClipboardRepository, Database, StorageFileReferences, StoragePaths, RESOURCE_ROOT_MARKER,
@@ -23,9 +24,7 @@ pub fn enforce_history_cleanup(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<u64, String> {
-    let guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let guard = lock_state(&config, "configuration lock is poisoned")?;
     enforce_history_cleanup_for(&database, &guard, &paths, Duration::ZERO)
 }
 

@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 
 use crate::cli::{CliArgs, CliCommand, LocalApiServer};
+use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::storage::{Database, StoragePaths};
 
@@ -69,14 +70,9 @@ pub fn run_cli_command(
         output_path,
     };
 
-    let page_size_limit = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
-        .page_size_limit();
-    let search_page_size_limit = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
-        .search_page_size_limit();
+    let page_size_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
+    let search_page_size_limit =
+        lock_state(&config, "configuration lock is poisoned")?.search_page_size_limit();
 
     crate::cli::run_cli_command(
         &args,
@@ -94,16 +90,12 @@ pub fn start_local_api(
     port: Option<u16>,
 ) -> Result<LocalApiStatus, String> {
     let database = Arc::new(Database::open(&paths.database).map_err(|error| error.to_string())?);
-    let mut api = api
-        .lock()
-        .map_err(|_| "local API server lock is poisoned".to_owned())?;
+    let mut api = lock_state(&api, "local API server lock is poisoned")?;
     if let Some(port) = port {
         api.set_port(port)?;
     }
     {
-        let config = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        let config = lock_state(&config, "configuration lock is poisoned")?;
         api.set_limits(config.page_size_limit(), config.search_page_size_limit());
     }
     api.set_token(load_or_create_api_token(&paths.project)?);
@@ -118,9 +110,7 @@ pub fn start_local_api(
 pub fn stop_local_api(
     api: tauri::State<'_, Mutex<LocalApiServer>>,
 ) -> Result<LocalApiStatus, String> {
-    let mut api = api
-        .lock()
-        .map_err(|_| "local API server lock is poisoned".to_owned())?;
+    let mut api = lock_state(&api, "local API server lock is poisoned")?;
     api.stop()?;
     Ok(LocalApiStatus {
         running: false,
@@ -132,9 +122,7 @@ pub fn stop_local_api(
 pub fn get_local_api_status(
     api: tauri::State<'_, Mutex<LocalApiServer>>,
 ) -> Result<LocalApiStatus, String> {
-    let api = api
-        .lock()
-        .map_err(|_| "local API server lock is poisoned".to_owned())?;
+    let api = lock_state(&api, "local API server lock is poisoned")?;
     Ok(LocalApiStatus {
         running: api.is_running(),
         port: api.port,

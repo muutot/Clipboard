@@ -8,6 +8,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 
+use crate::commands::lock::lock_state;
 use crate::config::{ConfigStore, SyncConfig, SyncProvider};
 use crate::content::ThumbnailWorker;
 use crate::domain::{ClipboardItem, ClipboardKind};
@@ -35,9 +36,7 @@ const MAX_SYNC_ICON_BYTES: u64 = 1024 * 1024;
 
 fn resource_materialization_lock(key: &str) -> Result<Arc<Mutex<()>>, String> {
     let locks = RESOURCE_MATERIALIZATION_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut locks = locks
-        .lock()
-        .map_err(|_| "resource materialization lock map is poisoned".to_string())?;
+    let mut locks = lock_state(&locks, "resource materialization lock map is poisoned")?;
     locks.retain(|_, lock| lock.strong_count() > 0);
     if let Some(lock) = locks.get(key).and_then(Weak::upgrade) {
         return Ok(lock);
@@ -202,9 +201,7 @@ pub fn get_sync_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     database: tauri::State<'_, Database>,
 ) -> Result<SyncConfigInfo, String> {
-    let guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_string())?;
+    let guard = lock_state(&config, "configuration lock is poisoned")?;
     let sync = guard.sync_config();
     Ok(SyncConfigInfo {
         provider: match sync.provider {
@@ -248,9 +245,7 @@ pub fn set_sync_config(
     sync_password: Option<String>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<(), String> {
-    let mut guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_string())?;
+    let mut guard = lock_state(&config, "configuration lock is poisoned")?;
     let previous = guard.sync_config();
     let sync = SyncConfig {
         provider: if provider == "s3" {
@@ -289,9 +284,7 @@ pub async fn test_sync_connection(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<sync::S3TestResult, String> {
     let settings = {
-        let guard = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_string())?;
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
         SyncSettings::validated_from_sync_config(&guard.sync_config())?
     };
     settings.object_store()?;
@@ -332,9 +325,7 @@ pub fn materialize_clipboard_item(
         .ok_or_else(|| "clipboard item was not found".to_string())?;
 
     let sync_config = {
-        let guard = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_string())?;
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
         guard.sync_config()
     };
     if sync_config.provider != SyncProvider::S3 {
@@ -416,9 +407,7 @@ fn materialize_item_resources(
         } else {
             let lock =
                 resource_materialization_lock(&format!("{remote_scope}:{}", reference.object_key))?;
-            let _guard = lock
-                .lock()
-                .map_err(|_| "resource materialization lock is poisoned".to_string())?;
+            let _guard = lock_state(&lock, "resource materialization lock is poisoned")?;
             let rechecked = database
                 .materialized_sync_resource_path(remote_scope, id, &reference)
                 .map_err(|error| error.to_string())?
@@ -471,9 +460,7 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
     let paths = app.state::<StoragePaths>();
 
     let settings = {
-        let guard = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_string())?;
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
         SyncSettings::from_config(&guard)?
     };
     let remote_scope = settings.remote_scope_id();

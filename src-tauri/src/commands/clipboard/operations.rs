@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use tauri::Emitter;
 
+use crate::commands::lock::lock_state;
 use crate::config::{ConfigStore, SearchIndexSyncMode};
 use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
@@ -28,10 +29,7 @@ pub fn list_clipboard_items(
     offset: Option<u32>,
     filter: Option<HistoryFilterArgs>,
 ) -> Result<Vec<ClipboardItem>, String> {
-    let max_limit = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
-        .page_size_limit();
+    let max_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(100).clamp(1, max_limit);
 
@@ -195,9 +193,7 @@ pub fn search_clipboard_items(
     let started = Instant::now();
 
     let (max_results, sync_mode) = {
-        let config = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        let config = lock_state(&config, "configuration lock is poisoned")?;
         (
             config.search_page_size_limit() as usize,
             config.search_index_sync_mode(),
@@ -325,10 +321,7 @@ pub fn list_deleted_clipboard_items(
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<Vec<ClipboardItem>, String> {
-    let max_limit = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
-        .page_size_limit();
+    let max_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
     database
         .list_deleted(
             limit.unwrap_or(100).clamp(1, max_limit),
@@ -377,10 +370,7 @@ pub fn permanently_delete_storage_kind(
     kind: ClipboardKind,
     expected: StorageKindDeleteExpectation,
 ) -> Result<StorageKindDeleteResult, String> {
-    let ingestion_guard = capture
-        .ingestion_guard
-        .lock()
-        .map_err(|_| "clipboard ingestion lock is poisoned".to_owned())?;
+    let ingestion_guard = lock_state(&capture.ingestion_guard, "clipboard ingestion lock")?;
     let expected = KindStorageStats {
         item_count: expected.item_count,
         size_bytes: expected.size_bytes,

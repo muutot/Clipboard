@@ -13,6 +13,7 @@ use crate::storage::{ClipboardRepository, Database};
 use crate::CaptureState;
 
 use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacySettings, PrivacyStatus};
+use crate::commands::lock::lock_state;
 
 #[tauri::command]
 pub fn get_runtime_info() -> RuntimeInfo {
@@ -27,15 +28,12 @@ pub fn toggle_privacy_pause(
     capture: tauri::State<'_, CaptureState>,
 ) -> Result<bool, String> {
     let paused = {
-        let mut privacy = privacy
-            .lock()
-            .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
+        let mut privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
         privacy.toggle_pause();
         privacy.is_paused()
     };
-    config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+
+    lock_state(&config, "configuration lock is poisoned")?
         .set_privacy_paused(paused)
         .map_err(|e| e.to_string())?;
 
@@ -51,10 +49,7 @@ pub fn check_sensitive_content(
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
     text: String,
 ) -> Result<bool, String> {
-    Ok(privacy
-        .lock()
-        .map_err(|_| "privacy manager lock is poisoned".to_owned())?
-        .is_sensitive_content(&text))
+    Ok(lock_state(&privacy, "privacy manager lock is poisoned")?.is_sensitive_content(&text))
 }
 
 #[tauri::command]
@@ -62,12 +57,8 @@ pub fn get_privacy_status(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
 ) -> Result<PrivacyStatus, String> {
-    let privacy = privacy
-        .lock()
-        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
 
     Ok(PrivacyStatus {
         paused: privacy.is_paused(),
@@ -80,12 +71,8 @@ pub fn get_privacy_settings(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
 ) -> Result<PrivacySettings, String> {
-    let privacy = privacy
-        .lock()
-        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
 
     Ok(PrivacySettings {
         paused: privacy.is_paused(),
@@ -114,9 +101,7 @@ pub fn set_privacy_settings(
     }
 
     let persisted_patterns: Option<Vec<String>> = {
-        let mut config = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        let mut config = lock_state(&config, "configuration lock is poisoned")?;
         if let Some(value) = local_only {
             config
                 .set_privacy_local_only(value)
@@ -138,21 +123,16 @@ pub fn set_privacy_settings(
             .iter()
             .filter_map(|pattern| regex_lite::Regex::new(pattern).ok())
             .collect();
-        privacy
-            .lock()
-            .map_err(|_| "privacy manager lock is poisoned".to_owned())?
-            .sensitive_patterns = compiled.clone();
+
+        lock_state(&privacy, "privacy manager lock is poisoned")?.sensitive_patterns =
+            compiled.clone();
         capture.set_sensitive_patterns(compiled);
     }
 
     let _ = app.emit("privacy-settings-changed", ());
 
-    let privacy = privacy
-        .lock()
-        .map_err(|_| "privacy manager lock is poisoned".to_owned())?;
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
 
     Ok(PrivacySettings {
         paused: privacy.is_paused(),
@@ -165,9 +145,7 @@ pub fn set_privacy_settings(
 pub fn get_auto_tag_rules(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<Vec<crate::config::AutoTagRule>, String> {
-    Ok(config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    Ok(lock_state(&config, "configuration lock is poisoned")?
         .auto_tag_rules()
         .to_vec())
 }
@@ -193,9 +171,7 @@ pub fn set_auto_tag_rules(
     }
 
     let persisted = {
-        config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?
+        lock_state(&config, "configuration lock is poisoned")?
             .set_auto_tag_rules(rules)
             .map_err(|error| error.to_string())?
     };
@@ -209,10 +185,7 @@ pub fn set_auto_tag_rules(
 pub fn get_keyboard_config(
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
 ) -> Result<KeyboardConfig, String> {
-    Ok(keyboard
-        .lock()
-        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
-        .config())
+    Ok(lock_state(&keyboard, "keyboard configuration lock is poisoned")?.config())
 }
 
 #[tauri::command]
@@ -223,9 +196,7 @@ pub fn configure_keyboard_shortcuts(
     action: String,
     shortcuts: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    let normalized = keyboard
-        .lock()
-        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+    let normalized = lock_state(&keyboard, "keyboard configuration lock is poisoned")?
         .set_action_shortcuts(action.clone(), shortcuts)
         .map_err(|error| error.to_string())?;
 
@@ -243,9 +214,7 @@ pub fn delete_keyboard_action(
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
     action: String,
 ) -> Result<(), String> {
-    keyboard
-        .lock()
-        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+    lock_state(&keyboard, "keyboard configuration lock is poisoned")?
         .delete_action(action.clone())
         .map_err(|error| error.to_string())?;
     // Deleting a global binding must unregister it immediately instead of
@@ -264,15 +233,10 @@ pub fn reset_keyboard_config(
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
 ) -> Result<KeyboardConfig, String> {
     {
-        let mut km = keyboard
-            .lock()
-            .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?;
+        let mut km = lock_state(&keyboard, "keyboard configuration lock is poisoned")?;
         km.reset_to_defaults().map_err(|error| error.to_string())?;
     }
-    let config = keyboard
-        .lock()
-        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
-        .config();
+    let config = lock_state(&keyboard, "keyboard configuration lock is poisoned")?.config();
     crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     Ok(config)
 }
@@ -282,10 +246,8 @@ pub fn paste_to_previous_application(
     app: tauri::AppHandle,
     hotkey_manager: tauri::State<'_, Mutex<HotkeyManager>>,
 ) -> Result<bool, String> {
-    let target = hotkey_manager
-        .lock()
-        .map_err(|_| "hotkey manager lock is poisoned".to_owned())?
-        .take_quick_paste_target();
+    let target =
+        lock_state(&hotkey_manager, "hotkey manager lock is poisoned")?.take_quick_paste_target();
     let Some(target) = target else {
         crate::dbg_log("paste_to_previous_application: no target");
         return Ok(false);
@@ -324,9 +286,7 @@ pub fn get_application_filter_settings(
     let discovered_with_icons = database
         .list_source_applications_with_icons()
         .map_err(|error| error.to_string())?;
-    let ignored_applications = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    let ignored_applications = lock_state(&config, "configuration lock is poisoned")?
         .ignored_applications()
         .to_vec();
 
@@ -361,12 +321,8 @@ pub fn apply_ignored_applications(
     capture: &CaptureState,
     applications: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    let mut monitor = monitor
-        .lock()
-        .map_err(|_| "clipboard monitor lock is poisoned".to_owned())?;
-    let normalized = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    let mut monitor = lock_state(&monitor, "clipboard monitor lock is poisoned")?;
+    let normalized = lock_state(&config, "configuration lock is poisoned")?
         .set_ignored_applications(applications)
         .map_err(|error| error.to_string())?;
     let normalized = capture.set_ignored_apps(normalized);

@@ -6,6 +6,7 @@ pub mod config;
 pub mod export;
 pub mod files;
 pub mod float;
+pub mod lock;
 pub mod ocr;
 pub mod signal;
 pub mod sync;

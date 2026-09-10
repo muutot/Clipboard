@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::params;
 
+use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::domain::ClipboardKind;
 use crate::keyboard::KeyboardManager;
@@ -24,15 +25,11 @@ pub fn get_storage_status(
     keyboard: tauri::State<'_, Mutex<KeyboardManager>>,
     search_index: tauri::State<'_, Arc<SearchIndex>>,
 ) -> Result<StorageStatus, String> {
-    let config_path = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    let config_path = lock_state(&config, "configuration lock is poisoned")?
         .path()
         .display()
         .to_string();
-    let keyboard_config_path = keyboard
-        .lock()
-        .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
+    let keyboard_config_path = lock_state(&keyboard, "keyboard configuration lock is poisoned")?
         .path()
         .display()
         .to_string();
@@ -93,9 +90,7 @@ pub async fn configure_storage_directory(
 ) -> Result<StorageDirectoryUpdate, String> {
     let requested_directory = data_directory.map(PathBuf::from);
     let (image_storage_path, file_storage_path) = {
-        let config = config
-            .lock()
-            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        let config = lock_state(&config, "configuration lock is poisoned")?;
         (
             config.image_storage_path().map(PathBuf::from),
             config.file_storage_path().map(PathBuf::from),
@@ -133,9 +128,7 @@ pub async fn configure_storage_directory(
         .uses_custom_data_directory()
         .then(|| target_paths.data_directory.clone());
 
-    config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    lock_state(&config, "configuration lock is poisoned")?
         .set_storage_directory(saved_directory)
         .map_err(|error| error.to_string())?;
 
@@ -170,9 +163,7 @@ pub fn set_resource_storage_paths(
     )
     .map_err(|error| error.to_string())?;
 
-    config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?
+    lock_state(&config, "configuration lock is poisoned")?
         .set_resource_storage_paths(image_storage_path, file_storage_path)
         .map_err(|error| error.to_string())?;
 
@@ -188,9 +179,7 @@ pub fn set_resource_storage_paths(
 pub fn get_storage_config(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<StorageConfigInfo, String> {
-    let config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let config = lock_state(&config, "configuration lock is poisoned")?;
     Ok(StorageConfigInfo {
         max_file_copy_size_bytes: config.max_file_copy_size_bytes(),
         max_screenshot_size_bytes: config.max_screenshot_size_bytes(),
@@ -209,9 +198,7 @@ pub fn set_storage_config(
     capture: tauri::State<'_, CaptureState>,
     max_file_copy_size_bytes: Option<u64>,
 ) -> Result<(), String> {
-    let mut config = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
+    let mut config = lock_state(&config, "configuration lock is poisoned")?;
     if let Some(v) = max_file_copy_size_bytes {
         config
             .set_max_file_copy_size_bytes(v)
