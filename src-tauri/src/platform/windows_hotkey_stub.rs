@@ -1,33 +1,37 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use super::windows_clipboard;
-use crate::keyboard::{Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
+use tauri::Emitter as _;
 
-type HotkeyRegistration = (i32, u32, u32);
+use super::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
+pub use super::hotkey_common::{
+    assign_hotkey_ids, combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
+    shortcut_bindings_to_windows_hotkeys, HotkeyRegistration, FIRST_HOTKEY_ID,
+    FLOAT_HOTKEY_ID_BASE,
+};
+use crate::keyboard::{global_action_ids, Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
 
-/// OS hotkey action selected by the fired registration id.
-/// Mirrors `windows_hotkey.rs`; the stub thread never fires, but the routing
-/// helpers below are shared test surface.
+/// OS hotkey action selected by the fired registration id. Mirrors
+/// `windows_hotkey.rs`; the stub thread never fires, but the routing stays
+/// identical so behavior differs only in OS registration, not in dispatch.
+/// `Forward` carries later registry actions as `global-hotkey` events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HotkeyAction {
     ToggleMain,
     ToggleFloat,
+    Forward(usize),
 }
-/// Id base for float-panel registrations; disjoint from toggle ids starting
-/// at 1 by construction.
-pub const FLOAT_HOTKEY_ID_BASE: i32 = 1000;
 
 pub fn action_for_hotkey_id(id: i32) -> HotkeyAction {
-    if id >= FLOAT_HOTKEY_ID_BASE {
-        HotkeyAction::ToggleFloat
-    } else {
-        HotkeyAction::ToggleMain
+    match action_index_for_hotkey_id(id) {
+        None | Some(0) => HotkeyAction::ToggleMain,
+        Some(1) => HotkeyAction::ToggleFloat,
+        Some(index) => HotkeyAction::Forward(index),
     }
 }
 
@@ -138,40 +142,6 @@ impl DoubleModifierTracker {
     }
 }
 
-fn deduplicate_hotkeys(bindings: &[(u32, u32)]) -> Vec<(u32, u32)> {
-    let mut seen = HashSet::new();
-    bindings
-        .iter()
-        .copied()
-        .filter(|binding| seen.insert(*binding))
-        .collect()
-}
-
-fn assign_hotkey_ids(bindings: &[(u32, u32)]) -> Vec<HotkeyRegistration> {
-    assign_hotkey_ids_with_base(bindings, 1)
-}
-
-fn assign_hotkey_ids_with_base(bindings: &[(u32, u32)], base: i32) -> Vec<HotkeyRegistration> {
-    deduplicate_hotkeys(bindings)
-        .into_iter()
-        .enumerate()
-        .map(|(index, (modifiers, vk))| (base + index as i32, modifiers, vk))
-        .collect()
-}
-
-/// Toggle plus float registrations for one shared message loop.
-pub fn combined_hotkey_registrations(
-    toggle_bindings: &[(u32, u32)],
-    float_bindings: &[(u32, u32)],
-) -> Vec<HotkeyRegistration> {
-    let mut registrations = assign_hotkey_ids(toggle_bindings);
-    registrations.extend(assign_hotkey_ids_with_base(
-        float_bindings,
-        FLOAT_HOTKEY_ID_BASE,
-    ));
-    registrations
-}
-
 static HOTKEY_STOP: AtomicBool = AtomicBool::new(false);
 
 pub fn set_hotkey_sender(_tx: &mpsc::Sender<HotkeyAction>) {}
@@ -198,21 +168,15 @@ fn spawn_hotkey_thread_with_registrations(
     })
 }
 
-pub fn spawn_hotkey_thread_with_hotkeys(
-    bindings: Vec<(u32, u32)>,
-    double_modifiers: Vec<Modifier>,
-    tx: mpsc::Sender<HotkeyAction>,
-) -> thread::JoinHandle<()> {
-    spawn_hotkey_thread_with_registrations(assign_hotkey_ids(&bindings), double_modifiers, tx)
-}
-
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
-    toggle_bindings: Vec<(u32, u32)>,
+    /// Chord bindings per global action in `global_action_ids()` order.
+    /// Mirrors `windows_hotkey.rs`; a new registry row extends this vector
+    /// without manager edits.
+    global_chords: Vec<Vec<(u32, u32)>>,
     toggle_doubles: Vec<Modifier>,
-    float_bindings: Vec<(u32, u32)>,
-    float_app: Option<tauri::AppHandle>,
+    app: Option<tauri::AppHandle>,
     quick_paste_target: Arc<QuickPasteTarget>,
 }
 
@@ -227,12 +191,28 @@ impl HotkeyManager {
         Self {
             handle: None,
             window: None,
-            toggle_bindings: Vec::new(),
+            global_chords: Vec::new(),
             toggle_doubles: Vec::new(),
-            float_bindings: Vec::new(),
-            float_app: None,
+            app: None,
             quick_paste_target: Arc::new(QuickPasteTarget::default()),
         }
+    }
+
+    fn ensure_chord_slots(&mut self) {
+        let want = global_action_ids().count();
+        if self.global_chords.len() < want {
+            self.global_chords.resize(want, Vec::new());
+        }
+    }
+
+    /// Sets chord bindings for any registry action by id and rebuilds the
+    /// shared loop. This is the only method new global actions need.
+    pub fn set_action_chords(&mut self, action: &str, bindings: Vec<(u32, u32)>) {
+        self.ensure_chord_slots();
+        if let Some(index) = global_action_ids().position(|id| id == action) {
+            self.global_chords[index] = bindings;
+        }
+        self.restart_combined_thread();
     }
 
     pub fn start_with_window(&mut self, modifiers: u32, vk: u32, window: tauri::WebviewWindow) {
@@ -249,15 +229,55 @@ impl HotkeyManager {
         double_modifiers: Vec<Modifier>,
         window: tauri::WebviewWindow,
     ) {
-        self.toggle_bindings = bindings;
+        self.ensure_chord_slots();
+        if let Some(slot) = self.global_chords.first_mut() {
+            *slot = bindings;
+        }
         self.toggle_doubles = double_modifiers;
         self.window = Some(window.clone());
         self.restart_combined_thread();
     }
 
     pub fn set_float_hotkeys(&mut self, bindings: Vec<(u32, u32)>, app: tauri::AppHandle) {
-        self.float_bindings = bindings;
-        self.float_app = Some(app);
+        self.ensure_chord_slots();
+        if let Some(slot) = self.global_chords.get_mut(1) {
+            *slot = bindings;
+        }
+        self.app = Some(app);
+        self.restart_combined_thread();
+    }
+
+    /// Starts the shared loop from a full registry-ordered chord plan in one
+    /// rebuild. Mirrors `windows_hotkey.rs`; the stub thread never fires, but
+    /// plan handling stays identical.
+    pub fn start_with_plan(
+        &mut self,
+        chords: Vec<Vec<(u32, u32)>>,
+        double_modifiers: Vec<Modifier>,
+        window: tauri::WebviewWindow,
+        app: tauri::AppHandle,
+    ) {
+        self.global_chords = chords;
+        self.ensure_chord_slots();
+        self.toggle_doubles = double_modifiers;
+        self.window = Some(window);
+        self.app = Some(app);
+        self.restart_combined_thread();
+    }
+
+    /// Applies a full registry-ordered chord plan plus the app handle in one
+    /// rebuild. Used by `refresh_hotkey_registrations` after any keyboard
+    /// config change; without a window the loop stays stopped.
+    pub fn apply_global_plan(
+        &mut self,
+        chords: Vec<Vec<(u32, u32)>>,
+        double_modifiers: Vec<Modifier>,
+        app: tauri::AppHandle,
+    ) {
+        self.global_chords = chords;
+        self.ensure_chord_slots();
+        self.toggle_doubles = double_modifiers;
+        self.app = Some(app);
         self.restart_combined_thread();
     }
 
@@ -266,16 +286,27 @@ impl HotkeyManager {
         let Some(window) = self.window.clone() else {
             return;
         };
-        let registrations =
-            combined_hotkey_registrations(&self.toggle_bindings, &self.float_bindings);
-        if registrations.is_empty() && self.toggle_doubles.is_empty() {
+        self.ensure_chord_slots();
+        let slices: Vec<&[(u32, u32)]> = self.global_chords.iter().map(Vec::as_slice).collect();
+        let plan = plan_registrations(&slices);
+        if plan.is_empty() && self.toggle_doubles.is_empty() {
             return;
         }
+        let registrations: Vec<HotkeyRegistration> = plan
+            .iter()
+            .map(|registration| {
+                (
+                    registration.id,
+                    registration.modifiers,
+                    registration.virtual_key,
+                )
+            })
+            .collect();
         let (tx, rx) = mpsc::channel::<HotkeyAction>();
         let handle =
             spawn_hotkey_thread_with_registrations(registrations, self.toggle_doubles.clone(), tx);
         let _quick_paste_target = Arc::clone(&self.quick_paste_target);
-        let float_app = self.float_app.clone();
+        let app = self.app.clone();
 
         thread::spawn(move || {
             while let Ok(action) = rx.recv() {
@@ -295,8 +326,20 @@ impl HotkeyManager {
                         }
                     }
                     HotkeyAction::ToggleFloat => {
-                        if let Some(app) = float_app.as_ref() {
+                        if let Some(app) = app.as_ref() {
                             let _ = crate::commands::float::toggle_float_panel(app.clone());
+                        }
+                    }
+                    HotkeyAction::Forward(index) => {
+                        // Future global actions without a native handler are
+                        // forwarded as events; listeners need no manager code.
+                        let action_id = global_action_ids().nth(index).unwrap_or("unknown");
+                        if let Some(app) = app.as_ref() {
+                            let _ = app.emit("global-hotkey", action_id);
+                        } else {
+                            crate::log_event!(
+                                "[hotkey] no app handle to forward global action {action_id}"
+                            );
                         }
                     }
                 }
@@ -344,86 +387,4 @@ fn foreground_window_handle() -> Option<isize> {
 
 pub fn restore_window_and_paste(_window_handle: isize) -> Result<(), String> {
     Err("quick paste is only implemented on Windows".to_owned())
-}
-
-fn windows_virtual_key(key: &str) -> Option<u32> {
-    let normalized = key.to_ascii_uppercase();
-    if let Some(function_key) = normalized
-        .strip_prefix('F')
-        .and_then(|number| number.parse::<u32>().ok())
-        .filter(|number| (1..=24).contains(number))
-    {
-        return Some(0x6F + function_key);
-    }
-
-    match normalized.as_str() {
-        "BACKSPACE" => Some(0x08),
-        "TAB" => Some(0x09),
-        "ENTER" | "RETURN" => Some(0x0D),
-        "ESC" | "ESCAPE" => Some(0x1B),
-        "SPACE" => Some(0x20),
-        "PAGEUP" => Some(0x21),
-        "PAGEDOWN" => Some(0x22),
-        "END" => Some(0x23),
-        "HOME" => Some(0x24),
-        "LEFT" | "ARROWLEFT" => Some(0x25),
-        "UP" | "ARROWUP" => Some(0x26),
-        "RIGHT" | "ARROWRIGHT" => Some(0x27),
-        "DOWN" | "ARROWDOWN" => Some(0x28),
-        "INSERT" => Some(0x2D),
-        "DELETE" | "DEL" => Some(0x2E),
-        other if other.len() == 1 => {
-            let byte = other.as_bytes()[0];
-            (byte.is_ascii_alphanumeric()).then_some(byte as u32)
-        }
-        _ => None,
-    }
-}
-
-pub fn shortcut_to_windows_hotkey(
-    binding: &crate::keyboard::ShortcutBinding,
-) -> Option<(u32, u32)> {
-    match binding {
-        crate::keyboard::ShortcutBinding::Chord { modifiers, key } => {
-            let mut mod_flags: u32 = 0;
-            for m in modifiers {
-                match m {
-                    crate::keyboard::Modifier::Alt => mod_flags |= windows_clipboard::MOD_ALT,
-                    crate::keyboard::Modifier::Control => {
-                        mod_flags |= windows_clipboard::MOD_CONTROL
-                    }
-                    crate::keyboard::Modifier::Shift => mod_flags |= windows_clipboard::MOD_SHIFT,
-                    crate::keyboard::Modifier::Meta => mod_flags |= windows_clipboard::MOD_WIN,
-                }
-            }
-            let vk = windows_virtual_key(key)?;
-            Some((mod_flags, vk))
-        }
-        crate::keyboard::ShortcutBinding::DoubleModifier { .. } => None,
-    }
-}
-
-pub fn shortcut_bindings_to_windows_hotkeys(
-    bindings: &[crate::keyboard::ShortcutBinding],
-) -> Vec<(u32, u32)> {
-    let converted = bindings
-        .iter()
-        .filter_map(shortcut_to_windows_hotkey)
-        .collect::<Vec<_>>();
-    deduplicate_hotkeys(&converted)
-}
-
-pub fn shortcut_bindings_to_double_modifiers(
-    bindings: &[crate::keyboard::ShortcutBinding],
-) -> Vec<Modifier> {
-    let mut seen = BTreeSet::new();
-    bindings
-        .iter()
-        .filter_map(|binding| match binding {
-            crate::keyboard::ShortcutBinding::DoubleModifier { modifier } => {
-                seen.insert(*modifier).then_some(*modifier)
-            }
-            crate::keyboard::ShortcutBinding::Chord { .. } => None,
-        })
-        .collect()
 }

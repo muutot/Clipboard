@@ -57,12 +57,13 @@ use cli::LocalApiServer;
 use commands::clipboard::SearchResultCache;
 use config::{ConfigStore, SearchIndexSyncMode};
 use content::{self_trigger, ThumbnailWorker};
-use keyboard::{KeyboardConfig, KeyboardManager};
+use keyboard::{KeyboardConfig, KeyboardManager, GLOBAL_HOTKEY_ACTIONS};
 use ocr::{NoopOcrEngine, OcrEngine, OcrWorkerManager, PpOcrEngine, TesseractOcrEngine};
 use performance::{PerformanceTracker, StartupMetrics, StartupTimer};
-use platform::windows_hotkey::{
-    shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys, HotkeyManager,
+use platform::hotkey_common::{
+    shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys,
 };
+use platform::windows_hotkey::HotkeyManager;
 use platform::{
     show_main_window, sync_autostart, ClipboardMonitor, SingleInstanceError, SingleInstanceGuard,
     SystemTray,
@@ -71,7 +72,6 @@ use privacy::PrivacyManager;
 use search::{SearchIndex, SearchSyncWorker, SearchSynchronizer};
 use shutdown::stop_runtime_services;
 use state::{CaptureState, CaptureWorker, SelfTriggerState};
-use std::str::FromStr;
 use storage::{
     discard_database_backups, discard_database_quarantine, quarantine_search_index,
     recover_database_if_needed, refresh_database_backup, Database, KindDeleteScope, OcrRepository,
@@ -79,8 +79,6 @@ use storage::{
 };
 use tauri::Manager;
 
-const TOGGLE_WINDOW_ACTION: &str = "toggleWindow";
-const TOGGLE_FLOAT_ACTION: &str = "toggleFloatPanel";
 pub(crate) const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
     include_favorites: false,
     include_deleted: true,
@@ -189,37 +187,34 @@ impl Drop for CleanupWorker {
     }
 }
 
-fn resolve_toggle_hotkeys(config: &KeyboardConfig) -> (Vec<(u32, u32)>, Vec<keyboard::Modifier>) {
-    resolve_action_hotkeys(config, TOGGLE_WINDOW_ACTION)
-}
-
-/// Chord bindings for one keyboard.json action. Double-tap-modifier
-/// bindings are toggle-only by design and never surface here.
-fn resolve_float_hotkeys(config: &KeyboardConfig) -> Vec<(u32, u32)> {
-    resolve_action_hotkeys(config, TOGGLE_FLOAT_ACTION).0
-}
-
-fn resolve_action_hotkeys(
+/// Builds the OS registration plan for every global registry action, in
+/// `global_action_ids()` order: one chord list per action plus the
+/// toggle-only double-modifier list. Invalid chords are skipped per action
+/// (`keyboard::action_bindings`), so one bad binding can never break the
+/// whole plan. A new global shortcut needs no changes here — only one row in
+/// `keyboard::GLOBAL_HOTKEY_ACTIONS` (+ its `keyboard-defaults.json` default).
+fn resolve_global_hotkey_plan(
     config: &KeyboardConfig,
-    action: &str,
-) -> (Vec<(u32, u32)>, Vec<keyboard::Modifier>) {
-    let Some(shortcuts) = config.shortcuts.get(action) else {
-        return (Vec::new(), Vec::new());
-    };
+) -> (Vec<Vec<(u32, u32)>>, Vec<keyboard::Modifier>) {
+    use keyboard::{action_bindings, ActionScope};
 
-    let bindings = shortcuts
+    let mut chords = Vec::with_capacity(GLOBAL_HOTKEY_ACTIONS.len());
+    let mut double_modifiers = Vec::new();
+    for def in GLOBAL_HOTKEY_ACTIONS
         .iter()
-        .filter_map(|shortcut| keyboard::ShortcutBinding::from_str(shortcut).ok())
-        .collect::<Vec<_>>();
-
-    (
-        shortcut_bindings_to_windows_hotkeys(&bindings),
-        shortcut_bindings_to_double_modifiers(&bindings),
-    )
+        .filter(|def| def.scope == ActionScope::Global)
+    {
+        let bindings = action_bindings(config, def.id);
+        chords.push(shortcut_bindings_to_windows_hotkeys(&bindings));
+        if def.allow_double_tap {
+            double_modifiers.extend(shortcut_bindings_to_double_modifiers(&bindings));
+        }
+    }
+    (chords, double_modifiers)
 }
 
-/// Re-registers OS hotkeys for the toggle + float actions from the current
-/// keyboard config. Also fixes a latent gap where deleting the toggle
+/// Re-registers OS hotkeys for every global action from the current keyboard
+/// config in a single rebuild. Also fixes a latent gap where deleting a
 /// binding left a stale registration until restart.
 pub(crate) fn refresh_hotkey_registrations(
     keyboard: &Mutex<KeyboardManager>,
@@ -230,16 +225,14 @@ pub(crate) fn refresh_hotkey_registrations(
         .lock()
         .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
         .config();
-    let (bindings, double_modifiers) = resolve_toggle_hotkeys(&config);
-    let float_bindings = resolve_float_hotkeys(&config);
+    let (chords, double_modifiers) = resolve_global_hotkey_plan(&config);
     let mut manager = hotkey_manager
         .lock()
         .map_err(|_| "hotkey manager lock is poisoned".to_owned())?;
-    if bindings.is_empty() && double_modifiers.is_empty() && float_bindings.is_empty() {
+    if chords.iter().all(Vec::is_empty) && double_modifiers.is_empty() {
         manager.stop();
     } else {
-        manager.restart_with_hotkeys(bindings, double_modifiers);
-        manager.set_float_hotkeys(float_bindings, app.clone());
+        manager.apply_global_plan(chords, double_modifiers, app.clone());
     }
     Ok(())
 }
@@ -621,34 +614,39 @@ pub fn run() {
                 });
             }
 
-            // Register global hotkey from keyboard config
+            // Register global hotkeys from the keyboard config in one rebuild:
+            // every registry action shares the same message loop, and an empty
+            // chord list simply registers nothing for that action.
             #[allow(unused_mut)]
             let mut hotkey_manager = HotkeyManager::new();
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 let kb_config = keyboard.config();
-                let (bindings, double_modifiers) = resolve_toggle_hotkeys(&kb_config);
-                if !bindings.is_empty() || !double_modifiers.is_empty() {
-                    hotkey_manager.start_with_hotkeys(bindings, double_modifiers, window.clone());
-                } else {
-                    // No usable toggle binding in config: fall back to the
-                    // canonical default from the shared bundle instead of a
+                let (mut chords, double_modifiers) = resolve_global_hotkey_plan(&kb_config);
+                if chords.iter().all(Vec::is_empty) && double_modifiers.is_empty() {
+                    // No usable binding in config: fall back to the canonical
+                    // toggle default from the shared bundle instead of a
                     // hardcoded chord.
                     let bundled = KeyboardConfig::default();
-                    let (fallback_bindings, _) = resolve_toggle_hotkeys(&bundled);
-                    if let Some((modifiers, vk)) = fallback_bindings.first() {
-                        crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using bundled default");
-                        hotkey_manager.start_with_window(*modifiers, *vk, window.clone());
-                    } else {
+                    let (fallback_chords, _) = resolve_global_hotkey_plan(&bundled);
+                    let fallback_toggle = fallback_chords.into_iter().next().unwrap_or_default();
+                    if fallback_toggle.is_empty() {
                         crate::log_event!("[hotkey] no valid toggleWindow shortcut and no bundled default; global toggle disabled");
+                    } else {
+                        crate::log_event!("[hotkey] no valid toggleWindow shortcut found in config, using bundled default");
+                        if let Some(slot) = chords.first_mut() {
+                            *slot = fallback_toggle;
+                        }
                     }
                 }
-                // Float-panel chords share the same message loop; an empty
-                // list simply registers nothing.
-                hotkey_manager.set_float_hotkeys(
-                    resolve_float_hotkeys(&kb_config),
-                    app.handle().clone(),
-                );
+                if chords.iter().any(|list| !list.is_empty()) || !double_modifiers.is_empty() {
+                    hotkey_manager.start_with_plan(
+                        chords,
+                        double_modifiers,
+                        window.clone(),
+                        app.handle().clone(),
+                    );
+                }
             }
             app.manage(Mutex::new(keyboard));
             app.manage(Mutex::new(hotkey_manager));

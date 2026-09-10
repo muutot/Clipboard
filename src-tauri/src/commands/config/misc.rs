@@ -5,12 +5,12 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 use crate::config::ConfigStore;
-use crate::keyboard::{KeyboardConfig, KeyboardManager};
+use crate::keyboard::{is_global_action, KeyboardConfig, KeyboardManager};
 use crate::platform::windows_hotkey::HotkeyManager;
 use crate::platform::{self, ClipboardMonitor, RuntimeInfo};
 use crate::privacy::PrivacyManager;
 use crate::storage::{ClipboardRepository, Database};
-use crate::{CaptureState, TOGGLE_FLOAT_ACTION, TOGGLE_WINDOW_ACTION};
+use crate::CaptureState;
 
 use super::{ApplicationFilterSettings, DiscoveredApplication, PrivacySettings, PrivacyStatus};
 
@@ -229,7 +229,7 @@ pub fn configure_keyboard_shortcuts(
         .set_action_shortcuts(action.clone(), shortcuts)
         .map_err(|error| error.to_string())?;
 
-    if action == TOGGLE_WINDOW_ACTION || action == TOGGLE_FLOAT_ACTION {
+    if is_global_action(&action) {
         crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     }
 
@@ -248,9 +248,10 @@ pub fn delete_keyboard_action(
         .map_err(|_| "keyboard configuration lock is poisoned".to_owned())?
         .delete_action(action.clone())
         .map_err(|error| error.to_string())?;
-    // Deleting a binding must unregister it immediately instead of leaving
-    // a stale OS hotkey until restart.
-    if action == TOGGLE_WINDOW_ACTION || action == TOGGLE_FLOAT_ACTION {
+    // Deleting a global binding must unregister it immediately instead of
+    // leaving a stale OS hotkey until restart. The registry check keeps this
+    // working for future global actions without edits here.
+    if is_global_action(&action) {
         crate::refresh_hotkey_registrations(&keyboard, &hotkey_manager, &app)?;
     }
     Ok(())

@@ -6,6 +6,7 @@
 // the same keys).
 
 import { defaultShortcutsFor } from "$lib/keyboard-defaults";
+import { HOTKEY_ACTIONS } from "$lib/keyboard-registry";
 
 export type NavigationAction =
   "moveSelectionUp" | "moveSelectionDown" | "switchFilterNext" | "switchFilterPrev";
@@ -55,4 +56,28 @@ export function resolveActionBindings(
   fallback: string[],
 ): string[] {
   return readBinding(shortcuts, action, fallback);
+}
+
+/**
+ * Bindings for every registry action: absent falls back to the canonical
+ * default, explicitly empty disables. New actions resolve here with no
+ * further edits — the table is driven by `HOTKEY_ACTIONS`.
+ */
+export function resolveAllBindings(shortcuts: Record<string, string[]>): Record<string, string[]> {
+  const map: Record<string, string[]> = {};
+  for (const action of HOTKEY_ACTIONS) {
+    map[action.id] = readBinding(shortcuts, action.id, defaultShortcutsFor(action.id));
+  }
+  return map;
+}
+
+/** Bindings for OS-global actions only, in registry order. */
+export function resolveGlobalBindings(
+  shortcuts: Record<string, string[]>,
+): Record<string, string[]> {
+  const map: Record<string, string[]> = {};
+  for (const action of HOTKEY_ACTIONS.filter((entry) => entry.scope === "global")) {
+    map[action.id] = readBinding(shortcuts, action.id, defaultShortcutsFor(action.id));
+  }
+  return map;
 }

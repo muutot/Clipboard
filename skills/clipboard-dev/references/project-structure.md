@@ -29,30 +29,31 @@ SvelteKit runs as a static SPA: `src/routes/+layout.ts` disables SSR and awaits 
 | `src/lib/i18n/`                      | Locale store, typed message shape, English and Simplified Chinese dictionaries                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `src/lib/settings-navigation.ts`     | Canonical settings sections, category/tab descriptors, icons, titles/descriptions, and breadcrumb paths                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `src/lib/settings-search.ts`         | Search index/metadata for setting cards and their typed navigation targets                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `src/lib/keyboard-registry.ts`       | Single frontend hotkey action registry (scope/category/icon/i18n per action); `global` rows mirror backend `GLOBAL_HOTKEY_ACTIONS` order                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `src/lib/data/demo-items.ts`         | Browser-preview fallback data; not proof of desktop persistence behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 Read `components.md` and `services.md` for ownership and change gates inside those directories.
 
 ## Backend ownership
 
-| Path                     | Ownership                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `src-tauri/src/lib.rs`   | Runtime composition and Tauri boundary; keep business logic in focused modules when practical                          |
-| `config.rs`              | `conf/conf.json` schema, defaults, validation, and atomic persistence                                                  |
-| `domain/`                | Shared Rust clipboard and OCR domain types                                                                             |
-| `storage/`               | SQLite connection/repositories, schema + forward migrations, storage paths, recovery/backups, integrity repair helpers |
-| `search/`                | Tantivy schema/query/index, manifest, outbox synchronization                                                           |
-| `ocr/`                   | Engine trait, PP-OCR/Tesseract/no-op engines, models, restartable worker manager                                       |
-| `content/`               | Detection/actions, hashing/self-trigger rules, file storage, metadata, thumbnails, text transforms                     |
-| `keyboard/`              | Shortcut config in `conf/keyboard.json`, binding parse/match, manager                                                  |
-| `platform/`              | Clipboard monitor, hotkey, tray, single-instance and platform-specific adapters                                        |
-| `privacy/`               | Pause/ignore/sensitive-source policy helpers                                                                           |
-| `performance/`           | Startup/search/performance snapshots and monitoring                                                                    |
-| `export/`                | JSON, CSV, plain-text import/export, and PPaste `.Pastebackup` import (`ppaste.rs`)                                    |
-| `crates/clipboard-sync/` | Tauri-independent S3 transport plus the provider-neutral v1 replication engine, contracts, codecs, and resources       |
-| `sync/`                  | Desktop DTO/path adapters and SQLite-backed integration tests for the sync crate                                       |
-| `commands/`              | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                                            |
-| `cli/`                   | Process CLI execution and loopback API server                                                                          |
+| Path                     | Ownership                                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src-tauri/src/lib.rs`   | Runtime composition and Tauri boundary; keep business logic in focused modules when practical                                                                              |
+| `config.rs`              | `conf/conf.json` schema, defaults, validation, and atomic persistence                                                                                                      |
+| `domain/`                | Shared Rust clipboard and OCR domain types                                                                                                                                 |
+| `storage/`               | SQLite connection/repositories, schema + forward migrations, storage paths, recovery/backups, integrity repair helpers                                                     |
+| `search/`                | Tantivy schema/query/index, manifest, outbox synchronization                                                                                                               |
+| `ocr/`                   | Engine trait, PP-OCR/Tesseract/no-op engines, models, restartable worker manager                                                                                           |
+| `content/`               | Detection/actions, hashing/self-trigger rules, file storage, metadata, thumbnails, text transforms                                                                         |
+| `keyboard/`              | Global-action registry (`actions.rs`), shortcut config in `conf/keyboard.json`, binding parse/match, manager                                                               |
+| `platform/`              | Clipboard monitor, hotkey (shared `hotkey_common` plan/id/key logic plus `windows_hotkey` loop and non-Windows stub), tray, single-instance and platform-specific adapters |
+| `privacy/`               | Pause/ignore/sensitive-source policy helpers                                                                                                                               |
+| `performance/`           | Startup/search/performance snapshots and monitoring                                                                                                                        |
+| `export/`                | JSON, CSV, plain-text import/export, and PPaste `.Pastebackup` import (`ppaste.rs`)                                                                                        |
+| `crates/clipboard-sync/` | Tauri-independent S3 transport plus the provider-neutral v1 replication engine, contracts, codecs, and resources                                                           |
+| `sync/`                  | Desktop DTO/path adapters and SQLite-backed integration tests for the sync crate                                                                                           |
+| `commands/`              | Tauri command modules (clipboard, config, update, system, files, OCR, etc.)                                                                                                |
+| `cli/`                   | Process CLI execution and loopback API server                                                                                                                              |
 
 Platform source files may contain detailed scaffolding or documented intended flows. Verify runtime wiring and tests before claiming platform completion.
 

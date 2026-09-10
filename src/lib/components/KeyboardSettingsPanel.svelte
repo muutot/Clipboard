@@ -10,6 +10,11 @@
     type KeyboardConfig,
   } from "$lib/services/keyboard";
   import { defaultShortcutsFor } from "$lib/keyboard-defaults";
+  import {
+    HOTKEY_ACTIONS,
+    type HotkeyActionDef,
+    type HotkeyCategory,
+  } from "$lib/keyboard-registry";
   import { messages, resolvePath } from "$lib/i18n";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
@@ -18,7 +23,7 @@
   interface Props {
     onclose: () => void;
     showHeader?: boolean;
-    category?: "item" | "quick" | "system" | "switch";
+    category?: HotkeyCategory;
     resetToken?: number;
     configPath?: string | null;
   }
@@ -47,302 +52,25 @@
     description: string;
     icon: IconName;
     defaults: string[];
-    cat: typeof category;
+    cat: HotkeyCategory;
     system?: boolean;
+    searchId?: string | null;
   }
 
-  const SYSTEM_ACTIONS: SystemAction[] = [
-    {
-      id: "copyItem",
-      labelKey: "keyboard.copyItem",
-      descKey: "keyboard.copyItemDesc",
-      description: "",
-      icon: "copy",
-      defaults: defaultShortcutsFor("copyItem"),
-      cat: "item",
-    },
-    {
-      id: "deleteItem",
-      labelKey: "keyboard.deleteItem",
-      descKey: "keyboard.deleteItemDesc",
-      description: "",
-      icon: "trash",
-      defaults: defaultShortcutsFor("deleteItem"),
-      cat: "item",
-    },
-    {
-      id: "favoriteItem",
-      labelKey: "keyboard.favoriteItem",
-      descKey: "keyboard.favoriteItemDesc",
-      description: "",
-      icon: "star",
-      defaults: defaultShortcutsFor("favoriteItem"),
-      cat: "item",
-    },
-    {
-      id: "addTag",
-      labelKey: "keyboard.addTag",
-      descKey: "keyboard.addTagDesc",
-      description: "",
-      icon: "tag",
-      defaults: defaultShortcutsFor("addTag"),
-      cat: "item",
-    },
-    {
-      id: "moveSelectionUp",
-      labelKey: "keyboard.moveSelectionUp",
-      descKey: "keyboard.moveSelectionDesc",
-      description: "",
-      icon: "arrow-up",
-      defaults: defaultShortcutsFor("moveSelectionUp"),
-      cat: "switch",
-    },
-    {
-      id: "moveSelectionDown",
-      labelKey: "keyboard.moveSelectionDown",
-      descKey: "keyboard.moveSelectionDesc",
-      description: "",
-      icon: "arrow-down",
-      defaults: defaultShortcutsFor("moveSelectionDown"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilterNext",
-      labelKey: "keyboard.switchFilterNext",
-      descKey: "keyboard.switchFilterDesc",
-      description: "",
-      icon: "arrow-right",
-      defaults: defaultShortcutsFor("switchFilterNext"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilterPrev",
-      labelKey: "keyboard.switchFilterPrev",
-      descKey: "keyboard.switchFilterDesc",
-      description: "",
-      icon: "arrow-left",
-      defaults: defaultShortcutsFor("switchFilterPrev"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter1",
-      labelKey: "keyboard.switchFilterAll",
-      descKey: "keyboard.switchFilterAll",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter1"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter2",
-      labelKey: "keyboard.switchFilterText",
-      descKey: "keyboard.switchFilterText",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter2"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter3",
-      labelKey: "keyboard.switchFilterLink",
-      descKey: "keyboard.switchFilterLink",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter3"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter4",
-      labelKey: "keyboard.switchFilterImage",
-      descKey: "keyboard.switchFilterImage",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter4"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter5",
-      labelKey: "keyboard.switchFilterFile",
-      descKey: "keyboard.switchFilterFile",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter5"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter6",
-      labelKey: "keyboard.switchFilterFavorite",
-      descKey: "keyboard.switchFilterFavorite",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter6"),
-      cat: "switch",
-    },
-    {
-      id: "switchFilter7",
-      labelKey: "keyboard.switchFilterDeleted",
-      descKey: "keyboard.switchFilterDeleted",
-      description: "",
-      icon: "grid",
-      defaults: defaultShortcutsFor("switchFilter7"),
-      cat: "switch",
-    },
-    {
-      id: "clearSelection",
-      labelKey: "keyboard.clearSelection",
-      descKey: "keyboard.clearSelectionDesc",
-      description: "",
-      icon: "x",
-      defaults: defaultShortcutsFor("clearSelection"),
-      cat: "item",
-    },
-    {
-      id: "openDetail",
-      labelKey: "keyboard.openDetail",
-      descKey: "keyboard.viewDetailDesc",
-      description: "",
-      icon: "eye",
-      defaults: defaultShortcutsFor("openDetail"),
-      cat: "item",
-    },
-    {
-      id: "downloadItem",
-      labelKey: "keyboard.downloadItem",
-      descKey: "keyboard.saveItemDesc",
-      description: "",
-      icon: "download",
-      defaults: defaultShortcutsFor("downloadItem"),
-      cat: "item",
-    },
-    {
-      id: "selectAll",
-      labelKey: "keyboard.selectAll",
-      descKey: "keyboard.selectAllDesc",
-      description: "",
-      icon: "check",
-      defaults: defaultShortcutsFor("selectAll"),
-      cat: "item",
-    },
-    {
-      id: "quickPaste",
-      labelKey: "keyboard.quickPaste",
-      descKey: "keyboard.pasteToWindowDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickPaste"),
-      cat: "item",
-    },
-    {
-      id: "quickCopy1",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy1"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy2",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy2"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy3",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy3"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy4",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy4"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy5",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy5"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy6",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy6"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy7",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy7"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy8",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy8"),
-      cat: "quick",
-    },
-    {
-      id: "quickCopy9",
-      descKey: "keyboard.quickCopyDesc",
-      description: "",
-      icon: "clipboard",
-      defaults: defaultShortcutsFor("quickCopy9"),
-      cat: "quick",
-    },
-    {
-      id: "toggleWindow",
-      labelKey: "keyboard.toggleWindow",
-      descKey: "keyboard.toggleWindowDesc",
-      description: "",
-      icon: "eye",
-      defaults: defaultShortcutsFor("toggleWindow"),
-      cat: "system",
-      system: true,
-    },
-    {
-      id: "toggleFloatPanel",
-      labelKey: "keyboard.toggleFloatPanel",
-      descKey: "keyboard.toggleFloatPanelDesc",
-      description: "",
-      icon: "layers",
-      defaults: defaultShortcutsFor("toggleFloatPanel"),
-      cat: "system",
-      system: true,
-    },
-    {
-      id: "hideWindow",
-      labelKey: "keyboard.hideWindow",
-      descKey: "keyboard.hideWindowDesc",
-      description: "",
-      icon: "eye",
-      defaults: defaultShortcutsFor("hideWindow"),
-      cat: "system",
-    },
-    {
-      id: "focusSearch",
-      labelKey: "keyboard.focusSearch",
-      descKey: "keyboard.focusSearchDesc",
-      description: "",
-      icon: "search",
-      defaults: defaultShortcutsFor("focusSearch"),
-      cat: "system",
-    },
-  ];
+  // Display metadata comes from the single action registry
+  // (`$lib/keyboard-registry.ts`): a new shortcut appears here with no panel
+  // edits once its registry row (+ `keyboard-defaults.json` default) lands.
+  const SYSTEM_ACTIONS: SystemAction[] = HOTKEY_ACTIONS.map((def: HotkeyActionDef) => ({
+    id: def.id,
+    labelKey: def.labelKey,
+    descKey: def.descKey,
+    description: "",
+    icon: def.icon,
+    defaults: defaultShortcutsFor(def.id),
+    cat: def.category,
+    system: def.system,
+    searchId: def.searchId ?? null,
+  }));
 
   const categoryActions = $derived.by(() => {
     return SYSTEM_ACTIONS.filter((a) => a.cat === category);
@@ -359,19 +87,7 @@
   }
 
   function settingsSearchIdForAction(action: SystemAction): string | null {
-    if (/^quickCopy\d+$/.test(action.id)) return "keyboard.quick-copy";
-    if (/^switchFilter\d+$/.test(action.id)) return "keyboard.switch-filter";
-    const map: Record<string, string> = {
-      copyItem: "keyboard.copy-item",
-      deleteItem: "keyboard.delete-item",
-      favoriteItem: "keyboard.favorite-item",
-      openDetail: "keyboard.open-detail",
-      selectAll: "keyboard.select-all",
-      quickPaste: "keyboard.quick-paste",
-      toggleWindow: "keyboard.toggle-window",
-      toggleFloatPanel: "keyboard.toggle-float-panel",
-    };
-    return map[action.id] ?? null;
+    return action.searchId ?? null;
   }
 
   function actionDesc(action: SystemAction): string {

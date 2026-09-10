@@ -50,6 +50,7 @@ Keep stable workflow and routing rules in `SKILL.md`. Put module-specific facts,
 | Settings shell, panel markup, controls, feedback, or settings CSS       | [settings-panels.md](references/settings-panels.md) and [css-theming.md](references/css-theming.md)             |
 | General setting fields, defaults, normalization, persistence            | [settings-reference.md](references/settings-reference.md) and [data-contracts.md](references/data-contracts.md) |
 | Search pagination or cache behavior                                     | [search-cache-strategy.md](references/search-cache-strategy.md)                                                 |
+| Global hotkeys, window shortcuts, keyboard config, or dispatch          | [hotkey-architecture.md](references/hotkey-architecture.md)                                                     |
 | Reviewing a local/niche UI exception                                    | [niche_ui_style.md](references/niche_ui_style.md); treat it as a review queue, never as an approved pattern     |
 
 Also read the focused project document when relevant: `docs/PITFALLS.md`, `docs/SEARCH.md`, `docs/OCR.md`, or `docs/DEFAULTS_AND_PRIVACY.md`.

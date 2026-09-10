@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { defaultShortcutsFor } from "../keyboard-defaults";
 import {
   resolveActionBindings,
+  resolveAllBindings,
   resolveFilterShortcutBindings,
+  resolveGlobalBindings,
   resolveNavigationBindings,
 } from "./shortcut-bindings";
 
@@ -72,5 +74,30 @@ describe("resolveActionBindings", () => {
     expect(resolveActionBindings({ toggleFloatPanel: [] }, "toggleFloatPanel", fallback)).toEqual(
       [],
     );
+  });
+});
+
+describe("resolveAllBindings", () => {
+  it("covers every canonical default without configuration", () => {
+    const bindings = resolveAllBindings({});
+    expect(bindings.toggleWindow).toEqual(["Alt+C"]);
+    expect(bindings.toggleFloatPanel).toEqual(["Alt+V"]);
+    expect(bindings.copyItem).toEqual(["Ctrl+C", "Enter"]);
+    expect(bindings.quickCopy9).toEqual(["Ctrl+9"]);
+    expect(bindings.quickPaste).toEqual([]);
+  });
+
+  it("honors overrides and per-action disables", () => {
+    const bindings = resolveAllBindings({ copyItem: ["F2"], focusSearch: [] });
+    expect(bindings.copyItem).toEqual(["F2"]);
+    expect(bindings.focusSearch).toEqual([]);
+    expect(bindings.toggleWindow).toEqual(["Alt+C"]);
+  });
+});
+
+describe("resolveGlobalBindings", () => {
+  it("returns only the OS-global actions in registry order", () => {
+    expect(Object.keys(resolveGlobalBindings({}))).toEqual(["toggleWindow", "toggleFloatPanel"]);
+    expect(resolveGlobalBindings({ toggleWindow: [] }).toggleWindow).toEqual([]);
   });
 });
