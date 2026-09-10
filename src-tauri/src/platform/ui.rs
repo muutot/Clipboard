@@ -153,7 +153,8 @@ impl SystemTray {
         if id == Self::SHOW_MENU_ID {
             show_main_window(app);
         } else if id == Self::FLOAT_MENU_ID {
-            // Same swap as every other entry point; never depends on the
+            // Same float-only toggle as every other entry point (the main
+            // window is left alone); never depends on the
             // main window's frontend state. Window creation dispatches to
             // the event loop and blocks for the response, while this menu
             // callback itself runs on the event loop thread — building

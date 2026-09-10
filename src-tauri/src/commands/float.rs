@@ -12,52 +12,30 @@ pub const FLOAT_WINDOW_LABEL: &str = "float";
 const FLOAT_WIDTH: f64 = 320.0;
 const FLOAT_HEIGHT: f64 = 480.0;
 
-/// Toggles between the main window and the float panel: when the float
-/// panel is visible it is hidden and the main window is shown; otherwise
-/// the float panel is opened (focused when already open) and the main
-/// window is hidden. Every entry point (toolbar, tray, global hotkey,
-/// in-app shortcut) funnels through this single swap so behavior is uniform.
+/// Shows or hides the float panel, mirroring the main-window toggle: a
+/// visible and focused panel is hidden, otherwise it is shown (built on
+/// first use) and focused. Only the float panel's own visibility changes;
+/// the main window is never touched. Every entry point (toolbar, tray,
+/// global hotkey, in-app shortcut) funnels through this single toggle so
+/// behavior is uniform.
 #[tauri::command]
 pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
     crate::log_event!("[float] toggle requested");
-    let float_visible = app
-        .get_webview_window(FLOAT_WINDOW_LABEL)
-        .is_some_and(|window| window.is_visible().unwrap_or(false));
-    crate::log_event!("[float] existing visible: {float_visible}");
-    if float_visible {
-        if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
+    if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
+        let is_visible = window.is_visible().unwrap_or(false);
+        let is_focused = window.is_focused().unwrap_or(false);
+        crate::log_event!("[float] existing visible: {is_visible}, focused: {is_focused}");
+        if is_visible && is_focused {
             window
                 .hide()
                 .map_err(|error| format!("failed to hide the float panel: {error}"))?;
+            crate::log_event!("[float] toggle done");
+            return Ok(());
         }
-        if let Some(window) = app.get_webview_window("main") {
-            window
-                .show()
-                .map_err(|error| format!("failed to show the main window: {error}"))?;
-            window
-                .set_focus()
-                .map_err(|error| format!("failed to focus the main window: {error}"))?;
-        }
-        return Ok(());
     }
-    // Hide the main window BEFORE creating the float window so creation
-    // happens under the same conditions as the proven tray path (no
-    // visibility/focus overlap while the new webview paints). On failure the
-    // main window is restored so the user is never left with nothing.
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
-    if let Err(error) = open_float_panel(app.clone()) {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-        }
-        return Err(error);
-    }
-    if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
-        let _ = window.set_focus();
-    }
+    let result = open_float_panel(app);
     crate::log_event!("[float] toggle done");
-    Ok(())
+    result
 }
 
 /// Focuses the float panel, creating it at the configured initial position
@@ -96,10 +74,15 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
         }
     }
     crate::log_event!("[float] building window");
-    builder
+    let window = builder
         .build()
         .map_err(|error| format!("failed to open the float panel: {error}"))?;
     crate::log_event!("[float] window built");
+    // The previous frontend-owned creation passed focus:true; keep parity
+    // so the new window paints and receives input immediately.
+    if let Err(error) = window.set_focus() {
+        crate::log_event!("[float] failed to focus the new panel: {error}");
+    }
     Ok(())
 }
 

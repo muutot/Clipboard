@@ -519,8 +519,7 @@ const en: LocaleDefinition = {
     toggleWindowDesc: "Show or hide main window (system global hotkey)",
     focusSearchDesc: "Focus search input",
     toggleFloatPanel: "Toggle float panel",
-    toggleFloatPanelDesc:
-      "Swap between the main window and the float panel (system global hotkey on Windows)",
+    toggleFloatPanelDesc: "Show or hide the float panel (system global hotkey on Windows)",
   },
   capture: {
     settings: "Settings / Capture",
