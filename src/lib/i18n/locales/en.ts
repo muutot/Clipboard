@@ -518,8 +518,8 @@ const en: LocaleDefinition = {
     quickCopyDesc: "Quick copy item #{n}",
     toggleWindowDesc: "Show or hide main window (system global hotkey)",
     focusSearchDesc: "Focus search input",
-    toggleFloatPanel: "Toggle float panel",
-    toggleFloatPanelDesc: "Show or hide the float panel (system global hotkey on Windows)",
+    toggleFloatPanel: "Toggle or hide float panel",
+    toggleFloatPanelDesc: "Show or hide float panel (system global hotkey)",
   },
   capture: {
     settings: "Settings / Capture",

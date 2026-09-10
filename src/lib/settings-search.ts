@@ -743,7 +743,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     "keyboard.toggle-float-panel",
     { section: "keyboard_system" },
     i18n("keyboard.toggleFloatPanel"),
-    "设置显示或隐藏悬浮窗口的快捷键（Windows 上为系统全局热键）",
+    "设置唤起或隐藏悬浮窗口的全局快捷键",
     [...defaultShortcutsFor("toggleFloatPanel"), "悬浮", "float"],
   ),
   entry(

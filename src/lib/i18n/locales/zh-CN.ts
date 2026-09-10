@@ -495,8 +495,8 @@ const zhCN: LocaleDefinition = {
     quickCopyDesc: "快速复制列表第 {n} 条",
     toggleWindowDesc: "唤起或隐藏主窗口（系统全局热键）",
     focusSearchDesc: "聚焦搜索输入框",
-    toggleFloatPanel: "切换悬浮窗口",
-    toggleFloatPanelDesc: "显示或隐藏悬浮窗口（Windows 上为系统全局热键）",
+    toggleFloatPanel: "唤起或隐藏悬浮窗口",
+    toggleFloatPanelDesc: "唤起或隐藏悬浮窗口（系统全局热键）",
   },
   capture: {
     settings: "设置 / 采集",

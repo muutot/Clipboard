@@ -322,6 +322,7 @@
       icon: "layers",
       defaults: defaultShortcutsFor("toggleFloatPanel"),
       cat: "system",
+      system: true,
     },
     {
       id: "hideWindow",
