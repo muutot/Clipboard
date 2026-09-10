@@ -193,19 +193,33 @@ fn spawn_hotkey_thread_with_registrations(
     tx: mpsc::Sender<HotkeyAction>,
 ) -> thread::JoinHandle<()> {
     set_hotkey_sender(&tx);
-    thread::spawn(move || {
-        let result = hotkey_message_loop(&registrations, &double_modifiers);
+    // Readiness handshake: the message window must exist before this returns,
+    // otherwise a subsequent stop()+join can post WM_QUIT to a not-yet-known
+    // hwnd and block forever joining a thread stuck in GetMessageW. At
+    // startup the float registration restarts the loop immediately after the
+    // toggle registration, which hit exactly that race and froze the app.
+    let (ready_tx, ready_rx) = mpsc::channel::<()>();
+    let handle = thread::spawn(move || {
+        let result = hotkey_message_loop(&registrations, &double_modifiers, ready_tx);
         clear_hotkey_state();
         if let Err(error) = result {
             crate::log_event!("[hotkey] message loop exited with error: {error}");
         }
         drop(tx);
-    })
+    });
+    if ready_rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .is_err()
+    {
+        crate::log_event!("[hotkey] message loop did not signal readiness; a later stop may block");
+    }
+    handle
 }
 
 fn hotkey_message_loop(
     registrations: &[HotkeyRegistration],
     double_modifiers: &[Modifier],
+    ready: mpsc::Sender<()>,
 ) -> Result<(), String> {
     if registrations.is_empty() && double_modifiers.is_empty() {
         return Err("no supported hotkey bindings were provided".to_owned());
@@ -284,6 +298,7 @@ fn hotkey_message_loop(
 
         let atom = RegisterClassExW(&wc);
         if atom == 0 && GetLastError() != 1410 {
+            let _ = ready.send(());
             return Err("RegisterClassExW failed".to_string());
         }
 
@@ -302,10 +317,14 @@ fn hotkey_message_loop(
             std::ptr::null(),
         );
         if hwnd == 0 {
+            let _ = ready.send(());
             return Err("CreateWindowExW failed".to_string());
         }
 
         set_hotkey_hwnd(hwnd);
+        // The stop path posts WM_QUIT to this hwnd, so signal readiness only
+        // once it is published.
+        let _ = ready.send(());
 
         let mut registered_ids = Vec::with_capacity(registrations.len());
         for (id, modifiers, vk) in registrations {
@@ -317,6 +336,7 @@ fn hotkey_message_loop(
                 }
                 clear_hotkey_state();
                 DestroyWindow(hwnd);
+                let _ = ready.send(());
                 return Err(error);
             }
             registered_ids.push(*id);
