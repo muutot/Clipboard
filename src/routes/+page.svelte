@@ -2871,12 +2871,6 @@
         >
         <button
           type="button"
-          aria-label={_t("toolbar.floatPanel")}
-          title={_t("toolbar.floatPanel")}
-          onclick={() => void toggleFloatPanel()}><AppIcon name="layers" size={17} /></button
-        >
-        <button
-          type="button"
           aria-label={_t("toolbar.settings")}
           title={_t("toolbar.settings")}
           onclick={openSettings}><AppIcon name="settings" size={17} /></button

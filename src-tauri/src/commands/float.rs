@@ -1,6 +1,6 @@
 //! Standalone float-panel window, owned by the backend so it never depends
 //! on the main window's frontend state. The tray menu, the global shortcut,
-//! and the main toolbar all funnel through [`toggle_float_panel`].
+//! and the in-app shortcut all funnel through [`toggle_float_panel`].
 
 use std::sync::Mutex;
 
@@ -15,8 +15,8 @@ const FLOAT_HEIGHT: f64 = 480.0;
 /// Shows or hides the float panel, mirroring the main-window toggle: a
 /// visible and focused panel is hidden, otherwise it is shown (built on
 /// first use) and focused. Only the float panel's own visibility changes;
-/// the main window is never touched. Every entry point (toolbar, tray,
-/// global hotkey, in-app shortcut) funnels through this single toggle so
+/// the main window is never touched. Every entry point (tray, global
+/// hotkey, in-app shortcut) funnels through this single toggle so
 /// behavior is uniform.
 #[tauri::command]
 pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
