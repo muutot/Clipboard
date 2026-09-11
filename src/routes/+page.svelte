@@ -69,6 +69,7 @@
   } from "$lib/utils/shortcut-bindings";
   import { captureBulkSnapshot, planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
   import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
+  import { resolveSearchInputAction } from "$lib/utils/search-input-actions";
   import {
     applyItemPatchesToCopies,
     findLoadedItemInCopies,
@@ -1146,105 +1147,61 @@
     searchInputEl?.focus();
   }
 
-  function canAcceptInlineSuggestion(): boolean {
-    const input = searchInputEl;
-    return Boolean(
-      inlineSearchSuggestion &&
-      input &&
-      input.selectionStart === input.selectionEnd &&
-      input.selectionEnd === query.length,
-    );
-  }
-
-  function acceptInlineSuggestion(): boolean {
-    const suggestion = inlineSearchSuggestion;
-    if (!suggestion || !canAcceptInlineSuggestion()) return false;
-
-    query = suggestion.value;
-    pendingSearchHistoryQuery = "";
-    searchSuggestionsOpen = false;
-    searchSuggestionIndex = -1;
-    void tick().then(() => {
-      const input = searchInputEl;
-      if (!input) return;
-      input.focus();
-      input.setSelectionRange(query.length, query.length);
-    });
-    return true;
-  }
-
   function handleSearchInputKeydown(event: KeyboardEvent) {
-    if (event.isComposing) return;
-
-    if (event.key === "Backspace") {
-      const now = Date.now();
-      if (now - lastBackspaceAt < 400 && query) {
-        event.preventDefault();
+    const input = searchInputEl;
+    const resolved = resolveSearchInputAction(event, {
+      now: Date.now(),
+      lastBackspaceAt,
+      query,
+      suggestionsOpen: searchSuggestionsOpen,
+      optionCount: searchOptions.length,
+      activeOption: activeSearchOption?.value ?? null,
+      inlineSuggestion: inlineSearchSuggestion?.value ?? null,
+      caretAtEnd:
+        input !== null &&
+        input.selectionStart === input.selectionEnd &&
+        input.selectionEnd === query.length,
+    });
+    lastBackspaceAt = resolved.backspaceAt;
+    if (resolved.prevent) event.preventDefault();
+    if (resolved.stop) event.stopPropagation();
+    switch (resolved.action.type) {
+      case "none":
+        break;
+      case "clear-query":
         query = "";
         pendingSearchHistoryQuery = "";
         searchSuggestionIndex = -1;
-        lastBackspaceAt = 0;
-      } else {
-        lastBackspaceAt = now;
-      }
-      return;
-    }
-    lastBackspaceAt = 0;
-
-    if (
-      (event.key === "Tab" || event.key === "ArrowRight") &&
-      !event.shiftKey &&
-      canAcceptInlineSuggestion()
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      acceptInlineSuggestion();
-      return;
-    }
-
-    if (
-      (event.key === "ArrowDown" || event.key === "ArrowUp") &&
-      searchSuggestionsOpen &&
-      searchOptions.length > 0
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      const direction = event.key === "ArrowDown" ? 1 : -1;
-      searchSuggestionIndex =
-        (searchSuggestionIndex + direction + searchOptions.length) % searchOptions.length;
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      event.stopPropagation();
-      if (activeSearchOption) {
-        chooseSearchOption(activeSearchOption.value);
-      } else {
-        commitSearchQuery();
-      }
-      return;
-    }
-
-    if (event.key === "Escape") {
-      if (searchSuggestionsOpen) {
-        event.preventDefault();
-        event.stopPropagation();
+        break;
+      case "accept-inline":
+        query = resolved.action.value;
+        pendingSearchHistoryQuery = "";
         searchSuggestionsOpen = false;
         searchSuggestionIndex = -1;
-        if (query) {
-          query = "";
-          pendingSearchHistoryQuery = "";
-        }
-        return;
-      }
-      if (query) {
-        event.preventDefault();
-        event.stopPropagation();
+        void tick().then(() => {
+          const el = searchInputEl;
+          if (!el) return;
+          el.focus();
+          el.setSelectionRange(query.length, query.length);
+        });
+        break;
+      case "move-index":
+        searchSuggestionIndex =
+          (searchSuggestionIndex + resolved.action.delta + searchOptions.length) %
+          searchOptions.length;
+        break;
+      case "commit-query":
+        commitSearchQuery();
+        break;
+      case "choose-option":
+        chooseSearchOption(resolved.action.value);
+        break;
+      case "close-suggestions":
+        searchSuggestionsOpen = false;
+        searchSuggestionIndex = -1;
         query = "";
         pendingSearchHistoryQuery = "";
-        return;
-      }
+        break;
     }
   }
 
