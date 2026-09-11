@@ -2461,6 +2461,55 @@
   >
     <section class="history-panel" aria-label={_t("app.recentRecords")}>
       <div class="section-heading"></div>
+      {#snippet historyCard(item: ClipboardItem)}
+        <ClipboardCard
+          {item}
+          index={filteredItemIndexById.get(item.id) ?? 0}
+          now={currentTime}
+          selected={selectedIds.has(item.id) || item.id === selectedId}
+          checked={selectedIds.has(item.id)}
+          showCheckbox={false}
+          hideActions={selectedIds.size > 0 ||
+            (detailDisplayMode === "split" && detailItem != null)}
+          hideMetaRow={detailDisplayMode === "split" && detailItem != null}
+          {cardPaddingTop}
+          {cardPaddingBottom}
+          {cardGap}
+          {cardBorderRadius}
+          cardHeight={cardHeightFor(item)}
+          {maxTextLines}
+          {showSecondaryText}
+          {alwaysShowActions}
+          quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible &&
+            !(detailDisplayMode === "split" && detailItem != null)}
+          onheightchange={recordCardHeight}
+          heightMeasurementKey={cardLayoutSignature(item)}
+          onselect={selectItem}
+          ontoggleSelect={toggleSelectItem}
+          ontoggleFavorite={toggleFavorite}
+          ondelete={deleteItem}
+          oncopy={copyItem}
+          onsave={saveItem}
+          ondetail={openDetail}
+          onimagefullscreen={handleImageFullscreen}
+          onmaterialize={prepareItemMaterialization}
+          onedit={startEdit}
+          onsaveedit={saveEdit}
+          onsaveasnew={saveAsNew}
+          oncanceledit={cancelEdit}
+          onplainpaste={plainPaste}
+          onformatpaste={formatPaste}
+          oncleanpaste={cleanPaste}
+          ondblclickpaste={doubleClickPasteItem}
+          {doubleClickPaste}
+          onrestore={restoreItem}
+          onsavetags={saveTags}
+          {tagColors}
+          ontoggleTagFilter={toggleTagFilter}
+          oneditTag={openTagEdit}
+          tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
+        />
+      {/snippet}
 
       {#if filteredItems.length > 0}
         <div
@@ -2482,102 +2531,10 @@
                   style="position: absolute; top: {virtualList.visibleItems[visibleIdx]
                     .top}px; left: 0; right: 0;"
                 >
-                  <ClipboardCard
-                    {item}
-                    index={filteredItemIndexById.get(item.id) ?? 0}
-                    now={currentTime}
-                    selected={selectedIds.has(item.id) || item.id === selectedId}
-                    checked={selectedIds.has(item.id)}
-                    showCheckbox={false}
-                    hideActions={selectedIds.size > 0 ||
-                      (detailDisplayMode === "split" && detailItem != null)}
-                    hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-                    {cardPaddingTop}
-                    {cardPaddingBottom}
-                    {cardGap}
-                    {cardBorderRadius}
-                    cardHeight={cardHeightFor(item)}
-                    {maxTextLines}
-                    {showSecondaryText}
-                    {alwaysShowActions}
-                    quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible &&
-                      !(detailDisplayMode === "split" && detailItem != null)}
-                    onheightchange={recordCardHeight}
-                    heightMeasurementKey={cardLayoutSignature(item)}
-                    onselect={selectItem}
-                    ontoggleSelect={toggleSelectItem}
-                    ontoggleFavorite={toggleFavorite}
-                    ondelete={deleteItem}
-                    oncopy={copyItem}
-                    onsave={saveItem}
-                    ondetail={openDetail}
-                    onimagefullscreen={handleImageFullscreen}
-                    onmaterialize={prepareItemMaterialization}
-                    onedit={startEdit}
-                    onsaveedit={saveEdit}
-                    onsaveasnew={saveAsNew}
-                    oncanceledit={cancelEdit}
-                    onplainpaste={plainPaste}
-                    onformatpaste={formatPaste}
-                    oncleanpaste={cleanPaste}
-                    ondblclickpaste={doubleClickPasteItem}
-                    {doubleClickPaste}
-                    onrestore={restoreItem}
-                    onsavetags={saveTags}
-                    {tagColors}
-                    ontoggleTagFilter={toggleTagFilter}
-                    oneditTag={openTagEdit}
-                    tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
-                  />
+                  {@render historyCard(item)}
                 </div>
               {:else}
-                <ClipboardCard
-                  {item}
-                  index={filteredItemIndexById.get(item.id) ?? 0}
-                  now={currentTime}
-                  selected={selectedIds.has(item.id) || item.id === selectedId}
-                  checked={selectedIds.has(item.id)}
-                  showCheckbox={false}
-                  hideActions={selectedIds.size > 0 ||
-                    (detailDisplayMode === "split" && detailItem != null)}
-                  hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-                  {cardPaddingTop}
-                  {cardPaddingBottom}
-                  {cardGap}
-                  {cardBorderRadius}
-                  cardHeight={cardHeightFor(item)}
-                  {maxTextLines}
-                  {showSecondaryText}
-                  {alwaysShowActions}
-                  quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible &&
-                    !(detailDisplayMode === "split" && detailItem != null)}
-                  onheightchange={recordCardHeight}
-                  heightMeasurementKey={cardLayoutSignature(item)}
-                  onselect={selectItem}
-                  ontoggleSelect={toggleSelectItem}
-                  ontoggleFavorite={toggleFavorite}
-                  ondelete={deleteItem}
-                  oncopy={copyItem}
-                  onsave={saveItem}
-                  ondetail={openDetail}
-                  onimagefullscreen={handleImageFullscreen}
-                  onmaterialize={prepareItemMaterialization}
-                  onedit={startEdit}
-                  onsaveedit={saveEdit}
-                  onsaveasnew={saveAsNew}
-                  oncanceledit={cancelEdit}
-                  onplainpaste={plainPaste}
-                  onformatpaste={formatPaste}
-                  oncleanpaste={cleanPaste}
-                  ondblclickpaste={doubleClickPasteItem}
-                  {doubleClickPaste}
-                  onrestore={restoreItem}
-                  onsavetags={saveTags}
-                  {tagColors}
-                  ontoggleTagFilter={toggleTagFilter}
-                  oneditTag={openTagEdit}
-                  tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
-                />
+                {@render historyCard(item)}
               {/if}
             {/each}
           </div>
