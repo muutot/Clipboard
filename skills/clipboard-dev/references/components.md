@@ -87,6 +87,10 @@ Multiselection action bar extracted from the main route. Renders nothing when `s
 
 Main-route status footer extracted with its scoped styles. Props: `resultSummary`, `runtimeLabel`, `statusMessage`, and `toggleHint` (current main-toggle binding, null hides the kbd chips when unbound). The route derives the hint from `keyboard.json` via `resolveActionBindings` with the shared `defaultShortcutsFor("toggleWindow")` default. Two deliberate cross-scope exceptions live in the component: `:global(.app-shell.split-detail) > .status-bar` for split-mode spanning and the 660px narrow-window rules (page-scoped selectors cannot reach component internals; the compiler flags them as unused if left in the route).
 
+### `Toolbar.svelte`
+
+Main-route filter toolbar: filter tabs, source/date dropdowns, and pin/settings actions. Props are values + callbacks (`filters`, `activeFilter`, `filterShortcutBindings`, `onselectfilter`, `sourceApps`, `sourceAppFilter`, `onsourceapp`, `dateFilter`, `dateFilterOptions`, `ondatefilter`, `onsettings`); dropdown open/search state, truncation effects, and the pin toggle (via the global `generalSettings` store) live inside. Owns its full style block verbatim plus the same two cross-scope exceptions as `StatusBar.svelte` (split-detail spanning, 660px rules). The route keeps list/pagination invalidation behind the callbacks; the toolbar drag region (`data-tauri-drag-region` + empty-space `startDragging`) stays on the component root.
+
 ## Content preview/editing
 
 | Component                | Responsibility                                                                                                                               | Important boundary                                                                                                                                                                                                       |
