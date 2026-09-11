@@ -3,6 +3,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
+  import DetailEditActions from "$lib/components/DetailEditActions.svelte";
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
@@ -705,20 +706,11 @@
                 placeholder={_t("edit.placeholder")}
                 oncontentchange={(content) => (editContent = content)}
               />
-              <div class="edit-actions">
-                <button type="button" class="edit-save" onclick={saveEdit}>
-                  <AppIcon name="check" size={14} strokeWidth={2.5} />
-                  {_t("edit.save")}
-                </button>
-                <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
-                  <AppIcon name="copy" size={14} strokeWidth={2.5} />
-                  {_t("edit.saveAsNew")}
-                </button>
-                <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
-                  <AppIcon name="x" size={14} strokeWidth={2.5} />
-                  {_t("edit.cancel")}
-                </button>
-              </div>
+              <DetailEditActions
+                onsave={saveEdit}
+                onsaveasnew={saveAsNew}
+                oncancel={() => (editing = false)}
+              />
             {:else}
               <CodePreview content={detailContent} />
             {/if}
@@ -730,20 +722,11 @@
                   rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
                   placeholder={_t("edit.placeholder")}></textarea>
               </div>
-              <div class="edit-actions">
-                <button type="button" class="edit-save" onclick={saveEdit}>
-                  <AppIcon name="check" size={14} strokeWidth={2.5} />
-                  {_t("edit.save")}
-                </button>
-                <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
-                  <AppIcon name="copy" size={14} strokeWidth={2.5} />
-                  {_t("edit.saveAsNew")}
-                </button>
-                <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
-                  <AppIcon name="x" size={14} strokeWidth={2.5} />
-                  {_t("edit.cancel")}
-                </button>
-              </div>
+              <DetailEditActions
+                onsave={saveEdit}
+                onsaveasnew={saveAsNew}
+                oncancel={() => (editing = false)}
+              />
             {:else}
               <MarkdownPreview content={detailContent} />
             {/if}
@@ -755,20 +738,11 @@
                   rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
                   placeholder={_t("edit.placeholder")}></textarea>
               </div>
-              <div class="edit-actions">
-                <button type="button" class="edit-save" onclick={saveEdit}>
-                  <AppIcon name="check" size={14} strokeWidth={2.5} />
-                  {_t("edit.save")}
-                </button>
-                <button type="button" class="edit-save-as-new" onclick={saveAsNew}>
-                  <AppIcon name="copy" size={14} strokeWidth={2.5} />
-                  {_t("edit.saveAsNew")}
-                </button>
-                <button type="button" class="edit-cancel" onclick={() => (editing = false)}>
-                  <AppIcon name="x" size={14} strokeWidth={2.5} />
-                  {_t("edit.cancel")}
-                </button>
-              </div>
+              <DetailEditActions
+                onsave={saveEdit}
+                onsaveasnew={saveAsNew}
+                oncancel={() => (editing = false)}
+              />
             {:else}
               <pre class="content-full">{item.textContent || item.title}</pre>
             {/if}
@@ -2022,66 +1996,6 @@
       monospace;
     resize: vertical;
     outline: none;
-  }
-
-  .edit-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
-    justify-content: flex-end;
-  }
-
-  .edit-actions button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 5px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    color: var(--text-muted);
-    line-height: 1;
-    background: var(--card-bg);
-    font: inherit;
-    font-size: 11.5px;
-    cursor: pointer;
-    transition:
-      background 100ms ease,
-      border-color 100ms ease;
-  }
-
-  .edit-actions button.edit-save {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-    border-color: var(--text-faint);
-  }
-
-  .edit-actions button.edit-save:hover {
-    color: #fff;
-    background: var(--border-color);
-    border-color: var(--text-faint);
-  }
-
-  .edit-actions button.edit-save-as-new {
-    color: var(--text-muted);
-    background: var(--card-bg);
-    border-color: var(--border-color);
-  }
-
-  .edit-actions button.edit-save-as-new:hover {
-    color: var(--text-secondary);
-    background: var(--hover-bg);
-    border-color: var(--text-faint);
-  }
-
-  .edit-actions button.edit-save-as-new:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-
-  .edit-actions button.edit-cancel:hover {
-    color: var(--text-secondary);
-    background: var(--hover-bg);
   }
 
   .image-full-preview {

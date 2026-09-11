@@ -43,6 +43,10 @@ Owns overlay/split detail rendering, resource metadata display, OCR status/actio
 
 Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimagefullscreen` callback; DetailPanel no longer owns the fullscreen viewer or WebviewWindow lifecycle.
 
+DetailPanel subcomponents (split out of the 2100+ line panel):
+
+- `DetailEditActions.svelte` — the save / save-as-new / cancel row shared by the code, markdown and plain-text edit modes. Props: `onsave`, `onsaveasnew`, `oncancel`; owns its scoped styles.
+
 Key contracts:
 
 - `item` may be null and `mode` is `overlay` or `split`.
