@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flushSync, onMount, tick, untrack } from "svelte";
-  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import BulkBar from "$lib/components/BulkBar.svelte";
@@ -25,7 +25,6 @@
     persistBatchFavorite,
     persistBatchDelete,
     persistTags,
-    persistLastUsed,
     listAllTags,
     searchClipboardHistory,
     listSourceApplications,
@@ -34,9 +33,8 @@
     materializeClipboardItem,
     toClipboardItem,
     copyClipboardItem,
-    writeClipboardImage,
+    pasteClipboardItem,
     writeClipboardText,
-    writeClipboardHtml,
     getDisplayTitle,
     getDisplayRemainingLines,
     type HistoryFilterArgs,
@@ -108,12 +106,6 @@
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
-
-  interface TextTransformResult {
-    input: string;
-    operation: string;
-    result: string;
-  }
 
   const dateFilterOptions = $derived([
     { id: "all" as const, label: _t("dateFilter.all") },
@@ -1641,190 +1633,36 @@
     refreshTagColors();
   }
 
-  async function cleanTextIfEnabled(text: string): Promise<string> {
-    if (!$generalSettings.pasteCleaningEnabled) return text;
-    try {
-      const transform = await invoke<TextTransformResult>("transform_text", {
-        operation: "cleanPaste",
-        input: text,
-      });
-      return transform.result;
-    } catch (error) {
-      console.error("Unable to clean text before paste", error);
-      return text;
-    }
-  }
-
-  async function pasteToPreviousApplication(
-    item: ClipboardItem,
-    keys: { paste: string; copy: string; failed: string },
-    write: () => Promise<void>,
-  ): Promise<void> {
-    if ($generalSettings.pinCopiedToTop) moveToTop(item.id);
-    try {
-      await write();
-    } catch (error) {
-      console.error("Unable to prepare clipboard content for paste", error);
-      showToast(_t(keys.failed), "error");
-      return;
-    }
-    void persistLastUsed(item.id);
-
-    if (!isTauriRuntime()) {
-      showToast(_t(keys.copy), "success");
-      return;
-    }
-
-    try {
-      const pasted = await invoke<boolean>("paste_to_previous_application");
-      showToast(_t(pasted ? keys.paste : keys.copy), pasted ? "success" : "info");
-    } catch (error) {
-      console.error("Unable to restore the previous application and paste", error);
-      showToast(_t(keys.failed), "error");
-    }
-  }
-
   async function plainPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    const text = item.textContent || item.title;
-    await pasteToPreviousApplication(
-      item,
-      {
-        paste: "toast.plainPasteSuccess",
-        copy: "toast.plainCopySuccess",
-        failed: "toast.plainPasteFailed",
-      },
-      async () => {
-        const cleaned = await cleanTextIfEnabled(text);
-        await writeClipboardText(cleaned);
-      },
-    );
+    await pasteClipboardItem(item, "plain", {
+      moveToTop: (mid) => moveToTop(mid),
+    });
   }
 
   async function formatPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item || !item.htmlContent) return;
-    const htmlContent = item.htmlContent;
-    const plainText = item.textContent || undefined;
-    await pasteToPreviousApplication(
-      item,
-      {
-        paste: "toast.formatPasteSuccess",
-        copy: "toast.formatCopySuccess",
-        failed: "toast.formatPasteFailed",
-      },
-      async () => {
-        if (plainText && $generalSettings.pasteCleaningEnabled) {
-          const cleaned = await cleanTextIfEnabled(plainText);
-          if (cleaned !== plainText) {
-            await writeClipboardText(cleaned);
-            return;
-          }
-        }
-        await writeClipboardHtml(htmlContent, plainText, item.rtfContent);
-      },
-    );
+    await pasteClipboardItem(item, "format", {
+      moveToTop: (mid) => moveToTop(mid),
+    });
   }
 
   async function cleanPaste(_id: string) {
     const item = items.find((i) => i.id === _id);
     if (!item) return;
-    const text = item.textContent || item.title;
-    await pasteToPreviousApplication(
-      item,
-      {
-        paste: "toast.cleanPasteSuccess",
-        copy: "toast.cleanCopySuccess",
-        failed: "toast.cleanPasteFailed",
-      },
-      async () => {
-        const transform = await invoke<TextTransformResult>("transform_text", {
-          operation: "cleanPaste",
-          input: text,
-        });
-        await writeClipboardText(transform.result);
-      },
-    );
+    await pasteClipboardItem(item, "clean", {
+      moveToTop: (mid) => moveToTop(mid),
+    });
   }
 
   async function doubleClickPasteItem(id: string) {
-    let item = findLoadedItem(id);
+    const item = findLoadedItem(id);
     if (!item) return;
-
-    if (item.kind === "text" || item.kind === "link") {
-      if (item.htmlContent) {
-        await formatPaste(id);
-      } else {
-        await plainPaste(id);
-      }
-      return;
-    }
-
-    if (item.kind === "image") {
-      try {
-        item = await ensureItemMaterialized(item);
-      } catch (error) {
-        console.error("Unable to materialize image for paste", error);
-        showToast(_t("toast.imagePasteFailed"), "error");
-        return;
-      }
-      const materializedItem = item;
-      await pasteToPreviousApplication(
-        materializedItem,
-        {
-          paste: "toast.imagePasteSuccess",
-          copy: "toast.imageCopySuccess",
-          failed: "toast.imagePasteFailed",
-        },
-        async () => {
-          const src = convertFileSrc((materializedItem.resourcePath ?? "").replace(/\\/g, "/"));
-          const response = await fetch(src);
-          const blob = await response.blob();
-          await writeClipboardImage(
-            blob,
-            materializedItem.resourcePath,
-            materializedItem.contentHash,
-          );
-        },
-      );
-      return;
-    }
-
-    if (item.kind === "file") {
-      try {
-        item = await ensureItemMaterialized(item);
-      } catch (error) {
-        console.error("Unable to materialize files for paste", error);
-        showToast(_t("toast.filePasteFailed"), "error");
-        return;
-      }
-      const materializedItem = item;
-      await pasteToPreviousApplication(
-        materializedItem,
-        {
-          paste: "toast.filePasteSuccess",
-          copy: "toast.fileCopySuccess",
-          failed: "toast.filePasteFailed",
-        },
-        async () => {
-          if (materializedItem.textContent && materializedItem.textContent.startsWith("[")) {
-            try {
-              const paths = JSON.parse(materializedItem.textContent) as string[];
-              if (paths.length > 1) {
-                await writeClipboardText(paths.join("\n"));
-                return;
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-          if (materializedItem.resourcePath) {
-            await writeClipboardText(materializedItem.resourcePath);
-          }
-        },
-      );
-    }
+    await pasteClipboardItem(item, "auto", {
+      moveToTop: (mid) => moveToTop(mid),
+    });
   }
 
   function duplicateItem(id: string) {

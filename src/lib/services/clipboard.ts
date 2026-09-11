@@ -1,6 +1,8 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { showToast } from "$lib/services/toast";
 import { invokeTauri, invokeTauriRequired, isTauriRuntime } from "$lib/services/runtime";
+import { generalSettings } from "$lib/services/settings";
+import { get } from "svelte/store";
 import type {
   ClipboardItem,
   ClipboardKind,
@@ -725,3 +727,219 @@ export const SOURCE_TONE_COLORS: Record<ClipboardItem["sourceTone"], string> = {
   blue: "#66bde1",
   violet: "#746dff",
 };
+
+export interface TextTransformResult {
+  input: string;
+  operation: string;
+  result: string;
+}
+
+export type PasteMode = "plain" | "format" | "clean" | "auto";
+
+export interface PasteItemHooks {
+  /** Reorder callback (the main list pins the pasted entry to the top). */
+  moveToTop?: (id: string) => void;
+}
+
+interface PasteMessageKeys {
+  paste: string;
+  copy: string;
+  failed: string;
+}
+
+async function cleanTextIfEnabled(text: string): Promise<string> {
+  if (!get(generalSettings).pasteCleaningEnabled) return text;
+  try {
+    const transform = await invokeTauri<TextTransformResult>("transform_text", {
+      operation: "cleanPaste",
+      input: text,
+    });
+    return transform?.result ?? text;
+  } catch (error) {
+    console.error("Unable to clean text before paste", error);
+    return text;
+  }
+}
+
+async function pasteToPreviousApp(
+  item: ClipboardItem,
+  keys: PasteMessageKeys,
+  write: () => Promise<void>,
+  hooks: PasteItemHooks = {},
+): Promise<void> {
+  const locale = getLocale();
+  const messages = locales[locale] ?? locales.en;
+  const t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath(messages, path, params);
+
+  if (get(generalSettings).pinCopiedToTop) hooks.moveToTop?.(item.id);
+  try {
+    await write();
+  } catch (error) {
+    console.error("Unable to prepare clipboard content for paste", error);
+    showToast(t(keys.failed), "error");
+    return;
+  }
+  void persistLastUsed(item.id);
+
+  if (!isTauriRuntime()) {
+    showToast(t(keys.copy), "success");
+    return;
+  }
+
+  try {
+    const pasted = await invokeTauri<boolean>("paste_to_previous_application");
+    showToast(t(pasted ? keys.paste : keys.copy), pasted ? "success" : "info");
+  } catch (error) {
+    console.error("Unable to restore the previous application and paste", error);
+    showToast(t(keys.failed), "error");
+  }
+}
+
+/**
+ * Pastes one history entry into the previous application (or copies it
+ * outside Tauri), shared by the main list, the detail panel, and the float
+ * panel. `auto` picks the richest available representation by kind.
+ */
+export async function pasteClipboardItem(
+  item: ClipboardItem,
+  mode: PasteMode = "auto",
+  hooks: PasteItemHooks = {},
+): Promise<void> {
+  const locale = getLocale();
+  const messages = locales[locale] ?? locales.en;
+  const t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath(messages, path, params);
+
+  if (mode === "plain") {
+    const text = item.textContent || item.title;
+    await pasteToPreviousApp(
+      item,
+      {
+        paste: "toast.plainPasteSuccess",
+        copy: "toast.plainCopySuccess",
+        failed: "toast.plainPasteFailed",
+      },
+      async () => {
+        const cleaned = await cleanTextIfEnabled(text);
+        await writeClipboardText(cleaned);
+      },
+      hooks,
+    );
+    return;
+  }
+
+  if (mode === "clean") {
+    const text = item.textContent || item.title;
+    await pasteToPreviousApp(
+      item,
+      {
+        paste: "toast.cleanPasteSuccess",
+        copy: "toast.cleanCopySuccess",
+        failed: "toast.cleanPasteFailed",
+      },
+      async () => {
+        const transform = await invokeTauri<TextTransformResult>("transform_text", {
+          operation: "cleanPaste",
+          input: text,
+        });
+        await writeClipboardText(transform?.result ?? text);
+      },
+      hooks,
+    );
+    return;
+  }
+
+  if (mode === "format") {
+    if (!item.htmlContent) return;
+    const htmlContent = item.htmlContent;
+    const plainText = item.textContent || undefined;
+    await pasteToPreviousApp(
+      item,
+      {
+        paste: "toast.formatPasteSuccess",
+        copy: "toast.formatCopySuccess",
+        failed: "toast.formatPasteFailed",
+      },
+      async () => {
+        if (plainText && get(generalSettings).pasteCleaningEnabled) {
+          const cleaned = await cleanTextIfEnabled(plainText);
+          if (cleaned !== plainText) {
+            await writeClipboardText(cleaned);
+            return;
+          }
+        }
+        await writeClipboardHtml(htmlContent, plainText, item.rtfContent);
+      },
+      hooks,
+    );
+    return;
+  }
+
+  // auto: richest representation by kind.
+  if (item.kind === "text" || item.kind === "link") {
+    if (item.htmlContent) {
+      await pasteClipboardItem(item, "format", hooks);
+    } else {
+      await pasteClipboardItem(item, "plain", hooks);
+    }
+    return;
+  }
+
+  if (item.kind === "image" || item.kind === "file") {
+    let media = item;
+    try {
+      media = await materializeClipboardItem(item);
+    } catch (error) {
+      console.error("Unable to materialize media for paste", error);
+      showToast(
+        t(item.kind === "image" ? "toast.imagePasteFailed" : "toast.filePasteFailed"),
+        "error",
+      );
+      return;
+    }
+    if (item.kind === "image") {
+      await pasteToPreviousApp(
+        media,
+        {
+          paste: "toast.imagePasteSuccess",
+          copy: "toast.imageCopySuccess",
+          failed: "toast.imagePasteFailed",
+        },
+        async () => {
+          const src = convertFileSrc((media.resourcePath ?? "").replace(/\\/g, "/"));
+          const response = await fetch(src);
+          const blob = await response.blob();
+          await writeClipboardImage(blob, media.resourcePath, media.contentHash);
+        },
+        hooks,
+      );
+      return;
+    }
+    await pasteToPreviousApp(
+      media,
+      {
+        paste: "toast.filePasteSuccess",
+        copy: "toast.fileCopySuccess",
+        failed: "toast.filePasteFailed",
+      },
+      async () => {
+        if (media.textContent && media.textContent.startsWith("[")) {
+          try {
+            const paths = JSON.parse(media.textContent) as string[];
+            if (paths.length > 1) {
+              await writeClipboardText(paths.join("\n"));
+              return;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        if (media.resourcePath) {
+          await writeClipboardText(media.resourcePath);
+        }
+      },
+      hooks,
+    );
+  }
+}
