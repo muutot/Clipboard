@@ -3,6 +3,7 @@ import type { ClipboardItem } from "$lib/types/clipboard";
 import {
   applyItemPatchesToCopies,
   findLoadedItemInCopies,
+  mergeDeletedHistoryPage,
   removeItemTag,
   removeItemsFromCopies,
   replaceItemInCopies,
@@ -138,5 +139,51 @@ describe("removeItemTag", () => {
   it("returns the entry untouched when the name is absent", () => {
     const before = item("a", { tags: ["x"] });
     expect(removeItemTag(before, "missing")).toBe(before);
+  });
+});
+
+describe("mergeDeletedHistoryPage", () => {
+  it("appends new recycle-bin rows as deleted", () => {
+    const merged = mergeDeletedHistoryPage(
+      [item("live")],
+      [item("gone-1"), item("gone-2")],
+      new Set(),
+    );
+    expect(merged.map((entry) => entry.id)).toEqual(["live", "gone-1", "gone-2"]);
+    expect(merged.slice(1).every((entry) => entry.deleted === true)).toBe(true);
+  });
+
+  it("does not resurrect a row restored while the page was in flight", () => {
+    // The row is already back in the active list (deleted: false); a stale
+    // recycle-bin response still lists it and must not flip it back.
+    const restored = item("a", { deleted: false, title: "restored" });
+    const merged = mergeDeletedHistoryPage(
+      [restored],
+      [item("a", { deleted: true, title: "stale" })],
+      new Set(),
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].deleted).toBe(false);
+    expect(merged[0].title).toBe("restored");
+  });
+
+  it("refreshes an existing deleted row from the persisted page", () => {
+    const merged = mergeDeletedHistoryPage(
+      [item("a", { deleted: true, title: "old" })],
+      [item("a", { deleted: true, title: "fresh" })],
+      new Set(),
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].title).toBe("fresh");
+    expect(merged[0].deleted).toBe(true);
+  });
+
+  it("drops suppressed ids from both the loaded list and the incoming page", () => {
+    const merged = mergeDeletedHistoryPage(
+      [item("keep"), item("purged", { deleted: true })],
+      [item("purged", { deleted: true }), item("keep")],
+      new Set(["purged"]),
+    );
+    expect(merged.map((entry) => entry.id)).toEqual(["keep"]);
   });
 });

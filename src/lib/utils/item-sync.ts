@@ -98,3 +98,30 @@ export function removeItemTag(item: ClipboardItem, name: string): ClipboardItem 
   if (!tags.includes(name)) return item;
   return { ...item, tags: tags.filter((tag) => tag !== name) };
 }
+
+/**
+ * Folds a recycle-bin page into the loaded list. Suppressed ids (locally
+ * restored/permanently deleted while the request was in flight) are dropped,
+ * and a persisted row never overwrites a local restore — a stale response must
+ * not resurrect a row the user already acted on.
+ */
+export function mergeDeletedHistoryPage(
+  items: ClipboardItem[],
+  page: ClipboardItem[],
+  suppressedIds: ReadonlySet<string>,
+): ClipboardItem[] {
+  const incoming = new Map(page.map((item) => [item.id, item]));
+  const merged = items
+    .filter((item) => !item.deleted || !suppressedIds.has(item.id))
+    .map((item) => {
+      const persisted = incoming.get(item.id);
+      if (!persisted || !item.deleted) return item;
+      return { ...item, ...persisted, deleted: true };
+    });
+  const existingIds = new Set(merged.map((item) => item.id));
+  for (const item of page) {
+    if (suppressedIds.has(item.id)) continue;
+    if (!existingIds.has(item.id)) merged.push({ ...item, deleted: true });
+  }
+  return merged;
+}

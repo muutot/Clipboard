@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { filterHistoryItems, resolveDateRange, type HistoryFilterState } from "./history-filter";
+import {
+  buildHistoryFilterArgs,
+  filterHistoryItems,
+  resolveDateRange,
+  type HistoryFilterState,
+} from "./history-filter";
 import type { ClipboardItem } from "$lib/types/clipboard";
 
 function item(overrides: Partial<ClipboardItem> & { id: string }): ClipboardItem {
@@ -39,6 +44,63 @@ describe("resolveDateRange", () => {
     expect(resolveDateRange("yesterday")!.from).toBe(new Date(2026, 7, 24, 0, 0, 0, 0).getTime());
     expect(resolveDateRange("week")!.from).toBe(new Date(2026, 7, 24).getTime());
     expect(resolveDateRange("month")!.from).toBe(new Date(2026, 7, 1).getTime());
+  });
+});
+
+describe("buildHistoryFilterArgs", () => {
+  const base = {
+    activeFilter: "all" as const,
+    tagFilter: null,
+    sourceAppFilter: "",
+    dateFilter: "all" as const,
+  };
+
+  it("maps the 'all' group to an unfiltered payload", () => {
+    expect(buildHistoryFilterArgs(base)).toEqual({
+      kind: null,
+      favorite: false,
+      tag: null,
+      sourceApp: null,
+      dateFromMs: null,
+      dateToMs: null,
+    });
+  });
+
+  it("maps the favorite group and content kinds", () => {
+    expect(buildHistoryFilterArgs({ ...base, activeFilter: "favorite" })).toMatchObject({
+      kind: null,
+      favorite: true,
+    });
+    expect(buildHistoryFilterArgs({ ...base, activeFilter: "image" })).toMatchObject({
+      kind: "image",
+      favorite: false,
+    });
+  });
+
+  it("ignores every axis for the recycle bin", () => {
+    expect(
+      buildHistoryFilterArgs({
+        activeFilter: "deleted",
+        tagFilter: "work",
+        sourceAppFilter: "Edge",
+        dateFilter: "today",
+      }),
+    ).toEqual({});
+  });
+
+  it("resolves the date id to an absolute window and forwards source/tag", () => {
+    vi.setSystemTime(new Date("2026-08-25T12:00:00"));
+    const args = buildHistoryFilterArgs({
+      activeFilter: "text",
+      tagFilter: "work",
+      sourceAppFilter: "Edge",
+      dateFilter: "today",
+    });
+    expect(args.kind).toBe("text");
+    expect(args.tag).toBe("work");
+    expect(args.sourceApp).toBe("Edge");
+    expect(args.dateFromMs).toBe(new Date(2026, 7, 25, 0, 0, 0, 0).getTime());
+    expect(args.dateToMs).toBe(new Date(2026, 7, 25, 23, 59, 59, 999).getTime());
   });
 });
 

@@ -3,6 +3,16 @@ export const clipboardKinds = ["text", "link", "image", "file"] as const;
 export type ClipboardKind = (typeof clipboardKinds)[number];
 export type ClipboardFilter = "all" | ClipboardKind | "favorite" | "deleted";
 
+/** Backend filter payload accepted by `list_clipboard_items`. */
+export interface HistoryFilterArgs {
+  kind?: ClipboardKind | null;
+  favorite?: boolean;
+  tag?: string | null;
+  sourceApp?: string | null;
+  dateFromMs?: number | null;
+  dateToMs?: number | null;
+}
+
 export interface ResourceFileMetadata {
   name: string;
   size: number;

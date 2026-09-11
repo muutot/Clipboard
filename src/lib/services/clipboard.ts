@@ -5,7 +5,7 @@ import { generalSettings } from "$lib/services/settings";
 import { get } from "svelte/store";
 import type {
   ClipboardItem,
-  ClipboardKind,
+  HistoryFilterArgs,
   PersistedClipboardItem,
   ResourceFileMetadata,
   ResourceMetadata,
@@ -72,15 +72,6 @@ export async function writeClipboardHtml(
     payload["text/rtf"] = new Blob([rtf], { type: "text/rtf" });
   }
   await navigator.clipboard.write([new ClipboardItem(payload)]);
-}
-
-export interface HistoryFilterArgs {
-  kind?: ClipboardKind | null;
-  favorite?: boolean;
-  tag?: string | null;
-  sourceApp?: string | null;
-  dateFromMs?: number | null;
-  dateToMs?: number | null;
 }
 
 export async function loadClipboardHistory(

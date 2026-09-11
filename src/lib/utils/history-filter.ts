@@ -3,7 +3,7 @@
 // The route only supplies state; this module never touches stores or IPC.
 
 import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
-import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
+import type { ClipboardFilter, ClipboardItem, HistoryFilterArgs } from "$lib/types/clipboard";
 
 export type HistoryDateFilter = "all" | "today" | "yesterday" | "week" | "month";
 
@@ -50,6 +50,27 @@ interface FilterCandidates {
   /** Backend search results for `indexedQuery`, or null when unavailable. */
   indexedItems: ClipboardItem[] | null;
   indexedQuery: string;
+}
+
+/**
+ * Maps the toolbar filter state onto the backend `list_clipboard_items`
+ * payload. The recycle bin ignores every other axis, so it returns an empty
+ * filter; date ids resolve to an absolute millisecond window.
+ */
+export function buildHistoryFilterArgs(
+  state: Pick<HistoryFilterState, "activeFilter" | "tagFilter" | "sourceAppFilter" | "dateFilter">,
+): HistoryFilterArgs {
+  if (state.activeFilter === "deleted") return {};
+  const dateRange = resolveDateRange(state.dateFilter);
+  return {
+    kind:
+      state.activeFilter === "all" || state.activeFilter === "favorite" ? null : state.activeFilter,
+    favorite: state.activeFilter === "favorite",
+    tag: state.tagFilter,
+    sourceApp: state.sourceAppFilter || null,
+    dateFromMs: dateRange?.from ?? null,
+    dateToMs: dateRange?.to ?? null,
+  };
 }
 
 function matchesGroup(item: ClipboardItem, activeFilter: ClipboardFilter): boolean {

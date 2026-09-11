@@ -37,7 +37,6 @@
     writeClipboardText,
     getDisplayTitle,
     getDisplayRemainingLines,
-    type HistoryFilterArgs,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
@@ -55,7 +54,7 @@
   } from "$lib/utils/virtual-scroll";
   import { estimateCardHeight } from "$lib/utils/card-height";
   import { parseDateQuery } from "$lib/utils/date-query";
-  import { filterHistoryItems, resolveDateRange } from "$lib/utils/history-filter";
+  import { buildHistoryFilterArgs, filterHistoryItems } from "$lib/utils/history-filter";
   import {
     mergeSearchCachePage,
     promoteFromCache as promoteCachedEntries,
@@ -72,6 +71,7 @@
   import {
     applyItemPatchesToCopies,
     findLoadedItemInCopies,
+    mergeDeletedHistoryPage,
     removeItemTag,
     removeItemsFromCopies,
     replaceItemInCopies,
@@ -883,25 +883,6 @@
     };
   });
 
-  function mergeDeletedHistoryPage(page: ClipboardItem[]) {
-    const incoming = new Map(page.map((item) => [item.id, item]));
-    const merged = items
-      .filter((item) => !item.deleted || !deletedHistorySuppressedIds.has(item.id))
-      .map((item) => {
-        const persisted = incoming.get(item.id);
-        // A local restore/delete mutation may have landed while the page was
-        // in flight. Do not let a stale recycle-bin response undo a restore.
-        if (!persisted || !item.deleted) return item;
-        return { ...item, ...persisted, deleted: true };
-      });
-    const existingIds = new Set(merged.map((item) => item.id));
-    for (const item of page) {
-      if (deletedHistorySuppressedIds.has(item.id)) continue;
-      if (!existingIds.has(item.id)) merged.push({ ...item, deleted: true });
-    }
-    items = merged;
-  }
-
   // Deleting, restoring, or permanently removing a row changes the result
   // set behind the recycle-bin OFFSET. Reset the cursor before loading again
   // so a mutation in an earlier page cannot cause the next row to be skipped.
@@ -923,19 +904,6 @@
     activeHistoryOffset = 0;
     activeHistoryHasMore = true;
     void loadActiveHistoryPage();
-  }
-
-  function buildActiveHistoryFilter(): HistoryFilterArgs {
-    if (activeFilter === "deleted") return {};
-    const dateRange = resolveDateRange(dateFilter);
-    return {
-      kind: activeFilter === "all" || activeFilter === "favorite" ? null : activeFilter,
-      favorite: activeFilter === "favorite",
-      tag: tagFilter,
-      sourceApp: sourceAppFilter || null,
-      dateFromMs: dateRange?.from ?? null,
-      dateToMs: dateRange?.to ?? null,
-    };
   }
 
   function updateSearchCache(results: ClipboardItem[]) {
@@ -984,7 +952,7 @@
       const page = await loadClipboardHistory(
         $generalSettings.display.pageSize,
         offset,
-        buildActiveHistoryFilter(),
+        buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
       );
       if (requestId !== activeHistoryRequestId) return;
       if (page === null) {
@@ -1078,7 +1046,7 @@
         return;
       }
 
-      mergeDeletedHistoryPage(page);
+      items = mergeDeletedHistoryPage(items, page, deletedHistorySuppressedIds);
       deletedHistoryOffset += page.length;
       deletedHistoryLoaded = true;
       deletedHistoryHasMore = page.length === DELETED_HISTORY_PAGE_SIZE;
