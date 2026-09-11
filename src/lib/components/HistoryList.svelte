@@ -6,6 +6,13 @@
 
   interface Props {
     items: ClipboardItem[];
+    /**
+     * Whether the filtered result set is non-empty. The empty state must key
+     * off the full filtered count, not `items` (the virtual-scroll page
+     * slice), otherwise a zero-height container yields an empty slice and the
+     * list never mounts to be measured.
+     */
+    hasItems: boolean;
     useVirtualScroll: boolean;
     virtualList: VirtualListResult;
     indexById: Map<string, number>;
@@ -57,6 +64,7 @@
 
   let {
     items,
+    hasItems,
     useVirtualScroll,
     virtualList,
     indexById,
@@ -157,7 +165,7 @@
     />
   {/snippet}
 
-  {#if items.length > 0}
+  {#if hasItems}
     <div class="history-list" role="listbox" aria-label={panelLabel} bind:this={listEl} {onscroll}>
       <div
         class="virtual-container"

@@ -2367,6 +2367,7 @@
   >
     <HistoryList
       items={visiblePageItems}
+      hasItems={filteredItems.length > 0}
       {useVirtualScroll}
       {virtualList}
       indexById={filteredItemIndexById}
