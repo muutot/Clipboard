@@ -4,6 +4,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import BulkBar from "$lib/components/BulkBar.svelte";
+  import StatusBar from "$lib/components/StatusBar.svelte";
   import ClipboardCard from "$lib/components/ClipboardCard.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
@@ -346,6 +347,15 @@
       "toggleFloatPanel",
       defaultShortcutsFor("toggleFloatPanel"),
     ),
+  );
+
+  // Main-toggle hint for the status bar; null hides the kbd chips when unbound.
+  const toggleWindowHint = $derived(
+    resolveActionBindings(
+      keyboardShortcuts,
+      "toggleWindow",
+      defaultShortcutsFor("toggleWindow"),
+    )[0] ?? null,
   );
 
   async function loadKeyboardShortcuts() {
@@ -3035,14 +3045,7 @@
     {/if}
   </div>
 
-  <footer class="status-bar" role="status" aria-live="polite">
-    <span class="status-left">
-      <span class="result-count">{resultSummary}</span>
-      <span class="runtime-status"><i></i>{runtimeLabel}</span>
-    </span>
-    <span class="status-msg">{statusMessage}</span>
-    <span class="shortcut-hints"><kbd>Alt</kbd><b>+</b><kbd>V</kbd> {_t("app.shortcutHint")}</span>
-  </footer>
+  <StatusBar {resultSummary} {runtimeLabel} {statusMessage} toggleHint={toggleWindowHint} />
 </main>
 
 <Toast />
@@ -3104,8 +3107,7 @@
 
   .app-shell.split-detail > .search-header,
   .app-shell.split-detail > .toolbar,
-  .app-shell.split-detail > .main-content,
-  .app-shell.split-detail > .status-bar {
+  .app-shell.split-detail > .main-content {
     grid-column: 1 / -1;
   }
 
@@ -3469,27 +3471,6 @@
     font-size: 11.5px;
   }
 
-  .result-count {
-    color: var(--text-faint);
-  }
-
-  .runtime-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .runtime-status i {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--success-color);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--success-color) 40%, transparent);
-  }
-
   .history-list {
     flex: 1;
     min-height: 0;
@@ -3527,68 +3508,12 @@
     font-size: 12px;
   }
 
-  .status-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    min-height: 34px;
-    padding: 7px 14px;
-    border-top: 1px solid var(--border-subtle);
-    color: var(--text-faint);
-    background: var(--statusbar-bg);
-    font-size: 11.5px;
-    overflow: hidden;
-  }
-
-  .status-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-shrink: 0;
-  }
-
-  .status-msg {
-    flex: 1 1 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
-
-  .shortcut-hints {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .shortcut-hints kbd {
-    padding: 1px 5px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-muted);
-    background: var(--hover-bg);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-    font: inherit;
-  }
-
-  .shortcut-hints b {
-    font-weight: 400;
-  }
-
   @media (max-width: 660px) {
     .filter-dropdowns {
       display: none;
     }
     .toolbar-actions {
       display: none;
-    }
-    .status-bar > span:first-child {
-      display: none;
-    }
-    .status-bar {
-      justify-content: flex-end;
     }
   }
 </style>

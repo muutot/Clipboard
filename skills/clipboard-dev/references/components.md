@@ -83,6 +83,10 @@ Renders viewport-bounded menu items with `id`, label, icon, destructive state, a
 
 Multiselection action bar extracted from the main route. Renders nothing when `selectedCount` is 0. Props: `selectedCount`, `selectedActiveCount`, `selectedDeletedCount`, `activeFilter: string`, `allSelectedFavorites`, plus `ondeselect`/`oncopy`/`ondelete`/`onfavorite`/`onrestore`/`onpermanentdelete` callbacks. Owns its `.bulk-bar` scoped styles (moved verbatim from the route; no parent selectors or page-scope element rules touch it). The route keeps the derived counts and bulk-operation implementations; the bar only presents them. i18n labels resolve internally via `messages`/`resolvePath`, matching other panels.
 
+### `StatusBar.svelte`
+
+Main-route status footer extracted with its scoped styles. Props: `resultSummary`, `runtimeLabel`, `statusMessage`, and `toggleHint` (current main-toggle binding, null hides the kbd chips when unbound). The route derives the hint from `keyboard.json` via `resolveActionBindings` with the shared `defaultShortcutsFor("toggleWindow")` default. Two deliberate cross-scope exceptions live in the component: `:global(.app-shell.split-detail) > .status-bar` for split-mode spanning and the 660px narrow-window rules (page-scoped selectors cannot reach component internals; the compiler flags them as unused if left in the route).
+
 ## Content preview/editing
 
 | Component                | Responsibility                                                                                                                               | Important boundary                                                                                                                                                                                                       |
