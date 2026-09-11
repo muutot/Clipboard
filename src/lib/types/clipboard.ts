@@ -13,6 +13,21 @@ export interface HistoryFilterArgs {
   dateToMs?: number | null;
 }
 
+/** Card action ids shared by the card action row and the context menu. */
+export const CARD_ACTION_IDS = [
+  "copy",
+  "plainpaste",
+  "formatpaste",
+  "cleanpaste",
+  "detail",
+  "edit",
+  "favorite",
+  "delete",
+  "restore",
+  "addTag",
+] as const;
+export type CardActionId = (typeof CARD_ACTION_IDS)[number];
+
 export interface ResourceFileMetadata {
   name: string;
   size: number;

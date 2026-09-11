@@ -1,11 +1,12 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CardActions from "$lib/components/CardActions.svelte";
   import Checkbox from "$lib/components/Checkbox.svelte";
   import TagChip from "$lib/components/TagChip.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import type { ContextMenuItem } from "$lib/components/ContextMenu.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
+  import { CARD_ACTION_IDS, type ClipboardItem, type CardActionId } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { formatRelativeTime } from "$lib/utils/time";
   import { isTauriRuntime } from "$lib/services/runtime";
@@ -108,19 +109,7 @@
     tagColors?: Record<string, string>;
   }
 
-  const cardActionIds = [
-    "copy",
-    "plainpaste",
-    "formatpaste",
-    "cleanpaste",
-    "detail",
-    "edit",
-    "favorite",
-    "delete",
-    "restore",
-    "addTag",
-  ] as const;
-  type CardActionId = (typeof cardActionIds)[number];
+  const cardActionIds = CARD_ACTION_IDS;
 
   let {
     item,
@@ -771,125 +760,18 @@
         <span>{formatRelativeTime(item.createdAt, now)}</span>
         {#if item.kind === "file"}<span class="file-count">{item.preview}</span>{/if}
         {#if item.kind === "image"}{@render tagArea()}{/if}
-        <div class="actions" aria-label={_t("card.itemActions")}>
-          {#each displayContentActions as action (`${action.actionType}:${action.payload}`)}
-            <button
-              type="button"
-              title={action.label}
-              aria-label={action.label}
-              aria-haspopup={action.actionType === "viewDate" ? "dialog" : undefined}
-              aria-expanded={action.actionType === "viewDate"
-                ? dateView?.isoDate === action.payload
-                : undefined}
-              onclick={(event) => handleAction(event, action)}
-            >
-              {#if quickActionKind(action) === "url"}
-                <AppIcon name="globe" size={16} />
-              {:else if quickActionKind(action) === "email"}
-                <AppIcon name="mail" size={16} />
-              {:else if quickActionKind(action) === "phone"}
-                <AppIcon name="phone" size={16} />
-              {:else if quickActionKind(action) === "date"}
-                <AppIcon name="calendar" size={16} />
-              {:else if quickActionKind(action) === "color"}
-                <AppIcon name="palette" size={16} />
-              {:else}
-                <AppIcon name="copy" size={16} />
-              {/if}
-            </button>
-          {/each}
-          <button
-            type="button"
-            title={_t("card.viewDetail")}
-            aria-label={_t("card.viewDetail")}
-            onclick={(event) => runCardAction("detail", event)}
-            ><AppIcon name="eye" size={16} /></button
-          >
-          <button
-            type="button"
-            title={_t("card.copy")}
-            aria-label={_t("card.copy")}
-            onclick={(event) => runCardAction("copy", event)}
-            ><AppIcon name="copy" size={16} /></button
-          >
-          {#if item.kind === "image" || item.kind === "file"}
-            <button
-              type="button"
-              title={_t("card.saveAs")}
-              aria-label={_t("card.saveAs")}
-              onclick={handleSaveAsClick}><AppIcon name="download" size={16} /></button
-            >
-          {/if}
-          {#if canEdit}
-            <button
-              type="button"
-              title={item.kind === "image" || item.kind === "file"
-                ? _t("edit.editFileName")
-                : _t("card.edit")}
-              aria-label={item.kind === "image" || item.kind === "file"
-                ? _t("edit.editFileName")
-                : _t("card.edit")}
-              onclick={(event) => runCardAction("edit", event)}
-              ><AppIcon name="edit" size={16} /></button
-            >
-          {/if}
-          {#if item.kind === "text"}
-            <button
-              type="button"
-              title={_t("card.pastePlain")}
-              aria-label={_t("card.pastePlain")}
-              onclick={(event) => runCardAction("plainpaste", event)}
-              ><AppIcon name="type" size={16} /></button
-            >
-          {/if}
-          {#if item.kind === "text" && item.htmlContent}
-            <button
-              type="button"
-              title={_t("card.pasteFormat")}
-              aria-label={_t("card.pasteFormat")}
-              onclick={(event) => runCardAction("formatpaste", event)}
-              ><AppIcon name="clipboard" size={16} /></button
-            >
-          {/if}
-          {#if item.kind === "text"}
-            <button
-              type="button"
-              title={_t("card.cleanPaste")}
-              aria-label={_t("card.cleanPaste")}
-              onclick={(event) => runCardAction("cleanpaste", event)}
-              ><AppIcon name="scan" size={16} /></button
-            >
-          {/if}
-          {#if !item.favorite}
-            <button
-              type="button"
-              title={_t("card.delete")}
-              aria-label={_t("card.delete")}
-              onclick={(event) => runCardAction("delete", event)}
-              ><AppIcon name="trash" size={16} /></button
-            >
-          {/if}
-          {#if item.deleted && onrestore}
-            <button
-              type="button"
-              title={_t("card.restore")}
-              aria-label={_t("card.restore")}
-              onclick={(event) => runCardAction("restore", event)}
-              ><AppIcon name="restore" size={16} /></button
-            >
-          {/if}
-          <button
-            type="button"
-            class:active={item.favorite}
-            title={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-            aria-label={item.favorite ? _t("card.unfavorite") : _t("card.favorite")}
-            onclick={(event) => runCardAction("favorite", event)}
-            ><AppIcon name="star" size={16} filled={item.favorite} /></button
-          >
-        </div>
-        <span class="shortcut" class:shortcut-resident={quickCopyBadgeAlwaysVisible}
-          >{index < 9 ? `⌘${index + 1}` : `#${index + 1}`}</span
-        >
+        <CardActions
+          {item}
+          {index}
+          {quickCopyBadgeAlwaysVisible}
+          contentActions={displayContentActions}
+          dateViewIso={dateView?.isoDate ?? null}
+          {canEdit}
+          canRestore={!!onrestore}
+          onquickaction={handleAction}
+          onrunaction={runCardAction}
+          onsaveas={handleSaveAsClick}
+        />
       </div>
     {/if}
   {:else}
@@ -1277,71 +1159,23 @@
     text-overflow: ellipsis;
   }
 
-  .actions {
-    display: flex;
-    flex: 0 0 auto;
-    gap: 2px;
-    margin-left: auto;
-    opacity: 0;
-    /* Hidden also removes the buttons from the Tab order, so an invisible
-       control can never silently swallow keyboard focus (WCAG 2.4.7). */
-    visibility: hidden;
-    pointer-events: auto;
-    transition:
-      opacity 120ms ease,
-      visibility 120ms ease;
-  }
-
-  .clip-card.actions-hidden .actions {
+  .clip-card.actions-hidden :global(.actions) {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
   }
 
-  .clip-card:hover .actions,
-  .clip-card.selected .actions,
-  .clip-card:focus-within .actions,
-  .clip-card:hover .shortcut,
-  .clip-card.selected .shortcut,
-  .clip-card:focus-within .shortcut,
-  .clip-card.actions-always .actions,
-  .clip-card.actions-always .shortcut,
-  .clip-card .shortcut.shortcut-resident {
+  .clip-card:hover :global(.actions),
+  .clip-card.selected :global(.actions),
+  .clip-card:focus-within :global(.actions),
+  .clip-card:hover :global(.shortcut),
+  .clip-card.selected :global(.shortcut),
+  .clip-card:focus-within :global(.shortcut),
+  .clip-card.actions-always :global(.actions),
+  .clip-card.actions-always :global(.shortcut),
+  .clip-card :global(.shortcut.shortcut-resident) {
     opacity: 1;
     visibility: visible;
-  }
-
-  .actions button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 27px;
-    height: 27px;
-    padding: 0;
-    border: 0;
-    border-radius: 6px;
-    color: var(--text-muted);
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .actions button:hover,
-  .actions button.active {
-    color: var(--warning-color);
-    background: var(--hover-bg);
-  }
-
-  .shortcut {
-    flex: 0 0 38px;
-    width: 38px;
-    margin-left: 2px;
-    text-align: right;
-    overflow: hidden;
-    color: var(--text-faint);
-    font-size: 11.5px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 120ms ease;
   }
 
   .date-action-dialog {
@@ -1534,7 +1368,7 @@
     .content {
       padding-right: 40px;
     }
-    .actions {
+    :global(.actions) {
       display: none;
     }
   }
