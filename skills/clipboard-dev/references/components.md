@@ -46,8 +46,9 @@ Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimag
 DetailPanel subcomponents (split out of the 2100+ line panel):
 
 - `DetailEditActions.svelte` — the save / save-as-new / cancel row shared by the code, markdown and plain-text edit modes. Props: `onsave`, `onsaveasnew`, `oncancel`; owns its scoped styles.
-- `DetailOcrTab.svelte` — the OCR tab: regenerate/copy actions, status dot, result `<pre>`, pending/failed/empty states. Props: `item`, `onocrupdate`. Owns the regeneration request, the transient feedback message and its timer, and routes OCR patches through `onocrupdate` so all four item copies stay in sync. The details-tab `.ocr-badge` rules stay in DetailPanel.
+- `DetailOcrTab.svelte` — the OCR tab: regenerate/copy actions, status dot, result `<pre>`, pending/failed/empty states. Props: `item`, `onocrupdate`. Owns the regeneration request, the transient feedback message and its timer, and routes OCR patches through `onocrupdate` so all four item copies stay in sync.
 - `DetailFilePreview.svelte` — the file preview: multi-file tree, single text-file content preview (fetch + 512 KiB truncation), loading/failed/unavailable states, and the fallback icon/name/size. Props: `item`. Owns its text-file detection and preview fetch effect.
+- `DetailDetailsTab.svelte` — the details tab: metadata rows, tag editor, file metadata + multi-file selector, image/resource paths, raw metadata `<details>`, and the special-marker list with filters. Props: `item`, `kindLabel`, `tagColors`, `onsavetags`. Owns marker extraction, formatting helpers, the tag draft, the selected file index and the marker filter; the `.ocr-badge` rules live here with the details row that uses them.
 
 Key contracts:
 
