@@ -272,6 +272,36 @@ export function getDisplayTitle(text: string): string {
   return match ? match[0].trim() : "";
 }
 
+export interface TextEditPatch {
+  /** Text-like records carry a generated title, preview and size. */
+  isText: boolean;
+  /** Image/file records rename in place and keep their stored text. */
+  isMedia: boolean;
+  newTitle: string;
+  newTextContent: string | null;
+  newPreview: string;
+  newSizeBytes: number;
+  newSizeLabel: string;
+}
+
+/**
+ * Derives the optimistic patch for an in-place text edit. Pure so the title /
+ * preview / size rules can be unit-tested without the route's state; the
+ * caller still owns persistence and the four-copy fan-out.
+ */
+export function deriveTextEditPatch(item: ClipboardItem, content: string): TextEditPatch {
+  const isText = item.kind === "text" || item.kind === "link";
+  return {
+    isText,
+    isMedia: item.kind === "image" || item.kind === "file",
+    newTitle: isText ? (item.customTitle ? item.title : generatedClipboardTitle(content)) : content,
+    newTextContent: isText ? content : (item.textContent ?? null),
+    newPreview: isText && content.length > 200 ? content.slice(200) : (item.preview ?? ""),
+    newSizeBytes: new TextEncoder().encode(content).byteLength,
+    newSizeLabel: formatTextLength(content.length),
+  };
+}
+
 export interface CopyItemHooks {
   /** Reorder callback (the main list pins the copied entry to the top). */
   moveToTop?: (id: string) => void;

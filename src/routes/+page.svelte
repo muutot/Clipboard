@@ -28,12 +28,11 @@
     listAllTags,
     searchClipboardHistory,
     listSourceApplications,
-    formatTextLength,
-    generatedClipboardTitle,
     materializeClipboardItem,
     toClipboardItem,
     copyClipboardItem,
     pasteClipboardItem,
+    deriveTextEditPatch,
     writeClipboardText,
     getDisplayTitle,
     getDisplayRemainingLines,
@@ -1493,17 +1492,8 @@
     const item = items.find((i) => i.id === id);
     if (!item) return false;
 
-    const isMedia = item?.kind === "image" || item?.kind === "file";
-    const isText = item?.kind === "text" || item?.kind === "link";
-    const newTitle = isText
-      ? item.customTitle
-        ? item.title
-        : generatedClipboardTitle(content)
-      : content;
-    const newTextContent = isText ? content : (item?.textContent ?? null);
-    const newPreview = isText && content.length > 200 ? content.slice(200) : (item?.preview ?? "");
-    const newSizeBytes = new TextEncoder().encode(content).byteLength;
-    const newSizeLabel = formatTextLength(content.length);
+    const { isMedia, isText, newTitle, newTextContent, newPreview, newSizeBytes, newSizeLabel } =
+      deriveTextEditPatch(item, content);
 
     if (isMedia && content) {
       try {

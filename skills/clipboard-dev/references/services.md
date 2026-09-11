@@ -35,6 +35,7 @@ Owns the record boundary and list operations:
 - resource metadata parsing and display title/size helpers.
 - `materializeClipboardItem(item)` invokes `materialize_clipboard_item` immediately before a remote image/file action needs local paths and coalesces concurrent frontend callers by item id. It preserves explicit command failures; ordinary list/search/hover paths never call it.
 - `copyClipboardItem(item, hooks?)` is the shared copy path used by the main route and the float panel.
+- `deriveTextEditPatch(item, content)` is the pure title/preview/size rule for in-place edits (media rename in place, text regenerates its title unless `customTitle`); the route keeps persistence and the four-copy fan-out.
 - `pasteClipboardItem(item, mode, hooks?)` is the shared paste-to-previous-app path. `mode` is `plain` | `format` | `clean` | `auto`; `auto` picks the richest representation by kind (text/link prefer HTML, image/file materialize first). It reads `pasteCleaningEnabled`/`pinCopiedToTop` from `generalSettings`, calls `persistLastUsed`, and shows the mode/kind-specific success or failure toast. Route wrappers (`plainPaste`, `formatPaste`, `cleanPaste`, `doubleClickPasteItem`) only resolve the item and pass `moveToTop`.
 
 Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDeletedClipboardHistory` is the current deleted-list API name. A copy/write path must register a compatible self-trigger hash before touching the system clipboard.
