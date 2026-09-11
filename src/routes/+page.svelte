@@ -71,8 +71,10 @@
   import {
     applyItemPatchesToCopies,
     findLoadedItemInCopies,
+    removeItemTag,
     removeItemsFromCopies,
     replaceItemInCopies,
+    rewriteItemTags,
   } from "$lib/utils/item-sync";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { alignDropdownOptionText } from "$lib/utils/dropdown";
@@ -808,7 +810,7 @@
       // out through the single funnel — including searchCache, which a
       // hand-rolled loop once missed.
       const transform = (entry: ClipboardItem) =>
-        renamed ? rewriteTags(entry, renamed.old, renamed.new) : removeTag(entry, deleted!);
+        renamed ? rewriteItemTags(entry, renamed.old, renamed.new) : removeItemTag(entry, deleted!);
       const patches = new Map<string, Partial<ClipboardItem>>();
       for (const entry of [
         ...items,
@@ -1663,27 +1665,6 @@
       if (tag.color) map[tag.name] = tag.color;
     }
     tagColors = map;
-  }
-
-  function rewriteTags(item: ClipboardItem, oldName: string, newName: string): ClipboardItem {
-    const tags = item.tags ?? [];
-    if (!tags.includes(oldName)) return item;
-    const seen = new Set<string>();
-    const next: string[] = [];
-    for (const tag of tags) {
-      const value = tag === oldName ? newName : tag;
-      if (!seen.has(value)) {
-        seen.add(value);
-        next.push(value);
-      }
-    }
-    return { ...item, tags: next };
-  }
-
-  function removeTag(item: ClipboardItem, name: string): ClipboardItem {
-    const tags = item.tags ?? [];
-    if (!tags.includes(name)) return item;
-    return { ...item, tags: tags.filter((tag) => tag !== name) };
   }
 
   async function saveTags(id: string, tags: string[]) {

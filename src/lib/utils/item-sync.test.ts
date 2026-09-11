@@ -3,8 +3,10 @@ import type { ClipboardItem } from "$lib/types/clipboard";
 import {
   applyItemPatchesToCopies,
   findLoadedItemInCopies,
+  removeItemTag,
   removeItemsFromCopies,
   replaceItemInCopies,
+  rewriteItemTags,
   type ItemCopies,
 } from "./item-sync";
 
@@ -112,5 +114,29 @@ describe("findLoadedItemInCopies", () => {
     };
     expect(findLoadedItemInCopies(detailOnly, "d")?.id).toBe("d");
     expect(findLoadedItemInCopies(state, "missing")).toBeUndefined();
+  });
+});
+
+describe("rewriteItemTags", () => {
+  it("renames the tag and drops duplicates the rename would create", () => {
+    expect(rewriteItemTags(item("a", { tags: ["x", "y"] }), "x", "z").tags).toEqual(["z", "y"]);
+    expect(rewriteItemTags(item("a", { tags: ["x", "z"] }), "x", "z").tags).toEqual(["z"]);
+  });
+
+  it("returns the entry untouched when the old name is absent", () => {
+    const before = item("a", { tags: ["x"] });
+    expect(rewriteItemTags(before, "missing", "z")).toBe(before);
+    expect(rewriteItemTags(item("a"), "x", "z").tags ?? []).toEqual([]);
+  });
+});
+
+describe("removeItemTag", () => {
+  it("removes the named tag", () => {
+    expect(removeItemTag(item("a", { tags: ["x", "y"] }), "x").tags).toEqual(["y"]);
+  });
+
+  it("returns the entry untouched when the name is absent", () => {
+    const before = item("a", { tags: ["x"] });
+    expect(removeItemTag(before, "missing")).toBe(before);
   });
 });

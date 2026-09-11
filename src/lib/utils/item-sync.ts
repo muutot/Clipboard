@@ -71,3 +71,30 @@ export function findLoadedItemInCopies(copies: ItemCopies, id: string): Clipboar
     (copies.detailItem?.id === id ? copies.detailItem : undefined)
   );
 }
+
+/** Renames one tag on an item, dropping duplicates the rename would create. */
+export function rewriteItemTags(
+  item: ClipboardItem,
+  oldName: string,
+  newName: string,
+): ClipboardItem {
+  const tags = item.tags ?? [];
+  if (!tags.includes(oldName)) return item;
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const tag of tags) {
+    const value = tag === oldName ? newName : tag;
+    if (!seen.has(value)) {
+      seen.add(value);
+      next.push(value);
+    }
+  }
+  return { ...item, tags: next };
+}
+
+/** Removes one tag from an item. */
+export function removeItemTag(item: ClipboardItem, name: string): ClipboardItem {
+  const tags = item.tags ?? [];
+  if (!tags.includes(name)) return item;
+  return { ...item, tags: tags.filter((tag) => tag !== name) };
+}
