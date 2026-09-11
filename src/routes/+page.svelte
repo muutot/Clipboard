@@ -6,7 +6,7 @@
   import BulkBar from "$lib/components/BulkBar.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import Toolbar from "$lib/components/Toolbar.svelte";
-  import ClipboardCard from "$lib/components/ClipboardCard.svelte";
+  import HistoryList from "$lib/components/HistoryList.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
   import TagEditDialog from "$lib/components/TagEditDialog.svelte";
@@ -2449,96 +2449,56 @@
     class="main-content"
     class:split-detail={detailDisplayMode === "split" && detailItem != null}
   >
-    <section class="history-panel" aria-label={_t("app.recentRecords")}>
-      <div class="section-heading"></div>
-      {#snippet historyCard(item: ClipboardItem)}
-        <ClipboardCard
-          {item}
-          index={filteredItemIndexById.get(item.id) ?? 0}
-          now={currentTime}
-          selected={selectedIds.has(item.id) || item.id === selectedId}
-          checked={selectedIds.has(item.id)}
-          showCheckbox={false}
-          hideActions={selectedIds.size > 0 ||
-            (detailDisplayMode === "split" && detailItem != null)}
-          hideMetaRow={detailDisplayMode === "split" && detailItem != null}
-          {cardPaddingTop}
-          {cardPaddingBottom}
-          {cardGap}
-          {cardBorderRadius}
-          cardHeight={cardHeightFor(item)}
-          {maxTextLines}
-          {showSecondaryText}
-          {alwaysShowActions}
-          quickCopyBadgeAlwaysVisible={quickCopyBadgeAlwaysVisible &&
-            !(detailDisplayMode === "split" && detailItem != null)}
-          onheightchange={recordCardHeight}
-          heightMeasurementKey={cardLayoutSignature(item)}
-          onselect={selectItem}
-          ontoggleSelect={toggleSelectItem}
-          ontoggleFavorite={toggleFavorite}
-          ondelete={deleteItem}
-          oncopy={copyItem}
-          onsave={saveItem}
-          ondetail={openDetail}
-          onimagefullscreen={handleImageFullscreen}
-          onmaterialize={prepareItemMaterialization}
-          onedit={startEdit}
-          onsaveedit={saveEdit}
-          onsaveasnew={saveAsNew}
-          oncanceledit={cancelEdit}
-          onplainpaste={plainPaste}
-          onformatpaste={formatPaste}
-          oncleanpaste={cleanPaste}
-          ondblclickpaste={doubleClickPasteItem}
-          {doubleClickPaste}
-          onrestore={restoreItem}
-          onsavetags={saveTags}
-          {tagColors}
-          ontoggleTagFilter={toggleTagFilter}
-          oneditTag={openTagEdit}
-          tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
-        />
-      {/snippet}
-
-      {#if filteredItems.length > 0}
-        <div
-          class="history-list"
-          role="listbox"
-          aria-label={_t("app.recentRecords")}
-          bind:this={historyListEl}
-          onscroll={handleHistoryScroll}
-        >
-          <div
-            class="virtual-container"
-            style="height: {useVirtualScroll
-              ? virtualList.totalHeight + 'px'
-              : 'auto'}; position: {useVirtualScroll ? 'relative' : 'static'};"
-          >
-            {#each visiblePageItems as item, visibleIdx (item.id)}
-              {#if useVirtualScroll}
-                <div
-                  style="position: absolute; top: {virtualList.visibleItems[visibleIdx]
-                    .top}px; left: 0; right: 0;"
-                >
-                  {@render historyCard(item)}
-                </div>
-              {:else}
-                {@render historyCard(item)}
-              {/if}
-            {/each}
-          </div>
-        </div>
-      {:else}
-        <div class="empty-state">
-          <span class="empty-icon"><AppIcon name="clipboard" size={28} /></span>
-          <strong>{items.length === 0 ? _t("app.noRecords") : _t("app.noMatchRecords")}</strong>
-          <p>
-            {items.length === 0 ? _t("app.noRecordsHint") : _t("app.noMatchRecordsHint")}
-          </p>
-        </div>
-      {/if}
-    </section>
+    <HistoryList
+      items={visiblePageItems}
+      {useVirtualScroll}
+      {virtualList}
+      indexById={filteredItemIndexById}
+      {currentTime}
+      {selectedIds}
+      {selectedId}
+      splitDetail={detailDisplayMode === "split" && detailItem != null}
+      {cardPaddingTop}
+      {cardPaddingBottom}
+      {cardGap}
+      {cardBorderRadius}
+      {maxTextLines}
+      {showSecondaryText}
+      {alwaysShowActions}
+      {quickCopyBadgeAlwaysVisible}
+      {doubleClickPaste}
+      {tagColors}
+      {tagAddSignal}
+      panelLabel={_t("app.recentRecords")}
+      emptyTitle={items.length === 0 ? _t("app.noRecords") : _t("app.noMatchRecords")}
+      emptyHint={items.length === 0 ? _t("app.noRecordsHint") : _t("app.noMatchRecordsHint")}
+      {cardHeightFor}
+      {cardLayoutSignature}
+      bind:listEl={historyListEl}
+      onscroll={handleHistoryScroll}
+      onheightchange={recordCardHeight}
+      onselect={selectItem}
+      ontoggleSelect={toggleSelectItem}
+      ontoggleFavorite={toggleFavorite}
+      ondelete={deleteItem}
+      oncopy={copyItem}
+      onsave={saveItem}
+      ondetail={openDetail}
+      onimagefullscreen={handleImageFullscreen}
+      onmaterialize={prepareItemMaterialization}
+      onedit={startEdit}
+      onsaveedit={saveEdit}
+      onsaveasnew={saveAsNew}
+      oncanceledit={cancelEdit}
+      onplainpaste={plainPaste}
+      onformatpaste={formatPaste}
+      oncleanpaste={cleanPaste}
+      ondblclickpaste={doubleClickPasteItem}
+      onrestore={restoreItem}
+      onsavetags={saveTags}
+      ontoggleTagFilter={toggleTagFilter}
+      oneditTag={openTagEdit}
+    />
 
     <BulkBar
       selectedCount={selectedIds.size}
@@ -2653,7 +2613,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
   }
 
-  .main-content.split-detail > *:last-child {
+  .main-content.split-detail > :global(*:last-child) {
     grid-column: 2;
     grid-row: 1 / -1;
   }
@@ -2790,57 +2750,5 @@
     height: 28px;
     border-radius: 8px;
     object-fit: contain;
-  }
-  .history-panel {
-    display: flex;
-    min-height: 0;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .section-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    color: var(--text-muted);
-    font-size: 11.5px;
-  }
-
-  .history-list {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 0 4px 6px;
-  }
-
-  .virtual-container {
-    width: 100%;
-  }
-
-  .empty-state {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  .empty-icon {
-    display: inline-flex;
-    margin-bottom: 12px;
-    color: var(--text-faint);
-  }
-
-  .empty-state strong {
-    color: var(--text-secondary);
-    font-size: 14px;
-  }
-
-  .empty-state p {
-    margin: 6px 0;
-    font-size: 12px;
   }
 </style>
