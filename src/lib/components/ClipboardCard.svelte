@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import CardDateDialog from "$lib/components/CardDateDialog.svelte";
   import CardActions from "$lib/components/CardActions.svelte";
   import Checkbox from "$lib/components/Checkbox.svelte";
   import TagChip from "$lib/components/TagChip.svelte";
@@ -24,7 +25,6 @@
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import { onContextMenuOpened, notifyContextMenuOpened } from "$lib/services/context-menu";
-  import { tick } from "svelte";
 
   let iconsBase = $derived($iconsDir);
 
@@ -255,7 +255,6 @@
   );
   let contentActions = $state<QuickAction[]>([]);
   let contentActionRequest = 0;
-  let dateDialog = $state<HTMLDialogElement | null>(null);
   let dateView = $state<{ isoDate: string; formattedDate: string; label: string } | null>(null);
 
   let contentActionsLoaded = $state(false);
@@ -306,7 +305,7 @@
     });
   });
 
-  async function showDateDialog(action: QuickAction) {
+  function showDateDialog(action: QuickAction) {
     const date = parseIsoDate(action.payload);
     if (!date) {
       // Never log the payload: it is clipboard-derived content and does not
@@ -323,35 +322,6 @@
       }).format(date),
       label: action.label,
     };
-    await tick();
-    if (!dateDialog || dateDialog.open) return;
-    try {
-      dateDialog.showModal();
-    } catch {
-      dateDialog.setAttribute("open", "");
-    }
-  }
-
-  function closeDateDialog() {
-    if (dateDialog?.open) {
-      try {
-        dateDialog.close();
-      } catch {
-        dateDialog.removeAttribute("open");
-      }
-    }
-    dateView = null;
-  }
-
-  function handleDateDialogKeydown(event: KeyboardEvent) {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopPropagation();
-    closeDateDialog();
-  }
-
-  function handleDateDialogClick(event: MouseEvent) {
-    if (event.target === event.currentTarget) closeDateDialog();
   }
 
   async function handleAction(event: MouseEvent, action: QuickAction) {
@@ -813,35 +783,7 @@
   {/if}
 </div>
 
-<dialog
-  bind:this={dateDialog}
-  class="date-action-dialog"
-  aria-label={dateView?.label ?? "View date"}
-  onclose={() => {
-    dateView = null;
-  }}
-  onclick={handleDateDialogClick}
-  onkeydown={handleDateDialogKeydown}
->
-  {#if dateView}
-    <div class="date-action-content">
-      <span class="date-action-icon"><AppIcon name="calendar" size={20} /></span>
-      <div class="date-action-text">
-        <time datetime={dateView.isoDate}>{dateView.formattedDate}</time>
-        <span>{dateView.isoDate}</span>
-      </div>
-      <button
-        type="button"
-        class="date-action-close"
-        title="Close date"
-        aria-label="Close date"
-        onclick={closeDateDialog}
-      >
-        <AppIcon name="x" size={15} />
-      </button>
-    </div>
-  {/if}
-</dialog>
+<CardDateDialog {dateView} ondismiss={() => (dateView = null)} />
 
 {#if contextMenu}
   <ContextMenu
@@ -1176,87 +1118,6 @@
   .clip-card :global(.shortcut.shortcut-resident) {
     opacity: 1;
     visibility: visible;
-  }
-
-  .date-action-dialog {
-    position: fixed;
-    width: min(320px, calc(100vw - 32px));
-    margin: auto;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-primary);
-    background: var(--card-bg);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  }
-
-  .date-action-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.52);
-    backdrop-filter: blur(2px);
-  }
-
-  .date-action-content {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 58px;
-    padding: 12px 38px 12px 14px;
-  }
-
-  .date-action-icon {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--warning-color);
-    background: var(--input-bg);
-  }
-
-  .date-action-text {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .date-action-text time {
-    color: var(--text-primary);
-    font-size: 13px;
-    line-height: 1.35;
-  }
-
-  .date-action-text span {
-    color: var(--text-muted);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 11px;
-    line-height: 1.3;
-  }
-
-  .date-action-close {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: 0;
-    border-radius: 5px;
-    color: var(--text-muted);
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .date-action-close:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
   }
 
   .edit-area {

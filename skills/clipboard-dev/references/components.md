@@ -23,6 +23,10 @@ Key contracts:
 
 The card's hover-revealed action row plus the quick-copy shortcut badge. Props: `item`, `index`, `quickCopyBadgeAlwaysVisible`, `contentActions` (the deduped quick actions), `dateViewIso` (for the date popover's `aria-expanded`), `canEdit`, `canRestore`, and `onquickaction`/`onrunaction`/`onsaveas` callbacks. It owns the `.actions`/`.actions button`/`.shortcut` base styles; `ClipboardCard` keeps the reveal/visibility rules (`.clip-card:hover :global(.actions)` etc.) and the narrow-width `:global(.actions) { display: none }` because they key off card state. The action-id union lives in `types/clipboard.ts` (`CARD_ACTION_IDS`/`CardActionId`) so the row and the card's context-menu handler stay in sync.
 
+### `CardDateDialog.svelte`
+
+The date quick-action popover. Props: `dateView` (`{isoDate, formattedDate, label}` or null) and `ondismiss`. It owns the `<dialog>` element and opens/closes reactively from `dateView` (so the parent only sets the payload), plus backdrop-click/Escape/close-button dismissal. The card no longer holds the dialog ref or a `tick()` dance.
+
 ### Height calculation contract
 
 Card height for virtual-scroll positioning and fixed-height rendering is governed by a **single canonical function** in `+page.svelte`:
