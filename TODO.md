@@ -60,7 +60,7 @@
 
 > 1.6 功能阈值：除还债外，新增**托盘速粘**、**自动标签规则**与**悬浮剪贴板**（置顶窄窗 + 默认位置五档 + 悬浮显隐 + 标题栏拖拽）三个用户可见功能（标签页新增用户可配规则区，非系统内置）。
 
-- [ ] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 context/store 下发。验收：现有测试全过 + 键盘导航回归。
+- [x] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 props/回调下发（与 BulkBar/StatusBar 既有约定一致）。已闭环：主路由拆出 Toolbar/StatusBar/BulkBar/HistoryList/SearchHeader 并下沉 paste/edit/历史合并/过滤等纯逻辑（3854→2535）；DetailPanel 拆出 EditActions/OcrTab/FilePreview/DetailsTab/ImagePreview（2121→755）；ClipboardCard 拆出 CardActions/CardDateDialog 并下沉 quickActionKind（1555→1236）。验收：`npm run verify` 全过、Vitest 189 passed；键盘导航由单测覆盖，真机手工回归未在本环境执行。
 - [ ] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步（当前 `updateItem` 漏斗仅是缓解）。验收：四副本一致性单测 + Svelte 5 深代理兼容验证记录。
 - [x] MAINT-03 公共 API 注释：已闭环（`b1d7a56`），逐函数复核 `capture.rs`/`search/index.rs` 全部 `pub fn` 均有 `///`，无遗漏。
 - [x] macOS 文件路径捕获：`NSPasteboard NSFilenamesPboardType` 原生读取已实现（`platform/macos.rs`，缺席回退空列表=旧行为；所用 FFI 形状复用既有模块）+ mac-only 防崩溃冒烟测试。**待 mac CI 变绿后**再把 README 平台矩阵该格从 `❌` 翻为 `✅`（本地无 mac，不可提前宣称）。
