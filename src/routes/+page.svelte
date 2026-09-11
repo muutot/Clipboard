@@ -2,11 +2,11 @@
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import AppIcon from "$lib/components/AppIcon.svelte";
   import BulkBar from "$lib/components/BulkBar.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import Toolbar from "$lib/components/Toolbar.svelte";
   import HistoryList from "$lib/components/HistoryList.svelte";
+  import SearchHeader from "$lib/components/SearchHeader.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
   import TagEditDialog from "$lib/components/TagEditDialog.svelte";
@@ -44,7 +44,6 @@
   import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
   import type { IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
-  import { assets } from "$app/paths";
   import {
     createVirtualList,
     editHeight,
@@ -2314,114 +2313,31 @@
   class:split-detail={detailDisplayMode === "split" && detailItem != null}
   bind:this={appShellEl}
 >
-  <header
-    class="search-header"
-    role="presentation"
-    aria-label={_t("actions.dragWindow")}
-    onmousedown={(e) => {
-      if (e.target === e.currentTarget) void getCurrentWindow().startDragging();
+  <SearchHeader
+    bind:query
+    bind:inputEl={searchInputEl}
+    placeholder={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
+    autocomplete={searchAutocomplete}
+    height={searchHeight}
+    fontSize={searchFontSize}
+    showSuggestions={showSearchSuggestions}
+    activeOptionIndex={activeSearchOption ? searchOptions.indexOf(activeSearchOption) : -1}
+    historyOptions={visibleSearchHistory}
+    suggestionOptions={visibleSearchSuggestions}
+    inlineSuggestionSuffix={inlineSearchSuggestion ? inlineSearchSuggestionSuffix : null}
+    onfocus={() => (searchSuggestionsOpen = true)}
+    oninput={() => {
+      searchSuggestionsOpen = true;
+      searchSuggestionIndex = -1;
+      if (pendingSearchHistoryQuery && query.trim() !== pendingSearchHistoryQuery) {
+        pendingSearchHistoryQuery = "";
+      }
     }}
-  >
-    <div class="search-box">
-      <input
-        bind:this={searchInputEl}
-        bind:value={query}
-        aria-label={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
-        aria-autocomplete={searchAutocomplete}
-        aria-controls={showSearchSuggestions ? "search-suggestions" : undefined}
-        aria-expanded={showSearchSuggestions}
-        aria-activedescendant={activeSearchOption
-          ? `search-option-${searchOptions.indexOf(activeSearchOption)}`
-          : undefined}
-        autocomplete="off"
-        placeholder={$generalSettings.searchPlaceholder?.trim() || _t("app.searchPlaceholder")}
-        spellcheck="false"
-        style={`height: ${searchHeight}px; font-size: ${searchFontSize}px;`}
-        onfocus={() => (searchSuggestionsOpen = true)}
-        oninput={() => {
-          searchSuggestionsOpen = true;
-          searchSuggestionIndex = -1;
-          if (pendingSearchHistoryQuery && query.trim() !== pendingSearchHistoryQuery) {
-            pendingSearchHistoryQuery = "";
-          }
-        }}
-        onblur={handleSearchInputBlur}
-        onkeydown={handleSearchInputKeydown}
-      />
-      {#if inlineSearchSuggestion}
-        <span
-          class="search-inline-hint"
-          aria-hidden="true"
-          style={`font-size: ${searchFontSize}px;`}
-        >
-          <span>{normalizeSearchTerm(query)}</span>{inlineSearchSuggestionSuffix}
-        </span>
-      {/if}
-      {#if showSearchSuggestions}
-        <div
-          id="search-suggestions"
-          class="search-suggestions"
-          role="listbox"
-          aria-label={_t("search.suggestionsLabel")}
-        >
-          {#if visibleSearchHistory.length > 0}
-            <div class="search-suggestions-heading">{_t("search.recent")}</div>
-            {#each visibleSearchHistory as option, index (option.value)}
-              {@const optionIndex = index}
-              <button
-                id={`search-option-${optionIndex}`}
-                type="button"
-                role="option"
-                tabindex="-1"
-                aria-selected={searchSuggestionIndex === optionIndex}
-                class:active={searchSuggestionIndex === optionIndex}
-                onmousedown={(event) => event.preventDefault()}
-                onclick={() => chooseSearchOption(option.value)}
-              >
-                <AppIcon name="clock" size={14} />
-                <span>{option.value}</span>
-              </button>
-            {/each}
-          {/if}
-          {#if visibleSearchSuggestions.length > 0}
-            <div class="search-suggestions-heading">{_t("search.suggestions")}</div>
-            {#each visibleSearchSuggestions as option, index (option.value)}
-              {@const optionIndex = visibleSearchHistory.length + index}
-              <button
-                id={`search-option-${optionIndex}`}
-                type="button"
-                role="option"
-                tabindex="-1"
-                aria-selected={searchSuggestionIndex === optionIndex}
-                class:active={searchSuggestionIndex === optionIndex}
-                onmousedown={(event) => event.preventDefault()}
-                onclick={() => chooseSearchOption(option.value)}
-              >
-                <AppIcon name="search" size={14} />
-                <span>{option.value}</span>
-              </button>
-            {/each}
-          {/if}
-        </div>
-      {/if}
-      {#if query}
-        <button
-          class="clear-button"
-          type="button"
-          aria-label={_t("app.clearSearch")}
-          onclick={clearSearchQuery}>脳</button
-        >
-      {/if}
-    </div>
-    <img
-      class="brand-icon"
-      src="{assets}/app-icon.png"
-      alt="Clipboard"
-      title="Clipboard"
-      width="28"
-      height="28"
-    />
-  </header>
+    onblur={handleSearchInputBlur}
+    onkeydown={handleSearchInputKeydown}
+    onchoose={chooseSearchOption}
+    onclear={clearSearchQuery}
+  />
 
   <Toolbar
     {filters}
@@ -2597,7 +2513,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
   }
 
-  .app-shell.split-detail > .search-header,
   .app-shell.split-detail > .main-content {
     grid-column: 1 / -1;
   }
@@ -2616,139 +2531,5 @@
   .main-content.split-detail > :global(*:last-child) {
     grid-column: 2;
     grid-row: 1 / -1;
-  }
-
-  .search-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    border-bottom: none;
-  }
-
-  .search-box {
-    position: relative;
-    display: flex;
-    flex: 1;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    color: var(--text-muted);
-  }
-
-  .search-suggestions {
-    position: absolute;
-    z-index: 110;
-    top: calc(100% + 8px);
-    left: 0;
-    right: 0;
-    max-height: min(280px, calc(100vh - 100px));
-    padding: 6px 0;
-    overflow-y: auto;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--surface-bg);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.48);
-  }
-
-  .search-suggestions-heading {
-    padding: 5px 12px 3px;
-    color: var(--text-faint);
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .search-suggestions button {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    gap: 8px;
-    min-height: 32px;
-    padding: 6px 12px;
-    border: 0;
-    color: var(--text-secondary);
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-    font-size: 12px;
-  }
-
-  .search-suggestions button :global(svg) {
-    flex: 0 0 auto;
-    color: var(--text-muted);
-  }
-
-  .search-suggestions button span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .search-suggestions button:hover,
-  .search-suggestions button.active {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
-  .search-suggestions button.active :global(svg) {
-    color: var(--selection-color);
-  }
-
-  .search-box input {
-    flex: 1;
-    min-width: 0;
-    padding: 2px 0 0px;
-    border: 0;
-    outline: 0;
-    color: var(--text-primary);
-    background: transparent;
-    font-size: clamp(17px, 3vw, 21px);
-    font-weight: 350;
-    letter-spacing: -0.02em;
-  }
-
-  .search-box input::placeholder {
-    color: var(--placeholder-color);
-    opacity: 1;
-  }
-
-  .search-inline-hint {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    z-index: 0;
-    overflow: hidden;
-    max-width: calc(100% - 42px);
-    color: var(--text-faint);
-    pointer-events: none;
-    transform: translateY(-50%);
-    white-space: pre;
-    font-size: clamp(17px, 3vw, 21px);
-    font-weight: 350;
-    letter-spacing: -0.02em;
-  }
-
-  .search-inline-hint span {
-    visibility: hidden;
-  }
-
-  .clear-button {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    color: var(--text-muted);
-    background: var(--hover-bg);
-    cursor: pointer;
-  }
-
-  .brand-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    object-fit: contain;
   }
 </style>
