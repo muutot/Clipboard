@@ -18,6 +18,7 @@ node_modules
 .idea
 .vscode
 .qoder
+.claude
 
 # Output
 /.svelte-kit
@@ -25,10 +26,17 @@ src-tauri/target-platform-validation
 export
 /build
 
+# Logs
+debug.log
+
 # JVM
 hs_err_pid*
 
 # Local reports (untracked)
 style.md
 WORKLOG.md
+audit-report-*.md
+
+# Stray local tooling stubs (untracked)
+pyproject.toml
 
