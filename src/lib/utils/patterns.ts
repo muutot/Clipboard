@@ -185,3 +185,23 @@ export function detectQuickActions(text: string, firstOnly?: boolean): QuickActi
     })),
   ]);
 }
+
+/**
+ * Resolves the icon/category bucket for a detected content action, preferring
+ * the backend-provided `kind` and falling back to payload/action inspection.
+ */
+export function quickActionKind(
+  action: QuickAction,
+): "url" | "email" | "phone" | "date" | "color" | "copy" {
+  if (action.kind) return action.kind;
+  if (action.actionType === "viewDate") return "date";
+  if (action.payload.startsWith("mailto:")) return "email";
+  if (action.payload.startsWith("tel:")) return "phone";
+  if (
+    action.actionType === "open" &&
+    (action.payload.startsWith("http://") || action.payload.startsWith("https://"))
+  )
+    return "url";
+  if (action.actionType === "copy" && /^#[0-9a-fA-F]{3,8}\b/.test(action.payload)) return "color";
+  return "copy";
+}

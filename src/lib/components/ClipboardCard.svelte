@@ -19,7 +19,7 @@
   } from "$lib/services/clipboard";
   import { trimTrailingBlankLines } from "$lib/utils/virtual-scroll";
   import { assetUrl as baseAssetUrl } from "$lib/utils/format";
-  import { detectQuickActions, parseIsoDate } from "$lib/utils/patterns";
+  import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/patterns";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
   import { onContextMenuOpened, notifyContextMenuOpened } from "$lib/services/context-menu";
@@ -306,22 +306,6 @@
     contentActions = [];
     contentActionRequest = 0;
   });
-
-  function quickActionKind(
-    action: QuickAction,
-  ): "url" | "email" | "phone" | "date" | "color" | "copy" {
-    if (action.kind) return action.kind;
-    if (action.actionType === "viewDate") return "date";
-    if (action.payload.startsWith("mailto:")) return "email";
-    if (action.payload.startsWith("tel:")) return "phone";
-    if (
-      action.actionType === "open" &&
-      (action.payload.startsWith("http://") || action.payload.startsWith("https://"))
-    )
-      return "url";
-    if (action.actionType === "copy" && /^#[0-9a-fA-F]{3,8}\b/.test(action.payload)) return "color";
-    return "copy";
-  }
 
   let displayContentActions = $derived.by(() => {
     const seenKinds = new Set<string>();
