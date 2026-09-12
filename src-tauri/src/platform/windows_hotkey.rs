@@ -303,13 +303,16 @@ fn hotkey_message_loop(
             if let Err(error) =
                 windows_clipboard::register_global_hotkey(hwnd, *id, *modifiers, *vk)
             {
-                for registered_id in registered_ids {
-                    let _ = windows_clipboard::unregister_global_hotkey(hwnd, registered_id);
-                }
-                clear_hotkey_state();
-                DestroyWindow(hwnd);
-                let _ = ready.send(());
-                return Err(error);
+                // A single occupied chord (another app already owns that
+                // shortcut) must not take down every other action sharing
+                // this loop: skip that chord and keep serving the rest.
+                let action = action_index_for_hotkey_id(*id)
+                    .and_then(|index| global_action_ids().nth(index))
+                    .unwrap_or("unknown");
+                crate::log_event!(
+                    "[hotkey] failed to register {action} chord (hotkey id {id}): {error}"
+                );
+                continue;
             }
             registered_ids.push(*id);
         }
