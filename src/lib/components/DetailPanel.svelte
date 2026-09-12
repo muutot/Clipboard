@@ -118,9 +118,14 @@
   let editContent = $state("");
   let editTitleContent = $state("");
 
+  // Depend only on the item id so OCR polling patches (which replace the
+  // item object every poll) don't flip the user back to the preview tab or
+  // discard an in-progress edit for the same item.
+  const currentItemId = $derived(item?.id ?? null);
+
   $effect(() => {
-    const currentItem = item;
-    if (currentItem) {
+    const itemId = currentItemId;
+    if (itemId !== null) {
       activeTab = "preview";
       editing = false;
     }

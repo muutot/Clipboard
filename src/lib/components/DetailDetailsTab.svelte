@@ -133,9 +133,17 @@
   const resourceFiles = $derived(item.fileMeta ?? []);
   const rawMetadata = $derived(formatMetadataJson(item.metadataJson));
 
+  // Reset transient per-item view state only when the entry actually
+  // changes: reading `item.id` directly would re-run on every item-object
+  // replacement (tag saves, OCR patches), yanking the selected file back
+  // to the first one mid-inspection.
+  const currentItemId = $derived(item.id);
+
   $effect(() => {
-    void item.id;
+    const itemId = currentItemId;
+    void itemId;
     selectedFileIndex = 0;
+    activeMarkerFilter = null;
   });
 </script>
 
