@@ -65,6 +65,7 @@
     windowConfigSaving = true;
     try {
       await setWindowConfig({ [key]: value });
+      _cachedWindowConfig = windowConfig;
     } catch {
       windowConfig = previous;
       feedback.show(_t("general.windowConfigUpdateFailed"), false);
@@ -93,6 +94,7 @@
     },
     {
       type: "toggle",
+      id: "general.launch-at-startup",
       icon: "clock",
       label: _t("general.launchAtStartup"),
       desc: _t("general.launchAtStartupDescription"),
@@ -102,6 +104,7 @@
     },
     {
       type: "toggle",
+      id: "general.close-to-tray",
       icon: "clipboard",
       label: _t("general.closeToTray"),
       desc: _t("general.closeToTrayDescription"),
