@@ -100,7 +100,7 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
       {
         section: "theme",
         labelKey: "storage.themeTab",
-        descriptionKey: "general.fontSizeDescription",
+        descriptionKey: "theme.themeModeDescription",
       },
       {
         section: "font",
