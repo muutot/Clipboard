@@ -2,7 +2,8 @@
   import SettingEntry from "$lib/components/SettingEntry.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import { generalSettings } from "$lib/services/settings";
+  import type { WindowConfig } from "$lib/types/clipboard";
+  import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
   import { onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
@@ -29,6 +30,49 @@
     return unsub;
   });
 
+  let _cachedWindowConfig: WindowConfig | null = null;
+
+  let windowConfig = $state<WindowConfig | null>(
+    _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
+  );
+  let windowConfigLoading = $state(!_cachedWindowConfig);
+  let windowConfigSaving = $state(false);
+
+  $effect(() => {
+    let cancelled = false;
+    void getWindowConfig()
+      .then((config) => {
+        if (!cancelled) {
+          _cachedWindowConfig = config;
+          windowConfig = config;
+        }
+      })
+      .catch(() => {
+        if (!cancelled) feedback.show(_t("general.windowConfigLoadFailed"), false);
+      })
+      .finally(() => {
+        if (!cancelled) windowConfigLoading = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  async function changeWindowSetting(key: "launchAtStartup" | "closeToTray", value: boolean) {
+    if (!windowConfig || windowConfigSaving) return;
+    const previous = windowConfig;
+    windowConfig = { ...previous, [key]: value };
+    windowConfigSaving = true;
+    try {
+      await setWindowConfig({ [key]: value });
+    } catch {
+      windowConfig = previous;
+      feedback.show(_t("general.windowConfigUpdateFailed"), false);
+    } finally {
+      windowConfigSaving = false;
+    }
+  }
+
   function changeLanguage(lang: Locale) {
     generalSettings.updateSetting("language", lang);
     locale.set(lang);
@@ -46,6 +90,24 @@
       icon: "globe",
       label: _t("general.language"),
       desc: _t("general.languageDescription"),
+    },
+    {
+      type: "toggle",
+      icon: "clock",
+      label: _t("general.launchAtStartup"),
+      desc: _t("general.launchAtStartupDescription"),
+      get: () => windowConfig?.launchAtStartup ?? false,
+      set: (v) => void changeWindowSetting("launchAtStartup", v),
+      disabled: () => windowConfigLoading || windowConfigSaving || !windowConfig,
+    },
+    {
+      type: "toggle",
+      icon: "clipboard",
+      label: _t("general.closeToTray"),
+      desc: _t("general.closeToTrayDescription"),
+      get: () => windowConfig?.closeToTray ?? false,
+      set: (v) => void changeWindowSetting("closeToTray", v),
+      disabled: () => windowConfigLoading || windowConfigSaving || !windowConfig,
     },
     {
       type: "toggle",

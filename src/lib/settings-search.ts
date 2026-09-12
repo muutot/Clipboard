@@ -257,7 +257,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.close-to-tray",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.closeToTray"),
     i18n("general.closeToTrayDescription"),
     ["托盘", "tray"],
