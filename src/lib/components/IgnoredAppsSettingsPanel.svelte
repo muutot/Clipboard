@@ -1,14 +1,19 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { onMount } from "svelte";
+  import AppIcon from "$lib/components/AppIcon.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
   import SearchField from "$lib/components/SearchField.svelte";
   import {
     configureIgnoredApplications,
     getApplicationFilterSettings,
     type ApplicationFilterSettings,
   } from "$lib/services/capture";
+  import { generalSettings } from "$lib/services/settings";
+  import { getStorageConfig } from "$lib/services/storage";
   import { messages, resolvePath } from "$lib/i18n";
-  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { isTauriRuntime } from "$lib/services/runtime";
+  import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -36,6 +41,12 @@
   let saving = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let maxFileCopySize = $state(50 * 1024 * 1024);
+  let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
+  let maxFileCopyDisplay = $state(50);
+  let maxTextCaptureSize = $state(500 * 1024);
+  let maxTextCaptureSizeUnit = $state<"byte" | "KB" | "MB" | "GB">("KB");
+  let maxTextCaptureDisplay = $state(500);
 
   const ignoredKeys = $derived(
     new Set((settings?.ignoredApplications ?? []).map(normalizeApplication)),
@@ -56,8 +67,58 @@
   );
 
   onMount(() => {
+    maxTextCaptureSize = $generalSettings.maxTextCaptureBytes;
+    maxTextCaptureDisplay = toDisplaySize(
+      $generalSettings.maxTextCaptureBytes,
+      maxTextCaptureSizeUnit,
+    );
     void loadSettings();
+    void loadStorageConfig();
   });
+
+  async function loadStorageConfig() {
+    try {
+      const result = await getStorageConfig();
+      if (result) {
+        maxFileCopySize = result.maxFileCopySizeBytes;
+        maxFileCopyDisplay = toDisplaySize(result.maxFileCopySizeBytes, maxFileCopySizeUnit);
+      }
+    } catch (error) {
+      console.error("Unable to load storage config", error);
+    }
+  }
+
+  function updateMaxFileSizeFromDisplay() {
+    maxFileCopySize = fromDisplaySize(maxFileCopyDisplay, maxFileCopySizeUnit);
+  }
+
+  function changeFileSizeUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    maxFileCopySizeUnit = unit;
+    maxFileCopyDisplay = toDisplaySize(maxFileCopySize, unit);
+  }
+
+  async function saveMaxFileCopySize() {
+    try {
+      await invoke("set_storage_config", { maxFileCopySizeBytes: maxFileCopySize });
+    } catch (error) {
+      console.error("Unable to save storage config", error);
+      feedback = error instanceof Error ? error.message : String(error);
+      feedbackSuccess = false;
+    }
+  }
+
+  function updateMaxTextCaptureFromDisplay() {
+    maxTextCaptureSize = fromDisplaySize(maxTextCaptureDisplay, maxTextCaptureSizeUnit);
+  }
+
+  function changeTextCaptureUnit(unit: "byte" | "KB" | "MB" | "GB") {
+    maxTextCaptureSizeUnit = unit;
+    maxTextCaptureDisplay = toDisplaySize(maxTextCaptureSize, unit);
+  }
+
+  function saveMaxTextCaptureSize() {
+    generalSettings.updateSetting("maxTextCaptureBytes", maxTextCaptureSize);
+  }
 
   async function loadSettings() {
     loading = true;
@@ -146,10 +207,62 @@
   </header>
 {/if}
 
-{#if loading}
-  <div class="settings-state">{_t("capture.readingApps")}</div>
-{:else if settings}
-  <div class="settings-scroll">
+<div class="settings-scroll">
+  <section
+    class="setting-card setting-card-row"
+    data-settings-search-id="storage.max-file-copy-size"
+  >
+    <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+    <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
+    <input
+      type="number"
+      bind:value={maxFileCopyDisplay}
+      min="1"
+      oninput={updateMaxFileSizeFromDisplay}
+      onchange={saveMaxFileCopySize}
+    />
+    <CustomSelect
+      className="unit-select"
+      value={maxFileCopySizeUnit}
+      options={[
+        { value: "byte", label: "B" },
+        { value: "KB", label: "KB" },
+        { value: "MB", label: "MB" },
+        { value: "GB", label: "GB" },
+      ]}
+      onchange={(v) => changeFileSizeUnit(v as "byte" | "KB" | "MB" | "GB")}
+    />
+  </section>
+
+  <section
+    class="setting-card setting-card-row"
+    data-settings-search-id="general.max-text-capture-size"
+  >
+    <span class="setting-icon"><AppIcon name="text" size={17} /></span>
+    <span class="setting-label">{_t("general.maxTextCaptureSize")}</span>
+    <input
+      type="number"
+      bind:value={maxTextCaptureDisplay}
+      min="1"
+      oninput={updateMaxTextCaptureFromDisplay}
+      onchange={saveMaxTextCaptureSize}
+    />
+    <CustomSelect
+      className="unit-select"
+      value={maxTextCaptureSizeUnit}
+      options={[
+        { value: "byte", label: "B" },
+        { value: "KB", label: "KB" },
+        { value: "MB", label: "MB" },
+        { value: "GB", label: "GB" },
+      ]}
+      onchange={(v) => changeTextCaptureUnit(v as "byte" | "KB" | "MB" | "GB")}
+    />
+  </section>
+
+  {#if loading}
+    <div class="settings-state">{_t("capture.readingApps")}</div>
+  {:else if settings}
     <section class="filter-board">
       <div class="application-column">
         <div class="column-heading">
@@ -258,10 +371,10 @@
     </section>
 
     <p class="auto-save-note">{_t("capture.configNote")}</p>
-  </div>
-{:else}
-  <div class="settings-state">{feedback || _t("capture.captureUnavailable")}</div>
-{/if}
+  {:else}
+    <div class="settings-state">{feedback || _t("capture.captureUnavailable")}</div>
+  {/if}
+</div>
 
 {#if feedback && settings}
   <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
@@ -275,6 +388,7 @@
   .settings-scroll {
     display: flex;
     flex-direction: column;
+    gap: 8px;
     flex: 1;
   }
 

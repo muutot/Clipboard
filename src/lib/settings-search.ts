@@ -83,7 +83,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "彩色",
     "color",
   ],
-  capture: [i18n("capture.title"), i18n("capture.settings"), "采集"],
+  capture: [i18n("capture.title"), i18n("capture.settings"), "采集", "上限"],
   capture_privacy: [
     i18n("capture.settings"),
     i18n("capture.sensitiveContentTitle"),
