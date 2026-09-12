@@ -255,7 +255,10 @@
 
 <div class="float-shell">
   <!-- svelte-ignore a11y_no_static_element_interactions: header is a window drag handle; inner buttons keep native semantics -->
-  <header class="float-header" data-tauri-drag-region onpointerdown={startHeaderDrag}>
+  <!-- No data-tauri-drag-region: the native modal drag loop would race the
+       manual pointer tracking below and swallow its pointerup, leaving a
+       stale dragState that blocks the next drag. -->
+  <header class="float-header" onpointerdown={startHeaderDrag}>
     <span class="float-title">{_t("float.title")}</span>
     <div class="float-tabs" role="tablist" aria-label={_t("float.title")}>
       <button
