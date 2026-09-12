@@ -509,7 +509,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
 
   entry(
     "recording.pause",
-    { section: "general_general" },
+    { section: "capture_privacy" },
     i18n("capture.pauseTitle"),
     i18n("capture.pauseDescription"),
     [i18n("capture.pauseAction"), i18n("capture.resumeAction")],

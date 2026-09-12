@@ -10,6 +10,9 @@
   } from "$lib/services/capture";
   import { messages, resolvePath } from "$lib/i18n";
   import { createFeedback } from "$lib/utils/feedback.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -25,12 +28,65 @@
   let loading = $state(true);
   let patternsText = $state("");
   let patternsSaving = $state(false);
+  let privacyPaused = $state(false);
+  let pauseLoading = $state(true);
+  // True on desktop macOS/Linux, where clipboard capture polls instead of
+  // using native monitoring and self-trigger marking is unavailable.
+  let nonWindowsDesktop = $state(false);
   const feedback = createFeedback(3000);
 
   onMount(() => {
     void loadPrivacy();
-    return () => feedback.dispose();
+    void loadPrivacyStatus();
+    let unlistenPrivacyPause: (() => void) | undefined;
+    if (isTauriRuntime()) {
+      void getRuntimeInfo().then((runtime) => {
+        if (runtime && runtime.operatingSystem !== "windows") {
+          nonWindowsDesktop = true;
+        }
+      });
+      listen<boolean>("privacy-pause-changed", (event) => {
+        privacyPaused = event.payload;
+      }).then((unlisten) => {
+        unlistenPrivacyPause = unlisten;
+      });
+    }
+    return () => {
+      unlistenPrivacyPause?.();
+      feedback.dispose();
+    };
   });
+
+  async function loadPrivacyStatus() {
+    if (!isTauriRuntime()) {
+      pauseLoading = false;
+      return;
+    }
+
+    try {
+      const status = await invoke<{ paused: boolean }>("get_privacy_status");
+      privacyPaused = status.paused;
+    } catch (error) {
+      console.error("Unable to load privacy status", error);
+    } finally {
+      pauseLoading = false;
+    }
+  }
+
+  async function togglePrivacyPause() {
+    if (!isTauriRuntime() || pauseLoading) return;
+    pauseLoading = true;
+
+    try {
+      privacyPaused = await invoke<boolean>("toggle_privacy_pause");
+      feedback.show(_t(privacyPaused ? "capture.paused" : "capture.resumed"), true);
+    } catch (error) {
+      console.error("Unable to toggle privacy pause", error);
+      feedback.show(error instanceof Error ? error.message : String(error), false);
+    } finally {
+      pauseLoading = false;
+    }
+  }
 
   async function loadPrivacy() {
     try {
@@ -92,6 +148,37 @@
 {/if}
 
 <div class="settings-scroll">
+  <CustomEntry
+    searchId="recording.pause"
+    config={{
+      type: "custom",
+      variant: "toggle",
+      icon: "pause",
+      label: _t("capture.pauseTitle"),
+      desc: _t("capture.pauseDescription"),
+    }}
+  >
+    <div class="pause-control">
+      <span class="pause-state">{_t(privacyPaused ? "capture.paused" : "capture.active")}</span>
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={!privacyPaused}
+        role="switch"
+        aria-checked={!privacyPaused}
+        aria-label={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
+        title={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
+        disabled={pauseLoading || !isTauriRuntime()}
+        onclick={togglePrivacyPause}
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </div>
+    {#if nonWindowsDesktop}
+      <p class="polling-note">{_t("capture.pollingNote")}</p>
+    {/if}
+  </CustomEntry>
+
   {#if loading || !privacy}
     <div class="settings-state">{_t("storage.readingConfig")}</div>
   {:else}
@@ -136,12 +223,31 @@
   {/if}
 </div>
 
-{#if feedback.message && !loading}
+{#if feedback.message}
   <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
 {/if}
 
 <style>
   header p {
     max-width: 570px;
+  }
+
+  .pause-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+
+  .pause-state {
+    color: var(--text-muted);
+    font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
+  }
+
+  .polling-note {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+    line-height: 1.5;
   }
 </style>

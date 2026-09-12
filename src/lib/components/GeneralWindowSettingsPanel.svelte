@@ -3,6 +3,7 @@
   import { messages, resolvePath } from "$lib/i18n";
   import type { FloatPanelPosition, WindowConfig, WindowEffect } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
+  import { onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
 
@@ -20,6 +21,9 @@
 
   let s = $state($generalSettings);
   let feedback = createFeedback(2000);
+
+  onDestroy(() => feedback.dispose());
+
   let windowConfig = $state<WindowConfig | null>(
     _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
   );
