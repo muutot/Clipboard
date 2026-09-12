@@ -23,12 +23,14 @@
     <span class="runtime-status"><i></i>{runtimeLabel}</span>
   </span>
   <span class="status-msg">{statusMessage}</span>
-  <span class="shortcut-hints">
-    {#each hintParts as part, index (index)}
-      {#if index > 0}<b>+</b>{/if}<kbd>{part}</kbd>
-    {/each}
-    {_t("app.shortcutHint")}</span
-  >
+  {#if hintParts.length > 0}
+    <span class="shortcut-hints">
+      {#each hintParts as part, index (index)}
+        {#if index > 0}<b>+</b>{/if}<kbd>{part}</kbd>
+      {/each}
+      {_t("app.shortcutHint")}</span
+    >
+  {/if}
 </footer>
 
 <style>
