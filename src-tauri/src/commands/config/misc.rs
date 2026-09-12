@@ -157,9 +157,13 @@ pub fn set_auto_tag_rules(
     rules: Vec<crate::config::AutoTagRule>,
 ) -> Result<Vec<crate::config::AutoTagRule>, String> {
     // Validate up front so nothing is persisted when a pattern is invalid
-    // or a tag is blank (mirrors set_privacy_settings).
+    // or a tag is blank (mirrors set_privacy_settings). Patterns are
+    // validated in their persisted form (500-char cap, then trim): a longer
+    // pattern whose truncation breaks the regex must be rejected here
+    // instead of being stored as a rule that can never compile.
     for rule in &rules {
-        if let Err(error) = regex_lite::Regex::new(rule.pattern.trim()) {
+        let persisted_pattern: String = rule.pattern.chars().take(500).collect();
+        if let Err(error) = regex_lite::Regex::new(persisted_pattern.trim()) {
             return Err(format!(
                 "invalid auto-tag pattern {:?}: {error}",
                 rule.pattern
