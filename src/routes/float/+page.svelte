@@ -25,21 +25,28 @@
   let items = $state<ClipboardItem[]>([]);
   let loading = $state(true);
   let copyingId = $state<string | null>(null);
+  /** Guards against a stale response overwriting a newer filter's list. */
+  let loadRequestId = 0;
 
   async function load() {
     if (!isTauriRuntime()) {
       loading = false;
       return;
     }
-    loading = true;
+    const request = ++loadRequestId;
+    // Stale-while-revalidate: keep the current list visible while it
+    // refreshes (every focus triggers a reload) and only show the
+    // placeholder on the very first load of an empty panel.
+    if (items.length === 0) loading = true;
     try {
       const args = filter === "favorite" ? { favorite: true } : {};
-      items = (await loadClipboardHistory(100, 0, args)) ?? [];
+      const result = (await loadClipboardHistory(100, 0, args)) ?? [];
+      if (request === loadRequestId) items = result;
     } catch (error) {
       console.error("Unable to load float history", error);
-      items = [];
+      if (request === loadRequestId) items = [];
     } finally {
-      loading = false;
+      if (request === loadRequestId) loading = false;
     }
   }
 
