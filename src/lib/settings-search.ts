@@ -362,7 +362,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.detail-display-mode",
-    { section: "general_window" },
+    { section: "layout" },
     i18n("general.detailDisplayMode"),
     i18n("general.detailDisplayModeDescription"),
     [

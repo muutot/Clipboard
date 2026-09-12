@@ -132,18 +132,6 @@
     },
     {
       type: "select",
-      icon: "grid",
-      label: _t("general.detailDisplayMode"),
-      desc: _t("general.detailDisplayModeDescription"),
-      get: () => s.detailDisplayMode,
-      options: [
-        { value: "overlay", label: _t("general.detailDisplayModeOverlay") },
-        { value: "split", label: _t("general.detailDisplayModeSplit") },
-      ],
-      set: (v) => generalSettings.updateSetting("detailDisplayMode", v as "overlay" | "split"),
-    },
-    {
-      type: "select",
       icon: "layers",
       label: _t("general.floatPanelPosition"),
       desc: _t("general.floatPanelPositionDescription"),
