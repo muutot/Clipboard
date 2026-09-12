@@ -1,26 +1,11 @@
 <script lang="ts">
-  import { onDestroy, tick } from "svelte";
+  import { tick } from "svelte";
   import type { Component } from "svelte";
   import { generalSettings } from "$lib/services/settings";
   import AppIcon from "$lib/components/AppIcon.svelte";
-  import CustomSelect from "$lib/components/CustomSelect.svelte";
   import SearchField from "$lib/components/SearchField.svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { listen } from "@tauri-apps/api/event";
-  import {
-    getStorageKindStats,
-    getStorageConfig,
-    getStorageStatus,
-    permanentlyDeleteStorageKind,
-    rebuildSearchIndex,
-    repairDatabase,
-    type StorageKind,
-    type StorageKindStats,
-    type StorageStatus,
-    type RepairResult,
-  } from "$lib/services/storage";
+  import { getStorageStatus, type StorageStatus } from "$lib/services/storage";
   import { isTauriRuntime, getRuntimeInfo } from "$lib/services/runtime";
-  import {} from "$lib/services/storage";
   import { getVersion } from "@tauri-apps/api/app";
   import { messages, resolvePath } from "$lib/i18n";
   import {
@@ -32,9 +17,7 @@
   } from "$lib/settings-navigation";
   import type { IconName } from "$lib/types/clipboard";
   import { formatBytes } from "$lib/utils/format";
-  import { fromDisplaySize, toDisplaySize } from "$lib/utils/unit-convert";
   import { captureFocusRestore, trapTabFocus } from "$lib/utils/focus";
-  import { endOfDay, startOfDay } from "$lib/utils/date-query";
   import {
     filterSettingsSearchItems,
     normalizeSettingsSearch,
@@ -177,10 +160,19 @@
       }),
     },
     {
-      sections: ["storage_tools"],
-      load: () => import("$lib/components/TransferPanel.svelte"),
+      sections: ["storage_limits"],
+      load: () => import("$lib/components/StorageLimitsPanel.svelte"),
       props: () => ({
-        maxItemCount,
+        onfeedback: (message: string, success: boolean) => {
+          feedback = message;
+          feedbackSuccess = success;
+        },
+      }),
+    },
+    {
+      sections: ["storage_tools"],
+      load: () => import("$lib/components/StorageToolsPanel.svelte"),
+      props: () => ({
         onfeedback: (message: string, success: boolean) => {
           feedback = message;
           feedbackSuccess = success;
@@ -269,28 +261,8 @@
   let { open, onclose, standalone = false }: Props = $props();
   let status = $state<StorageStatus | null>(null);
   let loading = $state(false);
-  let saving = $state(false);
-  let rebuilding = $state(false);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
-  const storageKinds: readonly {
-    kind: StorageKind;
-    labelKey: "filter.text" | "filter.link" | "filter.image" | "filter.file";
-    icon: "text" | "link" | "image" | "file";
-  }[] = [
-    { kind: "text", labelKey: "filter.text", icon: "text" },
-    { kind: "link", labelKey: "filter.link", icon: "link" },
-    { kind: "image", labelKey: "filter.image", icon: "image" },
-    { kind: "file", labelKey: "filter.file", icon: "file" },
-  ];
-  let storageKindStats = $state<Record<StorageKind, StorageKindStats>>({
-    text: { itemCount: 0, sizeBytes: 0 },
-    link: { itemCount: 0, sizeBytes: 0 },
-    image: { itemCount: 0, sizeBytes: 0 },
-    file: { itemCount: 0, sizeBytes: 0 },
-  });
-  let storageKindStatsAvailable = $state(false);
-  let deletingStorageKind = $state<StorageKind | null>(null);
 
   $effect(() => {
     if (feedback) {
@@ -523,134 +495,8 @@
     void tick().then(() => updateSettingsItemCount());
   });
 
-  let retentionPeriodDays = $state(90);
-  let maxItemCount = $state(10000);
-  let recycleBinDays = $state(30);
-  let maxFileCopySize = $state(50 * 1024 * 1024);
-  let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
-  let maxFileCopyDisplay = $state(50);
-  let maxTextCaptureSize = $state(500 * 1024);
-  let maxTextCaptureSizeUnit = $state<"byte" | "KB" | "MB" | "GB">("KB");
-  let maxTextCaptureDisplay = $state(500);
-
-  function updateMaxFileSizeFromDisplay() {
-    maxFileCopySize = fromDisplaySize(maxFileCopyDisplay, maxFileCopySizeUnit);
-  }
-
-  function changeFileSizeUnit(unit: "byte" | "KB" | "MB" | "GB") {
-    maxFileCopySizeUnit = unit;
-    maxFileCopyDisplay = toDisplaySize(maxFileCopySize, unit);
-  }
-
-  function updateMaxTextCaptureFromDisplay() {
-    maxTextCaptureSize = fromDisplaySize(maxTextCaptureDisplay, maxTextCaptureSizeUnit);
-  }
-
-  function changeTextCaptureUnit(unit: "byte" | "KB" | "MB" | "GB") {
-    maxTextCaptureSizeUnit = unit;
-    maxTextCaptureDisplay = toDisplaySize(maxTextCaptureSize, unit);
-  }
-
-  function storageKindLabel(kind: StorageKind): string {
-    return _t(storageKinds.find((entry) => entry.kind === kind)?.labelKey ?? "filter.text");
-  }
-
-  let repairResult = $state<RepairResult | null>(null);
-  let repairLoading = $state(false);
   let appVersion = $state("");
   let appExecutablePath = $state("");
-
-  async function loadStorageKindStats(): Promise<boolean> {
-    try {
-      const entries = await Promise.all(
-        storageKinds.map(async ({ kind }) => {
-          const stats = await getStorageKindStats(kind);
-          if (!stats) throw new Error("Storage kind statistics are unavailable");
-          return [kind, stats] as const;
-        }),
-      );
-      storageKindStats = Object.fromEntries(entries) as Record<StorageKind, StorageKindStats>;
-      storageKindStatsAvailable = true;
-      return true;
-    } catch (error) {
-      console.error("Unable to load storage kind statistics", error);
-      storageKindStats = {
-        text: { itemCount: 0, sizeBytes: 0 },
-        link: { itemCount: 0, sizeBytes: 0 },
-        image: { itemCount: 0, sizeBytes: 0 },
-        file: { itemCount: 0, sizeBytes: 0 },
-      };
-      storageKindStatsAvailable = false;
-      return false;
-    }
-  }
-
-  async function deleteStorageKind(kind: StorageKind) {
-    if (deletingStorageKind) return;
-
-    const label = storageKindLabel(kind);
-    deletingStorageKind = kind;
-    feedback = "";
-    feedbackSuccess = false;
-
-    try {
-      const freshStats = await getStorageKindStats(kind);
-      if (!freshStats) throw new Error(_t("storage.storageUnavailable"));
-      storageKindStats = { ...storageKindStats, [kind]: freshStats };
-      storageKindStatsAvailable = true;
-      if (freshStats.itemCount === 0) {
-        feedback = _t("storage.deleteKindNoData", { kind: label });
-        feedbackSuccess = true;
-        return;
-      }
-
-      const confirmed = window.confirm(
-        _t("storage.deleteKindConfirm", {
-          kind: label,
-          count: freshStats.itemCount,
-          size: formatBytes(freshStats.sizeBytes),
-        }),
-      );
-      if (!confirmed) return;
-
-      const result = await permanentlyDeleteStorageKind(kind, freshStats);
-      const warnings = [...result.warnings];
-      let refreshed = true;
-      try {
-        status = await getStorageStatus();
-        refreshed = status !== null && (await loadStorageKindStats());
-      } catch (error) {
-        console.error("Unable to refresh storage statistics after deletion", error);
-        refreshed = false;
-      }
-      if (!refreshed) warnings.push(_t("storage.deleteKindRefreshFailed"));
-
-      const params = {
-        kind: label,
-        count: result.deletedCount,
-        size: formatBytes(result.deletedSizeBytes),
-        files: result.removedFiles,
-      };
-      if (warnings.length > 0) {
-        feedback = _t("storage.deleteKindPartial", {
-          ...params,
-          warning: warnings.join("; "),
-        });
-      } else {
-        feedback = _t("storage.deleteKindSuccess", params);
-        feedbackSuccess = true;
-      }
-    } catch (error) {
-      console.error(`Unable to permanently delete ${kind} storage`, error);
-      await loadStorageKindStats();
-      feedback = _t("storage.deleteKindFailed", {
-        kind: label,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      deletingStorageKind = null;
-    }
-  }
 
   async function loadAppVersion(): Promise<void> {
     if (!isTauriRuntime()) return;
@@ -667,19 +513,9 @@
     }
   }
 
-  $effect(() => {
-    if (activeSection !== "storage_limits") return;
-    maxTextCaptureSize = $generalSettings.maxTextCaptureBytes;
-    maxTextCaptureDisplay = toDisplaySize(
-      $generalSettings.maxTextCaptureBytes,
-      maxTextCaptureSizeUnit,
-    );
-  });
-
   async function refreshStorageStats() {
     try {
       status = await getStorageStatus();
-      await loadStorageKindStats();
     } catch (error) {
       console.error("Unable to refresh storage statistics", error);
     }
@@ -690,41 +526,6 @@
       void loadStatus();
       void loadAppVersion();
     }
-  });
-
-  $effect(() => {
-    if (!open) return;
-
-    if (activeSection !== "storage_limits") return;
-    const refreshVisibleStatistics = refreshStorageStats;
-
-    let disposed = false;
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let unlistenAdd: (() => void) | undefined;
-    let unlistenInvalidated: (() => void) | undefined;
-    const scheduleRefresh = () => {
-      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => {
-        refreshTimer = undefined;
-        if (!disposed) void refreshVisibleStatistics();
-      }, 250);
-    };
-
-    void refreshVisibleStatistics();
-    listen("clipboard-item-added", scheduleRefresh).then((unlisten) => {
-      if (disposed) unlisten();
-      else unlistenAdd = unlisten;
-    });
-    listen("clipboard-history-invalidated", scheduleRefresh).then((unlisten) => {
-      if (disposed) unlisten();
-      else unlistenInvalidated = unlisten;
-    });
-    return () => {
-      disposed = true;
-      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
-      unlistenAdd?.();
-      unlistenInvalidated?.();
-    };
   });
 
   async function loadStatus() {
@@ -744,101 +545,6 @@
     } finally {
       loading = false;
     }
-
-    void loadHistoryConfig();
-  }
-
-  async function loadHistoryConfig() {
-    try {
-      const result = await invoke<{
-        maxItems: number;
-        retentionDays: number;
-        recycleBinDays: number;
-      }>("get_history_config");
-      if (result) {
-        maxItemCount = result.maxItems;
-        retentionPeriodDays = result.retentionDays;
-        recycleBinDays = result.recycleBinDays;
-      }
-    } catch (error) {
-      console.error("Unable to load history config", error);
-    }
-    try {
-      const result = await getStorageConfig();
-      if (result) {
-        maxFileCopySize = result.maxFileCopySizeBytes;
-        maxFileCopyDisplay = toDisplaySize(result.maxFileCopySizeBytes, maxFileCopySizeUnit);
-      }
-    } catch (error) {
-      console.error("Unable to load storage config", error);
-    }
-  }
-
-  async function doRepair() {
-    repairLoading = true;
-    repairResult = null;
-    feedback = "";
-    try {
-      repairResult = await repairDatabase();
-      if (repairResult) {
-        feedbackSuccess = repairResult.integrityOk;
-        feedback = repairResult.integrityOk
-          ? `Database integrity OK (${repairResult.pageCount} pages, ${repairResult.freelistCount} free)`
-          : `Database repair needed: ${repairResult.integrityMessage}`;
-      }
-    } catch (error) {
-      console.error("Database repair failed", error);
-      feedback =
-        "Database repair failed: " + (error instanceof Error ? error.message : String(error));
-      feedbackSuccess = false;
-    } finally {
-      repairLoading = false;
-    }
-  }
-
-  async function rebuildIndex() {
-    rebuilding = true;
-    feedback = "";
-    feedbackSuccess = false;
-
-    try {
-      const summary = await rebuildSearchIndex();
-      status = await getStorageStatus();
-      feedback = _t("storage.rebuildComplete", {
-        events: summary.processedEvents,
-        docs: summary.upsertedDocuments,
-      });
-      feedbackSuccess = true;
-    } catch (error) {
-      console.error("Unable to rebuild search index", error);
-      feedback = error instanceof Error ? error.message : String(error);
-    } finally {
-      rebuilding = false;
-    }
-  }
-
-  async function saveHistoryConfig() {
-    try {
-      await invoke("set_history_config", {
-        maxItems: maxItemCount,
-        retentionDays: retentionPeriodDays,
-        recycleBinDays: recycleBinDays,
-      });
-    } catch (error) {
-      console.error("Unable to save history config", error);
-    }
-  }
-
-  async function saveMaxFileCopySize() {
-    try {
-      await invoke("set_storage_config", { maxFileCopySizeBytes: maxFileCopySize });
-    } catch (error) {
-      console.error("Unable to save storage config", error);
-    }
-  }
-
-  function saveMaxTextCaptureSize() {
-    generalSettings.updateSetting("maxTextCaptureBytes", maxTextCaptureSize);
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -1080,183 +786,13 @@
         {@render settingsPanelLoadFailed()}
       {/await}
     {:else}
-      {#if loading}
-        <div class="settings-state">{_t("storage.readingConfig")}</div>
-      {:else if status}
-        <div class="settings-scroll">
-          {#if activeSection === "storage_tools"}
-            <section class="setting-card toggle-card">
-              <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-                <div>
-                  <strong>{_t("storage.searchIndexTitle")}</strong>
-                  <p>{_t("storage.searchIndexDesc")}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                class="settings-action-btn"
-                disabled={rebuilding}
-                onclick={rebuildIndex}
-              >
-                {rebuilding ? _t("storage.rebuilding") : _t("storage.rebuildIndex")}
-              </button>
-            </section>
-          {/if}
-          {#if activeSection === "storage_limits"}
-            <section class="setting-card setting-card-row">
-              <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
-              <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
-              <input
-                type="number"
-                bind:value={retentionPeriodDays}
-                min="1"
-                max="365"
-                onchange={saveHistoryConfig}
-              />
-              <span class="number-suffix">{_t("captureSettings.days")}</span>
-            </section>
+      <div class="settings-state">
+        {loading ? _t("storage.readingConfig") : feedback || _t("storage.storageUnavailable")}
+      </div>
+    {/if}
 
-            <section class="setting-card setting-card-row">
-              <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-              <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
-              <input
-                type="number"
-                bind:value={maxItemCount}
-                min="100"
-                step="100"
-                onchange={saveHistoryConfig}
-              />
-              <span class="number-suffix">{_t("storage.recordCountUnit")}</span>
-            </section>
-
-            <section class="setting-card setting-card-row">
-              <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-              <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
-              <input
-                type="number"
-                bind:value={recycleBinDays}
-                min="0"
-                max="365"
-                onchange={saveHistoryConfig}
-              />
-              <span class="number-suffix">{_t("captureSettings.days")}</span>
-            </section>
-
-            <section class="setting-card setting-card-row">
-              <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-              <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
-              <input
-                type="number"
-                bind:value={maxFileCopyDisplay}
-                min="1"
-                oninput={updateMaxFileSizeFromDisplay}
-                onchange={saveMaxFileCopySize}
-              />
-              <CustomSelect
-                className="unit-select"
-                value={maxFileCopySizeUnit}
-                options={[
-                  { value: "byte", label: "B" },
-                  { value: "KB", label: "KB" },
-                  { value: "MB", label: "MB" },
-                  { value: "GB", label: "GB" },
-                ]}
-                onchange={(v) => changeFileSizeUnit(v as "byte" | "KB" | "MB" | "GB")}
-              />
-            </section>
-
-            <section class="setting-card setting-card-row">
-              <span class="setting-icon"><AppIcon name="text" size={17} /></span>
-              <span class="setting-label">{_t("general.maxTextCaptureSize")}</span>
-              <input
-                type="number"
-                bind:value={maxTextCaptureDisplay}
-                min="1"
-                oninput={updateMaxTextCaptureFromDisplay}
-                onchange={saveMaxTextCaptureSize}
-              />
-              <CustomSelect
-                className="unit-select"
-                value={maxTextCaptureSizeUnit}
-                options={[
-                  { value: "byte", label: "B" },
-                  { value: "KB", label: "KB" },
-                  { value: "MB", label: "MB" },
-                  { value: "GB", label: "GB" },
-                ]}
-                onchange={(v) => changeTextCaptureUnit(v as "byte" | "KB" | "MB" | "GB")}
-              />
-            </section>
-
-            <section class="setting-card storage-kind-delete-card">
-              <div class="setting-heading">
-                <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-                <div>
-                  <strong>{_t("storage.deleteByKindTitle")}</strong>
-                  <p>{_t("storage.deleteByKindDesc")}</p>
-                </div>
-              </div>
-              <div class="storage-kind-delete-list">
-                {#each storageKinds as entry (entry.kind)}
-                  <div class="storage-kind-delete-row">
-                    <span class="storage-kind-icon"><AppIcon name={entry.icon} size={15} /></span>
-                    <div class="storage-kind-delete-copy">
-                      <strong>{_t(entry.labelKey)}</strong>
-                      <span>
-                        {storageKindStatsAvailable
-                          ? _t("storage.deleteKindCount", {
-                              count: storageKindStats[entry.kind].itemCount,
-                              size: formatBytes(storageKindStats[entry.kind].sizeBytes),
-                            })
-                          : "—"}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      class="danger-action"
-                      disabled={!storageKindStatsAvailable ||
-                        deletingStorageKind !== null ||
-                        storageKindStats[entry.kind].itemCount === 0}
-                      onclick={() => deleteStorageKind(entry.kind)}
-                    >
-                      {deletingStorageKind === entry.kind
-                        ? _t("storage.deletingKind")
-                        : _t("storage.deleteKindAction")}
-                    </button>
-                  </div>
-                {/each}
-              </div>
-              <p class="storage-kind-delete-scope">{_t("storage.deleteByKindScope")}</p>
-            </section>
-          {/if}
-          {#if activeSection === "storage_tools"}
-            <section class="setting-card setting-card-row">
-              <span class="setting-icon"><AppIcon name="settings" size={17} /></span>
-              <span class="setting-label">{_t("storage.databaseMaintenance")}</span>
-              <button type="button" disabled={repairLoading} onclick={doRepair}>
-                {repairLoading ? _t("storage.checkingDatabase") : _t("storage.checkDatabase")}
-              </button>
-            </section>
-            {#if repairResult}
-              <div class="repair-result">
-                <span class:ok={repairResult.integrityOk} class:fail={!repairResult.integrityOk}>
-                  {repairResult.integrityOk
-                    ? _t("storage.integrityOk")
-                    : _t("storage.integrityProblem")}
-                </span>
-                <code>{repairResult.integrityMessage}</code>
-              </div>
-            {/if}
-          {/if}
-        </div>
-      {:else}
-        <div class="settings-state">{feedback || _t("storage.storageUnavailable")}</div>
-      {/if}
-
-      {#if feedback && status}
-        <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
-      {/if}
+    {#if feedback}
+      <div class:success={feedbackSuccess} class="settings-feedback">{feedback}</div>
     {/if}
   </div>
 {/snippet}
@@ -1648,17 +1184,6 @@
       0 0 0 4px color-mix(in srgb, var(--selection-color) 12%, transparent) !important;
   }
 
-  .setting-heading p {
-    line-height: 1.5;
-  }
-
-  .setting-card {
-    padding: 10px 13px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-card-radius);
-    background: var(--card-bg);
-  }
-
   label {
     display: block;
     margin: 12px 0 6px;
@@ -1683,20 +1208,6 @@
     transition: border-color 120ms ease;
   }
 
-  .setting-card-row input {
-    width: 100px;
-  }
-
-  input:focus {
-    border-color: var(--text-faint);
-  }
-
-  .number-suffix {
-    color: var(--text-muted);
-    font-size: var(--settings-description-size);
-    flex-shrink: 0;
-  }
-
   @media (max-width: 560px) {
     .settings-dialog {
       grid-template-columns: 1fr;
@@ -1704,105 +1215,5 @@
     .settings-sidebar {
       display: none;
     }
-  }
-
-  .repair-result {
-    margin-top: 10px;
-    padding: 8px 9px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-control-radius);
-    background: var(--input-bg);
-    font-size: var(--settings-description-size);
-  }
-
-  .repair-result span.ok {
-    color: color-mix(in srgb, var(--success-color) 75%, white);
-  }
-
-  .repair-result span.fail {
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-  }
-
-  .repair-result code {
-    display: block;
-    margin-top: 4px;
-    color: var(--text-secondary);
-    font-size: var(--settings-note-size);
-  }
-
-  .storage-kind-delete-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .storage-kind-delete-row {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    min-width: 0;
-    padding: 9px 10px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--settings-control-radius);
-    background: var(--input-bg);
-  }
-
-  .storage-kind-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 27px;
-    height: 27px;
-    flex-shrink: 0;
-    border-radius: var(--settings-icon-radius);
-    color: var(--text-muted);
-    background: var(--hover-bg);
-  }
-
-  .storage-kind-delete-copy {
-    display: grid;
-    min-width: 0;
-    flex: 1;
-    gap: 2px;
-  }
-
-  .storage-kind-delete-copy strong {
-    color: var(--text-primary);
-    font-size: var(--settings-heading-size);
-    font-weight: 560;
-  }
-
-  .storage-kind-delete-copy span,
-  .storage-kind-delete-scope {
-    color: var(--text-muted);
-    font-size: var(--settings-description-size);
-  }
-
-  .storage-kind-delete-scope {
-    margin: 9px 0 0;
-    line-height: 1.45;
-  }
-
-  .danger-action {
-    min-width: 68px;
-    padding: 6px 9px;
-    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
-    border-radius: var(--settings-control-radius);
-    color: color-mix(in srgb, var(--danger-color) 75%, white);
-    background: color-mix(in srgb, var(--danger-color) 12%, var(--surface-bg));
-    font: inherit;
-    font-size: var(--settings-control-size);
-    white-space: nowrap;
-  }
-
-  .danger-action:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: color-mix(in srgb, var(--danger-color) 35%, var(--surface-bg));
-  }
-
-  .danger-action:disabled {
-    opacity: 0.45;
-    cursor: default;
   }
 </style>
