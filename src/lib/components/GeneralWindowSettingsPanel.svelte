@@ -1,12 +1,15 @@
 <script lang="ts">
   import SettingEntry from "$lib/components/SettingEntry.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import type { FloatPanelPosition, WindowEffect } from "$lib/types/clipboard";
-  import { generalSettings } from "$lib/services/settings";
+  import type { FloatPanelPosition, WindowConfig, WindowEffect } from "$lib/types/clipboard";
+  import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
+  import { createFeedback } from "$lib/utils/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
+
+  let _cachedWindowConfig: WindowConfig | null = null;
 
   interface Props {
     onclose: () => void;
@@ -16,6 +19,12 @@
   let { onclose, showHeader = true }: Props = $props();
 
   let s = $state($generalSettings);
+  let feedback = createFeedback(2000);
+  let windowConfig = $state<WindowConfig | null>(
+    _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
+  );
+  let windowConfigLoading = $state(!_cachedWindowConfig);
+  let windowConfigSaving = $state(false);
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -24,7 +33,60 @@
     return unsub;
   });
 
+  $effect(() => {
+    let cancelled = false;
+    void getWindowConfig()
+      .then((config) => {
+        if (!cancelled) {
+          _cachedWindowConfig = config;
+          windowConfig = config;
+        }
+      })
+      .catch(() => {
+        if (!cancelled) feedback.show(_t("general.windowConfigLoadFailed"), false);
+      })
+      .finally(() => {
+        if (!cancelled) windowConfigLoading = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  async function changeWindowSetting(key: "launchAtStartup" | "closeToTray", value: boolean) {
+    if (!windowConfig || windowConfigSaving) return;
+    const previous = windowConfig;
+    windowConfig = { ...previous, [key]: value };
+    windowConfigSaving = true;
+    try {
+      await setWindowConfig({ [key]: value });
+    } catch {
+      windowConfig = previous;
+      feedback.show(_t("general.windowConfigUpdateFailed"), false);
+    } finally {
+      windowConfigSaving = false;
+    }
+  }
+
   const windowEntries: SettingEntryConfig[] = $derived([
+    {
+      type: "toggle",
+      icon: "clock",
+      label: _t("general.launchAtStartup"),
+      desc: _t("general.launchAtStartupDescription"),
+      get: () => windowConfig?.launchAtStartup ?? false,
+      set: (v) => void changeWindowSetting("launchAtStartup", v),
+      disabled: () => windowConfigLoading || windowConfigSaving || !windowConfig,
+    },
+    {
+      type: "toggle",
+      icon: "clipboard",
+      label: _t("general.closeToTray"),
+      desc: _t("general.closeToTrayDescription"),
+      get: () => windowConfig?.closeToTray ?? false,
+      set: (v) => void changeWindowSetting("closeToTray", v),
+      disabled: () => windowConfigLoading || windowConfigSaving || !windowConfig,
+    },
     {
       type: "slider",
       icon: "sliders",
@@ -132,3 +194,7 @@
     <SettingEntry {config} />
   {/each}
 </div>
+
+{#if feedback.message}
+  <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
+{/if}

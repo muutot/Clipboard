@@ -250,14 +250,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.launch-at-startup",
-    { section: "general_general" },
+    { section: "general_window" },
     i18n("general.launchAtStartup"),
     i18n("general.launchAtStartupDescription"),
     ["自动启动", "boot", "login"],
   ),
   entry(
     "general.close-to-tray",
-    { section: "general_general" },
+    { section: "general_window" },
     i18n("general.closeToTray"),
     i18n("general.closeToTrayDescription"),
     ["托盘", "tray"],
