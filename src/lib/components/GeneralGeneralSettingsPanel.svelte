@@ -98,7 +98,7 @@
       desc: _t("general.launchAtStartupDescription"),
       get: () => windowConfig?.launchAtStartup ?? false,
       set: (v) => void changeWindowSetting("launchAtStartup", v),
-      disabled: () => windowConfigLoading || windowConfigSaving || !windowConfig,
+      disabled: () => windowConfigLoading || !windowConfig,
     },
     {
       type: "toggle",
