@@ -370,7 +370,10 @@ pub fn permanently_delete_storage_kind(
     kind: ClipboardKind,
     expected: StorageKindDeleteExpectation,
 ) -> Result<StorageKindDeleteResult, String> {
-    let ingestion_guard = lock_state(&capture.ingestion_guard, "clipboard ingestion lock")?;
+    let ingestion_guard = lock_state(
+        &capture.ingestion_guard,
+        "clipboard ingestion lock is poisoned",
+    )?;
     let expected = KindStorageStats {
         item_count: expected.item_count,
         size_bytes: expected.size_bytes,

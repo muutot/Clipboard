@@ -2,9 +2,10 @@
 //!
 //! Every Tauri command below locks managed `Mutex` state the same way; this
 //! helper collapses the three-line `.lock().map_err(...)` boilerplate while
-//! preserving the exact historical messages. It accepts anything that
-//! dereferences to a `Mutex` (`tauri::State<Mutex<T>>`, `Arc<Mutex<T>>`), so
-//! field locks like `capture.ingestion_guard` convert unchanged.
+//! preserving the exact historical messages. `name` is the complete poison
+//! message (e.g. `"configuration lock is poisoned"`). It accepts anything
+//! that dereferences to a `Mutex` (`tauri::State<Mutex<T>>`, `Arc<Mutex<T>>`),
+//! so field locks like `capture.ingestion_guard` convert unchanged.
 
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
@@ -16,5 +17,5 @@ where
     // Explicit deref coercion (rather than relying on method-call autoderef)
     // so the guard lifetime ties to the caller's borrow.
     let mutex: &'a Mutex<T> = state;
-    mutex.lock().map_err(|_| format!("{name} lock is poisoned"))
+    mutex.lock().map_err(|_| name.to_owned())
 }
