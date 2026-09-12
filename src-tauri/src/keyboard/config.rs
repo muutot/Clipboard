@@ -67,15 +67,16 @@ impl KeyboardConfigStore {
         let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
         fs::create_dir_all(&config_directory)?;
         let path = config_directory.join(KEYBOARD_CONFIG_FILE_NAME);
-        let mut config = if path.exists() {
-            serde_json::from_slice(&fs::read(&path)?)?
+        let (mut config, merged_defaults) = if path.exists() {
+            let loaded: KeyboardConfig = serde_json::from_slice(&fs::read(&path)?)?;
+            merge_missing_default_actions(loaded)
         } else {
-            KeyboardConfig::default()
+            (KeyboardConfig::default(), false)
         };
         normalize_and_validate(&mut config)?;
         let store = Self { path, config };
 
-        if !store.path.exists() {
+        if !store.path.exists() || merged_defaults {
             store.save()?;
         }
 
@@ -145,6 +146,39 @@ impl KeyboardConfigStore {
         }
         result
     }
+}
+
+/// Backfills bundled defaults for actions that are absent from a loaded
+/// config file. The settings UI only ever rebinds an action to a new chord
+/// list (possibly empty), never deletes its key, so a missing key means the
+/// file predates the action — without this merge, upgraders never receive
+/// new defaults like `toggleFloatPanel`. Defaults whose chords would
+/// collide with a binding the user already owns are skipped, so the merge
+/// can never introduce a `normalize_and_validate` conflict or fail load.
+fn merge_missing_default_actions(mut config: KeyboardConfig) -> (KeyboardConfig, bool) {
+    let taken: HashSet<String> = config
+        .shortcuts
+        .values()
+        .flatten()
+        .filter_map(|shortcut| {
+            ShortcutBinding::from_str(shortcut)
+                .ok()
+                .map(|binding| binding.canonical())
+        })
+        .collect();
+
+    let mut merged = false;
+    for (action, chords) in KeyboardConfig::default().shortcuts {
+        if chords.is_empty() || config.shortcuts.contains_key(&action) {
+            continue;
+        }
+        if chords.iter().any(|chord| taken.contains(chord)) {
+            continue;
+        }
+        config.shortcuts.insert(action, chords);
+        merged = true;
+    }
+    (config, merged)
 }
 
 fn normalize_and_validate(config: &mut KeyboardConfig) -> Result<(), StorageError> {
@@ -294,7 +328,7 @@ mod tests {
         fs::write(
             config_directory.join("keyboard.json"),
             serde_json::to_vec_pretty(&json!({
-                "shortcuts": { "toggleWindow": ["Alt+V"] },
+                "shortcuts": { "toggleWindow": ["Alt+C"] },
                 "doubleTapIntervalMs": 280
             }))
             .unwrap(),
@@ -308,6 +342,57 @@ mod tests {
         let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
 
         assert_eq!(saved["doubleTapIntervalMs"], 280);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn merges_missing_default_actions_into_an_existing_config() {
+        let project = temporary_directory("merge-missing");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        // A v1.5.2-era file: no toggleFloatPanel key at all.
+        fs::write(
+            config_directory.join("keyboard.json"),
+            serde_json::to_vec_pretty(&json!({
+                "shortcuts": { "toggleWindow": ["Ctrl+Space"], "copyItem": [] }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = KeyboardConfigStore::load(&project).unwrap();
+
+        assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Ctrl+Space"]);
+        assert_eq!(store.config().shortcuts["toggleFloatPanel"], vec!["Alt+V"]);
+        // An explicit empty binding is a user choice, not a missing key.
+        assert_eq!(store.config().shortcuts["copyItem"], Vec::<String>::new());
+        // The merge is persisted so later saves keep the new defaults.
+        let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();
+        assert_eq!(saved["shortcuts"]["toggleFloatPanel"], json!(["Alt+V"]));
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn skips_a_default_that_would_conflict_with_existing_bindings() {
+        let project = temporary_directory("merge-conflict");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        // The user kept the v1.5.2 default Alt+V for toggleWindow, which is
+        // also the new toggleFloatPanel default: the merge must skip the
+        // float default instead of failing load with a conflict.
+        fs::write(
+            config_directory.join("keyboard.json"),
+            serde_json::to_vec_pretty(&json!({
+                "shortcuts": { "toggleWindow": ["Alt+V"] }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = KeyboardConfigStore::load(&project).unwrap();
+
+        assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+V"]);
+        assert!(!store.config().shortcuts.contains_key("toggleFloatPanel"));
         fs::remove_dir_all(project).unwrap();
     }
 

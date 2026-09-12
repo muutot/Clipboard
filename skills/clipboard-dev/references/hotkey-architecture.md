@@ -103,6 +103,10 @@ Window-only (main window focused):
 - Config semantics are load-bearing: absent action → canonical default,
   explicitly empty → disabled, conflict across actions → reject with
   `ShortcutConflict`. Never merge keyboard config into `conf.json`.
+  `KeyboardConfigStore::load` backfills bundled defaults for actions absent
+  from an existing file (upgraders receive `toggleFloatPanel` etc.) and
+  persists the merge; a default that would collide with a binding the user
+  already owns is skipped, leaving that action unbound.
 - Canonical shortcut format is the contract between layers (modifier order
   Ctrl/Alt/Shift/Meta, single-char upper-cased, multi-char first-upper
   rest-lower); both `ShortcutBinding::canonical` and
