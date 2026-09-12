@@ -5,7 +5,6 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import SearchField from "$lib/components/SearchField.svelte";
-  import GeneralSettingsPanel from "$lib/components/GeneralSettingsPanel.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import {
@@ -85,6 +84,26 @@
   const lazyPanelModules = new Map<string, Promise<LazyPanelModule>>();
 
   const LAZY_PANEL_DESCRIPTORS: LazyPanelDescriptor[] = [
+    {
+      sections: ["general_general"],
+      load: () => import("$lib/components/GeneralGeneralSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["general_window"],
+      load: () => import("$lib/components/GeneralWindowSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["general_search"],
+      load: () => import("$lib/components/GeneralSearchSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
+      sections: ["general_items"],
+      load: () => import("$lib/components/GeneralItemsSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
     {
       sections: ["layout"],
       load: () => import("$lib/components/LayoutSettingsPanel.svelte"),
@@ -1047,18 +1066,6 @@
           </div>
         {/if}
       </div>
-    {:else if activeSection === "general_search" || activeSection === "general_items" || activeSection === "general_window" || activeSection === "general_general"}
-      <GeneralSettingsPanel
-        {onclose}
-        section={activeSection === "general_search"
-          ? "search"
-          : activeSection === "general_items"
-            ? "items"
-            : activeSection === "general_general"
-              ? "general"
-              : "window"}
-        showHeader={false}
-      />
     {:else if lazyPanel}
       {#await loadLazyPanelModule(activeSection)}
         {@render loadingSettingsPanel()}
