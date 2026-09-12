@@ -73,7 +73,7 @@ The keyboard configuration card ("独立快捷键配置") is not a shell-level e
 
 Render every child from `StorageSettingsDialog` with `showHeader={false}`. Conditional removal must happen in the child; a parent scoped selector cannot reliably hide a descendant component's scoped header.
 
-Keep the default `GeneralSettingsPanel` eager. Non-default child panels (including `StatisticsSettingsPanel`, `AboutSettingsPanel`, and `IconCacheSettingsPanel`) use cached dynamic imports in `StorageSettingsDialog` so their component code and scoped CSS load on first visit; retain the shared loading/error states, concrete import types, and settings-search mount polling when adding another lazy panel. Lazy panels that show loading/unavailable states use the shared `.settings-state` rule from `settings-shared.css`.
+Every child panel — including the four General section panels, `StorageLimitsPanel`, `StorageToolsPanel`, `StatisticsSettingsPanel`, `AboutSettingsPanel`, and `IconCacheSettingsPanel` — is a cached dynamic import in `StorageSettingsDialog` so its component code and scoped CSS loads on first visit; retain the shared loading/error states, concrete import types, and settings-search mount polling when adding another lazy panel. Lazy panels that show loading/unavailable states use the shared `.settings-state` rule from `settings-shared.css`.
 
 `LayoutSettingsPanel.svelte` is the minimal structure reference because it uses shared styles without a local style block. Use other panels only for their genuinely specific controls.
 
