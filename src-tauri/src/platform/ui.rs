@@ -257,21 +257,38 @@ fn load_recent_entries<R: Runtime>(app: &AppHandle<R>) -> Vec<(String, String)> 
         date_from_ms: None,
         date_to_ms: None,
     };
-    let Ok(items) = database.list_recent(TRAY_RECENT_FETCH, 0, &filter) else {
-        return Vec::new();
-    };
-    items
-        .into_iter()
-        .filter(|item| matches!(item.kind, ClipboardKind::Text | ClipboardKind::Link))
-        .filter_map(|item| {
+    // Page through history until the submenu is full or records run out:
+    // a fixed oversample window showed "no recent text" whenever the newest
+    // records happened to be all images/files.
+    let mut entries: Vec<(String, String)> = Vec::new();
+    let mut offset: u32 = 0;
+    while entries.len() < TRAY_RECENT_COUNT {
+        let Ok(items) = database.list_recent(TRAY_RECENT_FETCH, offset, &filter) else {
+            break;
+        };
+        let page_len = items.len();
+        if page_len == 0 {
+            break;
+        }
+        for item in items {
+            if entries.len() >= TRAY_RECENT_COUNT {
+                break;
+            }
+            if !matches!(item.kind, ClipboardKind::Text | ClipboardKind::Link) {
+                continue;
+            }
             let text = item.text_content.as_deref().unwrap_or("").trim();
             if text.is_empty() {
-                return None;
+                continue;
             }
-            Some((item.id.clone(), tray_recent_title(text)))
-        })
-        .take(TRAY_RECENT_COUNT)
-        .collect()
+            entries.push((item.id.clone(), tray_recent_title(text)));
+        }
+        if page_len < TRAY_RECENT_FETCH as usize {
+            break;
+        }
+        offset += page_len as u32;
+    }
+    entries
 }
 
 /// Copies a history entry back to the system clipboard through the same
