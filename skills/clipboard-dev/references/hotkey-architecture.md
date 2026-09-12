@@ -128,8 +128,8 @@ Window-only (main window focused):
 - `cargo test --lib hotkey` — id ranges, routing (`Forward` for new
   actions), conversion, double-tap tracker, quick-paste target.
 - `npx vitest run src/lib/keyboard-registry.test.ts
-  src/lib/utils/shortcut-bindings.test.ts
-  src/lib/utils/keyboard-actions.test.ts` — registry/defaults parity,
+src/lib/utils/shortcut-bindings.test.ts
+src/lib/utils/keyboard-actions.test.ts` — registry/defaults parity,
   binding resolution, decision table.
 - `npm run check` for registry/panel/route changes; `npm run lint:rust`
   and `cargo fmt` for backend changes.
@@ -142,4 +142,3 @@ Window-only (main window focused):
   together with the dispatch branch.
 - Update this reference when layers, the add-shortcut flow, id routing,
   event names, or availability constraints change.
-
