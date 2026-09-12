@@ -107,7 +107,7 @@
       desc: _t("general.closeToTrayDescription"),
       get: () => windowConfig?.closeToTray ?? false,
       set: (v) => void changeWindowSetting("closeToTray", v),
-      disabled: () => windowConfigLoading || windowConfigSaving || !windowConfig,
+      disabled: () => windowConfigLoading || !windowConfig,
     },
     {
       type: "toggle",
