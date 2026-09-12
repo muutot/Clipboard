@@ -62,6 +62,7 @@ action id — listeners need no manager changes.
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib/keyboard-registry.ts`                    | **The** frontend registry: every action's id, scope (`global` must mirror the backend order 1:1), category, icon, i18n keys, and settings-search id. `GLOBAL_ACTION_IDS`, `isGlobalAction`, `actionsByCategory`.                                 |
 | `src/lib/utils/shortcut-bindings.ts`              | `resolveAllBindings` (every registry action), `resolveGlobalBindings` (global only), plus the legacy per-group resolvers (filter position, navigation, single action). Rule everywhere: absent → canonical default, explicitly empty → disabled. |
+| <br />                                            | <br />                                                                                                                                                                                                                                           |
 | `src/lib/utils/keyboard.ts`                       | Target guards (`isEditableKeyboardTarget`, `isItemActionShortcut`, `isActivatableKeyboardTarget`) and `shortcutMatchesEvent` (exact modifier set, canonical format).                                                                             |
 | `src/lib/utils/keyboard-actions.ts`               | Pure `resolveKeyAction` decision table (branch order is load-bearing; unit-tested).                                                                                                                                                              |
 | `src/routes/+page.svelte`                         | `executeKeyAction` handler switch; loads `keyboardShortcuts` on mount and window focus.                                                                                                                                                          |
@@ -127,8 +128,8 @@ Window-only (main window focused):
 - `cargo test --lib hotkey` — id ranges, routing (`Forward` for new
   actions), conversion, double-tap tracker, quick-paste target.
 - `npx vitest run src/lib/keyboard-registry.test.ts
-src/lib/utils/shortcut-bindings.test.ts
-src/lib/utils/keyboard-actions.test.ts` — registry/defaults parity,
+  src/lib/utils/shortcut-bindings.test.ts
+  src/lib/utils/keyboard-actions.test.ts` — registry/defaults parity,
   binding resolution, decision table.
 - `npm run check` for registry/panel/route changes; `npm run lint:rust`
   and `cargo fmt` for backend changes.
@@ -141,3 +142,4 @@ src/lib/utils/keyboard-actions.test.ts` — registry/defaults parity,
   together with the dispatch branch.
 - Update this reference when layers, the add-shortcut flow, id routing,
   event names, or availability constraints change.
+
