@@ -335,6 +335,16 @@
     ),
   );
 
+  // Quick-paste shortcut; unbound by default, so it only fires when the
+  // user explicitly binds it in the keyboard settings.
+  const quickPasteBindings = $derived(
+    resolveActionBindings(
+      keyboardShortcuts,
+      "quickPaste",
+      defaultShortcutsFor("quickPaste"),
+    ),
+  );
+
   // Main-toggle hint for the status bar; null hides the kbd chips when unbound.
   const toggleWindowHint = $derived(
     resolveActionBindings(
@@ -2126,6 +2136,15 @@
       case "toggle-float":
         void toggleFloatPanel();
         break;
+      case "quick-paste": {
+        const item = findLoadedItem(action.id);
+        if (item) {
+          void pasteClipboardItem(item, "auto", {
+            moveToTop: (mid) => moveToTop(mid),
+          });
+        }
+        break;
+      }
     }
   }
 
@@ -2155,6 +2174,7 @@
         switchFilterNext: navigationBindings.switchFilterNext,
         switchFilterPrev: navigationBindings.switchFilterPrev,
         toggleFloatBindings: floatPanelBindings,
+        quickPasteBindings,
       }),
     );
   }

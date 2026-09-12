@@ -36,7 +36,8 @@ export type KeyAction =
   | { type: "toggle-favorite"; id: string; prevent: boolean }
   | { type: "tag-add"; prevent: boolean }
   | { type: "save-item"; id: string; prevent: boolean }
-  | { type: "toggle-float"; prevent: boolean };
+  | { type: "toggle-float"; prevent: boolean }
+  | { type: "quick-paste"; id: string; prevent: boolean };
 
 export interface KeyActionItem {
   id: string;
@@ -72,6 +73,8 @@ export interface KeyActionContext {
   switchFilterPrev: string[];
   /** Bindings for the float-panel action (canonical default, empty disables). */
   toggleFloatBindings: string[];
+  /** Bindings for the quick-paste action (unbound by default). */
+  quickPasteBindings: string[];
 }
 
 function isTextInput(target: EventTarget | null): boolean {
@@ -111,6 +114,17 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
   // Dedicated action bindings win over generic filter shortcuts below.
   if (ctx.toggleFloatBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
     return { type: "toggle-float", prevent: true };
+  }
+
+  // Quick paste targets the selected entry (healed to the first visible one
+  // like the item shortcuts below), mirroring the copy/paste flows.
+  if (ctx.quickPasteBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
+    let item = ctx.filteredItems.find((i) => i.id === ctx.selectedId);
+    if (!item && ctx.filteredItems.length > 0) {
+      item = ctx.filteredItems[0];
+    }
+    if (item) return { type: "quick-paste", id: item.id, prevent: true };
+    return { type: "none", prevent: false };
   }
 
   const switchEditableTarget = !editableTarget || ctx.isSearchInput;

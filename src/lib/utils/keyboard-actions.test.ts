@@ -42,6 +42,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     switchFilterNext: ["Alt+ArrowRight"],
     switchFilterPrev: ["Alt+ArrowLeft"],
     toggleFloatBindings: defaultShortcutsFor("toggleFloatPanel"),
+    quickPasteBindings: defaultShortcutsFor("quickPaste"),
     ...overrides,
   };
 }
@@ -118,6 +119,38 @@ describe("resolveKeyAction — search and quick copy", () => {
     ).toBe("toggle-float");
     expect(
       resolveKeyAction(keyEvent({ key: "v", altKey: true }), ctx({ toggleFloatBindings: [] })).type,
+    ).toBe("none");
+  });
+
+  it("quick-pastes the selected item on its binding, unbound by default", () => {
+    expect(resolveKeyAction(keyEvent({ key: "q", ctrlKey: true }), ctx()).type).toBe("none");
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "q", ctrlKey: true }),
+        ctx({ quickPasteBindings: ["Ctrl+Q"] }),
+      ),
+    ).toEqual({
+      type: "quick-paste",
+      id: "a",
+      prevent: true,
+    });
+    // A selection that no longer matches the filter heals to the first
+    // visible entry instead of silently no-opping.
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "q", ctrlKey: true }),
+        ctx({ quickPasteBindings: ["Ctrl+Q"], selectedId: "zzz" }),
+      ),
+    ).toEqual({
+      type: "quick-paste",
+      id: "a",
+      prevent: true,
+    });
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "q", ctrlKey: true }),
+        ctx({ quickPasteBindings: ["Ctrl+Q"], filteredItems: [] }),
+      ).type,
     ).toBe("none");
   });
 });
