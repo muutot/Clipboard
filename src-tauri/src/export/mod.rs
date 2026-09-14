@@ -58,10 +58,12 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
             .map_err(|e| e.to_string()),
         ExportFormat::Csv => {
             let mut wtr = String::new();
-            wtr.push_str("id,kind,title,text_content,source_app,created_at_ms,is_favorite\n");
+            wtr.push_str(
+                "id,kind,title,text_content,source_app,created_at_ms,is_favorite,content_hash\n",
+            );
             for item in filtered {
                 wtr.push_str(&format!(
-                    "{},{},{},{},{},{},{}\n",
+                    "{},{},{},{},{},{},{},{}\n",
                     escape_csv(&item.id),
                     clipboard_kind_name(item.kind),
                     escape_csv(&item.title),
@@ -69,6 +71,7 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
                     escape_csv(item.source_app.as_deref().unwrap_or("")),
                     item.created_at_ms,
                     item.is_favorite,
+                    escape_csv(&item.content_hash),
                 ));
             }
             Ok(wtr)
@@ -259,6 +262,7 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
     let source_idx = column_index("source_app");
     let created_idx = column_index("created_at_ms");
     let favorite_idx = column_index("is_favorite");
+    let content_hash_idx = column_index("content_hash");
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -339,11 +343,21 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
             })
             .unwrap_or(false);
 
-        let content_hash = crate::content::hash::compute_content_hash(
-            clipboard_kind_name(kind),
-            text_content.as_deref().unwrap_or(""),
-            None,
-        );
+        // Prefer the exported identity. Media rows carry no text, so deriving
+        // the hash from `text_content` alone gives every image/file row the
+        // same hash and the `UNIQUE(kind, content_hash)` upsert silently
+        // collapses them into one row. Older CSVs without the column keep the
+        // derived fallback for backward compatibility.
+        let content_hash = field(content_hash_idx)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_owned())
+            .unwrap_or_else(|| {
+                crate::content::hash::compute_content_hash(
+                    clipboard_kind_name(kind),
+                    text_content.as_deref().unwrap_or(""),
+                    None,
+                )
+            });
 
         let item = crate::domain::ClipboardItem {
             id,
@@ -814,6 +828,72 @@ mod tests {
         assert_eq!(
             link_item.text_content.as_deref(),
             Some("https://example.com")
+        );
+    }
+
+    #[test]
+    fn csv_export_import_keeps_distinct_media_rows() {
+        let items = vec![
+            ClipboardItem {
+                id: "img-1".to_owned(),
+                kind: ClipboardKind::Image,
+                title: "first".to_owned(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: None,
+                preview_path: None,
+                content_hash: "hash-image-1".to_owned(),
+                source_app: None,
+                size_bytes: 10,
+                created_at_ms: 1,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            },
+            ClipboardItem {
+                id: "img-2".to_owned(),
+                kind: ClipboardKind::Image,
+                title: "second".to_owned(),
+                text_content: None,
+                html_content: None,
+                rtf_content: None,
+                resource_path: None,
+                preview_path: None,
+                content_hash: "hash-image-2".to_owned(),
+                source_app: None,
+                size_bytes: 20,
+                created_at_ms: 2,
+                last_used_at_ms: None,
+                is_favorite: false,
+                icon_path: None,
+                metadata_json: None,
+            },
+        ];
+        let csv = export_items(
+            &items,
+            &ExportOptions {
+                format: ExportFormat::Csv,
+                include_favorites: true,
+                date_from_ms: None,
+                date_to_ms: None,
+                content_types: vec![],
+            },
+        )
+        .unwrap();
+
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let summary = import_from_csv(&csv, &database).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        assert_eq!(database.item_count().unwrap(), 2);
+        assert_eq!(
+            database.get_item("img-1").unwrap().unwrap().content_hash,
+            "hash-image-1"
+        );
+        assert_eq!(
+            database.get_item("img-2").unwrap().unwrap().content_hash,
+            "hash-image-2"
         );
     }
 }
