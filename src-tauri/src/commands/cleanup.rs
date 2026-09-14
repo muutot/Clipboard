@@ -104,7 +104,18 @@ pub fn cleanup_orphan_storage_files_with_grace(
         if !dir.is_dir() {
             continue;
         }
-        let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(error) => {
+                // A single unreadable root must not abort cleanup of the
+                // remaining roots; log it and keep scanning.
+                crate::log_event!(
+                    "[cleanup] failed to read directory {}: {error}",
+                    dir.display()
+                );
+                continue;
+            }
+        };
         for entry in entries.flatten() {
             let entry_path = entry.path();
             if entry_path.is_dir() {
