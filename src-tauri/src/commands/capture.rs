@@ -472,21 +472,22 @@ pub(crate) fn run_capture_loop(
                             image_dir.display(),
                             e
                         );
+                        // A record pointing at an unwritten file renders
+                        // broken forever and fails every OCR/thumbnail job,
+                        // so drop this capture instead of saving it.
+                        continue;
                     }
                     let img_path = image_dir.join(format!("{}.png", img_hash));
-                    match std::fs::write(&img_path, &img) {
-                        Ok(_) => {
-                            crate::log_event!(
-                                "[clipboard-worker] saved image: {}",
-                                img_path.display()
-                            )
-                        }
-                        Err(e) => crate::log_event!(
+                    if let Err(e) = std::fs::write(&img_path, &img) {
+                        crate::log_event!(
                             "[clipboard-worker] failed to write image {}: {}",
                             img_path.display(),
                             e
-                        ),
+                        );
+                        // Same as above: never persist a dangling resource.
+                        continue;
                     }
+                    crate::log_event!("[clipboard-worker] saved image: {}", img_path.display());
 
                     let image_path = img_path.to_string_lossy().to_string();
                     let metadata = serde_json::json!({
