@@ -408,19 +408,20 @@
   );
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
+  // Resolve every selected id across all four copies: a search result can live
+  // only in `indexedItems`/`searchCache`, so counting against `items` alone
+  // undercounts and makes bulk operations skip search-only rows.
+  const selectedLoadedItems = $derived(
+    [...selectedIds]
+      .map((id) => findLoadedItem(id))
+      .filter((item): item is ClipboardItem => item !== undefined),
+  );
   const selectedDeletedCount = $derived(
-    selectedIds.size === 0
-      ? 0
-      : items.filter((item) => selectedIds.has(item.id) && !!item.deleted).length,
+    selectedLoadedItems.filter((item) => !!item.deleted).length,
   );
-  const selectedActiveCount = $derived(
-    selectedIds.size === 0
-      ? 0
-      : items.filter((item) => selectedIds.has(item.id) && !item.deleted).length,
-  );
+  const selectedActiveCount = $derived(selectedLoadedItems.filter((item) => !item.deleted).length);
   const allSelectedFavorites = $derived(
-    selectedIds.size > 0 &&
-      items.filter((item) => selectedIds.has(item.id)).every((item) => item.favorite),
+    selectedLoadedItems.length > 0 && selectedLoadedItems.every((item) => item.favorite),
   );
   const resultSummary = $derived(
     searchPending
@@ -1392,9 +1393,12 @@
     if (!target) return;
 
     const wasSelected = selectedIds.has(id);
+    const previousDetailItem = detailItem;
+    const previousSearchCache = searchCache;
     addSuppressedId(id);
-    items = items.filter((item) => item.id !== id);
-    if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
+    // Route through the shared funnel so `detailItem`/`searchCache` cannot keep
+    // rendering a row that no longer exists.
+    removeItems(new Set([id]));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistPermanentDelete(id)
@@ -1407,6 +1411,8 @@
         console.error("Unable to permanently delete clipboard item", error);
         deletedHistorySuppressedIds.delete(id);
         reinsertItem(target, wasSelected);
+        detailItem = previousDetailItem;
+        searchCache = previousSearchCache;
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1419,8 +1425,11 @@
     if (!target) return;
 
     const wasSelected = selectedIds.has(id);
-    items = items.filter((item) => item.id !== id);
-    if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
+    const previousDetailItem = detailItem;
+    const previousSearchCache = searchCache;
+    // Route through the shared funnel so `detailItem`/`searchCache` cannot keep
+    // rendering a row that no longer exists.
+    removeItems(new Set([id]));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistHardDelete(id)
@@ -1432,6 +1441,8 @@
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
         reinsertItem(target, wasSelected);
+        detailItem = previousDetailItem;
+        searchCache = previousSearchCache;
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1547,7 +1558,7 @@
   }
 
   async function saveEdit(id: string, content: string): Promise<boolean> {
-    const item = items.find((i) => i.id === id);
+    const item = findLoadedItem(id);
     if (!item) return false;
 
     const { isMedia, isText, newTitle, newTextContent, newPreview, newSizeBytes, newSizeLabel } =
@@ -1721,7 +1732,7 @@
   }
 
   function copyFilename(_id: string) {
-    const item = items.find((i) => i.id === _id);
+    const item = findLoadedItem(_id);
     if (!item) return;
     const name = item.fileName ?? item.title;
     void writeClipboardText(name)
@@ -1765,11 +1776,11 @@
   // --- Bulk operations ---
 
   function bulkCopy() {
-    const selectedItems = items.filter((i) => selectedIds.has(i.id));
+    const selectedItems = selectedLoadedItems;
     const text = selectedItems.map((i) => i.title).join("\n");
     void writeClipboardText(text)
       .then(() => {
-        showToast(_t("toast.bulkCopySuccess", { count: selectedIds.size }), "success");
+        showToast(_t("toast.bulkCopySuccess", { count: selectedItems.length }), "success");
       })
       .catch(() => {
         showToast(_t("toast.copyFailed"), "error");
@@ -1807,9 +1818,7 @@
   }
 
   function bulkRestore() {
-    const ids = items
-      .filter((item) => selectedIds.has(item.id) && item.deleted)
-      .map((item) => item.id);
+    const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
     if (ids.length === 0) return;
 
     const previousItems = captureBulkSnapshot({
@@ -1845,9 +1854,7 @@
   }
 
   function bulkPermanentDelete() {
-    const ids = items
-      .filter((item) => selectedIds.has(item.id) && item.deleted)
-      .map((item) => item.id);
+    const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
     if (ids.length === 0) return;
 
     const previous = captureBulkSnapshot({ items, indexedItems, selectedIds, detailItem });
@@ -1875,7 +1882,7 @@
   }
 
   function bulkDelete() {
-    const selectedItems = items.filter((item) => selectedIds.has(item.id));
+    const selectedItems = selectedLoadedItems;
     if (selectedItems.length === 0) return;
 
     const useRecycleBin = $generalSettings.useRecycleBin;
