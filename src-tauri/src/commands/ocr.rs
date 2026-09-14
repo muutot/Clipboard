@@ -107,12 +107,18 @@ pub fn get_ocr_status(
     let pending = database.count_pending_ocr().map_err(|e| e.to_string())?;
     let completed = database.count_completed_ocr().map_err(|e| e.to_string())?;
     let failed = database.count_failed_ocr().map_err(|e| e.to_string())?;
-    let cfg = lock_state(&config, "config lock poisoned")?;
-    let engine = cfg.ocr_engine().to_string();
-    let models_dir = ocr::models::models_dir(&paths.storage);
-    let model = configured_ppocr_model(&cfg);
-    let installed_variants = ocr::models::installed_model_variants(&models_dir);
-    let ppocr_available = ocr::models::model_is_installed(&models_dir, model);
+    // Read everything that needs the config, then release the lock before
+    // probing engines: `TesseractOcrEngine::is_available` spawns a process,
+    // which must not hold the global config lock.
+    let (engine, model, installed_variants, ppocr_available) = {
+        let cfg = lock_state(&config, "config lock poisoned")?;
+        let engine = cfg.ocr_engine().to_string();
+        let models_dir = ocr::models::models_dir(&paths.storage);
+        let model = configured_ppocr_model(&cfg);
+        let installed_variants = ocr::models::installed_model_variants(&models_dir);
+        let ppocr_available = ocr::models::model_is_installed(&models_dir, model);
+        (engine, model, installed_variants, ppocr_available)
+    };
     let tesseract_available = TesseractOcrEngine::is_available();
     let engine_available = match engine.as_str() {
         "ppocr" => ppocr_available,
@@ -229,8 +235,12 @@ pub fn check_ppocr_status(
     config: tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<PpOcrStatus, String> {
     let models_dir = ocr::models::models_dir(&paths.storage);
-    let config = lock_state(&config, "config lock poisoned")?;
-    let active_model = configured_ppocr_model(&config);
+    // `configured_ppocr_model` returns a 'static spec, so the guard can be
+    // released before the (spawning) availability probe.
+    let active_model = {
+        let config = lock_state(&config, "config lock poisoned")?;
+        configured_ppocr_model(&config)
+    };
     Ok(PpOcrStatus {
         available: ocr::models::model_is_installed(&models_dir, active_model),
         tesseract_available: TesseractOcrEngine::is_available(),

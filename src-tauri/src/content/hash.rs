@@ -155,7 +155,7 @@ impl AppIconStore {
 }
 
 fn infer_icon_extension(data: &[u8]) -> &'static str {
-    if data.len() >= 3 && &data[0..3] == b"\x89PNG" {
+    if data.len() >= 4 && &data[0..4] == b"\x89PNG" {
         return "png";
     }
     if data.len() >= 3 && &data[0..3] == b"\xff\xd8\xff" {

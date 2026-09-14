@@ -963,6 +963,11 @@ pub fn list_s3_objects_after(
     )
 }
 
+/// Upper bound on objects buffered by one listing call. The listing is
+/// paginated but accumulated in memory; a namespace beyond this fails loudly
+/// instead of exhausting memory. Sized well above realistic clipboard counts.
+const MAX_LISTED_OBJECTS: usize = 1_000_000;
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn list_s3_objects_after_with_metrics(
     endpoint: &str,
@@ -1015,6 +1020,11 @@ pub(crate) fn list_s3_objects_after_with_metrics(
         }
         let page = parse_s3_list_page(&xml);
         entries.extend(page.entries);
+        if entries.len() > MAX_LISTED_OBJECTS {
+            return Err(format!(
+                "S3 listing exceeded {MAX_LISTED_OBJECTS} objects; refusing to buffer more"
+            ));
+        }
         if !page.is_truncated {
             return Ok(entries);
         }

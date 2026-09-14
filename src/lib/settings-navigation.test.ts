@@ -42,6 +42,7 @@ describe("resolveSettingsNavPath", () => {
       "storage.statisticsTab",
       "statistics.memoryTab",
     ]);
+    expect(resolveSettingsNavPath(t, "tags")).toEqual(["storage.tagsTab", "storage.tagsManageTab"]);
   });
 
   it("switches crumbs when moving between groups", () => {
@@ -53,7 +54,6 @@ describe("resolveSettingsNavPath", () => {
 
   it("collapses single-tab groups to the group label alone", () => {
     expect(resolveSettingsNavPath(t, "ocr")).toEqual(["OCR"]); // displayLabel
-    expect(resolveSettingsNavPath(t, "tags")).toEqual(["storage.tagsTab"]);
     expect(resolveSettingsNavPath(t, "about")).toEqual(["about.tabLabel"]);
   });
 

@@ -55,7 +55,12 @@ pub fn enforce_history_cleanup_for(
         .permanently_delete_expired(recycle_bin_days)
         .map_err(|error| error.to_string())?;
 
-    let _ = cleanup_orphan_storage_files_with_grace(database, paths, orphan_file_grace);
+    if let Err(error) = cleanup_orphan_storage_files_with_grace(database, paths, orphan_file_grace)
+    {
+        // Surface the failure instead of reporting a clean run that silently
+        // left orphan files on disk.
+        crate::log_event!("[cleanup] orphan file cleanup failed: {error}");
+    }
 
     Ok(total_deleted)
 }
@@ -125,7 +130,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
                     continue;
                 }
             }
-            freed_bytes += metadata.len();
+            let size_bytes = metadata.len();
             if let Err(e) = std::fs::remove_file(&entry_path) {
                 crate::log_event!(
                     "[cleanup] failed to remove orphan file {}: {e}",
@@ -133,6 +138,9 @@ pub fn cleanup_orphan_storage_files_with_grace(
                 );
             } else {
                 removed_files += 1;
+                // Only count space actually freed; a failed removal above must
+                // not inflate the reported total.
+                freed_bytes += size_bytes;
             }
         }
     }

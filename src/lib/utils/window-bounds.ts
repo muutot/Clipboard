@@ -122,7 +122,9 @@ export function createWindowBoundsController(
           pendingBounds = bounds;
           return drainWrites();
         })
-        .catch(() => {});
+        .catch((error) => {
+          console.error("Unable to persist window bounds", error);
+        });
     }, SAVE_DEBOUNCE_MS);
   }
 
@@ -133,11 +135,14 @@ export function createWindowBoundsController(
       saveTimer = undefined;
       try {
         pendingBounds = await captureBounds();
-      } catch {
+      } catch (error) {
+        console.error("Unable to capture window bounds for save", error);
         return;
       }
     }
-    await drainWrites().catch(() => {});
+    await drainWrites().catch((error) => {
+      console.error("Unable to flush window bounds", error);
+    });
   }
 
   async function restore(): Promise<void> {

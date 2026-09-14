@@ -300,14 +300,17 @@ fn authorize(request: &HttpRequest, token: &str, port: u16) -> Option<HttpRespon
     None
 }
 
-/// Length-independent comparison so response timing cannot leak token bytes.
+/// Length-independent comparison so response timing cannot leak token bytes
+/// or the expected token length. The loop always runs `max(left, right)`
+/// iterations; a length difference is folded into the accumulator instead of
+/// returning early.
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    let mut difference = 0u8;
-    for (a, b) in left.iter().zip(right.iter()) {
-        difference |= a ^ b;
+    let mut difference = left.len() ^ right.len();
+    let max = left.len().max(right.len());
+    for index in 0..max {
+        let a = left.get(index).copied().unwrap_or(0);
+        let b = right.get(index).copied().unwrap_or(0);
+        difference |= usize::from(a ^ b);
     }
     difference == 0
 }
@@ -456,7 +459,10 @@ fn dispatch(
     let Ok(path_parts) = path_parts else {
         return error_response(400, "invalid URL encoding");
     };
-    let query = parse_query(query);
+    let query = match parse_query(query) {
+        Ok(query) => query,
+        Err(error) => return error_response(400, &error),
+    };
 
     match (request.method.as_str(), path_parts.as_slice()) {
         ("GET", [segment]) if segment == "health" => {
@@ -609,15 +615,17 @@ fn content_type_for(format: ExportFormat) -> &'static str {
     }
 }
 
-fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
-    query
-        .split('&')
-        .filter(|part| !part.is_empty())
-        .filter_map(|part| {
-            let (key, value) = part.split_once('=').unwrap_or((part, ""));
-            Some((decode_component(key).ok()?, decode_component(value).ok()?))
-        })
-        .collect()
+fn parse_query(query: &str) -> Result<std::collections::HashMap<String, String>, String> {
+    let mut parsed = std::collections::HashMap::new();
+    for part in query.split('&').filter(|part| !part.is_empty()) {
+        let (key, value) = part.split_once('=').unwrap_or((part, ""));
+        // Reject a malformed component instead of silently treating the
+        // parameter as absent and returning unrelated results.
+        let key = decode_component(key)?;
+        let value = decode_component(value)?;
+        parsed.insert(key, value);
+    }
+    Ok(parsed)
 }
 
 fn decode_component(value: &str) -> Result<String, String> {
@@ -694,6 +702,26 @@ mod tests {
                 .push(("Authorization".to_owned(), format!("Bearer {token}")));
         }
         http
+    }
+
+    #[test]
+    fn constant_time_eq_matches_only_equal_slices() {
+        assert!(constant_time_eq(b"token", b"token"));
+        assert!(constant_time_eq(b"", b""));
+        assert!(!constant_time_eq(b"token", b"toke"));
+        assert!(!constant_time_eq(b"toke", b"token"));
+        assert!(!constant_time_eq(b"token", b"tokens"));
+        assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    #[test]
+    fn parse_query_rejects_malformed_components() {
+        let parsed = parse_query("limit=10&q=hello").unwrap();
+        assert_eq!(parsed.get("limit").map(String::as_str), Some("10"));
+        assert_eq!(parsed.get("q").map(String::as_str), Some("hello"));
+        // `%FF` is not valid UTF-8 once decoded, so the component must be
+        // rejected rather than silently dropped.
+        assert!(parse_query("q=%FF").is_err());
     }
 
     #[test]

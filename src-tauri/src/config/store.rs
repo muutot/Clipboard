@@ -36,7 +36,13 @@ impl ConfigStore {
                         path.display(),
                         quarantined.display()
                     );
-                    let _ = fs::rename(&path, &quarantined);
+                    if fs::rename(&path, &quarantined).is_err() {
+                        // The rename can fail (e.g. the file is locked by
+                        // antivirus or another process). Remove the corrupt
+                        // file so the default rewrite below still runs instead
+                        // of re-reading the same bytes on every launch.
+                        let _ = fs::remove_file(&path);
+                    }
                     (AppConfig::default(), true)
                 }
             }

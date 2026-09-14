@@ -415,14 +415,18 @@ fn record_head_cache(
     let etag = downloaded_etag.or_else(|| listed.and_then(|info| info.etag.as_deref()));
     if let Some(etag) = etag {
         let modified_ms = listed.and_then(|info| info.modified_ms);
-        let _ = database.record_sync_head_cache(
+        if let Err(error) = database.record_sync_head_cache(
             remote_scope,
             device_id,
             etag,
             stored_size_bytes,
             modified_ms,
             head,
-        );
+        ) {
+            // Best-effort cache: a persistent failure only costs repeated head
+            // downloads, but it must not be invisible.
+            eprintln!("[sync] failed to record head cache for {device_id}: {error}");
+        }
     }
 }
 

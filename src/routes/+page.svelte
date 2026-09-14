@@ -282,7 +282,10 @@
   let pendingHeights = new Map<string, MeasuredCardHeight>();
 
   $effect(() => {
-    const activeIds = new Set(items.map((i) => i.id));
+    // Prune measured heights against the displayed list, not `items` alone:
+    // during a search the rendered cards come from `indexedItems`, and keying
+    // off `items` deleted their measurements on any history change.
+    const activeIds = new Set(filteredItems.map((i) => i.id));
     const current = untrack(() => measuredCardHeights);
     let changed = false;
     for (const key of Object.keys(current)) {
@@ -1455,11 +1458,17 @@
   }
 
   function moveToTop(id: string) {
-    const idx = items.findIndex((i) => i.id === id);
-    if (idx > 0) {
-      const [item] = items.splice(idx, 1);
-      items = [item, ...items];
-    }
+    const promote = (list: ClipboardItem[]): ClipboardItem[] => {
+      const idx = list.findIndex((i) => i.id === id);
+      if (idx <= 0) return list;
+      const next = [...list];
+      const [item] = next.splice(idx, 1);
+      return [item, ...next];
+    };
+    items = promote(items);
+    // During a search the visible list is `indexedItems`, so the copied row
+    // must be promoted there too or "pin copied to top" silently no-ops.
+    if (indexedItems) indexedItems = promote(indexedItems);
   }
 
   async function copyItem(id: string) {
