@@ -95,7 +95,9 @@ impl ClipboardRepository for Database {
                      text_content = ?4,
                      content_hash = ?5,
                      size_bytes = ?6,
-                     metadata_json = COALESCE(?7, metadata_json)
+                     metadata_json = COALESCE(?7, metadata_json),
+                     html_content = NULL,
+                     rtf_content = NULL
                  WHERE id = ?1
                    AND deleted = 0
                    AND kind IN ('text', 'link')",

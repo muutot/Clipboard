@@ -660,6 +660,32 @@ fn update_text_item_replaces_payload_and_preserves_record_metadata() {
 }
 
 #[test]
+fn update_text_item_clears_stale_rich_content() {
+    let database = Database::open_in_memory().unwrap();
+    let mut original = text_item("rich-edit", "old-rich-hash", 100);
+    original.html_content = Some("<p>old html</p>".to_owned());
+    original.rtf_content = Some("{\\rtf old}".to_owned());
+    database.save_item(&original).unwrap();
+
+    assert!(database
+        .update_text_item(&TextItemUpdate {
+            id: "rich-edit",
+            kind: ClipboardKind::Text,
+            title: "edited",
+            text_content: "edited body",
+            content_hash: "new-rich-hash",
+            size_bytes: 11,
+            metadata_json: None,
+        })
+        .unwrap());
+
+    let saved = database.get_item("rich-edit").unwrap().unwrap();
+    assert_eq!(saved.text_content.as_deref(), Some("edited body"));
+    assert_eq!(saved.html_content, None);
+    assert_eq!(saved.rtf_content, None);
+}
+
+#[test]
 fn update_text_item_can_replace_metadata_without_dropping_the_record() {
     let database = Database::open_in_memory().unwrap();
     let mut original = text_item("metadata-edit", "old-metadata-hash", 100);

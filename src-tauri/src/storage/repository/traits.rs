@@ -101,6 +101,9 @@ pub trait ClipboardRepository {
     /// byte count are updated together with the text.  SQLite's UNIQUE(kind,
     /// content_hash) constraint rejects an edit that would collide with a
     /// different history record without partially updating either row.
+    /// The stale `html_content`/`rtf_content` are cleared as well: after a
+    /// plain-text edit they no longer represent the payload and would
+    /// otherwise be written back verbatim on the next format paste.
     fn update_text_item(&self, update: &TextItemUpdate<'_>) -> Result<bool, StorageError>;
     fn get_item(&self, id: &str) -> Result<Option<ClipboardItem>, StorageError>;
     fn get_items_by_ids(&self, ids: &[String]) -> Result<Vec<ClipboardItem>, StorageError>;
