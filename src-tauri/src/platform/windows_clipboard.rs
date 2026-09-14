@@ -1572,7 +1572,7 @@ impl WindowsClipboardMonitor {
         let handle = thread::Builder::new()
             .name("clipboard-monitor".to_owned())
             .spawn(move || {
-                let mut last_text: Option<String> = None;
+                let mut poll_state = crate::platform::ClipboardPollState::new();
                 let mut sequence = 0u32;
 
                 loop {
@@ -1581,17 +1581,26 @@ impl WindowsClipboardMonitor {
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
 
-                    let current_text = crate::platform::platform().read_clipboard_text();
-
-                    let changed = match (&last_text, &current_text) {
-                        (Some(old), Some(new)) => old != new,
-                        (None, None) => false,
-                        _ => true,
+                    let platform = crate::platform::platform();
+                    let current_text = platform.read_clipboard_text();
+                    // Text is the cheap signal. File and image reads only run
+                    // when there is no text, so image decoding does not happen
+                    // on every tick while a text selection sits on the
+                    // clipboard, while image/file copies are still detected.
+                    let (current_files, current_image) = if current_text.is_none() {
+                        let files = platform.read_clipboard_file_paths();
+                        let image = if files.is_empty() {
+                            platform.read_clipboard_image()
+                        } else {
+                            None
+                        };
+                        (files, image)
+                    } else {
+                        (Vec::new(), None)
                     };
 
-                    if changed {
+                    if poll_state.observe(current_text, current_files, current_image) {
                         sequence = sequence.wrapping_add(1);
-                        last_text = current_text;
                         let _ = sender_for_thread.send(ClipboardChange { sequence });
                     }
                 }

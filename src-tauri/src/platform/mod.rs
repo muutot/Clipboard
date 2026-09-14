@@ -84,6 +84,64 @@ pub fn parse_uri_list(text: &str) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
+//  Non-Windows clipboard polling
+// ---------------------------------------------------------------------------
+
+/// Change detector for the polling clipboard monitor used on platforms
+/// without a clipboard sequence number. It fingerprints text, file paths, and
+/// image pixels so image/file copies are detected even when the clipboard
+/// never transitions through text. The first text observation follows the
+/// original text comparison (a pre-existing text selection is reported once);
+/// the first non-text observation is not reported, so an image or file list
+/// already on the clipboard at startup is not captured.
+#[derive(Default)]
+pub struct ClipboardPollState {
+    first_tick: bool,
+    text: Option<String>,
+    files: Vec<String>,
+    image: Option<(Vec<u8>, u32, u32)>,
+}
+
+impl ClipboardPollState {
+    pub fn new() -> Self {
+        Self {
+            first_tick: true,
+            ..Self::default()
+        }
+    }
+
+    /// Records the current clipboard state and returns whether it differs from
+    /// the previous state. `image` is `None` when the caller did not probe one
+    /// (for example because the clipboard had text or files).
+    pub fn observe(
+        &mut self,
+        text: Option<String>,
+        files: Vec<String>,
+        image: Option<(Vec<u8>, u32, u32)>,
+    ) -> bool {
+        let changed = if text.is_some() {
+            self.text != text
+        } else if self.first_tick {
+            false
+        } else {
+            // A text->non-text transition, or changed file/image content.
+            self.text.is_some() || files != self.files || image != self.image
+        };
+
+        if text.is_some() {
+            self.files.clear();
+            self.image = None;
+        } else {
+            self.files = files;
+            self.image = image;
+        }
+        self.text = text;
+        self.first_tick = false;
+        changed
+    }
+}
+
+// ---------------------------------------------------------------------------
 //  Tests
 // ---------------------------------------------------------------------------
 
@@ -326,6 +384,44 @@ mod tests {
         assert!(lock_path.exists());
         fs::remove_file(&lock_path).unwrap();
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn poll_state_detects_text_changes() {
+        let mut state = ClipboardPollState::new();
+        // Pre-existing text is reported once, matching the original monitor.
+        assert!(state.observe(Some("first".to_owned()), vec![], None));
+        assert!(!state.observe(Some("first".to_owned()), vec![], None));
+        assert!(state.observe(Some("second".to_owned()), vec![], None));
+    }
+
+    #[test]
+    fn poll_state_detects_non_text_copies_without_a_text_transition() {
+        let mut state = ClipboardPollState::new();
+        let image_a = Some((vec![1, 2, 3], 2, 2));
+        let image_b = Some((vec![4, 5, 6], 2, 2));
+
+        // Startup image is ignored; a different image while the clipboard
+        // stays text-free is still reported.
+        assert!(!state.observe(None, vec![], image_a));
+        assert!(state.observe(None, vec![], image_b.clone()));
+        // Same content again is not a change.
+        assert!(!state.observe(None, vec![], image_b));
+
+        // File paths are compared the same way.
+        assert!(state.observe(None, vec!["/a".to_owned()], None));
+        assert!(!state.observe(None, vec!["/a".to_owned()], None));
+        assert!(state.observe(None, vec!["/b".to_owned()], None));
+    }
+
+    #[test]
+    fn poll_state_reports_text_to_non_text_transitions() {
+        let mut state = ClipboardPollState::new();
+        assert!(state.observe(Some("text".to_owned()), vec![], None));
+        // Text -> image must report even though the image itself was unseen.
+        assert!(state.observe(None, vec![], Some((vec![9], 1, 1))));
+        // Image -> text must report.
+        assert!(state.observe(Some("again".to_owned()), vec![], None));
     }
 
     fn temporary_test_directory(label: &str) -> PathBuf {
