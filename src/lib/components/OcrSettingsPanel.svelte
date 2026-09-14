@@ -33,6 +33,7 @@
   let ocrProgressCurrent = $state(0);
   let ocrProgressTotal = $state(0);
   let modelVariant = $state("small");
+  let modelVariantInitialized = $state(false);
   let ocrDownloadUnlisten: (() => void) | undefined;
   let ocrInstallRequestId = 0;
   let destroyed = false;
@@ -113,7 +114,13 @@
         ocrHasEngine = result.hasEngine;
         installedVariants = result.installedVariants;
         activeVariant = result.ppocrModelVariant;
-        if (!modelVariant) modelVariant = result.ppocrModelVariant;
+        // Sync the selector to the configured variant once, before the user
+        // picks one; the previous `if (!modelVariant)` guard never fired
+        // because `modelVariant` defaulted to a truthy "small".
+        if (!modelVariantInitialized && result.ppocrModelVariant) {
+          modelVariant = result.ppocrModelVariant;
+          modelVariantInitialized = true;
+        }
       } else {
         installedVariants = [];
       }
@@ -125,7 +132,10 @@
         detUnclipRatio = cfg.detUnclipRatio;
         if (cfg.ppocrModelVariant) {
           activeVariant = cfg.ppocrModelVariant;
-          if (!modelVariant) modelVariant = cfg.ppocrModelVariant;
+          if (!modelVariantInitialized) {
+            modelVariant = cfg.ppocrModelVariant;
+            modelVariantInitialized = true;
+          }
         }
       }
     } finally {
