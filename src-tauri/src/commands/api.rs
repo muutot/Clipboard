@@ -18,6 +18,7 @@ fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> 
     if let Ok(existing) = std::fs::read_to_string(&token_path) {
         let token = existing.trim();
         if !token.is_empty() {
+            restrict_api_token_permissions(&token_path);
             return Ok(token.to_owned());
         }
     }
@@ -31,8 +32,22 @@ fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> 
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     std::fs::write(&token_path, format!("{token}\n")).map_err(|error| error.to_string())?;
+    restrict_api_token_permissions(&token_path);
     Ok(token)
 }
+
+/// Tightens the token file to owner-only on Unix. The token authorizes the
+/// loopback API, so a world-readable file would let another local account
+/// read or delete the clipboard history. Best-effort: a failure leaves the
+/// previous permissions rather than blocking the API.
+#[cfg(unix)]
+fn restrict_api_token_permissions(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+}
+
+#[cfg(not(unix))]
+fn restrict_api_token_permissions(_path: &Path) {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,4 +142,31 @@ pub fn get_local_api_status(
         running: api.is_running(),
         port: api.port,
     })
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::load_or_create_api_token;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn api_token_file_is_owner_only() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let project = std::env::temp_dir().join(format!(
+            "clipboard-api-token-{}-{unique}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&project).unwrap();
+
+        load_or_create_api_token(&project).unwrap();
+
+        let token_path = project.join("conf").join("api.token");
+        let mode = std::fs::metadata(&token_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+
+        std::fs::remove_dir_all(project).unwrap();
+    }
 }
