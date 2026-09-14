@@ -89,7 +89,6 @@ const MAIN_WINDOW_MIN_WIDTH: u32 = 730;
 const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
 
 const HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
-const SCHEDULED_ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
 
 pub(crate) struct CleanupWorker {
     stop_flag: Arc<AtomicBool>,
@@ -127,7 +126,7 @@ impl CleanupWorker {
                         &database,
                         &config,
                         &paths,
-                        SCHEDULED_ORPHAN_FILE_GRACE,
+                        commands::cleanup::ORPHAN_FILE_GRACE,
                     ) {
                         Ok(total_deleted) if total_deleted > 0 => {
                             crate::log_event!(

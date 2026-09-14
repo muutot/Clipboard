@@ -18,6 +18,13 @@ pub struct StorageCleanupResult {
     pub(crate) freed_bytes: u64,
 }
 
+/// Grace period that protects freshly written storage files from orphan
+/// cleanup while the capture loop sits between writing the file and saving
+/// its database record. The scheduled cleanup worker uses the same value;
+/// manual commands must not bypass it because, unlike the kind-delete path,
+/// they run without the ingestion lock that excludes concurrent captures.
+pub const ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
+
 #[tauri::command]
 pub fn enforce_history_cleanup(
     database: tauri::State<'_, Database>,
@@ -25,7 +32,7 @@ pub fn enforce_history_cleanup(
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<u64, String> {
     let guard = lock_state(&config, "configuration lock is poisoned")?;
-    enforce_history_cleanup_for(&database, &guard, &paths, Duration::ZERO)
+    enforce_history_cleanup_for(&database, &guard, &paths, ORPHAN_FILE_GRACE)
 }
 
 pub fn enforce_history_cleanup_for(
@@ -144,7 +151,7 @@ pub fn cleanup_storage_files(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<StorageCleanupResult, String> {
-    cleanup_orphan_storage_files(&database, &paths)
+    cleanup_orphan_storage_files_with_grace(&database, &paths, ORPHAN_FILE_GRACE)
 }
 
 fn resolve_storage_file_references(
