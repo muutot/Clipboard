@@ -232,15 +232,27 @@ pub fn tray_recent_title(text: &str) -> String {
 /// Called after tray creation, after each captured save, and on pause flips.
 pub fn refresh_tray_recent_menu<R: Runtime>(app: &AppHandle<R>) {
     let entries = load_recent_entries(app);
-    match SystemTray::build_menu(app, &entries) {
-        Ok(menu) => {
-            if let Some(tray) = app.tray_by_id("main-tray") {
-                if let Err(error) = tray.set_menu(Some(menu)) {
-                    crate::log_event!("[tray] failed to refresh recent menu: {error}");
+    let app_for_task = app.clone();
+    // Build and install the menu on the main thread without waiting. Calling
+    // `tray.set_menu` directly from a background thread blocks until the main
+    // thread runs the queued menu task, but the main thread joins the capture
+    // worker during shutdown, so the two would deadlock. `run_on_main_thread`
+    // only posts the task and returns.
+    if let Err(error) =
+        app.run_on_main_thread(
+            move || match SystemTray::build_menu(&app_for_task, &entries) {
+                Ok(menu) => {
+                    if let Some(tray) = app_for_task.tray_by_id("main-tray") {
+                        if let Err(error) = tray.set_menu(Some(menu)) {
+                            crate::log_event!("[tray] failed to refresh recent menu: {error}");
+                        }
+                    }
                 }
-            }
-        }
-        Err(error) => crate::log_event!("[tray] failed to rebuild menu: {error}"),
+                Err(error) => crate::log_event!("[tray] failed to rebuild menu: {error}"),
+            },
+        )
+    {
+        crate::log_event!("[tray] failed to schedule menu refresh: {error}");
     }
 }
 
