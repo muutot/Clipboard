@@ -159,10 +159,20 @@ impl DoubleModifierTracker {
     }
 }
 
+/// Chord registration failure forwarded to the frontend so the keyboard
+/// settings panel can surface a conflict (another app already owns the
+/// shortcut) instead of silently showing the binding as active.
+#[derive(serde::Serialize, Clone)]
+pub struct HotkeyRegistrationFailure<'a> {
+    pub action: &'a str,
+    pub error: String,
+}
+
 fn spawn_hotkey_thread_with_registrations(
     registrations: Vec<HotkeyRegistration>,
     double_modifiers: Vec<Modifier>,
     tx: mpsc::Sender<HotkeyAction>,
+    app: Option<tauri::AppHandle>,
 ) -> thread::JoinHandle<()> {
     set_hotkey_sender(&tx);
     // Readiness handshake: the message window must exist before this returns,
@@ -172,7 +182,7 @@ fn spawn_hotkey_thread_with_registrations(
     // toggle registration, which hit exactly that race and froze the app.
     let (ready_tx, ready_rx) = mpsc::channel::<()>();
     let handle = thread::spawn(move || {
-        let result = hotkey_message_loop(&registrations, &double_modifiers, ready_tx);
+        let result = hotkey_message_loop(&registrations, &double_modifiers, ready_tx, app);
         clear_hotkey_state();
         if let Err(error) = result {
             crate::log_event!("[hotkey] message loop exited with error: {error}");
@@ -192,6 +202,7 @@ fn hotkey_message_loop(
     registrations: &[HotkeyRegistration],
     double_modifiers: &[Modifier],
     ready: mpsc::Sender<()>,
+    app: Option<tauri::AppHandle>,
 ) -> Result<(), String> {
     if registrations.is_empty() && double_modifiers.is_empty() {
         return Err("no supported hotkey bindings were provided".to_owned());
@@ -312,6 +323,18 @@ fn hotkey_message_loop(
                 crate::log_event!(
                     "[hotkey] failed to register {action} chord (hotkey id {id}): {error}"
                 );
+                // Tell the settings UI the chord is not actually live —
+                // without this the panel keeps showing it as an active
+                // binding while the OS silently drops every press.
+                if let Some(app) = app.as_ref() {
+                    let _ = app.emit(
+                        "hotkey-registration-failed",
+                        HotkeyRegistrationFailure {
+                            action,
+                            error: error.clone(),
+                        },
+                    );
+                }
                 continue;
             }
             registered_ids.push(*id);
@@ -650,8 +673,12 @@ impl HotkeyManager {
             })
             .collect();
         let (tx, rx) = mpsc::channel::<HotkeyAction>();
-        let handle =
-            spawn_hotkey_thread_with_registrations(registrations, self.toggle_doubles.clone(), tx);
+        let handle = spawn_hotkey_thread_with_registrations(
+            registrations,
+            self.toggle_doubles.clone(),
+            tx,
+            self.app.clone(),
+        );
         let quick_paste_target = Arc::clone(&self.quick_paste_target);
         let app = self.app.clone();
 

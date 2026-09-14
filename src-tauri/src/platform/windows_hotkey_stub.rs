@@ -158,6 +158,7 @@ fn spawn_hotkey_thread_with_registrations(
     _registrations: Vec<HotkeyRegistration>,
     _double_modifiers: Vec<Modifier>,
     tx: mpsc::Sender<HotkeyAction>,
+    _app: Option<tauri::AppHandle>,
 ) -> thread::JoinHandle<()> {
     HOTKEY_STOP.store(false, Ordering::SeqCst);
     thread::spawn(move || {
@@ -303,8 +304,12 @@ impl HotkeyManager {
             })
             .collect();
         let (tx, rx) = mpsc::channel::<HotkeyAction>();
-        let handle =
-            spawn_hotkey_thread_with_registrations(registrations, self.toggle_doubles.clone(), tx);
+        let handle = spawn_hotkey_thread_with_registrations(
+            registrations,
+            self.toggle_doubles.clone(),
+            tx,
+            self.app.clone(),
+        );
         let _quick_paste_target = Arc::clone(&self.quick_paste_target);
         let app = self.app.clone();
 

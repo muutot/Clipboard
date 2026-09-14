@@ -479,6 +479,7 @@ const zhCN: LocaleDefinition = {
     deleteAction: "删除此操作",
     systemBadge: "系统",
     bindingDisabled: "未绑定",
+    registrationConflict: "「{action}」注册失败：该快捷键可能已被其他应用占用",
     pressKey: "按下快捷键…",
     copyItemDesc: "复制当前选中的条目到剪贴板",
     deleteItemDesc: "删除当前选中的条目",

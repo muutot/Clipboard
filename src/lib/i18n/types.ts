@@ -460,6 +460,7 @@ export interface LocaleDefinition {
     deleteAction: string;
     systemBadge: string;
     bindingDisabled: string;
+    registrationConflict: string;
     pressKey: string;
     copyItemDesc: string;
     deleteItemDesc: string;

@@ -502,6 +502,8 @@ const en: LocaleDefinition = {
     deleteAction: "Delete Action",
     systemBadge: "System",
     bindingDisabled: "Not bound",
+    registrationConflict:
+      '"{action}" failed to register — another app may already own this shortcut',
     pressKey: "Press shortcut…",
     copyItemDesc: "Copy the selected item to clipboard",
     deleteItemDesc: "Delete the selected item",

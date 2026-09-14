@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/feedback.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import {
@@ -39,6 +40,10 @@
   let config = $state<KeyboardConfig | null>(null);
   let loading = $state(true);
   const feedback = createFeedback(2000);
+  // Registration conflicts need longer on screen than a save confirmation:
+  // the message names an action and a reason the user has to read and act on.
+  const conflictFeedback = createFeedback(10000);
+  let unlistenRegistrationFailure: (() => void) | undefined;
   let recordingAction = $state("");
   let recordingTimer: ReturnType<typeof setTimeout> | undefined;
   let configRequestId = 0;
@@ -120,6 +125,22 @@
 
   onMount(() => {
     void loadConfig();
+    // The backend skips chords the OS refuses (another app owns the
+    // shortcut) and reports each one here; without this listener the chip
+    // keeps looking active while every press is silently dropped.
+    interface RegistrationFailure {
+      action: string;
+      error: string;
+    }
+    listen<RegistrationFailure>("hotkey-registration-failed", (event) => {
+      const { action } = event.payload;
+      const known = SYSTEM_ACTIONS.find((a) => a.id === action);
+      const label = known ? actionLabel(known) : action;
+      conflictFeedback.show(_t("keyboard.registrationConflict", { action: label }), false);
+    }).then((unlisten) => {
+      if (componentDestroyed) unlisten();
+      else unlistenRegistrationFailure = unlisten;
+    });
   });
 
   $effect(() => {
@@ -246,6 +267,8 @@
     componentDestroyed = true;
     configRequestId += 1;
     feedback.dispose();
+    conflictFeedback.dispose();
+    unlistenRegistrationFailure?.();
     if (recordingTimer !== undefined) clearTimeout(recordingTimer);
     // Match the capture flag from startRecording: without `true` the removal
     // is a no-op, the listener survives the component, keeps swallowing every
@@ -362,6 +385,10 @@
 
 {#if feedback.message && config}
   <div class:success={feedback.success} class="settings-feedback">{feedback.message}</div>
+{/if}
+
+{#if conflictFeedback.message && config}
+  <div class="settings-feedback">{conflictFeedback.message}</div>
 {/if}
 
 <style>
