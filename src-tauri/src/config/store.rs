@@ -102,6 +102,25 @@ impl ConfigStore {
         Ok(())
     }
 
+    /// Applies an in-memory mutation and persists it, restoring the previous
+    /// config when the write fails. Setters without custom rollback should use
+    /// this so a failed save cannot leave the running app on a value that was
+    /// never persisted.
+    fn mutate_and_save<T>(
+        &mut self,
+        mutate: impl FnOnce(&mut AppConfig) -> T,
+    ) -> Result<T, StorageError> {
+        let previous = self.config.clone();
+        let value = mutate(&mut self.config);
+        match self.save() {
+            Ok(()) => Ok(value),
+            Err(error) => {
+                self.config = previous;
+                Err(error)
+            }
+        }
+    }
+
     pub fn storage_directory(&self) -> Option<&Path> {
         self.config.storage.data_directory.as_deref()
     }
@@ -110,8 +129,9 @@ impl ConfigStore {
         &mut self,
         data_directory: Option<PathBuf>,
     ) -> Result<(), StorageError> {
-        self.config.storage.data_directory = data_directory;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.storage.data_directory = data_directory;
+        })
     }
 
     pub fn set_resource_storage_paths(
@@ -130,9 +150,10 @@ impl ConfigStore {
             }
         }
 
-        self.config.storage.image_storage_path = image_storage_path;
-        self.config.storage.file_storage_path = file_storage_path;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.storage.image_storage_path = image_storage_path;
+            config.storage.file_storage_path = file_storage_path;
+        })
     }
 
     pub fn ignored_applications(&self) -> &[String] {
@@ -155,8 +176,10 @@ impl ConfigStore {
         }
 
         let applications = normalized.into_values().collect::<Vec<_>>();
-        self.config.privacy.ignored_applications = applications.clone();
-        self.save()?;
+        let stored = applications.clone();
+        self.mutate_and_save(move |config| {
+            config.privacy.ignored_applications = stored;
+        })?;
         Ok(applications)
     }
 
@@ -165,8 +188,9 @@ impl ConfigStore {
     }
 
     pub fn set_launch_at_startup(&mut self, value: bool) -> Result<(), StorageError> {
-        self.config.window.launch_at_startup = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.window.launch_at_startup = value;
+        })
     }
 
     pub fn close_to_tray(&self) -> bool {
@@ -174,8 +198,9 @@ impl ConfigStore {
     }
 
     pub fn set_close_to_tray(&mut self, value: bool) -> Result<(), StorageError> {
-        self.config.window.close_to_tray = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.window.close_to_tray = value;
+        })
     }
 
     pub fn single_instance(&self) -> bool {
@@ -183,8 +208,9 @@ impl ConfigStore {
     }
 
     pub fn set_single_instance(&mut self, value: bool) -> Result<(), StorageError> {
-        self.config.window.single_instance = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.window.single_instance = value;
+        })
     }
 
     pub fn window_position(&self) -> Option<(i32, i32, u32, u32)> {
@@ -202,11 +228,12 @@ impl ConfigStore {
         width: u32,
         height: u32,
     ) -> Result<(), StorageError> {
-        self.config.window.x = Some(x);
-        self.config.window.y = Some(y);
-        self.config.window.width = Some(width);
-        self.config.window.height = Some(height);
-        self.save()
+        self.mutate_and_save(|config| {
+            config.window.x = Some(x);
+            config.window.y = Some(y);
+            config.window.width = Some(width);
+            config.window.height = Some(height);
+        })
     }
 
     pub fn privacy_paused(&self) -> bool {
@@ -214,8 +241,9 @@ impl ConfigStore {
     }
 
     pub fn set_privacy_paused(&mut self, value: bool) -> Result<(), StorageError> {
-        self.config.privacy.paused = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.privacy.paused = value;
+        })
     }
 
     pub fn privacy_master_password_hash(&self) -> Option<&str> {
@@ -226,8 +254,9 @@ impl ConfigStore {
         &mut self,
         value: Option<String>,
     ) -> Result<(), StorageError> {
-        self.config.privacy.master_password_hash = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.privacy.master_password_hash = value;
+        })
     }
 
     /// When local-only mode is on, the app must not make outbound network
@@ -237,8 +266,9 @@ impl ConfigStore {
     }
 
     pub fn set_privacy_local_only(&mut self, value: bool) -> Result<(), StorageError> {
-        self.config.privacy.local_only = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.privacy.local_only = value;
+        })
     }
 
     pub fn sensitive_patterns(&self) -> &[String] {
@@ -261,8 +291,10 @@ impl ConfigStore {
             normalized.push(pattern.to_owned());
         }
 
-        self.config.privacy.sensitive_patterns = normalized.clone();
-        self.save()?;
+        let stored = normalized.clone();
+        self.mutate_and_save(move |config| {
+            config.privacy.sensitive_patterns = stored;
+        })?;
         Ok(normalized)
     }
 
@@ -310,8 +342,10 @@ impl ConfigStore {
             normalized.push(AutoTagRule { pattern, tag });
         }
 
-        self.config.tags.auto_tag_rules = normalized.clone();
-        self.save()?;
+        let stored = normalized.clone();
+        self.mutate_and_save(move |config| {
+            config.tags.auto_tag_rules = stored;
+        })?;
         Ok(normalized)
     }
 
@@ -320,8 +354,9 @@ impl ConfigStore {
     }
 
     pub fn set_schedule_auto_export(&mut self, value: Option<String>) -> Result<(), StorageError> {
-        self.config.export.schedule_auto_export = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.export.schedule_auto_export = value;
+        })
     }
 
     pub fn ocr_engine(&self) -> &str {
@@ -337,8 +372,9 @@ impl ConfigStore {
     }
 
     pub fn set_models_dir(&mut self, value: Option<PathBuf>) -> Result<(), StorageError> {
-        self.config.ocr.models_dir = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.ocr.models_dir = value;
+        })
     }
 
     pub fn det_score_threshold(&self) -> f32 {
@@ -381,13 +417,17 @@ impl ConfigStore {
     }
 
     pub fn set_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.general.page_size_limit = value.clamp(500, 6_000);
-        self.save()
+        let value = value.clamp(500, 6_000);
+        self.mutate_and_save(|config| {
+            config.general.page_size_limit = value;
+        })
     }
 
     pub fn set_search_page_size_limit(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.general.search_page_size_limit = value.clamp(50, 1_000);
-        self.save()
+        let value = value.clamp(50, 1_000);
+        self.mutate_and_save(|config| {
+            config.general.search_page_size_limit = value;
+        })
     }
 
     pub fn search_index_sync_mode(&self) -> SearchIndexSyncMode {
@@ -444,23 +484,27 @@ impl ConfigStore {
     }
 
     pub fn set_retention_days(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.history.retention_days = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.history.retention_days = value;
+        })
     }
 
     pub fn set_max_items(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.history.max_items = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.history.max_items = value;
+        })
     }
 
     pub fn set_recycle_bin_days(&mut self, value: u32) -> Result<(), StorageError> {
-        self.config.history.recycle_bin_days = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.history.recycle_bin_days = value;
+        })
     }
 
     pub fn set_max_file_copy_size_bytes(&mut self, value: u64) -> Result<(), StorageError> {
-        self.config.storage.max_file_copy_size_bytes = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.storage.max_file_copy_size_bytes = value;
+        })
     }
 
     pub fn sync_config(&self) -> SyncConfig {
@@ -513,8 +557,9 @@ impl ConfigStore {
     }
 
     pub fn set_auto_sync(&mut self, enabled: bool) -> Result<(), StorageError> {
-        self.config.sync.auto_sync = enabled;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.sync.auto_sync = enabled;
+        })
     }
 
     pub fn auto_sync_interval_secs(&self) -> u64 {
@@ -522,8 +567,10 @@ impl ConfigStore {
     }
 
     pub fn set_auto_sync_interval_secs(&mut self, value: u64) -> Result<(), StorageError> {
-        self.config.sync.auto_sync_interval_secs = value.clamp(10, 86400);
-        self.save()
+        let value = value.clamp(10, 86400);
+        self.mutate_and_save(|config| {
+            config.sync.auto_sync_interval_secs = value;
+        })
     }
 
     pub fn max_sync_image_bytes(&self) -> u64 {
@@ -531,8 +578,9 @@ impl ConfigStore {
     }
 
     pub fn set_max_sync_image_bytes(&mut self, value: u64) -> Result<(), StorageError> {
-        self.config.sync.max_sync_image_bytes = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.sync.max_sync_image_bytes = value;
+        })
     }
 
     pub fn max_sync_file_bytes(&self) -> u64 {
@@ -540,8 +588,9 @@ impl ConfigStore {
     }
 
     pub fn set_max_sync_file_bytes(&mut self, value: u64) -> Result<(), StorageError> {
-        self.config.sync.max_sync_file_bytes = value;
-        self.save()
+        self.mutate_and_save(|config| {
+            config.sync.max_sync_file_bytes = value;
+        })
     }
 
     pub fn s3_region(&self) -> String {
@@ -569,9 +618,10 @@ impl ConfigStore {
         status: &str,
         timestamp_ms: i64,
     ) -> Result<(), StorageError> {
-        self.config.sync.last_sync_ms = Some(timestamp_ms);
-        self.config.sync.last_sync_status = Some(status.to_string());
-        self.save()
+        self.mutate_and_save(|config| {
+            config.sync.last_sync_ms = Some(timestamp_ms);
+            config.sync.last_sync_status = Some(status.to_string());
+        })
     }
 
     fn save(&self) -> Result<(), StorageError> {

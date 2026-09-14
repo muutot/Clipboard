@@ -651,6 +651,25 @@ fn update_source_parses_unknown_values_as_gitcode() {
     assert_eq!(UpdateSource::Gitcode.as_str(), "gitcode");
 }
 
+#[test]
+fn failed_save_rolls_back_the_in_memory_value() {
+    let project = temporary_test_directory("rollback");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let before = store.launch_at_startup();
+
+    // Removing the conf directory makes the atomic write fail, so the setter
+    // must return an error and leave the in-memory value untouched.
+    fs::remove_dir_all(project.join("conf")).unwrap();
+    assert!(store.set_launch_at_startup(!before).is_err());
+    assert_eq!(store.launch_at_startup(), before);
+
+    let retention_before = store.retention_days();
+    assert!(store.set_retention_days(retention_before + 1).is_err());
+    assert_eq!(store.retention_days(), retention_before);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
 fn temporary_test_directory(label: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
