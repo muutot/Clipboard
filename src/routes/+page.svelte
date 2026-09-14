@@ -2042,8 +2042,14 @@
   function moveSelection(offset: number) {
     if (filteredItems.length === 0) return;
 
-    const current = Math.max(0, selectedIndex);
-    const next = Math.min(filteredItems.length - 1, Math.max(0, current + offset));
+    // With no current selection, step onto the first (Down) or last (Up)
+    // row instead of skipping one via the clamped index.
+    const next =
+      selectedIndex === -1
+        ? offset > 0
+          ? 0
+          : filteredItems.length - 1
+        : Math.min(filteredItems.length - 1, Math.max(0, selectedIndex + offset));
     selectedId = filteredItems[next].id;
     const el = document.querySelector(`[data-id="${selectedId}"]`);
     if (el instanceof HTMLElement) {
