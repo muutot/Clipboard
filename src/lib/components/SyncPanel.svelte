@@ -139,7 +139,7 @@
     } catch (e) {
       showToast(String(e), "error");
     } finally {
-      syncing = false;
+      syncTesting = false;
     }
   }
 
@@ -337,7 +337,12 @@
     <section class="setting-card setting-card-row">
       <span class="setting-icon"><AppIcon name="link" size={17} /></span>
       <span class="setting-label">{_t("storage.syncTest")}</span>
-      <button type="button" class="settings-action-btn" onclick={handleTestConnection}>
+      <button
+        type="button"
+        class="settings-action-btn"
+        disabled={syncTesting || syncing}
+        onclick={handleTestConnection}
+      >
         {syncTesting ? _t("storage.syncTesting") : _t("storage.syncTest")}
       </button>
     </section>
