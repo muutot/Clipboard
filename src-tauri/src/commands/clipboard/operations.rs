@@ -31,13 +31,9 @@ pub fn list_clipboard_items(
 ) -> Result<Vec<ClipboardItem>, String> {
     let max_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
     let offset = offset.unwrap_or(0);
+    // `max_limit` caps the per-page size only; the row offset is independent.
+    // Coupling them truncated deep pages (e.g. offset 600 with a 500 cap).
     let limit = limit.unwrap_or(100).clamp(1, max_limit);
-
-    let limit = if offset >= max_limit {
-        0
-    } else {
-        (max_limit - offset).min(limit)
-    };
 
     let filter = filter.map_or_else(HistoryFilter::default, |args| HistoryFilter {
         kind: args.kind,
