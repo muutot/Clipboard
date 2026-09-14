@@ -507,11 +507,7 @@ pub fn rename_item(
                     // The detail panel and multi-file paste read the managed
                     // path out of `metadata_json`/`text_content` before
                     // `resource_path`, so those copies must move with the file.
-                    rewrite_stored_resource_paths(
-                        &mut updated,
-                        &old_path_string,
-                        &new_path_string,
-                    );
+                    rewrite_stored_resource_paths(&mut updated, &old_path_string, &new_path_string);
                     database.save_item(&updated).map_err(|e| e.to_string())?;
                     if let Err(e) = std::fs::rename(old, &new_path) {
                         database.save_item(&rollback).map_err(|rollback_error| {
@@ -704,11 +700,7 @@ mod tests {
         record.text_content =
             Some(r#"["/store/files/old.txt","/store/files/other.txt"]"#.to_owned());
 
-        rewrite_stored_resource_paths(
-            &mut record,
-            "/store/files/old.txt",
-            "/store/files/new.txt",
-        );
+        rewrite_stored_resource_paths(&mut record, "/store/files/old.txt", "/store/files/new.txt");
 
         let metadata: serde_json::Value =
             serde_json::from_str(record.metadata_json.as_deref().unwrap()).unwrap();
