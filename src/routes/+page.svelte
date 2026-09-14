@@ -1824,6 +1824,7 @@
     const previousItems = captureBulkSnapshot({
       items,
       indexedItems,
+      searchCache,
       selectedIds,
       detailItem,
     });
@@ -1832,6 +1833,10 @@
     items = setDeletedFlags(items, idSet, false);
     if (indexedItems) {
       indexedItems = setDeletedFlags(indexedItems, idSet, false);
+    }
+    searchCache = setDeletedFlags(searchCache, idSet, false);
+    if (detailItem && idSet.has(detailItem.id)) {
+      detailItem = { ...detailItem, deleted: false };
     }
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
@@ -1847,7 +1852,9 @@
         for (const id of ids) deletedHistorySuppressedIds.delete(id);
         items = previousItems.items;
         indexedItems = previousItems.indexedItems;
+        searchCache = previousItems.searchCache;
         selectedIds = previousItems.selectedIds;
+        detailItem = previousItems.detailItem;
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -1857,7 +1864,13 @@
     const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
     if (ids.length === 0) return;
 
-    const previous = captureBulkSnapshot({ items, indexedItems, selectedIds, detailItem });
+    const previous = captureBulkSnapshot({
+      items,
+      indexedItems,
+      searchCache,
+      selectedIds,
+      detailItem,
+    });
     const idSet = new Set(ids);
     for (const id of ids) addSuppressedId(id);
     removeItems(idSet);
@@ -1874,6 +1887,7 @@
         for (const id of ids) deletedHistorySuppressedIds.delete(id);
         items = previous.items;
         indexedItems = previous.indexedItems;
+        searchCache = previous.searchCache;
         selectedIds = previous.selectedIds;
         detailItem = previous.detailItem;
         statusMessage = _t("app.deleteFailed");
@@ -1890,7 +1904,13 @@
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
-    const previous = captureBulkSnapshot({ items, indexedItems, selectedIds, detailItem });
+    const previous = captureBulkSnapshot({
+      items,
+      indexedItems,
+      searchCache,
+      selectedIds,
+      detailItem,
+    });
     const softSet = new Set(softIds);
 
     for (const id of softIds) deletedHistorySuppressedIds.delete(id);
@@ -1898,17 +1918,23 @@
 
     const hardSet = new Set(hardIds);
     const permanentSet = new Set(permanentIds);
+    const removedOptimistic = new Set([...permanentSet, ...hardSet]);
     items = items
-      .filter((item) => !permanentSet.has(item.id) && !hardSet.has(item.id))
+      .filter((item) => !removedOptimistic.has(item.id))
       .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
     if (indexedItems) {
       indexedItems = indexedItems
-        .filter((item) => !permanentSet.has(item.id) && !hardSet.has(item.id))
+        .filter((item) => !removedOptimistic.has(item.id))
         .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
     }
+    searchCache = searchCache
+      .filter((item) => !removedOptimistic.has(item.id))
+      .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
     selectedIds = new Set();
-    if (detailItem && (permanentSet.has(detailItem.id) || hardSet.has(detailItem.id))) {
+    if (detailItem && removedOptimistic.has(detailItem.id)) {
       detailItem = null;
+    } else if (detailItem && softSet.has(detailItem.id)) {
+      detailItem = { ...detailItem, deleted: true };
     }
 
     const operations: {
@@ -1981,11 +2007,16 @@
       } else {
         indexedItems = null;
       }
+      searchCache = previous.searchCache
+        .filter((item) => !removedIds.has(item.id))
+        .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
       selectedIds = new Set([...previous.selectedIds].filter((id) => !succeededIds.has(id)));
-      if (previous.detailItem && !removedIds.has(previous.detailItem.id)) {
-        detailItem = previous.detailItem;
-      } else if (previous.detailItem && removedIds.has(previous.detailItem.id)) {
+      if (previous.detailItem && removedIds.has(previous.detailItem.id)) {
         detailItem = null;
+      } else if (previous.detailItem && successfulSoft.has(previous.detailItem.id)) {
+        detailItem = { ...previous.detailItem, deleted: true };
+      } else {
+        detailItem = previous.detailItem;
       }
 
       if (successfulSoft.size > 0 || successfulPermanent.size > 0) {
@@ -2035,6 +2066,8 @@
     for (const id of ids) deletedHistorySuppressedIds.delete(id);
     const previousItems = items.map((entry) => ({ ...entry }));
     const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
+    const previousSearchCache = searchCache.map((entry) => ({ ...entry }));
+    const previousDetailItem = detailItem ? { ...detailItem } : null;
     const previousSelectedIds = new Set(selectedIds);
 
     if ($generalSettings.useRecycleBin) {
@@ -2045,6 +2078,12 @@
         indexedItems = indexedItems.map((item) =>
           idSet.has(item.id) ? { ...item, deleted: true } : item,
         );
+      }
+      searchCache = searchCache.map((item) =>
+        idSet.has(item.id) ? { ...item, deleted: true } : item,
+      );
+      if (detailItem && idSet.has(detailItem.id)) {
+        detailItem = { ...detailItem, deleted: true };
       }
       selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
@@ -2058,6 +2097,8 @@
           console.error("Unable to clear history", error);
           items = previousItems;
           indexedItems = previousIndexedItems;
+          searchCache = previousSearchCache;
+          detailItem = previousDetailItem;
           selectedIds = previousSelectedIds;
           showToast(_t("app.deleteFailed"), "error");
         });
@@ -2069,6 +2110,8 @@
     // direct-delete command for each active record instead.
     items = items.filter((item) => !idSet.has(item.id));
     if (indexedItems) indexedItems = indexedItems.filter((item) => !idSet.has(item.id));
+    searchCache = searchCache.filter((item) => !idSet.has(item.id));
+    if (detailItem && idSet.has(detailItem.id)) detailItem = null;
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void Promise.all(
@@ -2094,6 +2137,11 @@
         } else {
           indexedItems = null;
         }
+        searchCache = previousSearchCache.filter((item) => !successfulIds.has(item.id));
+        detailItem =
+          previousDetailItem && !successfulIds.has(previousDetailItem.id)
+            ? previousDetailItem
+            : null;
         selectedIds = new Set([...previousSelectedIds].filter((id) => !successfulIds.has(id)));
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");

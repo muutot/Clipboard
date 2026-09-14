@@ -39,6 +39,7 @@ export function planBulkDelete(
 export interface BulkSnapshot {
   items: ClipboardItem[];
   indexedItems: ClipboardItem[] | null;
+  searchCache: ClipboardItem[];
   selectedIds: Set<string>;
   detailItem: ClipboardItem | null;
 }
@@ -47,12 +48,14 @@ export interface BulkSnapshot {
 export function captureBulkSnapshot(state: {
   items: ClipboardItem[];
   indexedItems: ClipboardItem[] | null;
+  searchCache: ClipboardItem[];
   selectedIds: ReadonlySet<string>;
   detailItem: ClipboardItem | null;
 }): BulkSnapshot {
   return {
     items: state.items.map((entry) => ({ ...entry })),
     indexedItems: state.indexedItems?.map((entry) => ({ ...entry })) ?? null,
+    searchCache: state.searchCache.map((entry) => ({ ...entry })),
     selectedIds: new Set(state.selectedIds),
     detailItem: state.detailItem ? { ...state.detailItem } : null,
   };

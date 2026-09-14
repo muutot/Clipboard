@@ -54,11 +54,13 @@ describe("captureBulkSnapshot", () => {
   it("copies lists and sets so later mutations never leak into the snapshot", () => {
     const items = [item("a"), item("b")];
     const indexed = [item("a")];
+    const cache = [item("a"), item("b")];
     const selected = new Set(["a"]);
     const detail = item("a");
     const snapshot = captureBulkSnapshot({
       items,
       indexedItems: indexed,
+      searchCache: cache,
       selectedIds: selected,
       detailItem: detail,
     });
@@ -66,12 +68,16 @@ describe("captureBulkSnapshot", () => {
     items.push(item("c"));
     items[0].title = "mutated";
     indexed.pop();
+    cache.pop();
+    cache[0].title = "mutated";
     selected.add("b");
     detail.title = "mutated";
 
     expect(snapshot.items.map((entry) => entry.id)).toEqual(["a", "b"]);
     expect(snapshot.items[0].title).toBe("a");
     expect(snapshot.indexedItems).toHaveLength(1);
+    expect(snapshot.searchCache.map((entry) => entry.id)).toEqual(["a", "b"]);
+    expect(snapshot.searchCache[0].title).toBe("a");
     expect(snapshot.selectedIds).toEqual(new Set(["a"]));
     expect(snapshot.detailItem?.title).toBe("a");
   });
@@ -80,6 +86,7 @@ describe("captureBulkSnapshot", () => {
     const snapshot = captureBulkSnapshot({
       items: [],
       indexedItems: null,
+      searchCache: [],
       selectedIds: new Set(),
       detailItem: null,
     });
