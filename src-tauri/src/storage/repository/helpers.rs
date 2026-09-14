@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rusqlite::{params, Row};
+use rusqlite::{params, OptionalExtension, Row};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::StorageError;
@@ -31,7 +31,7 @@ pub(super) fn insert_item_row(
     item: &ClipboardItem,
     size_bytes: i64,
 ) -> Result<String, StorageError> {
-    Ok(connection.query_row(
+    let id: String = connection.query_row(
         "INSERT INTO clipboard_items (
             id,
             kind,
@@ -115,7 +115,44 @@ pub(super) fn insert_item_row(
             item.metadata_json,
         ],
         |row| row.get(0),
-    )?)
+    )?;
+    // Keep the derived `item_tags` index aligned with the metadata the upsert
+    // actually stored (a conflict may have merged old tags via json_patch).
+    // Without this, a duplicate or imported record carried tags in
+    // `metadata_json` that `list_all_tags`/tag filtering never saw.
+    sync_item_tags_from_metadata(connection, &id)?;
+    Ok(id)
+}
+
+/// Mirrors `metadata_json.tags` into the derived `item_tags` index for one row.
+fn sync_item_tags_from_metadata(
+    connection: &rusqlite::Connection,
+    id: &str,
+) -> Result<(), StorageError> {
+    let metadata: Option<Option<String>> = connection
+        .query_row(
+            "SELECT metadata_json FROM clipboard_items WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let tags = metadata
+        .flatten()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+        .and_then(|value| value.get("tags").and_then(|tags| tags.as_array()).cloned())
+        .unwrap_or_default();
+
+    connection.execute("DELETE FROM item_tags WHERE item_id = ?1", [id])?;
+    for tag in tags {
+        let Some(tag) = tag.as_str().map(str::trim).filter(|tag| !tag.is_empty()) else {
+            continue;
+        };
+        connection.execute(
+            "INSERT OR IGNORE INTO item_tags (item_id, tag) VALUES (?1, ?2)",
+            params![id, tag],
+        )?;
+    }
+    Ok(())
 }
 
 /// Reports whether an item with the same `(kind, content_hash)` already

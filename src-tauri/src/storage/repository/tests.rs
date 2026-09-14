@@ -53,6 +53,32 @@ fn dedup_upsert_preserves_existing_tags() {
 }
 
 #[test]
+fn insert_populates_item_tags_from_metadata() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("duplicated", "hash-duplicated", 100);
+    // A duplicate or import carries tags in `metadata_json` without going
+    // through `set_tags`, so the derived `item_tags` index must be populated
+    // on insert or tag counts and tag filtering miss the record.
+    item.metadata_json = Some(r#"{"tags":["work","urgent"]}"#.to_owned());
+    database.save_item(&item).unwrap();
+
+    let tags = database.list_all_tags().unwrap();
+    assert_eq!(tags.iter().find(|tag| tag.name == "work").unwrap().count, 1);
+    assert_eq!(
+        tags.iter().find(|tag| tag.name == "urgent").unwrap().count,
+        1
+    );
+
+    let filter = HistoryFilter {
+        tag: Some("work".to_owned()),
+        ..HistoryFilter::default()
+    };
+    let recent = database.list_recent(20, 0, &filter).unwrap();
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0].id, "duplicated");
+}
+
+#[test]
 fn resource_reference_count_includes_multi_file_text_references() {
     let database = Database::open_in_memory().unwrap();
 
