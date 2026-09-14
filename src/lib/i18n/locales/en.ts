@@ -568,6 +568,7 @@ const en: LocaleDefinition = {
   },
   actions: {
     close: "Close settings",
+    save: "Save",
     sendEmail: "Send email",
     openUrl: "Open URL",
     callPhone: "Call phone",
@@ -697,6 +698,7 @@ const en: LocaleDefinition = {
     fullscreenPreview: "Fullscreen preview",
     locateFile: "Locate File",
     openFolder: "Open Folder",
+    file: "File",
     files: "files",
     filePreviewLoading: "Reading file content...",
     filePreviewUnavailable: "Text preview is not available for this file",

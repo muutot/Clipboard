@@ -520,6 +520,7 @@ export interface LocaleDefinition {
   };
   actions: {
     close: string;
+    save: string;
     sendEmail: string;
     openUrl: string;
     callPhone: string;
@@ -649,6 +650,7 @@ export interface LocaleDefinition {
     fullscreenPreview: string;
     locateFile: string;
     openFolder: string;
+    file: string;
     files: string;
     filePreviewLoading: string;
     filePreviewUnavailable: string;

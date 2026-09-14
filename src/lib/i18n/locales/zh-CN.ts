@@ -541,6 +541,7 @@ const zhCN: LocaleDefinition = {
   },
   actions: {
     close: "关闭设置",
+    save: "保存",
     sendEmail: "发送邮件",
     openUrl: "打开链接",
     callPhone: "拨打电话",
@@ -670,6 +671,7 @@ const zhCN: LocaleDefinition = {
     fullscreenPreview: "全屏预览",
     locateFile: "定位到文件",
     openFolder: "打开文件夹",
+    file: "文件",
     files: "个文件",
     filePreviewLoading: "正在读取文件内容…",
     filePreviewUnavailable: "当前文件不支持文本预览",
