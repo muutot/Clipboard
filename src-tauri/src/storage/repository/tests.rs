@@ -1310,3 +1310,24 @@ fn concurrent_read_does_not_block_writes() {
     assert!(read_result.is_ok());
     assert_eq!(database.item_count().unwrap(), 2);
 }
+
+#[test]
+fn expired_purge_covers_legacy_rows_without_a_delete_timestamp() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("legacy", "hash-legacy", 100))
+        .unwrap();
+    assert!(database.soft_delete("legacy").unwrap());
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "UPDATE clipboard_items SET deleted_at_ms = NULL WHERE id = 'legacy'",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+    assert_eq!(database.permanently_delete_expired(30).unwrap(), 1);
+    assert!(database.get_item("legacy").unwrap().is_none());
+}

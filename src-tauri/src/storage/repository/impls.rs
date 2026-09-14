@@ -804,11 +804,12 @@ impl ClipboardRepository for Database {
         }
         self.with_connection(|connection| {
             let cutoff_ms = current_time_ms() - i64::from(days) * 86_400_000;
+            // Legacy rows can carry deleted = 1 with a NULL timestamp; treat
+            // them as expired rather than letting them live forever.
             let deleted = connection.execute(
                 "DELETE FROM clipboard_items
                  WHERE deleted = 1
-                   AND deleted_at_ms IS NOT NULL
-                   AND deleted_at_ms < ?1",
+                   AND (deleted_at_ms IS NULL OR deleted_at_ms < ?1)",
                 [cutoff_ms],
             )?;
             Ok(deleted as u64)
