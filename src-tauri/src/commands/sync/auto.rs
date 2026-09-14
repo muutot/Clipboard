@@ -1,4 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -6,6 +7,12 @@ use tauri::Manager;
 
 use crate::commands::sync::run_sync;
 use crate::config::ConfigStore;
+
+/// How long `stop` waits for an in-flight `run_sync` before leaking the
+/// worker thread. A network-slow run has no cancellation checkpoints, so an
+/// unbounded join could hang exit/restart until the S3 timeouts fire (up to
+/// 30 minutes for a streaming transfer).
+const STOP_JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Background worker that periodically runs the same S3-first v1 engine as the
 /// manual `sync_now` command. Both paths share `SYNC_RUN_LOCK`, so a second run
@@ -100,7 +107,31 @@ impl AutoSyncWorker {
     pub fn stop(&mut self) {
         self.stop_flag.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            // Join through a helper thread so the wait is bounded: if the
+            // worker is stuck in a long sync, log and leak it — the stop flag
+            // stays set (the loop exits after the in-flight run) and process
+            // exit reclaims the thread.
+            let (done_tx, done_rx) = mpsc::channel::<()>();
+            let join_helper = std::thread::Builder::new()
+                .name("auto-sync-join".to_owned())
+                .spawn(move || {
+                    if let Err(panic) = handle.join() {
+                        crate::log_event!("[auto-sync] worker terminated with a panic: {panic:?}");
+                    }
+                    let _ = done_tx.send(());
+                });
+            match join_helper {
+                Ok(_) => {
+                    if done_rx.recv_timeout(STOP_JOIN_TIMEOUT).is_err() {
+                        crate::log_event!(
+                            "[auto-sync] worker still running after 30s; leaking the thread so shutdown can proceed"
+                        );
+                    }
+                }
+                Err(error) => {
+                    crate::log_event!("[auto-sync] failed to spawn the join helper: {error}");
+                }
+            }
         }
     }
 }

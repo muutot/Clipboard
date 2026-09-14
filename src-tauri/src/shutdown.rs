@@ -7,8 +7,9 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
     // Stop the auto-sync worker first: it is a background writer that owns an
     // AppHandle and writes both SQLite and S3, so anything it commits after a
     // storage snapshot would be lost, and it must not resolve managed state
-    // after teardown. Joining here guarantees no in-flight run outlives the
-    // stop call.
+    // after teardown. Its stop waits for the in-flight run up to a bounded
+    // timeout and then leaks the (flag-set) thread rather than hang exit on a
+    // slow S3 run.
     if let Some(worker) = app.try_state::<Mutex<crate::commands::sync::AutoSyncWorker>>() {
         match worker.lock() {
             Ok(mut worker) => worker.stop(),
