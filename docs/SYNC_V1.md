@@ -281,7 +281,9 @@ A compactor:
    immediately reads the pointer back and requires the exact published bytes (or observes a
    strictly newer, non-regressing concurrent winner);
 6. only after that durable read-back succeeds, deletes snapshots and segments covered by the
-   immediately previous checkpoint vector;
+   immediately previous checkpoint vector; keys under a covered segment prefix that do not parse
+   as canonical segments (a directory marker, or a partial or foreign upload) are skipped rather
+   than aborting the pass, so one stray object cannot block compaction;
 7. retains the current and immediately previous checkpoints and atomically records the new local
    baseline only after cleanup completes.
 

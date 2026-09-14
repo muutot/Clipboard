@@ -1831,6 +1831,48 @@ fn pulls_and_garbage_collects_more_than_one_thousand_segments() {
 }
 
 #[test]
+fn garbage_collection_tolerates_non_segment_keys() {
+    let store = MemoryStore::default();
+    let device_id = "33333333-3333-4333-8333-333333333333";
+    let epoch = "44444444-4444-4444-8444-444444444444";
+
+    let segment = Segment {
+        device_id: device_id.to_string(),
+        epoch: epoch.to_string(),
+        first_sequence: 1,
+        last_sequence: 1,
+        mutations: MutationBatch {
+            upserts: vec![replicated_text("gc-1", "gc", 1, device_id)],
+            tombstones: Vec::new(),
+        },
+    };
+    let encoded = encode_segment(&segment, None).unwrap();
+    let key = segment_object_key(device_id, epoch, 1, 1, &encoded.sha256).unwrap();
+    let stray_key = format!("{}README", segment_prefix(device_id, epoch).unwrap());
+    {
+        let mut objects = store.objects.lock().unwrap();
+        objects.insert(key.clone(), encoded.bytes);
+        objects.insert(stray_key.clone(), b"not a segment".to_vec());
+    }
+
+    let deleted = engine::test_support::garbage_collect_covered_history(
+        &store,
+        &[DeviceCursor {
+            device_id: device_id.to_string(),
+            epoch: epoch.to_string(),
+            sequence: 1,
+            last_segment_key: None,
+        }],
+    )
+    .unwrap();
+
+    assert_eq!(deleted, 1);
+    let objects = store.objects.lock().unwrap();
+    assert!(!objects.contains_key(&key));
+    assert!(objects.contains_key(&stray_key));
+}
+
+#[test]
 fn restored_database_merges_its_remote_head_before_rotating_epoch() {
     let store = MemoryStore::default();
     let paths = temp_paths("restored-head");

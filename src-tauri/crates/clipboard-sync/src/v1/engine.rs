@@ -1121,7 +1121,13 @@ fn garbage_collect_covered_history(
         }
         let prefix = segment_prefix(&cursor.device_id, &cursor.epoch)?;
         for object in store.list(&prefix, None)? {
-            let segment = parse_segment_key(&object.key)?;
+            // Tolerate non-canonical keys under the prefix (directory markers,
+            // partial or foreign uploads) instead of aborting the whole
+            // compaction pass; `prune_unreferenced_checkpoints` skips the same
+            // way. An unparseable key is left untouched for a later pass.
+            let Ok(segment) = parse_segment_key(&object.key) else {
+                continue;
+            };
             if segment.last_sequence <= cursor.sequence {
                 store.delete(&object.key)?;
                 deleted = checked_add(deleted, 1, "deleted remote object count")?;
