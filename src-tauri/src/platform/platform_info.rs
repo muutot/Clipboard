@@ -113,9 +113,11 @@ pub fn current_capabilities() -> PlatformCapabilities {
 
     #[cfg(target_os = "macos")]
     {
+        // No OS-global hotkey path is wired (the hook register is a stub);
+        // bindings apply while the main window is focused.
         return PlatformCapabilities {
             clipboard_monitoring: true,
-            global_shortcut: true,
+            global_shortcut: false,
             quick_paste: true,
             system_tray: true,
             requires_accessibility_permission: true,
@@ -124,9 +126,11 @@ pub fn current_capabilities() -> PlatformCapabilities {
 
     #[cfg(target_os = "linux")]
     {
+        // X11/Wayland have no OS-global registration; bindings apply while
+        // the main window is focused (compositor setup is out of scope).
         return PlatformCapabilities {
             clipboard_monitoring: true,
-            global_shortcut: true,
+            global_shortcut: false,
             quick_paste: false,
             system_tray: true,
             requires_accessibility_permission: false,
