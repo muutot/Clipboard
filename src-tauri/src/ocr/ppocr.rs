@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::oarocr::OAROCRBuilder;
@@ -49,6 +49,13 @@ impl PpOcrEngine {
     }
 
     fn build_ocr(&self) -> Result<oar_ocr::oarocr::OAROCR, OcrEngineError> {
+        // `OAR_HOME` is process-global: serialize set-var + build so two
+        // engines (e.g. restart overlap) cannot interleave different dirs.
+        static OAR_BUILD_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let build_lock = OAR_BUILD_LOCK.get_or_init(|| Mutex::new(()));
+        let _held = build_lock
+            .lock()
+            .map_err(|_| OcrEngineError::new("OCR build lock is poisoned"))?;
         super::models::set_oar_home(&self.models_dir);
 
         OAROCRBuilder::new(
