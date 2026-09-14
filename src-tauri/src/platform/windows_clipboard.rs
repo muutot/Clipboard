@@ -141,7 +141,19 @@ impl WindowsClipboardMonitor {
 
     pub fn start(&mut self) -> Result<mpsc::Receiver<ClipboardChange>, String> {
         if self.running {
-            return Err("clipboard monitor is already running".to_string());
+            // The monitor thread exits silently when the capture worker's
+            // receiver is dropped (worker panic or spawn failure) — nothing
+            // resets this flag. Detect the dead thread so a restart is not
+            // permanently blocked by "already running".
+            let thread_dead = self
+                .handle
+                .as_ref()
+                .is_some_and(|handle| handle.is_finished());
+            if !thread_dead {
+                return Err("clipboard monitor is already running".to_string());
+            }
+            self.running = false;
+            self.handle = None;
         }
 
         let (sender, receiver) = mpsc::channel();
@@ -1562,7 +1574,19 @@ impl WindowsClipboardMonitor {
 
     pub fn start(&mut self) -> Result<mpsc::Receiver<ClipboardChange>, String> {
         if self.running {
-            return Err("clipboard monitor is already running".to_string());
+            // The monitor thread exits silently when the capture worker's
+            // receiver is dropped (worker panic or spawn failure) — nothing
+            // resets this flag. Detect the dead thread so a restart is not
+            // permanently blocked by "already running".
+            let thread_dead = self
+                .handle
+                .as_ref()
+                .is_some_and(|handle| handle.is_finished());
+            if !thread_dead {
+                return Err("clipboard monitor is already running".to_string());
+            }
+            self.running = false;
+            self.handle = None;
         }
 
         let (sender, receiver) = mpsc::channel();
