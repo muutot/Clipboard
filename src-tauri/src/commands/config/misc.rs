@@ -83,7 +83,6 @@ pub fn get_privacy_settings(
 
 #[tauri::command]
 pub fn set_privacy_settings(
-    app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     privacy: tauri::State<'_, Mutex<PrivacyManager>>,
     capture: tauri::State<'_, CaptureState>,
@@ -129,7 +128,8 @@ pub fn set_privacy_settings(
         capture.set_sensitive_patterns(compiled);
     }
 
-    let _ = app.emit("privacy-settings-changed", ());
+    // No event is emitted here: the command returns the fresh
+    // `PrivacySettings` and the settings panel renders from that value.
 
     let privacy = lock_state(&privacy, "privacy manager lock is poisoned")?;
     let config = lock_state(&config, "configuration lock is poisoned")?;

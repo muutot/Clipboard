@@ -215,7 +215,13 @@ impl WindowsClipboardMonitor {
         self.sender = None;
         if let Some(handle) = self.handle.take() {
             if handle.thread().id() != thread::current().id() {
-                let _ = handle.join();
+                // A panicked monitor explains why captures silently stopped;
+                // swallowing the payload hid that from every log.
+                if let Err(panic) = handle.join() {
+                    crate::log_event!(
+                        "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
+                    );
+                }
             }
         }
     }
@@ -1647,7 +1653,13 @@ impl WindowsClipboardMonitor {
         self.sender = None;
         if let Some(handle) = self.handle.take() {
             if handle.thread().id() != thread::current().id() {
-                let _ = handle.join();
+                // A panicked monitor explains why captures silently stopped;
+                // swallowing the payload hid that from every log.
+                if let Err(panic) = handle.join() {
+                    crate::log_event!(
+                        "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
+                    );
+                }
             }
         }
     }

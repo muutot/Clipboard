@@ -666,7 +666,13 @@ impl X11ClipboardMonitor {
     pub fn stop(&mut self) -> X11Result<()> {
         self.running.store(false, Ordering::SeqCst);
         if let Some(handle) = self.event_thread.take() {
-            let _ = handle.join();
+            // A panicked monitor explains why captures silently stopped;
+            // swallowing the payload hid that from every log.
+            if let Err(panic) = handle.join() {
+                crate::log_event!(
+                    "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
+                );
+            }
         }
         self.snapshot_tx = None;
         Ok(())
