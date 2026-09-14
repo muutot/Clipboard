@@ -6,7 +6,8 @@ use serde::Serialize;
 use crate::cli::{CliArgs, CliCommand, LocalApiServer};
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
-use crate::storage::{Database, StoragePaths};
+use crate::state::SelfTriggerState;
+use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
 const API_TOKEN_FILE_NAME: &str = "api.token";
 
@@ -57,9 +58,11 @@ pub struct LocalApiStatus {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn run_cli_command(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
+    self_trigger: tauri::State<'_, SelfTriggerState>,
     command: String,
     query: Option<String>,
     limit: Option<usize>,
@@ -76,6 +79,28 @@ pub fn run_cli_command(
         "stats" => CliCommand::Stats,
         other => return Err(format!("unknown command: {other}")),
     };
+
+    // The in-process renderer path shares the capture thread's guard, so mark
+    // the pending write before the CLI helper touches the system clipboard.
+    // (A standalone CLI subprocess cannot reach this guard; on Windows its
+    // OS-level marker still applies, on other platforms a re-capture there
+    // remains a known limitation.)
+    if command == CliCommand::Copy {
+        if let Some(id) = query.as_deref() {
+            if let Ok(Some(item)) = database.get_item(id) {
+                let text = item
+                    .text_content
+                    .as_deref()
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or(&item.title);
+                if let Ok(mut guard) = self_trigger.0.lock() {
+                    guard.mark_clipboard_write(text);
+                } else {
+                    crate::log_event!("[api] self-trigger lock poisoned; copy may re-capture");
+                }
+            }
+        }
+    }
 
     let args = CliArgs {
         command,
