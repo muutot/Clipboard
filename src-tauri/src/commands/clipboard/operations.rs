@@ -474,7 +474,14 @@ pub fn rename_item(
                 let parent = old.parent().unwrap_or(std::path::Path::new("."));
                 // The new name arrives from the webview and must never be able
                 // to escape the managed directory via separators or traversal.
-                let candidate = format!("{sanitized_name}.{ext}");
+                // An empty extension must not produce a trailing dot: Windows
+                // strips it from the real file name, so the DB record would
+                // point at a path that does not exist on disk.
+                let candidate = if ext.is_empty() {
+                    sanitized_name.clone()
+                } else {
+                    format!("{sanitized_name}.{ext}")
+                };
                 if std::path::Path::new(&candidate)
                     .file_name()
                     .map(|f| f.to_string_lossy().to_string())
