@@ -37,7 +37,13 @@ impl AutoSyncWorker {
                         }
                         let guard = match lock_result {
                             Ok(guard) => guard,
-                            Err(_) => continue,
+                            // Sleep before retrying: falling through to the
+                            // loop-end sleep keeps a poisoned lock from
+                            // spinning the thread at full CPU.
+                            Err(_) => {
+                                std::thread::sleep(Duration::from_millis(1000));
+                                continue;
+                            }
                         };
                         // Read the two values, then drop the guard so it no
                         // longer borrows the config state across the loop body.
