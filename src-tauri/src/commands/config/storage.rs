@@ -341,40 +341,6 @@ fn restore_quarantined_database(moved: &[(PathBuf, PathBuf)]) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{quarantine_database_for_migration, restore_quarantined_database};
-    use std::time::SystemTime;
-
-    #[test]
-    fn quarantine_moves_existing_database_and_sidecars_aside() {
-        let unique = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let directory = std::env::temp_dir().join(format!(
-            "clipboard-migration-quarantine-{}-{unique}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&directory).unwrap();
-        let database = directory.join("clipboard.sqlite3");
-        let wal = directory.join("clipboard.sqlite3-wal");
-        std::fs::write(&database, b"db").unwrap();
-        std::fs::write(&wal, b"wal").unwrap();
-
-        let moved = quarantine_database_for_migration(&database).unwrap();
-        assert_eq!(moved.len(), 2);
-        assert!(!database.exists());
-        assert!(!wal.exists());
-
-        restore_quarantined_database(&moved);
-        assert_eq!(std::fs::read(&database).unwrap(), b"db");
-        assert_eq!(std::fs::read(&wal).unwrap(), b"wal");
-
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-}
-
 pub fn storage_path_mappings(old: &StoragePaths, new: &StoragePaths) -> Vec<(PathBuf, PathBuf)> {
     let mut mappings = vec![
         (old.previews.clone(), new.previews.clone()),
@@ -525,5 +491,39 @@ pub fn rewrite_json_value_paths(
             changed
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{quarantine_database_for_migration, restore_quarantined_database};
+    use std::time::SystemTime;
+
+    #[test]
+    fn quarantine_moves_existing_database_and_sidecars_aside() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-migration-quarantine-{}-{unique}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("clipboard.sqlite3");
+        let wal = directory.join("clipboard.sqlite3-wal");
+        std::fs::write(&database, b"db").unwrap();
+        std::fs::write(&wal, b"wal").unwrap();
+
+        let moved = quarantine_database_for_migration(&database).unwrap();
+        assert_eq!(moved.len(), 2);
+        assert!(!database.exists());
+        assert!(!wal.exists());
+
+        restore_quarantined_database(&moved);
+        assert_eq!(std::fs::read(&database).unwrap(), b"db");
+        assert_eq!(std::fs::read(&wal).unwrap(), b"wal");
+
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }
