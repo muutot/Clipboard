@@ -251,7 +251,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.launch-at-startup",
-    { section: "general_window" },
+    { section: "general_general" },
     i18n("general.launchAtStartup"),
     i18n("general.launchAtStartupDescription"),
     ["自动启动", "boot", "login"],
@@ -314,7 +314,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "general.max-text-capture-size",
-    { section: "storage_limits" },
+    { section: "capture" },
     i18n("general.maxTextCaptureSize"),
     i18n("general.maxTextCaptureSizeDescription"),
     ["捕获", "文本", "纯文本", "上限", "大小", "长度", "capture", "size", "limit"],
@@ -607,7 +607,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
   entry(
     "storage.max-file-copy-size",
-    { section: "storage_limits" },
+    { section: "capture" },
     i18n("captureSettings.maxFileCopySize"),
     i18n("captureSettings.maxFileCopySizeDesc"),
     ["文件大小", "copy limit"],
