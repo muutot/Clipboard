@@ -42,6 +42,8 @@ pub mod secret_store;
 pub mod single_instance;
 pub mod ui;
 
+use std::path::Path;
+
 // ---------------------------------------------------------------------------
 //  Re-exports so items remain at crate::platform::*
 // ---------------------------------------------------------------------------
@@ -81,6 +83,18 @@ pub fn parse_uri_list(text: &str) -> Vec<String> {
             line.strip_prefix("file://").map(|p| p.to_owned())
         })
         .collect()
+}
+
+/// Extracts the `.app` bundle directory from a macOS executable path:
+/// `/Applications/Foo.app/Contents/MacOS/Foo` -> `/Applications/Foo.app`.
+/// Returns `None` when the path is not inside a `.app` bundle.
+pub fn macos_app_bundle_from_exe(exe_path: &str) -> Option<&Path> {
+    let exe = Path::new(exe_path);
+    let bundle = exe.parent()?.parent()?.parent()?;
+    bundle
+        .extension()
+        .is_some_and(|extension| extension == "app")
+        .then_some(bundle)
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +398,17 @@ mod tests {
         assert!(lock_path.exists());
         fs::remove_file(&lock_path).unwrap();
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn macos_app_bundle_extraction_walks_to_the_bundle() {
+        assert_eq!(
+            super::macos_app_bundle_from_exe("/Applications/Foo.app/Contents/MacOS/Foo"),
+            Some(Path::new("/Applications/Foo.app"))
+        );
+        // Not inside a .app bundle.
+        assert_eq!(super::macos_app_bundle_from_exe("/usr/bin/ls"), None);
+        assert_eq!(super::macos_app_bundle_from_exe("Foo"), None);
     }
 
     #[test]

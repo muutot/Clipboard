@@ -751,12 +751,8 @@ pub fn extract_app_icon(
         return Some(dest.to_string_lossy().to_string());
     }
 
-    // Walk up from exe_path to find the .app bundle
-    let exe = std::path::Path::new(exe_path);
-    let bundle = exe.parent()?.parent()?; // Contents/MacOS/exe -> Contents -> .app
-    if !bundle.extension().is_some_and(|ext| ext == "app") {
-        return None;
-    }
+    // Walk up from exe_path to find the .app bundle.
+    let bundle = crate::platform::macos_app_bundle_from_exe(exe_path)?;
 
     // Read CFBundleIconFile from Info.plist via plutil
     let info_plist = bundle.join("Contents/Info.plist");
