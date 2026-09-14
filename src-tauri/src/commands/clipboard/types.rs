@@ -35,7 +35,15 @@ pub struct SearchResultCache {
     inner: Mutex<Option<CachedSearchResult>>,
 }
 
-pub(crate) type CachedSearchResult = (String, Vec<SearchSortRule>, usize, Vec<ClipboardItem>);
+pub(crate) type CachedSearchResult = (String, Vec<SearchSortRule>, usize, i64, Vec<ClipboardItem>);
+
+/// Local calendar-day bucket. Relative date phrases ("今天", "本周", "本月")
+/// resolve against the local day, so a cached page must not survive a local
+/// midnight boundary.
+fn current_date_bucket() -> i64 {
+    use chrono::Datelike;
+    chrono::Local::now().date_naive().num_days_from_ce() as i64
+}
 
 impl Default for SearchResultCache {
     fn default() -> Self {
@@ -59,8 +67,13 @@ impl SearchResultCache {
         limit: usize,
     ) -> Option<Vec<ClipboardItem>> {
         let cache = self.inner.lock().ok()?;
-        let (cached_query, cached_rules, cached_max, cached_items) = cache.as_ref()?;
-        if cached_query != query || cached_rules != rules || *cached_max < max_results {
+        let (cached_query, cached_rules, cached_max, cached_bucket, cached_items) =
+            cache.as_ref()?;
+        if cached_query != query
+            || cached_rules != rules
+            || *cached_max < max_results
+            || *cached_bucket != current_date_bucket()
+        {
             return None;
         }
         let total = cached_items.len();
@@ -79,7 +92,7 @@ impl SearchResultCache {
         items: Vec<ClipboardItem>,
     ) {
         if let Ok(mut cache) = self.inner.lock() {
-            *cache = Some((query, rules, max_results, items));
+            *cache = Some((query, rules, max_results, current_date_bucket(), items));
         }
     }
 

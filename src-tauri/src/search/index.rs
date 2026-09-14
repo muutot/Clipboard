@@ -24,6 +24,10 @@ use super::{
 
 const INDEX_WRITER_MEMORY_BYTES: usize = 60_000_000;
 
+/// Cached `search_all_ids` snapshot: `(normalized query, max_results, date
+/// range, ids)`.
+type CachedIdSnapshot = (String, usize, Option<(i64, i64)>, Vec<String>);
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchHit {
     pub item_id: String,
@@ -45,7 +49,10 @@ pub struct SearchIndex {
     reader: IndexReader,
     layout: Option<SearchIndexLayout>,
     rebuild_required: AtomicBool,
-    cached_ids: Mutex<Option<(String, usize, Vec<String>)>>,
+    /// The date range is part of the key because relative phrases like "今天"
+    /// resolve against `Local::now()`; without it a query cached before
+    /// midnight would serve yesterday's range after midnight.
+    cached_ids: Mutex<Option<CachedIdSnapshot>>,
     /// Bumped whenever the cached id snapshot is invalidated. A concurrent
     /// `search_all_ids` computes against the reader it captured and only
     /// repopulates the cache when this is unchanged, so a write cannot be
@@ -266,29 +273,32 @@ impl SearchIndex {
     ) -> Result<(Vec<String>, usize), SearchError> {
         let generation = self.cache_generation.load(Ordering::Acquire);
         let normalized = input.trim().to_owned();
+        let query = SearchQuery::parse(input);
+        let ngrams = query.required_ngrams();
+        let date_range = query.date_range();
         {
             let cache = self
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            if let Some((ref cached_query, cached_max, ref ids)) = *cache {
-                if cached_query.as_str() == normalized.as_str() && cached_max >= max_results {
+            if let Some((ref cached_query, cached_max, cached_range, ref ids)) = *cache {
+                if cached_query.as_str() == normalized.as_str()
+                    && cached_max >= max_results
+                    && cached_range == date_range
+                {
                     let total = ids.len();
                     return Ok((ids[..max_results.min(total)].to_vec(), total));
                 }
             }
         }
 
-        let query = SearchQuery::parse(input);
-        let ngrams = query.required_ngrams();
-        let date_range = query.date_range();
         if ngrams.is_empty() && date_range.is_none() {
             let mut cache = self
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
             if self.cache_generation.load(Ordering::Acquire) == generation {
-                *cache = Some((normalized, max_results, Vec::new()));
+                *cache = Some((normalized, max_results, date_range, Vec::new()));
             }
             return Ok((Vec::new(), 0));
         }
@@ -337,7 +347,7 @@ impl SearchIndex {
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
             if self.cache_generation.load(Ordering::Acquire) == generation {
-                *cache = Some((normalized, max_results, ids.clone()));
+                *cache = Some((normalized, max_results, date_range, ids.clone()));
             }
         }
 

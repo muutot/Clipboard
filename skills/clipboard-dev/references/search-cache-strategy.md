@@ -8,10 +8,10 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 ## Backend Tantivy ID cache
 
-`SearchIndex` stores `cached_ids: Mutex<Option<(String, usize, Vec<String>)>>`.
+`SearchIndex` stores `cached_ids: Mutex<Option<(String, usize, Option<(i64, i64)>, Vec<String>)>>`.
 
-- Key: normalized query plus requested `max_results`.
-- Hit: query matches and cached maximum is at least the new maximum; return only the requested prefix while retaining the cached total.
+- Key: normalized query plus requested `max_results` plus the resolved date range.
+- Hit: query matches, cached maximum is at least the new maximum, and the resolved date range matches; return only the requested prefix while retaining the cached total. The date range is part of the key because relative phrases ("今天", "本周", "本月") resolve against `Local::now()`; without it a cache entry created before midnight would serve yesterday's range after midnight.
 - Miss: query differs or requested maximum grows; run Tantivy again and replace the cache.
 - Empty query stores/returns an empty ID set.
 - `apply_changes()` clears cached IDs after index mutations and reloads the reader, so a subsequent search reflects the commit without callers having to reload explicitly.
@@ -20,7 +20,7 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 ## Backend SearchResultCache
 
-`SearchResultCache` in `src-tauri/src/commands/clipboard/types.rs` stores fully-sorted, fetched `ClipboardItem` results keyed by `(query, sort_rules, max_results)`.
+`SearchResultCache` in `src-tauri/src/commands/clipboard/types.rs` stores fully-sorted, fetched `ClipboardItem` results keyed by `(query, sort_rules, max_results, local_date_bucket)`. The local calendar-day bucket invalidates the cache at the next local midnight so relative-date queries cannot serve a stale range.
 
 - Hit: slice `[offset..offset+limit]` directly from the cached vector; no DB or index access needed.
 - Miss: re-run the full search pipeline (Tantivy → SQL fetch → sort) and cache the result.
