@@ -146,29 +146,38 @@
     return restoreFocus;
   });
 
+  // Depend only on the item id/kind values, through `$derived`: reading the
+  // `item` prop directly registers a reference-granular dependency, and every
+  // OCR patch replaces the object (even when the status is unchanged), which
+  // re-ran the polling effect, reset `requestInFlight`, and fired an immediate
+  // poll — an IPC-speed busy poll. A `$derived` only invalidates downstream
+  // when the value itself changes.
+  const polledItemId = $derived(item?.id ?? null);
+  const polledItemKind = $derived(item?.kind ?? null);
+
   $effect(() => {
-    // Depend only on the item id/kind. Depending on the whole `item` object
-    // re-ran this effect on every OCR patch (each patch creates a new object),
-    // which reset `requestInFlight` and fired an immediate poll, turning the
-    // 2 s interval into an IPC-speed busy poll. `untrack` reads the latest
-    // status inside the poll without registering a dependency.
-    const itemId = item?.id;
-    const itemKind = item?.kind;
+    const itemId = polledItemId;
+    const itemKind = polledItemKind;
     if (itemKind !== "image" || !itemId || !isTauriRuntime()) return;
 
     let disposed = false;
     let requestInFlight = false;
     const poll = () => {
       if (disposed || requestInFlight) return;
-      const current = untrack(() => item);
-      if (
-        !current ||
-        current.id !== itemId ||
-        current.ocrStatus === "completed" ||
-        current.ocrStatus === "failed" ||
-        current.ocrStatus === "none"
-      )
-        return;
+      // The staleness check reads `item` and `ocrStatus`; keep those reads out
+      // of the effect's dependency set (the first synchronous `poll()` below
+      // runs inside the tracked phase).
+      const stale = untrack(() => {
+        const current = item;
+        return (
+          !current ||
+          current.id !== itemId ||
+          current.ocrStatus === "completed" ||
+          current.ocrStatus === "failed" ||
+          current.ocrStatus === "none"
+        );
+      });
+      if (stale) return;
 
       requestInFlight = true;
       invoke<{
