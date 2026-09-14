@@ -196,15 +196,33 @@ impl SearchSyncWorker {
             .name("search-sync".to_owned())
             .spawn(move || {
                 while !worker_stop_flag.load(Ordering::Relaxed) {
-                    let pending = database.has_pending_outbox_events().unwrap_or(true);
-                    if pending {
-                        match synchronizer.sync_until_idle(&database, &index) {
-                            Ok(summary) if summary.processed_events > 0 => {
-                                on_changes_applied();
-                            }
+                    if index.requires_full_rebuild() {
+                        // The startup `initialize` rebuild is best-effort; if it
+                        // failed (or the index was flagged mid-session) the
+                        // worker must retry it, otherwise the index stays
+                        // incomplete for the whole session.
+                        match synchronizer.rebuild(&database, &index) {
+                            Ok(summary) if summary.processed_events > 0 => on_changes_applied(),
                             Ok(_) => {}
                             Err(error) => {
-                                crate::log_event!("[search-sync] background drain failed: {error}");
+                                crate::log_event!(
+                                    "[search-sync] background rebuild failed: {error}"
+                                );
+                            }
+                        }
+                    } else {
+                        let pending = database.has_pending_outbox_events().unwrap_or(true);
+                        if pending {
+                            match synchronizer.sync_until_idle(&database, &index) {
+                                Ok(summary) if summary.processed_events > 0 => {
+                                    on_changes_applied();
+                                }
+                                Ok(_) => {}
+                                Err(error) => {
+                                    crate::log_event!(
+                                        "[search-sync] background drain failed: {error}"
+                                    );
+                                }
                             }
                         }
                     }
@@ -456,5 +474,39 @@ mod tests {
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
         let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+    }
+
+    #[test]
+    fn background_worker_performs_a_required_full_rebuild() {
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&item("pre", "重建前存在")).unwrap();
+        let index = Arc::new(SearchIndex::in_memory().unwrap());
+        // Simulate a failed startup initialize: the manifest flags a rebuild
+        // but the index is empty.
+        index.begin_full_rebuild().unwrap();
+        assert!(index.requires_full_rebuild());
+        assert!(index.search("重建", 20).unwrap().is_empty());
+
+        let mut worker = SearchSyncWorker::start(
+            database,
+            index.clone(),
+            Duration::from_millis(20),
+            Arc::new(|| {}),
+        )
+        .unwrap();
+
+        for _ in 0..100 {
+            if index.search("重建", 20).unwrap().len() == 1 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(index.search("重建", 20).unwrap().len(), 1);
+        assert!(!index.requires_full_rebuild());
+        worker.stop();
     }
 }

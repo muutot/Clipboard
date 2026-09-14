@@ -247,6 +247,68 @@ fn validate_replace_source(source: &std::path::Path) -> Result<(), String> {
 // reachable from the webview) was removed: it had no frontend caller and was
 // an arbitrary-file-copy primitive. `replace_icon_file` is the constrained
 // replacement for the one legitimate use case.
+//
+// `save_clipboard_item_file` is the constrained replacement for the "Save As"
+// flow: the webview passes only the item id and a user-chosen destination, and
+// the source is resolved from the stored record and required to live under an
+// owned resource root.
+
+/// Resolves a stored resource reference to an existing file that is inside an
+/// owned image/file root. Absolute stored paths are canonicalized and checked
+/// against both roots; relative references are resolved against them first.
+fn managed_source_path(paths: &StoragePaths, stored: &str) -> Result<std::path::PathBuf, String> {
+    let raw = std::path::Path::new(stored);
+    let resolved = if raw.is_absolute() {
+        raw.to_path_buf()
+    } else {
+        [&paths.images, &paths.files, &paths.storage]
+            .iter()
+            .map(|root| root.join(raw))
+            .find(|candidate| candidate.is_file())
+            .ok_or_else(|| "clipboard item resource was not found".to_string())?
+    };
+    let canonical = std::fs::canonicalize(&resolved)
+        .map_err(|_| "clipboard item resource was not found".to_string())?;
+    let inside_managed_root = [&paths.images, &paths.files].iter().any(|root| {
+        std::fs::canonicalize(root)
+            .map(|root| canonical.starts_with(&root))
+            .unwrap_or(false)
+    });
+    if !inside_managed_root {
+        return Err("clipboard item resource is outside managed storage".to_string());
+    }
+    Ok(canonical)
+}
+
+#[tauri::command]
+pub fn save_clipboard_item_file(
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+    id: String,
+    dst: String,
+) -> Result<(), String> {
+    let item = database
+        .get_item(&id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "clipboard item not found".to_string())?;
+    let source = item
+        .resource_path
+        .ok_or_else(|| "clipboard item has no file resource".to_string())?;
+    let source_path = managed_source_path(paths.inner(), &source)?;
+    let destination = std::path::Path::new(&dst);
+    if !destination.is_absolute() {
+        return Err("destination must be an absolute path".to_string());
+    }
+    if destination.is_dir() {
+        return Err("destination is a directory".to_string());
+    }
+    if destination == source_path {
+        return Ok(());
+    }
+    std::fs::copy(&source_path, destination)
+        .map_err(|error| format!("failed to save file: {error}"))?;
+    Ok(())
+}
 
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
@@ -257,7 +319,9 @@ pub fn open_external_url(url: String) -> Result<(), String> {
     // RFC 3986 schemes are case-insensitive; accept any casing but still
     // require an http(s) scheme.
     let scheme_ok = ["http://", "https://"].iter().any(|scheme| {
-        trimmed.len() >= scheme.len() && trimmed[..scheme.len()].eq_ignore_ascii_case(scheme)
+        trimmed
+            .get(..scheme.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
     });
     if !scheme_ok {
         return Err("only http(s) URLs can be opened".to_string());
@@ -365,6 +429,58 @@ mod tests {
         let err = validate_replace_source(&dir.join("big.png")).unwrap_err();
         assert!(err.contains("10 MiB"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn save_file_test_project(label: &str) -> std::path::PathBuf {
+        let project =
+            std::env::temp_dir().join(format!("save-file-test-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&project);
+        project
+    }
+
+    #[test]
+    fn managed_source_path_accepts_a_file_under_the_image_root() {
+        let project = save_file_test_project("ok");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        touch(&paths.images, "a.png", b"img");
+
+        let resolved =
+            managed_source_path(&paths, &paths.images.join("a.png").to_string_lossy()).unwrap();
+
+        assert_eq!(resolved.file_name().unwrap(), "a.png");
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn managed_source_path_rejects_a_file_outside_managed_roots() {
+        let project = save_file_test_project("outside");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        touch(&project, "secret.txt", b"secret");
+
+        let err =
+            managed_source_path(&paths, &project.join("secret.txt").to_string_lossy()).unwrap_err();
+
+        assert!(err.contains("outside managed storage"), "{err}");
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn managed_source_path_rejects_a_missing_file() {
+        let project = save_file_test_project("missing");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+
+        let err = managed_source_path(&paths, "does-not-exist.png").unwrap_err();
+
+        assert!(err.contains("not found"), "{err}");
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn open_external_url_rejects_multibyte_text_without_panicking() {
+        // 9 bytes with char boundaries at 0/3/6/9: slicing at byte 7 would
+        // panic, so the scheme check must use a char-boundary-safe accessor.
+        assert!(open_external_url("中中中".to_owned()).is_err());
+        assert!(open_external_url("javascript:alert(1)".to_owned()).is_err());
     }
 
     #[test]

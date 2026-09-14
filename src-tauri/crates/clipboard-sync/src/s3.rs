@@ -623,6 +623,7 @@ pub fn put_s3_object(
     let client = shared_client()?;
     let (scheme, host) = parse_endpoint(endpoint);
     let content_md5 = content_md5_base64(&data);
+    let payload_len = data.len() as u64;
     let mut extra_headers = vec![
         ("content-type", "application/octet-stream"),
         ("content-md5", content_md5.as_str()),
@@ -646,6 +647,7 @@ pub fn put_s3_object(
         extra_headers: &extra_headers,
     };
     let resp = signed_request(&client, &req)?
+        .timeout(streaming_timeout(payload_len))
         .body(data)
         .send()
         .map_err(|e| format!("upload failed: {e}"))?;
@@ -768,6 +770,7 @@ pub fn get_s3_object(
         extra_headers: &[],
     };
     let resp = signed_request(&client, &req)?
+        .timeout(streaming_timeout(IN_MEMORY_OBJECT_MAX_BYTES))
         .send()
         .map_err(|e| format!("download failed: {e}"))?;
 
@@ -1112,6 +1115,13 @@ fn validate_payload_sha256(value: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Size budget used for in-memory (non-file-streamed) object transfers:
+/// segments and checkpoint/device pointers. They are metadata-only and small,
+/// but must not inherit the fixed 60 s shared-client timeout, or a slow link
+/// aborts a legitimate transfer that the size-scaled streaming paths would
+/// have completed.
+const IN_MEMORY_OBJECT_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 fn streaming_timeout(size_limit_bytes: u64) -> Duration {
     const ASSUMED_MIN_BYTES_PER_SECOND: u64 = 64 * 1024;

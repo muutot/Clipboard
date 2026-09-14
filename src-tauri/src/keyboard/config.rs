@@ -67,13 +67,21 @@ impl KeyboardConfigStore {
         let config_directory = project_directory.join(CONFIG_DIRECTORY_NAME);
         fs::create_dir_all(&config_directory)?;
         let path = config_directory.join(KEYBOARD_CONFIG_FILE_NAME);
-        let (mut config, merged_defaults) = if path.exists() {
-            let loaded: KeyboardConfig = serde_json::from_slice(&fs::read(&path)?)?;
-            merge_missing_default_actions(loaded)
+        let (config, merged_defaults) = if path.exists() {
+            match Self::load_and_validate(&path) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    // Mirror `ConfigStore::load`: a corrupt or schema-invalid
+                    // file must never make the app unlaunchable. Quarantine it
+                    // and continue from the bundled defaults instead of
+                    // propagating the error into the Tauri setup hook.
+                    Self::quarantine_corrupt(&config_directory, &path, &error);
+                    (KeyboardConfig::default(), false)
+                }
+            }
         } else {
             (KeyboardConfig::default(), false)
         };
-        normalize_and_validate(&mut config)?;
         let store = Self { path, config };
 
         if !store.path.exists() || merged_defaults {
@@ -81,6 +89,28 @@ impl KeyboardConfigStore {
         }
 
         Ok(store)
+    }
+
+    fn load_and_validate(path: &Path) -> Result<(KeyboardConfig, bool), StorageError> {
+        let loaded: KeyboardConfig = serde_json::from_slice(&fs::read(path)?)?;
+        let (mut config, merged_defaults) = merge_missing_default_actions(loaded);
+        normalize_and_validate(&mut config)?;
+        Ok((config, merged_defaults))
+    }
+
+    fn quarantine_corrupt(config_directory: &Path, path: &Path, error: &StorageError) {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        let quarantined =
+            config_directory.join(format!("{KEYBOARD_CONFIG_FILE_NAME}.corrupt-{stamp}"));
+        crate::log_event!(
+            "[keyboard] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
+            path.display(),
+            quarantined.display()
+        );
+        let _ = fs::rename(path, &quarantined);
     }
 
     pub fn path(&self) -> &Path {
@@ -98,6 +128,17 @@ impl KeyboardConfigStore {
     ) -> Result<Vec<String>, StorageError> {
         validate_action_name(&action)?;
         let normalized = normalize_shortcuts(&shortcuts)?;
+        // Reject a key that has no global-hotkey mapping up front instead of
+        // persisting it and dropping it silently during registration.
+        for shortcut in &normalized {
+            let binding = ShortcutBinding::from_str(shortcut)
+                .map_err(|error| StorageError::InvalidShortcut(error.to_string()))?;
+            if crate::platform::hotkey_common::hotkey_registration_identity(&binding).is_none() {
+                return Err(StorageError::InvalidShortcut(format!(
+                    "'{shortcut}' uses a key that cannot be registered as a global shortcut"
+                )));
+            }
+        }
         let mut updated = self.config.clone();
         updated.shortcuts.insert(action, normalized.clone());
         normalize_and_validate(&mut updated)?;
@@ -107,8 +148,12 @@ impl KeyboardConfigStore {
     }
 
     pub fn delete_action(&mut self, action: &str) -> Result<(), StorageError> {
+        // Store an explicit empty binding instead of removing the key. The
+        // load-time default merge treats an absent key as "this config predates
+        // the action" and re-adds the bundled default, so removing the key here
+        // would silently undo the deletion on the next launch.
         let mut updated = self.config.clone();
-        updated.shortcuts.remove(action);
+        updated.shortcuts.insert(action.to_owned(), Vec::new());
         normalize_and_validate(&mut updated)?;
         self.config = updated;
         self.save()?;
@@ -137,7 +182,7 @@ impl KeyboardConfigStore {
             file.write_all(&contents)?;
             file.sync_all()?;
             drop(file);
-            fs::rename(&temporary_path, &self.path)?;
+            crate::storage::replace_file(&temporary_path, &self.path)?;
             Ok(())
         })();
 
@@ -160,10 +205,9 @@ fn merge_missing_default_actions(mut config: KeyboardConfig) -> (KeyboardConfig,
         .shortcuts
         .values()
         .flatten()
-        .filter_map(|shortcut| {
-            ShortcutBinding::from_str(shortcut)
-                .ok()
-                .map(|binding| binding.canonical())
+        .filter_map(|shortcut| ShortcutBinding::from_str(shortcut).ok())
+        .filter_map(|binding| {
+            crate::platform::hotkey_common::hotkey_registration_identity(&binding)
         })
         .collect();
 
@@ -172,7 +216,14 @@ fn merge_missing_default_actions(mut config: KeyboardConfig) -> (KeyboardConfig,
         if chords.is_empty() || config.shortcuts.contains_key(&action) {
             continue;
         }
-        if chords.iter().any(|chord| taken.contains(chord)) {
+        if chords.iter().any(|chord| {
+            ShortcutBinding::from_str(chord)
+                .ok()
+                .and_then(|binding| {
+                    crate::platform::hotkey_common::hotkey_registration_identity(&binding)
+                })
+                .is_some_and(|identity| taken.contains(&identity))
+        }) {
             continue;
         }
         config.shortcuts.insert(action, chords);
@@ -189,7 +240,20 @@ fn normalize_and_validate(config: &mut KeyboardConfig) -> Result<(), StorageErro
         *shortcuts = normalize_shortcuts(shortcuts)?;
 
         for shortcut in shortcuts {
-            if let Some(existing_action) = owners.insert(shortcut.clone(), action.clone()) {
+            // Compare the resolved OS chord, not the spelling: `Ctrl+Esc` and
+            // `Ctrl+Escape` are different canonicals that register the same
+            // virtual key, so a string comparison would miss the collision.
+            let Some(identity) = ShortcutBinding::from_str(shortcut)
+                .ok()
+                .and_then(|binding| {
+                    crate::platform::hotkey_common::hotkey_registration_identity(&binding)
+                })
+            else {
+                // A key without a global-hotkey mapping is kept (older configs
+                // may contain one) but cannot collide with anything.
+                continue;
+            };
+            if let Some(existing_action) = owners.insert(identity, action.clone()) {
                 return Err(StorageError::ShortcutConflict {
                     shortcut: shortcut.clone(),
                     first_action: existing_action,
@@ -394,6 +458,107 @@ mod tests {
         assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+V"]);
         assert!(!store.config().shortcuts.contains_key("toggleFloatPanel"));
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn quarantines_an_unparsable_keyboard_config_instead_of_failing() {
+        let project = temporary_directory("corrupt-unparsable");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(config_directory.join("keyboard.json"), b"{ not valid json").unwrap();
+
+        let store = KeyboardConfigStore::load(&project)
+            .expect("an unparsable keyboard config must not abort startup");
+
+        assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+C"]);
+        assert_eq!(quarantine_count(&config_directory), 1);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn quarantines_a_wrong_shape_keyboard_config_instead_of_failing() {
+        let project = temporary_directory("corrupt-shape");
+        let config_directory = project.join("conf");
+        fs::create_dir_all(&config_directory).unwrap();
+        fs::write(
+            config_directory.join("keyboard.json"),
+            serde_json::to_vec_pretty(&json!({
+                "shortcuts": { "toggleWindow": "Alt+C" }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let store = KeyboardConfigStore::load(&project)
+            .expect("a wrong-shape keyboard config must not abort startup");
+
+        assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+C"]);
+        assert_eq!(quarantine_count(&config_directory), 1);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn deleting_an_action_is_not_undone_by_the_default_merge() {
+        let project = temporary_directory("delete-action");
+        let mut store = KeyboardConfigStore::load(&project).unwrap();
+        assert_eq!(store.config().shortcuts["toggleWindow"], vec!["Alt+C"]);
+
+        store.delete_action("toggleWindow").unwrap();
+        let reopened = KeyboardConfigStore::load(&project).unwrap();
+
+        assert_eq!(
+            reopened.config().shortcuts["toggleWindow"],
+            Vec::<String>::new()
+        );
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn rejects_alias_collisions_that_map_to_the_same_os_chord() {
+        let project = temporary_directory("alias-collision");
+        let mut store = KeyboardConfigStore::load(&project).unwrap();
+        store
+            .set_action_shortcuts("toggleWindow".to_owned(), vec!["Ctrl+Esc".to_owned()])
+            .unwrap();
+
+        let error = store
+            .set_action_shortcuts("quickPaste".to_owned(), vec!["Ctrl+Escape".to_owned()])
+            .unwrap_err();
+
+        assert!(
+            matches!(error, StorageError::ShortcutConflict { .. }),
+            "{error:?}"
+        );
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_key_without_a_global_hotkey_mapping() {
+        let project = temporary_directory("unsupported-key");
+        let mut store = KeyboardConfigStore::load(&project).unwrap();
+
+        let error = store
+            .set_action_shortcuts("toggleWindow".to_owned(), vec!["Ctrl+,".to_owned()])
+            .unwrap_err();
+
+        assert!(
+            matches!(error, StorageError::InvalidShortcut(_)),
+            "{error:?}"
+        );
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    fn quarantine_count(config_directory: &std::path::Path) -> usize {
+        fs::read_dir(config_directory)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("keyboard.json.corrupt-")
+            })
+            .count()
     }
 
     fn temporary_directory(label: &str) -> std::path::PathBuf {

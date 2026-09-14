@@ -133,7 +133,10 @@
   );
 
   function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
-    const original = items.find((i) => i.id === id);
+    // Resolve across every copy: a search result can live only in
+    // `indexedItems`/`searchCache` while the loaded history page is `items`.
+    // Looking in `items` alone silently no-ops every action on such a row.
+    const original = findLoadedItem(id);
     if (!original) return false;
     applyItemPatches(new Map([[id, mutator(original)]]));
     return true;
@@ -230,6 +233,9 @@
   let indexedQuery = $state("");
   let searchPending = $state(false);
   let searchRequestId = 0;
+  // Bumped by `clipboard-history-invalidated` to re-run the search effect;
+  // cancelling the in-flight request alone left the panel with no results.
+  let searchEpoch = $state(0);
   let searchHasMore = $state(false);
   let searchLoading = $state(false);
   let searchOffset = $state(0);
@@ -250,6 +256,9 @@
   let sourceApps = $state<string[]>([]);
 
   let detailItem = $state<ClipboardItem | null>(null);
+  // Guards the async materialization in `openDetail`: a late result must not
+  // reopen a panel the user already closed or replaced with another item.
+  let detailRequestId = 0;
 
   let fullscreenFilePath = $state<string | null>(null);
   let fullscreenOpacity = $state(0.92);
@@ -574,6 +583,7 @@
     const requestedQuery = query.trim();
     const requestedPageSize = $generalSettings.display.searchPageSize;
     const requestedSortRules = $generalSettings.searchSortRules;
+    const requestedEpoch = searchEpoch;
     const requestId = ++searchRequestId;
     searchLoadRequestId += 1;
     searchLoading = false;
@@ -605,7 +615,8 @@
     const timer = window.setTimeout(() => {
       void searchClipboardHistory(requestedQuery, requestedPageSize, 0, requestedSortRules)
         .then((results) => {
-          if (requestId !== searchRequestId || results === null) return;
+          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || results === null)
+            return;
           indexedItems = results;
           indexedQuery = requestedQuery;
           searchOffset = results.length;
@@ -674,8 +685,14 @@
         if (status) {
           iconsDir.set(status.iconsDir);
         }
-        return loadActiveHistoryPage();
       })
+      .catch((error) => {
+        console.error("Unable to load storage status", error);
+      });
+
+    // Load history independently of the storage-status probe: a transient
+    // status failure must not leave the whole list empty.
+    void loadActiveHistoryPage()
       .then(() => {
         if (items.length === 0) return;
         selectedId = items[0]?.id ?? "";
@@ -749,7 +766,10 @@
         }
         items = items.filter((item) => !removedIds.has(item.id));
         if (indexedItems) indexedItems = indexedItems.filter((item) => !removedIds.has(item.id));
-        searchRequestId += 1;
+        // Re-run the search effect instead of only cancelling the in-flight
+        // request; otherwise a search that lands during this event is dropped
+        // and never retried.
+        searchEpoch += 1;
         searchPending = false;
         selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
         if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
@@ -1014,7 +1034,11 @@
         return;
       }
 
-      indexedItems = [...(indexedItems ?? []), ...results];
+      // OFFSET pagination can replay a row after an out-of-band insertion;
+      // drop ids already loaded so the keyed each never sees a duplicate key.
+      const knownIds = new Set((indexedItems ?? []).map((item) => item.id));
+      const freshResults = results.filter((item) => !knownIds.has(item.id));
+      indexedItems = [...(indexedItems ?? []), ...freshResults];
       searchOffset += results.length;
       searchHasMore = results.length === $generalSettings.display.searchPageSize;
       updateSearchCache(results);
@@ -1144,11 +1168,22 @@
           el.setSelectionRange(query.length, query.length);
         });
         break;
-      case "move-index":
+      case "move-index": {
+        const count = searchOptions.length;
+        if (count === 0) {
+          searchSuggestionIndex = -1;
+          break;
+        }
+        // From "nothing selected" (-1), ArrowUp must land on the last option
+        // and ArrowDown on the first; the plain modulo skipped the last one.
         searchSuggestionIndex =
-          (searchSuggestionIndex + resolved.action.delta + searchOptions.length) %
-          searchOptions.length;
+          searchSuggestionIndex < 0
+            ? resolved.action.delta < 0
+              ? count - 1
+              : 0
+            : (searchSuggestionIndex + resolved.action.delta + count) % count;
         break;
+      }
       case "commit-query":
         commitSearchQuery();
         break;
@@ -1296,8 +1331,21 @@
       });
   }
 
+  /// Re-adds an optimistically removed row after a failed hard/permanent
+  /// delete without replacing the whole array, so rows captured during the
+  /// request survive.
+  function reinsertItem(item: ClipboardItem, wasSelected: boolean) {
+    if (!items.some((entry) => entry.id === item.id)) {
+      items = [item, ...items];
+    }
+    if (indexedItems && !indexedItems.some((entry) => entry.id === item.id)) {
+      indexedItems = [item, ...indexedItems];
+    }
+    if (wasSelected) selectedIds = new Set([...selectedIds, item.id]);
+  }
+
   function deleteItem(id: string) {
-    const item = items.find((i) => i.id === id);
+    const item = findLoadedItem(id);
     if (item?.deleted) {
       permanentlyDeleteItem(id);
       return;
@@ -1307,10 +1355,7 @@
       return;
     }
 
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSelectedIds = new Set(selectedIds);
-
+    const wasSelected = selectedIds.has(id);
     deletedHistorySuppressedIds.delete(id);
     updateItem(id, () => ({ deleted: true }));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
@@ -1324,21 +1369,19 @@
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
-        selectedIds = previousSelectedIds;
+        // Undo only this row; restoring a whole-array snapshot would discard
+        // items captured while the delete was in flight.
+        revertItem(id, { deleted: false });
+        if (wasSelected) selectedIds = new Set([...selectedIds, id]);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
 
   function permanentlyDeleteItem(id: string) {
-    const target = items.find((item) => item.id === id);
+    const target = findLoadedItem(id);
     if (!target) return;
 
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSelectedIds = new Set(selectedIds);
-
+    const wasSelected = selectedIds.has(id);
     addSuppressedId(id);
     items = items.filter((item) => item.id !== id);
     if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
@@ -1353,9 +1396,7 @@
       .catch((error) => {
         console.error("Unable to permanently delete clipboard item", error);
         deletedHistorySuppressedIds.delete(id);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
-        selectedIds = previousSelectedIds;
+        reinsertItem(target, wasSelected);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1364,13 +1405,10 @@
   // permanent-delete command intentionally accepts only already deleted
   // rows, while this path handles active rows when the feature is disabled.
   function hardDeleteItem(id: string) {
-    const target = items.find((item) => item.id === id);
+    const target = findLoadedItem(id);
     if (!target) return;
 
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSelectedIds = new Set(selectedIds);
-
+    const wasSelected = selectedIds.has(id);
     items = items.filter((item) => item.id !== id);
     if (indexedItems) indexedItems = indexedItems.filter((item) => item.id !== id);
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
@@ -1383,19 +1421,14 @@
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
-        selectedIds = previousSelectedIds;
+        reinsertItem(target, wasSelected);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
 
   function restoreItem(id: string) {
-    const target = items.find((item) => item.id === id);
+    const target = findLoadedItem(id);
     if (!target?.deleted) return;
-
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
 
     addSuppressedId(id);
     updateItem(id, () => ({ deleted: false }));
@@ -1409,8 +1442,7 @@
       .catch((error) => {
         console.error("Unable to restore clipboard item", error);
         deletedHistorySuppressedIds.delete(id);
-        items = previousItems;
-        indexedItems = previousIndexedItems;
+        revertItem(id, { deleted: true });
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1435,10 +1467,14 @@
   async function openDetail(id: string) {
     const item = findLoadedItem(id);
     if (!item) return;
+    const requestId = ++detailRequestId;
     detailItem = item;
     if (item.kind === "image" || item.kind === "file") {
       try {
-        detailItem = await ensureItemMaterialized(item);
+        const materialized = await ensureItemMaterialized(item);
+        if (requestId === detailRequestId && detailItem?.id === id) {
+          detailItem = materialized;
+        }
       } catch (error) {
         console.error("Unable to materialize clipboard item for detail", error);
       }
@@ -1478,6 +1514,7 @@
   }
 
   function closeDetail() {
+    detailRequestId += 1;
     detailItem = null;
     void tick().then(() => {
       const el = document.querySelector(`[data-id="${selectedId}"]`);
@@ -1553,10 +1590,16 @@
   }
 
   function renameTitle(id: string, title: string) {
+    const item = findLoadedItem(id);
+    if (!item) return;
+    const previousTitle = item.title;
+    const previousCustomTitle = item.customTitle;
     updateItem(id, () => ({ title, customTitle: true }));
-    invoke("rename_item", { id, newName: title }).catch((err) =>
-      console.error("Rename item failed:", err),
-    );
+    invoke("rename_item", { id, newName: title }).catch((err) => {
+      console.error("Rename item failed:", err);
+      revertItem(id, { title: previousTitle, customTitle: previousCustomTitle });
+      showToast(_t("toast.saveFailed"), "error");
+    });
   }
 
   function toggleTagFilter(tag: string) {
@@ -1585,19 +1628,27 @@
   }
 
   async function saveTags(id: string, tags: string[]) {
+    const item = findLoadedItem(id);
+    if (!item) return;
+    const previousTags = item.tags ?? [];
     const deduped = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
     // updateItem fans the patch out to items, indexedItems, searchCache, and
     // detailItem so no copy of the entry keeps stale tags.
     updateItem(id, () => ({ tags: deduped }));
-    const ok = await persistTags(id, deduped);
-    if (ok === false) {
+    try {
+      const ok = await persistTags(id, deduped);
+      if (ok === false) throw new Error("record not found");
+    } catch (error) {
+      console.error("Unable to save tags", error);
+      revertItem(id, { tags: previousTags });
       showToast(_t("toast.saveFailed"), "error");
+      return;
     }
     refreshTagColors();
   }
 
   async function plainPaste(_id: string) {
-    const item = items.find((i) => i.id === _id);
+    const item = findLoadedItem(_id);
     if (!item) return;
     await pasteClipboardItem(item, "plain", {
       moveToTop: (mid) => moveToTop(mid),
@@ -1605,7 +1656,7 @@
   }
 
   async function formatPaste(_id: string) {
-    const item = items.find((i) => i.id === _id);
+    const item = findLoadedItem(_id);
     if (!item || !item.htmlContent) return;
     await pasteClipboardItem(item, "format", {
       moveToTop: (mid) => moveToTop(mid),
@@ -1613,7 +1664,7 @@
   }
 
   async function cleanPaste(_id: string) {
-    const item = items.find((i) => i.id === _id);
+    const item = findLoadedItem(_id);
     if (!item) return;
     await pasteClipboardItem(item, "clean", {
       moveToTop: (mid) => moveToTop(mid),
@@ -1685,7 +1736,7 @@
       const filters = ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [];
       const filePath = await save({ defaultPath: defaultName, filters });
       if (filePath) {
-        await invoke("copy_file_to", { src: item.resourcePath, dst: filePath });
+        await invoke("save_clipboard_item_file", { id, dst: filePath });
         showToast(_t("card.saveAs"), "success");
       }
     } catch (error) {

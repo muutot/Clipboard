@@ -16,6 +16,7 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 - Empty query stores/returns an empty ID set.
 - `apply_changes()` clears cached IDs after index mutations and reloads the reader, so a subsequent search reflects the commit without callers having to reload explicitly.
 - `begin_full_rebuild()` clears cached IDs before rebuild.
+- `clear_cached_ids()` bumps an internal generation counter. A concurrent `search_all_ids` captures the generation before it reads and only repopulates the cache when the generation is still unchanged, so a write cannot be followed by a stale id list; both `apply_changes()` and `begin_full_rebuild()` clear again after the reader reload to drop a snapshot stored during the commit window.
 
 ## Backend SearchResultCache
 
@@ -37,7 +38,7 @@ The capture thread and other mutation commands write to SQLite (triggering `sear
   - Empty outbox: one cheap `SELECT ... LIMIT` and no reader reload; the result cache is preserved so pagination stays a hit.
   - Pending events: Tantivy is updated, `cached_ids` is cleared by `apply_changes`, and the result cache is cleared so the re-query reflects newly captured or mutated items.
   - Sync failure is logged and swallowed so a broken index does not block search; results may be stale until the next successful sync or rebuild.
-- `"background"`: a `SearchSyncWorker` started at app startup owns a dedicated database connection and polls the outbox every 500 ms, applying changes via the same `SearchSynchronizer`. The search command skips the blocking drain entirely (no outbox probe), so capture-heavy workloads do not add latency to the search hot path. The worker clears the `SearchResultCache` through an `on_changes_applied` callback. Changing the mode requires a restart because the worker is only created at startup.
+- `"background"`: a `SearchSyncWorker` started at app startup owns a dedicated database connection and polls the outbox every 500 ms, applying changes via the same `SearchSynchronizer`. The search command skips the blocking drain entirely (no outbox probe), so capture-heavy workloads do not add latency to the search hot path. The worker clears the `SearchResultCache` through an `on_changes_applied` callback. It also retries a required full rebuild (`SearchIndex::requires_full_rebuild`) on each tick, so a failed startup `initialize` does not leave the index incomplete for the whole session. Changing the mode requires a restart because the worker is only created at startup.
 
 This is the only Tantivy search entry point; the CLI/local API uses SQLite scanning and is unaffected. Startup, `rebuild_search_index`, and storage-kind deletion still sync explicitly.
 
@@ -49,9 +50,10 @@ The main route debounces a first-page indexed search by 300 ms.
 
 - Queries shorter than two characters, empty queries, recycle-bin filtering, and recognized date queries do not use Tantivy.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
+- `searchEpoch` (bumped by the `clipboard-history-invalidated` listener) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
 - The same effect synchronously tracks `display.searchPageSize` and `searchSortRules`; either setting changing invalidates first-page and pagination request IDs before re-querying.
 - Successful first pages set `indexedItems`, `indexedQuery`, `searchOffset`, and `searchHasMore`.
-- `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination.
+- `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already present in `indexedItems` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
 - `searchHasMore` is inferred from a full page; an empty/short page ends pagination.
 
 When changing query, filter, sort, or mutation behavior, audit both first-page and pagination request IDs. A stale pagination response must never append to a newer query. Keep offset reset and result invalidation together.
@@ -84,7 +86,7 @@ Active history is backed by `created_at_ms DESC LIMIT/OFFSET`. A committed inser
 
 ## Mutation invalidation
 
-Single-entry patches MUST go through `updateItem`/`revertItem`, which delegate to `applyItemPatches` — the single funnel that maps a patch over `items`, `indexedItems`, `searchCache`, and `detailItem` in one pass per list (this funnel exists because a hand-rolled mapping loop once left `searchCache` with stale tags). Bulk mutations use the same helper or take full value snapshots of all four copies before mutating, and roll back all four on failure (see `bulkFavorite`). Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs and resets affected deleted-history pagination.
+Single-entry patches MUST go through `updateItem`/`revertItem`, which delegate to `applyItemPatches` — the single funnel that maps a patch over `items`, `indexedItems`, `searchCache`, and `detailItem` in one pass per list (this funnel exists because a hand-rolled mapping loop once left `searchCache` with stale tags). `updateItem` resolves the original through `findLoadedItem` (all four copies), not `items` alone: a search result can live only in `indexedItems`/`searchCache` while the loaded history page is `items`, and resolving against `items` silently no-ops the action. Bulk mutations use the same helper or take full value snapshots of all four copies before mutating, and roll back all four on failure (see `bulkFavorite`). Single-row delete/restore failures revert only the affected row (a patch or a targeted re-insert), never a whole-array snapshot, so rows captured during the request are not discarded. Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs, bumps `searchEpoch`, and resets affected deleted-history pagination.
 
 Search index freshness still depends on SQLite outbox synchronization. When adding a mutation:
 

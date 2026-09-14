@@ -4,6 +4,18 @@ use crate::state::CaptureState;
 use tauri::Manager;
 
 pub fn stop_runtime_services(app: &tauri::AppHandle) {
+    // Stop the auto-sync worker first: it is a background writer that owns an
+    // AppHandle and writes both SQLite and S3, so anything it commits after a
+    // storage snapshot would be lost, and it must not resolve managed state
+    // after teardown. Joining here guarantees no in-flight run outlives the
+    // stop call.
+    if let Some(worker) = app.try_state::<Mutex<crate::commands::sync::AutoSyncWorker>>() {
+        match worker.lock() {
+            Ok(mut worker) => worker.stop(),
+            Err(_) => crate::log_event!("[shutdown] auto-sync worker lock is poisoned"),
+        }
+    }
+
     if let Some(cleanup) = app.try_state::<Mutex<crate::CleanupWorker>>() {
         match cleanup.lock() {
             Ok(cleanup) => cleanup.stop(),

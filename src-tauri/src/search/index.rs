@@ -2,7 +2,7 @@ use std::{
     ops::Bound,
     path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Mutex,
     },
 };
@@ -46,6 +46,11 @@ pub struct SearchIndex {
     layout: Option<SearchIndexLayout>,
     rebuild_required: AtomicBool,
     cached_ids: Mutex<Option<(String, usize, Vec<String>)>>,
+    /// Bumped whenever the cached id snapshot is invalidated. A concurrent
+    /// `search_all_ids` computes against the reader it captured and only
+    /// repopulates the cache when this is unchanged, so a write cannot be
+    /// followed by a stale id list.
+    cache_generation: AtomicU64,
 }
 
 impl SearchIndex {
@@ -130,6 +135,9 @@ impl SearchIndex {
         writer.commit()?;
         drop(writer);
         self.reader.reload()?;
+        // Re-invalidate after the reload so a snapshot stored during the
+        // rebuild window cannot survive.
+        self.clear_cached_ids();
         self.rebuild_required.store(true, Ordering::Release);
         Ok(())
     }
@@ -179,6 +187,9 @@ impl SearchIndex {
 
         drop(writer);
         self.reader.reload()?;
+        // Re-invalidate after the reload so a snapshot stored during the
+        // commit window cannot survive as a stale id list.
+        self.clear_cached_ids();
         Ok(())
     }
 
@@ -253,6 +264,7 @@ impl SearchIndex {
         input: &str,
         max_results: usize,
     ) -> Result<(Vec<String>, usize), SearchError> {
+        let generation = self.cache_generation.load(Ordering::Acquire);
         let normalized = input.trim().to_owned();
         {
             let cache = self
@@ -275,7 +287,9 @@ impl SearchIndex {
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            *cache = Some((normalized, max_results, Vec::new()));
+            if self.cache_generation.load(Ordering::Acquire) == generation {
+                *cache = Some((normalized, max_results, Vec::new()));
+            }
             return Ok((Vec::new(), 0));
         }
 
@@ -322,14 +336,19 @@ impl SearchIndex {
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            *cache = Some((normalized, max_results, ids.clone()));
+            if self.cache_generation.load(Ordering::Acquire) == generation {
+                *cache = Some((normalized, max_results, ids.clone()));
+            }
         }
 
         Ok((ids, total))
     }
 
-    /// Drops the cached id snapshot so the next sweep repopulates it.
+    /// Drops the cached id snapshot so the next sweep repopulates it, and
+    /// invalidates any concurrent computation that started against the old
+    /// reader.
     pub fn clear_cached_ids(&self) {
+        self.cache_generation.fetch_add(1, Ordering::AcqRel);
         if let Ok(mut cache) = self.cached_ids.lock() {
             *cache = None;
         }
@@ -358,6 +377,7 @@ impl SearchIndex {
             layout,
             rebuild_required: AtomicBool::new(rebuild_required),
             cached_ids: Mutex::new(None),
+            cache_generation: AtomicU64::new(0),
         })
     }
 

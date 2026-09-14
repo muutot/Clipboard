@@ -10,7 +10,7 @@ pub use super::cleanup::{
 };
 pub use super::files::{
     delete_icon_files, list_icon_cache, open_external_url, replace_icon_file, reveal_in_explorer,
-    IconCacheEntry,
+    save_clipboard_item_file, IconCacheEntry,
 };
 pub use super::signal::{stop_signal_requested, wait_for_stop};
 

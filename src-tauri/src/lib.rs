@@ -295,6 +295,14 @@ pub fn run() {
             asset_scope
                 .allow_directory(&paths.storage, true)
                 .map_err(|error| -> String { format!("failed to grant asset access: {error}") })?;
+            // Custom image/file roots may live outside `storage`; grant them
+            // too or every preview/thumbnail/icon request for those records is
+            // rejected by the webview asset protocol.
+            for resource_root in [&paths.images, &paths.files] {
+                asset_scope
+                    .allow_directory(resource_root, true)
+                    .map_err(|error| -> String { format!("failed to grant asset access: {error}") })?;
+            }
             let recovery_report = recover_database_if_needed(&paths.database)?;
             if let Some(report) = &recovery_report {
                 crate::log_event!(
@@ -733,6 +741,7 @@ pub fn run() {
             mark_self_triggered_image,
             open_external_url,
             reveal_in_explorer,
+            save_clipboard_item_file,
             rename_item,
             update_clipboard_text,
             set_history_config,

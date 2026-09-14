@@ -29,6 +29,30 @@ fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem 
 }
 
 #[test]
+fn dedup_upsert_preserves_existing_tags() {
+    let database = Database::open_in_memory().unwrap();
+    let mut item = text_item("tagged", "hash-tagged", 100);
+    item.metadata_json = Some(r#"{"customTitle":true}"#.to_owned());
+    database.save_item(&item).unwrap();
+    database.set_tags("tagged", &["work".to_owned()]).unwrap();
+
+    // Re-save the same (kind, content_hash) with metadata that omits `tags`,
+    // exactly like a re-captured image/file. The upsert must merge rather than
+    // replace, or the tags silently disappear while `item_tags` keeps them.
+    let mut recapture = item.clone();
+    recapture.metadata_json = Some(r#"{"width":10}"#.to_owned());
+    database.save_item(&recapture).unwrap();
+
+    let stored = database.get_item("tagged").unwrap().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_str(stored.metadata_json.as_deref().unwrap()).unwrap();
+    assert_eq!(metadata.get("tags"), Some(&serde_json::json!(["work"])));
+    assert_eq!(metadata.get("width"), Some(&serde_json::json!(10)));
+    assert_eq!(metadata.get("customTitle"), Some(&serde_json::json!(true)));
+    assert_eq!(database.list_all_tags().unwrap()[0].name, "work");
+}
+
+#[test]
 fn saves_and_lists_items_by_recency() {
     let database = Database::open_in_memory().unwrap();
     database

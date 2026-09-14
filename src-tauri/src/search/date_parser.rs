@@ -70,7 +70,12 @@ fn local_midnight(dt: DateTime<Local>) -> i64 {
 
 /// `[start_ms, end_ms)` epoch-millisecond range for `period` in local time.
 fn period_range(period: DatePeriod) -> (i64, i64) {
-    let now = Local::now();
+    period_range_at(period, Local::now())
+}
+
+/// Same as [`period_range`] but with an explicit "now", so the boundary math can
+/// be unit-tested deterministically (month-end, leap years, DST).
+fn period_range_at(period: DatePeriod, now: DateTime<Local>) -> (i64, i64) {
     match period {
         DatePeriod::Today => {
             let start = local_midnight(now);
@@ -92,14 +97,15 @@ fn period_range(period: DatePeriod) -> (i64, i64) {
         }
         DatePeriod::ThisMonth => {
             let start = local_midnight(now.with_day(1).unwrap_or(now));
-            let next_month = if now.month() == 12 {
-                now.with_year(now.year() + 1)
-                    .and_then(|d| d.with_month(1))
-                    .unwrap_or(now)
-            } else {
-                now.with_month(now.month() + 1).unwrap_or(now)
-            };
-            let end = local_midnight(next_month);
+            // Anchor on the 1st, then jump past the current month and normalize
+            // back to day 1. Adding 31 days from the 1st always lands in the
+            // next month (every month has at most 31 days), so the exclusive
+            // end is the first instant of the following month regardless of the
+            // current day-of-month.
+            let first_of_next_month = (now.with_day(1).unwrap_or(now) + Duration::days(31))
+                .with_day(1)
+                .unwrap_or(now);
+            let end = local_midnight(first_of_next_month);
             (start, end)
         }
     }
@@ -172,5 +178,38 @@ mod tests {
         let (range, rest) = extract_date_range("本周 发票 本月");
         assert!(range.is_some());
         assert_eq!(rest, "发票");
+    }
+
+    fn local_dt(year: i32, month: u32, day: u32) -> DateTime<Local> {
+        Local
+            .with_ymd_and_hms(year, month, day, 12, 0, 0)
+            .single()
+            .expect("valid local date")
+    }
+
+    fn ymd(ms: i64) -> (i32, u32, u32) {
+        let dt = Local.timestamp_millis_opt(ms).single().unwrap();
+        (dt.year(), dt.month(), dt.day())
+    }
+
+    #[test]
+    fn this_month_ends_on_the_first_of_next_month() {
+        let (start, end) = period_range_at(DatePeriod::ThisMonth, local_dt(2026, 9, 14));
+        assert_eq!(ymd(start), (2026, 9, 1));
+        assert_eq!(ymd(end), (2026, 10, 1));
+    }
+
+    #[test]
+    fn this_month_handles_a_31_day_month() {
+        let (start, end) = period_range_at(DatePeriod::ThisMonth, local_dt(2026, 1, 31));
+        assert_eq!(ymd(start), (2026, 1, 1));
+        assert_eq!(ymd(end), (2026, 2, 1));
+        assert!(end > start);
+    }
+
+    #[test]
+    fn this_month_december_rolls_into_the_next_year() {
+        let (_, end) = period_range_at(DatePeriod::ThisMonth, local_dt(2026, 12, 15));
+        assert_eq!(ymd(end), (2027, 1, 1));
     }
 }

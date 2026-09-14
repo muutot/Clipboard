@@ -80,10 +80,19 @@ pub(super) fn insert_item_row(
                 excluded.icon_path,
                 clipboard_items.icon_path
             ),
-            metadata_json = COALESCE(
-                excluded.metadata_json,
-                clipboard_items.metadata_json
-            ),
+            -- Merge metadata instead of replacing it: a re-captured image/file
+            -- carries its own dimensions/paths but no user tags, and a plain
+            -- COALESCE would wipe the existing `tags` while `item_tags` keeps
+            -- them. json_patch lets the new metadata overwrite its own keys
+            -- while preserving keys it does not mention.
+            metadata_json = CASE
+                WHEN excluded.metadata_json IS NULL THEN clipboard_items.metadata_json
+                WHEN clipboard_items.metadata_json IS NULL THEN excluded.metadata_json
+                WHEN json_valid(clipboard_items.metadata_json)
+                     AND json_valid(excluded.metadata_json)
+                    THEN json_patch(clipboard_items.metadata_json, excluded.metadata_json)
+                ELSE excluded.metadata_json
+            END,
             deleted = 0,
             deleted_at_ms = NULL
          RETURNING id",

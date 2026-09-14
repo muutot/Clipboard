@@ -616,7 +616,7 @@ fn atomic_write_json(path: &Path, contents: Vec<u8>) -> Result<(), StorageError>
         file.write_all(&contents)?;
         file.sync_all()?;
         drop(file);
-        fs::rename(&temporary_path, path)?;
+        crate::storage::replace_file(&temporary_path, path)?;
         Ok(())
     })();
 

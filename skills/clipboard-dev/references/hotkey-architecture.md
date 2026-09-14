@@ -40,7 +40,7 @@ event forward (anything else)     event with the action id payload
 | Module                            | Responsibility                                                                                                                                                                                                                                                       |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `keyboard/actions.rs`             | **The** global-action registry: `GLOBAL_HOTKEY_ACTIONS` (`toggleWindow` with `allow_double_tap`, `toggleFloatPanel` without), `is_global_action`, `global_action_ids`, per-action `action_bindings` (skips invalid chords so one bad binding never breaks the plan). |
-| `keyboard/config.rs`              | `conf/keyboard.json` schema, canonical normalization, cross-action conflict rejection, atomic save.                                                                                                                                                                  |
+| `keyboard/config.rs`              | `conf/keyboard.json` schema, canonical normalization, cross-action conflict rejection on the resolved OS chord identity, unsupported-key rejection on save, durable atomic save, corrupt-file quarantine.                                                            |
 | `keyboard/matcher.rs`             | In-memory chord + double-tap matcher (used by tests and non-OS paths).                                                                                                                                                                                               |
 | `keyboard/manager.rs`             | Config store + matcher composition; no OS code.                                                                                                                                                                                                                      |
 | `platform/hotkey_common.rs`       | Shared pure logic for both OS backends: per-action id ranges (`action_id_base` / `action_index_for_hotkey_id`, stride 1000, legacy `1..` / `1000..` layout preserved), `plan_registrations`, Win32 key mapping, binding conversion.                                  |
@@ -107,7 +107,17 @@ Window-only (main window focused):
   `KeyboardConfigStore::load` backfills bundled defaults for actions absent
   from an existing file (upgraders receive `toggleFloatPanel` etc.) and
   persists the merge; a default that would collide with a binding the user
-  already owns is skipped, leaving that action unbound.
+  already owns is skipped, leaving that action unbound. Deleting an action
+  stores an explicit empty list (not a removed key) so the merge cannot
+  resurrect it on the next launch.
+- Conflict detection compares the resolved OS chord
+  (`hotkey_common::hotkey_registration_identity`: canonical modifiers + the
+  shared virtual key), not the canonical spelling, so aliases that register
+  the same chord (`Ctrl+Esc` vs `Ctrl+Escape`) are rejected. `set_action_shortcuts`
+  also rejects a key with no global-hotkey mapping instead of persisting it
+  and dropping it silently at registration; a config that cannot be parsed or
+  validated is quarantined to `keyboard.json.corrupt-<unix-seconds>` and
+  replaced with defaults rather than aborting startup.
 - Canonical shortcut format is the contract between layers (modifier order
   Ctrl/Alt/Shift/Meta, single-char upper-cased, multi-char first-upper
   rest-lower); both `ShortcutBinding::canonical` and

@@ -639,6 +639,34 @@ mod storage_cleanup_tests {
     }
 
     #[test]
+    fn history_cleanup_keeps_search_delete_events() {
+        use crate::commands::cleanup::enforce_history_cleanup_for;
+        use crate::config::ConfigStore;
+        use crate::storage::{SearchOperation, SearchRepository};
+
+        let paths = temporary_storage("cleanup-search-outbox");
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&stored_item("expired", ClipboardKind::Text, None, None))
+            .unwrap();
+        // Retention/capacity cleanup hard-deletes active rows, whose trigger
+        // enqueues the delete event the search index needs to drop the doc.
+        database.delete_item("expired").unwrap();
+        let config = ConfigStore::load(&paths.project).unwrap();
+
+        enforce_history_cleanup_for(&database, &config, &paths, std::time::Duration::ZERO).unwrap();
+
+        let events = database.read_search_outbox(20).unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|event| event.operation == SearchOperation::Delete),
+            "retention cleanup must not drop the search delete event"
+        );
+        fs::remove_dir_all(&paths.project).unwrap();
+    }
+
+    #[test]
     fn category_delete_cleans_ocr_search_index_and_managed_resources() {
         let paths = temporary_storage("category-delete");
         let resource = paths.images.join("category.png");

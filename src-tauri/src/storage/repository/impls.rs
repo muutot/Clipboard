@@ -310,7 +310,11 @@ impl ClipboardRepository for Database {
 
     fn set_tags(&self, id: &str, tags: &[String]) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
-            let existing: Option<Option<String>> = connection
+            // Read and write the same row inside one transaction so a
+            // concurrent capture upsert (which owns a different connection)
+            // cannot slip between the snapshot and the update and be lost.
+            let transaction = connection.transaction()?;
+            let existing: Option<Option<String>> = transaction
                 .query_row(
                     "SELECT metadata_json FROM clipboard_items WHERE id = ?1",
                     [id],
@@ -352,7 +356,6 @@ impl ClipboardRepository for Database {
             }
             let updated = object.to_string();
 
-            let transaction = connection.transaction()?;
             let changed = transaction.execute(
                 "UPDATE clipboard_items SET metadata_json = ?2 WHERE id = ?1 AND deleted = 0",
                 params![id, updated],
@@ -616,17 +619,6 @@ impl ClipboardRepository for Database {
                 [excess],
             )?;
             Ok(deleted as u64)
-        })
-    }
-
-    fn cleanup_orphan_search_index(&self) -> Result<u64, StorageError> {
-        self.with_connection(|connection| {
-            let removed = connection.execute(
-                "DELETE FROM search_outbox
-                 WHERE item_id NOT IN (SELECT id FROM clipboard_items)",
-                [],
-            )?;
-            Ok(removed as u64)
         })
     }
 

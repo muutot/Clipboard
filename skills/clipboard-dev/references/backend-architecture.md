@@ -71,11 +71,11 @@ Resource-root safety is mandatory:
 - image and file roots must not overlap each other or reserved project/data/database/index/icon paths;
 - cleanup skips the ownership marker and runs only when the corresponding cleanup flag is true.
 
-Changing data directories is a migration workflow, not a path-string edit. Keep managed/external path rewriting, database backup, search-index derivation, and concurrent ingestion/worker coordination in scope.
+Changing data directories is a migration workflow, not a path-string edit. Keep managed/external path rewriting, database backup, search-index derivation, and concurrent ingestion/worker coordination in scope. The webview asset protocol is granted the managed storage root plus any configured image/file roots, so previews and thumbnails render even when a custom resource directory lives outside `storage`.
 
 ## Search
 
-Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite search triggers append `search_outbox` operations; `SearchSynchronizer` drains them. Outbox draining runs lazily inside `search_clipboard_items` by default or in a startup `SearchSyncWorker` when `GeneralConfig.search_index_sync_mode` is `background`. Full rebuild clears/recreates derived index state and repopulates from SQLite. `SearchIndex::open` retries a failed open once after a short delay before falling back to delete-and-recreate, so transient interference (antivirus locks, permission hiccups) does not trigger a minutes-long full re-index. Read `search-cache-strategy.md` before changing pagination or query caching.
+Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLite search triggers append `search_outbox` operations; `SearchSynchronizer` drains them. Outbox draining runs lazily inside `search_clipboard_items` by default or in a startup `SearchSyncWorker` when `GeneralConfig.search_index_sync_mode` is `background`; the worker also retries a required full rebuild (`SearchIndex::requires_full_rebuild`) each tick. The outbox is mutated only by the synchronizer: history cleanup must never prune it, because deleting the `delete` events for hard-deleted rows would leave their Tantivy documents indexed forever. Full rebuild clears/recreates derived index state and repopulates from SQLite. `SearchIndex::open` retries a failed open once after a short delay before falling back to delete-and-recreate, so transient interference (antivirus locks, permission hiccups) does not trigger a minutes-long full re-index. Read `search-cache-strategy.md` before changing pagination or query caching.
 
 ## OCR
 
@@ -101,7 +101,7 @@ Privacy pause, ignored applications, and sensitive-source checks happen before p
 
 ## Unified shutdown
 
-`stop_runtime_services()` stops cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, and local API services. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray. Every new worker/listener/server needs a stop signal, retained join/unlisten handle, idempotent stop behavior, integration with normal exit/tray exit/interrupt/restart as applicable, and drop/stop tests or a documented verification gap.
+`stop_runtime_services()` stops the auto-sync worker first (it is a background SQLite/S3 writer that must not outlive a storage snapshot), then cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, local API, and search-sync services. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray. Every new worker/listener/server needs a stop signal, retained join/unlisten handle, idempotent stop behavior, integration with normal exit/tray exit/interrupt/restart as applicable, and drop/stop tests or a documented verification gap.
 
 ## Backend change checklist
 

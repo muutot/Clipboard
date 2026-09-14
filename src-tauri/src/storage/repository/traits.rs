@@ -147,7 +147,6 @@ pub trait ClipboardRepository {
     fn item_count(&self) -> Result<u64, StorageError>;
     fn delete_older_than(&self, days: u32) -> Result<u64, StorageError>;
     fn enforce_capacity_limit(&self, max_items: u64) -> Result<u64, StorageError>;
-    fn cleanup_orphan_search_index(&self) -> Result<u64, StorageError>;
     fn soft_delete(&self, id: &str) -> Result<bool, StorageError>;
     /// Soft-delete all requested active records atomically.
     ///

@@ -28,15 +28,21 @@ pub fn set_general_settings(
     capture: tauri::State<'_, CaptureState>,
     settings: GeneralConfig,
 ) -> Result<GeneralConfig, String> {
-    let saved = {
+    let (saved, max_text_capture_bytes) = {
         let mut config = lock_state(&config, "configuration lock is poisoned")?;
         config
             .set_general_settings(settings)
             .map_err(|error| error.to_string())?;
-        config.general_settings().clone()
+        (
+            config.general_settings().clone(),
+            // Use the clamped getter, not the raw stored field: the command
+            // accepts any u64, so an unclamped value would silently change the
+            // live capture cap while the config read-back reports the clamp.
+            config.max_text_capture_bytes(),
+        )
     };
 
-    capture.set_max_text_capture_bytes(saved.max_text_capture_bytes);
+    capture.set_max_text_capture_bytes(max_text_capture_bytes);
     let _ = app.emit("general-settings-changed", &saved);
     if saved.window_opacity_affects_text {
         apply_window_transparency_to_main(&app, saved.window_transparency);

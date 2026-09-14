@@ -814,24 +814,154 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
             return None;
         }
 
-        let size = GlobalSize(handle);
-        if size == 0 {
-            CloseClipboard();
-            return None;
-        }
-
-        let ptr = GlobalLock(handle);
-        if ptr.is_null() {
-            CloseClipboard();
-            return None;
-        }
-
-        let data = std::slice::from_raw_parts(ptr, size).to_vec();
-        GlobalUnlock(handle);
+        // CF_BITMAP yields an HBITMAP, not an HGLOBAL, so GlobalSize/GlobalLock
+        // cannot read it. Convert it to a DIB with GetDIBits and reuse the DIB
+        // decoder; a plain DIB/DIBV5 still takes the shared-memory path.
+        let result = if format == CF_BITMAP {
+            hbitmap_to_dib_bytes(handle).and_then(|dib| dib_to_png(&dib))
+        } else {
+            let size = GlobalSize(handle);
+            if size == 0 {
+                CloseClipboard();
+                return None;
+            }
+            let ptr = GlobalLock(handle);
+            if ptr.is_null() {
+                CloseClipboard();
+                return None;
+            }
+            let data = std::slice::from_raw_parts(ptr, size).to_vec();
+            GlobalUnlock(handle);
+            dib_to_png(&data)
+        };
         CloseClipboard();
-
-        dib_to_png(&data)
+        result
     }
+}
+
+/// Converts an `HBITMAP` into a bottom-up 32-bpp DIB buffer (BITMAPINFOHEADER
+/// followed by BGRA pixels) so it can be decoded by [`dib_to_png`]. The alpha
+/// byte is forced opaque: an `HBITMAP` carries no defined alpha channel, and a
+/// zero high byte would otherwise produce a fully transparent PNG.
+#[cfg(target_os = "windows")]
+unsafe fn hbitmap_to_dib_bytes(hbitmap: isize) -> Option<Vec<u8>> {
+    extern "system" {
+        fn GetObjectW(obj: isize, size: i32, buf: *mut u8) -> i32;
+        fn GetDC(hwnd: isize) -> isize;
+        fn ReleaseDC(hwnd: isize, dc: isize) -> i32;
+        fn GetDIBits(
+            dc: isize,
+            bitmap: isize,
+            start: u32,
+            lines: u32,
+            bits: *mut u8,
+            info: *mut BITMAPINFOHEADER,
+            usage: u32,
+        ) -> i32;
+    }
+
+    #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
+    struct BITMAPINFOHEADER {
+        biSize: u32,
+        biWidth: i32,
+        biHeight: i32,
+        biPlanes: u16,
+        biBitCount: u16,
+        biCompression: u32,
+        biSizeImage: u32,
+        biXPelsPerMeter: i32,
+        biYPelsPerMeter: i32,
+        biClrUsed: u32,
+        biClrImportant: u32,
+    }
+
+    #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
+    struct BITMAP {
+        bmType: i32,
+        bmWidth: i32,
+        bmHeight: i32,
+        bmWidthBytes: i32,
+        bmPlanes: u16,
+        bmBitsPixel: u16,
+        bmBits: isize,
+    }
+
+    const DIB_RGB_COLORS: u32 = 0;
+    const BI_RGB: u32 = 0;
+
+    let mut bmp = BITMAP {
+        bmType: 0,
+        bmWidth: 0,
+        bmHeight: 0,
+        bmWidthBytes: 0,
+        bmPlanes: 0,
+        bmBitsPixel: 0,
+        bmBits: 0,
+    };
+    if GetObjectW(
+        hbitmap,
+        std::mem::size_of::<BITMAP>() as i32,
+        &mut bmp as *mut _ as *mut u8,
+    ) == 0
+    {
+        return None;
+    }
+    if bmp.bmWidth <= 0 || bmp.bmHeight == 0 {
+        return None;
+    }
+    let width = bmp.bmWidth.unsigned_abs();
+    let height = bmp.bmHeight.unsigned_abs();
+    let image_size = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
+
+    let mut header = BITMAPINFOHEADER {
+        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+        biWidth: width as i32,
+        // Positive height requests bottom-up rows, matching `dib_to_png`.
+        biHeight: height as i32,
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB,
+        biSizeImage: image_size as u32,
+        biXPelsPerMeter: 0,
+        biYPelsPerMeter: 0,
+        biClrUsed: 0,
+        biClrImportant: 0,
+    };
+
+    let dc = GetDC(0);
+    if dc == 0 {
+        return None;
+    }
+    let mut pixels = vec![0u8; image_size];
+    let copied = GetDIBits(
+        dc,
+        hbitmap,
+        0,
+        height,
+        pixels.as_mut_ptr(),
+        &mut header,
+        DIB_RGB_COLORS,
+    );
+    ReleaseDC(0, dc);
+    if copied == 0 {
+        return None;
+    }
+
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+        pixel[3] = 255;
+    }
+
+    let mut dib = Vec::with_capacity(std::mem::size_of::<BITMAPINFOHEADER>() + pixels.len());
+    dib.extend_from_slice(std::slice::from_raw_parts(
+        (&header as *const BITMAPINFOHEADER) as *const u8,
+        std::mem::size_of::<BITMAPINFOHEADER>(),
+    ));
+    dib.extend_from_slice(&pixels);
+    Some(dib)
 }
 
 #[cfg(target_os = "windows")]

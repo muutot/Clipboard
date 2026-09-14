@@ -54,9 +54,6 @@ pub fn enforce_history_cleanup_for(
     total_deleted += database
         .permanently_delete_expired(recycle_bin_days)
         .map_err(|error| error.to_string())?;
-    total_deleted += database
-        .cleanup_orphan_search_index()
-        .map_err(|error| error.to_string())?;
 
     let _ = cleanup_orphan_storage_files_with_grace(database, paths, orphan_file_grace);
 

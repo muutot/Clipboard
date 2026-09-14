@@ -1,3 +1,4 @@
+mod atomic;
 mod database;
 mod error;
 mod maintenance;
@@ -11,6 +12,7 @@ mod search_repository;
 mod sync_repository;
 mod sync_state;
 
+pub use atomic::replace_file;
 pub use database::Database;
 pub use error::StorageError;
 pub use maintenance::RepairResult;

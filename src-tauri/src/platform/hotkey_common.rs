@@ -153,6 +153,25 @@ pub fn windows_virtual_key(key: &str) -> Option<u32> {
     }
 }
 
+/// Provider-neutral identity of a chord for conflict detection and support
+/// checks: the canonical modifier set plus the shared platform virtual key.
+/// Two spellings that register the same OS chord (for example `Ctrl+Esc` and
+/// `Ctrl+Escape`) share one identity. Returns `None` when the key has no
+/// global-hotkey mapping, so callers can reject it instead of silently
+/// dropping it at registration time.
+pub fn hotkey_registration_identity(binding: &crate::keyboard::ShortcutBinding) -> Option<String> {
+    match binding {
+        crate::keyboard::ShortcutBinding::Chord { modifiers, key } => {
+            let virtual_key = windows_virtual_key(key)?;
+            let labels: Vec<&str> = modifiers.iter().map(|modifier| modifier.label()).collect();
+            Some(format!("{}+{}", labels.join("+"), virtual_key))
+        }
+        crate::keyboard::ShortcutBinding::DoubleModifier { modifier } => {
+            Some(format!("{}+{}", modifier.label(), modifier.label()))
+        }
+    }
+}
+
 pub fn shortcut_to_windows_hotkey(
     binding: &crate::keyboard::ShortcutBinding,
 ) -> Option<(u32, u32)> {
@@ -181,7 +200,6 @@ pub fn shortcut_to_windows_hotkey(
         crate::keyboard::ShortcutBinding::DoubleModifier { .. } => None,
     }
 }
-
 pub fn shortcut_bindings_to_windows_hotkeys(
     bindings: &[crate::keyboard::ShortcutBinding],
 ) -> Vec<(u32, u32)> {
@@ -216,8 +234,9 @@ mod tests {
 
     use super::{
         action_id_base, action_index_for_hotkey_id, assign_hotkey_ids,
-        combined_hotkey_registrations, plan_registrations, shortcut_bindings_to_double_modifiers,
-        shortcut_bindings_to_windows_hotkeys, FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE,
+        combined_hotkey_registrations, hotkey_registration_identity, plan_registrations,
+        shortcut_bindings_to_double_modifiers, shortcut_bindings_to_windows_hotkeys,
+        FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE,
     };
 
     #[test]
@@ -302,6 +321,20 @@ mod tests {
             ]
         );
         assert!(combined_hotkey_registrations(&[], &[]).is_empty());
+    }
+
+    #[test]
+    fn registration_identity_unifies_key_aliases_and_rejects_unknown_keys() {
+        let esc = ShortcutBinding::from_str("Ctrl+Esc").unwrap();
+        let escape = ShortcutBinding::from_str("Ctrl+Escape").unwrap();
+        assert_eq!(
+            hotkey_registration_identity(&esc),
+            hotkey_registration_identity(&escape)
+        );
+        assert_eq!(
+            hotkey_registration_identity(&ShortcutBinding::from_str("Ctrl+,").unwrap()),
+            None
+        );
     }
 
     #[test]
