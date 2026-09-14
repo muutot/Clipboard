@@ -544,7 +544,13 @@ pub fn defer_mutation_resources(
                 item.resource_path = None;
 
                 if let Some(json) = item.text_content.as_deref() {
-                    if let Ok(portable_paths) = serde_json::from_str::<Vec<String>>(json) {
+                    // An empty portable-path list must fall back to the
+                    // primary `resource_path`; otherwise the file resource is
+                    // dropped and peers cannot materialize it.
+                    let portable_paths = serde_json::from_str::<Vec<String>>(json)
+                        .ok()
+                        .filter(|paths| !paths.is_empty());
+                    if let Some(portable_paths) = portable_paths {
                         if primary.as_deref().is_some_and(|primary| {
                             portable_paths.first().is_some_and(|first| first != primary)
                         }) {
@@ -636,10 +642,12 @@ pub fn collect_mutation_resource_refs(
                 &mut references,
             )?,
             SyncItemKind::File => {
+                // Empty portable-path lists fall back to `resource_path`.
                 let portable_paths = item
                     .text_content
                     .as_deref()
-                    .and_then(|json| serde_json::from_str::<Vec<String>>(json).ok());
+                    .and_then(|json| serde_json::from_str::<Vec<String>>(json).ok())
+                    .filter(|paths| !paths.is_empty());
                 if let Some(paths) = portable_paths {
                     for (index, path) in paths.iter().enumerate() {
                         let ordinal = u32::try_from(index)
