@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/AppIcon.svelte";
@@ -74,7 +74,11 @@
   });
 
   $effect(() => {
-    void loadOcrStatus();
+    // Load once on mount. The call must be untracked: its synchronous guard
+    // reads/writes `ocrStatusLoading`, which would otherwise register a
+    // self-dependency, re-running this effect after every IPC round-trip and
+    // collapsing the 2 s task poll into an IPC-speed reload loop.
+    untrack(() => void loadOcrStatus());
     const interval = setInterval(() => void loadOcrTaskStatus(), 2000);
     return () => clearInterval(interval);
   });
