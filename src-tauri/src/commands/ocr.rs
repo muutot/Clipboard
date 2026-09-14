@@ -38,56 +38,64 @@ pub fn apply_ocr_runtime_settings(
     worker: &OcrWorkerManager,
     update: OcrConfigUpdate,
 ) -> Result<OcrConfigResponse, String> {
-    let mut cfg = lock_state(&config, "config lock poisoned")?;
-    let engine = update.engine.unwrap_or_else(|| cfg.ocr_engine().to_owned());
-    let model = match update.ppocr_model_variant {
-        Some(variant) => ocr::models::model_spec(&variant)
-            .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?,
-        None => configured_ppocr_model(&cfg),
-    };
-    let score_threshold = update
-        .det_score_threshold
-        .unwrap_or_else(|| cfg.det_score_threshold());
-    let box_threshold = update
-        .det_box_threshold
-        .unwrap_or_else(|| cfg.det_box_threshold());
-    let unclip_ratio = update
-        .det_unclip_ratio
-        .unwrap_or_else(|| cfg.det_unclip_ratio());
+    // The config lock only needs to cover the read-modify-write of the
+    // settings. `worker.restart` joins the OCR thread, which may be busy
+    // with a long inference; holding the lock across it would block every
+    // config-dependent command for seconds.
+    let (response, runtime_engine, database) = {
+        let mut cfg = lock_state(&config, "config lock poisoned")?;
+        let engine = update.engine.unwrap_or_else(|| cfg.ocr_engine().to_owned());
+        let model = match update.ppocr_model_variant {
+            Some(variant) => ocr::models::model_spec(&variant)
+                .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?,
+            None => configured_ppocr_model(&cfg),
+        };
+        let score_threshold = update
+            .det_score_threshold
+            .unwrap_or_else(|| cfg.det_score_threshold());
+        let box_threshold = update
+            .det_box_threshold
+            .unwrap_or_else(|| cfg.det_box_threshold());
+        let unclip_ratio = update
+            .det_unclip_ratio
+            .unwrap_or_else(|| cfg.det_unclip_ratio());
 
-    let runtime_engine: Arc<dyn OcrEngine> = match engine.as_str() {
-        "ppocr" => {
-            let ppocr = PpOcrEngine::new(
-                ocr::models::models_dir(&paths.storage),
-                model,
-                score_threshold,
-                box_threshold,
-                unclip_ratio,
-            );
-            if !ppocr.is_available() {
-                return Err(format!("PP-OCR {} model files are not installed", model.id));
+        let runtime_engine: Arc<dyn OcrEngine> = match engine.as_str() {
+            "ppocr" => {
+                let ppocr = PpOcrEngine::new(
+                    ocr::models::models_dir(&paths.storage),
+                    model,
+                    score_threshold,
+                    box_threshold,
+                    unclip_ratio,
+                );
+                if !ppocr.is_available() {
+                    return Err(format!("PP-OCR {} model files are not installed", model.id));
+                }
+                Arc::new(ppocr)
             }
-            Arc::new(ppocr)
-        }
-        "tesseract" if TesseractOcrEngine::is_available() => Arc::new(
-            TesseractOcrEngine::with_languages(cfg.tesseract_languages().to_owned()),
-        ),
-        "tesseract" => return Err("Tesseract is not available".to_owned()),
-        _ => return Err(format!("unsupported OCR engine: {engine}")),
-    };
-    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
+            "tesseract" if TesseractOcrEngine::is_available() => Arc::new(
+                TesseractOcrEngine::with_languages(cfg.tesseract_languages().to_owned()),
+            ),
+            "tesseract" => return Err("Tesseract is not available".to_owned()),
+            _ => return Err(format!("unsupported OCR engine: {engine}")),
+        };
+        let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
 
-    cfg.set_ocr_settings(
-        engine,
-        model.id.to_owned(),
-        score_threshold,
-        box_threshold,
-        unclip_ratio,
-    )
-    .map_err(|e| e.to_string())?;
+        cfg.set_ocr_settings(
+            engine,
+            model.id.to_owned(),
+            score_threshold,
+            box_threshold,
+            unclip_ratio,
+        )
+        .map_err(|e| e.to_string())?;
+        (ocr_config_response(&cfg), runtime_engine, database)
+    };
+
     worker.restart(runtime_engine, Arc::new(database));
 
-    Ok(ocr_config_response(&cfg))
+    Ok(response)
 }
 
 #[tauri::command]
