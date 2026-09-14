@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use rusqlite::params;
+use rusqlite::{params, TransactionBehavior};
 
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
@@ -317,7 +317,7 @@ pub fn rewrite_database_storage_paths(
     mappings: &[(PathBuf, PathBuf)],
 ) -> Result<u64, StorageError> {
     database.with_connection(|connection| {
-        let transaction = connection.transaction()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let records = {
             let mut statement = transaction.prepare(
                 "SELECT id, kind, text_content, resource_path, preview_path, icon_path, metadata_json

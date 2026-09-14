@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{params, params_from_iter, OptionalExtension};
+use rusqlite::{params, params_from_iter, OptionalExtension, TransactionBehavior};
 
 use super::{
     content_exists_on_connection, current_time_ms, delete_kind_records, insert_item_row,
@@ -30,7 +30,8 @@ impl Database {
         entries: &[(String, ClipboardItem)],
     ) -> Result<TransactionalSaveSummary, StorageError> {
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let mut summary = TransactionalSaveSummary::default();
 
             for (label, item) in entries {
@@ -313,7 +314,8 @@ impl ClipboardRepository for Database {
             // Read and write the same row inside one transaction so a
             // concurrent capture upsert (which owns a different connection)
             // cannot slip between the snapshot and the update and be lost.
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let existing: Option<Option<String>> = transaction
                 .query_row(
                     "SELECT metadata_json FROM clipboard_items WHERE id = ?1",
@@ -420,7 +422,8 @@ impl ClipboardRepository for Database {
             return Ok(0);
         }
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let updated = rewrite_item_tags(&transaction, old, Some(new))?;
 
             // Migrate the registry color, preferring an explicit new-name row.
@@ -474,7 +477,8 @@ impl ClipboardRepository for Database {
             return Ok(0);
         }
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let updated = rewrite_item_tags(&transaction, name, None)?;
             transaction.execute("DELETE FROM tags WHERE name = ?1", [name])?;
             transaction.execute(
@@ -514,7 +518,8 @@ impl ClipboardRepository for Database {
         }
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
             let placeholders: Vec<String> = ids
                 .iter()
@@ -654,7 +659,8 @@ impl ClipboardRepository for Database {
         }
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let mut active_ids = Vec::with_capacity(ids.len());
 
             // Validate first so a favorite never causes a partially deleted
@@ -722,7 +728,8 @@ impl ClipboardRepository for Database {
         }
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             for id in &ids {
                 let exists = transaction
                     .query_row(
@@ -765,7 +772,8 @@ impl ClipboardRepository for Database {
         }
 
         self.with_connection(|connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             for id in &ids {
                 let exists = transaction
                     .query_row(

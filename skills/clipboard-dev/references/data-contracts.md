@@ -36,6 +36,8 @@ PPaste backups made on Windows store zip entry names with backslashes (e.g. `Pas
 
 Duplicate imports are not double-counted: `import_rows` first materializes all resources (file I/O outside the write transaction), then hands every row to `Database::save_items_transactional`, which inside ONE transaction checks `(kind, content_hash)` existence (matching the `UNIQUE(kind, content_hash)` upsert key, includes soft-deleted rows) and counts an existing row as skipped instead of re-upserting. Per-row insert failures are collected in the summary instead of aborting the batch; a hard database error rolls the whole import back and surfaces as a single error. The single-item `save_item`/`content_exists` trait methods share the same SQL helpers (`insert_item_row` / `content_exists_on_connection` in `repository/helpers.rs`) and remain the path for other callers.
 
+Short repository read-modify-write transactions (`save_items_transactional`, `set_tags`, `rename_tag`, `delete_tag`, `delete_kind_records`, the batch soft-delete/restore/permanent-delete paths, and the migration path rewrite) begin with `BEGIN IMMEDIATE`. The app opens several independent connections (main, OCR, thumbnail, cleanup, search-sync, local API) to the same WAL database; a DEFERRED transaction that reads first and upgrades to a write returns `SQLITE_BUSY_SNAPSHOT` when another connection commits in between, which `busy_timeout` cannot resolve. Long-running sync apply transactions stay DEFERRED on purpose so they do not hold the write lock for their whole duration.
+
 ## SQLite schema
 
 `src-tauri/src/storage/schema.rs::initialize` is authoritative. Schema v1 is the clean baseline:

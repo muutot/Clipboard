@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{params, OptionalExtension, Row, TransactionBehavior};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::StorageError;
@@ -209,7 +209,7 @@ pub(super) fn delete_kind_records(
     scope: KindDeleteScope,
     expected: Option<KindStorageStats>,
 ) -> Result<KindDeleteResult, StorageError> {
-    let transaction = connection.transaction()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     if let Some(expected) = expected {
         let current = query_kind_storage_stats(&transaction, kind, scope)?;
         if current != expected {
