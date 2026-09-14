@@ -78,7 +78,8 @@ The pure maintenance logic lives in `src/lib/utils/search-cache.ts` (`mergeSearc
 - threshold: `pageSizeLimit + loadTolerance`;
 - when exceeded, remove up to `loadTolerance` oldest non-deleted, non-favorite items;
 - favorites and recycle-bin items are protected from this in-memory trimming;
-- default `pageSizeLimit` is 500 and default tolerance is 100.
+- default `pageSizeLimit` is 500 and default tolerance is 100;
+- the window is a cap, not a target: once `items.length` reaches the threshold, `loadActiveHistoryPage` sets `activeHistoryHasMore = false` because deeper OFFSET pages hold the oldest rows and would be evicted immediately (previously pagination kept fetch-then-evicting on every scroll event at the cap).
 
 Changing this logic requires checking selected/detail items, virtual-scroll height state, active/deleted offsets, and the spare-result cache. In-memory trimming must not be confused with database history cleanup.
 

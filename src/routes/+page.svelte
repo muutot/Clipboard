@@ -1005,6 +1005,14 @@
       const loadedIds = new Set(page.map((item) => item.id));
       promoteFromCache(loadedIds);
       trimLoadedItems();
+      // The trim cap is a sliding window over the newest rows: deeper OFFSET
+      // pages contain the oldest rows and would be evicted right after
+      // loading, so a full window must end pagination instead of fetching
+      // pages that can never stay loaded (this previously looped
+      // fetch-then-evict on every scroll event once the cap was reached).
+      if (items.length >= $generalSettings.pageSizeLimit + $generalSettings.loadTolerance) {
+        activeHistoryHasMore = false;
+      }
     } catch (error) {
       if (requestId !== activeHistoryRequestId) return;
       console.error("Unable to load clipboard history", error);
