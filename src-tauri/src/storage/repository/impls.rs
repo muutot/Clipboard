@@ -430,9 +430,12 @@ impl ClipboardRepository for Database {
                 })
                 .optional()?;
             if let Some(color) = old_color {
+                // Prefer an explicit new-name registry row: only carry the old
+                // tag's color when `new` has none. `DO UPDATE SET color =
+                // excluded.color` would overwrite the destination's own color.
                 transaction.execute(
                     "INSERT INTO tags (name, color) VALUES (?1, ?2)
-                     ON CONFLICT(name) DO UPDATE SET color = excluded.color",
+                     ON CONFLICT(name) DO NOTHING",
                     params![new, color],
                 )?;
                 transaction.execute("DELETE FROM tags WHERE name = ?1", [old])?;

@@ -387,6 +387,26 @@ fn rename_tag_rewrites_items_and_migrates_color() {
 }
 
 #[test]
+fn rename_tag_keeps_the_destination_registry_color() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("item-1", "hash-1", 100))
+        .unwrap();
+    database
+        .set_tags("item-1", &["work".to_owned(), "urgent".to_owned()])
+        .unwrap();
+    assert!(database.set_tag_color("work", "#0000ff").unwrap());
+    assert!(database.set_tag_color("urgent", "#ff0000").unwrap());
+
+    database.rename_tag("work", "urgent").unwrap();
+
+    let tags = database.list_all_tags().unwrap();
+    let urgent = tags.iter().find(|tag| tag.name == "urgent").unwrap();
+    assert_eq!(urgent.color, "#ff0000");
+    assert!(tags.iter().all(|tag| tag.name != "work"));
+}
+
+#[test]
 fn delete_tag_removes_it_from_items_and_registry() {
     let database = Database::open_in_memory().unwrap();
     database
