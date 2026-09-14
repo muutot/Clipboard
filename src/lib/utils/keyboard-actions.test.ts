@@ -187,6 +187,14 @@ describe("resolveKeyAction — filters and movement", () => {
     });
   });
 
+  it("keeps arrow keys inside editable targets", () => {
+    const input = targetOn("input");
+    const withTarget = (e: KeyboardEvent) => Object.defineProperty(e, "target", { value: input });
+    expect(resolveKeyAction(withTarget(keyEvent({ key: "ArrowDown" })), ctx()).type).toBe("none");
+    expect(resolveKeyAction(withTarget(keyEvent({ key: "ArrowUp" })), ctx()).type).toBe("none");
+    input.remove();
+  });
+
   it("lets editables keep their keys except item-action shortcuts", () => {
     const input = targetOn("input");
     const withTarget = (e: KeyboardEvent) => Object.defineProperty(e, "target", { value: input });

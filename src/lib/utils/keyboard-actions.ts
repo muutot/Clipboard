@@ -136,6 +136,10 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     }
   }
 
+  // Editable targets keep arrow keys for caret movement: the move-selection
+  // bindings must be resolved after this guard, not before it.
+  if (editableTarget && !isItemActionShortcut(event)) return { type: "none", prevent: false };
+
   if (ctx.moveSelectionDown.some((binding) => shortcutMatchesEvent(binding, event))) {
     return { type: "move-selection", delta: 1, prevent: true };
   }
@@ -143,8 +147,6 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
   if (ctx.moveSelectionUp.some((binding) => shortcutMatchesEvent(binding, event))) {
     return { type: "move-selection", delta: -1, prevent: true };
   }
-
-  if (editableTarget && !isItemActionShortcut(event)) return { type: "none", prevent: false };
 
   if (ctx.switchFilterNext.some((binding) => shortcutMatchesEvent(binding, event))) {
     if (isTextInput(event.target)) return { type: "none", prevent: false };
