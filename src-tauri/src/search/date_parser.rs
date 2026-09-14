@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, Local};
+use chrono::{DateTime, Datelike, Days, Duration, Local, NaiveDate};
 
 /// Relative-date periods understood from a free-text search query.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,15 +47,14 @@ pub fn extract_date_range(input: &str) -> (Option<(i64, i64)>, String) {
     (range, remaining)
 }
 
-/// Local midnight (00:00:00.000) of `dt` as epoch milliseconds.
+/// Local midnight (00:00:00.000) of `date` as epoch milliseconds.
 ///
 /// On DST-transition days local midnight may be ambiguous (clock repeated) or
 /// nonexistent (clock skipped). Both cases fall back to the current fixed
 /// offset instead of panicking inside a search command; the resulting range
 /// boundary can be off by at most one hour on those rare days.
-fn local_midnight(dt: DateTime<Local>) -> i64 {
-    let naive = dt
-        .date_naive()
+fn local_midnight(date: NaiveDate) -> i64 {
+    let naive = date
         .and_hms_opt(0, 0, 0)
         .expect("midnight is always a valid time");
     match naive.and_local_timezone(Local) {
@@ -76,37 +75,42 @@ fn period_range(period: DatePeriod) -> (i64, i64) {
 /// Same as [`period_range`] but with an explicit "now", so the boundary math can
 /// be unit-tested deterministically (month-end, leap years, DST).
 fn period_range_at(period: DatePeriod, now: DateTime<Local>) -> (i64, i64) {
+    let today = now.date_naive();
     match period {
         DatePeriod::Today => {
-            let start = local_midnight(now);
-            let end = local_midnight(now + Duration::days(1));
-            (start, end)
+            // Calendar-day arithmetic, not `now + 24h`: on a DST fall-back day
+            // the local day is 25 hours long, so an absolute 24h would end the
+            // range before the day is over and could collapse it to empty.
+            let end = local_midnight(today.succ_opt().unwrap_or(today));
+            (local_midnight(today), end)
         }
         DatePeriod::Yesterday => {
-            let start = local_midnight(now - Duration::days(1));
-            let end = local_midnight(now);
-            (start, end)
+            let start = local_midnight(today.pred_opt().unwrap_or(today));
+            (start, local_midnight(today))
         }
         DatePeriod::ThisWeek => {
             // Weeks start on Monday (ISO 8601), matching Chinese convention.
             let days_from_monday = now.weekday().num_days_from_monday() as i64;
-            let monday = now - Duration::days(days_from_monday);
-            let start = local_midnight(monday);
-            let end = local_midnight(monday + Duration::days(7));
-            (start, end)
+            let monday = (now - Duration::days(days_from_monday)).date_naive();
+            let end = monday
+                .checked_add_days(Days::new(7))
+                .map(local_midnight)
+                .unwrap_or_else(|| local_midnight(monday));
+            (local_midnight(monday), end)
         }
         DatePeriod::ThisMonth => {
-            let start = local_midnight(now.with_day(1).unwrap_or(now));
+            let first = today.with_day(1).unwrap_or(today);
+            let start = local_midnight(first);
             // Anchor on the 1st, then jump past the current month and normalize
             // back to day 1. Adding 31 days from the 1st always lands in the
             // next month (every month has at most 31 days), so the exclusive
             // end is the first instant of the following month regardless of the
             // current day-of-month.
-            let first_of_next_month = (now.with_day(1).unwrap_or(now) + Duration::days(31))
-                .with_day(1)
-                .unwrap_or(now);
-            let end = local_midnight(first_of_next_month);
-            (start, end)
+            let first_of_next_month = first
+                .checked_add_days(Days::new(31))
+                .and_then(|date| date.with_day(1))
+                .unwrap_or(first);
+            (start, local_midnight(first_of_next_month))
         }
     }
 }
@@ -145,6 +149,15 @@ mod tests {
         let (today_start, _) = period_range(DatePeriod::Today);
         assert_eq!(end, today_start);
         assert!(start < end);
+    }
+
+    #[test]
+    fn today_ends_at_tomorrow_midnight() {
+        let now = Local::now();
+        let (start, end) = period_range_at(DatePeriod::Today, now);
+        assert!(start < end);
+        let expected_end = local_midnight(now.date_naive().succ_opt().unwrap());
+        assert_eq!(end, expected_end);
     }
 
     #[test]
