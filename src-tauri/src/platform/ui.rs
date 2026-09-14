@@ -169,19 +169,32 @@ impl SystemTray {
             show_main_window(app);
             let _ = app.emit("tray-open-settings", ());
         } else if id == Self::PAUSE_MENU_ID {
-            let paused = app
-                .try_state::<CaptureState>()
-                .map(|c| {
-                    let new_paused = !c.is_paused();
-                    c.set_paused(new_paused);
-                    new_paused
-                })
-                .unwrap_or(false);
-            if let Ok(mut config) = app.state::<Mutex<ConfigStore>>().lock() {
-                let _ = config.set_privacy_paused(paused);
+            // Mirror the `toggle_privacy_pause` command ordering: the
+            // PrivacyManager flips first and is the source of truth, the
+            // CaptureState follows the resolved value, and config
+            // persistence errors are logged instead of silently dropped —
+            // a blind second flip could desync the two states when the
+            // config write fails.
+            let Some(privacy) = app.try_state::<Mutex<PrivacyManager>>() else {
+                return;
+            };
+            let Ok(mut privacy) = privacy.lock() else {
+                crate::log_event!("[tray] privacy manager lock is poisoned; pause state unchanged");
+                return;
+            };
+            privacy.toggle_pause();
+            let paused = privacy.is_paused();
+            drop(privacy);
+
+            if let Some(capture) = app.try_state::<CaptureState>() {
+                capture.set_paused(paused);
             }
-            if let Ok(mut privacy) = app.state::<Mutex<PrivacyManager>>().lock() {
-                privacy.toggle_pause();
+            if let Some(config) = app.try_state::<Mutex<ConfigStore>>() {
+                if let Ok(mut config) = config.lock() {
+                    if let Err(error) = config.set_privacy_paused(paused) {
+                        crate::log_event!("[tray] failed to persist the pause state: {error}");
+                    }
+                }
             }
             let _ = app.emit("privacy-pause-changed", paused);
             // Rebuild so the checkbox reflects the toggled state; the
