@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ColorField from "$lib/components/ColorField.svelte";
   import { messages, resolvePath } from "$lib/i18n";
@@ -22,6 +23,7 @@
 
   let s = $state($generalSettings);
   let feedback = $state("");
+  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     const unsub = generalSettings.subscribe((v) => {
@@ -59,10 +61,13 @@
 
   function showFeedback(msg: string, success: boolean) {
     feedback = msg;
-    setTimeout(() => {
+    clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
       feedback = "";
     }, 2000);
   }
+
+  onDestroy(() => clearTimeout(feedbackTimer));
 </script>
 
 {#if showHeader}

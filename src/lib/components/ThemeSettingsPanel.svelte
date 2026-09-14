@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import ColorField from "$lib/components/ColorField.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
@@ -20,6 +21,7 @@
   let s = $state($generalSettings);
   let feedback = $state("");
   let feedbackSuccess = $state(false);
+  let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let themeColors = $state<ThemeColors>({ ...DARK_THEME_COLORS });
 
   $effect(() => {
@@ -35,10 +37,13 @@
   function showFeedback(msg: string, success: boolean) {
     feedback = msg;
     feedbackSuccess = success;
-    setTimeout(() => {
+    clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
       feedback = "";
     }, 2000);
   }
+
+  onDestroy(() => clearTimeout(feedbackTimer));
 
   function changeTheme(value: ThemeMode) {
     generalSettings.updateSetting("theme", value);
