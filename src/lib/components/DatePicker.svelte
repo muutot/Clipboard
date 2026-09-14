@@ -50,8 +50,10 @@
 
   const weekdayNames = $derived(
     Array.from({ length: 7 }, (_, column) => {
+      // 2021-01-03 is a Sunday, matching `getDay()`'s 0-based Sunday origin, so
+      // column 0 labels the same weekday the grid's first column starts on.
       const offset = (column + weekStart) % 7;
-      return weekdayFmt.format(new Date(2021, 0, 4 + offset));
+      return weekdayFmt.format(new Date(2021, 0, 3 + offset));
     }),
   );
 
@@ -124,8 +126,10 @@
   }
 
   function shiftMonth(delta: number) {
+    // `Math.floor` already handles negative months, so no extra year
+    // correction is needed (an extra `-1` jumped back two years from January).
     const month = viewMonth + delta;
-    viewYear = viewYear + Math.floor(month / 12) + (month < 0 && month % 12 !== 0 ? -1 : 0);
+    viewYear = viewYear + Math.floor(month / 12);
     viewMonth = ((month % 12) + 12) % 12;
   }
 </script>
