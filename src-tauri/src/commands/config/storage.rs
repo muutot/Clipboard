@@ -287,9 +287,16 @@ pub fn migrate_storage_data(
     }
 
     if old.database != new.database && old.database.exists() {
-        database
-            .vacuum_into(&new.database)
-            .map_err(|e| format!("failed to migrate database: {}", e))?;
+        // `VACUUM INTO` refuses an existing destination, so a failed earlier
+        // attempt (or a pre-existing database at the chosen directory) would
+        // make every retry fail. Quarantine whatever is there first, restore it
+        // if the vacuum itself fails, and leave the quarantined copy behind
+        // otherwise instead of destroying a pre-existing database.
+        let quarantined = quarantine_database_for_migration(&new.database)?;
+        if let Err(error) = database.vacuum_into(&new.database) {
+            restore_quarantined_database(&quarantined);
+            return Err(format!("failed to migrate database: {error}"));
+        }
         let migrated_database = Database::open(&new.database)
             .map_err(|e| format!("failed to open migrated database: {e}"))?;
         rewrite_database_storage_paths(&migrated_database, &storage_path_mappings(old, new))
@@ -297,6 +304,75 @@ pub fn migrate_storage_data(
     }
 
     Ok(())
+}
+
+/// Moves an existing database and its WAL sidecars out of the way before a
+/// `VACUUM INTO`, returning the `(backup, original)` pairs so a failed vacuum
+/// can restore them.
+fn quarantine_database_for_migration(path: &Path) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut moved = Vec::new();
+    for candidate in [
+        path.to_path_buf(),
+        PathBuf::from(format!("{}-wal", path.display())),
+        PathBuf::from(format!("{}-shm", path.display())),
+    ] {
+        if !candidate.exists() {
+            continue;
+        }
+        let backup = PathBuf::from(format!("{}.pre-migrate-{stamp}", candidate.display()));
+        std::fs::rename(&candidate, &backup).map_err(|error| {
+            format!(
+                "failed to quarantine {} before migration: {error}",
+                candidate.display()
+            )
+        })?;
+        moved.push((backup, candidate));
+    }
+    Ok(moved)
+}
+
+fn restore_quarantined_database(moved: &[(PathBuf, PathBuf)]) {
+    for (backup, original) in moved {
+        let _ = std::fs::rename(backup, original);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{quarantine_database_for_migration, restore_quarantined_database};
+    use std::time::SystemTime;
+
+    #[test]
+    fn quarantine_moves_existing_database_and_sidecars_aside() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-migration-quarantine-{}-{unique}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("clipboard.sqlite3");
+        let wal = directory.join("clipboard.sqlite3-wal");
+        std::fs::write(&database, b"db").unwrap();
+        std::fs::write(&wal, b"wal").unwrap();
+
+        let moved = quarantine_database_for_migration(&database).unwrap();
+        assert_eq!(moved.len(), 2);
+        assert!(!database.exists());
+        assert!(!wal.exists());
+
+        restore_quarantined_database(&moved);
+        assert_eq!(std::fs::read(&database).unwrap(), b"db");
+        assert_eq!(std::fs::read(&wal).unwrap(), b"wal");
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 pub fn storage_path_mappings(old: &StoragePaths, new: &StoragePaths) -> Vec<(PathBuf, PathBuf)> {

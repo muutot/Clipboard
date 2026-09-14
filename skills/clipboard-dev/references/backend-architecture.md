@@ -71,7 +71,7 @@ Resource-root safety is mandatory:
 - image and file roots must not overlap each other or reserved project/data/database/index/icon paths;
 - cleanup skips the ownership marker and runs only when the corresponding cleanup flag is true.
 
-Changing data directories is a migration workflow, not a path-string edit. Keep managed/external path rewriting, database backup, search-index derivation, and concurrent ingestion/worker coordination in scope. The webview asset protocol is granted the managed storage root plus any configured image/file roots, so previews and thumbnails render even when a custom resource directory lives outside `storage`.
+Changing data directories is a migration workflow, not a path-string edit. Keep managed/external path rewriting, database backup, search-index derivation, and concurrent ingestion/worker coordination in scope. The webview asset protocol is granted the managed storage root plus any configured image/file roots, so previews and thumbnails render even when a custom resource directory lives outside `storage`. Migration must be retryable: `VACUUM INTO` refuses an existing destination, so `migrate_storage_data` quarantines any existing target database and its `-wal`/`-shm` sidecars to `*.pre-migrate-<stamp>` first (restoring them if the vacuum fails), which both lets a retry after a partial failure proceed and avoids destroying a pre-existing database at the chosen directory.
 
 ## Search
 
