@@ -216,6 +216,10 @@
       return;
     if (dragState) return;
     const requestId = ++dragRequestId;
+    // `event.currentTarget` is nulled once dispatch leaves this handler, and
+    // the awaits below yield — capture the header reference up front so
+    // pointer capture actually runs instead of always being skipped.
+    const header = event.currentTarget instanceof Element ? event.currentTarget : null;
     const win = await resolveFloatWindow();
     if (requestId !== dragRequestId) return;
     if (!win) return;
@@ -229,7 +233,6 @@
         winY: pos.y,
         scale,
       };
-      const header = event.currentTarget instanceof Element ? event.currentTarget : null;
       try {
         header?.setPointerCapture(event.pointerId);
       } catch {
