@@ -75,7 +75,7 @@ static RE_DATE_CN: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"\b(\d{4})年(\d{1,2})月(\d{1,2})日").unwrap());
 
 static RE_URL: LazyLock<regex_lite::Regex> =
-    LazyLock::new(|| regex_lite::Regex::new(r"https?://[^\s<>{}|\^`\[\]]+").unwrap());
+    LazyLock::new(|| regex_lite::Regex::new(r"(?i)https?://[^\s<>{}|\^`\[\]]+").unwrap());
 static RE_EMAIL: LazyLock<regex_lite::Regex> = LazyLock::new(|| {
     regex_lite::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap()
 });
@@ -196,7 +196,13 @@ fn extract_ip_addresses(text: &str) -> Vec<String> {
 }
 
 fn is_standalone_link(text: &str) -> bool {
-    if text.starts_with("http://") || text.starts_with("https://") {
+    // Scheme comparison is case-insensitive: `HTTPS://…` is a valid URL and
+    // must classify as a link like its lowercase spelling.
+    let starts_with_ignore_case = |prefix: &str| {
+        text.get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+    };
+    if starts_with_ignore_case("http://") || starts_with_ignore_case("https://") {
         return !text.contains(char::is_whitespace);
     }
     false
@@ -300,6 +306,14 @@ mod tests {
     fn detects_standalone_link() {
         let markers = detect_markers("https://github.com/user/repo");
         assert!(markers.is_link);
+    }
+
+    #[test]
+    fn detects_uppercase_scheme_links() {
+        let markers = detect_markers("HTTPS://github.com/user/repo");
+        assert!(markers.has_url);
+        assert!(markers.is_link);
+        assert_eq!(markers.urls, vec!["HTTPS://github.com/user/repo"]);
     }
 
     #[test]
