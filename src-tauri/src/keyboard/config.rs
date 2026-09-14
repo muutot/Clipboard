@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::storage::StorageError;
 
+use super::actions::is_global_action;
 use super::ShortcutBinding;
 
 const CONFIG_DIRECTORY_NAME: &str = "conf";
@@ -128,15 +129,20 @@ impl KeyboardConfigStore {
     ) -> Result<Vec<String>, StorageError> {
         validate_action_name(&action)?;
         let normalized = normalize_shortcuts(&shortcuts)?;
-        // Reject a key that has no global-hotkey mapping up front instead of
-        // persisting it and dropping it silently during registration.
-        for shortcut in &normalized {
-            let binding = ShortcutBinding::from_str(shortcut)
-                .map_err(|error| StorageError::InvalidShortcut(error.to_string()))?;
-            if crate::platform::hotkey_common::hotkey_registration_identity(&binding).is_none() {
-                return Err(StorageError::InvalidShortcut(format!(
-                    "'{shortcut}' uses a key that cannot be registered as a global shortcut"
-                )));
+        // Only OS-global actions need a registrable global-hotkey chord. A
+        // window action may legitimately use a key with no global mapping
+        // (e.g. the shipped `focusSearch` default `/`), which is dispatched by
+        // the webview instead of `RegisterHotKey`.
+        if is_global_action(&action) {
+            for shortcut in &normalized {
+                let binding = ShortcutBinding::from_str(shortcut)
+                    .map_err(|error| StorageError::InvalidShortcut(error.to_string()))?;
+                if crate::platform::hotkey_common::hotkey_registration_identity(&binding).is_none()
+                {
+                    return Err(StorageError::InvalidShortcut(format!(
+                        "'{shortcut}' uses a key that cannot be registered as a global shortcut"
+                    )));
+                }
             }
         }
         let mut updated = self.config.clone();
@@ -365,6 +371,30 @@ mod tests {
         assert_eq!(saved, vec!["Ctrl+Shift+V", "Shift+Shift"]);
         let reopened = KeyboardConfigStore::load(&project).unwrap();
         assert_eq!(reopened.config().shortcuts["toggleWindow"], saved);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn allows_window_actions_without_a_global_hotkey_mapping() {
+        let project = temporary_directory("window-action");
+        let mut store = KeyboardConfigStore::load(&project).unwrap();
+
+        // `focusSearch` is a window action; `/` has no global-hotkey mapping
+        // and must still be saveable.
+        let saved = store
+            .set_action_shortcuts(
+                "focusSearch".to_owned(),
+                vec!["/".to_owned(), "Ctrl+K".to_owned()],
+            )
+            .unwrap();
+        assert_eq!(saved, vec!["/", "Ctrl+K"]);
+
+        // A global action still rejects an unregistrable key.
+        let error = store
+            .set_action_shortcuts("toggleWindow".to_owned(), vec!["/".to_owned()])
+            .unwrap_err();
+        assert!(matches!(error, StorageError::InvalidShortcut(_)));
+
         fs::remove_dir_all(project).unwrap();
     }
 
