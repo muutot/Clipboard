@@ -210,10 +210,14 @@ fn error_with_path(context: &str, path: PathBuf, error: std::io::Error) -> std::
     )
 }
 
+/// Readiness check used at startup and by status queries: size plus the
+/// trust-on-first-use digest when one was recorded. Files installed before
+/// digest pinning have no `.sha256` sidecar and keep the size-only fallback
+/// inside [`model_digest_matches`].
 pub fn model_is_installed(dir: &Path, spec: &PpOcrModelSpec) -> bool {
     spec.files()
         .iter()
-        .all(|file| model_file_is_installed(dir, file))
+        .all(|file| model_file_is_installed(dir, file) && model_digest_matches(dir, file))
 }
 
 pub fn installed_model_variants(dir: &Path) -> Vec<&'static str> {
@@ -261,6 +265,29 @@ mod tests {
             .unwrap()
             .set_len(tiny.detection.size_bytes - 1)
             .unwrap();
+        assert!(!model_is_installed(&dir, tiny));
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn installed_check_rejects_same_size_replacement_after_pinning() {
+        let dir = temporary_test_directory("installed-digest");
+        fs::create_dir_all(&dir).unwrap();
+        let tiny = model_spec("tiny").unwrap();
+        for file in tiny.files() {
+            create_sized_file(&dir, &file);
+            record_model_digest(&dir, &file).unwrap();
+        }
+        assert!(model_is_installed(&dir, tiny));
+
+        // Same-size content swap must fail readiness so startup re-downloads
+        // instead of crashing at first predict.
+        let first = tiny.files()[0];
+        let path = dir.join(first.filename);
+        let mut bytes = fs::read(&path).unwrap();
+        bytes[0] ^= 0xff;
+        fs::write(&path, &bytes).unwrap();
         assert!(!model_is_installed(&dir, tiny));
 
         fs::remove_dir_all(dir).unwrap();
