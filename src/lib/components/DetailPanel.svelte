@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import type { IconName } from "$lib/types/clipboard";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
@@ -147,18 +147,26 @@
   });
 
   $effect(() => {
-    if (item?.kind !== "image" || !isTauriRuntime()) return;
+    // Depend only on the item id/kind. Depending on the whole `item` object
+    // re-ran this effect on every OCR patch (each patch creates a new object),
+    // which reset `requestInFlight` and fired an immediate poll, turning the
+    // 2 s interval into an IPC-speed busy poll. `untrack` reads the latest
+    // status inside the poll without registering a dependency.
+    const itemId = item?.id;
+    const itemKind = item?.kind;
+    if (itemKind !== "image" || !itemId || !isTauriRuntime()) return;
 
-    const targetItem = item;
     let disposed = false;
     let requestInFlight = false;
     const poll = () => {
+      if (disposed || requestInFlight) return;
+      const current = untrack(() => item);
       if (
-        disposed ||
-        requestInFlight ||
-        targetItem.ocrStatus === "completed" ||
-        targetItem.ocrStatus === "failed" ||
-        targetItem.ocrStatus === "none"
+        !current ||
+        current.id !== itemId ||
+        current.ocrStatus === "completed" ||
+        current.ocrStatus === "failed" ||
+        current.ocrStatus === "none"
       )
         return;
 
@@ -167,17 +175,17 @@
         fullText: string;
         status: "pending" | "processing" | "completed" | "failed";
         errorMessage: string | null;
-      } | null>("get_clipboard_item_ocr", { id: targetItem.id })
+      } | null>("get_clipboard_item_ocr", { id: itemId })
         .then((result) => {
           if (disposed) return;
           if (result) {
-            onocrupdate(targetItem.id, {
+            onocrupdate(itemId, {
               ocrStatus: result.status,
               ocrError: result.errorMessage ?? undefined,
               ocrText: result.fullText || undefined,
             });
           } else {
-            onocrupdate(targetItem.id, {
+            onocrupdate(itemId, {
               ocrStatus: "none",
               ocrText: undefined,
               ocrError: undefined,
@@ -186,7 +194,7 @@
         })
         .catch(() => {
           if (disposed) return;
-          onocrupdate(targetItem.id, { ocrStatus: "failed", ocrError: _t("detail.ocrReadFailed") });
+          onocrupdate(itemId, { ocrStatus: "failed", ocrError: _t("detail.ocrReadFailed") });
         })
         .finally(() => {
           requestInFlight = false;
