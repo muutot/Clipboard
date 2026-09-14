@@ -261,6 +261,10 @@
     let promise = lazyPanelModules.get(cacheKey);
     if (!promise) {
       promise = descriptor.load();
+      // Evict on rejection: a cached rejected promise would make every later
+      // navigation re-await the same failure, permanently breaking the panel
+      // after one transient chunk-load error until the window restarts.
+      promise.catch(() => lazyPanelModules.delete(cacheKey));
       lazyPanelModules.set(cacheKey, promise);
     }
     return promise;
