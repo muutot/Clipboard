@@ -33,6 +33,12 @@ pub(crate) use auto::AutoSyncWorker;
 
 const DEFAULT_S3_REGION: &str = "us-east-1";
 const MAX_SYNC_ICON_BYTES: u64 = 1024 * 1024;
+/// Resource byte limits are clamped to a working window, mirroring the
+/// `segment_max_entries` / `auto_sync_interval_secs` treatment: 0 makes the
+/// upload side silently skip every binary while materialization hard-fails,
+/// and huge values disable protection against runaway downloads.
+const MIN_SYNC_RESOURCE_BYTES: u64 = 1024;
+const MAX_SYNC_RESOURCE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 fn resource_materialization_lock(key: &str) -> Result<Arc<Mutex<()>>, String> {
     let locks = RESOURCE_MATERIALIZATION_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
@@ -152,8 +158,12 @@ impl SyncSettings {
                 .clone()
                 .filter(|password| !password.is_empty()),
             segment_max_entries: sync.segment_max_entries.clamp(16, 10_000) as usize,
-            max_sync_image_bytes: sync.max_sync_image_bytes,
-            max_sync_file_bytes: sync.max_sync_file_bytes,
+            max_sync_image_bytes: sync
+                .max_sync_image_bytes
+                .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
+            max_sync_file_bytes: sync
+                .max_sync_file_bytes
+                .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
         })
     }
 
@@ -265,8 +275,10 @@ pub fn set_sync_config(
         auto_sync,
         auto_sync_interval_secs: auto_sync_interval_secs.clamp(10, 86_400),
         segment_max_entries: segment_max_entries.clamp(16, 10_000),
-        max_sync_image_bytes,
-        max_sync_file_bytes,
+        max_sync_image_bytes: max_sync_image_bytes
+            .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
+        max_sync_file_bytes: max_sync_file_bytes
+            .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
     };
     guard
         .set_sync_config(sync)
@@ -678,6 +690,16 @@ mod tests {
             max_sync_image_bytes: 5_242_880,
             max_sync_file_bytes: 10_485_760,
         }
+    }
+
+    #[test]
+    fn resource_byte_limits_are_clamped_to_a_working_window() {
+        let mut sync = configured_sync();
+        sync.max_sync_image_bytes = 0;
+        sync.max_sync_file_bytes = u64::MAX;
+        let settings = SyncSettings::from_sync_config(&sync).unwrap();
+        assert_eq!(settings.max_sync_image_bytes, MIN_SYNC_RESOURCE_BYTES);
+        assert_eq!(settings.max_sync_file_bytes, MAX_SYNC_RESOURCE_BYTES);
     }
 
     #[test]
