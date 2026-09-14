@@ -499,9 +499,19 @@ pub fn rename_item(
                     // failed database write leaves the disk untouched; a
                     // failed rename is rolled back in the database so the
                     // record never points at a missing file.
+                    let old_path_string = old.to_string_lossy().to_string();
+                    let new_path_string = new_path.to_string_lossy().to_string();
                     let rollback = updated.clone();
-                    updated.resource_path = Some(new_path.to_string_lossy().to_string());
-                    updated.preview_path = Some(new_path.to_string_lossy().to_string());
+                    updated.resource_path = Some(new_path_string.clone());
+                    updated.preview_path = Some(new_path_string.clone());
+                    // The detail panel and multi-file paste read the managed
+                    // path out of `metadata_json`/`text_content` before
+                    // `resource_path`, so those copies must move with the file.
+                    rewrite_stored_resource_paths(
+                        &mut updated,
+                        &old_path_string,
+                        &new_path_string,
+                    );
                     database.save_item(&updated).map_err(|e| e.to_string())?;
                     if let Err(e) = std::fs::rename(old, &new_path) {
                         database.save_item(&rollback).map_err(|rollback_error| {
@@ -563,11 +573,67 @@ fn is_windows_reserved_device_name(stem: &str) -> bool {
     })
 }
 
+/// Rewrites every exact occurrence of `old_path` inside a renamed record's
+/// `metadata_json` and file-list `text_content`. `rename_item` updates
+/// `resource_path`/`preview_path`, but the detail panel and multi-file paste
+/// read the managed path out of those fields first, so a rename that skipped
+/// them would point the UI at a file that no longer exists.
+fn rewrite_stored_resource_paths(item: &mut ClipboardItem, old_path: &str, new_path: &str) {
+    if let Some(metadata) = item.metadata_json.as_deref() {
+        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(metadata) {
+            replace_path_strings(&mut value, old_path, new_path);
+            if let Ok(serialized) = serde_json::to_string(&value) {
+                item.metadata_json = Some(serialized);
+            }
+        }
+    }
+    if let Some(text) = item.text_content.as_deref() {
+        if let Ok(mut paths) = serde_json::from_str::<Vec<String>>(text) {
+            let mut changed = false;
+            for path in &mut paths {
+                if path == old_path {
+                    *path = new_path.to_owned();
+                    changed = true;
+                }
+            }
+            if changed {
+                if let Ok(serialized) = serde_json::to_string(&paths) {
+                    item.text_content = Some(serialized);
+                }
+            }
+        }
+    }
+}
+
+/// Recursively replaces string values equal to `old_path`. Exact matches keep
+/// unrelated paths (e.g. the other files of a multi-file capture) untouched.
+fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path: &str) {
+    match value {
+        serde_json::Value::String(text) => {
+            if text == old_path {
+                *text = new_path.to_owned();
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                replace_path_strings(item, old_path, new_path);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for item in map.values_mut() {
+                replace_path_strings(item, old_path, new_path);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         apply_sort_rules, cmp_by_field, generated_clipboard_title, metadata_custom_title,
-        resolve_custom_title, sanitize_file_stem, set_custom_title_metadata,
+        resolve_custom_title, rewrite_stored_resource_paths, sanitize_file_stem,
+        set_custom_title_metadata,
     };
     use crate::commands::clipboard::types::{SearchSortDirection, SearchSortField, SearchSortRule};
     use crate::domain::{ClipboardItem, ClipboardKind};
@@ -623,6 +689,39 @@ mod tests {
         assert_eq!(sanitize_file_stem("com1"), "_");
         assert_eq!(sanitize_file_stem("LPT4"), "_");
         assert_eq!(sanitize_file_stem("combo"), "combo");
+    }
+
+    #[test]
+    fn rename_rewrites_managed_paths_in_metadata_and_file_list() {
+        let mut record = item("file-1", "old");
+        record.kind = ClipboardKind::File;
+        record.resource_path = Some("/store/files/old.txt".to_owned());
+        record.preview_path = Some("/store/files/old.txt".to_owned());
+        record.metadata_json = Some(
+            r#"{"resourcePath":"/store/files/old.txt","files":[{"storagePath":"/store/files/old.txt"},{"storagePath":"/store/files/other.txt"}]}"#
+                .to_owned(),
+        );
+        record.text_content =
+            Some(r#"["/store/files/old.txt","/store/files/other.txt"]"#.to_owned());
+
+        rewrite_stored_resource_paths(
+            &mut record,
+            "/store/files/old.txt",
+            "/store/files/new.txt",
+        );
+
+        let metadata: serde_json::Value =
+            serde_json::from_str(record.metadata_json.as_deref().unwrap()).unwrap();
+        assert_eq!(metadata["resourcePath"], "/store/files/new.txt");
+        assert_eq!(metadata["files"][0]["storagePath"], "/store/files/new.txt");
+        assert_eq!(
+            metadata["files"][1]["storagePath"],
+            "/store/files/other.txt"
+        );
+        assert_eq!(
+            record.text_content.as_deref(),
+            Some(r#"["/store/files/new.txt","/store/files/other.txt"]"#)
+        );
     }
 
     #[test]

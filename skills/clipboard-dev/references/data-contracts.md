@@ -165,7 +165,7 @@ Event payloads also use camelCase where Rust structs are serialized. Register li
 - Preserve external original paths separately from managed storage paths.
 - Rewrite only managed paths during data-directory migration.
 - Include every path in multi-file reference accounting so cleanup cannot delete active files.
-- Resource files are content-hash-named and may be shared by several records (dedup, duplicates). `rename_item` renames the physical file only when the record is its sole owner (`resource_reference_count(path, id) == 0`); a shared file keeps its hash name and only the display title changes, so renaming one record never breaks another. The count includes direct `resource_path`/`preview_path` references and the non-first files of multi-file records (the ordered `text_content` JSON list).
+- Resource files are content-hash-named and may be shared by several records (dedup, duplicates). `rename_item` renames the physical file only when the record is its sole owner (`resource_reference_count(path, id) == 0`); a shared file keeps its hash name and only the display title changes, so renaming one record never breaks another. The count includes direct `resource_path`/`preview_path` references and the non-first files of multi-file records (the ordered `text_content` JSON list). A successful rename also rewrites every exact occurrence of the old path inside `metadata_json` (`resourcePath`/`previewPath`/`storagePath`, per-file `files[].storagePath`) and the multi-file `text_content` list, because the detail panel and multi-file paste read those fields before `resource_path`; skipping them would point the UI at a file that no longer exists.
 
 ## Tags
 
