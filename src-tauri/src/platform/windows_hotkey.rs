@@ -462,6 +462,30 @@ pub fn clear_hotkey_state() {
     clear_double_modifier_tracker();
 }
 
+/// Bounded wait covering the gap after a readiness-timeout spawn: the loop
+/// thread may publish its hwnd after the spawn-side handshake gave up, and
+/// until it does (or the thread exits on its error path) there is no hwnd to
+/// post WM_QUIT to, while `join` would block forever on a thread stuck in
+/// `GetMessageW`. Returns `false` when the wait expired — the caller must
+/// then leak the thread instead of joining it.
+fn wait_for_hotkey_hwnd_or_exit(handle: &thread::JoinHandle<()>) -> bool {
+    const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + WAIT;
+    loop {
+        if handle.is_finished() {
+            return true;
+        }
+        let hwnd = HOTKEY_HWND.lock().map(|g| *g).unwrap_or(0);
+        if hwnd != 0 {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 pub fn stop_hotkey_thread() {
     let hwnd = HOTKEY_HWND.lock().ok().and_then(|g| {
         let h = *g;
@@ -707,9 +731,31 @@ impl HotkeyManager {
     }
 
     pub fn stop(&mut self) {
+        let handle = self.handle.take();
+        // The spawn-side readiness wait may time out before the loop thread
+        // publishes its hwnd (pathologically slow window creation). Then
+        // `stop_hotkey_thread` has no hwnd to post WM_QUIT to and the join
+        // below would block forever on a thread stuck in GetMessageW. Wait
+        // bounded for the hwnd to appear — or the thread to exit on its own
+        // error path — before asking the stop to run; if even that expires,
+        // leak the thread so shutdown still proceeds.
+        let joinable = handle
+            .as_ref()
+            .map(wait_for_hotkey_hwnd_or_exit)
+            .unwrap_or(true);
         stop_hotkey_thread();
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+        if let Some(handle) = handle {
+            if joinable {
+                if let Err(panic) = handle.join() {
+                    crate::log_event!(
+                        "[hotkey] message loop thread terminated with a panic: {panic:?}"
+                    );
+                }
+            } else {
+                crate::log_event!(
+                    "[hotkey] message loop thread never became stoppable; leaking it so shutdown can proceed"
+                );
+            }
         }
         self.quick_paste_target.clear();
     }
