@@ -39,6 +39,7 @@
     void loadPrivacy();
     void loadPrivacyStatus();
     let unlistenPrivacyPause: (() => void) | undefined;
+    let disposed = false;
     if (isTauriRuntime()) {
       void getRuntimeInfo().then((runtime) => {
         if (runtime && runtime.operatingSystem !== "windows") {
@@ -48,10 +49,12 @@
       listen<boolean>("privacy-pause-changed", (event) => {
         privacyPaused = event.payload;
       }).then((unlisten) => {
-        unlistenPrivacyPause = unlisten;
+        if (disposed) unlisten();
+        else unlistenPrivacyPause = unlisten;
       });
     }
     return () => {
+      disposed = true;
       unlistenPrivacyPause?.();
       feedback.dispose();
     };
