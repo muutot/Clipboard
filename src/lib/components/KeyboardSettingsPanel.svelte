@@ -247,7 +247,10 @@
     configRequestId += 1;
     feedback.dispose();
     if (recordingTimer !== undefined) clearTimeout(recordingTimer);
-    window.removeEventListener("keydown", onRecordingKey);
+    // Match the capture flag from startRecording: without `true` the removal
+    // is a no-op, the listener survives the component, keeps swallowing every
+    // keydown, and writes stray bindings into the keyboard config.
+    window.removeEventListener("keydown", onRecordingKey, true);
   });
 </script>
 
