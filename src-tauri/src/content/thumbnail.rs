@@ -128,7 +128,7 @@ pub struct ThumbnailWorker {
 }
 
 impl ThumbnailWorker {
-    pub fn start(preview_dir: PathBuf, database: Arc<Database>) -> Self {
+    pub fn start(preview_dir: PathBuf, database: Arc<Database>) -> Result<Self, String> {
         let (sender, receiver) = mpsc::channel::<ThumbnailTask>();
 
         let handle = thread::Builder::new()
@@ -157,12 +157,12 @@ impl ThumbnailWorker {
                     }
                 }
             })
-            .expect("failed to spawn the thumbnail worker thread");
+            .map_err(|error| format!("failed to spawn the thumbnail worker thread: {error}"))?;
 
-        Self {
+        Ok(Self {
             sender,
             handle: Some(handle),
-        }
+        })
     }
 
     pub fn queue(&self) -> ThumbnailQueue {
@@ -266,7 +266,8 @@ mod tests {
         let database = Arc::new(Database::open(dir.join("db.sqlite")).unwrap());
         database.save_item(&image_item("img", &source)).unwrap();
 
-        let mut worker = ThumbnailWorker::start(dir.join("previews"), Arc::clone(&database));
+        let mut worker =
+            ThumbnailWorker::start(dir.join("previews"), Arc::clone(&database)).unwrap();
         worker.queue().enqueue("img".to_owned(), source.clone());
 
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -289,7 +290,7 @@ mod tests {
         let dir = temporary_dir("stop");
         let database = Arc::new(Database::open(dir.join("db.sqlite")).unwrap());
 
-        let mut worker = ThumbnailWorker::start(dir.join("previews"), database);
+        let mut worker = ThumbnailWorker::start(dir.join("previews"), database).unwrap();
         let queue = worker.queue();
         worker.stop();
         worker.stop();

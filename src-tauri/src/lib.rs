@@ -416,7 +416,7 @@ pub fn run() {
 
             let thumbnail_database = Database::open(&paths.database)?;
             let thumbnail_worker =
-                ThumbnailWorker::start(paths.previews.clone(), Arc::new(thumbnail_database));
+                ThumbnailWorker::start(paths.previews.clone(), Arc::new(thumbnail_database))?;
             let thumbnail_queue = thumbnail_worker.queue();
 
             let mut privacy_manager = PrivacyManager::new();
