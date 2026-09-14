@@ -243,7 +243,82 @@ pub fn tray_recent_title(text: &str) -> String {
 /// Rebuilds the tray menu from the current capture state and recent history.
 /// Best-effort: any failure keeps the previous menu and logs the cause.
 /// Called after tray creation, after each captured save, and on pause flips.
+///
+/// Debounced: every capture used to trigger a full rebuild — each one pages
+/// through history and constructs the whole menu on the main thread — so a
+/// burst of clipboard events became a storm of main-thread menu tasks. At
+/// most one rebuild runs per window; a single delayed rebuild coalesces the
+/// suppressed tail so the newest entry still shows up.
+const TRAY_REFRESH_DEBOUNCE_MS: u64 = 400;
+
+struct TrayRefreshDebounce {
+    next_allowed: Option<std::time::Instant>,
+    trailing_scheduled: bool,
+}
+
+static TRAY_REFRESH_DEBOUNCE: Mutex<TrayRefreshDebounce> = Mutex::new(TrayRefreshDebounce {
+    next_allowed: None,
+    trailing_scheduled: false,
+});
+
 pub fn refresh_tray_recent_menu<R: Runtime>(app: &AppHandle<R>) {
+    if tray_refresh_due_now() {
+        tray_refresh_now(app);
+        return;
+    }
+    schedule_trailing_tray_refresh(app);
+}
+
+/// Leading edge: claims the window when the previous one has expired.
+fn tray_refresh_due_now() -> bool {
+    let now = std::time::Instant::now();
+    let Ok(mut state) = TRAY_REFRESH_DEBOUNCE.lock() else {
+        return true; // fail open: a stuck lock must not freeze the tray menu
+    };
+    if state.next_allowed.is_none_or(|deadline| now >= deadline) {
+        state.next_allowed = Some(now + std::time::Duration::from_millis(TRAY_REFRESH_DEBOUNCE_MS));
+        true
+    } else {
+        false
+    }
+}
+
+/// Trailing edge: one helper thread sleeps to the window's end and refreshes
+/// with the latest history, so the final event of a burst is not dropped.
+fn schedule_trailing_tray_refresh<R: Runtime>(app: &AppHandle<R>) {
+    let deadline = {
+        let Ok(mut state) = TRAY_REFRESH_DEBOUNCE.lock() else {
+            return;
+        };
+        if state.trailing_scheduled {
+            return; // an existing helper already covers this burst
+        }
+        state.trailing_scheduled = true;
+        state.next_allowed.unwrap_or_else(std::time::Instant::now)
+    };
+    let app_for_timer = app.clone();
+    let spawn = std::thread::Builder::new()
+        .name("tray-refresh-debounce".to_owned())
+        .spawn(move || {
+            let now = std::time::Instant::now();
+            if deadline > now {
+                std::thread::sleep(deadline - now);
+            }
+            if let Ok(mut state) = TRAY_REFRESH_DEBOUNCE.lock() {
+                state.trailing_scheduled = false;
+                state.next_allowed = None; // let the helper's refresh run
+            }
+            refresh_tray_recent_menu(&app_for_timer);
+        });
+    if let Err(error) = spawn {
+        crate::log_event!("[tray] failed to spawn the refresh debounce helper: {error}");
+        if let Ok(mut state) = TRAY_REFRESH_DEBOUNCE.lock() {
+            state.trailing_scheduled = false;
+        }
+    }
+}
+
+fn tray_refresh_now<R: Runtime>(app: &AppHandle<R>) {
     let entries = load_recent_entries(app);
     let app_for_task = app.clone();
     // Build and install the menu on the main thread without waiting. Calling
