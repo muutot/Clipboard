@@ -192,7 +192,9 @@
   function startRecording(action: string) {
     stopRecording();
     recordingAction = action;
-    window.addEventListener("keydown", onRecordingKey);
+    // Capture phase so Escape (and every recorded key) is consumed before the
+    // settings shell's window keydown listener can close the whole window.
+    window.addEventListener("keydown", onRecordingKey, true);
     recordingTimer = setTimeout(() => {
       recordingTimer = undefined;
       stopRecording();
@@ -205,12 +207,13 @@
       recordingTimer = undefined;
     }
     recordingAction = "";
-    window.removeEventListener("keydown", onRecordingKey);
+    window.removeEventListener("keydown", onRecordingKey, true);
   }
 
   function onRecordingKey(event: KeyboardEvent) {
     event.preventDefault();
-    event.stopPropagation();
+    // Stop other window listeners (the settings shell) from also reacting.
+    event.stopImmediatePropagation();
 
     if (event.key === "Escape") {
       stopRecording();

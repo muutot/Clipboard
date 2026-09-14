@@ -133,13 +133,15 @@
     if (event.key !== "Escape") return;
     if (replaceTarget) {
       event.preventDefault();
-      event.stopPropagation();
+      // Capture phase + immediate stop so the settings shell's window keydown
+      // listener does not also close the whole settings window.
+      event.stopImmediatePropagation();
       closeReplaceDialog();
     }
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydowncapture={handleKeydown} />
 
 <div class="settings-scroll">
   <section class="setting-card">
