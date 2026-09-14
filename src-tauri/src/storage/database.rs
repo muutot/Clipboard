@@ -71,8 +71,10 @@ impl Database {
 }
 
 fn vacuum_into_path(connection: &Connection, target_path: &Path) -> Result<(), StorageError> {
-    let target = target_path.to_string_lossy().replace('\\', "\\\\");
-    connection.execute_batch(&format!("VACUUM INTO '{}'", target.replace('\'', "''")))?;
+    // SQLite string literals only escape `'` as `''`; backslashes are literal.
+    // Doubling them would create a file whose name contains doubled separators.
+    let target = target_path.to_string_lossy().replace('\'', "''");
+    connection.execute_batch(&format!("VACUUM INTO '{target}'"))?;
     Ok(())
 }
 
