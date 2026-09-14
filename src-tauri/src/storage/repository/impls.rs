@@ -922,11 +922,27 @@ impl ClipboardRepository for Database {
 
     fn resource_reference_count(&self, path: &str, exclude_id: &str) -> Result<u64, StorageError> {
         self.with_connection(|connection| {
+            // Count direct resource/preview references plus the non-first files
+            // of multi-file records, which are referenced only through the
+            // ordered `text_content` JSON list. Missing the latter lets
+            // `rename_item` rename a file out from under another record.
             Ok(connection.query_row(
                 "SELECT COUNT(*)
                  FROM clipboard_items
                  WHERE id <> ?1
-                   AND (resource_path = ?2 OR preview_path = ?2)",
+                   AND (
+                       resource_path = ?2
+                       OR preview_path = ?2
+                       OR (
+                           kind = 'file'
+                           AND text_content IS NOT NULL
+                           AND json_valid(text_content)
+                           AND EXISTS (
+                               SELECT 1 FROM json_each(clipboard_items.text_content)
+                               WHERE value = ?2
+                           )
+                       )
+                   )",
                 params![exclude_id, path],
                 |row| {
                     let count: i64 = row.get(0)?;

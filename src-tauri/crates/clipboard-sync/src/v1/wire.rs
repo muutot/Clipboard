@@ -1375,6 +1375,52 @@ mod tests {
     }
 
     #[test]
+    fn near_limit_high_entropy_chunk_round_trips() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-sync-pack-size-test-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        // Printable ASCII maximizes per-byte entropy for a UTF-8 String field.
+        // If even this near-limit chunk survives, zstd's framing overhead
+        // cannot push a real (String-only) chunk past the decoder's stored-size
+        // bound, so the encoder/decoder size limits agree in practice.
+        let target = large_pack_chunk_limit_bytes() - 8192;
+        let mut text = String::with_capacity(target);
+        for _ in 0..target {
+            let byte = 0x20 + (rand::random::<u8>() % 95);
+            text.push(byte as char);
+        }
+        let mut item = sample_item();
+        item.text_content = Some(text);
+        let batch = MutationBatch {
+            upserts: vec![ReplicatedItem {
+                item,
+                version: sample_version(),
+            }],
+            tombstones: Vec::new(),
+        };
+        let raw_size = mutation_batch_encoded_size(&batch).unwrap();
+        assert!(
+            raw_size <= large_pack_chunk_limit_bytes(),
+            "raw batch size {raw_size} must fit the chunk limit"
+        );
+
+        let header = SnapshotPackHeader {
+            device_id: "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
+            epoch: "e04623ec-6109-4275-a748-8743f3076b7d".to_string(),
+            through_sequence: 1,
+        };
+        let encoded = encode_snapshot_pack(&directory, &header, [batch.clone()], None).unwrap();
+        let mut reader = open_snapshot_pack(encoded.path(), None).unwrap();
+        assert_eq!(reader.next().unwrap().unwrap(), batch);
+        assert!(reader.next().is_none());
+        drop(reader);
+        drop(encoded);
+        let _ = fs::remove_dir(&directory);
+    }
+
+    #[test]
     fn chunked_pack_rejects_wrong_password_and_tampering() {
         let directory = std::env::temp_dir().join(format!(
             "clipboard-sync-pack-corruption-test-{}-{:016x}",

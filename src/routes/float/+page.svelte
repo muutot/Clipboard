@@ -202,6 +202,10 @@
     scale: number;
   } | null = null;
 
+  // Cancels a drag whose async window lookup resolves after the panel closed
+  // (or after another pointerdown), so its window-level listeners cannot leak.
+  let dragRequestId = 0;
+
   async function startHeaderDrag(event: PointerEvent) {
     if (
       !isTauriRuntime() ||
@@ -211,10 +215,13 @@
     )
       return;
     if (dragState) return;
+    const requestId = ++dragRequestId;
     const win = await resolveFloatWindow();
+    if (requestId !== dragRequestId) return;
     if (!win) return;
     try {
       const [pos, scale] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
+      if (requestId !== dragRequestId) return;
       dragState = {
         startX: event.screenX,
         startY: event.screenY,
@@ -252,6 +259,7 @@
   }
 
   function endHeaderDrag() {
+    dragRequestId += 1;
     dragState = null;
     window.removeEventListener("pointermove", onHeaderDragMove);
     window.removeEventListener("pointerup", endHeaderDrag);

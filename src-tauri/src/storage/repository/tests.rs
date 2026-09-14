@@ -53,6 +53,35 @@ fn dedup_upsert_preserves_existing_tags() {
 }
 
 #[test]
+fn resource_reference_count_includes_multi_file_text_references() {
+    let database = Database::open_in_memory().unwrap();
+
+    // Row "single": a lone copy of /managed/b.bin as its resource.
+    let mut single = text_item("single", "hash-single", 100);
+    single.kind = ClipboardKind::File;
+    single.text_content = None;
+    single.resource_path = Some("/managed/b.bin".to_owned());
+    database.save_item(&single).unwrap();
+
+    // Row "group": a [a, b] group whose second file is the same /managed/b.bin,
+    // referenced only through the ordered text_content list.
+    let mut group = text_item("group", "hash-group", 200);
+    group.kind = ClipboardKind::File;
+    group.resource_path = Some("/managed/a.bin".to_owned());
+    group.text_content = Some(serde_json::json!(["/managed/a.bin", "/managed/b.bin"]).to_string());
+    database.save_item(&group).unwrap();
+
+    // The shared path must be counted, or renaming the "single" record would
+    // rename the file out from under the "group" record.
+    assert_eq!(
+        database
+            .resource_reference_count("/managed/b.bin", "single")
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn saves_and_lists_items_by_recency() {
     let database = Database::open_in_memory().unwrap();
     database

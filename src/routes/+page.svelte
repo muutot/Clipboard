@@ -1282,6 +1282,13 @@
 
     if (event && event.shiftKey && lastClickedIndex >= 0) {
       const currentIdx = filteredItems.findIndex((i) => i.id === id);
+      if (currentIdx < 0) {
+        // The card left the filtered set between paint and click; indexing -1
+        // would throw, so fall back to a plain selection.
+        selectedId = id;
+        lastClickedIndex = -1;
+        return;
+      }
       const start = Math.min(lastClickedIndex, currentIdx);
       const end = Math.max(lastClickedIndex, currentIdx);
       const rangeIds = new Set<string>();

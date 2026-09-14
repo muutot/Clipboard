@@ -233,6 +233,9 @@ pub(crate) fn search_items_by_scanning(
     limit: usize,
     scan_page_size: usize,
 ) -> Result<Vec<ClipboardItem>, String> {
+    // A zero page size would make `list_recent` return an empty page while the
+    // offset never advances, looping forever; clamp it at the boundary.
+    let scan_page_size = scan_page_size.max(1);
     let normalized = query.to_lowercase();
     let mut offset = 0u32;
     let mut matches = Vec::new();
@@ -419,6 +422,20 @@ mod tests {
             limit: None,
             format: None,
             output_path: None,
+        }
+    }
+
+    #[test]
+    fn zero_scan_page_size_does_not_hang() {
+        let database = Database::open_in_memory().unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = search_items_by_scanning(&database, "content", 10, 0);
+            let _ = sender.send(result.is_ok());
+        });
+        match receiver.recv_timeout(std::time::Duration::from_secs(2)) {
+            Ok(returned) => assert!(returned),
+            Err(_) => panic!("search_items_by_scanning with scan_page_size 0 did not return"),
         }
     }
 

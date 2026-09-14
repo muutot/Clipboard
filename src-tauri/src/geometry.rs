@@ -22,19 +22,19 @@ pub struct WindowWorkArea {
 
 #[allow(clippy::too_many_arguments)]
 fn window_intersection_area(
-    ax: i32,
-    ay: i32,
-    ar: i32,
-    ab: i32,
-    bx: i32,
-    by: i32,
-    br: i32,
-    bb: i32,
+    ax: i64,
+    ay: i64,
+    ar: i64,
+    ab: i64,
+    bx: i64,
+    by: i64,
+    br: i64,
+    bb: i64,
 ) -> i64 {
-    let ix = ax.max(bx) as i64;
-    let iy = ay.max(by) as i64;
-    let ir = ar.min(br) as i64;
-    let ib = ab.min(bb) as i64;
+    let ix = ax.max(bx);
+    let iy = ay.max(by);
+    let ir = ar.min(br);
+    let ib = ab.min(bb);
     if ix < ir && iy < ib {
         (ir - ix) * (ib - iy)
     } else {
@@ -47,15 +47,19 @@ fn window_center_distance_squared(win: &WindowPosition, area: &WindowWorkArea) -
     let cy = win.y as i64 + win.height as i64 / 2;
     let ax = area.x as i64 + area.width as i64 / 2;
     let ay = area.y as i64 + area.height as i64 / 2;
-    let dx = cx - ax;
-    let dy = cy - ay;
-    dx * dx + dy * dy
+    let dx = cx.saturating_sub(ax);
+    let dy = cy.saturating_sub(ay);
+    // Saturating: config-controlled coordinates can be extreme, and this is
+    // only a tie-breaker, so a clamped distance is fine.
+    dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
 }
 
 fn clamp_window_axis(pos: i32, size: u32, area_pos: i32, area_size: u32) -> i32 {
-    let pos = pos.max(area_pos);
-    let pos = pos.min(area_pos + area_size as i32 - size as i32);
-    pos.max(area_pos)
+    // Compute in i64: config-controlled coordinates can be near i32::MAX and
+    // the intermediate sums would otherwise overflow.
+    let lower = area_pos as i64;
+    let upper = area_pos as i64 + area_size as i64 - size as i64;
+    (pos as i64).max(lower).min(upper).max(lower) as i32
 }
 
 pub fn clamp_window_position_to_work_areas(
@@ -68,12 +72,20 @@ pub fn clamp_window_position_to_work_areas(
     if let Some(area) = work_areas
         .iter()
         .map(|area| {
-            let wr = window.x + window.width as i32;
-            let wb = window.y + window.height as i32;
-            let ar = area.x + area.width as i32;
-            let ab = area.y + area.height as i32;
-            let intersection =
-                window_intersection_area(window.x, window.y, wr, wb, area.x, area.y, ar, ab);
+            let wr = window.x as i64 + window.width as i64;
+            let wb = window.y as i64 + window.height as i64;
+            let ar = area.x as i64 + area.width as i64;
+            let ab = area.y as i64 + area.height as i64;
+            let intersection = window_intersection_area(
+                window.x as i64,
+                window.y as i64,
+                wr,
+                wb,
+                area.x as i64,
+                area.y as i64,
+                ar,
+                ab,
+            );
             let dist = window_center_distance_squared(&window, area);
             (intersection, dist, area)
         })
@@ -139,6 +151,29 @@ mod tests {
         let result = clamp_window_position_to_work_areas(window, &areas);
         assert_eq!(result.width, 1920);
         assert_eq!(result.height, 1040);
+    }
+
+    #[test]
+    fn extreme_coordinates_do_not_overflow() {
+        // Config-controlled values with no bounds check: the sums must be
+        // computed in i64 or a debug build panics (and release wraps).
+        let window = WindowPosition {
+            x: i32::MAX - 10,
+            y: i32::MAX - 10,
+            width: 2_000_000_000,
+            height: 2_000_000_000,
+        };
+        let areas = vec![WindowWorkArea {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        }];
+
+        let result = clamp_window_position_to_work_areas(window, &areas);
+
+        assert!(result.width <= 1920);
+        assert!(result.height <= 1080);
     }
 
     #[test]

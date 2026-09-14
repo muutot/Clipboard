@@ -1006,6 +1006,7 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let img = match bit_count {
         32 => {
             let rgba = bgra_to_rgba(pixel_data, width, height_abs);
+            let rgba = normalize_zero_alpha(rgba);
             image::RgbaImage::from_raw(width, height_abs, rgba)?
         }
         24 => {
@@ -1022,6 +1023,20 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let mut png_bytes = std::io::Cursor::new(Vec::new());
     img.write_to(&mut png_bytes, image::ImageFormat::Png).ok()?;
     Some((png_bytes.into_inner(), width, height_abs))
+}
+
+/// Treats an all-zero alpha channel as "no alpha": many BI_RGB 32-bpp DIB
+/// producers leave the high byte at 0, which would otherwise decode to a fully
+/// transparent PNG. A DIB with any meaningful alpha is left untouched.
+#[cfg(target_os = "windows")]
+fn normalize_zero_alpha(mut rgba: Vec<u8>) -> Vec<u8> {
+    let all_zero = rgba.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 0);
+    if all_zero {
+        for pixel in rgba.as_chunks_mut::<4>().0 {
+            pixel[3] = 255;
+        }
+    }
+    rgba
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1068,8 +1083,6 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> isize;
-        fn GlobalLock(handle: isize) -> *const u8;
-        fn GlobalUnlock(handle: isize) -> i32;
         fn IsClipboardFormatAvailable(format: u32) -> i32;
         fn DragQueryFileW(hdrop: isize, index: u32, buffer: *mut u16, max_count: u32) -> u32;
     }
@@ -1083,31 +1096,28 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
             return vec![];
         }
 
+        // `GetClipboardData(CF_HDROP)` already returns the HDROP handle that
+        // `DragQueryFileW` expects. It must not be GlobalLock'd: that yields a
+        // pointer to the DROPFILES structure, not the handle, and would also
+        // make the subsequent GlobalUnlock operate on the wrong value.
         let handle = GetClipboardData(CF_HDROP);
         if handle == 0 {
             CloseClipboard();
             return vec![];
         }
 
-        let ptr = GlobalLock(handle) as isize;
-        if ptr == 0 {
-            CloseClipboard();
-            return vec![];
-        }
-
-        let file_count = DragQueryFileW(ptr, 0xFFFFFFFF, std::ptr::null_mut(), 0);
+        let file_count = DragQueryFileW(handle, 0xFFFFFFFF, std::ptr::null_mut(), 0);
         let mut paths = Vec::new();
 
         for i in 0..file_count {
             let mut buffer = [0u16; 520];
-            let len = DragQueryFileW(ptr, i, buffer.as_mut_ptr(), 520);
+            let len = DragQueryFileW(handle, i, buffer.as_mut_ptr(), 520);
             if len > 0 {
                 let wide: Vec<u16> = buffer[..len as usize].to_vec();
                 paths.push(OsString::from_wide(&wide).to_string_lossy().to_string());
             }
         }
 
-        GlobalUnlock(ptr);
         CloseClipboard();
         paths
     }
@@ -1778,6 +1788,82 @@ mod tests {
         let mut dib = header.to_vec();
         dib.extend_from_slice(&[0u8; 256]);
         assert_eq!(dib_to_png(&dib), None);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dib_to_png_normalizes_zero_alpha_from_bi_rgb_producers() {
+        // A 1x1 BI_RGB 32-bpp DIB whose high byte is 0 (the common case for
+        // producers that do not set alpha). The decoded PNG must be opaque,
+        // not fully transparent.
+        let mut header = [0u8; 40];
+        header[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+        header[4..8].copy_from_slice(&1i32.to_le_bytes()); // biWidth
+        header[8..12].copy_from_slice(&1i32.to_le_bytes()); // biHeight
+        header[12..14].copy_from_slice(&1u16.to_le_bytes()); // biPlanes
+        header[14..16].copy_from_slice(&32u16.to_le_bytes()); // biBitCount
+        header[16..20].copy_from_slice(&0u32.to_le_bytes()); // BI_RGB
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&[0x30, 0x20, 0x10, 0x00]); // B, G, R, A=0
+
+        let (png, width, height) = dib_to_png(&dib).expect("decodable DIB");
+        assert_eq!((width, height), (1, 1));
+        let decoded = image::load_from_memory(&png).unwrap().to_rgba8();
+        assert_eq!(decoded.get_pixel(0, 0).0[3], 255, "alpha must be opaque");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn read_clipboard_file_paths_reads_a_cf_hdrop() {
+        use std::os::windows::ffi::OsStrExt;
+
+        extern "system" {
+            fn OpenClipboard(hwnd: isize) -> i32;
+            fn EmptyClipboard() -> i32;
+            fn CloseClipboard() -> i32;
+            fn SetClipboardData(format: u32, handle: isize) -> isize;
+            fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
+            fn GlobalLock(handle: isize) -> *const u8;
+            fn GlobalUnlock(handle: isize) -> i32;
+        }
+        const GMEM_MOVEABLE: u32 = 0x0002;
+        const CF_HDROP: u32 = 15;
+        const DROPFILES_SIZE: usize = 20;
+
+        let path = r"C:\Windows\notepad.exe";
+        let mut wide: Vec<u16> = std::ffi::OsStr::new(path).encode_wide().collect();
+        wide.push(0);
+        wide.push(0);
+        let path_bytes = wide.len() * 2;
+        let total = DROPFILES_SIZE + path_bytes;
+
+        unsafe {
+            let handle = GlobalAlloc(GMEM_MOVEABLE, total);
+            assert_ne!(handle, 0, "GlobalAlloc failed");
+            let ptr = GlobalLock(handle) as *mut u8;
+            assert!(!ptr.is_null(), "GlobalLock failed");
+            std::ptr::write_bytes(ptr, 0, DROPFILES_SIZE);
+            std::ptr::write_unaligned(ptr as *mut u32, DROPFILES_SIZE as u32); // pFiles
+            std::ptr::write_unaligned(ptr.add(16) as *mut i32, 1); // fWide
+            std::ptr::copy_nonoverlapping(
+                wide.as_ptr() as *const u8,
+                ptr.add(DROPFILES_SIZE),
+                path_bytes,
+            );
+            GlobalUnlock(handle);
+
+            assert_ne!(OpenClipboard(0), 0, "OpenClipboard failed");
+            EmptyClipboard();
+            assert_ne!(
+                SetClipboardData(CF_HDROP, handle),
+                0,
+                "SetClipboardData failed"
+            );
+            CloseClipboard();
+        }
+
+        let paths = read_clipboard_file_paths();
+        assert_eq!(paths, vec![path.to_owned()]);
     }
 
     /// Builds a CF_HTML payload with accurate byte offsets. Header widths are

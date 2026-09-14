@@ -203,10 +203,14 @@ fn annotate_truncation_risk(
     database: &Database,
     config: &tauri::State<'_, Mutex<ConfigStore>>,
 ) -> Result<(), String> {
-    let guard = config
-        .lock()
-        .map_err(|_| "configuration lock is poisoned".to_owned())?;
-    let max_items = guard.max_items();
+    let max_items = {
+        // Read the config value, then release the config lock before touching
+        // the database so the lock order stays one-directional.
+        let guard = config
+            .lock()
+            .map_err(|_| "configuration lock is poisoned".to_owned())?;
+        guard.max_items()
+    };
     let active = database.item_count().map_err(|error| error.to_string())?;
     summary.max_items = max_items;
     summary.pending_truncation = active.saturating_sub(u64::from(max_items));
