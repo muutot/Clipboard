@@ -90,6 +90,7 @@ const en: LocaleDefinition = {
     tagsDescription:
       "Manage every tag across your clipboard items: rename, delete, or recolor in bulk.",
     tagsSectionTitle: "Manage all clipboard tags",
+    tagsManageTab: "Manage tags",
     layoutTab: "Layout",
     fontTab: "Font",
     themeTab: "Theme",

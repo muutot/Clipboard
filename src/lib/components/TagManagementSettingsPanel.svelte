@@ -5,17 +5,13 @@
   import TagColorPicker from "$lib/components/TagColorPicker.svelte";
   import TagRow from "$lib/components/TagRow.svelte";
   import { messages, resolvePath } from "$lib/i18n";
-  import { isTauriRuntime } from "$lib/services/runtime";
   import { resolveFixedPopoverPosition } from "$lib/utils/dropdown";
   import type { TagsChangedPayload } from "$lib/types/clipboard";
   import {
     deleteTag,
-    getAutoTagRules,
     listAllTags,
     renameTag,
-    setAutoTagRules,
     setTagColor,
-    type AutoTagRule,
     type TagInfo,
   } from "$lib/services/clipboard";
   import { emit, listen } from "@tauri-apps/api/event";
@@ -52,8 +48,6 @@
 
   let tags = $state<TagInfo[]>([]);
   let loading = $state(true);
-  let rules = $state<AutoTagRule[]>([]);
-  let rulesSaving = $state(false);
   let feedback = $state<{ message: string; kind: "success" | "error" } | null>(null);
   let confirmDelete = $state<Record<string, boolean>>({});
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -76,7 +70,6 @@
     let disposed = false;
     let unlistenTagsChanged: (() => void) | undefined;
     void load();
-    void loadRules();
     listen<TagsChangedPayload>("tags-changed", () => {
       if (suppressTagsChangedReload) return;
       void load();
@@ -95,34 +88,6 @@
     const result = await listAllTags();
     tags = (result ?? []).sort((a, b) => a.name.localeCompare(b.name));
     loading = false;
-  }
-
-  async function loadRules() {
-    rules = (await getAutoTagRules()) ?? [];
-  }
-
-  function addRule() {
-    rules = [...rules, { pattern: "", tag: "" }];
-  }
-
-  function removeRule(index: number) {
-    rules = rules.filter((_, i) => i !== index);
-  }
-
-  async function saveRules() {
-    if (rulesSaving) return;
-    rulesSaving = true;
-    try {
-      const saved = await setAutoTagRules(
-        rules.map((rule) => ({ pattern: rule.pattern.trim(), tag: rule.tag.trim() })),
-      );
-      rules = saved ?? rules;
-      notify(_t("tags.autoTagSaved"));
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), "error");
-    } finally {
-      rulesSaving = false;
-    }
   }
 
   function notify(message: string, kind: "success" | "error" = "success") {
@@ -291,55 +256,6 @@
       {feedback.message}
     </p>
   {/if}
-
-  <section class="setting-card autotag-card">
-    <div class="setting-heading">
-      <div>
-        <strong>{_t("tags.autoTagTitle")}</strong>
-        <p>{_t("tags.autoTagDescription")}</p>
-      </div>
-    </div>
-    {#each rules as rule, index (index)}
-      <div class="autotag-row">
-        <input
-          class="autotag-pattern"
-          type="text"
-          bind:value={rule.pattern}
-          placeholder={_t("tags.autoTagPatternPlaceholder")}
-          aria-label={_t("tags.autoTagPatternPlaceholder")}
-          spellcheck={false}
-        />
-        <input
-          class="autotag-tag"
-          type="text"
-          bind:value={rule.tag}
-          placeholder={_t("tags.autoTagTagPlaceholder")}
-          aria-label={_t("tags.autoTagTagPlaceholder")}
-          spellcheck={false}
-        />
-        <button
-          type="button"
-          class="autotag-remove"
-          aria-label={_t("tags.autoTagDelete")}
-          title={_t("tags.autoTagDelete")}
-          onclick={() => removeRule(index)}>×</button
-        >
-      </div>
-    {/each}
-    <div class="autotag-actions">
-      <button type="button" class="autotag-add" onclick={addRule}>
-        {_t("tags.autoTagAdd")}
-      </button>
-      <button
-        type="button"
-        class="autotag-save"
-        disabled={rulesSaving || !isTauriRuntime()}
-        onclick={() => void saveRules()}
-      >
-        {_t("tags.autoTagSave")}
-      </button>
-    </div>
-  </section>
 </div>
 
 <style>
@@ -347,89 +263,6 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
-  }
-
-  .autotag-card {
-    margin-top: 12px;
-  }
-
-  .autotag-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  .autotag-pattern {
-    flex: 3;
-    min-width: 0;
-  }
-
-  .autotag-tag {
-    flex: 2;
-    min-width: 0;
-  }
-
-  .autotag-pattern,
-  .autotag-tag {
-    padding: 5px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    background: var(--input-bg, var(--surface-bg));
-    font-size: 12px;
-  }
-
-  .autotag-pattern:focus,
-  .autotag-tag:focus {
-    outline: none;
-    border-color: var(--text-faint);
-  }
-
-  .autotag-remove {
-    flex-shrink: 0;
-    padding: 2px 8px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: var(--text-muted);
-    background: transparent;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1.4;
-  }
-
-  .autotag-remove:hover {
-    color: var(--danger-color);
-    border-color: var(--border-color);
-  }
-
-  .autotag-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .autotag-add,
-  .autotag-save {
-    padding: 5px 12px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    color: var(--text-secondary);
-    background: var(--card-bg);
-    cursor: pointer;
-    font-size: 11.5px;
-    font-weight: 500;
-  }
-
-  .autotag-add:hover,
-  .autotag-save:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-  }
-
-  .autotag-save:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .tag-color-popover {

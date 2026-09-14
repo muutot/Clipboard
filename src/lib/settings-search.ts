@@ -162,6 +162,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   ],
   ocr: [i18n("storage.ocrTitle"), "OCR", "文字识别"],
   tags: [i18n("storage.tagsTab"), i18n("tags.title"), "标签", "tag"],
+  tags_rules: [i18n("storage.tagsTab"), i18n("tags.autoTagTitle"), "规则", "正则", "rule"],
   statistics: [i18n("statistics.title"), "统计", "诊断"],
   about: [i18n("about.tabLabel"), i18n("about.title"), "更新", "版本", "update", "version"],
 };
@@ -836,18 +837,15 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "tags" },
     i18n("storage.tagsSectionTitle"),
     i18n("storage.tagsDescription"),
-    [
-      i18n("storage.tagsTab"),
-      i18n("tags.title"),
-      i18n("tags.autoTagTitle"),
-      "标签管理",
-      "重命名",
-      "删除",
-      "颜色",
-      "自动标签",
-      "规则",
-      "正则",
-    ],
+    [i18n("storage.tagsTab"), i18n("tags.title"), "标签管理", "重命名", "删除", "颜色"],
+  ),
+
+  entry(
+    "tags.autoTagRules",
+    { section: "tags_rules" },
+    i18n("tags.autoTagTitle"),
+    i18n("tags.autoTagDescription"),
+    ["自动标签", "规则", "正则", "采集", "打标", "auto tag", "regex", "pattern"],
   ),
 
   entry(

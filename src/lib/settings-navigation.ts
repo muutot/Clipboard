@@ -23,6 +23,7 @@ export const SETTINGS_SECTIONS = [
   "keyboard_system",
   "keyboard_switch",
   "tags",
+  "tags_rules",
   "ocr",
   "statistics",
   "about",
@@ -220,7 +221,18 @@ export const SETTINGS_NAV_GROUP_DEFINITIONS: readonly SettingsNavGroupDefinition
     id: "tags",
     icon: "tag",
     labelKey: "storage.tagsTab",
-    tabs: [{ section: "tags", labelKey: "storage.tagsSectionTitle" }],
+    tabs: [
+      {
+        section: "tags",
+        labelKey: "storage.tagsManageTab",
+        descriptionKey: "storage.tagsDescription",
+      },
+      {
+        section: "tags_rules",
+        labelKey: "tags.autoTagTitle",
+        descriptionKey: "tags.autoTagDescription",
+      },
+    ],
   },
   {
     id: "ocr",

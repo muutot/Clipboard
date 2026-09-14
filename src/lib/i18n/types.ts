@@ -89,6 +89,7 @@ export interface LocaleDefinition {
     tagsTab: string;
     tagsDescription: string;
     tagsSectionTitle: string;
+    tagsManageTab: string;
     layoutTab: string;
     fontTab: string;
     themeTab: string;

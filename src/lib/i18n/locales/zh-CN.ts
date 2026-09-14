@@ -89,6 +89,7 @@ const zhCN: LocaleDefinition = {
     tagsTab: "标签",
     tagsDescription: "管理所有剪贴板条目标签，可批量重命名、删除或设置颜色。",
     tagsSectionTitle: "管理所有剪贴板条目标签",
+    tagsManageTab: "管理标签",
     layoutTab: "布局",
     fontTab: "字体",
     themeTab: "主题",

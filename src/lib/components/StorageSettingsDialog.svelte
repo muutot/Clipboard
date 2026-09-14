@@ -139,6 +139,14 @@
       }),
     },
     {
+      sections: ["tags_rules"],
+      load: () => import("$lib/components/TagRulesSettingsPanel.svelte"),
+      props: () => ({
+        onclose,
+        showHeader: false,
+      }),
+    },
+    {
       sections: ["ocr"],
       load: () => import("$lib/components/OcrSettingsPanel.svelte"),
       props: () => ({
