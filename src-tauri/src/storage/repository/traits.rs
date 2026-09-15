@@ -145,6 +145,10 @@ pub trait ClipboardRepository {
     fn set_favorite_batch(&self, ids: &[String], is_favorite: bool) -> Result<bool, StorageError>;
     fn delete_item(&self, id: &str) -> Result<bool, StorageError>;
     fn item_count(&self) -> Result<u64, StorageError>;
+    /// Counts active records that capacity cleanup is allowed to evict
+    /// (non-favorites). Favorites are protected from cleanup, so callers
+    /// that predict cleanup must use this instead of [`item_count`].
+    fn evictable_item_count(&self) -> Result<u64, StorageError>;
     fn delete_older_than(&self, days: u32) -> Result<u64, StorageError>;
     fn enforce_capacity_limit(&self, max_items: u64) -> Result<u64, StorageError>;
     fn soft_delete(&self, id: &str) -> Result<bool, StorageError>;

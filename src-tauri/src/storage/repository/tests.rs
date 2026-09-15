@@ -1243,6 +1243,37 @@ fn item_count_includes_restored_items() {
 }
 
 #[test]
+fn capacity_counts_only_evictable_records() {
+    let database = Database::open_in_memory().unwrap();
+    let mut favorite = text_item("favorite", "hash-fav", 100);
+    favorite.is_favorite = true;
+    database.save_item(&favorite).unwrap();
+    database
+        .save_item(&text_item("plain", "hash-plain", 200))
+        .unwrap();
+
+    // `item_count` still reports every active row for stats surfaces…
+    assert_eq!(database.item_count().unwrap(), 2);
+    // …while capacity accounting sees only the row cleanup may delete.
+    assert_eq!(database.evictable_item_count().unwrap(), 1);
+
+    // An all-favorite library over the limit evicts nothing instead of
+    // reporting a phantom excess on every cleanup tick.
+    database
+        .save_item(&text_item("plain-2", "hash-plain-2", 300))
+        .unwrap();
+    let mut all_favorite = text_item("favorite-2", "hash-fav-2", 400);
+    all_favorite.is_favorite = true;
+    database.save_item(&all_favorite).unwrap();
+    database
+        .set_favorite_batch(&["plain".to_owned(), "plain-2".to_owned()], true)
+        .unwrap();
+    assert_eq!(database.evictable_item_count().unwrap(), 0);
+    assert_eq!(database.enforce_capacity_limit(1).unwrap(), 0);
+    assert_eq!(database.item_count().unwrap(), 4);
+}
+
+#[test]
 fn deleted_records_are_listed_in_recency_order() {
     let database = Database::open_in_memory().unwrap();
     database

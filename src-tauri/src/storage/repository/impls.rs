@@ -586,6 +586,21 @@ impl ClipboardRepository for Database {
         })
     }
 
+    fn evictable_item_count(&self) -> Result<u64, StorageError> {
+        self.with_connection(|connection| {
+            let count: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0 AND is_favorite = 0",
+                [],
+                |row| row.get(0),
+            )?;
+
+            u64::try_from(count).map_err(|_| StorageError::InvalidStoredValue {
+                field: "clipboard_items.count",
+                value: count,
+            })
+        })
+    }
+
     fn delete_older_than(&self, days: u32) -> Result<u64, StorageError> {
         if days == 0 {
             return Ok(0);
@@ -608,8 +623,11 @@ impl ClipboardRepository for Database {
             return Ok(0);
         }
         self.with_connection(|connection| {
+            // Count only evictable rows: favorites are protected from the
+            // DELETE below, so counting them would report a phantom excess
+            // (and spin every cleanup tick) when the library is all-favorite.
             let count: i64 = connection.query_row(
-                "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0",
+                "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0 AND is_favorite = 0",
                 [],
                 |row| row.get(0),
             )?;

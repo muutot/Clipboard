@@ -211,7 +211,9 @@ fn annotate_truncation_risk(
             .map_err(|_| "configuration lock is poisoned".to_owned())?;
         guard.max_items()
     };
-    let active = database.item_count().map_err(|error| error.to_string())?;
+    let active = database
+        .evictable_item_count()
+        .map_err(|error| error.to_string())?;
     summary.max_items = max_items;
     summary.pending_truncation = active.saturating_sub(u64::from(max_items));
     Ok(())
