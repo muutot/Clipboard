@@ -225,6 +225,12 @@ pub fn start_clipboard_monitoring(
     thumbnail_worker: tauri::State<'_, Mutex<crate::content::ThumbnailWorker>>,
     app_handle: tauri::AppHandle,
 ) -> Result<bool, String> {
+    // Acquire the thumbnail queue BEFORE starting the monitor: if this lock
+    // is poisoned we must fail without a running monitor that has no
+    // consumer draining its change notifications.
+    let thumbnail_queue =
+        lock_state(&thumbnail_worker, "thumbnail worker lock is poisoned")?.queue();
+
     let mut guard = lock_state(&monitor, "clipboard monitor lock is poisoned")?;
     guard.start()?;
 
@@ -240,8 +246,6 @@ pub fn start_clipboard_monitoring(
     let file_storage_path = paths.files.clone();
     let self_trigger_clone = self_trigger.0.clone();
     let capture_for_thread = capture.inner().clone();
-    let thumbnail_queue =
-        lock_state(&thumbnail_worker, "thumbnail worker lock is poisoned")?.queue();
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_for_thread = Arc::clone(&stop_flag);
     let (stop_sender, stop_receiver) = mpsc::channel();
@@ -291,8 +295,16 @@ pub fn stop_clipboard_monitoring(
     monitor: tauri::State<'_, Mutex<ClipboardMonitor>>,
     capture: tauri::State<'_, CaptureState>,
 ) -> Result<bool, String> {
-    lock_state(&monitor, "clipboard monitor lock is poisoned")?.stop()?;
+    // Always stop the capture worker, even when the monitor lock is
+    // poisoned: an early `?` here used to leak the writer thread while
+    // reporting the monitor as stopped.
+    let monitor_result =
+        lock_state(&monitor, "clipboard monitor lock is poisoned").and_then(|monitor| {
+            let mut monitor = monitor;
+            monitor.stop()
+        });
     capture.stop_worker();
+    monitor_result?;
     Ok(true)
 }
 
