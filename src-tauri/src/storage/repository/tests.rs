@@ -722,6 +722,81 @@ fn resource_reference_count_reports_shared_files_excluding_the_current_record() 
 }
 
 #[test]
+fn latest_file_record_referencing_storage_returns_most_recent_file_owner() {
+    let database = Database::open_in_memory().unwrap();
+
+    // Row "old": first copy of the managed file, its original later renamed.
+    let mut old = text_item("file-old", "hash-old", 100);
+    old.kind = ClipboardKind::File;
+    old.text_content = None;
+    old.resource_path = Some("C:\\managed\\a1b2c3.txt".to_owned());
+    old.metadata_json = Some(
+        serde_json::json!({
+            "files": [{
+                "name": "Draft.txt",
+                "storagePath": "C:\\managed\\a1b2c3.txt",
+                "originalPath": "C:\\originals\\Draft.txt"
+            }]
+        })
+        .to_string(),
+    );
+    database.save_item(&old).unwrap();
+
+    // Row "new": the same content re-copied after the rename, under a new id.
+    let mut new = text_item("file-new", "hash-new", 200);
+    new.kind = ClipboardKind::File;
+    new.text_content = None;
+    new.resource_path = Some("C:\\managed\\a1b2c3.txt".to_owned());
+    new.metadata_json = Some(
+        serde_json::json!({
+            "files": [{
+                "name": "Final.txt",
+                "storagePath": "C:\\managed\\a1b2c3.txt",
+                "originalPath": "C:\\originals\\Final.txt"
+            }]
+        })
+        .to_string(),
+    );
+    database.save_item(&new).unwrap();
+
+    // The "old" record must inherit the freshest owner's original path.
+    let inherited = database
+        .latest_file_record_referencing_storage("C:\\managed\\a1b2c3.txt", "file-old")
+        .unwrap()
+        .unwrap();
+    assert_eq!(inherited.id, "file-new");
+    let rediscovered = database
+        .latest_file_record_referencing_storage("C:\\managed\\a1b2c3.txt", "file-new")
+        .unwrap()
+        .unwrap();
+    assert_eq!(rediscovered.id, "file-old");
+
+    // Unknown storage paths yield no record.
+    assert!(database
+        .latest_file_record_referencing_storage("C:\\managed\\missing.txt", "file-old")
+        .unwrap()
+        .is_none());
+    // Non-file records must never satisfy the lookup, even when their metadata
+    // references the same managed path.
+    let storage = "C:\\managed\\text-only.txt";
+    let mut text_row = text_item("text-row", "hash-text", 300);
+    text_row.metadata_json = Some(
+        serde_json::json!({
+            "files": [{
+                "storagePath": storage,
+                "originalPath": "C:\\originals\\Text.txt"
+            }]
+        })
+        .to_string(),
+    );
+    database.save_item(&text_row).unwrap();
+    assert!(database
+        .latest_file_record_referencing_storage(storage, "text-scan")
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn update_text_item_replaces_payload_and_preserves_record_metadata() {
     let database = Database::open_in_memory().unwrap();
     let mut original = text_item("editable", "old-hash", 100);

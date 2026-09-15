@@ -211,4 +211,14 @@ pub trait ClipboardRepository {
     /// than zero means another record shares the file, so callers must not
     /// rename or delete it.
     fn resource_reference_count(&self, path: &str, exclude_id: &str) -> Result<u64, StorageError>;
+    /// The most recently created active file record whose resource metadata
+    /// references `storage_path`, excluding `exclude_id`. Content-storage
+    /// dedup makes that the same underlying file captured later, so copy
+    /// writes inherit its latest recorded `originalPath` (the last copied
+    /// name) when the current record's own original file is gone.
+    fn latest_file_record_referencing_storage(
+        &self,
+        storage_path: &str,
+        exclude_id: &str,
+    ) -> Result<Option<ClipboardItem>, StorageError>;
 }

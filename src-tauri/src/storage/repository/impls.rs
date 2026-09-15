@@ -981,6 +981,38 @@ impl ClipboardRepository for Database {
             )?)
         })
     }
+
+    fn latest_file_record_referencing_storage(
+        &self,
+        storage_path: &str,
+        exclude_id: &str,
+    ) -> Result<Option<ClipboardItem>, StorageError> {
+        self.with_connection(|connection| {
+            let sql = format!(
+                "SELECT {ITEM_COLUMNS}
+                 FROM clipboard_items
+                 WHERE kind = 'file'
+                   AND deleted = 0
+                   AND id <> ?1
+                   AND EXISTS (
+                       SELECT 1
+                       FROM json_each(clipboard_items.metadata_json, '$.files') AS f
+                       WHERE json_extract(f.value, '$.storagePath') = ?2
+                   )
+                 ORDER BY created_at_ms DESC
+                 LIMIT 1"
+            );
+            let stored_item = connection
+                .query_row(
+                    &sql,
+                    params![exclude_id, storage_path],
+                    StoredClipboardItem::from_row,
+                )
+                .optional()?;
+
+            stored_item.map(TryInto::try_into).transpose()
+        })
+    }
 }
 
 /// Rewrites `metadata_json.tags` on every active record, replacing `target`

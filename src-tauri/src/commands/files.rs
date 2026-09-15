@@ -315,12 +315,16 @@ pub fn save_clipboard_item_file(
 /// use the stored png; file items re-reference the still-existing original
 /// file for each entry (so pasting keeps the original name) and fall back to
 /// the managed storage copy / the record's resource path when the original is
-/// gone. Pass-through files that exceed the copy-size limit keep their
-/// original absolute location and are accepted here: the paths originate from
-/// the record, never from the webview.
+/// gone. When `database` is given and the original for a managed copy is gone,
+/// the freshest other record sharing that managed file is consulted so the
+/// pasted name stays the one from the most recent copy of the same content.
+/// Pass-through files that exceed the copy-size limit keep their original
+/// absolute location and are accepted here: the paths originate from the
+/// record, never from the webview.
 fn resolve_clipboard_file_paths(
     item: &ClipboardItem,
     paths: &StoragePaths,
+    database: Option<&Database>,
 ) -> Result<Vec<std::path::PathBuf>, String> {
     let mut candidates = Vec::new();
     match item.kind {
@@ -335,7 +339,9 @@ fn resolve_clipboard_file_paths(
                     // OS clipboard semantics: re-reference the original file so
                     // the pasted copy keeps its original name instead of the
                     // managed (hash-named) storage copy. The managed copy stays
-                    // the fallback when the original no longer exists on disk.
+                    // the fallback when the original no longer exists on disk;
+                    // with a database, the latest copy of the same content then
+                    // donates its recorded original name.
                     if let Some(original) = original {
                         if std::path::Path::new(&original).is_file() {
                             candidates.push(original);
@@ -343,6 +349,14 @@ fn resolve_clipboard_file_paths(
                         }
                     }
                     if let Some(storage) = storage {
+                        if let Some(database) = database {
+                            if let Some(inherited) =
+                                latest_copied_original_path(database, &storage, &item.id)
+                            {
+                                candidates.push(inherited.to_string_lossy().to_string());
+                                continue;
+                            }
+                        }
                         candidates.push(storage);
                     }
                 }
@@ -377,6 +391,35 @@ fn resolve_clipboard_file_paths(
         return Err("clipboard item has no available files on disk".to_string());
     }
     Ok(resolved)
+}
+
+/// Locates the original file recorded by the most recent copy of the same
+/// managed file (excluding `exclude_id`) and returns its path only when it
+/// still exists on disk. Content-storage dedup guarantees a matching record
+/// holds the identical bytes, so its original path is the last name given to
+/// this content by the user.
+fn latest_copied_original_path(
+    database: &Database,
+    storage: &str,
+    exclude_id: &str,
+) -> Option<std::path::PathBuf> {
+    let record = database
+        .latest_file_record_referencing_storage(storage, exclude_id)
+        .ok()??;
+    let original = file_metadata_entries(&record.metadata_json)?
+        .into_iter()
+        .find_map(
+            |(entry_storage, entry_original)| match (entry_storage, entry_original) {
+                (Some(entry_storage), Some(entry_original))
+                    if entry_storage.as_str() == storage =>
+                {
+                    Some(entry_original)
+                }
+                _ => None,
+            },
+        )?;
+    let path = std::path::PathBuf::from(&original);
+    path.is_file().then_some(path)
 }
 
 /// Reads the `(storagePath, originalPath)` pair (legacy `path` for storage) of
@@ -429,7 +472,7 @@ pub fn copy_clipboard_item_files(
         .get_item(&id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "clipboard item not found".to_string())?;
-    let resolved = resolve_clipboard_file_paths(&item, paths.inner())?;
+    let resolved = resolve_clipboard_file_paths(&item, paths.inner(), Some(&database))?;
     let files = resolved
         .iter()
         .map(|path| path.to_string_lossy().to_string())
@@ -640,6 +683,7 @@ mod tests {
                 None,
             ),
             &paths,
+            None,
         )
         .unwrap();
 
@@ -665,7 +709,7 @@ mod tests {
         );
 
         let resolved =
-            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths)
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths, None)
                 .unwrap();
 
         assert_eq!(resolved.len(), 2);
@@ -695,7 +739,7 @@ mod tests {
         );
 
         let resolved =
-            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths)
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths, None)
                 .unwrap();
 
         assert_eq!(resolved.len(), 1);
@@ -722,13 +766,95 @@ mod tests {
         );
 
         let resolved =
-            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths)
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths, None)
                 .unwrap();
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(
             resolved[0].file_name().unwrap().to_string_lossy(),
             "missing-original.txt"
+        );
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    /// A full file record persisted via the repository, mirroring how the
+    /// capture pipeline stores one managed copy plus its original location.
+    fn persisted_file_item(
+        id: &str,
+        content_hash: &str,
+        created_at_ms: i64,
+        storage_path: String,
+        original_path: String,
+    ) -> ClipboardItem {
+        let mut item = item(ClipboardKind::File, Some(storage_path.clone()), None);
+        item.id = id.to_owned();
+        item.content_hash = content_hash.to_owned();
+        item.created_at_ms = created_at_ms;
+        item.metadata_json = Some(
+            serde_json::json!({
+                "files": [{
+                    "name": original_path.rsplit(['/', '\\']).next().unwrap_or(""),
+                    "storagePath": storage_path,
+                    "originalPath": original_path,
+                }]
+            })
+            .to_string(),
+        );
+        item
+    }
+
+    #[test]
+    fn resolve_clipboard_file_paths_inherits_the_latest_copied_name() {
+        let project = save_file_test_project("latest-name");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        // The managed storage copy (hash-named) still exists...
+        touch(&paths.files, "a1b2c3d4.txt", b"same content");
+        let storage = paths
+            .files
+            .join("a1b2c3d4.txt")
+            .to_string_lossy()
+            .to_string();
+        // ...but the first copy's original was renamed away afterwards.
+        let stale_original = project.join("Old Name.txt").to_string_lossy().to_string();
+        // The most recent copy of the same content lives under a new name.
+        let latest_original = project
+            .join("Current Name.txt")
+            .to_string_lossy()
+            .to_string();
+        touch(&project, "Current Name.txt", b"same content");
+
+        let old = persisted_file_item(
+            "file-old",
+            "hash-old",
+            100,
+            storage.clone(),
+            stale_original.clone(),
+        );
+        let new = persisted_file_item(
+            "file-new",
+            "hash-new",
+            200,
+            storage.clone(),
+            latest_original.clone(),
+        );
+        database.save_item(&old).unwrap();
+        database.save_item(&new).unwrap();
+
+        let resolved = resolve_clipboard_file_paths(&old, &paths, Some(&database)).unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].file_name().unwrap().to_string_lossy(),
+            "Current Name.txt"
+        );
+
+        // Without a database the stale original falls back to the (non-existent
+        // here) managed copy; here it resolves to the managed storage name.
+        let fallback = resolve_clipboard_file_paths(&old, &paths, None).unwrap();
+        assert_eq!(
+            fallback[0].file_name().unwrap().to_string_lossy(),
+            "a1b2c3d4.txt"
         );
         let _ = std::fs::remove_dir_all(&project);
     }
@@ -740,9 +866,12 @@ mod tests {
         touch(&project, "large.bin", b"big");
         let original = project.join("large.bin").to_string_lossy().to_string();
 
-        let resolved =
-            resolve_clipboard_file_paths(&item(ClipboardKind::File, Some(original), None), &paths)
-                .unwrap();
+        let resolved = resolve_clipboard_file_paths(
+            &item(ClipboardKind::File, Some(original), None),
+            &paths,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(resolved.len(), 1);
         assert!(resolved[0].ends_with("large.bin"));
@@ -755,11 +884,13 @@ mod tests {
         let paths = StoragePaths::initialize(project.clone()).unwrap();
 
         assert!(
-            resolve_clipboard_file_paths(&item(ClipboardKind::Text, None, None), &paths).is_err()
+            resolve_clipboard_file_paths(&item(ClipboardKind::Text, None, None), &paths, None)
+                .is_err()
         );
         assert!(resolve_clipboard_file_paths(
             &item(ClipboardKind::File, Some("gone.txt".to_string()), None),
-            &paths
+            &paths,
+            None
         )
         .is_err());
         let _ = std::fs::remove_dir_all(&project);
@@ -775,7 +906,10 @@ mod tests {
         assert_eq!(
             file_metadata_entries(&metadata).unwrap(),
             vec![
-                (Some("C:\\managed\\a.txt".to_owned()), Some("C:\\docs\\a.txt".to_owned())),
+                (
+                    Some("C:\\managed\\a.txt".to_owned()),
+                    Some("C:\\docs\\a.txt".to_owned())
+                ),
                 (Some("C:\\orig\\b.txt".to_owned()), None),
             ]
         );

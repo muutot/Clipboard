@@ -1879,7 +1879,9 @@ mod tests {
         let terminated_at = wide
             .split(|unit| *unit == 0)
             .filter(|part| !part.is_empty());
-        let decoded = terminated_at.map(String::from_utf16_lossy).collect::<Vec<_>>();
+        let decoded = terminated_at
+            .map(String::from_utf16_lossy)
+            .collect::<Vec<_>>();
         assert_eq!(decoded, ["C:\\a.png", "D:\\notes\\b.txt"]);
     }
 
