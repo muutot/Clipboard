@@ -33,9 +33,16 @@ pub fn toggle_privacy_pause(
         privacy.is_paused()
     };
 
-    lock_state(&config, "configuration lock is poisoned")?
+    // Persist before touching the capture worker: if the config write fails,
+    // roll the in-memory toggle back so `PrivacyManager` and `CaptureState`
+    // cannot fork (paused in memory while still recording).
+    if let Err(error) = lock_state(&config, "configuration lock is poisoned")?
         .set_privacy_paused(paused)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())
+    {
+        lock_state(&privacy, "privacy manager lock is poisoned")?.toggle_pause();
+        return Err(error);
+    }
 
     capture.set_paused(paused);
 
