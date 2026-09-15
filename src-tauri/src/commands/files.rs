@@ -312,10 +312,12 @@ pub fn save_clipboard_item_file(
 }
 
 /// Resolves the existing local files behind an image/file record. Image items
-/// use the stored png; file items prefer the per-file storage paths recorded
-/// in resource metadata and fall back to the record's resource path. Pass-through files that
-/// exceed the copy-size limit keep their original absolute location and are
-/// accepted here: the paths originate from the record, never from the webview.
+/// use the stored png; file items re-reference the still-existing original
+/// file for each entry (so pasting keeps the original name) and fall back to
+/// the managed storage copy / the record's resource path when the original is
+/// gone. Pass-through files that exceed the copy-size limit keep their
+/// original absolute location and are accepted here: the paths originate from
+/// the record, never from the webview.
 fn resolve_clipboard_file_paths(
     item: &ClipboardItem,
     paths: &StoragePaths,
@@ -328,8 +330,22 @@ fn resolve_clipboard_file_paths(
             }
         }
         ClipboardKind::File => {
-            if let Some(metadata_paths) = file_metadata_paths(&item.metadata_json) {
-                candidates.extend(metadata_paths);
+            if let Some(entries) = file_metadata_entries(&item.metadata_json) {
+                for (storage, original) in entries {
+                    // OS clipboard semantics: re-reference the original file so
+                    // the pasted copy keeps its original name instead of the
+                    // managed (hash-named) storage copy. The managed copy stays
+                    // the fallback when the original no longer exists on disk.
+                    if let Some(original) = original {
+                        if std::path::Path::new(&original).is_file() {
+                            candidates.push(original);
+                            continue;
+                        }
+                    }
+                    if let Some(storage) = storage {
+                        candidates.push(storage);
+                    }
+                }
             }
             if candidates.is_empty() {
                 if let Some(resource) = item.resource_path.as_deref() {
@@ -363,26 +379,39 @@ fn resolve_clipboard_file_paths(
     Ok(resolved)
 }
 
-/// Reads the `storagePath` (legacy `path`) of each entry in the `files` array
-/// of the record's resource metadata.
-fn file_metadata_paths(metadata_json: &Option<String>) -> Option<Vec<String>> {
+/// Reads the `(storagePath, originalPath)` pair (legacy `path` for storage) of
+/// each entry in the `files` array of the record's resource metadata. The
+/// original path is optional: it is absent when the source is not a file on
+/// disk (for example an in-memory screenshot).
+fn file_metadata_entries(
+    metadata_json: &Option<String>,
+) -> Option<Vec<(Option<String>, Option<String>)>> {
     let json = metadata_json.as_deref()?;
     let parsed: serde_json::Value = serde_json::from_str(json).ok()?;
     let files = parsed.get("files")?.as_array()?;
-    let mut paths = Vec::new();
+    let mut entries = Vec::new();
     for file in files {
-        if let Some(value) = file.get("storagePath").or_else(|| file.get("path")) {
-            if let Some(path) = value.as_str() {
-                if !path.trim().is_empty() {
-                    paths.push(path.to_owned());
-                }
-            }
+        let storage = file
+            .get("storagePath")
+            .or_else(|| file.get("path"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let original = file
+            .get("originalPath")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        if storage.is_some() || original.is_some() {
+            entries.push((storage, original));
         }
     }
-    if paths.is_empty() {
+    if entries.is_empty() {
         None
     } else {
-        Some(paths)
+        Some(entries)
     }
 }
 
@@ -644,6 +673,67 @@ mod tests {
     }
 
     #[test]
+    fn resolve_clipboard_file_paths_restores_the_original_file_name() {
+        let project = save_file_test_project("original-name");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        // The managed copy carries a hash-derived name...
+        touch(
+            &paths.files,
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.txt",
+            b"original content",
+        );
+        // ...while the user's real file still exists under its original name.
+        touch(&project, "my report.txt", b"original content");
+        let metadata = Some(
+            serde_json::json!({
+                "files": [{
+                    "storagePath": paths.files.join("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.txt").to_string_lossy().to_string(),
+                    "originalPath": project.join("my report.txt").to_string_lossy().to_string(),
+                }]
+            })
+            .to_string(),
+        );
+
+        let resolved =
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths)
+                .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].file_name().unwrap().to_string_lossy(),
+            "my report.txt"
+        );
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn resolve_clipboard_file_paths_falls_back_to_storage_when_original_is_gone() {
+        let project = save_file_test_project("original-gone");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        touch(&paths.files, "missing-original.txt", b"content");
+        let metadata = Some(
+            serde_json::json!({
+                "files": [{
+                    "storagePath": paths.files.join("missing-original.txt").to_string_lossy().to_string(),
+                    "originalPath": project.join("gone.txt").to_string_lossy().to_string(),
+                }]
+            })
+            .to_string(),
+        );
+
+        let resolved =
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths)
+                .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].file_name().unwrap().to_string_lossy(),
+            "missing-original.txt"
+        );
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
     fn resolve_clipboard_file_paths_accepts_pass_through_absolute_paths() {
         let project = save_file_test_project("passthrough");
         let paths = StoragePaths::initialize(project.clone()).unwrap();
@@ -676,17 +766,21 @@ mod tests {
     }
 
     #[test]
-    fn file_metadata_paths_reads_storage_and_legacy_path_fields() {
-        let metadata =
-            Some(r#"{"files":[{"storagePath":"C:\\managed\\a.txt"},{"path":"C:\\orig\\b.txt"},{"name":"c.txt"}]}"#
-                .to_owned());
+    fn file_metadata_entries_reads_storage_and_original_path_fields() {
+        let metadata = Some(
+            r#"{"files":[{"storagePath":"C:\\managed\\a.txt","originalPath":"C:\\docs\\a.txt"},{"path":"C:\\orig\\b.txt"},{"name":"c.txt"}]}"#
+                .to_owned(),
+        );
 
         assert_eq!(
-            file_metadata_paths(&metadata).unwrap(),
-            ["C:\\managed\\a.txt", "C:\\orig\\b.txt"]
+            file_metadata_entries(&metadata).unwrap(),
+            vec![
+                (Some("C:\\managed\\a.txt".to_owned()), Some("C:\\docs\\a.txt".to_owned())),
+                (Some("C:\\orig\\b.txt".to_owned()), None),
+            ]
         );
-        assert!(file_metadata_paths(&None).is_none());
-        assert!(file_metadata_paths(&Some("{}".to_owned())).is_none());
+        assert!(file_metadata_entries(&None).is_none());
+        assert!(file_metadata_entries(&Some("{}".to_owned())).is_none());
     }
 
     #[test]
