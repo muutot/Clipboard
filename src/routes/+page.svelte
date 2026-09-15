@@ -758,6 +758,10 @@
       if (searchCache.some((i) => i.id === newItem.id)) {
         applyItemPatches(new Map([[newItem.id, newItem]]));
       }
+      // The open detail panel holds its own object reference; refresh it so
+      // a re-copied entry does not keep showing the previous timestamp or
+      // resource paths.
+      if (detailItem?.id === newItem.id) detailItem = newItem;
     });
 
     const unlistenHistoryInvalidated = listen<ClipboardHistoryInvalidation>(
@@ -770,6 +774,11 @@
         }
         items = items.filter((item) => !removedIds.has(item.id));
         if (indexedItems) indexedItems = indexedItems.filter((item) => !removedIds.has(item.id));
+        // The spare search cache is also a copy of live rows; evict removed
+        // ids so a later promoteFromCache cannot resurrect deleted entries.
+        if (searchCache.some((item) => removedIds.has(item.id))) {
+          searchCache = searchCache.filter((item) => !removedIds.has(item.id));
+        }
         // Re-run the search effect instead of only cancelling the in-flight
         // request; otherwise a search that lands during this event is dropped
         // and never retried.
@@ -1488,6 +1497,9 @@
     // During a search the visible list is `indexedItems`, so the copied row
     // must be promoted there too or "pin copied to top" silently no-ops.
     if (indexedItems) indexedItems = promote(indexedItems);
+    // The spare search cache keeps its own order; promote there as well so
+    // a later promoteFromCache does not restore the pre-copy position.
+    searchCache = promote(searchCache);
   }
 
   async function copyItem(id: string) {
