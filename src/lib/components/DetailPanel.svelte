@@ -162,6 +162,10 @@
 
     let disposed = false;
     let requestInFlight = false;
+    // Cleared once the record reaches a terminal OCR state; without this
+    // the interval stayed alive (waking every 2s to early-return) until the
+    // panel closed or a different item was selected.
+    let interval: ReturnType<typeof setInterval> | undefined;
     const poll = () => {
       if (disposed || requestInFlight) return;
       // The staleness check reads `item` and `ocrStatus`; keep those reads out
@@ -177,7 +181,13 @@
           current.ocrStatus === "none"
         );
       });
-      if (stale) return;
+      if (stale) {
+        if (interval !== undefined) {
+          clearInterval(interval);
+          interval = undefined;
+        }
+        return;
+      }
 
       requestInFlight = true;
       invoke<{
@@ -211,10 +221,10 @@
     };
 
     poll();
-    const interval = setInterval(poll, 2000);
+    interval = setInterval(poll, 2000);
     return () => {
       disposed = true;
-      clearInterval(interval);
+      if (interval !== undefined) clearInterval(interval);
     };
   });
 
