@@ -53,12 +53,20 @@
   function switchFilter(next: FloatFilter) {
     if (filter === next) return;
     filter = next;
+    // Drop the old filter's rows instead of showing them stale-while-
+    // revalidate: a click during the reload would otherwise copy an entry
+    // from the previous filter. (Focus-triggered reloads keep SWR in
+    // `load()`; only explicit filter switches clear.)
+    items = [];
     void load();
   }
 
   async function copy(id: string) {
     const item = items.find((i) => i.id === id);
-    if (!item || copyingId) return;
+    // Guard per row, not globally: the template already disables only the
+    // in-flight row, so a global guard silently swallowed clicks on other
+    // rows with no feedback.
+    if (!item || copyingId === id) return;
     copyingId = id;
     try {
       await copyClipboardItem(item);
