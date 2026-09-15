@@ -1785,7 +1785,13 @@
 
   function bulkCopy() {
     const selectedItems = selectedLoadedItems;
-    const text = selectedItems.map((i) => i.title).join("\n");
+    // Text/link rows carry the full content in `textContent` while `title`
+    // is only the first line; copying titles silently drops content.
+    // Media rows keep `title` (their `textContent` is null or an internal
+    // multi-file JSON list, never user-facing text).
+    const text = selectedItems
+      .map((i) => (i.kind === "text" || i.kind === "link" ? i.textContent || i.title : i.title))
+      .join("\n");
     void writeClipboardText(text)
       .then(() => {
         showToast(_t("toast.bulkCopySuccess", { count: selectedItems.length }), "success");
