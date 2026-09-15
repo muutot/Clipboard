@@ -533,8 +533,11 @@
   }
 
   function virtualHeightFor(item: ClipboardItem): number {
+    // Only reuse a measured height recorded under the same layout
+    // signature; otherwise an edit-mode measurement keeps polluting the
+    // normal layout after editing ends (and vice versa).
     const measured = measuredCardHeights[item.id];
-    if (measured) return measured.height;
+    if (measured && measured.signature === cardLayoutSignature(item)) return measured.height;
     if (editingId === item.id) {
       return editHeight(
         (item.textContent || "").split("\n").length,
