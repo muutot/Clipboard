@@ -210,14 +210,26 @@ fn import_rows(
     // First pass materializes resources (file I/O) before the write
     // transaction opens, so slow disk work never blocks capture-thread
     // database writes for the duration of a large import.
+    //
+    // IDs are derived from the content hash (not the row index): a bare
+    // `ON CONFLICT DO UPDATE` matches *either* unique key, so a second
+    // package's `ppaste_{index}` row would otherwise overwrite the first
+    // package's unrelated row sharing that synthetic id. Content-derived
+    // ids make re-imports idempotent and cross-package collisions
+    // impossible unless the content itself is identical (which the
+    // `(kind, content_hash)` pre-check already counts as skipped).
     let mut prepared: Vec<(String, ClipboardItem)> = Vec::new();
     for (index, row) in rows.iter().enumerate() {
-        let id = format!("ppaste_{index}");
-        match build_item(row, &id, archive, paths) {
-            Ok(item) => prepared.push((id, item)),
+        let index_label = format!("ppaste_{index}");
+        match build_item(row, &index_label, archive, paths) {
+            Ok(mut item) => {
+                let id = format!("ppaste_{}", item.content_hash);
+                item.id = id.clone();
+                prepared.push((id, item));
+            }
             Err(error) => {
                 skipped += 1;
-                errors.push(format!("failed to import {id}: {error}"));
+                errors.push(format!("failed to import {index_label}: {error}"));
             }
         }
     }
@@ -614,6 +626,92 @@ mod tests {
         assert_eq!(second.errors.len(), 1);
         assert!(second.errors[0].contains("file record(s) were skipped"));
         assert_eq!(database.item_count().unwrap(), 4);
+
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn imports_from_two_backups_do_not_overwrite_each_other() {
+        let temp = std::env::temp_dir().join(format!(
+            "ppaste-twobackups-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+
+        // First backup carries the fixture text; the second carries different
+        // text. With index-derived ids both would claim `ppaste_0` and the
+        // second import would overwrite the first row.
+        let first_backup = make_backup(&temp);
+        let second_db = temp.join("source2.db3");
+        {
+            let conn = Connection::open(&second_db).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE PPaste_Main (
+                    PUID TEXT PRIMARY KEY,
+                    TYPE TEXT, TYPE_CHILD TEXT, VALUE TEXT, SEARCH TEXT,
+                    FAVORITE INTEGER, CREATE_TIME DATETIME,
+                    SOURCEPATH TEXT, WIDTH INTEGER, HEIGHT INTEGER
+                );",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO PPaste_Main
+                    (PUID, TYPE, TYPE_CHILD, VALUE, SEARCH, FAVORITE, CREATE_TIME, SOURCEPATH, WIDTH, HEIGHT)
+                 VALUES
+                    ('T9', 'Text', 'UnicodeText', 'a completely different sentence', 'a completely different sentence', 0, '2026-04-28 12:15:22', 'Zen', 0, 0);",
+                [],
+            )
+            .unwrap();
+        }
+        let second_backup = temp.join("second.Pastebackup");
+        {
+            let db_bytes = std::fs::read(&second_db).unwrap();
+            let file = std::fs::File::create(&second_backup).unwrap();
+            let mut writer = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            writer.start_file("PPaste2.db3", options).unwrap();
+            writer.write_all(&db_bytes).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            temp.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let first =
+            import_from_ppaste_backup(first_backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(first.imported_count, 4);
+        let second =
+            import_from_ppaste_backup(second_backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(second.imported_count, 1);
+        assert_eq!(second.skipped_count, 0);
+        // 4 rows from the first backup plus the new distinct row.
+        assert_eq!(database.item_count().unwrap(), 5);
+        let stored = database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap();
+        assert!(stored.iter().any(|i| i
+            .text_content
+            .as_deref()
+            .unwrap_or_default()
+            .contains("hello world")));
+        assert!(stored.iter().any(|i| i
+            .text_content
+            .as_deref()
+            .unwrap_or_default()
+            .contains("a completely different sentence")));
+        // Ids are content-derived, so distinct content yields distinct ids.
+        assert!(stored.iter().all(|i| i.id.starts_with("ppaste_")));
 
         std::fs::remove_dir_all(&temp).unwrap();
     }
