@@ -99,6 +99,7 @@
     onsaveasnew: (id: string, title: string, content: string) => void;
     onrestore?: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
+    oncopyPath?: (id: string) => void;
     onmaterialize?: (id: string) => void;
     onheightchange?: (id: string, height: number, immediate?: boolean) => void;
     onsavetags?: (id: string, tags: string[]) => void;
@@ -147,6 +148,7 @@
     onsaveasnew,
     onrestore,
     onimagefullscreen,
+    oncopyPath,
     onmaterialize,
     onheightchange,
     onsavetags,
@@ -434,6 +436,9 @@
         tagAdding = true;
         tagDraft = "";
         return;
+      case "copyPath":
+        oncopyPath?.(item.id);
+        return;
     }
   }
 
@@ -470,6 +475,9 @@
     notifyContextMenuOpened();
     const items: ContextMenuItem[] = [
       { id: "copy", label: _t("card.copy"), icon: "copy" },
+      ...(item.kind === "image" || item.kind === "file"
+        ? [{ id: "copyPath", label: _t("card.copyPath"), icon: "link" as IconName }]
+        : []),
       ...(item.kind === "text" || item.kind === "link"
         ? [
             {

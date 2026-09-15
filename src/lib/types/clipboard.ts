@@ -16,6 +16,7 @@ export interface HistoryFilterArgs {
 /** Card action ids shared by the card action row and the context menu. */
 export const CARD_ACTION_IDS = [
   "copy",
+  "copyPath",
   "plainpaste",
   "formatpaste",
   "cleanpaste",

@@ -31,6 +31,7 @@
     materializeClipboardItem,
     toClipboardItem,
     copyClipboardItem,
+    copyClipboardPath,
     pasteClipboardItem,
     deriveTextEditPatch,
     writeClipboardText,
@@ -1514,6 +1515,14 @@
     });
   }
 
+  async function copyPath(id: string) {
+    const item = findLoadedItem(id);
+    if (!item) return;
+    await copyClipboardPath(item, {
+      onstatus: (message) => (statusMessage = message),
+    });
+  }
+
   async function openDetail(id: string) {
     const item = findLoadedItem(id);
     if (!item) return;
@@ -2572,6 +2581,7 @@
       ontoggleFavorite={toggleFavorite}
       ondelete={deleteItem}
       oncopy={copyItem}
+      oncopyPath={copyPath}
       onsave={saveItem}
       ondetail={openDetail}
       onimagefullscreen={handleImageFullscreen}
@@ -2610,6 +2620,7 @@
         item={detailItem}
         onclose={closeDetail}
         oncopy={copyItem}
+        oncopyPath={copyPath}
         onedit={startEdit}
         onsaveedit={saveEdit}
         onrenametitle={renameTitle}
@@ -2643,6 +2654,7 @@
     item={detailItem}
     onclose={closeDetail}
     oncopy={copyItem}
+    oncopyPath={copyPath}
     onedit={startEdit}
     onsaveedit={saveEdit}
     onrenametitle={renameTitle}

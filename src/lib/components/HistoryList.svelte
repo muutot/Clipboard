@@ -56,6 +56,7 @@
     oncleanpaste: (id: string) => void;
     ondblclickpaste: (id: string) => void;
     onrestore: (id: string) => void;
+    oncopyPath: (id: string) => void;
     onsavetags: (id: string, tags: string[]) => void;
     ontoggleTagFilter: (tag: string) => void;
     oneditTag: (tag: string) => void;
@@ -108,6 +109,7 @@
     oncleanpaste,
     ondblclickpaste,
     onrestore,
+    oncopyPath,
     onsavetags,
     ontoggleTagFilter,
     oneditTag,
@@ -157,6 +159,7 @@
       {ondblclickpaste}
       {doubleClickPaste}
       {onrestore}
+      {oncopyPath}
       {onsavetags}
       {tagColors}
       {ontoggleTagFilter}

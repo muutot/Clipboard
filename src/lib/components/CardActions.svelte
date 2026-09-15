@@ -75,6 +75,14 @@
   {#if item.kind === "image" || item.kind === "file"}
     <button
       type="button"
+      title={_t("card.copyPath")}
+      aria-label={_t("card.copyPath")}
+      onclick={(event) => onrunaction("copyPath", event)}><AppIcon name="link" size={16} /></button
+    >
+  {/if}
+  {#if item.kind === "image" || item.kind === "file"}
+    <button
+      type="button"
       title={_t("card.saveAs")}
       aria-label={_t("card.saveAs")}
       onclick={onsaveas}><AppIcon name="download" size={16} /></button

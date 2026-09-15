@@ -29,6 +29,12 @@ pub trait PlatformClipboard {
     fn read_clipboard_image(&self) -> Option<(Vec<u8>, u32, u32)>;
     fn read_clipboard_file_paths(&self) -> Vec<String>;
     fn write_clipboard_text_with_self_trigger(&self, text: &str) -> Result<(), String>;
+    /// Writes file references (CF_HDROP on Windows) so paste into a file
+    /// manager copies the files themselves. Non-Windows platforms fall back to
+    /// the joined paths as text, matching the historical `copy` behavior.
+    fn write_clipboard_files_with_self_trigger(&self, paths: &[String]) -> Result<(), String> {
+        self.write_clipboard_text_with_self_trigger(&paths.join("\n"))
+    }
     fn extract_app_icon(&self, icon_dir: &Path, app_name: &str, exe_path: &str) -> Option<String>;
 
     /// Reads the optional HTML fragment used for paste-by-format.

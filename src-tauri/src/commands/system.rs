@@ -9,8 +9,8 @@ pub use super::cleanup::{
     enforce_history_cleanup, enforce_history_cleanup_for, StorageCleanupResult,
 };
 pub use super::files::{
-    delete_icon_files, list_icon_cache, open_external_url, replace_icon_file, reveal_in_explorer,
-    save_clipboard_item_file, IconCacheEntry,
+    copy_clipboard_item_files, delete_icon_files, list_icon_cache, open_external_url,
+    replace_icon_file, reveal_in_explorer, save_clipboard_item_file, IconCacheEntry,
 };
 pub use super::signal::{stop_signal_requested, wait_for_stop};
 

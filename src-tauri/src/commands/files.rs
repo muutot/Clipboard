@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::content::{compute_content_hash, compute_normalized_media_hash, icon_key};
+use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
 #[derive(Debug, Clone, Serialize)]
@@ -310,6 +311,103 @@ pub fn save_clipboard_item_file(
     Ok(())
 }
 
+/// Resolves the existing local files behind an image/file record. Image items
+/// use the stored png; file items prefer the per-file storage paths recorded
+/// in resource metadata and fall back to the record's resource path. Pass-through files that
+/// exceed the copy-size limit keep their original absolute location and are
+/// accepted here: the paths originate from the record, never from the webview.
+fn resolve_clipboard_file_paths(
+    item: &ClipboardItem,
+    paths: &StoragePaths,
+) -> Result<Vec<std::path::PathBuf>, String> {
+    let mut candidates = Vec::new();
+    match item.kind {
+        ClipboardKind::Image => {
+            if let Some(resource) = item.resource_path.as_deref() {
+                candidates.push(resource.to_owned());
+            }
+        }
+        ClipboardKind::File => {
+            if let Some(metadata_paths) = file_metadata_paths(&item.metadata_json) {
+                candidates.extend(metadata_paths);
+            }
+            if candidates.is_empty() {
+                if let Some(resource) = item.resource_path.as_deref() {
+                    candidates.push(resource.to_owned());
+                }
+            }
+        }
+        _ => return Err("clipboard item is not an image or file".to_string()),
+    }
+
+    let mut resolved = Vec::new();
+    for candidate in &candidates {
+        let raw = std::path::Path::new(candidate);
+        let path = if raw.is_absolute() {
+            raw.to_path_buf()
+        } else {
+            [&paths.images, &paths.files, &paths.storage]
+                .iter()
+                .map(|root| root.join(raw))
+                .find(|candidate| candidate.is_file())
+                .unwrap_or_else(|| paths.storage.join(raw))
+        };
+        if path.is_file() {
+            resolved.push(path);
+        }
+    }
+
+    if resolved.is_empty() {
+        return Err("clipboard item has no available files on disk".to_string());
+    }
+    Ok(resolved)
+}
+
+/// Reads the `storagePath` (legacy `path`) of each entry in the `files` array
+/// of the record's resource metadata.
+fn file_metadata_paths(metadata_json: &Option<String>) -> Option<Vec<String>> {
+    let json = metadata_json.as_deref()?;
+    let parsed: serde_json::Value = serde_json::from_str(json).ok()?;
+    let files = parsed.get("files")?.as_array()?;
+    let mut paths = Vec::new();
+    for file in files {
+        if let Some(value) = file.get("storagePath").or_else(|| file.get("path")) {
+            if let Some(path) = value.as_str() {
+                if !path.trim().is_empty() {
+                    paths.push(path.to_owned());
+                }
+            }
+        }
+    }
+    if paths.is_empty() {
+        None
+    } else {
+        Some(paths)
+    }
+}
+
+/// Copies the files behind one image/file record back to the system clipboard
+/// as dropped file references (CF_HDROP on Windows). The record id is the only
+/// input from the webview; the actual paths are resolved from the database, so
+/// no arbitrary-path clipboard primitive is re-exposed.
+#[tauri::command]
+pub fn copy_clipboard_item_files(
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+    id: String,
+) -> Result<(), String> {
+    let item = database
+        .get_item(&id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "clipboard item not found".to_string())?;
+    let resolved = resolve_clipboard_file_paths(&item, paths.inner())?;
+    let files = resolved
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    crate::platform::platform().write_clipboard_files_with_self_trigger(&files)
+}
+
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
     // Only real web URLs may reach the OS opener. The URL text can originate
@@ -473,6 +571,122 @@ mod tests {
 
         assert!(err.contains("not found"), "{err}");
         let _ = std::fs::remove_dir_all(&project);
+    }
+
+    fn item(
+        kind: ClipboardKind,
+        resource_path: Option<String>,
+        metadata_json: Option<String>,
+    ) -> ClipboardItem {
+        ClipboardItem {
+            id: "id".to_string(),
+            kind,
+            title: "title".to_string(),
+            text_content: None,
+            html_content: None,
+            rtf_content: None,
+            resource_path,
+            preview_path: None,
+            content_hash: "hash".to_string(),
+            source_app: None,
+            icon_path: None,
+            size_bytes: 0,
+            created_at_ms: 0,
+            last_used_at_ms: None,
+            is_favorite: false,
+            metadata_json,
+        }
+    }
+
+    #[test]
+    fn resolve_clipboard_file_paths_accepts_an_image_resource() {
+        let project = save_file_test_project("media-root");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        touch(&paths.images, "a.png", b"img");
+
+        let resolved = resolve_clipboard_file_paths(
+            &item(
+                ClipboardKind::Image,
+                Some(paths.images.join("a.png").to_string_lossy().to_string()),
+                None,
+            ),
+            &paths,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert!(resolved[0].ends_with("a.png"));
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn resolve_clipboard_file_paths_prefers_metadata_storage_paths() {
+        let project = save_file_test_project("file-list");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        touch(&paths.files, "a.txt", b"a");
+        touch(&paths.files, "b.txt", b"b");
+        let metadata = Some(
+            serde_json::json!({
+                "files": [
+                    { "storagePath": paths.files.join("a.txt").to_string_lossy().to_string() },
+                    { "storagePath": paths.files.join("b.txt").to_string_lossy().to_string() },
+                ]
+            })
+            .to_string(),
+        );
+
+        let resolved =
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, None, metadata), &paths)
+                .unwrap();
+
+        assert_eq!(resolved.len(), 2);
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn resolve_clipboard_file_paths_accepts_pass_through_absolute_paths() {
+        let project = save_file_test_project("passthrough");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+        touch(&project, "large.bin", b"big");
+        let original = project.join("large.bin").to_string_lossy().to_string();
+
+        let resolved =
+            resolve_clipboard_file_paths(&item(ClipboardKind::File, Some(original), None), &paths)
+                .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert!(resolved[0].ends_with("large.bin"));
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn resolve_clipboard_file_paths_rejects_text_items_and_missing_files() {
+        let project = save_file_test_project("cleanup");
+        let paths = StoragePaths::initialize(project.clone()).unwrap();
+
+        assert!(
+            resolve_clipboard_file_paths(&item(ClipboardKind::Text, None, None), &paths).is_err()
+        );
+        assert!(resolve_clipboard_file_paths(
+            &item(ClipboardKind::File, Some("gone.txt".to_string()), None),
+            &paths
+        )
+        .is_err());
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn file_metadata_paths_reads_storage_and_legacy_path_fields() {
+        let metadata =
+            Some(r#"{"files":[{"storagePath":"C:\\managed\\a.txt"},{"path":"C:\\orig\\b.txt"},{"name":"c.txt"}]}"#
+                .to_owned());
+
+        assert_eq!(
+            file_metadata_paths(&metadata).unwrap(),
+            ["C:\\managed\\a.txt", "C:\\orig\\b.txt"]
+        );
+        assert!(file_metadata_paths(&None).is_none());
+        assert!(file_metadata_paths(&Some("{}".to_owned())).is_none());
     }
 
     #[test]

@@ -86,6 +86,7 @@
     onduplicate: (id: string) => void;
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncopyfilename: (id: string) => void;
+    oncopyPath: (id: string) => void;
     onimagefullscreen?: (id: string) => void;
     onsavetags: (id: string, tags: string[]) => void;
     onocrupdate: (id: string, patch: Partial<ClipboardItem>) => void;
@@ -106,6 +107,7 @@
     onduplicate,
     onsaveasnew,
     oncopyfilename,
+    oncopyPath,
     onimagefullscreen,
     onsavetags,
     onocrupdate,
@@ -450,6 +452,12 @@
             <AppIcon name="copy" size={15} />
             {_t("card.copy")}
           </button>
+          {#if item.kind === "image" || item.kind === "file"}
+            <button type="button" onclick={() => oncopyPath(item.id)}>
+              <AppIcon name="link" size={15} />
+              {_t("card.copyPath")}
+            </button>
+          {/if}
           {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
             <button
               type="button"

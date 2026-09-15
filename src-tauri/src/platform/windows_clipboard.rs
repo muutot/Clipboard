@@ -44,6 +44,10 @@ impl crate::platform::PlatformClipboard for WindowsPlatform {
         write_clipboard_text_with_self_trigger(text)
     }
 
+    fn write_clipboard_files_with_self_trigger(&self, paths: &[String]) -> Result<(), String> {
+        write_clipboard_files_with_self_trigger(paths)
+    }
+
     fn extract_app_icon(
         &self,
         icon_dir: &std::path::Path,
@@ -357,6 +361,56 @@ fn read_self_trigger_marker() -> Option<Vec<u8>> {
     None
 }
 
+// Owns nothing itself; `SetClipboardData` transfers ownership of successful
+// allocations to the system and the guard only closes the clipboard so the
+// next `EmptyClipboard` releases them.
+#[cfg(target_os = "windows")]
+#[link(name = "User32")]
+extern "system" {
+    fn OpenClipboard(window: isize) -> i32;
+    fn CloseClipboard() -> i32;
+    fn EmptyClipboard() -> i32;
+    fn SetClipboardData(format: u32, memory: isize) -> isize;
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "Kernel32")]
+extern "system" {
+    fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
+    fn GlobalFree(memory: isize) -> isize;
+    fn GlobalLock(memory: isize) -> *const u8;
+    fn GlobalUnlock(memory: isize) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+struct ClipboardGuard;
+
+#[cfg(target_os = "windows")]
+impl Drop for ClipboardGuard {
+    fn drop(&mut self) {
+        unsafe {
+            CloseClipboard();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn allocate_global_bytes(bytes: &[u8]) -> Result<isize, String> {
+    const GMEM_MOVEABLE: u32 = 0x0002;
+    let memory = unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes.len()) };
+    if memory == 0 {
+        return Err("failed to allocate clipboard memory".to_owned());
+    }
+    let target = unsafe { GlobalLock(memory) }.cast_mut();
+    if target.is_null() {
+        unsafe { GlobalFree(memory) };
+        return Err("failed to lock clipboard memory".to_owned());
+    }
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+    unsafe { GlobalUnlock(memory) };
+    Ok(memory)
+}
+
 /// Writes CF_UNICODETEXT plus a private hash marker. Marker failures are
 /// intentionally best-effort: the text write must retain its original
 /// behavior even when a clipboard implementation rejects custom formats.
@@ -365,55 +419,6 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
     use std::ffi::OsStr;
     use std::iter;
     use std::os::windows::ffi::OsStrExt;
-
-    const GMEM_MOVEABLE: u32 = 0x0002;
-
-    #[link(name = "User32")]
-    extern "system" {
-        fn OpenClipboard(window: isize) -> i32;
-        fn CloseClipboard() -> i32;
-        fn EmptyClipboard() -> i32;
-        fn SetClipboardData(format: u32, memory: isize) -> isize;
-    }
-
-    #[link(name = "Kernel32")]
-    extern "system" {
-        fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
-        fn GlobalFree(memory: isize) -> isize;
-        fn GlobalLock(memory: isize) -> *const u8;
-        fn GlobalUnlock(memory: isize) -> i32;
-    }
-
-    struct ClipboardGuard;
-
-    impl Drop for ClipboardGuard {
-        fn drop(&mut self) {
-            unsafe {
-                CloseClipboard();
-            }
-        }
-    }
-
-    unsafe fn allocate_global_bytes(
-        bytes: &[u8],
-        global_alloc: unsafe extern "system" fn(u32, usize) -> isize,
-        global_free: unsafe extern "system" fn(isize) -> isize,
-        global_lock: unsafe extern "system" fn(isize) -> *const u8,
-        global_unlock: unsafe extern "system" fn(isize) -> i32,
-    ) -> Result<isize, String> {
-        let memory = global_alloc(GMEM_MOVEABLE, bytes.len());
-        if memory == 0 {
-            return Err("failed to allocate clipboard memory".to_owned());
-        }
-        let target = global_lock(memory).cast_mut();
-        if target.is_null() {
-            global_free(memory);
-            return Err("failed to lock clipboard memory".to_owned());
-        }
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len());
-        global_unlock(memory);
-        Ok(memory)
-    }
 
     let wide = OsStr::new(text)
         .encode_wide()
@@ -436,22 +441,14 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
         }
 
         let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
-        let text_memory = allocate_global_bytes(
-            wide_bytes,
-            GlobalAlloc,
-            GlobalFree,
-            GlobalLock,
-            GlobalUnlock,
-        )?;
+        let text_memory = allocate_global_bytes(wide_bytes)?;
         if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
             GlobalFree(text_memory);
             return Err("failed to write text to the system clipboard".to_owned());
         }
 
         if let Some(format) = self_trigger_format_id() {
-            if let Ok(marker_memory) =
-                allocate_global_bytes(&marker, GlobalAlloc, GlobalFree, GlobalLock, GlobalUnlock)
-            {
+            if let Ok(marker_memory) = allocate_global_bytes(&marker) {
                 if SetClipboardData(format, marker_memory) == 0 {
                     GlobalFree(marker_memory);
                 }
@@ -465,6 +462,97 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
 #[cfg(not(target_os = "windows"))]
 pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String> {
     Err("Windows clipboard text writing is not supported on this platform".to_owned())
+}
+
+/// Builds a `CF_HDROP` payload: a DROPFILES header (`pFiles`/`pt`/`fNC`/
+/// `fWide`) followed by a double-NUL-terminated list of UTF-16LE paths.
+#[cfg(target_os = "windows")]
+fn build_drop_files_bytes(paths: &[String]) -> Result<Vec<u8>, String> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut utf16 = Vec::new();
+    for path in paths {
+        if path.is_empty() {
+            return Err("no file paths to copy".to_owned());
+        }
+        utf16.extend(OsStr::new(path).encode_wide().flat_map(u16::to_le_bytes));
+        utf16.extend_from_slice(&[0, 0]);
+    }
+    utf16.extend_from_slice(&[0, 0]);
+    let mut header = Vec::with_capacity(20 + utf16.len());
+    header.extend_from_slice(&20u32.to_le_bytes());
+    header.extend_from_slice(&0i32.to_le_bytes());
+    header.extend_from_slice(&0i32.to_le_bytes());
+    header.extend_from_slice(&0u32.to_le_bytes());
+    header.extend_from_slice(&1u32.to_le_bytes());
+    header.extend_from_slice(&utf16);
+    Ok(header)
+}
+
+/// Writes `CF_HDROP` (dropped file references) plus the joined paths as
+/// `CF_UNICODETEXT` and the private hash marker. Pasting into a file manager
+/// copies the referenced files; text consumers still receive the path list.
+#[cfg(target_os = "windows")]
+pub fn write_clipboard_files_with_self_trigger(paths: &[String]) -> Result<(), String> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    if paths.is_empty() {
+        return Err("no file paths to copy".to_owned());
+    }
+
+    let buffer = build_drop_files_bytes(paths)?;
+
+    let text = paths.join("\n");
+    let marker = self_trigger_marker_for_text(&text);
+
+    unsafe {
+        if OpenClipboard(0) == 0 {
+            return Err("failed to open the system clipboard".to_owned());
+        }
+        let _clipboard_guard = ClipboardGuard;
+
+        if EmptyClipboard() == 0 {
+            return Err("failed to clear the system clipboard".to_owned());
+        }
+
+        let drop_memory = allocate_global_bytes(&buffer)?;
+        if SetClipboardData(CF_HDROP, drop_memory) == 0 {
+            GlobalFree(drop_memory);
+            return Err("failed to write files to the system clipboard".to_owned());
+        }
+
+        let wide = OsStr::new(&text)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let wide_byte_len = wide
+            .len()
+            .checked_mul(std::mem::size_of::<u16>())
+            .ok_or_else(|| "clipboard text is too large".to_owned())?;
+        let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
+        let text_memory = allocate_global_bytes(wide_bytes)?;
+        if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
+            GlobalFree(text_memory);
+            return Err("failed to write text to the system clipboard".to_owned());
+        }
+
+        if let Some(format) = self_trigger_format_id() {
+            if let Ok(marker_memory) = allocate_global_bytes(&marker) {
+                if SetClipboardData(format, marker_memory) == 0 {
+                    GlobalFree(marker_memory);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn write_clipboard_files_with_self_trigger(_paths: &[String]) -> Result<(), String> {
+    Err("Windows clipboard file writing is not supported on this platform".to_owned())
 }
 
 #[cfg(target_os = "windows")]
@@ -1766,6 +1854,39 @@ mod tests {
             b"not-a-content-hash",
             "ordinary text"
         ));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn drop_files_payload_is_wide_terminated_and_double_null_ended() {
+        let payload =
+            build_drop_files_bytes(&["C:\\a.png".to_owned(), "D:\\notes\\b.txt".to_owned()])
+                .unwrap();
+        // DROPFILES header: pFiles=20, pt=(0,0), fNC=false, fWide=true.
+        assert_eq!(&payload[0..4], &20u32.to_le_bytes());
+        assert_eq!(&payload[12..16], &0u32.to_le_bytes());
+        assert_eq!(&payload[16..20], &1u32.to_le_bytes());
+
+        let paths_region = &payload[20..];
+        let wide: Vec<u16> = paths_region
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        // Each path is NUL-terminated and the whole list is double-NUL ended.
+        assert!(wide.ends_with(&[0, 0]));
+        let terminated_at = wide
+            .split(|unit| *unit == 0)
+            .filter(|part| !part.is_empty());
+        let decoded = terminated_at.map(String::from_utf16_lossy).collect::<Vec<_>>();
+        assert_eq!(decoded, ["C:\\a.png", "D:\\notes\\b.txt"]);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn drop_files_payload_rejects_empty_paths() {
+        assert!(build_drop_files_bytes(&[String::new()]).is_err());
     }
 
     #[test]

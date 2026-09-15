@@ -62,6 +62,7 @@
 
 - [x] MAINT-01 拆分巨型文件：`+page.svelte` ~3854 行、`DetailPanel.svelte` 2121 行、`ClipboardCard.svelte` 1555 行。先补 Vitest 基线再按视图区块拆（列表/筛选/批量/键盘导航），状态经 props/回调下发（与 BulkBar/StatusBar 既有约定一致）。已闭环：主路由拆出 Toolbar/StatusBar/BulkBar/HistoryList/SearchHeader 并下沉 paste/edit/历史合并/过滤等纯逻辑（3854→2535）；DetailPanel 拆出 EditActions/OcrTab/FilePreview/DetailsTab/ImagePreview（2121→755）；ClipboardCard 拆出 CardActions/CardDateDialog 并下沉 quickActionKind（1555→1236）。验收：`npm run verify` 全过、Vitest 189 passed；键盘导航由单测覆盖，真机手工回归未在本环境执行。
 - [ ] MAINT-02 单一 source of truth：`Map<id, item>` + 派生 id 视图替代四副本手工同步（当前 `updateItem` 漏斗仅是缓解）。验收：四副本一致性单测 + Svelte 5 深代理兼容验证记录。
+- [x] 复制源文件 + 复制路径按钮：图片/文件主复制改写 CF_HDROP（Windows，DROPFILES 头 + UTF-16LE 双 NUL 路径表，另写 CF_UNICODETEXT + 自触发标记），资源管理器粘贴即复制源文件；卡片/右键菜单/详情面板新增"复制路径"（图片→存储路径，文件→逐项 originalPath 兜底 storagePath）；新增 `copy_clipboard_item_files(id)` 命令（仅传 id，路径由记录解析 + `is_file` 存在性校验，未重开 `copy_file_to` 任意复制原语）。验收：623 主线 + 8 集成 + 44 同步 Rust 单测、199 Vitest、`svelte-check`/`clippy -D warnings`/`prettier` 全绿。真机 Explorer 粘贴回归待手工。
 - [x] MAINT-03 公共 API 注释：已闭环（`b1d7a56`），逐函数复核 `capture.rs`/`search/index.rs` 全部 `pub fn` 均有 `///`，无遗漏。
 - [x] macOS 文件路径捕获：`NSPasteboard NSFilenamesPboardType` 原生读取已实现（`platform/macos.rs`，缺席回退空列表=旧行为；所用 FFI 形状复用既有模块）+ mac-only 防崩溃冒烟测试。**待 mac CI 变绿后**再把 README 平台矩阵该格从 `❌` 翻为 `✅`（本地无 mac，不可提前宣称）。
 - [x] Linux 图标提取：freedesktop `.desktop` + 图标主题查找已实现并接线 X11/Wayland（`platform/linux_icons.rs`，fixture 单测全平台可跑）。

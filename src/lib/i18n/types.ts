@@ -33,6 +33,7 @@ export interface LocaleDefinition {
   };
   card: {
     copy: string;
+    copyPath: string;
     export: string;
     saveAs: string;
     favorite: string;

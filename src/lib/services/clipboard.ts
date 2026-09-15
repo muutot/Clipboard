@@ -49,6 +49,13 @@ export async function writeClipboardImage(
   await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
 }
 
+/** Copies the files behind an image/file record back to the system clipboard
+ * as dropped file references (CF_HDROP on Windows). The backend resolves the
+ * paths from the record, so no arbitrary paths cross the IPC boundary. */
+export async function copyClipboardItemFiles(id: string): Promise<void> {
+  await invoke("copy_clipboard_item_files", { id });
+}
+
 export async function writeClipboardHtml(
   html: string,
   plainText?: string | null,
@@ -338,6 +345,22 @@ export async function copyClipboardItem(
 
   void persistLastUsed(item.id);
 
+  if (item.kind === "image" || item.kind === "file") {
+    if (isTauriRuntime()) {
+      try {
+        await copyClipboardItemFiles(item.id);
+        hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
+        showToast(t("toast.copySuccess"), "success");
+        return;
+      } catch (error) {
+        console.error("Unable to copy media files", error);
+        showToast(t("toast.copyFailed"), "error");
+        return;
+      }
+    }
+    // Browser/demo fallback keeps the historical in-page behavior.
+  }
+
   if (item.kind === "image" && item.resourcePath) {
     try {
       const src = convertFileSrc(item.resourcePath.replace(/\\/g, "/"));
@@ -396,6 +419,70 @@ export function getDisplayRemainingLines(text: string): string {
 
   // 切出第一行后面的部分，直接调用原生 trimStart() 剥离开头所有不可见字符
   return text.slice(match.index + match[0].length).trimStart();
+}
+
+/**
+ * Copies the local file paths behind an image/file record as text (joined by
+ * newlines). Files prefer the recorded original path so the user pastes the
+ * path they recognize; the managed storage path is the fallback.
+ */
+export async function copyClipboardPath(
+  item: ClipboardItem,
+  hooks: CopyItemHooks = {},
+): Promise<void> {
+  const locale = getLocale();
+  const messages = locales[locale] ?? locales.en;
+  const t = (path: string, params?: Record<string, string | number>) =>
+    resolvePath(messages, path, params);
+
+  let media = item;
+  if (media.kind === "image" || media.kind === "file") {
+    try {
+      media = await materializeClipboardItem(media);
+    } catch (error) {
+      console.error("Unable to materialize clipboard item for path copy", error);
+      showToast(t("toast.copyFailed"), "error");
+      return;
+    }
+  }
+
+  const lines = clipboardPathLines(media);
+  if (lines.length === 0) {
+    showToast(t("toast.copyFailed"), "error");
+    return;
+  }
+
+  try {
+    await writeClipboardText(lines.join("\n"));
+    hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(media.title) }));
+    showToast(t("toast.copySuccess"), "success");
+  } catch {
+    showToast(t("toast.copyFailed"), "error");
+  }
+}
+
+/**
+ * The "copy path" text lines for an image/file record. Images use the recorded
+ * file path; files prefer the per-file original path (the path the user
+ * recognizes) and fall back to the recorded resource path. Always empty for
+ * unsupported kinds or records without a resolvable file path.
+ */
+export function clipboardPathLines(media: ClipboardItem): string[] {
+  const lines: string[] = [];
+  if (media.kind === "image") {
+    if (media.resourcePath) lines.push(media.resourcePath);
+  } else if (media.kind === "file") {
+    const files = media.fileMeta ?? [];
+    if (files.length > 0) {
+      for (const file of files) {
+        const path = file.originalPath || file.storagePath;
+        if (path) lines.push(path);
+      }
+    } else if (media.resourcePath) {
+      lines.push(media.resourcePath);
+    }
+  }
+  return lines;
 }
 
 export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {

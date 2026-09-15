@@ -770,7 +770,8 @@ pub fn run() {
             set_sync_config,
             test_sync_connection,
             sync_now,
-            materialize_clipboard_item
+            materialize_clipboard_item,
+            copy_clipboard_item_files
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
