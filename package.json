@@ -25,21 +25,21 @@
   },
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2.7.2"
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.3",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "^2.11.4",
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "prettier-plugin-svelte": "^4.1.1",
-    "svelte": "^5.56.10",
+    "svelte": "^5.57.0",
     "svelte-check": "^4.7.6",
     "typescript": "~6.0.3",
-    "vite": "^8.2.2",
+    "vite": "^8.3.0",
     "vitest": "^4.1.11"
   }
 }
