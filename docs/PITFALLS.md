@@ -125,6 +125,21 @@ struct ClipboardItem {
 }
 ```
 
+### `WebviewWindowBuilder::transparent` 在 macOS 上不存在
+
+Tauri 2 的 `transparent()`（`WebviewWindowBuilder`/`WindowBuilder`/`WebviewBuilder` 三处同名方法）被 `#[cfg(any(not(target_os = "macos"), feature = "macos-private-api"))]` 门控：macOS 默认没有该方法，直接调用会在 macOS CI 报 `E0599`，而 Windows 本地编译完全正常。
+
+```rust
+// BUG: Windows 本地能过，macOS CI 报 E0599
+WebviewWindowBuilder::new(&app, "float", url).transparent(true)
+
+// FIX: 只在非 macOS 调用；macOS 保持不透明（页面自带主题背景即可）
+#[cfg(not(target_os = "macos"))]
+{
+    builder = builder.transparent(true);
+}
+```
+
 ## CSS 层级
 
 ### z-index 分层已固定，不可打破
