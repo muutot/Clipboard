@@ -196,12 +196,14 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px 16px;
+    padding: 0;
   }
 
   .update-dialog-body :global(.markdown-body) {
-    padding: 20px;
-    border-color: var(--border-subtle);
+    min-height: 100%;
+    padding: 16px 20px;
+    border: none;
+    border-radius: 0;
     background: var(--input-bg);
     color: var(--text-secondary);
   }
