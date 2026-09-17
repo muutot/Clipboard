@@ -41,14 +41,14 @@ export const demoClipboardItems: ClipboardItem[] = [
   {
     id: "demo-file-video",
     kind: "file",
-    title: "PixPin_2026-07-23_15-48-41.mp4",
+    title: "示例录屏文件.mp4",
     preview: "1 个文件",
     sourceApp: "未知来源",
     sourceTone: "blue",
     sizeLabel: "111.9 KB",
     createdAt: now - 6 * minute,
     favorite: false,
-    fileName: "PixPin_2026-07-23_15-48-41.mp4",
+    fileName: "示例录屏文件.mp4",
   },
   {
     id: "demo-link-tauri",
@@ -75,7 +75,7 @@ export const demoClipboardItems: ClipboardItem[] = [
   {
     id: "demo-text-plan",
     kind: "text",
-    title: "将 v3.5.7 全部去掉 follow 思源最新版本",
+    title: "待办：整理本周工作笔记",
     preview: "",
     sourceApp: "Codex",
     sourceTone: "violet",
