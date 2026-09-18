@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use tauri::Emitter as _;
+use tauri::Manager as _;
 
 use super::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
 pub use super::hotkey_common::{
@@ -706,6 +707,22 @@ impl HotkeyManager {
                     }
                     HotkeyAction::ToggleFloat => {
                         if let Some(app) = app.as_ref() {
+                            // Mirror ToggleMain: remember the foreground window
+                            // as the quick-paste target so "copy and paste"
+                            // from the float panel has a window to restore.
+                            // Skip when one of our own windows is focused
+                            // (the user is toggling the panel away, and its
+                            // handle must not become the paste target).
+                            let own_focused = window.is_focused().unwrap_or(false)
+                                || app
+                                    .get_webview_window(crate::commands::float::FLOAT_WINDOW_LABEL)
+                                    .and_then(|panel| panel.is_focused().ok())
+                                    .unwrap_or(false);
+                            if !own_focused {
+                                if let Some(window_handle) = foreground_window_handle() {
+                                    quick_paste_target.remember(window_handle);
+                                }
+                            }
                             if let Err(error) =
                                 crate::commands::float::toggle_float_panel(app.clone())
                             {

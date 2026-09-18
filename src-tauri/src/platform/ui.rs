@@ -159,6 +159,29 @@ impl SystemTray {
             // the event loop and blocks for the response, while this menu
             // callback itself runs on the event loop thread — building
             // inline would self-deadlock. Offload to a worker thread.
+            //
+            // Mirror `show_main_window`: remember the foreground window
+            // first so "copy and paste" from the float panel has a window
+            // to restore. Skip when the panel itself is visible and focused
+            // (the toggle is about to hide it, and its own handle must not
+            // become the paste target).
+            {
+                let own_focused = app
+                    .get_webview_window(crate::commands::float::FLOAT_WINDOW_LABEL)
+                    .and_then(|panel| {
+                        let visible = panel.is_visible().unwrap_or(false);
+                        let focused = panel.is_focused().unwrap_or(false);
+                        Some(visible && focused)
+                    })
+                    .unwrap_or(false);
+                if !own_focused {
+                    if let Some(hm) = app.try_state::<Mutex<HotkeyManager>>() {
+                        if let Ok(hm) = hm.lock() {
+                            hm.remember_foreground();
+                        }
+                    }
+                }
+            }
             let app = app.clone();
             std::thread::spawn(move || {
                 if let Err(error) = crate::commands::float::toggle_float_panel(app) {

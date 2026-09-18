@@ -52,7 +52,9 @@ event forward (anything else)     event with the action id payload
 `HotkeyManager` stores chords per registry action (`global_chords` parallel to
 `global_action_ids()` order) plus the toggle-only `toggle_doubles`. Its
 dispatch loop handles `ToggleMain` (window show/hide + quick-paste target
-remember) and `ToggleFloat` natively; any later registry action arrives as
+remember) and `ToggleFloat` (panel toggle + quick-paste target remember when
+neither our main nor float window is focused, so mouse-toggle-away never
+records our own handle) natively; any later registry action arrives as
 `Forward(index)` and is emitted as a `global-hotkey` event carrying the
 action id — listeners need no manager changes.
 
