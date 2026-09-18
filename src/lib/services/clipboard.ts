@@ -1032,16 +1032,12 @@ export async function pasteClipboardItem(
         failed: "toast.filePasteFailed",
       },
       async () => {
-        if (media.textContent && media.textContent.startsWith("[")) {
-          try {
-            const paths = JSON.parse(media.textContent) as string[];
-            if (paths.length > 1) {
-              await writeClipboardText(paths.join("\n"));
-              return;
-            }
-          } catch {
-            /* ignore */
-          }
+        // Files must reach the OS clipboard as file drops (CF_HDROP),
+        // otherwise a later Ctrl+V only pastes a path string and the
+        // target app cannot accept it as a file.
+        if (isTauriRuntime()) {
+          await copyClipboardItemFiles(media.id);
+          return;
         }
         if (media.resourcePath) {
           await writeClipboardText(media.resourcePath);
