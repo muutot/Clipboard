@@ -5,6 +5,16 @@ use crate::content::hash::{
     compute_media_write_hashes,
 };
 
+/// How long a text/file self-trigger marker stays valid. Covers the short
+/// window between the frontend writing the clipboard and the capture thread
+/// observing the resulting sequence-number change.
+const ENTRY_TTL: Duration = Duration::from_secs(2);
+/// Media markers need a wider window: the capture thread can spend several
+/// seconds waking up (500ms poll), reading the DIB and re-encoding a large
+/// screenshot to PNG before it reaches the hash check, and an expired marker
+/// would re-capture the image the app itself just pasted.
+const MEDIA_ENTRY_TTL: Duration = Duration::from_secs(5);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DedupResult {
     pub is_duplicate: bool,
@@ -14,6 +24,7 @@ pub struct DedupResult {
 struct SelfTriggerEntry {
     hash: String,
     timestamp: Instant,
+    ttl: Duration,
 }
 
 pub struct SelfTriggerGuard {
@@ -28,6 +39,10 @@ impl SelfTriggerGuard {
     }
 
     pub fn mark_as_self_triggered(&mut self, content_hash: &str) {
+        self.mark_with_ttl(content_hash, ENTRY_TTL);
+    }
+
+    fn mark_with_ttl(&mut self, content_hash: &str, ttl: Duration) {
         self.cleanup_expired();
         if let Some(entry) = self
             .entries
@@ -35,23 +50,25 @@ impl SelfTriggerGuard {
             .find(|entry| entry.hash == content_hash)
         {
             entry.timestamp = Instant::now();
+            entry.ttl = ttl;
             return;
         }
         self.entries.push(SelfTriggerEntry {
             hash: content_hash.to_owned(),
             timestamp: Instant::now(),
+            ttl,
         });
     }
 
     pub fn mark_clipboard_write(&mut self, text: &str) {
         for hash in compute_clipboard_write_hashes(text) {
-            self.mark_as_self_triggered(&hash);
+            self.mark_with_ttl(&hash, ENTRY_TTL);
         }
     }
 
     pub fn mark_media_write(&mut self, kind: &str, data: &[u8]) {
         for hash in compute_media_write_hashes(kind, data) {
-            self.mark_as_self_triggered(&hash);
+            self.mark_with_ttl(&hash, MEDIA_ENTRY_TTL);
         }
     }
 
@@ -86,7 +103,7 @@ impl SelfTriggerGuard {
     fn cleanup_expired(&mut self) {
         let now = Instant::now();
         self.entries
-            .retain(|entry| now.duration_since(entry.timestamp) < Duration::from_secs(2));
+            .retain(|entry| now.duration_since(entry.timestamp) < entry.ttl);
     }
 }
 
