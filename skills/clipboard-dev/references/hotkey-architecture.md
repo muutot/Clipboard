@@ -54,7 +54,16 @@ event forward (anything else)     event with the action id payload
 dispatch loop handles `ToggleMain` (window show/hide + quick-paste target
 remember) and `ToggleFloat` (panel toggle + quick-paste target remember when
 neither our main nor float window is focused, so mouse-toggle-away never
-records our own handle) natively; any later registry action arrives as
+records our own handle) natively, and its message-loop thread additionally
+hosts a continuous `EVENT_SYSTEM_FOREGROUND` watcher
+(`WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS`) that keeps the
+take-once quick-paste target pointed at the last external foreground window.
+The watcher is what makes "copy and paste" work when the float panel was
+opened without a hotkey (resident panel clicked with the mouse, tray toggle
+without a stored target): by the time the click lands the panel already owns
+the focus, so only continuous tracking knows where the user came from. A
+stale handle degrades to the historical copy-only toast. Any later registry
+action arrives as
 `Forward(index)` and is emitted as a `global-hotkey` event carrying the
 action id — listeners need no manager changes.
 

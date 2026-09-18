@@ -24,6 +24,10 @@ const WM_SYSKEYUP: u32 = 0x0105;
 const WH_KEYBOARD_LL: i32 = 13;
 #[cfg(target_os = "windows")]
 const QUICK_PASTE_FOCUS_DELAY: Duration = Duration::from_millis(60);
+const EVENT_SYSTEM_FOREGROUND: u32 = 0x0003;
+const OBJID_WINDOW: i32 = 0;
+const WINEVENT_OUTOFCONTEXT: u32 = 0x0000;
+const WINEVENT_SKIPOWNPROCESS: u32 = 0x0002;
 
 #[derive(Default)]
 struct QuickPasteTarget {
@@ -174,6 +178,7 @@ fn spawn_hotkey_thread_with_registrations(
     double_modifiers: Vec<Modifier>,
     tx: mpsc::Sender<HotkeyAction>,
     app: Option<tauri::AppHandle>,
+    paste_target: Arc<QuickPasteTarget>,
 ) -> thread::JoinHandle<()> {
     set_hotkey_sender(&tx);
     // Readiness handshake: the message window must exist before this returns,
@@ -183,7 +188,13 @@ fn spawn_hotkey_thread_with_registrations(
     // toggle registration, which hit exactly that race and froze the app.
     let (ready_tx, ready_rx) = mpsc::channel::<()>();
     let handle = thread::spawn(move || {
-        let result = hotkey_message_loop(&registrations, &double_modifiers, ready_tx, app);
+        let result = hotkey_message_loop(
+            &registrations,
+            &double_modifiers,
+            ready_tx,
+            app,
+            paste_target,
+        );
         clear_hotkey_state();
         if let Err(error) = result {
             crate::log_event!("[hotkey] message loop exited with error: {error}");
@@ -204,10 +215,12 @@ fn hotkey_message_loop(
     double_modifiers: &[Modifier],
     ready: mpsc::Sender<()>,
     app: Option<tauri::AppHandle>,
+    paste_target: Arc<QuickPasteTarget>,
 ) -> Result<(), String> {
     if registrations.is_empty() && double_modifiers.is_empty() {
         return Err("no supported hotkey bindings were provided".to_owned());
     }
+    set_foreground_paste_target(&paste_target);
 
     extern "system" {
         fn GetModuleHandleW(module: *const u16) -> isize;
@@ -233,6 +246,16 @@ fn hotkey_message_loop(
         fn DestroyWindow(hwnd: isize) -> i32;
         fn SetWindowsHookExW(id: i32, hook_proc: usize, module: isize, thread_id: u32) -> isize;
         fn UnhookWindowsHookEx(hook: isize) -> i32;
+        fn SetWinEventHook(
+            event_min: u32,
+            event_max: u32,
+            module: isize,
+            proc: usize,
+            process_id: u32,
+            thread_id: u32,
+            flags: u32,
+        ) -> isize;
+        fn UnhookWinEvent(hook: isize) -> i32;
     }
     #[repr(C)]
     struct WndClassExW {
@@ -364,6 +387,29 @@ fn hotkey_message_loop(
             hook
         };
 
+        // Continuous foreground tracking so "copy and paste" also works
+        // when no hotkey or tray toggle recorded a target first: a resident
+        // float panel clicked with the mouse already owns the focus by the
+        // time the click lands, so only a watcher can know where the user
+        // came from. SKIPOWNPROCESS keeps our own windows out, and the
+        // target stays take-once, so a stale entry degrades to the
+        // historical copy-only toast instead of a bogus paste.
+        let foreground_hook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            0,
+            foreground_hook_proc as *const () as usize,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+        );
+        if foreground_hook == 0 {
+            crate::log_event!(
+                "[hotkey] failed to install the foreground watcher (Windows error {})",
+                GetLastError()
+            );
+        }
+
         let mut msg: Msg = std::mem::zeroed();
         loop {
             let ret = GetMessageW(&mut msg, 0, 0, 0);
@@ -374,6 +420,10 @@ fn hotkey_message_loop(
             DispatchMessageW(&msg);
         }
 
+        if foreground_hook != 0 {
+            UnhookWinEvent(foreground_hook);
+        }
+        clear_foreground_paste_target();
         if keyboard_hook != 0 {
             UnhookWindowsHookEx(keyboard_hook);
         }
@@ -451,6 +501,41 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: usize, lparam: i
 static HOTKEY_SENDER: Mutex<Option<mpsc::Sender<HotkeyAction>>> = Mutex::new(None);
 static HOTKEY_HWND: Mutex<isize> = Mutex::new(0);
 static DOUBLE_MODIFIER_TRACKER: Mutex<Option<DoubleModifierTracker>> = Mutex::new(None);
+static FOREGROUND_TARGET: Mutex<Option<Arc<QuickPasteTarget>>> = Mutex::new(None);
+
+/// WinEvent callback feeding the continuous foreground watcher. Runs on the
+/// hotkey message-loop thread (OUTOFCONTEXT delivery), so it only locks the
+/// shared target and never touches UI state.
+unsafe extern "system" fn foreground_hook_proc(
+    _hook: isize,
+    _event: u32,
+    hwnd: isize,
+    id_object: i32,
+    _id_child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    if id_object != OBJID_WINDOW || hwnd == 0 {
+        return;
+    }
+    if let Ok(guard) = FOREGROUND_TARGET.lock() {
+        if let Some(target) = guard.as_ref() {
+            target.remember(hwnd);
+        }
+    }
+}
+
+fn set_foreground_paste_target(target: &Arc<QuickPasteTarget>) {
+    if let Ok(mut guard) = FOREGROUND_TARGET.lock() {
+        *guard = Some(Arc::clone(target));
+    }
+}
+
+fn clear_foreground_paste_target() {
+    if let Ok(mut guard) = FOREGROUND_TARGET.lock() {
+        *guard = None;
+    }
+}
 
 fn set_double_modifier_tracker(double_modifiers: &[Modifier]) {
     if let Ok(mut guard) = DOUBLE_MODIFIER_TRACKER.lock() {
@@ -679,6 +764,7 @@ impl HotkeyManager {
             self.toggle_doubles.clone(),
             tx,
             self.app.clone(),
+            Arc::clone(&self.quick_paste_target),
         );
         let quick_paste_target = Arc::clone(&self.quick_paste_target);
         let app = self.app.clone();
@@ -962,12 +1048,15 @@ fn send_ctrl_v() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::keyboard::Modifier;
     use crate::platform::hotkey_common::action_id_base;
 
     use super::{
-        action_for_hotkey_id, DoubleModifierTracker, HotkeyAction, QuickPasteTarget,
-        FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE,
+        action_for_hotkey_id, clear_foreground_paste_target, foreground_hook_proc,
+        set_foreground_paste_target, DoubleModifierTracker, HotkeyAction, QuickPasteTarget,
+        EVENT_SYSTEM_FOREGROUND, FIRST_HOTKEY_ID, FLOAT_HOTKEY_ID_BASE, OBJID_WINDOW,
     };
 
     const VK_SHIFT: u32 = 0x10;
@@ -1006,6 +1095,23 @@ mod tests {
         target.remember(0);
 
         assert_eq!(target.take(), None);
+    }
+
+    #[test]
+    fn foreground_hook_records_window_objects_only() {
+        let shared = Arc::new(QuickPasteTarget::default());
+        set_foreground_paste_target(&shared);
+        unsafe {
+            foreground_hook_proc(0, EVENT_SYSTEM_FOREGROUND, 77, OBJID_WINDOW, 0, 0, 0);
+        }
+        assert_eq!(shared.take(), Some(77));
+        unsafe {
+            // Non-window objects and null handles must not become targets.
+            foreground_hook_proc(0, EVENT_SYSTEM_FOREGROUND, 78, 1, 0, 0, 0);
+            foreground_hook_proc(0, EVENT_SYSTEM_FOREGROUND, 0, OBJID_WINDOW, 0, 0, 0);
+        }
+        assert_eq!(shared.take(), None);
+        clear_foreground_paste_target();
     }
 
     #[test]
