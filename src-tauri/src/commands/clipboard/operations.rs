@@ -957,6 +957,41 @@ mod tests {
         );
     }
 
+    /// Module scenario for tie ordering: the search pipeline feeds items in
+    /// Tantivy relevance order and the reference strategy documents that
+    /// order as the fallback for equal sort keys. With `sort_unstable_by`
+    /// the tie groups of a larger input are permuted, so the documented
+    /// fallback only holds deterministically under a stable sort.
+    #[test]
+    fn apply_sort_rules_keeps_incoming_order_for_tied_keys() {
+        // 160 items in 40 ascending size groups of four. Sorting by size
+        // desc must fully reverse the group order while every tie group
+        // keeps its incoming (relevance) sequence.
+        let mut items: Vec<ClipboardItem> = (0..160)
+            .map(|index| {
+                let mut entry = item(&format!("id-{index:03}"), "record");
+                entry.size_bytes = (index / 4) as u64;
+                entry
+            })
+            .collect();
+        apply_sort_rules(
+            &mut items,
+            &[rule(SearchSortField::Size, SearchSortDirection::Desc)],
+        );
+
+        let expected: Vec<String> = (0..40)
+            .rev()
+            .flat_map(|group| (0..4).map(move |offset| format!("id-{:03}", group * 4 + offset)))
+            .collect();
+        assert_eq!(
+            items
+                .iter()
+                .map(|entry| entry.id.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
     #[test]
     fn generated_clipboard_title_truncates_by_chars_not_bytes() {
         let ascii = "k".repeat(500);
@@ -1112,7 +1147,11 @@ pub fn apply_sort_rules(items: &mut [ClipboardItem], rules: &[SearchSortRule]) {
     if rules.is_empty() {
         return;
     }
-    items.sort_unstable_by(|a, b| {
+    // Stable on purpose: when every rule key ties, the incoming order —
+    // the Tantivy relevance order the search pipeline feeds in — must
+    // survive as the fallback. `sort_unstable_by` permutes tied elements
+    // for larger inputs, which scrambles pages and breaks that contract.
+    items.sort_by(|a, b| {
         let mut ord = std::cmp::Ordering::Equal;
         for rule in rules {
             ord = cmp_by_field(a, b, rule.field);

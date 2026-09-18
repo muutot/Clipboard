@@ -29,7 +29,7 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 - `search_clipboard_items` also clears this cache when it applies pending outbox events, so stale pages are not served after a mutation; see lazy sync below.
 - Cache miss when `max_results` is larger than the cached value ensures `searchPageSizeLimit` changes invalidate stale entries.
 
-`search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result, and only then slices the requested offset/limit. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order; a silent per-query cap truncates later search pages. Sorting after slicing breaks ordering across page boundaries and is forbidden. When sort fields tie, the incoming Tantivy relevance order remains the fallback order.
+`search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result, and only then slices the requested offset/limit. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order; a silent per-query cap truncates later search pages. Sorting after slicing breaks ordering across page boundaries and is forbidden. `apply_sort_rules` sorts stably on purpose: when sort fields tie, the incoming Tantivy relevance order deterministically remains the fallback order (an unstable sort permutes tied elements for larger inputs).
 
 ### Lazy sync on search
 
