@@ -1,4 +1,9 @@
-use std::{fs, fs::File, path::PathBuf, time::Duration};
+use std::{
+    fs,
+    fs::File,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +73,7 @@ impl SearchIndexLayout {
     }
 }
 
-fn read_manifest(path: &PathBuf) -> Option<SearchIndexManifest> {
+fn read_manifest(path: &Path) -> Option<SearchIndexManifest> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         // A transient sharing violation (antivirus, backup tooling) must not
@@ -83,7 +88,7 @@ fn read_manifest(path: &PathBuf) -> Option<SearchIndexManifest> {
     serde_json::from_slice(&bytes).ok()
 }
 
-fn write_manifest(path: &PathBuf, state: SearchIndexState) -> Result<(), SearchError> {
+fn write_manifest(path: &Path, state: SearchIndexState) -> Result<(), SearchError> {
     let manifest = SearchIndexManifest {
         version: SEARCH_INDEX_VERSION,
         state,
