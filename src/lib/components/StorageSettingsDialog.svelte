@@ -237,6 +237,13 @@
       }),
     },
     {
+      sections: ["keyboard_float"],
+      load: () => import("$lib/components/FloatPanelClickSettingsPanel.svelte"),
+      props: () => ({
+        showHeader: false,
+      }),
+    },
+    {
       sections: ["statistics"],
       load: () => import("$lib/components/StatisticsSettingsPanel.svelte"),
       props: () => ({

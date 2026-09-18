@@ -160,6 +160,14 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "切换",
     "switch",
   ],
+  keyboard_float: [
+    i18n("storage.keyboardTab"),
+    i18n("storage.keyboardFloatTab"),
+    "快捷键",
+    "悬浮",
+    "点击",
+    "float",
+  ],
   ocr: [i18n("storage.ocrTitle"), "OCR", "文字识别"],
   tags: [i18n("storage.tagsTab"), i18n("tags.title"), "标签", "tag"],
   tags_rules: [i18n("storage.tagsTab"), i18n("tags.autoTagTitle"), "规则", "正则", "rule"],
@@ -830,6 +838,27 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("keyboard.switchFilterDeleted"),
     "设置切换到回收站分类的快捷键",
     ["Alt+7"],
+  ),
+  entry(
+    "keyboard.float-click-left",
+    { section: "keyboard_float" },
+    i18n("floatClick.leftClick"),
+    i18n("floatClick.leftClickDesc"),
+    ["左键", "悬浮", "float", "left click"],
+  ),
+  entry(
+    "keyboard.float-click-right",
+    { section: "keyboard_float" },
+    i18n("floatClick.rightClick"),
+    i18n("floatClick.rightClickDesc"),
+    ["右键", "悬浮", "float", "right click"],
+  ),
+  entry(
+    "keyboard.float-click-middle",
+    { section: "keyboard_float" },
+    i18n("floatClick.middleClick"),
+    i18n("floatClick.middleClickDesc"),
+    ["中键", "悬浮", "float", "middle click"],
   ),
 
   entry(

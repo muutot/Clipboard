@@ -111,6 +111,8 @@ export interface LocaleDefinition {
     keyboardSystemDescription: string;
     keyboardSwitchTab: string;
     keyboardSwitchDescription: string;
+    keyboardFloatTab: string;
+    keyboardFloatDescription: string;
     storagePathsTab: string;
     storageLimitsTab: string;
     storageToolsTab: string;
@@ -996,6 +998,22 @@ export interface LocaleDefinition {
     autoTagSaved: string;
     autoTagInvalid: string;
     autoTagDelete: string;
+  };
+  floatClick: {
+    title: string;
+    description: string;
+    leftClick: string;
+    leftClickDesc: string;
+    rightClick: string;
+    rightClickDesc: string;
+    middleClick: string;
+    middleClickDesc: string;
+    none: string;
+    copy: string;
+    copyPaste: string;
+    favorite: string;
+    detail: string;
+    delete: string;
   };
 }
 

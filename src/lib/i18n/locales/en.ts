@@ -117,6 +117,8 @@ const en: LocaleDefinition = {
     keyboardSystemDescription: "Global shortcut for showing or hiding the main window",
     keyboardSwitchTab: "Switch",
     keyboardSwitchDescription: "Shortcuts for moving the selection and switching category filters",
+    keyboardFloatTab: "Float Panel",
+    keyboardFloatDescription: "Mouse click actions on float panel items",
     storagePathsTab: "Storage Paths",
     storageLimitsTab: "Limits & Cleanup",
     storageToolsTab: "Maintenance",
@@ -1064,6 +1066,23 @@ const en: LocaleDefinition = {
     autoTagSaved: "Auto-tag rules saved",
     autoTagInvalid: "Rule {index} is invalid: {error}",
     autoTagDelete: "Delete rule",
+  },
+  floatClick: {
+    title: "Float panel clicks",
+    description:
+      "Mouse click actions on float panel items; each action can be used once except None",
+    leftClick: "Left click item",
+    leftClickDesc: "Action when left-clicking a float panel item",
+    rightClick: "Right click item",
+    rightClickDesc: "Action when right-clicking a float panel item",
+    middleClick: "Middle click item",
+    middleClickDesc: "Action when middle-clicking a float panel item",
+    none: "None",
+    copy: "Copy",
+    copyPaste: "Copy and paste",
+    favorite: "Favorite",
+    detail: "View detail",
+    delete: "Delete",
   },
 };
 

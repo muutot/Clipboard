@@ -6,6 +6,7 @@ import { invokeTauri, isTauriRuntime } from "$lib/services/runtime";
 import type {
   GeneralSettings,
   GeneralSettingsInfo,
+  FloatPanelClickAction,
   GroupDisplayMode,
   Language,
   SortRule,
@@ -59,6 +60,9 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   viewerBackdropOpacity: 92,
   searchSuggestionMode: "off",
   floatPanelPosition: "bottomRight",
+  floatPanelLeftClick: "copy",
+  floatPanelRightClick: "none",
+  floatPanelMiddleClick: "none",
   searchHistoryEnabled: false,
   searchPlaceholder: "",
   cardActionsDisplay: "hover",
@@ -204,6 +208,20 @@ function validGroupDisplayMode(
   fallback: GeneralSettings["groupDisplayMode"],
 ): GeneralSettings["groupDisplayMode"] {
   return value === "iconText" || value === "iconOnly" || value === "textOnly" ? value : fallback;
+}
+
+function validFloatPanelClickAction(
+  value: unknown,
+  fallback: FloatPanelClickAction,
+): FloatPanelClickAction {
+  return value === "none" ||
+    value === "copy" ||
+    value === "copyPaste" ||
+    value === "favorite" ||
+    value === "detail" ||
+    value === "delete"
+    ? value
+    : fallback;
 }
 
 function validFloatPanelPosition(
@@ -507,6 +525,18 @@ function normalizeGeneralSettings(
   result.floatPanelPosition = validFloatPanelPosition(
     source.floatPanelPosition ?? fallback("floatPanelPosition"),
     defaultSettings.floatPanelPosition,
+  );
+  result.floatPanelLeftClick = validFloatPanelClickAction(
+    source.floatPanelLeftClick ?? fallback("floatPanelLeftClick"),
+    defaultSettings.floatPanelLeftClick,
+  );
+  result.floatPanelRightClick = validFloatPanelClickAction(
+    source.floatPanelRightClick ?? fallback("floatPanelRightClick"),
+    defaultSettings.floatPanelRightClick,
+  );
+  result.floatPanelMiddleClick = validFloatPanelClickAction(
+    source.floatPanelMiddleClick ?? fallback("floatPanelMiddleClick"),
+    defaultSettings.floatPanelMiddleClick,
   );
   result.searchSortRules = validSortRules(
     source.searchSortRules ?? fallback("searchSortRules"),

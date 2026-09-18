@@ -13,8 +13,12 @@
     copyClipboardItem,
     getDisplayTitle,
     loadClipboardHistory,
+    pasteClipboardItem,
+    persistDelete,
+    persistFavorite,
   } from "$lib/services/clipboard";
-  import type { ClipboardItem } from "$lib/types/clipboard";
+  import { generalSettings } from "$lib/services/settings";
+  import type { ClipboardItem, FloatPanelClickAction } from "$lib/types/clipboard";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -73,6 +77,68 @@
     } finally {
       copyingId = null;
     }
+  }
+
+  async function runClickAction(id: string, action: FloatPanelClickAction) {
+    const item = items.find((i) => i.id === id);
+    if (!item || action === "none") return;
+    if (action === "copy") {
+      await copy(id);
+      return;
+    }
+    if (action === "copyPaste") {
+      if (copyingId === id) return;
+      copyingId = id;
+      try {
+        await copyClipboardItem(item);
+        await pasteClipboardItem(item, "auto");
+      } finally {
+        copyingId = null;
+      }
+      return;
+    }
+    if (action === "favorite") {
+      const ok = await persistFavorite(id, !item.favorite);
+      if (ok) {
+        items = items.map((entry) =>
+          entry.id === id ? { ...entry, favorite: !entry.favorite } : entry,
+        );
+        showToast(
+          _t(item.favorite ? "toast.unfavoriteSuccess" : "toast.favoriteSuccess"),
+          "success",
+        );
+      } else {
+        showToast(_t("app.favoriteFailed"), "error");
+      }
+      return;
+    }
+    if (action === "detail") {
+      await copy(id);
+      return;
+    }
+    if (action === "delete") {
+      const ok = await persistDelete(id);
+      if (ok) {
+        items = items.filter((entry) => entry.id !== id);
+        showToast(_t("toast.deleteSuccess"), "success");
+      } else {
+        showToast(_t("app.deleteFailed"), "error");
+      }
+    }
+  }
+
+  function handleRowClick(id: string, event: MouseEvent) {
+    if (event.button === 2) {
+      event.preventDefault();
+      void runClickAction(id, $generalSettings.floatPanelRightClick ?? "none");
+      return;
+    }
+    if (event.button === 1) {
+      event.preventDefault();
+      void runClickAction(id, $generalSettings.floatPanelMiddleClick ?? "none");
+      return;
+    }
+    void runClickAction(id, $generalSettings.floatPanelLeftClick ?? "copy");
   }
 
   function rowTitle(item: ClipboardItem): string {
@@ -319,7 +385,17 @@
           class="float-row"
           title={rowTitle(item)}
           disabled={copyingId === item.id}
-          onclick={() => void copy(item.id)}
+          onclick={(event) => handleRowClick(item.id, event)}
+          oncontextmenu={(event) => {
+            event.preventDefault();
+            void runClickAction(item.id, $generalSettings.floatPanelRightClick ?? "none");
+          }}
+          onauxclick={(event) => {
+            if (event.button === 1) {
+              event.preventDefault();
+              void runClickAction(item.id, $generalSettings.floatPanelMiddleClick ?? "none");
+            }
+          }}
         >
           <AppIcon name={item.kind} size={14} />
           <span class="float-row-title">{rowTitle(item)}</span>
