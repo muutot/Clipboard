@@ -67,11 +67,25 @@ pub(super) fn insert_item_row(
             preview_path = excluded.preview_path,
             source_app = excluded.source_app,
             size_bytes = excluded.size_bytes,
-            created_at_ms = excluded.created_at_ms,
-            last_used_at_ms = COALESCE(
-                excluded.last_used_at_ms,
-                clipboard_items.last_used_at_ms
-            ),
+            -- A strictly newer capture time means an external re-copy of
+            -- existing content: the original capture time is frozen and the
+            -- reuse is recorded as usage instead. Saves that echo the stored
+            -- timestamp (rename, rollback, imports of older backups) keep
+            -- both fields untouched.
+            created_at_ms = clipboard_items.created_at_ms,
+            last_used_at_ms = CASE
+                WHEN excluded.created_at_ms > clipboard_items.created_at_ms THEN MAX(
+                    COALESCE(
+                        clipboard_items.last_used_at_ms,
+                        excluded.created_at_ms
+                    ),
+                    excluded.created_at_ms
+                )
+                ELSE COALESCE(
+                    clipboard_items.last_used_at_ms,
+                    excluded.last_used_at_ms
+                )
+            END,
             is_favorite = MAX(
                 clipboard_items.is_favorite,
                 excluded.is_favorite

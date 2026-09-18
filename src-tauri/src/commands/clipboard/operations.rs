@@ -1121,10 +1121,11 @@ pub fn cmp_by_field(
         SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
         // Items never used from history have `last_used_at_ms = NULL`. Fall back
         // to `created_at_ms` so a freshly copied (but unused) entry still sorts
-        // to the top instead of sinking below used entries. A re-captured entry
-        // bumps `created_at_ms` while keeping its older `last_used_at_ms`, so the
-        // effective recency is the greater of the two; otherwise a repeated copy
-        // from another app would never outrank its own previous use.
+        // to the top instead of sinking below used entries. A re-copied entry
+        // stamps `last_used_at_ms` while its `created_at_ms` stays frozen, so
+        // the effective recency is the greater of the two; the max (rather
+        // than a plain fallback) also keeps imported/synced rows whose stored
+        // `last_used_at_ms` predates their capture time ordered sanely.
         SearchSortField::LastUsedAt => {
             let a_recency = a
                 .last_used_at_ms

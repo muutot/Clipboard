@@ -784,9 +784,10 @@
       const existingIdx = items.findIndex((i) => i.id === newItem.id);
       if (existingIdx >= 0) {
         // Re-copying an existing entry is de-duplicated on (kind, content_hash)
-        // and keeps the same row id with a bumped created_at_ms, but the list
-        // order is driven by array position rather than the timestamp. Promote
-        // it to the top so the just-copied entry is visibly pinned.
+        // and keeps the same row id with a refreshed last_used_at_ms (the
+        // original created_at_ms stays frozen), but the list order is driven
+        // by array position rather than the timestamp. Promote it to the top
+        // so the just-copied entry is visibly pinned.
         items.splice(existingIdx, 1);
         items = [newItem, ...items];
         selectedId = newItem.id;

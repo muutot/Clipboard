@@ -95,6 +95,22 @@ pub fn register_image_self_trigger(
     }
 }
 
+/// Loads the stored row for the `clipboard-item-added` event. A re-copied
+/// entry is de-duplicated onto its existing row with a frozen `created_at_ms`
+/// and a refreshed `last_used_at_ms`, so emitting the transient capture
+/// snapshot would lie about the capture time until the next list reload.
+fn load_emit_item(database: &Database, saved_id: &str, fallback: &ClipboardItem) -> ClipboardItem {
+    database
+        .get_item(saved_id)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| {
+            let mut item = fallback.clone();
+            item.id = saved_id.to_owned();
+            item
+        })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapturedFileReference {
     pub(crate) original_path: String,
@@ -568,8 +584,7 @@ pub(crate) fn run_capture_loop(
                                 );
                             }
                             thumbnail_queue.enqueue(saved_id.clone(), img_path.clone());
-                            let mut emit_item = item.clone();
-                            emit_item.id = saved_id;
+                            let emit_item = load_emit_item(&database, &saved_id, &item);
                             let _ = app_handle.emit("clipboard-item-added", &emit_item);
                             crate::platform::refresh_tray_recent_menu(&app_handle);
                             continue;
@@ -635,8 +650,7 @@ pub(crate) fn run_capture_loop(
                         match database.save_item(&item) {
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
-                                let mut emit_item = item.clone();
-                                emit_item.id = saved_id;
+                                let emit_item = load_emit_item(&database, &saved_id, &item);
                                 let _ = app_handle.emit("clipboard-item-added", &emit_item);
                                 crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
@@ -692,8 +706,7 @@ pub(crate) fn run_capture_loop(
                         match database.save_item(&item) {
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
-                                let mut emit_item = item.clone();
-                                emit_item.id = saved_id;
+                                let emit_item = load_emit_item(&database, &saved_id, &item);
                                 let _ = app_handle.emit("clipboard-item-added", &emit_item);
                                 crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
@@ -787,8 +800,7 @@ pub(crate) fn run_capture_loop(
                                 );
                             }
                         }
-                        let mut emit_item = item.clone();
-                        emit_item.id = saved_id;
+                        let emit_item = load_emit_item(&database, &saved_id, &item);
                         let _ = app_handle.emit("clipboard-item-added", &emit_item);
                         crate::platform::refresh_tray_recent_menu(&app_handle);
                     }

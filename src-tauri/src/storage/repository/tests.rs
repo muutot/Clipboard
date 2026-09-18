@@ -137,16 +137,16 @@ fn set_last_used_records_usage_without_changing_capture_time() {
         None
     );
 
-    // A re-copy bumps created_at_ms but last_used stays independent of capture.
+    // A re-copy freezes created_at_ms and records the reuse as usage.
     let recaptured = text_item("used", "hash-1", 500);
     database.save_item(&recaptured).unwrap();
     assert_eq!(
         database.get_item("used").unwrap().unwrap().created_at_ms,
-        500
+        100
     );
     assert_eq!(
         database.get_item("used").unwrap().unwrap().last_used_at_ms,
-        None
+        Some(500)
     );
 
     let updated = database.set_last_used("used").unwrap();
@@ -155,7 +155,7 @@ fn set_last_used_records_usage_without_changing_capture_time() {
     assert!(loaded.last_used_at_ms.is_some());
     assert!(loaded.last_used_at_ms.unwrap() >= 500);
     // Capture time must remain untouched by the usage stamp.
-    assert_eq!(loaded.created_at_ms, 500);
+    assert_eq!(loaded.created_at_ms, 100);
 
     // Unknown ids are a no-op.
     assert!(!database.set_last_used("missing").unwrap());
@@ -206,20 +206,87 @@ fn recapture_promotes_entry_with_older_last_used_to_top() {
     assert_eq!(before[0].id, "newer");
     assert_eq!(before[1].id, "used");
 
-    // An external re-copy bumps created_at_ms to 300 while the upsert keeps the
-    // older last_used_at_ms. The capture uses a fresh id, but dedup reuses the
-    // existing row id.
+    // An external re-copy freezes created_at_ms and stamps last_used_at_ms.
+    // The capture uses a fresh id, but dedup reuses the existing row id.
     let recapture = text_item("used-new-id", "hash-used", 300);
     assert_eq!(database.save_item(&recapture).unwrap(), "used");
     let stored = database.get_item("used").unwrap().unwrap();
-    assert_eq!(stored.created_at_ms, 300);
-    assert_eq!(stored.last_used_at_ms, Some(150));
+    assert_eq!(stored.created_at_ms, 100);
+    assert_eq!(stored.last_used_at_ms, Some(300));
 
     let after = database
         .list_recent(20, 0, &HistoryFilter::default())
         .unwrap();
     assert_eq!(after[0].id, "used");
     assert_eq!(after[1].id, "newer");
+}
+
+#[test]
+fn dedup_save_echoing_stored_timestamp_keeps_both_fields() {
+    let database = Database::open_in_memory().unwrap();
+    let item = text_item("echo", "hash-echo", 100);
+    database.save_item(&item).unwrap();
+    database.set_last_used("echo").unwrap();
+
+    // Rename/rollback-style saves echo the stored capture time without a
+    // usage stamp: the CASE must take the ELSE branch and leave both the
+    // frozen capture time and the recorded usage untouched.
+    database
+        .save_item(&text_item("echo", "hash-echo", 100))
+        .unwrap();
+    let stored = database.get_item("echo").unwrap().unwrap();
+    assert_eq!(stored.created_at_ms, 100);
+    assert!(stored.last_used_at_ms.is_some());
+
+    // Importing an older backup must not rewrite either field either.
+    database
+        .save_item(&text_item("echo", "hash-echo", 50))
+        .unwrap();
+    let stored = database.get_item("echo").unwrap().unwrap();
+    assert_eq!(stored.created_at_ms, 100);
+    assert!(stored.last_used_at_ms.is_some());
+}
+
+#[test]
+fn re_copy_save_item_emits_no_outbox_traffic() {
+    let database = Database::open_in_memory().unwrap();
+    database.initialize_sync().unwrap();
+    database
+        .save_item(&text_item("recopied", "hash-recopied", 100))
+        .unwrap();
+    let sync_before = database.count_sync_outbox().unwrap();
+    let search_before: i64 = database
+        .with_connection(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*) FROM search_outbox WHERE item_id = 'recopied'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .unwrap();
+    assert!(sync_before > 0);
+    assert!(search_before > 0);
+
+    // A pure re-copy freezes created_at_ms and stamps last_used_at_ms, and
+    // neither outbox trigger watches the usage stamp, so the reuse must not
+    // enqueue sync or search traffic. Real re-captures carry a fresh id but
+    // an identical content-derived payload, so only the timestamps differ.
+    let mut recapture = text_item("recopied-new-id", "hash-recopied", 200);
+    recapture.title = "record-recopied".to_owned();
+    recapture.text_content = Some("content-recopied".to_owned());
+    database.save_item(&recapture).unwrap();
+
+    assert_eq!(database.count_sync_outbox().unwrap(), sync_before);
+    let search_after: i64 = database
+        .with_connection(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*) FROM search_outbox WHERE item_id = 'recopied'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .unwrap();
+    assert_eq!(search_after, search_before);
 }
 
 #[test]
@@ -650,7 +717,9 @@ fn repeated_content_reuses_the_existing_record() {
     let stored = database.get_item(&stored_id).unwrap().unwrap();
 
     assert_eq!(stored_id, "original");
-    assert_eq!(stored.created_at_ms, 500);
+    // The original capture time is frozen; the re-copy is recorded as usage.
+    assert_eq!(stored.created_at_ms, 100);
+    assert_eq!(stored.last_used_at_ms, Some(500));
     assert!(stored.is_favorite);
     assert_eq!(database.item_count().unwrap(), 1);
 }
@@ -674,7 +743,9 @@ fn re_copied_soft_deleted_content_resurrects_the_record() {
     assert_eq!(stored_id, "original");
     assert_eq!(database.item_count().unwrap(), 1);
     let stored = database.get_item(&stored_id).unwrap().unwrap();
-    assert_eq!(stored.created_at_ms, 500);
+    // Resurrection keeps the original capture time and records the reuse.
+    assert_eq!(stored.created_at_ms, 100);
+    assert_eq!(stored.last_used_at_ms, Some(500));
     let listed = database
         .list_recent(20, 0, &HistoryFilter::default())
         .unwrap();
