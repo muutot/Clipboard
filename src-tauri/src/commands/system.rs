@@ -75,8 +75,9 @@ pub fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
     if cfg!(debug_assertions) {
         return Err("restart_blocked_in_dev".to_owned());
     }
-    app.restart();
-    Ok(())
+    // `restart` diverges (terminates the process), so it doubles as the
+    // function's tail without a trailing `Ok(())`.
+    app.restart()
 }
 
 #[tauri::command]

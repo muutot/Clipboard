@@ -169,10 +169,10 @@ impl SystemTray {
             {
                 let own_focused = app
                     .get_webview_window(crate::commands::float::FLOAT_WINDOW_LABEL)
-                    .and_then(|panel| {
+                    .map(|panel| {
                         let visible = panel.is_visible().unwrap_or(false);
                         let focused = panel.is_focused().unwrap_or(false);
-                        Some(visible && focused)
+                        visible && focused
                     })
                     .unwrap_or(false);
                 if !own_focused {
