@@ -190,7 +190,8 @@ Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 
 - Builds for Windows (x64), macOS (arm64), Linux (x64)
 - Intel macOS (x86_64-apple-darwin) is excluded: ort-sys ships no prebuilt ONNX Runtime for it
-- Creates a draft GitHub Release with artifacts using `RELEASE.md` as the release body
+- Publishes the GitHub Release directly (`releaseDraft: false`) with artifacts using `RELEASE.md` as the release body
+- Then runs the `sync-gitcode` job, which mirrors the published release body + assets to GitCode via `scripts/sync_release.py`. Requires repo secret `GITCODE_TOKEN` (rotate immediately if ever committed in plaintext); optional `GITCODE_OWNER` overrides the default owner.
 
 ## Version source files
 

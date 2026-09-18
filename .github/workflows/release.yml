@@ -11,9 +11,8 @@ on:
         required: true
         type: string
 
-# Read-only by default; only the build job (which publishes the draft
-# release) gets contents:write. A compromised verify job then cannot touch
-# releases.
+# Read-only by default; only the build job (which publishes the release)
+# gets contents:write. A compromised verify job then cannot touch releases.
 permissions:
   contents: read
 
@@ -170,7 +169,7 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: "v__VERSION__"
           releaseBody: ${{ steps.release_body.outputs.body }}
-          releaseDraft: true
+          releaseDraft: false
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
 
@@ -195,3 +194,37 @@ jobs:
           sort -k2 -u -o "$out" "$out"
           cat "$out"
           gh release upload "$RELEASE_TAG" "$out" --clobber --repo "$GITHUB_REPOSITORY"
+
+  sync-gitcode:
+    # Runs after all platform builds finish. The release is published directly
+    # (releaseDraft: false), so the GitHub API fetch and asset downloads here
+    # always see the final public release with all assets attached.
+    name: Sync to GitCode
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sync dependencies
+        run: pip install requests tqdm
+
+      # Mirrors the published GitHub Release body + assets to GitCode.
+      # Requires repo secrets GITCODE_TOKEN (GitCode personal access token),
+      # GITCODE_OWNER and GITCODE_REPO (target GitCode coordinates).
+      - name: Sync release to GitCode
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GITCODE_OWNER: ${{ secrets.GITCODE_OWNER }}
+          GITCODE_REPO: ${{ secrets.GITCODE_REPO }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SYNC_TAG: ${{ env.RELEASE_TAG }}
+        run: python scripts/sync_release.py
