@@ -505,6 +505,15 @@ FunctionEnd
 Section EarlyChecks
   !if "${ALLOWDOWNGRADES}" == "false"
   ${If} ${Silent}
+    ; $R0 is only populated by the interactive PageReinstall page, which is
+    ; skipped in silent installs. Determine the installed version here so
+    ; silent downgrades are refused exactly like interactive ones. An empty
+    ; registry value means no existing installation and lets the check pass.
+    ReadRegStr $R0 SHCTX "${UNINSTKEY}" "DisplayVersion"
+    ${If} $R0 != ""
+      nsis_tauri_utils::SemverCompare "${VERSION}" $R0
+      Pop $R0
+    ${EndIf}
     ${If} $R0 = -1
       System::Call 'kernel32::AttachConsole(i -1)i.r0'
       ${If} $0 <> 0
