@@ -127,11 +127,14 @@ def download_file_with_progress_and_resume(
                     print(f"    [OK] {asset_name} 已完整下载，无需重复拉取。")
                     return True
 
+                # 服务器忽略 Range 请求返回 200 时，本地半截文件不能继续追加，
+                # 必须丢弃旧分片从头重写，否则会拼出损坏的资产文件。
+                if r.status_code == 200 and downloaded_bytes > 0:
+                    file_mode = "wb"
+                    downloaded_bytes = 0
+
                 if r.status_code not in (200, 206):
                     print(f"    [!] 服务器返回状态码: {r.status_code}")
-                    if downloaded_bytes > 0 and r.status_code == 200:
-                        file_mode = "wb"
-                        downloaded_bytes = 0
 
                 r.raise_for_status()
 
