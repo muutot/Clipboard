@@ -1,8 +1,9 @@
-use std::{fs, path::PathBuf};
+use std::{fs, fs::File, path::PathBuf, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
 use super::SearchError;
+use crate::storage::replace_file;
 
 pub const SEARCH_INDEX_VERSION: u32 = 2;
 
@@ -68,7 +69,17 @@ impl SearchIndexLayout {
 }
 
 fn read_manifest(path: &PathBuf) -> Option<SearchIndexManifest> {
-    let bytes = fs::read(path).ok()?;
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        // A transient sharing violation (antivirus, backup tooling) must not
+        // be mistaken for a missing manifest: `prepare` wipes the whole index
+        // in that case. Retry once after a short delay, mirroring the
+        // tolerance in `Index::open_or_create`.
+        Err(_) => {
+            std::thread::sleep(Duration::from_millis(250));
+            fs::read(path).ok()?
+        }
+    };
     serde_json::from_slice(&bytes).ok()
 }
 
@@ -77,7 +88,15 @@ fn write_manifest(path: &PathBuf, state: SearchIndexState) -> Result<(), SearchE
         version: SEARCH_INDEX_VERSION,
         state,
     };
-    fs::write(path, serde_json::to_vec_pretty(&manifest)?)?;
+    // Replace atomically (fsync'd temporary + platform-atomic rename) so a
+    // crash mid-write cannot corrupt the manifest into a needless full
+    // rebuild of the index.
+    let temporary = path.with_extension("json.tmp");
+    let mut file = File::create(&temporary)?;
+    serde_json::to_writer_pretty(&mut file, &manifest)?;
+    file.sync_all()?;
+    drop(file);
+    replace_file(&temporary, path)?;
     Ok(())
 }
 
