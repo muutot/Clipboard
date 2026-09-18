@@ -84,8 +84,12 @@
   async function restartApp() {
     try {
       await invoke("restart_app");
-    } catch {
-      console.error("Unable to restart app");
+    } catch (error) {
+      // Debug builds refuse the self-restart (it would orphan the dev
+      // server); surface the guidance instead of failing silently.
+      const blocked = String(error).includes("restart_blocked_in_dev");
+      if (blocked) onfeedback(_t("app.restartBlockedInDev"), false);
+      else console.error("Unable to restart app");
     }
   }
 

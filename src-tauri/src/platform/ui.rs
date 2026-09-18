@@ -227,7 +227,18 @@ impl SystemTray {
         } else if id == Self::QUIT_MENU_ID {
             app.exit(0);
         } else if id == Self::RESTART_MENU_ID {
-            app.restart();
+            // Same dev-mode hazard as the `restart_app` command: restarting
+            // out from under `tauri dev` kills the Vite server, leaving the
+            // orphaned process unable to open any new window. Refuse with
+            // guidance instead of self-destructing.
+            if cfg!(debug_assertions) {
+                crate::log_event!(
+                    "[tray] restart refused in a debug build; restart from the terminal instead"
+                );
+                let _ = app.emit("tray-restart-blocked-in-dev", ());
+            } else {
+                app.restart();
+            }
         } else if let Some(item_id) = recent_item_id(id) {
             tray_copy_item(app, item_id);
         }

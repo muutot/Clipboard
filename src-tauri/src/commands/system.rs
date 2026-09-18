@@ -65,8 +65,18 @@ pub fn transform_text(input: String, operation: String) -> Result<TextTransform,
 }
 
 #[tauri::command]
-pub fn restart_app(app: tauri::AppHandle) {
+pub fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+    // A self-restart inside `tauri dev` orphans the app: the CLI tears down
+    // the Vite dev server when the original process exits, so the restarted
+    // process keeps already-loaded windows but every newly created webview
+    // (settings, float panel) fails with a localhost connection-refused
+    // page. Debug builds therefore refuse and tell the caller to restart
+    // from the terminal; release builds restart for real.
+    if cfg!(debug_assertions) {
+        return Err("restart_blocked_in_dev".to_owned());
+    }
     app.restart();
+    Ok(())
 }
 
 #[tauri::command]

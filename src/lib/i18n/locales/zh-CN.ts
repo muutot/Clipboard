@@ -21,6 +21,7 @@ const zhCN: LocaleDefinition = {
     browserPreview: "浏览器预览",
     coreConnected: "核心已连接",
     shortcutHint: "唤起",
+    restartBlockedInDev: "开发模式下请在终端重启应用，托盘/设置内重启会断开前端开发服务器",
   },
   filter: {
     all: "全部",

@@ -800,6 +800,10 @@
       openSettings();
     });
 
+    const unlistenTrayRestartBlocked = listen("tray-restart-blocked-in-dev", () => {
+      showToast(_t("app.restartBlockedInDev"), "info");
+    });
+
     const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
     let previousRememberWindowPosition = false;
 
@@ -910,6 +914,7 @@
       void unlisten.then((fn) => fn()).catch(() => {});
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
+      void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
       unsubSettings();

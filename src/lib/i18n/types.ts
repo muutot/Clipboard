@@ -21,6 +21,7 @@ export interface LocaleDefinition {
     browserPreview: string;
     coreConnected: string;
     shortcutHint: string;
+    restartBlockedInDev: string;
   };
   filter: {
     all: string;

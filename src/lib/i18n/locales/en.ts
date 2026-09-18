@@ -21,6 +21,8 @@ const en: LocaleDefinition = {
     browserPreview: "Browser Preview",
     coreConnected: "Core Connected",
     shortcutHint: "Toggle",
+    restartBlockedInDev:
+      "In dev mode, restart the app from the terminal; in-app restart would orphan the frontend dev server",
   },
   filter: {
     all: "All",
