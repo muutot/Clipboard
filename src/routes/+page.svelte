@@ -354,6 +354,12 @@
     resolveActionBindings(keyboardShortcuts, "quickPaste", defaultShortcutsFor("quickPaste")),
   );
 
+  // Hide-window shortcut; absent actions fall back to the canonical default
+  // (Escape), empty disables hiding from the main window.
+  const hideWindowBindings = $derived(
+    resolveActionBindings(keyboardShortcuts, "hideWindow", defaultShortcutsFor("hideWindow")),
+  );
+
   // Item-action chords (copy/delete/favorite/tag/detail/save/select-all);
   // absent actions fall back to the canonical defaults, empty disables.
   // These must stay wired here: the keydown decision table matches against
@@ -2392,6 +2398,7 @@
         switchFilterNext: navigationBindings.switchFilterNext,
         switchFilterPrev: navigationBindings.switchFilterPrev,
         toggleFloatBindings: floatPanelBindings,
+        hideWindowBindings,
         quickPasteBindings,
         itemBindings: itemShortcutBindings,
         quickCopyBindings: quickCopyShortcutBindings,

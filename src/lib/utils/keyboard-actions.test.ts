@@ -42,6 +42,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     switchFilterNext: ["Alt+ArrowRight"],
     switchFilterPrev: ["Alt+ArrowLeft"],
     toggleFloatBindings: defaultShortcutsFor("toggleFloatPanel"),
+    hideWindowBindings: defaultShortcutsFor("hideWindow"),
     quickPasteBindings: defaultShortcutsFor("quickPaste"),
     itemBindings: {
       copyItem: defaultShortcutsFor("copyItem"),
@@ -100,6 +101,29 @@ describe("resolveKeyAction — Escape", () => {
       type: "none",
       prevent: false,
     });
+  });
+
+  it("honors hideWindow rebinding and disabling", () => {
+    // Clearing the binding disables Escape-hide.
+    expect(
+      resolveKeyAction(keyEvent({ key: "Escape" }), ctx({ isTauri: true, hideWindowBindings: [] }))
+        .type,
+    ).toBe("none");
+    // A rebound chord fires instead; plain Escape no longer hides.
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "h", ctrlKey: true }),
+        ctx({ isTauri: true, hideWindowBindings: ["Ctrl+H"] }),
+      ),
+    ).toEqual({ type: "escape-hide-window", prevent: true });
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "Escape" }),
+        ctx({ isTauri: true, hideWindowBindings: ["Ctrl+H"] }),
+      ).type,
+    ).toBe("none");
+    // Custom chords never fire outside Tauri (browser preview).
+    expect(resolveKeyAction(keyEvent({ key: "h", ctrlKey: true }), ctx()).type).toBe("none");
   });
 });
 

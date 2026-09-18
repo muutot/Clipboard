@@ -77,6 +77,10 @@ export interface KeyActionContext {
   switchFilterPrev: string[];
   /** Bindings for the float-panel action (canonical default, empty disables). */
   toggleFloatBindings: string[];
+  /** Bindings for the hide-window action (canonical default Escape, empty
+   * disables). Rebinding away from Escape fires on the custom chord; Escape
+   * itself only hides while it is still one of the bound chords. */
+  hideWindowBindings: string[];
   /** Bindings for the quick-paste action (unbound by default). */
   quickPasteBindings: string[];
   /** Per-item action chords from conf/keyboard.json (absent falls back to the
@@ -117,7 +121,11 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
       return { type: "none", prevent: false };
     }
     if (ctx.tagFilter) return { type: "escape-toggle-tag", tag: ctx.tagFilter, prevent: false };
-    if (ctx.isTauri) return { type: "escape-hide-window", prevent: false };
+    // Escape hides the window only while it remains one of the bound
+    // hideWindow chords; clearing the binding in settings disables it.
+    if (ctx.isTauri && matchesAny(ctx.hideWindowBindings)) {
+      return { type: "escape-hide-window", prevent: false };
+    }
     return { type: "none", prevent: false };
   }
 
@@ -140,6 +148,17 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
   // Dedicated action bindings win over generic filter shortcuts below.
   if (ctx.toggleFloatBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
     return { type: "toggle-float", prevent: true };
+  }
+
+  // Custom hide-window chords (e.g. Ctrl+H). Plain Escape is handled in the
+  // dedicated Escape branch below so tag-filter and detail Escape semantics
+  // keep their precedence.
+  if (
+    event.key !== "Escape" &&
+    ctx.isTauri &&
+    ctx.hideWindowBindings.some((binding) => shortcutMatchesEvent(binding, event))
+  ) {
+    return { type: "escape-hide-window", prevent: true };
   }
 
   // Quick paste targets the selected entry (healed to the first visible one
