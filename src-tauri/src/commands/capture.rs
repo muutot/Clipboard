@@ -448,6 +448,22 @@ pub(crate) fn run_capture_loop(
                     continue;
                 }
 
+                // The foreground window may have changed while the clipboard
+                // formats were being read (or before this event was handled).
+                // The clipboard carries no source attribution, so a single
+                // sample cannot prove where the content came from. Re-sample
+                // and skip when either endpoint is sensitive/paused: this
+                // conservatively closes the copy-in-sensitive-app then
+                // alt-tab-before-handling bypass without dropping captures
+                // that moved between two ordinary windows.
+                let app_info_after = platform::platform().get_foreground_app();
+                let source_app_after = foreground_app_name(&app_info_after);
+                if source_app_after != source_app
+                    && capture_state.should_skip(source_app_after.as_deref(), text.as_deref())
+                {
+                    continue;
+                }
+
                 if let Some((img, img_width, img_height)) = image_data {
                     if stop_flag.load(Ordering::SeqCst) {
                         break;
