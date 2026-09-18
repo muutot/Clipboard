@@ -13,8 +13,17 @@
     return unsub;
   });
 
-  function handleClose() {
-    getCurrentWindow().close();
+  async function handleClose() {
+    // Flush the debounced settings write before destroying the webview:
+    // otherwise an edit made within the persist debounce window is lost.
+    // The window still closes when persistence fails (the pending value is
+    // retained for retry); trapping the user here would be worse.
+    try {
+      await generalSettings.flush();
+    } catch (error) {
+      console.error("Unable to persist settings before close:", error);
+    }
+    await getCurrentWindow().close();
   }
 </script>
 

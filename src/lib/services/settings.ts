@@ -706,6 +706,12 @@ function createSettingsStore() {
   let writeInFlight: Promise<void> | undefined;
   let unlistenSettings: (() => void) | undefined;
   let legacyMigrationPending = false;
+  // A `general-settings-changed` broadcast that arrives while our own write
+  // is in flight (or debounced) cannot be applied directly: our command
+  // response is canonical for the in-flight value. Remember it so the drain
+  // below re-hydrates from the backend afterwards instead of silently
+  // diverging from (and later overwriting) the other window's change.
+  let refreshAfterWrite = false;
 
   if (!desktop && typeof window !== "undefined") {
     store.subscribe((value) => {
@@ -763,6 +769,19 @@ function createSettingsStore() {
           throw error;
         }
       }
+      // A remote change that arrived mid-write was skipped by the listener
+      // below; converge on the backend state now that our value persisted.
+      if (refreshAfterWrite && !pendingValue) {
+        refreshAfterWrite = false;
+        try {
+          const response = await getGeneralSettings();
+          const hydrated = normalizeGeneralSettings(response.settings, cloneDefaults());
+          store.set(applyDirtySettings(hydrated, get(store), dirtyKeys));
+          setLocale(get(store).language);
+        } catch (error) {
+          console.error("Settings refresh after write failed:", error);
+        }
+      }
     })().finally(() => {
       writeInFlight = undefined;
     });
@@ -780,8 +799,14 @@ function createSettingsStore() {
       try {
         unlistenSettings = await listen<GeneralSettings>("general-settings-changed", (event) => {
           // Ignore an event while our own command is in flight; its command
-          // response is the canonical value we apply below.
-          if (writeInFlight || pendingValue) return;
+          // response is the canonical value we apply below. Remember that a
+          // remote change arrived so the drain converges on it afterwards
+          // instead of leaving this window diverged (and overwriting it with
+          // the next local edit).
+          if (writeInFlight || pendingValue) {
+            refreshAfterWrite = true;
+            return;
+          }
           const normalized = normalizeGeneralSettings(event.payload, get(store));
           store.set(normalized);
           setLocale(normalized.language);
@@ -888,6 +913,10 @@ function createSettingsStore() {
     destroy() {
       if (writeTimer !== undefined) clearTimeout(writeTimer);
       writeTimer = undefined;
+      // Do not drop a debounced value on teardown: hand it to the drain so a
+      // pending edit still reaches the backend instead of being lost.
+      if (pendingValue)
+        void drainWrites().catch((err) => console.error("Settings persist failed:", err));
       unlistenSettings?.();
       unlistenSettings = undefined;
     },
