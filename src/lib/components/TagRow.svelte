@@ -41,11 +41,21 @@
     class="tag-name-input"
     value={tag.name}
     aria-label={_t("tags.renamePlaceholder")}
-    onblur={(e) => oncommitRename(tag, (e.currentTarget as HTMLInputElement).value)}
+    onblur={(e) => {
+      const input = e.currentTarget as HTMLInputElement;
+      void oncommitRename(tag, input.value);
+      // The one-way `value` binding never rewrites an unchanged expression,
+      // so a canceled or failed rename would otherwise leave the stale draft
+      // in the DOM and commit it on the next blur. Restore it explicitly;
+      // after a successful rename this row is re-keyed and destroyed anyway.
+      input.value = tag.name;
+    }}
     onkeydown={(e) => {
       if (e.key === "Enter") {
         (e.currentTarget as HTMLInputElement).blur();
       } else if (e.key === "Escape") {
+        // Cancel the draft before reset so the following blur is a no-op.
+        (e.currentTarget as HTMLInputElement).value = tag.name;
         onreset();
       }
     }}
