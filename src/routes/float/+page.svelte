@@ -90,7 +90,9 @@
       if (copyingId === id) return;
       copyingId = id;
       try {
-        await copyClipboardItem(item);
+        // pasteClipboardItem already stages the clipboard content and
+        // restores the previous app with a single toast; copying first
+        // would write the clipboard twice and pop a second toast.
         await pasteClipboardItem(item, "auto");
       } finally {
         copyingId = null;
