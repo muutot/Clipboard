@@ -266,6 +266,19 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
     });
   });
 
+  it("keeps Enter and Space inside contenteditable hosts (code editor)", () => {
+    const editor = targetOn("div", { contenteditable: "true" });
+    const onEditorEnter = Object.defineProperty(keyEvent({ key: "Enter" }), "target", {
+      value: editor,
+    });
+    expect(resolveKeyAction(onEditorEnter, ctx())).toEqual({ type: "none", prevent: false });
+    const onEditorSpace = Object.defineProperty(keyEvent({ key: " " }), "target", {
+      value: editor,
+    });
+    expect(resolveKeyAction(onEditorSpace, ctx())).toEqual({ type: "none", prevent: false });
+    editor.remove();
+  });
+
   it("clears selection on Backspace and selects all on Ctrl+A", () => {
     expect(resolveKeyAction(keyEvent({ key: "Backspace" }), ctx()).type).toBe("clear-selection");
     expect(resolveKeyAction(keyEvent({ key: "a", ctrlKey: true }), ctx())).toEqual({

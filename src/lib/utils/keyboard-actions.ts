@@ -195,14 +195,21 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
   }
 
   if (event.key === "Enter") {
-    if (isTextInput(event.target)) return { type: "none", prevent: false };
-    if (isActivatableKeyboardTarget(event.target)) return { type: "none", prevent: false };
+    // Editable surfaces (inputs, textareas, selects, contenteditable hosts
+    // such as the detail code editor) keep Enter for themselves; only plain
+    // surfaces and non-activatable cards activate the selection.
+    if (editableTarget || isActivatableKeyboardTarget(event.target)) {
+      return { type: "none", prevent: false };
+    }
     return { type: "activate-selected", prevent: true };
   }
 
   if (event.key === " ") {
-    if (isTextInput(event.target)) return { type: "none", prevent: false };
-    if (isActivatableKeyboardTarget(event.target)) return { type: "none", prevent: false };
+    // Same editable guard as Enter: contenteditable hosts must keep Space
+    // for typing instead of having it swallowed by open-detail.
+    if (editableTarget || isActivatableKeyboardTarget(event.target)) {
+      return { type: "none", prevent: false };
+    }
     if (ctx.selectedId) return { type: "open-detail", id: ctx.selectedId, prevent: true };
     return { type: "none", prevent: true };
   }
