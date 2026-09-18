@@ -8,6 +8,7 @@ use tauri::{
     AppHandle, Emitter, Listener, Manager, Runtime,
 };
 
+use crate::commands::clipboard::{record_item_usage, SearchResultCache};
 use crate::config::ConfigStore;
 use crate::domain::ClipboardKind;
 use crate::platform::windows_hotkey::HotkeyManager;
@@ -451,7 +452,11 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         crate::platform::platform()
             .write_clipboard_text_with_self_trigger(text)
             .map_err(|error| format!("failed to write clipboard: {error}"))?;
-        let _ = database.set_last_used(item_id);
+        if let Some(cache) = app.try_state::<SearchResultCache>() {
+            let _ = record_item_usage(&database, &cache, item_id);
+        } else {
+            let _ = database.set_last_used(item_id);
+        }
         Ok(())
     })();
     if let Err(error) = result {

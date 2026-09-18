@@ -24,6 +24,7 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 - Hit: slice `[offset..offset+limit]` directly from the cached vector; no DB or index access needed.
 - Miss: re-run the full search pipeline (Tantivy → SQL fetch → sort) and cache the result.
+- Usage stamps clear this cache explicitly: `record_item_usage` (called by the `set_clipboard_item_last_used` command and the tray copy path) drops the cached result after `set_last_used` succeeds, because usage is device-local, writes no `search_outbox` event, and would otherwise leave a cached `lastUsedAt` page serving the pre-usage order.
 - `rebuild_search_index` clears this cache along with Tantivy's `cached_ids`.
 - `search_clipboard_items` also clears this cache when it applies pending outbox events, so stale pages are not served after a mutation; see lazy sync below.
 - Cache miss when `max_results` is larger than the cached value ensures `searchPageSizeLimit` changes invalidate stale entries.

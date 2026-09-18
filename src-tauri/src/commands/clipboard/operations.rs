@@ -74,11 +74,27 @@ pub fn set_clipboard_item_tags(
 #[tauri::command]
 pub fn set_clipboard_item_last_used(
     database: tauri::State<'_, Database>,
+    search_cache: tauri::State<'_, SearchResultCache>,
     id: String,
 ) -> Result<bool, String> {
-    database
-        .set_last_used(&id)
-        .map_err(|error| error.to_string())
+    record_item_usage(&database, &search_cache, &id)
+}
+
+/// Stamps usage and invalidates the search result cache in one step.
+/// `set_last_used` writes no `search_outbox` event (usage is device-local and
+/// unwatched by the sync triggers), so neither the lazy drain nor the
+/// background worker ever clears `SearchResultCache` for it; a cached
+/// `lastUsedAt` page would keep serving the pre-usage order.
+pub fn record_item_usage(
+    database: &Database,
+    search_cache: &SearchResultCache,
+    id: &str,
+) -> Result<bool, String> {
+    let updated = database.set_last_used(id).map_err(|e| e.to_string())?;
+    if updated {
+        search_cache.clear();
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -624,11 +640,15 @@ fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path:
 mod tests {
     use super::{
         apply_sort_rules, cmp_by_field, generated_clipboard_title, metadata_custom_title,
-        resolve_custom_title, rewrite_stored_resource_paths, sanitize_file_stem,
+        record_item_usage, resolve_custom_title, rewrite_stored_resource_paths, sanitize_file_stem,
         set_custom_title_metadata,
     };
-    use crate::commands::clipboard::types::{SearchSortDirection, SearchSortField, SearchSortRule};
+    use crate::commands::clipboard::types::{
+        SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
+    };
     use crate::domain::{ClipboardItem, ClipboardKind};
+    use crate::storage::ClipboardRepository;
+    use crate::storage::Database;
 
     fn item(id: &str, title: &str) -> ClipboardItem {
         ClipboardItem {
@@ -875,6 +895,66 @@ mod tests {
         let mut items = vec![item("x", "x"), item("a", "a")];
         apply_sort_rules(&mut items, &[]);
         assert_eq!(items[0].id, "x");
+    }
+
+    /// Module scenario for the usage-stamp staleness: the default history
+    /// sort is `lastUsedAt desc`, a usage stamp writes no `search_outbox`
+    /// event, and `SearchResultCache` therefore outlives the re-ranking the
+    /// stamp should cause. After pasting an entry out of history, the next
+    /// cached page must no longer serve the pre-usage order.
+    #[test]
+    fn usage_stamp_invalidates_the_cached_last_used_page() {
+        let database = Database::open_in_memory().unwrap();
+        let mut older = item("older", "record-older");
+        older.text_content = Some("content-older".to_owned());
+        older.created_at_ms = 100;
+        let mut newer = item("newer", "record-newer");
+        newer.text_content = Some("content-newer".to_owned());
+        newer.created_at_ms = 200;
+        database.save_item(&older).unwrap();
+        database.save_item(&newer).unwrap();
+
+        // Simulate the search pipeline for the default sort: fetch, sort,
+        // cache the full sorted result.
+        let rules = vec![SearchSortRule {
+            field: SearchSortField::LastUsedAt,
+            direction: SearchSortDirection::Desc,
+        }];
+        let ids = vec!["older".to_owned(), "newer".to_owned()];
+        let mut sorted = database.get_items_by_ids(&ids).unwrap();
+        apply_sort_rules(&mut sorted, &rules);
+        assert_eq!(
+            sorted
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["newer", "older"]
+        );
+
+        let cache = SearchResultCache::new();
+        cache.set(String::new(), rules.clone(), 100, sorted);
+        assert_eq!(cache.get("", &rules, 100, 0, 10).unwrap()[0].id, "newer");
+
+        // The user pastes the older entry out of history; the usage entry
+        // point must drop the cached page since no outbox event fires.
+        let updated = record_item_usage(&database, &cache, "older").unwrap();
+        assert!(updated);
+
+        // The cached page must be gone now; while it survives, scrolling
+        // serves the stale pre-usage order even though the entry has been
+        // re-ranked in the database.
+        assert!(cache.get("", &rules, 100, 0, 10).is_none());
+
+        // A cache-miss re-query re-sorts with the used entry on top.
+        let mut resorted = database.get_items_by_ids(&ids).unwrap();
+        apply_sort_rules(&mut resorted, &rules);
+        assert_eq!(
+            resorted
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["older", "newer"]
+        );
     }
 
     #[test]
