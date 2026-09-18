@@ -3,7 +3,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -20,6 +20,13 @@ const MAX_CONCURRENT_CONNECTIONS: usize = 32;
 /// response cannot pin a connection thread forever.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
+/// Total budget for reading one request (headers + body). The per-`read()`
+/// socket timeout above restarts on every chunk, so without an overall
+/// deadline a drip-feed client could pin one of the 32 connection threads
+/// forever without ever presenting a token (authorization only runs after
+/// the full request is read); 32 such connections would 503 every
+/// legitimate caller.
+const MAX_READ_DURATION: Duration = Duration::from_secs(10);
 
 /// A loopback-only HTTP API for scripts and local automation.
 ///
@@ -186,7 +193,10 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
 
         match listener.accept() {
             Ok((stream, _peer)) => {
-                if active_connections.load(Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
+                // Reserve the slot atomically: the previous check-then-add
+                // could overshoot the cap when connections arrived in bursts.
+                if active_connections.fetch_add(1, Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
+                    active_connections.fetch_sub(1, Ordering::SeqCst);
                     let mut stream = stream;
                     let rejection = error_response(503, "too many concurrent connections");
                     let _ = write_response(&mut stream, &rejection);
@@ -198,7 +208,6 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
                 // limit bound each thread).
                 let database = Arc::clone(&database);
                 let token = Arc::clone(&token);
-                active_connections.fetch_add(1, Ordering::SeqCst);
                 let connection_counter = Arc::clone(&active_connections);
                 let spawned = thread::Builder::new()
                     .name("clipboard-local-api-conn".to_owned())
@@ -334,9 +343,19 @@ impl HttpRequest {
 }
 
 fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
+    read_request_with_deadline(stream, Instant::now() + MAX_READ_DURATION)
+}
+
+fn read_request_with_deadline(
+    stream: &mut TcpStream,
+    deadline: Instant,
+) -> Result<HttpRequest, String> {
     let mut bytes = Vec::new();
     let header_end;
     loop {
+        if Instant::now() >= deadline {
+            return Err("request read timed out".to_owned());
+        }
         let mut chunk = [0u8; 4096];
         let read = stream
             .read(&mut chunk)
@@ -386,6 +405,9 @@ fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
     }
 
     while bytes.len() < header_end + content_length {
+        if Instant::now() >= deadline {
+            return Err("request read timed out".to_owned());
+        }
         let mut chunk = [0u8; 4096];
         let read = stream
             .read(&mut chunk)
@@ -796,6 +818,24 @@ mod tests {
         let http = authorized_request("GET", "/items", "wrong-token", 8123);
         let rejection = authorize(&http, "secret-token", 8123).expect("must reject");
         assert_eq!(rejection.status, 401);
+    }
+
+    #[test]
+    fn expired_read_deadline_rejects_without_blocking() {
+        // A pre-expired deadline must fail fast even when a full request is
+        // already waiting: this is the drip-feed guardrail. Use a real
+        // loopback pair so the test exercises the socket read path.
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).unwrap();
+        client
+            .write_all(b"GET /health HTTP/1.1\r\nHost: x\r\n\r\n")
+            .unwrap();
+        let (mut server_side, _) = listener.accept().unwrap();
+        let error =
+            read_request_with_deadline(&mut server_side, Instant::now() - Duration::from_secs(1))
+                .expect_err("expired deadline must reject the request");
+        assert!(error.contains("timed out"), "unexpected error: {error}");
     }
 
     #[test]
