@@ -43,6 +43,19 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     switchFilterPrev: ["Alt+ArrowLeft"],
     toggleFloatBindings: defaultShortcutsFor("toggleFloatPanel"),
     quickPasteBindings: defaultShortcutsFor("quickPaste"),
+    itemBindings: {
+      copyItem: defaultShortcutsFor("copyItem"),
+      deleteItem: defaultShortcutsFor("deleteItem"),
+      favoriteItem: defaultShortcutsFor("favoriteItem"),
+      addTag: defaultShortcutsFor("addTag"),
+      openDetail: defaultShortcutsFor("openDetail"),
+      downloadItem: defaultShortcutsFor("downloadItem"),
+      selectAll: defaultShortcutsFor("selectAll"),
+    },
+    quickCopyBindings: Array.from({ length: 9 }, (_, index) =>
+      defaultShortcutsFor(`quickCopy${index + 1}`),
+    ),
+    focusSearchBindings: defaultShortcutsFor("focusSearch"),
     ...overrides,
   };
 }
@@ -299,7 +312,53 @@ describe("resolveKeyAction — item shortcuts", () => {
     ).toEqual({ type: "none", prevent: false });
   });
 
-  it("preserves the case-sensitive key quirk (CapsLock C does nothing)", () => {
-    expect(resolveKeyAction(keyEvent({ key: "C", ctrlKey: true }), ctx()).type).toBe("none");
+  it("matches single-letter chords case-insensitively (CapsLock Ctrl+C copies)", () => {
+    // Canonical binding matching normalizes letter case, so CapsLock no
+    // longer disables the shortcut. This intentionally differs from the old
+    // case-sensitive `event.key` comparison.
+    expect(resolveKeyAction(keyEvent({ key: "C", ctrlKey: true }), ctx()).type).toBe("copy-item");
+  });
+
+  it("honors custom item bindings and disabled actions", () => {
+    const custom = ctx({
+      itemBindings: {
+        copyItem: ["F2"],
+        deleteItem: [],
+        favoriteItem: defaultShortcutsFor("favoriteItem"),
+        addTag: defaultShortcutsFor("addTag"),
+        openDetail: defaultShortcutsFor("openDetail"),
+        downloadItem: defaultShortcutsFor("downloadItem"),
+        selectAll: defaultShortcutsFor("selectAll"),
+      },
+    });
+    expect(resolveKeyAction(keyEvent({ key: "F2" }), custom)).toEqual({
+      type: "copy-item",
+      id: "a",
+      prevent: true,
+    });
+    // Disabled delete: Ctrl+D no longer fires.
+    expect(resolveKeyAction(keyEvent({ key: "d", ctrlKey: true }), custom).type).toBe("none");
+    // Untouched defaults keep working alongside the custom chord.
+    expect(resolveKeyAction(keyEvent({ key: "f", ctrlKey: true }), custom).type).toBe(
+      "toggle-favorite",
+    );
+  });
+
+  it("honors custom quick-copy and focus-search bindings", () => {
+    const custom = ctx({
+      quickCopyBindings: [["F1"], [], [], [], [], [], [], [], []],
+      focusSearchBindings: ["Ctrl+P"],
+    });
+    expect(resolveKeyAction(keyEvent({ key: "F1" }), custom)).toEqual({
+      type: "quick-copy",
+      index: 0,
+      prevent: true,
+    });
+    expect(resolveKeyAction(keyEvent({ key: "p", ctrlKey: true }), custom).type).toBe(
+      "focus-search",
+    );
+    // Rebound away from the defaults: Ctrl+2 and `/` stay silent.
+    expect(resolveKeyAction(keyEvent({ key: "2", ctrlKey: true }), custom).type).toBe("none");
+    expect(resolveKeyAction(keyEvent({ key: "/" }), custom).type).toBe("none");
   });
 });

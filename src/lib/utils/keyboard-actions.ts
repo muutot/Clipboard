@@ -11,9 +11,13 @@ import {
  * returns the single action to perform — all DOM/store side effects stay in
  * the route, which keeps this module unit-testable without a component.
  *
- * Branch order mirrors the original handler exactly; even quirky guards
- * (e.g. item shortcuts compare a case-sensitive `event.key`) are preserved
- * so extraction cannot change behavior.
+ * Item actions, quick-copy slots, and focus-search match the user's
+ * configured chords from conf/keyboard.json (passed in via the context, with
+ * canonical defaults as fallback); branch order mirrors the original handler
+ * so overlapping custom chords resolve deterministically. Single-letter
+ * chords compare case-insensitively, so CapsLock no longer disables them
+ * (this intentionally differs from the pre-extraction `event.key`
+ * comparison).
  */
 export type KeyAction =
   | { type: "none"; prevent: boolean }
@@ -75,6 +79,23 @@ export interface KeyActionContext {
   toggleFloatBindings: string[];
   /** Bindings for the quick-paste action (unbound by default). */
   quickPasteBindings: string[];
+  /** Per-item action chords from conf/keyboard.json (absent falls back to the
+   * canonical defaults, explicitly empty disables). Previously these actions
+   * were hardcoded below, so rebinding them in settings silently did nothing. */
+  itemBindings: Record<
+    | "copyItem"
+    | "deleteItem"
+    | "favoriteItem"
+    | "addTag"
+    | "openDetail"
+    | "downloadItem"
+    | "selectAll",
+    string[]
+  >;
+  /** `quickCopy1..9` chords in position order (empty disables that slot). */
+  quickCopyBindings: string[][];
+  /** Focus-search chords (default `/` and Ctrl+K). */
+  focusSearchBindings: string[];
 }
 
 function isTextInput(target: EventTarget | null): boolean {
@@ -83,8 +104,8 @@ function isTextInput(target: EventTarget | null): boolean {
 
 export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): KeyAction {
   const editableTarget = isEditableKeyboardTarget(event.target);
-  const quickCopyIndex =
-    (event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null;
+  const matchesAny = (bindings: readonly string[]): boolean =>
+    bindings.some((binding) => shortcutMatchesEvent(binding, event));
 
   if (event.key === "Escape") {
     if (event.defaultPrevented || ctx.hasEditing || ctx.hasFullscreen || ctx.hasTagDialog) {
@@ -100,15 +121,20 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     return { type: "none", prevent: false };
   }
 
-  if (
-    (event.key === "/" && !editableTarget) ||
-    ((event.ctrlKey || event.metaKey) && event.key === "k")
-  ) {
+  if (matchesAny(ctx.focusSearchBindings) && (!editableTarget || event.ctrlKey || event.metaKey)) {
+    // Default chords are `/` (outside editables) and Ctrl/⌘+K (everywhere);
+    // a custom chord with modifiers keeps the Ctrl+K precedent, a bare one
+    // keeps the `/` precedent so typing is never hijacked.
     return { type: "focus-search", prevent: true };
   }
 
-  if (quickCopyIndex !== null && (!editableTarget || ctx.isSearchInput)) {
-    return { type: "quick-copy", index: quickCopyIndex, prevent: true };
+  if (!editableTarget || ctx.isSearchInput) {
+    const quickCopyIndex = ctx.quickCopyBindings.findIndex((bindings) =>
+      bindings.some((binding) => shortcutMatchesEvent(binding, event)),
+    );
+    if (quickCopyIndex >= 0) {
+      return { type: "quick-copy", index: quickCopyIndex, prevent: true };
+    }
   }
 
   // Dedicated action bindings win over generic filter shortcuts below.
@@ -136,9 +162,19 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     }
   }
 
-  // Editable targets keep arrow keys for caret movement: the move-selection
-  // bindings must be resolved after this guard, not before it.
-  if (editableTarget && !isItemActionShortcut(event)) return { type: "none", prevent: false };
+  // Editable targets keep their keys for typing: only item-action chords
+  // punch through (Ctrl+A stays native so text selection keeps working).
+  const punchThroughBindings = [
+    ...ctx.itemBindings.copyItem,
+    ...ctx.itemBindings.deleteItem,
+    ...ctx.itemBindings.favoriteItem,
+    ...ctx.itemBindings.addTag,
+    ...ctx.itemBindings.openDetail,
+    ...ctx.itemBindings.downloadItem,
+  ];
+  if (editableTarget && !isItemActionShortcut(event, punchThroughBindings)) {
+    return { type: "none", prevent: false };
+  }
 
   if (ctx.moveSelectionDown.some((binding) => shortcutMatchesEvent(binding, event))) {
     return { type: "move-selection", delta: 1, prevent: true };
@@ -175,12 +211,12 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     return { type: "clear-selection", prevent: false };
   }
 
-  if ((event.metaKey || event.ctrlKey) && event.key === "a") {
+  if (matchesAny(ctx.itemBindings.selectAll)) {
     if (isTextInput(event.target)) return { type: "none", prevent: false };
     return { type: "select-all", prevent: true };
   }
 
-  if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+  {
     let item = ctx.filteredItems.find((i) => i.id === ctx.selectedId);
     if (!item && ctx.filteredItems.length > 0) {
       // Heal a selection that no longer matches the active filter so the
@@ -189,27 +225,29 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     }
     if (!item) return { type: "none", prevent: false };
 
-    if (event.key === "c") {
+    // Priority order mirrors the historical hardcoded branches: when the
+    // user binds the same chord to two item actions, the first wins.
+    if (matchesAny(ctx.itemBindings.copyItem)) {
       if (ctx.selectedCount > 0) return { type: "bulk-copy", prevent: true };
       return { type: "copy-item", id: item.id, prevent: true };
     }
-    if (event.key === "d") {
+    if (matchesAny(ctx.itemBindings.deleteItem)) {
       if (ctx.selectedCount > 0) return { type: "bulk-delete", prevent: true };
       if (!item.favorite) return { type: "delete-item", id: item.id, prevent: true };
       return { type: "none", prevent: false };
     }
-    if (event.key === "f") {
+    if (matchesAny(ctx.itemBindings.favoriteItem)) {
       if (ctx.selectedCount > 0) return { type: "bulk-favorite", prevent: true };
       return { type: "toggle-favorite", id: item.id, prevent: true };
     }
-    if (event.key === "e") {
+    if (matchesAny(ctx.itemBindings.openDetail)) {
       return { type: "open-detail", id: item.id, prevent: true };
     }
-    if (event.key === "t") {
+    if (matchesAny(ctx.itemBindings.addTag)) {
       if (ctx.selectedCount > 0) return { type: "none", prevent: false };
       return { type: "tag-add", prevent: true };
     }
-    if (event.key === "s") {
+    if (matchesAny(ctx.itemBindings.downloadItem)) {
       if (item.kind === "image" || item.kind === "file") {
         return { type: "save-item", id: item.id, prevent: true };
       }

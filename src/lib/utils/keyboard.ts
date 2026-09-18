@@ -13,8 +13,16 @@ export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
  * selected entry even when focus is in an editable target such as the search
  * box. Ctrl+A is deliberately excluded so the search box keeps its native
  * "select all text" behavior.
+ *
+ * `extraBindings` carries the user's configured item-action chords
+ * (conf/keyboard.json): a custom binding such as F2 must also punch through
+ * editables, otherwise rebinding an action silently disables it while typing.
  */
-export function isItemActionShortcut(event: KeyboardEvent): boolean {
+export function isItemActionShortcut(
+  event: KeyboardEvent,
+  extraBindings: readonly string[] = [],
+): boolean {
+  if (extraBindings.some((binding) => shortcutMatchesEvent(binding, event))) return true;
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return false;
   return ["c", "d", "f", "e", "t", "s"].includes(event.key.toLowerCase());
 }

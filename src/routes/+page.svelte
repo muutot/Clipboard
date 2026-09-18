@@ -354,6 +354,56 @@
     resolveActionBindings(keyboardShortcuts, "quickPaste", defaultShortcutsFor("quickPaste")),
   );
 
+  // Item-action chords (copy/delete/favorite/tag/detail/save/select-all);
+  // absent actions fall back to the canonical defaults, empty disables.
+  // These must stay wired here: the keydown decision table matches against
+  // them, and a binding edited in settings would otherwise silently do
+  // nothing in the main window.
+  const itemShortcutBindings = $derived({
+    copyItem: resolveActionBindings(keyboardShortcuts, "copyItem", defaultShortcutsFor("copyItem")),
+    deleteItem: resolveActionBindings(
+      keyboardShortcuts,
+      "deleteItem",
+      defaultShortcutsFor("deleteItem"),
+    ),
+    favoriteItem: resolveActionBindings(
+      keyboardShortcuts,
+      "favoriteItem",
+      defaultShortcutsFor("favoriteItem"),
+    ),
+    addTag: resolveActionBindings(keyboardShortcuts, "addTag", defaultShortcutsFor("addTag")),
+    openDetail: resolveActionBindings(
+      keyboardShortcuts,
+      "openDetail",
+      defaultShortcutsFor("openDetail"),
+    ),
+    downloadItem: resolveActionBindings(
+      keyboardShortcuts,
+      "downloadItem",
+      defaultShortcutsFor("downloadItem"),
+    ),
+    selectAll: resolveActionBindings(
+      keyboardShortcuts,
+      "selectAll",
+      defaultShortcutsFor("selectAll"),
+    ),
+  });
+
+  // `quickCopy1..9` chords in position order for the decision table.
+  const quickCopyShortcutBindings = $derived(
+    Array.from({ length: 9 }, (_, index) =>
+      resolveActionBindings(
+        keyboardShortcuts,
+        `quickCopy${index + 1}`,
+        defaultShortcutsFor(`quickCopy${index + 1}`),
+      ),
+    ),
+  );
+
+  const focusSearchShortcutBindings = $derived(
+    resolveActionBindings(keyboardShortcuts, "focusSearch", defaultShortcutsFor("focusSearch")),
+  );
+
   // Main-toggle hint for the status bar; null hides the kbd chips when unbound.
   const toggleWindowHint = $derived(
     resolveActionBindings(
@@ -2342,6 +2392,9 @@
         switchFilterPrev: navigationBindings.switchFilterPrev,
         toggleFloatBindings: floatPanelBindings,
         quickPasteBindings,
+        itemBindings: itemShortcutBindings,
+        quickCopyBindings: quickCopyShortcutBindings,
+        focusSearchBindings: focusSearchShortcutBindings,
       }),
     );
   }
