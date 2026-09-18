@@ -749,6 +749,25 @@ mod tests {
     }
 
     #[test]
+    fn cmp_by_field_prefers_newer_capture_over_older_use() {
+        let mut recaptured = item("a", "a");
+        recaptured.created_at_ms = 300;
+        recaptured.last_used_at_ms = Some(150);
+        let mut other = item("b", "b");
+        other.created_at_ms = 200;
+        other.last_used_at_ms = None;
+
+        assert_eq!(
+            cmp_by_field(&recaptured, &other, SearchSortField::LastUsedAt),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_by_field(&other, &recaptured, SearchSortField::LastUsedAt),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
     fn cmp_by_field_covers_title_size_kind_and_favorite() {
         let mut small = item("s", "beta");
         small.size_bytes = 10;
@@ -987,11 +1006,21 @@ pub fn cmp_by_field(
         SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
         // Items never used from history have `last_used_at_ms = NULL`. Fall back
         // to `created_at_ms` so a freshly copied (but unused) entry still sorts
-        // to the top instead of sinking below used entries.
-        SearchSortField::LastUsedAt => b
-            .last_used_at_ms
-            .unwrap_or(b.created_at_ms)
-            .cmp(&a.last_used_at_ms.unwrap_or(a.created_at_ms)),
+        // to the top instead of sinking below used entries. A re-captured entry
+        // bumps `created_at_ms` while keeping its older `last_used_at_ms`, so the
+        // effective recency is the greater of the two; otherwise a repeated copy
+        // from another app would never outrank its own previous use.
+        SearchSortField::LastUsedAt => {
+            let a_recency = a
+                .last_used_at_ms
+                .unwrap_or(a.created_at_ms)
+                .max(a.created_at_ms);
+            let b_recency = b
+                .last_used_at_ms
+                .unwrap_or(b.created_at_ms)
+                .max(b.created_at_ms);
+            b_recency.cmp(&a_recency)
+        }
         SearchSortField::Title => b.title.cmp(&a.title),
         SearchSortField::Size => b.size_bytes.cmp(&a.size_bytes),
         SearchSortField::Kind => b.kind.cmp(&a.kind),

@@ -190,6 +190,39 @@ fn list_recent_defaults_to_most_recently_used_with_capture_fallback() {
 }
 
 #[test]
+fn recapture_promotes_entry_with_older_last_used_to_top() {
+    let database = Database::open_in_memory().unwrap();
+    // A used entry: captured at 100, used at 150.
+    let mut used = text_item("used", "hash-used", 100);
+    used.last_used_at_ms = Some(150);
+    database.save_item(&used).unwrap();
+    // A newer unused entry captured at 200 sorts above (200 > 150).
+    database
+        .save_item(&text_item("newer", "hash-newer", 200))
+        .unwrap();
+    let before = database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap();
+    assert_eq!(before[0].id, "newer");
+    assert_eq!(before[1].id, "used");
+
+    // An external re-copy bumps created_at_ms to 300 while the upsert keeps the
+    // older last_used_at_ms. The capture uses a fresh id, but dedup reuses the
+    // existing row id.
+    let recapture = text_item("used-new-id", "hash-used", 300);
+    assert_eq!(database.save_item(&recapture).unwrap(), "used");
+    let stored = database.get_item("used").unwrap().unwrap();
+    assert_eq!(stored.created_at_ms, 300);
+    assert_eq!(stored.last_used_at_ms, Some(150));
+
+    let after = database
+        .list_recent(20, 0, &HistoryFilter::default())
+        .unwrap();
+    assert_eq!(after[0].id, "used");
+    assert_eq!(after[1].id, "newer");
+}
+
+#[test]
 fn list_recent_filters_by_tag_and_paginates_matching_records() {
     let database = Database::open_in_memory().unwrap();
     for (id, hash, ts) in [("a", "h-a", 100), ("b", "h-b", 200), ("c", "h-c", 300)] {
