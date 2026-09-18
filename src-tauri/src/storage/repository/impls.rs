@@ -204,7 +204,7 @@ impl ClipboardRepository for Database {
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
                  WHERE {}
-                 ORDER BY MAX(COALESCE(last_used_at_ms, created_at_ms), created_at_ms) DESC, created_at_ms DESC
+                 ORDER BY MAX(COALESCE(last_used_at_ms, created_at_ms), created_at_ms) DESC, created_at_ms DESC, id DESC
                  LIMIT ? OFFSET ?",
                 conditions.join(" AND ")
             );
@@ -223,7 +223,7 @@ impl ClipboardRepository for Database {
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
                  WHERE deleted = 1
-                 ORDER BY COALESCE(deleted_at_ms, created_at_ms) DESC, created_at_ms DESC
+                 ORDER BY COALESCE(deleted_at_ms, created_at_ms) DESC, created_at_ms DESC, id DESC
                  LIMIT ?1 OFFSET ?2"
             );
             let mut statement = connection.prepare_cached(&sql)?;
