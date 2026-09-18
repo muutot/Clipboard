@@ -478,8 +478,11 @@ function normalizeGeneralSettings(
     ...DARK_THEME_COLORS,
   });
   result.customPresets = normalizeCustomPresets(source.customPresets ?? fallback("customPresets"));
-  result.activePresetId =
-    typeof source.activePresetId === "string" ? source.activePresetId : undefined;
+  // Like every other optional field, a missing value falls back to the
+  // current store state so a partial payload (older backend, partial
+  // broadcast) cannot silently clear the active theme preset.
+  const activePresetSource = source.activePresetId ?? fallback("activePresetId");
+  result.activePresetId = typeof activePresetSource === "string" ? activePresetSource : undefined;
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
     "overlay",
