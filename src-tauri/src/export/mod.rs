@@ -120,25 +120,24 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
     let items: Vec<ClipboardItem> =
         serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
 
-    let mut imported = 0u64;
-    let mut skipped = 0u64;
-    let mut errors = Vec::new();
-
+    // Route through the transactional bulk path so re-importing a record with
+    // the same `(kind, content_hash)` counts as skipped instead of rewriting
+    // the stored row (title/timestamps/resurrection) via the single-item
+    // upsert. This matches the `.Pastebackup` import semantics.
+    let mut entries = Vec::with_capacity(items.len());
     for mut item in items {
         item.icon_path = normalize_imported_icon_key(item.icon_path.as_deref());
-        match crate::storage::ClipboardRepository::save_item(database, &item) {
-            Ok(_) => imported += 1,
-            Err(e) => {
-                skipped += 1;
-                errors.push(format!("failed to import {}: {e}", item.id));
-            }
-        }
+        let label = item.id.clone();
+        entries.push((label, item));
     }
+    let summary = database
+        .save_items_transactional(&entries)
+        .map_err(|error| error.to_string())?;
 
     Ok(ImportSummary {
-        imported_count: imported,
-        skipped_count: skipped,
-        errors,
+        imported_count: summary.imported_count,
+        skipped_count: summary.skipped_count,
+        errors: summary.errors,
         pending_truncation: 0,
         max_items: 0,
     })
@@ -171,9 +170,7 @@ fn normalize_imported_icon_key(icon_path: Option<&str>) -> Option<String> {
 /// `---`; blank chunks are ignored and duplicate content is handled by the
 /// database's normal content-hash upsert path.
 pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportSummary, String> {
-    let mut imported = 0u64;
-    let mut skipped = 0u64;
-    let mut errors = Vec::new();
+    let mut entries = Vec::new();
 
     for (index, chunk) in text.split("\n---\n").enumerate() {
         let content = chunk.trim_matches(['\r', '\n']);
@@ -212,19 +209,19 @@ pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportS
             metadata_json: None,
         };
 
-        match crate::storage::ClipboardRepository::save_item(database, &item) {
-            Ok(_) => imported += 1,
-            Err(error) => {
-                skipped += 1;
-                errors.push(format!("failed to import chunk {index}: {error}"));
-            }
-        }
+        entries.push((format!("chunk {index}"), item));
     }
 
+    // Same duplicate-skip contract as the JSON path: re-imported content must
+    // not rewrite the stored rows.
+    let summary = database
+        .save_items_transactional(&entries)
+        .map_err(|error| error.to_string())?;
+
     Ok(ImportSummary {
-        imported_count: imported,
-        skipped_count: skipped,
-        errors,
+        imported_count: summary.imported_count,
+        skipped_count: summary.skipped_count,
+        errors: summary.errors,
         pending_truncation: 0,
         max_items: 0,
     })
@@ -270,9 +267,7 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
         .as_millis()
         .min(i64::MAX as u128) as i64;
 
-    let mut imported = 0u64;
-    let mut skipped = 0u64;
-    let mut errors = Vec::new();
+    let mut entries = Vec::new();
     let mut row_index = 0u64;
 
     while let Some(record) = reader.next_record() {
@@ -378,19 +373,19 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
             metadata_json: None,
         };
 
-        match crate::storage::ClipboardRepository::save_item(database, &item) {
-            Ok(_) => imported += 1,
-            Err(error) => {
-                skipped += 1;
-                errors.push(format!("failed to import row {row_index}: {error}"));
-            }
-        }
+        entries.push((format!("row {row_index}"), item));
     }
 
+    // Same duplicate-skip contract as the JSON path: re-imported content must
+    // not rewrite the stored rows.
+    let summary = database
+        .save_items_transactional(&entries)
+        .map_err(|error| error.to_string())?;
+
     Ok(ImportSummary {
-        imported_count: imported,
-        skipped_count: skipped,
-        errors,
+        imported_count: summary.imported_count,
+        skipped_count: summary.skipped_count,
+        errors: summary.errors,
         pending_truncation: 0,
         max_items: 0,
     })
@@ -627,6 +622,28 @@ mod tests {
         assert_eq!(summary.imported_count, 2);
         assert_eq!(summary.skipped_count, 0);
         assert!(summary.errors.is_empty());
+    }
+
+    #[test]
+    fn reimporting_same_json_skips_without_rewriting_stored_rows() {
+        let database = crate::storage::Database::open_in_memory().unwrap();
+        let json = serde_json::to_string(&sample_items()).unwrap();
+
+        let first = import_from_json(&json, &database).unwrap();
+        assert_eq!(first.imported_count, 2);
+        assert_eq!(first.skipped_count, 0);
+
+        // A crafted re-import carries the same identities but hostile content:
+        // it must be skipped, never overwrite the stored rows.
+        let hostile = r#"[{"id":"item-1","kind":"text","title":"HOSTILE","textContent":"Hello, world!","htmlContent":null,"rtfContent":null,"resourcePath":"C:\\evil.txt","previewPath":null,"contentHash":"abc","sourceApp":"Evil","iconPath":null,"sizeBytes":13,"createdAtMs":999999,"lastUsedAtMs":null,"isFavorite":true,"metadataJson":null}]"#;
+        let second = import_from_json(hostile, &database).unwrap();
+        assert_eq!(second.imported_count, 0);
+        assert_eq!(second.skipped_count, 1);
+
+        let stored = database.get_item("item-1").unwrap().unwrap();
+        assert_eq!(stored.title, "Hello");
+        assert_eq!(stored.created_at_ms, 1000);
+        assert_eq!(stored.resource_path, None);
     }
 
     #[test]
