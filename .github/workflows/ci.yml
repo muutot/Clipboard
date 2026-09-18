@@ -36,7 +36,7 @@ jobs:
             ${{ runner.os }}-node24-
 
       - name: Install dependencies
-        run: npm install --frozen-lockfile
+        run: npm ci
 
       - run: npm run format:check
 
@@ -81,10 +81,12 @@ jobs:
             ci
 
       - name: Check formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+        # --all covers every workspace member (e.g. crates/clipboard-sync),
+        # not just the root package.
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 
       - name: Clippy
-        run: cargo clippy --profile ci --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --profile ci --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
 
       - name: Install nextest
         uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2
@@ -92,4 +94,4 @@ jobs:
           tool: cargo-nextest
 
       - name: Test
-        run: cargo nextest run --cargo-profile ci --manifest-path src-tauri/Cargo.toml
+        run: cargo nextest run --cargo-profile ci --manifest-path src-tauri/Cargo.toml --workspace

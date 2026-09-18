@@ -49,14 +49,16 @@ if (-not $SkipFrontend) {
 }
 
 if (-not $SkipRust) {
+    # --all / --workspace cover every workspace member (e.g. crates/clipboard-sync),
+    # matching package.json's format:rust:check / lint:rust / test:rust scripts.
     Step "Rust: cargo fmt --check" {
-        cargo fmt --manifest-path "$rustDir\Cargo.toml" -- --check
+        cargo fmt --manifest-path "$rustDir\Cargo.toml" --all -- --check
     }
     Step "Rust: cargo clippy" {
-        cargo clippy -j 1 --manifest-path "$rustDir\Cargo.toml" --all-targets -- -D warnings
+        cargo clippy -j 1 --manifest-path "$rustDir\Cargo.toml" --workspace --all-targets -- -D warnings
     }
     Step "Rust: cargo test" {
-        cargo test -j 1 --manifest-path "$rustDir\Cargo.toml"
+        cargo test -j 1 --manifest-path "$rustDir\Cargo.toml" --workspace
     }
 }
 
