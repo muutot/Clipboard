@@ -824,9 +824,13 @@ impl ClipboardRepository for Database {
             let cutoff_ms = current_time_ms() - i64::from(days) * 86_400_000;
             // Legacy rows can carry deleted = 1 with a NULL timestamp; treat
             // them as expired rather than letting them live forever.
+            // Favorites stay protected like every other cleanup path: a record
+            // the user explicitly favorited inside the recycle bin must not be
+            // hard-deleted by expiry.
             let deleted = connection.execute(
                 "DELETE FROM clipboard_items
                  WHERE deleted = 1
+                   AND is_favorite = 0
                    AND (deleted_at_ms IS NULL OR deleted_at_ms < ?1)",
                 [cutoff_ms],
             )?;

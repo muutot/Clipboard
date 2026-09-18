@@ -1470,3 +1470,16 @@ fn expired_purge_covers_legacy_rows_without_a_delete_timestamp() {
     assert_eq!(database.permanently_delete_expired(30).unwrap(), 1);
     assert!(database.get_item("legacy").unwrap().is_none());
 }
+
+#[test]
+fn expired_purge_keeps_favorited_recycle_bin_records() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("kept", "hash-kept", 100))
+        .unwrap();
+    assert!(database.soft_delete("kept").unwrap());
+    assert!(database.set_favorite("kept", true).unwrap());
+
+    assert_eq!(database.permanently_delete_expired(30).unwrap(), 0);
+    assert!(database.get_item("kept").unwrap().is_some());
+}
