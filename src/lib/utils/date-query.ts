@@ -59,8 +59,11 @@ const patterns: Array<{ regex: RegExp; resolver: (now: number) => DateRange }> =
     regex: /^(上月|last month|上个月)$/i,
     resolver: (now) => {
       const d = new Date(now);
-      d.setMonth(d.getMonth() - 1);
+      // Normalize the day first so short months never roll the decremented
+      // month back over (e.g. March 31 minus one month must be February 1,
+      // not the rollover result March 2).
       d.setDate(1);
+      d.setMonth(d.getMonth() - 1);
       const from = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
       const to = endOfDay(new Date(d.getFullYear(), d.getMonth() + 1, 0).getTime());
       return { from, to };

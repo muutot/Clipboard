@@ -102,4 +102,18 @@ describe("parseDateQuery", () => {
     expect(marchRange.from).toBe(ts(2026, 3, 1, 0));
     expect(marchRange.to).toBe(endOfDay(ts(2026, 3, 31, 12)));
   });
+
+  it("parses last month without rolling over on month-end days", () => {
+    // March 31 must resolve to February, not roll over back into March.
+    vi.setSystemTime(ts(2026, 3, 31, 9));
+    const range = parseDateQuery("last month")!;
+    expect(range.from).toBe(ts(2026, 2, 1, 0));
+    expect(range.to).toBe(endOfDay(ts(2026, 2, 28, 12)));
+
+    // October 31 must resolve to September.
+    vi.setSystemTime(ts(2026, 10, 31, 9));
+    const septemberRange = parseDateQuery("上月")!;
+    expect(septemberRange.from).toBe(ts(2026, 9, 1, 0));
+    expect(septemberRange.to).toBe(endOfDay(ts(2026, 9, 30, 12)));
+  });
 });
