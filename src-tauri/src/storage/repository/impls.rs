@@ -555,7 +555,13 @@ impl ClipboardRepository for Database {
 
     fn delete_item(&self, id: &str) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
-            let is_favorite = connection
+            // Guard and delete must share one Immediate transaction: other
+            // workers hold their own connections, so two separate autocommit
+            // statements would let a concurrent `set_favorite` slip in
+            // between the check and the delete and hard-delete a favorite.
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let is_favorite = transaction
                 .query_row(
                     "SELECT is_favorite FROM clipboard_items WHERE id = ?1",
                     [id],
@@ -567,7 +573,10 @@ impl ClipboardRepository for Database {
                 return Err(StorageError::FavoriteMustBeRemoved(id.to_owned()));
             }
 
-            Ok(connection.execute("DELETE FROM clipboard_items WHERE id = ?1", [id])? > 0)
+            let deleted =
+                transaction.execute("DELETE FROM clipboard_items WHERE id = ?1", [id])? > 0;
+            transaction.commit()?;
+            Ok(deleted)
         })
     }
 
@@ -650,7 +659,12 @@ impl ClipboardRepository for Database {
 
     fn soft_delete(&self, id: &str) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
-            let is_favorite = connection
+            // Same Immediate-transaction guard as `delete_item` and
+            // `soft_delete_batch`: the favorite check and the UPDATE must
+            // observe one consistent snapshot.
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let is_favorite = transaction
                 .query_row(
                     "SELECT is_favorite FROM clipboard_items WHERE id = ?1 AND deleted = 0",
                     [id],
@@ -663,10 +677,12 @@ impl ClipboardRepository for Database {
             }
 
             let now = current_time_ms();
-            Ok(connection.execute(
+            let deleted = transaction.execute(
                 "UPDATE clipboard_items SET deleted = 1, deleted_at_ms = ?2 WHERE id = ?1 AND deleted = 0",
                 params![id, now],
-            )? > 0)
+            )? > 0;
+            transaction.commit()?;
+            Ok(deleted)
         })
     }
 
