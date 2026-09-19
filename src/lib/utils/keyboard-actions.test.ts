@@ -315,6 +315,19 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
     expect(resolveKeyAction(keyEvent({ key: "Enter" }), ctx({ selectedId: "" })).type).toBe("none");
   });
 
+  it("routes Space through the openDetail binding (disable contract)", () => {
+    // Default bindings keep Space opening the detail panel.
+    expect(resolveKeyAction(keyEvent({ key: " " }), ctx()).type).toBe("open-detail");
+    // Clearing openDetail in settings disables Space as well instead of the
+    // hardcoded behavior silently ignoring the configuration.
+    const disabled = ctx();
+    disabled.itemBindings = { ...disabled.itemBindings, openDetail: [] };
+    expect(resolveKeyAction(keyEvent({ key: " " }), disabled)).toEqual({
+      type: "none",
+      prevent: false,
+    });
+  });
+
   it("opens detail on Space, preventing default even without a selection", () => {
     expect(resolveKeyAction(keyEvent({ key: " " }), ctx())).toEqual({
       type: "open-detail",

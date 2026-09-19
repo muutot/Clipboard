@@ -253,6 +253,12 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     if (editableTarget || isActivatableKeyboardTarget(event.target)) {
       return { type: "none", prevent: false };
     }
+    // Space opens detail through the openDetail binding: clearing that
+    // chord in settings disables the Space behavior too (mirroring the
+    // Enter/copyItem contract above) instead of being silently ignored.
+    if (!matchesAny(ctx.itemBindings.openDetail)) {
+      return { type: "none", prevent: false };
+    }
     if (ctx.selectedId) return { type: "open-detail", id: ctx.selectedId, prevent: true };
     return { type: "none", prevent: true };
   }
