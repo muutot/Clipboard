@@ -1179,7 +1179,13 @@ fn pull_device_with_checkpoint_recovery(
                 resource_limits,
                 result,
                 true,
-            )?;
+            )
+            .map_err(|recovery_error| {
+                // Preserve the original failure: recovery diagnostics alone
+                // ("checkpoint is required...") would misreport a transient
+                // pull error as a missing-history problem.
+                format!("{original_error}; forced checkpoint recovery failed: {recovery_error}")
+            })?;
             if !recovered {
                 return Err(original_error);
             }
