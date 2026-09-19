@@ -1259,12 +1259,23 @@ impl Database {
             set_changelog_suppressed(&transaction, true)?;
             let applied = apply_mutations(&transaction, remote_scope, mutations, resource_refs)?;
             set_changelog_suppressed(&transaction, false)?;
-            transaction.execute(
-                "DELETE FROM sync_cursors WHERE remote_scope = ?1",
-                [remote_scope],
-            )?;
+            // A checkpoint vector is frozen at publish time, so a device
+            // whose segments were pulled after the publish has an existing
+            // cursor ahead of its vector entry. Replacing it would regress
+            // the cursor and force a full re-pull (the same regression the
+            // segment path rejects as "segment cursor sequence regressed").
+            // Merge instead: keep any same-epoch cursor ahead of the vector
+            // and preserve cursors for devices the vector does not mention.
             for cursor in cursors {
-                upsert_cursor(&transaction, remote_scope, cursor, None)?;
+                match load_cursor(&transaction, remote_scope, &cursor.device_id)? {
+                    Some(existing)
+                        if existing.epoch == cursor.epoch
+                            && existing.sequence > cursor.sequence =>
+                    {
+                        continue;
+                    }
+                    _ => upsert_cursor(&transaction, remote_scope, cursor, None)?,
+                }
             }
             transaction.execute(
                 "INSERT INTO sync_checkpoint_state
@@ -1346,12 +1357,23 @@ impl Database {
                     })?;
             }
             set_changelog_suppressed(&transaction, false)?;
-            transaction.execute(
-                "DELETE FROM sync_cursors WHERE remote_scope = ?1",
-                [remote_scope],
-            )?;
+            // A checkpoint vector is frozen at publish time, so a device
+            // whose segments were pulled after the publish has an existing
+            // cursor ahead of its vector entry. Replacing it would regress
+            // the cursor and force a full re-pull (the same regression the
+            // segment path rejects as "segment cursor sequence regressed").
+            // Merge instead: keep any same-epoch cursor ahead of the vector
+            // and preserve cursors for devices the vector does not mention.
             for cursor in cursors {
-                upsert_cursor(&transaction, remote_scope, cursor, None)?;
+                match load_cursor(&transaction, remote_scope, &cursor.device_id)? {
+                    Some(existing)
+                        if existing.epoch == cursor.epoch
+                            && existing.sequence > cursor.sequence =>
+                    {
+                        continue;
+                    }
+                    _ => upsert_cursor(&transaction, remote_scope, cursor, None)?,
+                }
             }
             transaction.execute(
                 "INSERT INTO sync_checkpoint_state
@@ -4098,6 +4120,70 @@ mod tests {
                 .apply_sync_checkpoint(REMOTE_SCOPE, 1, &"b".repeat(64), &cursors, &mutations)
                 .unwrap(),
             0
+        );
+    }
+
+    #[test]
+    fn checkpoint_apply_does_not_regress_cursors_ahead_of_the_frozen_vector() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let mutations = MutationBatch {
+            upserts: vec![replicated(
+                "checkpoint-item",
+                "hash-checkpoint",
+                "checkpoint",
+                RecordVersion {
+                    modified_at_ms: 900,
+                    writer_device_id: REMOTE_DEVICE.to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        let first_key =
+            crate::sync::v1::segment_object_key(REMOTE_DEVICE, REMOTE_EPOCH, 1, 2, &"a".repeat(64))
+                .unwrap();
+
+        // Generation 1 freezes the device at sequence 2.
+        database
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                1,
+                &"b".repeat(64),
+                &[cursor(2, Some(&first_key))],
+                &mutations,
+            )
+            .unwrap();
+        // Generation 2 publishes a newer vector (sequence 5) that the pull
+        // path applies.
+        database
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                2,
+                &"e".repeat(64),
+                &[cursor(5, None)],
+                &mutations,
+            )
+            .unwrap();
+        assert_eq!(
+            database.list_sync_cursors(REMOTE_SCOPE).unwrap(),
+            vec![cursor(5, None)]
+        );
+
+        // Re-applying the generation-2 checkpoint must not reset the cursor
+        // back to its stale in-vector value: the segments between 2 and 5
+        // were already applied, so a regression would force a full re-pull.
+        database
+            .apply_sync_checkpoint(
+                REMOTE_SCOPE,
+                2,
+                &"e".repeat(64),
+                &[cursor(2, Some(&first_key))],
+                &mutations,
+            )
+            .unwrap();
+        assert_eq!(
+            database.list_sync_cursors(REMOTE_SCOPE).unwrap(),
+            vec![cursor(5, None)]
         );
     }
 
