@@ -53,6 +53,7 @@
   let filePreviewText = $state("");
   let filePreviewTruncated = $state(false);
   let filePreviewRequest = 0;
+  let loadedPreviewKey = "";
 
   function isTextFile(target: ClipboardItem): boolean {
     const mime = target.mimeType?.toLowerCase() ?? "";
@@ -83,6 +84,22 @@
 
   $effect(() => {
     const target = item;
+    // Reading the `item` proxy tracks every property, so any unrelated update
+    // (e.g. saving tags or a title rename) would replace the object and
+    // re-fetch the preview. Only the fields that determine the preview are
+    // meaningful: bail out when none of them changed.
+    const previewKey = target
+      ? [
+          target.kind,
+          target.fileMeta?.length ?? 0,
+          target.mimeType ?? "",
+          target.resourceMetadata?.extension ?? "",
+          filePreviewPath(target) ?? "",
+        ].join("\u0000")
+      : "";
+    if (previewKey === loadedPreviewKey) return;
+    loadedPreviewKey = previewKey;
+
     const request = ++filePreviewRequest;
     filePreviewText = "";
     filePreviewTruncated = false;
