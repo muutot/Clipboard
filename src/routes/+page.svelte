@@ -2272,7 +2272,10 @@
     // can clear bulk selection, close detail panel, or hide the window.
   }
 
-  let tagAddSignal = $state(0);
+  // Carries the pressed card id so the signal is consumed as an edge by the
+  // targeted card only; a bare counter would re-fire on every other card the
+  // moment it becomes selected.
+  let tagAddSignal = $state<{ seq: number; itemId: string } | null>(null);
 
   function focusActiveFilterTab() {
     void tick().then(() => {
@@ -2352,7 +2355,7 @@
         toggleFavorite(action.id);
         break;
       case "tag-add":
-        tagAddSignal++;
+        tagAddSignal = { seq: (tagAddSignal?.seq ?? 0) + 1, itemId: selectedId ?? "" };
         break;
       case "save-item":
         saveItem(action.id);

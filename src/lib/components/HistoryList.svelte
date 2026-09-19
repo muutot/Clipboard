@@ -30,7 +30,7 @@
     quickCopyBadgeAlwaysVisible: boolean;
     doubleClickPaste: boolean;
     tagColors: Record<string, string>;
-    tagAddSignal: number;
+    tagAddSignal: { seq: number; itemId: string } | null;
     panelLabel: string;
     emptyTitle: string;
     emptyHint: string;
@@ -164,7 +164,7 @@
       {tagColors}
       {ontoggleTagFilter}
       {oneditTag}
-      tagAddSignal={selectedId === item.id ? tagAddSignal : 0}
+      tagAddSignal={tagAddSignal?.itemId === item.id ? tagAddSignal.seq : 0}
     />
   {/snippet}
 
