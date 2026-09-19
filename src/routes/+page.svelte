@@ -492,7 +492,6 @@
   const cardTextHeight = $derived($generalSettings.cardTextHeight);
   const cardTallTextHeight = $derived($generalSettings.cardTallTextHeight);
   const cardImageHeight = $derived($generalSettings.cardImageHeight);
-  const cardCustomTitleHeight = $derived($generalSettings.cardCustomTitleHeight);
   const cardGap = $derived($generalSettings.cardGap);
   const cardPaddingTop = $derived($generalSettings.cardPaddingTop);
   const cardPaddingBottom = $derived($generalSettings.cardPaddingBottom);
@@ -513,7 +512,6 @@
         imageHeight: cardImageHeight,
         textHeight: cardTextHeight,
         tallTextHeight: cardTallTextHeight,
-        customTitleHeight: cardCustomTitleHeight,
         cardGap,
         cardPaddingTop,
         cardPaddingBottom,
@@ -536,7 +534,6 @@
       cardTextHeight,
       cardTallTextHeight,
       cardImageHeight,
-      cardCustomTitleHeight,
       cardGap,
       cardPaddingTop,
       cardPaddingBottom,

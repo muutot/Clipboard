@@ -872,8 +872,6 @@ const zhCN: LocaleDefinition = {
     shortTextHeightDescription: "单行文本或无预览条目的内容高度（不含上下内边距）",
     tallTextHeight: "长文本高度",
     tallTextHeightDescription: "带预览的多行文本条目内容高度（不含上下内边距）",
-    customTitleHeight: "自定义标题高度",
-    customTitleHeightDescription: "带自定义标题的条目高度",
     imageHeight: "图片高度",
     imageHeightDescription: "图片条目的内容区高度（不含上下内边距）",
     searchHeight: "搜索框高度",

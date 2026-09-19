@@ -40,7 +40,6 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   cardTextHeight: 42,
   cardTallTextHeight: 42,
   cardImageHeight: 80,
-  cardCustomTitleHeight: 80,
   searchHeight: 30,
   searchFontSize: 20,
   cardBorderRadius: 5,
@@ -416,12 +415,6 @@ function normalizeGeneralSettings(
     defaultSettings.cardImageHeight,
     64,
     200,
-  );
-  result.cardCustomTitleHeight = integerInRange(
-    source.cardCustomTitleHeight ?? fallback("cardCustomTitleHeight"),
-    defaultSettings.cardCustomTitleHeight,
-    40,
-    120,
   );
   result.searchHeight = integerInRange(
     source.searchHeight ?? fallback("searchHeight"),

@@ -65,27 +65,6 @@ describe("itemHeight", () => {
     );
   });
 
-  it("uses customTitleHeight as the content base for custom-title cards and grows per extra line", () => {
-    const base = itemHeight({
-      kind: "text",
-      textLines: 1,
-      customTitle: true,
-      customTitleHeight: 80,
-      cardGap: 1,
-    });
-    expect(base).toBe(81);
-    expect(
-      itemHeight({
-        kind: "text",
-        textLines: 3,
-        customTitle: true,
-        customTitleHeight: 80,
-        cardGap: 1,
-      }),
-    ).toBe(80 + 20 + 20 + 1);
-    expect(itemHeight({ kind: "text", textLines: 1, customTitle: true, cardGap: 1 })).toBe(80 + 1);
-  });
-
   it("expands every kind with the card padding externally", () => {
     const padding = { cardPaddingTop: 1, cardPaddingBottom: 2 };
     const image = itemHeight({ kind: "image", imageHeight: 80, cardGap: 1 });

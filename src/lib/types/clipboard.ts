@@ -335,7 +335,6 @@ export interface GeneralSettings {
   cardTextHeight: number;
   cardTallTextHeight: number;
   cardImageHeight: number;
-  cardCustomTitleHeight: number;
   searchHeight: number;
   searchFontSize: number;
   cardBorderRadius: number;

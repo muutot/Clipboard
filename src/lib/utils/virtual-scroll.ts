@@ -11,7 +11,6 @@ export interface VirtualListResult {
 
 export const TEXT_LINE_HEIGHT = 20;
 export const PREVIEW_LINE_HEIGHT = 16;
-export const CUSTOM_TITLE_BASE_HEIGHT = 80;
 
 export function trimTrailingBlankLines(text: string | null | undefined): string {
   return (text ?? "").replace(/(?:\r\n?|\n)(?:[ \t]*(?:\r\n?|\n))*[ \t]*$/, "");
@@ -48,8 +47,6 @@ export function itemHeight({
   cardPaddingTop = 0,
   cardPaddingBottom = 0,
   showPreview = true,
-  customTitle = false,
-  customTitleHeight,
 }: {
   kind: string;
   textLines?: number;
@@ -60,20 +57,17 @@ export function itemHeight({
   cardPaddingTop?: number;
   cardPaddingBottom?: number;
   showPreview?: boolean;
-  customTitle?: boolean;
-  customTitleHeight?: number;
 }): number {
   // Every kind shares the same contract: the *-height settings are content
   // heights and card padding expands the estimated card height externally.
+  // Custom-title cards render the same structure as normal text cards
+  // (single-line title + clamped preview + meta row), so they share the
+  // same formula.
   const gap = cardGap ?? 5;
   const padding = cardPaddingTop + cardPaddingBottom;
   if (kind === "image") return (imageHeight ?? 130) + padding + gap;
 
   const visibleLines = showPreview ? Math.max(1, textLines) : 1;
-  if (customTitle) {
-    const baseHeight = customTitleHeight ?? CUSTOM_TITLE_BASE_HEIGHT;
-    return baseHeight + Math.max(0, visibleLines - 1) * TEXT_LINE_HEIGHT + padding + gap;
-  }
   if (visibleLines <= 1) return (textHeight ?? 58) + padding + gap;
   return (
     (tallTextHeight ?? 70) +

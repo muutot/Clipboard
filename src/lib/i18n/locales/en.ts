@@ -915,8 +915,6 @@ const en: LocaleDefinition = {
     tallTextHeight: "Tall Text Height",
     tallTextHeightDescription:
       "Content height for multi-line items with preview (excludes top/bottom padding)",
-    customTitleHeight: "Custom Title Height",
-    customTitleHeightDescription: "Height for items with custom title",
     imageHeight: "Image Height",
     imageHeightDescription: "Content height for image items (excludes top/bottom padding)",
     searchHeight: "Search Box Height",

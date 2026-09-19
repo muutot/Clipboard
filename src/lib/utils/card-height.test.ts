@@ -93,27 +93,30 @@ describe("estimateCardHeight", () => {
     );
   });
 
-  it("applies customTitleHeight as the content base for custom-title text cards", () => {
-    const inputs: CardEstimateInputs = { ...baseInputs, customTitleHeight: 80 };
+  it("estimates custom-title text cards with the shared text formula", () => {
     const customItem = {
       kind: "text",
       title: "Search Query",
       textContent: "Body line",
       customTitle: true,
     };
-    expect(estimateCardHeight(customItem, inputs, false)).toBe(
+    // Custom-title cards render a single-line title plus the clamped content
+    // preview, exactly like a normal text card, so the estimate must use the
+    // same textHeight/tallTextHeight formula (1 line in the headless env).
+    expect(estimateCardHeight(customItem, baseInputs, false)).toBe(
       itemHeight({
         kind: "text",
         textLines: 1,
-        customTitle: true,
-        customTitleHeight: 80,
+        textHeight: baseInputs.textHeight,
+        tallTextHeight: baseInputs.tallTextHeight,
+        imageHeight: baseInputs.imageHeight,
         cardGap: baseInputs.cardGap,
         cardPaddingTop: baseInputs.cardPaddingTop,
         cardPaddingBottom: baseInputs.cardPaddingBottom,
         showPreview: baseInputs.showSecondaryText,
       }),
     );
-    expect(estimateCardHeight(customItem, inputs, false)).toBe(80 + 6 + 6 + 5);
+    expect(estimateCardHeight(customItem, baseInputs, false)).toBe(58 + 6 + 6 + 5);
   });
 
   it("covers link kind with the same text path", () => {

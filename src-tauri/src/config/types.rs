@@ -90,8 +90,6 @@ pub struct GeneralConfig {
     pub card_tall_text_height: u16,
     #[serde(alias = "compactImageHeight")]
     pub card_image_height: u16,
-    #[serde(alias = "compactCustomTitleHeight")]
-    pub card_custom_title_height: u16,
     #[serde(alias = "compactSearchHeight")]
     pub search_height: u16,
     #[serde(alias = "compactSearchFontSize")]
@@ -135,7 +133,6 @@ impl Default for GeneralConfig {
             card_text_height: 42,
             card_tall_text_height: 42,
             card_image_height: 80,
-            card_custom_title_height: 80,
             search_height: 30,
             search_font_size: 20,
             card_border_radius: 5,

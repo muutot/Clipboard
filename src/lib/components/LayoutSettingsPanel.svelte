@@ -80,17 +80,6 @@
     },
     {
       type: "slider",
-      icon: "type",
-      label: _t("layout.customTitleHeight"),
-      desc: _t("layout.customTitleHeightDescription"),
-      get: () => s.cardCustomTitleHeight,
-      set: (v) => generalSettings.updateSetting("cardCustomTitleHeight", v),
-      min: 40,
-      max: 120,
-      suffix: "px",
-    },
-    {
-      type: "slider",
       icon: "image",
       label: _t("layout.imageHeight"),
       desc: _t("layout.imageHeightDescription"),

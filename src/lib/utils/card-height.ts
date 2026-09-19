@@ -12,7 +12,6 @@ export interface CardEstimateInputs {
   imageHeight: number;
   textHeight: number;
   tallTextHeight: number;
-  customTitleHeight?: number;
   cardGap: number;
   cardPaddingTop: number;
   cardPaddingBottom: number;
@@ -39,7 +38,6 @@ export function estimateCardHeight(
     imageHeight,
     textHeight,
     tallTextHeight,
-    customTitleHeight,
     cardGap,
     cardPaddingTop,
     cardPaddingBottom,
@@ -60,7 +58,6 @@ export function estimateCardHeight(
       imageHeight,
       textHeight,
       tallTextHeight,
-      customTitleHeight,
       cardGap,
       cardPaddingTop,
       cardPaddingBottom,
@@ -68,6 +65,10 @@ export function estimateCardHeight(
     });
   }
 
+  // Custom-title cards render the user title plus the FULL content as the
+  // clamped preview (not "first line + rest"), so count the visual lines of
+  // the whole content; normal cards render the first line as the title and
+  // preview only the remaining lines.
   let totalLines = 1;
   if (item.customTitle) {
     const bodyLines = showSecondaryText
@@ -96,8 +97,6 @@ export function estimateCardHeight(
   return itemHeight({
     kind: item.kind,
     textLines: totalLines,
-    customTitle: item.customTitle === true,
-    customTitleHeight,
     textHeight,
     tallTextHeight,
     imageHeight,

@@ -849,8 +849,6 @@ export interface LocaleDefinition {
     shortTextHeightDescription: string;
     tallTextHeight: string;
     tallTextHeightDescription: string;
-    customTitleHeight: string;
-    customTitleHeightDescription: string;
     imageHeight: string;
     imageHeightDescription: string;
     searchHeight: string;

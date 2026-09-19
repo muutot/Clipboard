@@ -39,20 +39,19 @@ There is no layout-mode toggle: these fields are the always-on card/search sizin
 
 Every card kind shares one estimator contract: the `*Height` fields are content heights, and `cardPaddingTop`/`cardPaddingBottom` expand the estimated card height externally (image, text, file, and edit estimates alike). `cardTextHeight`/`cardTallTextHeight` were recalibrated from whole-card to content-height semantics (defaults 44 → 42); values saved under the old semantics stay loadable and only drift by the saved padding until the ResizeObserver measurement corrects them.
 
-| Field                   | Default | Normalized range |
-| ----------------------- | ------- | ---------------- |
-| `cardPaddingTop`        | `1`     | 0–20             |
-| `cardPaddingBottom`     | `1`     | 0–20             |
-| `cardGap`               | `1`     | 0–20             |
-| `cardTextHeight`        | `42`    | 36–90            |
-| `cardTallTextHeight`    | `42`    | 42–100           |
-| `cardImageHeight`       | `80`    | 64–200           |
-| `cardCustomTitleHeight` | `80`    | 40–120           |
-| `searchHeight`          | `30`    | 28–56            |
-| `searchFontSize`        | `20`    | 10–24            |
-| `cardBorderRadius`      | `5`     | 0–20             |
+| Field                | Default | Normalized range |
+| -------------------- | ------- | ---------------- |
+| `cardPaddingTop`     | `1`     | 0–20             |
+| `cardPaddingBottom`  | `1`     | 0–20             |
+| `cardGap`            | `1`     | 0–20             |
+| `cardTextHeight`     | `42`    | 36–90            |
+| `cardTallTextHeight` | `42`    | 42–100           |
+| `cardImageHeight`    | `80`    | 64–200           |
+| `searchHeight`       | `30`    | 28–56            |
+| `searchFontSize`     | `20`    | 10–24            |
+| `cardBorderRadius`   | `5`     | 0–20             |
 
-`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes ten sliders. `cardCustomTitleHeight` is normalized, and the layout estimator consumes it as the content base for custom-title text/link cards (title line plus first content area), growing by one text line height per extra preview line; the estimator falls back to `customTitleHeight ?? 80` when the field is absent.
+`LayoutSettingsPanel` (labeled "Layout" in the UI) exposes nine sliders. Custom-title text/link cards share the same text estimate as normal text cards (single-line title + clamped preview + meta row); the former dedicated `cardCustomTitleHeight` base was removed because a user-fixed height cannot track the rendered content and left an empty band inside pinned cards. Stale `cardCustomTitleHeight` keys in old `settings.json` are absorbed by the Rust config `extra` map and ignored.
 
 ## General scalar/enum settings
 
