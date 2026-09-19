@@ -130,6 +130,11 @@
     if (itemId !== null) {
       activeTab = "preview";
       editing = false;
+      // The title rename draft belongs to the previous item. Keeping it
+      // open across an item switch would save the old title onto the new
+      // item when the pending input commits (blur/Enter).
+      editingTitle = false;
+      editTitleContent = "";
     }
   });
 
