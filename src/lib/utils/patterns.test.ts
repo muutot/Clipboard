@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quickActionKind } from "./patterns";
+import { detectQuickActions, quickActionKind } from "./patterns";
 import type { QuickAction } from "$lib/services/clipboard";
 
 function action(overrides: Partial<QuickAction> & { payload: string }): QuickAction {
@@ -27,5 +27,13 @@ describe("quickActionKind", () => {
     expect(quickActionKind(action({ payload: "plain text" }))).toBe("copy");
     expect(quickActionKind(action({ payload: "ftp://example.com" }))).toBe("copy");
     expect(quickActionKind(action({ payload: "#ff0000", actionType: "open" }))).toBe("copy");
+  });
+
+  it("skips invalid date candidates instead of abandoning the scan (firstOnly)", () => {
+    // 13/45/2024 parses under neither d/m/y reading; findFirstDate must keep
+    // scanning and find the valid 15/6/2024 instead of returning nothing.
+    const actions = detectQuickActions("13/45/2024 x 15/6/2024", true);
+    const dateAction = actions.find((entry) => entry.kind === "date");
+    expect(dateAction?.payload).toBe("2024-06-15");
   });
 });

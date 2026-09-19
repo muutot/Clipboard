@@ -91,7 +91,11 @@ function findFirstDate(text: string): string | undefined {
     const dayFirst = normalizeInlineDate(year, second, first);
     const monthFirst = normalizeInlineDate(year, first, second);
     if (dayFirst && monthFirst && dayFirst !== monthFirst) continue;
-    return dayFirst ?? monthFirst ?? undefined;
+    const hit = dayFirst ?? monthFirst;
+    // An invalid candidate (neither reading parses) must be skipped, not
+    // returned as `undefined`: early-returning here would abandon the
+    // remaining matches even though a later one is a valid date.
+    if (hit) return hit;
   }
 }
 
