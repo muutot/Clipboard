@@ -445,28 +445,47 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
         .ok_or_else(|| "clipboard text is too large".to_owned())?;
     let marker = self_trigger_marker_for_text(text);
 
+    // Allocate and fill every buffer before touching the clipboard: once
+    // EmptyClipboard succeeds the user's previous contents are gone, so
+    // allocation failures must not be reachable after that point.
+    let text_memory = allocate_global_bytes(unsafe {
+        std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len)
+    })?;
+    let marker_memory = self_trigger_format_id().and_then(|format| {
+        allocate_global_bytes(&marker)
+            .ok()
+            .map(|memory| (format, memory))
+    });
+
     unsafe {
         if !open_clipboard_with_retry() {
+            GlobalFree(text_memory);
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
             return Err("failed to open the system clipboard".to_owned());
         }
         let _clipboard_guard = ClipboardGuard;
 
         if EmptyClipboard() == 0 {
+            GlobalFree(text_memory);
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
             return Err("failed to clear the system clipboard".to_owned());
         }
 
-        let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
-        let text_memory = allocate_global_bytes(wide_bytes)?;
         if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
             GlobalFree(text_memory);
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
             return Err("failed to write text to the system clipboard".to_owned());
         }
 
-        if let Some(format) = self_trigger_format_id() {
-            if let Ok(marker_memory) = allocate_global_bytes(&marker) {
-                if SetClipboardData(format, marker_memory) == 0 {
-                    GlobalFree(marker_memory);
-                }
+        if let Some((format, marker_memory)) = marker_memory {
+            if SetClipboardData(format, marker_memory) == 0 {
+                GlobalFree(marker_memory);
             }
         }
     }
@@ -521,46 +540,80 @@ pub fn write_clipboard_files_with_self_trigger(paths: &[String]) -> Result<(), S
 
     let text = paths.join("\n");
     let marker = self_trigger_marker_for_text(&text);
+    let wide = OsStr::new(&text)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    // Allocate every buffer before touching the clipboard: once
+    // EmptyClipboard succeeds the user's previous contents are gone, so the
+    // primary payload's allocation must not be reachable after that point.
+    // The text/marker forms stay best-effort and may fail harmlessly later.
+    let drop_memory = allocate_global_bytes(&buffer)?;
+    let text_memory =
+        wide.len()
+            .checked_mul(std::mem::size_of::<u16>())
+            .and_then(|wide_byte_len| {
+                allocate_global_bytes(unsafe {
+                    std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len)
+                })
+                .ok()
+            });
+    let marker_memory = self_trigger_format_id().and_then(|format| {
+        allocate_global_bytes(&marker)
+            .ok()
+            .map(|memory| (format, memory))
+    });
 
     unsafe {
         if !open_clipboard_with_retry() {
+            GlobalFree(drop_memory);
+            if let Some(memory) = text_memory {
+                GlobalFree(memory);
+            }
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
             return Err("failed to open the system clipboard".to_owned());
         }
         let _clipboard_guard = ClipboardGuard;
 
         if EmptyClipboard() == 0 {
+            GlobalFree(drop_memory);
+            if let Some(memory) = text_memory {
+                GlobalFree(memory);
+            }
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
             return Err("failed to clear the system clipboard".to_owned());
         }
 
-        let drop_memory = allocate_global_bytes(&buffer)?;
         if SetClipboardData(CF_HDROP, drop_memory) == 0 {
             GlobalFree(drop_memory);
+            if let Some(memory) = text_memory {
+                GlobalFree(memory);
+            }
+            if let Some((_, memory)) = marker_memory {
+                GlobalFree(memory);
+            }
             return Err("failed to write files to the system clipboard".to_owned());
         }
 
-        let wide = OsStr::new(&text)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
         // The file list is the primary payload. Once CF_HDROP is in place
         // the user's previous clipboard contents are already gone, so a
         // failure in the text form must not abort with an error: the files
         // would still be pasteable while the caller reports failure. Treat
         // the text form as best-effort instead.
-        if let Some(wide_byte_len) = wide.len().checked_mul(std::mem::size_of::<u16>()) {
-            let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
-            if let Ok(text_memory) = allocate_global_bytes(wide_bytes) {
-                if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
-                    GlobalFree(text_memory);
-                }
+        if let Some(text_memory) = text_memory {
+            if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
+                GlobalFree(text_memory);
             }
         }
 
-        if let Some(format) = self_trigger_format_id() {
-            if let Ok(marker_memory) = allocate_global_bytes(&marker) {
-                if SetClipboardData(format, marker_memory) == 0 {
-                    GlobalFree(marker_memory);
-                }
+        if let Some((format, marker_memory)) = marker_memory {
+            if SetClipboardData(format, marker_memory) == 0 {
+                GlobalFree(marker_memory);
             }
         }
     }
@@ -2159,7 +2212,18 @@ mod tests {
             );
             GlobalUnlock(handle);
 
-            assert_ne!(OpenClipboard(0), 0, "OpenClipboard failed");
+            // The clipboard can be held open briefly by another process
+            // (including a running dev instance of this app), so retry the
+            // open like the production path does.
+            let mut opened = false;
+            for _ in 0..100 {
+                if OpenClipboard(0) != 0 {
+                    opened = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            assert!(opened, "OpenClipboard failed");
             EmptyClipboard();
             assert_ne!(
                 SetClipboardData(CF_HDROP, handle),
