@@ -73,7 +73,7 @@
 {#if showHeader}
   <header>
     <div>
-      <span class="eyebrow">{_t("appearanceSettings")}</span>
+      <span class="eyebrow">{_t("storage.appearanceSettings")}</span>
       <h2>{_t("storage.iconsTab")}</h2>
       <p>{_t("general.iconColorsDescription")}</p>
     </div>

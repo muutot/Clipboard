@@ -236,7 +236,7 @@
 {#if showHeader}
   <header>
     <div>
-      <span class="eyebrow">{_t("appearanceSettings")}</span>
+      <span class="eyebrow">{_t("storage.appearanceSettings")}</span>
       <h2>{_t("theme.title")}</h2>
       <p>{_t("theme.themeModeDescription")}</p>
     </div>
