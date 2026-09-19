@@ -20,6 +20,7 @@ struct MemoryStore {
     fail_checkpoint_cas: Mutex<bool>,
     drop_checkpoint_after_success: Mutex<bool>,
     list_without_etags: Mutex<bool>,
+    get_without_etags: Mutex<bool>,
     deleted: Mutex<Vec<String>>,
     gets: Mutex<Vec<String>>,
     lists: Mutex<Vec<String>>,
@@ -48,6 +49,7 @@ impl ObjectStore for MemoryStore {
 
     fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
         self.gets.lock().unwrap().push(key.to_string());
+        let etagless = key == CHECKPOINT_HEAD_KEY && *self.get_without_etags.lock().unwrap();
         Ok(self
             .objects
             .lock()
@@ -55,7 +57,7 @@ impl ObjectStore for MemoryStore {
             .get(key)
             .cloned()
             .map(|bytes| DownloadedObject {
-                etag: Some(format!("\"{}\"", hex::encode(Sha256::digest(&bytes)))),
+                etag: (!etagless).then(|| format!("\"{}\"", hex::encode(Sha256::digest(&bytes)))),
                 bytes,
             }))
     }
@@ -1199,6 +1201,62 @@ fn checkpoint_cas_loser_never_garbage_collects_history() {
         .lock()
         .unwrap()
         .contains_key(&protected_snapshot));
+
+    drop(database);
+    fs::remove_dir_all(paths.project).unwrap();
+}
+
+#[test]
+fn compaction_survives_stores_that_omit_etags() {
+    let store = MemoryStore::default();
+    let paths = temp_paths("checkpoint-no-etag");
+    let database = Database::open(&paths.database).unwrap();
+    database
+        .save_item(&text_item("initial", "initial"))
+        .unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let previous_checkpoint = database
+        .get_sync_checkpoint_state(REMOTE_SCOPE)
+        .unwrap()
+        .unwrap();
+    database.save_item(&text_item("later", "later")).unwrap();
+    sync_database(&store, &database, &paths, REMOTE_SCOPE, None, options()).unwrap();
+    let state = database
+        .get_or_create_sync_remote_state(REMOTE_SCOPE)
+        .unwrap();
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "DELETE FROM sync_checkpoint_cursors WHERE remote_scope = ?1",
+                [REMOTE_SCOPE],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    // Some S3-compatible stores omit ETag headers on GET responses; compaction
+    // must degrade to an unconditional put instead of failing the whole run.
+    *store.get_without_etags.lock().unwrap() = true;
+
+    let mut result = SyncEngineResult::default();
+    maybe_compact(
+        &store,
+        &database,
+        &paths,
+        REMOTE_SCOPE,
+        &database.get_sync_device_id().unwrap(),
+        &state,
+        None,
+        options().resource_limits,
+        &mut result,
+    )
+    .unwrap();
+
+    assert!(result.bytes_uploaded > 0);
+    let (generation, _) = database
+        .get_sync_checkpoint_state(REMOTE_SCOPE)
+        .unwrap()
+        .unwrap();
+    assert!(generation > previous_checkpoint.0);
 
     drop(database);
     fs::remove_dir_all(paths.project).unwrap();

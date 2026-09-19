@@ -841,7 +841,15 @@ fn maybe_compact(
     let encoded_head_size = encoded_head.stored_size_bytes();
     let expected_head_bytes = encoded_head.bytes;
     let condition = existing.as_ref().map_or(PutCondition::IfAbsent, |current| {
-        PutCondition::IfMatch(current.etag.clone())
+        // Stores that omit ETags (some S3-compatible gateways) cannot serve a
+        // compare-and-swap: fall back to an unconditional put instead of
+        // failing every compaction. The pointer is re-downloaded and verified
+        // right after (checkpoint_pointer_is_durable), so a clobbered write is
+        // detected rather than silently trusted.
+        current
+            .etag
+            .clone()
+            .map_or(PutCondition::Unconditional, PutCondition::IfMatch)
     });
     match store.put(CHECKPOINT_HEAD_KEY, expected_head_bytes.clone(), condition)? {
         PutOutcome::PreconditionFailed => return Ok(()),
@@ -983,7 +991,10 @@ fn prune_unreferenced_checkpoints(
 
 struct StoredCheckpointHead {
     head: CheckpointHead,
-    etag: String,
+    /// `None` when the store does not report ETags (some S3-compatible
+    /// gateways). Compaction then degrades to an unconditional put instead of
+    /// failing; see the put condition in `maybe_compact`.
+    etag: Option<String>,
 }
 
 fn read_checkpoint_head(
@@ -999,9 +1010,10 @@ fn read_checkpoint_head(
         downloaded.bytes.len() as u64,
         "downloaded byte count",
     )?;
-    let etag = downloaded
-        .etag
-        .ok_or_else(|| "checkpoint pointer response is missing an ETag".to_string())?;
+    // An absent ETag must not fail the run: several S3-compatible stores omit
+    // the header. Compaction degrades to an unconditional put (see
+    // maybe_compact) and re-verifies the pointer afterwards.
+    let etag = downloaded.etag;
     let head = decode_checkpoint_head(&downloaded.bytes, session_key)?;
     validate_checkpoint_head(&head)?;
     Ok(Some(StoredCheckpointHead { head, etag }))
