@@ -1088,7 +1088,12 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     // DIB width must be positive; a negative value would wrap when cast to
     // u32 and overflow the per-row math below.
     let width = u32::try_from(width).ok()?;
-    let height_abs = i32::from_le_bytes([dib[8], dib[9], dib[10], dib[11]]).unsigned_abs();
+    // A negative biHeight declares top-down rows; positive declares the
+    // classic bottom-up layout. Dropping the sign would flip every image
+    // produced by top-down sources.
+    let raw_height = i32::from_le_bytes([dib[8], dib[9], dib[10], dib[11]]);
+    let top_down = raw_height < 0;
+    let height_abs = raw_height.unsigned_abs();
     let bit_count = u16::from_le_bytes([dib[14], dib[15]]);
 
     let header_size = header_size as usize;
@@ -1114,12 +1119,12 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
 
     let img = match bit_count {
         32 => {
-            let rgba = bgra_to_rgba(pixel_data, width, height_abs);
+            let rgba = bgra_to_rgba(pixel_data, width, height_abs, top_down);
             let rgba = normalize_zero_alpha(rgba);
             image::RgbaImage::from_raw(width, height_abs, rgba)?
         }
         24 => {
-            let rgb = bgr_to_rgb(pixel_data, width, height_abs);
+            let rgb = bgr_to_rgb(pixel_data, width, height_abs, top_down);
             let mut buf = Vec::with_capacity(rgb.len());
             for chunk in rgb.as_chunks::<3>().0 {
                 buf.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
@@ -1154,10 +1159,12 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
 }
 
 #[cfg(target_os = "windows")]
-fn bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+fn bgra_to_rgba(data: &[u8], width: u32, height: u32, top_down: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len());
     let row_size = (width * 4) as usize;
-    for y in (0..height).rev() {
+    for index in 0..height {
+        // Bottom-up DIBs store rows reversed in memory; top-down DIBs do not.
+        let y = if top_down { index } else { height - 1 - index };
         let start = (y as usize) * row_size;
         let row = &data[start..start + row_size];
         for chunk in row.as_chunks::<4>().0 {
@@ -1168,10 +1175,12 @@ fn bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Vec<u8> {
 }
 
 #[cfg(target_os = "windows")]
-fn bgr_to_rgb(data: &[u8], width: u32, height: u32) -> Vec<u8> {
+fn bgr_to_rgb(data: &[u8], width: u32, height: u32, top_down: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len());
     let row_padded = (width * 3).div_ceil(4) * 4;
-    for y in (0..height).rev() {
+    for index in 0..height {
+        // Mirror `bgra_to_rgba`: only bottom-up DIBs read rows in reverse.
+        let y = if top_down { index } else { height - 1 - index };
         let start = (y as usize) * row_padded as usize;
         let row = &data[start..start + (width * 3) as usize];
         for chunk in row.as_chunks::<3>().0 {
@@ -1981,6 +1990,33 @@ mod tests {
         assert_eq!((width, height), (1, 1));
         let decoded = image::load_from_memory(&png).unwrap().to_rgba8();
         assert_eq!(decoded.get_pixel(0, 0).0[3], 255, "alpha must be opaque");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dib_to_png_respects_top_down_negative_bi_height() {
+        // A 1x2 BI_RGB 32-bpp DIB with negative biHeight: rows are stored
+        // top-down, so the first buffer row must become the first PNG row.
+        let mut header = [0u8; 40];
+        header[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+        header[4..8].copy_from_slice(&1i32.to_le_bytes()); // biWidth
+        header[8..12].copy_from_slice(&(-2i32).to_le_bytes()); // top-down
+        header[12..14].copy_from_slice(&1u16.to_le_bytes()); // biPlanes
+        header[14..16].copy_from_slice(&32u16.to_le_bytes()); // biBitCount
+        header[16..20].copy_from_slice(&0u32.to_le_bytes()); // BI_RGB
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&[0, 0, 255, 255]); // row 0: red
+        dib.extend_from_slice(&[255, 0, 0, 255]); // row 1: blue
+
+        let (png, width, height) = dib_to_png(&dib).expect("decodable DIB");
+        assert_eq!((width, height), (1, 2));
+        let decoded = image::load_from_memory(&png).unwrap().to_rgba8();
+        assert_eq!(decoded.get_pixel(0, 0).0, [255, 0, 0, 255], "first row red");
+        assert_eq!(
+            decoded.get_pixel(0, 1).0,
+            [0, 0, 255, 255],
+            "second row blue"
+        );
     }
 
     #[cfg(target_os = "windows")]
