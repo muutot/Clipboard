@@ -714,19 +714,15 @@
     }
   });
 
-  // After filteredItems changes, prune invalid selectedIds
+  // After filteredItems changes, prune invalid selectedIds. Rebuild the set
+  // in one pass: removing ids one at a time would re-trigger this effect
+  // once per invalid id and can exceed Svelte's effect update depth on
+  // large bulk selections.
   $effect(() => {
     const idSet = new Set(filteredItems.map((i) => i.id));
-    let changed = false;
-    for (const id of selectedIds) {
-      if (!idSet.has(id)) {
-        selectedIds = new Set([...selectedIds].filter((x) => x !== id));
-        changed = true;
-        break;
-      }
-    }
-    if (!changed && selectedIds.size > 0 && filteredItems.length === 0) {
-      selectedIds = new Set();
+    const pruned = new Set([...selectedIds].filter((id) => idSet.has(id)));
+    if (pruned.size !== selectedIds.size) {
+      selectedIds = pruned;
     }
   });
 
