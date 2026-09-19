@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { resolvePath } from "./index";
 import en from "./locales/en";
 import zhCN from "./locales/zh-CN";
 
@@ -55,6 +56,13 @@ function collectReferencedKeys(): Map<string, string[]> {
 describe("i18n locales", () => {
   it("keeps en and zh-CN key sets in sync", () => {
     expect(leafKeys(en).sort()).toEqual(leafKeys(zhCN).sort());
+  });
+
+  it("replaces every placeholder and ignores $ patterns in values", () => {
+    const source = { msg: "{title} x{title} y" };
+    // `$&` in a user-supplied value must be inserted literally, not expand
+    // to the matched placeholder, and every occurrence must be replaced.
+    expect(resolvePath(source, "msg", { title: "a$&b" })).toBe("a$&b xa$&b y");
   });
 
   it("resolves the labels that previously rendered as raw key paths", () => {

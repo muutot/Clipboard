@@ -74,7 +74,10 @@ export function resolvePath(
 
   if (params) {
     return Object.entries(params).reduce(
-      (result, [key, paramValue]) => result.replace(`{${key}}`, String(paramValue)),
+      // The function form prevents `$&`-style replacement patterns inside
+      // user-supplied values from being interpreted, and the global flag
+      // replaces every occurrence of the placeholder.
+      (result, [key, paramValue]) => result.replaceAll(`{${key}}`, () => String(paramValue)),
       value,
     );
   }
