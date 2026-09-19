@@ -99,7 +99,9 @@ struct DoubleModifierTracker {
     double_tap_interval_ms: u64,
     active_press: Option<Modifier>,
     press_interrupted: bool,
-    last_tap: Option<(Modifier, u64)>,
+    // Timestamps are raw GetTickCount() ticks (u32 milliseconds, wraps every
+    // ~49.7 days); wrapping subtraction keeps intervals across the wrap.
+    last_tap: Option<(Modifier, u32)>,
 }
 
 impl DoubleModifierTracker {
@@ -113,7 +115,7 @@ impl DoubleModifierTracker {
         }
     }
 
-    fn on_key_event(&mut self, virtual_key: u32, is_key_down: bool, timestamp_ms: u64) -> bool {
+    fn on_key_event(&mut self, virtual_key: u32, is_key_down: bool, timestamp_ms: u32) -> bool {
         let Some(modifier) = modifier_from_virtual_key(virtual_key) else {
             if is_key_down {
                 self.press_interrupted = self.active_press.is_some();
@@ -151,8 +153,8 @@ impl DoubleModifierTracker {
             .last_tap
             .is_some_and(|(previous_modifier, previous_timestamp)| {
                 previous_modifier == modifier
-                    && timestamp_ms >= previous_timestamp
-                    && timestamp_ms - previous_timestamp <= self.double_tap_interval_ms
+                    && u64::from(timestamp_ms.wrapping_sub(previous_timestamp))
+                        <= self.double_tap_interval_ms
             });
         if is_double_tap && self.registered.contains(&modifier) {
             self.last_tap = None;
@@ -481,7 +483,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: usize, lparam: i
                 .ok()
                 .and_then(|mut tracker| {
                     tracker.as_mut().map(|tracker| {
-                        tracker.on_key_event(event.virtual_key, is_key_down, u64::from(event.time))
+                        tracker.on_key_event(event.virtual_key, is_key_down, event.time)
                     })
                 })
                 .unwrap_or(false);
@@ -1158,6 +1160,27 @@ mod tests {
         assert!(!tracker.on_key_event(VK_SHIFT, false, 1_550));
         tracker.on_key_event(VK_SHIFT, true, 1_700);
         assert!(tracker.on_key_event(VK_SHIFT, false, 1_750));
+    }
+
+    #[test]
+    fn tracker_fires_when_the_tick_counter_wraps() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        assert!(!tracker.on_key_event(VK_SHIFT, true, u32::MAX - 250));
+        assert!(!tracker.on_key_event(VK_SHIFT, false, u32::MAX - 200));
+        assert!(!tracker.on_key_event(VK_SHIFT, true, u32::MAX - 50));
+        assert!(tracker.on_key_event(VK_SHIFT, false, 0));
+    }
+
+    #[test]
+    fn tracker_ignores_taps_outside_the_interval_across_the_wrap() {
+        let mut tracker = DoubleModifierTracker::new([Modifier::Shift]);
+
+        tracker.on_key_event(VK_SHIFT, true, u32::MAX - 250);
+        tracker.on_key_event(VK_SHIFT, false, u32::MAX - 200);
+        // One second after the wrapped first tap: outside the 300 ms window.
+        tracker.on_key_event(VK_SHIFT, true, 800);
+        assert!(!tracker.on_key_event(VK_SHIFT, false, 850));
     }
 
     #[test]
