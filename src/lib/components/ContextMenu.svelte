@@ -31,6 +31,7 @@
   let posY = $state(0);
 
   let activeSub = $state<string | null>(null);
+  let subOpenLeft = $state(false);
 
   function adjustPosition(width: number, height: number) {
     const vw = window.innerWidth;
@@ -47,6 +48,11 @@
   });
 
   function openSub(id: string) {
+    // The submenu opens to the right of the parent; flip it to the left
+    // when the menu sits so close to the right edge that the fixed-width
+    // submenu would render outside the viewport, unreachable.
+    const menuRect = menuEl?.getBoundingClientRect();
+    subOpenLeft = menuRect !== undefined && menuRect.right + 8 + 180 > window.innerWidth;
     activeSub = id;
   }
 
@@ -121,7 +127,7 @@
         <span class="menu-label">{item.label}</span>
         <span class="menu-chevron"><AppIcon name="chevron-right" size={13} /></span>
         {#if activeSub === item.id}
-          <div class="submenu" role="menu">
+          <div class="submenu" class:open-left={subOpenLeft} role="menu">
             {#each item.children as child}
               <button
                 type="button"
@@ -254,5 +260,10 @@
     padding: 4px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(12px);
+  }
+
+  .submenu.open-left {
+    left: auto;
+    right: calc(100% + 8px);
   }
 </style>
