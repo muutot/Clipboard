@@ -133,10 +133,14 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     return { type: "none", prevent: false };
   }
 
-  if (matchesAny(ctx.focusSearchBindings) && (!editableTarget || event.ctrlKey || event.metaKey)) {
+  if (
+    matchesAny(ctx.focusSearchBindings) &&
+    (!editableTarget || event.ctrlKey || event.metaKey || event.altKey)
+  ) {
     // Default chords are `/` (outside editables) and Ctrl/⌘+K (everywhere);
-    // a custom chord with modifiers keeps the Ctrl+K precedent, a bare one
-    // keeps the `/` precedent so typing is never hijacked.
+    // a custom chord with non-typing modifiers (Ctrl/⌘/Alt) keeps the Ctrl+K
+    // precedent, a bare one keeps the `/` precedent so typing is never
+    // hijacked. Shift stays excluded: Shift+key types characters.
     return { type: "focus-search", prevent: true };
   }
 

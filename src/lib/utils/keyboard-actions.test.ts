@@ -417,4 +417,14 @@ describe("resolveKeyAction — item shortcuts", () => {
     expect(resolveKeyAction(keyEvent({ key: "2", ctrlKey: true }), custom).type).toBe("none");
     expect(resolveKeyAction(keyEvent({ key: "/" }), custom).type).toBe("none");
   });
+
+  it("fires Alt-modified focus-search chords inside editable targets", () => {
+    const custom = ctx({ focusSearchBindings: ["Alt+P"] });
+    const editor = targetOn("div", { contenteditable: "true" });
+    const onEditor = Object.defineProperty(keyEvent({ key: "p", altKey: true }), "target", {
+      value: editor,
+    });
+    expect(resolveKeyAction(onEditor, custom).type).toBe("focus-search");
+    editor.remove();
+  });
 });
