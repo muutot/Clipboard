@@ -739,6 +739,8 @@ pub fn run() {
             check_ppocr_status,
             mark_self_triggered,
             mark_self_triggered_image,
+            unmark_self_triggered,
+            unmark_self_triggered_image,
             open_external_url,
             reveal_in_explorer,
             save_clipboard_item_file,

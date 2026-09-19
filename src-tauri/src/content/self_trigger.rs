@@ -72,6 +72,27 @@ impl SelfTriggerGuard {
         }
     }
 
+    /// Removes markers registered by [`SelfTriggerGuard::mark_clipboard_write`].
+    /// The frontend marks before writing; when the write itself fails the
+    /// marker must be dropped, otherwise an external copy of the same content
+    /// inside the suppression window would be silently swallowed.
+    pub fn unmark_clipboard_write(&mut self, text: &str) {
+        let hashes = compute_clipboard_write_hashes(text);
+        self.entries.retain(|entry| !hashes.contains(&entry.hash));
+    }
+
+    /// Removes markers registered by [`SelfTriggerGuard::mark_media_write`].
+    pub fn unmark_media_write(&mut self, kind: &str, data: &[u8]) {
+        let hashes = compute_media_write_hashes(kind, data);
+        self.entries.retain(|entry| !hashes.contains(&entry.hash));
+    }
+
+    /// Removes a single hash previously registered via
+    /// [`SelfTriggerGuard::mark_as_self_triggered`].
+    pub fn unmark(&mut self, content_hash: &str) {
+        self.entries.retain(|entry| entry.hash != content_hash);
+    }
+
     pub fn is_self_triggered(&mut self, content_hash: &str) -> bool {
         self.cleanup_expired();
         self.entries.iter().any(|entry| entry.hash == content_hash)
@@ -167,6 +188,20 @@ mod tests {
         assert!(guard.is_text_write_self_triggered("text", "https://example.com"));
         assert!(guard.is_text_write_self_triggered("link", "https://example.com"));
         assert!(!guard.is_text_write_self_triggered("text", "other text"));
+    }
+
+    #[test]
+    fn unmarking_a_failed_write_restores_external_capture() {
+        let mut guard = SelfTriggerGuard::new();
+        guard.mark_clipboard_write("https://example.com");
+        guard.unmark_clipboard_write("https://example.com");
+
+        assert!(!guard.is_text_write_self_triggered("text", "https://example.com"));
+        assert!(!guard.is_text_write_self_triggered("link", "https://example.com"));
+        // Unrelated markers survive.
+        guard.mark_clipboard_write("other");
+        guard.unmark_clipboard_write("unrelated");
+        assert!(guard.is_text_write_self_triggered("text", "other"));
     }
 
     #[test]

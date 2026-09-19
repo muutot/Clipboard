@@ -405,6 +405,50 @@ pub fn mark_self_triggered_image(
     )
 }
 
+#[tauri::command]
+/// Clears a text self-trigger marker after the clipboard write failed, so an
+/// external copy of the same content inside the suppression window is still
+/// captured instead of being silently swallowed.
+pub fn unmark_self_triggered(
+    self_trigger: tauri::State<'_, SelfTriggerState>,
+    text: String,
+) -> Result<(), String> {
+    self_trigger
+        .0
+        .lock()
+        .map_err(|_| "self-trigger lock poisoned".to_owned())?
+        .unmark_clipboard_write(&text);
+    Ok(())
+}
+
+#[tauri::command]
+/// Clears image self-trigger markers after the clipboard write failed.
+pub fn unmark_self_triggered_image(
+    self_trigger: tauri::State<'_, SelfTriggerState>,
+    resource_path: Option<String>,
+    content_hash: Option<String>,
+) -> Result<(), String> {
+    let mut guard = self_trigger
+        .0
+        .lock()
+        .map_err(|_| "self-trigger lock poisoned".to_owned())?;
+    if let Some(path) = resource_path
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+    {
+        if let Ok(data) = std::fs::read(path) {
+            guard.unmark_media_write("image", &data);
+        }
+    }
+    if let Some(content_hash) = content_hash
+        .as_deref()
+        .filter(|hash| !hash.trim().is_empty())
+    {
+        guard.unmark(content_hash);
+    }
+    Ok(())
+}
+
 /// Shared clipboard ingestion loop used by both the startup path in `lib.rs`
 /// and the `start_clipboard_monitoring` Tauri command. Handles all clipboard
 /// content kinds (text/html, image, files) so a monitor (re)started at runtime

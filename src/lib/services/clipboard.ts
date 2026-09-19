@@ -27,7 +27,20 @@ export async function writeClipboardText(text: string): Promise<void> {
       console.warn("Unable to register text self-trigger", error);
     }
   }
-  await navigator.clipboard.writeText(text);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    // The write failed; drop the pre-write marker so an external copy of the
+    // same text inside the suppression window is still captured.
+    if (isTauriRuntime()) {
+      try {
+        await invoke("unmark_self_triggered", { text });
+      } catch (unmarkError) {
+        console.warn("Unable to clear text self-trigger", unmarkError);
+      }
+    }
+    throw error;
+  }
 }
 
 export async function writeClipboardImage(
@@ -35,7 +48,8 @@ export async function writeClipboardImage(
   resourcePath?: string | null,
   contentHash?: string,
 ): Promise<void> {
-  if (isTauriRuntime() && (resourcePath || contentHash)) {
+  const shouldMark = isTauriRuntime() && Boolean(resourcePath || contentHash);
+  if (shouldMark) {
     try {
       await invoke("mark_self_triggered_image", {
         resourcePath: resourcePath ?? null,
@@ -46,7 +60,21 @@ export async function writeClipboardImage(
     }
   }
 
-  await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+  } catch (error) {
+    if (shouldMark) {
+      try {
+        await invoke("unmark_self_triggered_image", {
+          resourcePath: resourcePath ?? null,
+          contentHash: contentHash ?? null,
+        });
+      } catch (unmarkError) {
+        console.warn("Unable to clear image self-trigger", unmarkError);
+      }
+    }
+    throw error;
+  }
 }
 
 /** Copies the files behind an image/file record back to the system clipboard
@@ -61,7 +89,8 @@ export async function writeClipboardHtml(
   plainText?: string | null,
   rtf?: string | null,
 ): Promise<void> {
-  if (isTauriRuntime() && plainText) {
+  const shouldMark = isTauriRuntime() && Boolean(plainText);
+  if (shouldMark) {
     try {
       await invoke("mark_self_triggered", { text: plainText });
     } catch (error) {
@@ -78,7 +107,18 @@ export async function writeClipboardHtml(
   if (rtf) {
     payload["text/rtf"] = new Blob([rtf], { type: "text/rtf" });
   }
-  await navigator.clipboard.write([new ClipboardItem(payload)]);
+  try {
+    await navigator.clipboard.write([new ClipboardItem(payload)]);
+  } catch (error) {
+    if (shouldMark && plainText) {
+      try {
+        await invoke("unmark_self_triggered", { text: plainText });
+      } catch (unmarkError) {
+        console.warn("Unable to clear HTML self-trigger", unmarkError);
+      }
+    }
+    throw error;
+  }
 }
 
 export async function loadClipboardHistory(
@@ -299,7 +339,9 @@ export interface TextEditPatch {
 export function deriveTextEditPatch(item: ClipboardItem, content: string): TextEditPatch {
   const isText = item.kind === "text" || item.kind === "link";
   const newTitle = isText
-    ? (item.customTitle ? item.title : generatedClipboardTitle(content))
+    ? item.customTitle
+      ? item.title
+      : generatedClipboardTitle(content)
     : content;
   // Mirror the load-time preview rule in buildPreview so the card never shows
   // a preview that silently changes or disappears on the next reload: for
