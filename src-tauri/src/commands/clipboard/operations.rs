@@ -454,6 +454,14 @@ pub fn rename_item(
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
+    rename_item_record(&database, id, new_name)
+}
+
+fn rename_item_record(
+    database: &Database,
+    id: String,
+    new_name: String,
+) -> Result<ClipboardItem, String> {
     let items = database
         .get_items_by_ids(std::slice::from_ref(&id))
         .map_err(|e| e.to_string())?;
@@ -515,7 +523,14 @@ pub fn rename_item(
                     let new_path_string = new_path.to_string_lossy().to_string();
                     let rollback = updated.clone();
                     updated.resource_path = Some(new_path_string.clone());
-                    updated.preview_path = Some(new_path_string.clone());
+                    // preview_path either points at the dedicated thumbnail
+                    // under previews/ or falls back to the original image
+                    // path until the worker fills it in. Only refresh the
+                    // fallback; overwriting a generated thumbnail link would
+                    // lose it and orphan the preview file.
+                    if updated.preview_path.as_deref() == Some(old_path_string.as_str()) {
+                        updated.preview_path = Some(new_path_string.clone());
+                    }
                     // The detail panel and multi-file paste read the managed
                     // path out of `metadata_json`/`text_content` before
                     // `resource_path`, so those copies must move with the file.
@@ -529,9 +544,6 @@ pub fn rename_item(
                         })?;
                         return Err(format!("rename failed: {e}"));
                     }
-                } else {
-                    updated.resource_path = Some(new_path.to_string_lossy().to_string());
-                    updated.preview_path = Some(new_path.to_string_lossy().to_string());
                 }
             }
         }
@@ -640,8 +652,8 @@ fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path:
 mod tests {
     use super::{
         apply_sort_rules, cmp_by_field, generated_clipboard_title, metadata_custom_title,
-        record_item_usage, resolve_custom_title, rewrite_stored_resource_paths, sanitize_file_stem,
-        set_custom_title_metadata,
+        record_item_usage, rename_item_record, resolve_custom_title, rewrite_stored_resource_paths,
+        sanitize_file_stem, set_custom_title_metadata,
     };
     use crate::commands::clipboard::types::{
         SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
@@ -735,6 +747,63 @@ mod tests {
     #[test]
     fn trims_trailing_dots_and_spaces() {
         assert_eq!(sanitize_file_stem("name. "), "name");
+    }
+
+    #[test]
+    fn rename_keeps_generated_thumbnail_preview_path() {
+        let project = std::env::temp_dir().join(format!(
+            "clipboard-rename-preview-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let paths = crate::storage::StoragePaths::initialize(project.clone()).unwrap();
+        let database = Database::open(&paths.database).unwrap();
+
+        let images_dir = project.join("images");
+        std::fs::create_dir_all(&images_dir).unwrap();
+        let old_path = images_dir.join("old.png");
+        std::fs::write(&old_path, b"png").unwrap();
+
+        // A generated thumbnail (preview_path != resource_path) must survive
+        // the rename: overwriting it would drop the preview link and orphan
+        // the file under previews/.
+        let mut record = item("img-1", "old");
+        record.kind = ClipboardKind::Image;
+        record.resource_path = Some(old_path.display().to_string());
+        record.preview_path = Some("/store/previews/thumb.jpg".to_owned());
+        database.save_item(&record).unwrap();
+
+        let renamed = rename_item_record(&database, "img-1".to_owned(), "new".to_owned()).unwrap();
+        let new_path = images_dir.join("new.png");
+        assert_eq!(
+            renamed.resource_path.as_deref(),
+            Some(new_path.to_str().unwrap())
+        );
+        assert_eq!(
+            renamed.preview_path.as_deref(),
+            Some("/store/previews/thumb.jpg")
+        );
+        assert!(new_path.exists());
+        assert!(!old_path.exists());
+
+        // A fallback preview (thumbnail not yet generated) follows the file.
+        let mut fallback = item("img-2", "old2");
+        fallback.kind = ClipboardKind::Image;
+        let old2 = images_dir.join("old2.png");
+        std::fs::write(&old2, b"png").unwrap();
+        fallback.resource_path = Some(old2.display().to_string());
+        fallback.preview_path = fallback.resource_path.clone();
+        database.save_item(&fallback).unwrap();
+        let renamed2 =
+            rename_item_record(&database, "img-2".to_owned(), "new2".to_owned()).unwrap();
+        let new2 = images_dir.join("new2.png");
+        assert_eq!(
+            renamed2.preview_path.as_deref(),
+            Some(new2.to_str().unwrap())
+        );
+
+        drop(database);
+        std::fs::remove_dir_all(project).unwrap();
     }
 
     fn rule(field: SearchSortField, direction: SearchSortDirection) -> SearchSortRule {
