@@ -72,14 +72,15 @@ export function extractDates(text: string): string[] {
 }
 
 function findFirstDate(text: string): string | undefined {
-  const m1 = text.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
-  if (m1) {
-    const d = normalizeInlineDate(Number(m1[1]), Number(m1[2]), Number(m1[3]));
+  // Every format scans all of its matches and skips candidates that fail
+  // calendar validation: returning early on an invalid first candidate
+  // (e.g. 9999-99-99) would miss a valid date later in the text.
+  for (const m of text.matchAll(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g)) {
+    const d = normalizeInlineDate(Number(m[1]), Number(m[2]), Number(m[3]));
     if (d) return d;
   }
-  const m2 = text.match(/\b(\d{4})年(\d{1,2})月(\d{1,2})日/);
-  if (m2) {
-    const d = normalizeInlineDate(Number(m2[1]), Number(m2[2]), Number(m2[3]));
+  for (const m of text.matchAll(/\b(\d{4})年(\d{1,2})月(\d{1,2})日/g)) {
+    const d = normalizeInlineDate(Number(m[1]), Number(m[2]), Number(m[3]));
     if (d) return d;
   }
   const re = /\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/g;

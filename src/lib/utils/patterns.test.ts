@@ -36,4 +36,12 @@ describe("quickActionKind", () => {
     const dateAction = actions.find((entry) => entry.kind === "date");
     expect(dateAction?.payload).toBe("2024-06-15");
   });
+
+  it("keeps scanning y/m/d matches after an invalid one (firstOnly)", () => {
+    // 9999-99-99 matches the y/m/d shape but fails calendar validation;
+    // findFirstDate must continue to the valid 2024-05-01.
+    const actions = detectQuickActions("9999-99-99 and 2024-05-01", true);
+    const dateAction = actions.find((entry) => entry.kind === "date");
+    expect(dateAction?.payload).toBe("2024-05-01");
+  });
 });
