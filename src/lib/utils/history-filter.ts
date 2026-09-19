@@ -2,7 +2,13 @@
 // keyword rules (and their indexed-result bypass) can be tested in isolation.
 // The route only supplies state; this module never touches stores or IPC.
 
-import { parseDateQuery, startOfDay, endOfDay, startOfWeek } from "$lib/utils/date-query";
+import {
+  parseDateQuery,
+  shiftCalendarDays,
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+} from "$lib/utils/date-query";
 import type { ClipboardFilter, ClipboardItem, HistoryFilterArgs } from "$lib/types/clipboard";
 
 export type HistoryDateFilter = "all" | "today" | "yesterday" | "week" | "month";
@@ -16,13 +22,13 @@ export function resolveDateRange(
   filter: HistoryDateFilter | string,
   now = Date.now(),
 ): DateRange | null {
-  const dayMs = 24 * 60 * 60 * 1_000;
-
   switch (filter) {
     case "today":
       return { from: startOfDay(now), to: endOfDay(now) };
-    case "yesterday":
-      return { from: startOfDay(now - dayMs), to: endOfDay(now - dayMs) };
+    case "yesterday": {
+      const yesterday = shiftCalendarDays(now, -1);
+      return { from: startOfDay(yesterday), to: endOfDay(yesterday) };
+    }
     case "week":
       return { from: startOfWeek(now), to: endOfDay(now) };
     case "month": {

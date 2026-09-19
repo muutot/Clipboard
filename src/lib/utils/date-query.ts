@@ -3,7 +3,17 @@ export interface DateRange {
   to: number;
 }
 
-const dayMs = 24 * 60 * 60 * 1_000;
+/**
+ * Shifts a timestamp by whole calendar days. Calendar arithmetic (unlike
+ * subtracting `24h` epochs) is DST-safe: on the day after a spring-forward
+ * transition the local day is only 23 hours, so `now - 24h` lands on the
+ * wrong calendar day while this helper moves exactly one wall-clock day.
+ */
+export function shiftCalendarDays(ts: number, days: number): number {
+  const d = new Date(ts);
+  d.setDate(d.getDate() + days);
+  return d.getTime();
+}
 
 export function startOfDay(ts: number): number {
   const d = new Date(ts);
@@ -33,7 +43,10 @@ const patterns: Array<{ regex: RegExp; resolver: (now: number) => DateRange }> =
   },
   {
     regex: /^(昨天|yesterday)$/i,
-    resolver: (now) => ({ from: startOfDay(now - dayMs), to: endOfDay(now - dayMs) }),
+    resolver: (now) => {
+      const yesterday = shiftCalendarDays(now, -1);
+      return { from: startOfDay(yesterday), to: endOfDay(yesterday) };
+    },
   },
   {
     regex: /^(本周|this week|这周)$/i,
@@ -42,8 +55,8 @@ const patterns: Array<{ regex: RegExp; resolver: (now: number) => DateRange }> =
   {
     regex: /^(上周|last week)$/i,
     resolver: (now) => {
-      const lastWeekStart = startOfWeek(now - 7 * dayMs);
-      return { from: lastWeekStart, to: endOfDay(lastWeekStart + 6 * dayMs) };
+      const lastWeekStart = startOfWeek(shiftCalendarDays(now, -7));
+      return { from: lastWeekStart, to: endOfDay(shiftCalendarDays(lastWeekStart, 6)) };
     },
   },
   {
