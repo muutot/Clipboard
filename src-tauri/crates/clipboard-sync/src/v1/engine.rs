@@ -143,6 +143,16 @@ pub fn sync_database(
         )?;
     }
 
+    state = adopt_orphan_segments(
+        store,
+        database,
+        remote_scope,
+        &device_id,
+        state,
+        session_key,
+        &mut result,
+    )?;
+
     while let Some(batch) =
         database.get_sync_outbox_batch_for_scope(remote_scope, options.segment_max_entries)?
     {
@@ -1259,6 +1269,109 @@ fn publish_bootstrap(
         &head,
     );
     Ok(state)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn adopt_orphan_segments(
+    store: &impl ObjectStore,
+    database: &impl SyncRepository,
+    remote_scope: &str,
+    device_id: &str,
+    mut state: SyncRemoteState,
+    session_key: Option<&SessionKey>,
+    result: &mut SyncEngineResult,
+) -> Result<SyncRemoteState, String> {
+    if !state.initialized {
+        return Ok(state);
+    }
+    let prefix = segment_prefix(device_id, &state.epoch)?;
+    loop {
+        let listed = store.list(&prefix, None)?;
+        // A retry that encoded a longer segment than an earlier orphan leaves
+        // a partially overlapping leftover: once the shorter orphan is
+        // adopted, such an object can never continue the contiguous chain
+        // peers require, so remove it before looking for adoptable orphans.
+        for info in &listed {
+            let Ok(parsed) = parse_segment_key(&info.key) else {
+                continue;
+            };
+            if parsed.first_sequence <= state.published_sequence
+                && parsed.last_sequence > state.published_sequence
+            {
+                store.delete(&info.key)?;
+                result.deleted_remote_objects =
+                    checked_add(result.deleted_remote_objects, 1, "deleted object count")?;
+            }
+        }
+        let expected_first = state
+            .published_sequence
+            .checked_add(1)
+            .ok_or_else(|| "sync published sequence overflowed".to_string())?;
+        let candidate = listed
+            .iter()
+            .filter_map(|info| {
+                parse_segment_key(&info.key)
+                    .ok()
+                    .map(|parsed| (parsed, info.size_bytes))
+            })
+            .filter(|(parsed, _)| parsed.first_sequence == expected_first)
+            .min_by_key(|(parsed, _)| parsed.last_sequence);
+        let Some((candidate, stored_size)) = candidate else {
+            return Ok(state);
+        };
+        let key = segment_object_key(
+            device_id,
+            &state.epoch,
+            candidate.first_sequence,
+            candidate.last_sequence,
+            &candidate.sha256,
+        )?;
+        // The orphan was uploaded by an interrupted publish that never
+        // reached `publish_head`, so its mutations still match the outbox
+        // rows (those are only deleted by the commit below). Publishing the
+        // head for it and committing drains the outbox through the orphan
+        // instead of re-encoding a new overlapping segment.
+        let bytes = get_verified_object(store, &key, &candidate.sha256, stored_size, result)?;
+        let segment = decode_segment(&bytes, session_key)?;
+        if segment.device_id != device_id
+            || segment.epoch != state.epoch
+            || segment.first_sequence != expected_first
+            || segment.last_sequence != candidate.last_sequence
+            || segment.mutations.is_empty()
+        {
+            return Err(format!(
+                "orphan segment {key:?} does not match its key layout"
+            ));
+        }
+        let resource_refs = collect_mutation_resource_refs(&segment.mutations)?;
+        database.record_sync_resource_refs(remote_scope, &segment.mutations, &resource_refs)?;
+        result.uploaded_entries = checked_add(
+            result.uploaded_entries,
+            segment.mutations.len() as u64,
+            "uploaded entry count",
+        )?;
+        let mut next_state = state.clone();
+        next_state.published_sequence = segment.last_sequence;
+        next_state.last_segment_key = Some(key.clone());
+        next_state.updated_at_ms = current_time_ms();
+        let head = next_state.device_head(device_id)?;
+        let published_head = publish_head(store, &head, session_key, result)?;
+        state = database.commit_sync_segment_published(
+            remote_scope,
+            &state.epoch,
+            &key,
+            segment.last_sequence,
+        )?;
+        record_head_cache(
+            database,
+            remote_scope,
+            device_id,
+            None,
+            published_head.etag.as_deref(),
+            published_head.stored_size_bytes,
+            &head,
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
