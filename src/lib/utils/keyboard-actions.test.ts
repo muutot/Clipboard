@@ -44,6 +44,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     toggleFloatBindings: defaultShortcutsFor("toggleFloatPanel"),
     hideWindowBindings: defaultShortcutsFor("hideWindow"),
     quickPasteBindings: defaultShortcutsFor("quickPaste"),
+    clearSelectionBindings: defaultShortcutsFor("clearSelection"),
     itemBindings: {
       copyItem: defaultShortcutsFor("copyItem"),
       deleteItem: defaultShortcutsFor("deleteItem"),
@@ -309,6 +310,24 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
       type: "select-all",
       prevent: true,
     });
+  });
+
+  it("honors clearSelection rebinding and disabling from settings", () => {
+    // Empty bindings disable the action instead of keeping Backspace active.
+    expect(
+      resolveKeyAction(keyEvent({ key: "Backspace" }), ctx({ clearSelectionBindings: [] })).type,
+    ).toBe("none");
+    // A rebound chord fires on the new key and leaves the old one native.
+    expect(
+      resolveKeyAction(
+        keyEvent({ key: "x", altKey: true }),
+        ctx({ clearSelectionBindings: ["Alt+X"] }),
+      ).type,
+    ).toBe("clear-selection");
+    expect(
+      resolveKeyAction(keyEvent({ key: "Backspace" }), ctx({ clearSelectionBindings: ["Alt+X"] }))
+        .type,
+    ).toBe("none");
   });
 });
 

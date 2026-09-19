@@ -354,6 +354,16 @@
     resolveActionBindings(keyboardShortcuts, "quickPaste", defaultShortcutsFor("quickPaste")),
   );
 
+  // Clear-selection shortcut (canonical default Backspace, empty disables);
+  // must stay wired here so settings edits take effect in the main window.
+  const clearSelectionBindings = $derived(
+    resolveActionBindings(
+      keyboardShortcuts,
+      "clearSelection",
+      defaultShortcutsFor("clearSelection"),
+    ),
+  );
+
   // Hide-window shortcut; absent actions fall back to the canonical default
   // (Escape), empty disables hiding from the main window.
   const hideWindowBindings = $derived(
@@ -2422,6 +2432,7 @@
         toggleFloatBindings: floatPanelBindings,
         hideWindowBindings,
         quickPasteBindings,
+        clearSelectionBindings,
         itemBindings: itemShortcutBindings,
         quickCopyBindings: quickCopyShortcutBindings,
         focusSearchBindings: focusSearchShortcutBindings,

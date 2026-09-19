@@ -83,6 +83,10 @@ export interface KeyActionContext {
   hideWindowBindings: string[];
   /** Bindings for the quick-paste action (unbound by default). */
   quickPasteBindings: string[];
+  /** Bindings for the clear-selection action (canonical default Backspace,
+   * empty disables). Previously Backspace was hardcoded here, so rebinding
+   * or disabling clearSelection in settings silently did nothing. */
+  clearSelectionBindings: string[];
   /** Per-item action chords from conf/keyboard.json (absent falls back to the
    * canonical defaults, explicitly empty disables). Previously these actions
    * were hardcoded below, so rebinding them in settings silently did nothing. */
@@ -233,7 +237,7 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     return { type: "none", prevent: true };
   }
 
-  if (event.key === "Backspace") {
+  if (ctx.clearSelectionBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
     return { type: "clear-selection", prevent: false };
   }
 
