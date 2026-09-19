@@ -1100,7 +1100,44 @@ fn dib_to_png(dib: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     if header_size > dib.len() {
         return None;
     }
-    let pixel_data = &dib[header_size..];
+    // Only uncompressed layouts are decodable by the fixed BGRA/BGR readers
+    // below. BITFIELDS headers carry their channel masks around byte 40
+    // (inside V4+ headers, or appended right after a 40-byte info header);
+    // accept only the standard 32-bpp BGRA masks and reject everything else
+    // instead of decoding mask bytes as pixels.
+    const BI_RGB: u32 = 0;
+    const BI_BITFIELDS: u32 = 3;
+    const BI_ALPHABITFIELDS: u32 = 6;
+    const STANDARD_BGRA_MASKS: (u32, u32, u32) = (0x00FF_0000, 0x0000_FF00, 0x0000_00FF);
+    let compression = u32::from_le_bytes([dib[16], dib[17], dib[18], dib[19]]);
+    let mask_bytes: usize = match compression {
+        BI_RGB => 0,
+        BI_BITFIELDS => 12,
+        BI_ALPHABITFIELDS => 16,
+        _ => return None,
+    };
+    if mask_bytes > 0 {
+        if bit_count != 32 || dib.len() < 40 + mask_bytes {
+            return None;
+        }
+        let red = u32::from_le_bytes(dib[40..44].try_into().unwrap());
+        let green = u32::from_le_bytes(dib[44..48].try_into().unwrap());
+        let blue = u32::from_le_bytes(dib[48..52].try_into().unwrap());
+        if (red, green, blue) != STANDARD_BGRA_MASKS {
+            return None;
+        }
+        if compression == BI_ALPHABITFIELDS {
+            let alpha = u32::from_le_bytes(dib[52..56].try_into().unwrap());
+            if alpha != 0xFF00_0000 {
+                return None;
+            }
+        }
+    }
+    let pixel_start = header_size.max(40 + mask_bytes);
+    if pixel_start > dib.len() {
+        return None;
+    }
+    let pixel_data = &dib[pixel_start..];
 
     // A clipboard producer may declare a header whose claimed pixel payload is
     // larger than the actual allocation. Validate the exact byte count up front
@@ -2017,6 +2054,54 @@ mod tests {
             [0, 0, 255, 255],
             "second row blue"
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dib_to_png_skips_standard_bitfields_masks_after_info_header() {
+        // A 1x1 32-bpp BI_BITFIELDS DIB with a 40-byte info header: the 12
+        // mask bytes follow the header and must not be decoded as pixels.
+        let mut header = [0u8; 40];
+        header[0..4].copy_from_slice(&40u32.to_le_bytes()); // biSize
+        header[4..8].copy_from_slice(&1i32.to_le_bytes()); // biWidth
+        header[8..12].copy_from_slice(&1i32.to_le_bytes()); // biHeight
+        header[14..16].copy_from_slice(&32u16.to_le_bytes()); // biBitCount
+        header[16..20].copy_from_slice(&3u32.to_le_bytes()); // BI_BITFIELDS
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&0x00FF_0000u32.to_le_bytes()); // red mask
+        dib.extend_from_slice(&0x0000_FF00u32.to_le_bytes()); // green mask
+        dib.extend_from_slice(&0x0000_00FFu32.to_le_bytes()); // blue mask
+        dib.extend_from_slice(&[0x30, 0x20, 0x10, 0xFF]); // B, G, R, A
+
+        let (png, width, height) = dib_to_png(&dib).expect("decodable DIB");
+        assert_eq!((width, height), (1, 1));
+        let decoded = image::load_from_memory(&png).unwrap().to_rgba8();
+        assert_eq!(decoded.get_pixel(0, 0).0, [0x10, 0x20, 0x30, 0xFF]);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dib_to_png_rejects_nonstandard_or_compressed_dibs() {
+        let mut header = [0u8; 40];
+        header[0..4].copy_from_slice(&40u32.to_le_bytes());
+        header[4..8].copy_from_slice(&1i32.to_le_bytes());
+        header[8..12].copy_from_slice(&1i32.to_le_bytes());
+        header[14..16].copy_from_slice(&32u16.to_le_bytes());
+        // BI_JPEG (4): compressed payloads have no decodable pixel rows.
+        header[16..20].copy_from_slice(&4u32.to_le_bytes());
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&[0u8; 4]);
+        assert_eq!(dib_to_png(&dib), None);
+
+        // BI_BITFIELDS with a non-standard red mask cannot be decoded by the
+        // fixed BGRA reader.
+        header[16..20].copy_from_slice(&3u32.to_le_bytes());
+        let mut dib = header.to_vec();
+        dib.extend_from_slice(&0x0000_000Fu32.to_le_bytes()); // non-standard red
+        dib.extend_from_slice(&0x0000_FF00u32.to_le_bytes());
+        dib.extend_from_slice(&0x0000_00FFu32.to_le_bytes());
+        dib.extend_from_slice(&[0u8; 4]);
+        assert_eq!(dib_to_png(&dib), None);
     }
 
     #[cfg(target_os = "windows")]
