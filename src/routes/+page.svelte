@@ -2155,7 +2155,29 @@
     if (el instanceof HTMLElement) {
       el.scrollIntoView({ block: "nearest" });
       el.focus();
+      return;
     }
+
+    // Virtual scroll: the target row may live outside the rendered window,
+    // so there is no card element to scrollIntoView. Scroll the window so
+    // the row becomes visible, then focus it after Svelte renders it.
+    if (!useVirtualScroll || !historyListEl) return;
+    const start = virtualPositions[next] ?? 0;
+    const height = virtualHeights[next] ?? VIRTUAL_SCROLL_CONFIG.itemHeight;
+    const viewport = historyListEl.clientHeight;
+    const bottom = start + height;
+    const target =
+      start < historyListEl.scrollTop
+        ? start
+        : bottom > historyListEl.scrollTop + viewport
+          ? bottom - viewport
+          : historyListEl.scrollTop;
+    scrollTop = Math.max(0, Math.min(target, Math.max(0, virtualList.totalHeight - viewport)));
+    historyListEl.scrollTop = scrollTop;
+    void tick().then(() => {
+      const rendered = document.querySelector(`[data-id="${selectedId}"]`);
+      if (rendered instanceof HTMLElement) rendered.focus();
+    });
   }
 
   function clearHistory() {
