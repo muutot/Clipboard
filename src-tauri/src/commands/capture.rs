@@ -40,6 +40,35 @@ pub fn foreground_app_name(app: &platform::ForegroundApp) -> Option<String> {
     }
 }
 
+/// Normalizes a platform clipboard image payload into encoded PNG bytes.
+///
+/// The Windows adapter re-encodes DIB data to PNG, but the Linux and macOS
+/// adapters hand back raw RGBA pixel buffers (exactly width × height × 4
+/// bytes). Persisting raw pixels verbatim as `{hash}.png` produces files no
+/// image decoder can open, which silently breaks previews, thumbnails, OCR,
+/// and re-copy on every non-Windows platform. Raw-shaped buffers are
+/// re-encoded here; any other payload is returned unchanged so malformed
+/// captures keep their deterministic byte-hash identity.
+pub fn normalize_platform_image_to_png(data: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
+    let expected = width as usize * height as usize * 4;
+    if expected == 0 || data.len() != expected {
+        return data;
+    }
+    let Some(frame) = image::RgbaImage::from_raw(width, height, data) else {
+        // Unreachable: the byte count was validated above.
+        return Vec::new();
+    };
+    let mut png = Vec::new();
+    if image::DynamicImage::ImageRgba8(frame)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .is_err()
+    {
+        // Unreachable for an in-memory RGBA buffer.
+        return Vec::new();
+    }
+    png
+}
+
 /// True when `content_hash` matches one of this app's recent clipboard writes.
 pub fn should_skip_self_triggered_hash(
     guard: &mut content::self_trigger::SelfTriggerGuard,
@@ -484,6 +513,14 @@ pub(crate) fn run_capture_loop(
                     if stop_flag.load(Ordering::SeqCst) {
                         break;
                     }
+                    // Linux/macOS adapters return raw RGBA pixels; re-encode
+                    // them here so the persisted `{hash}.png` is decodable.
+                    let img = normalize_platform_image_to_png(img, img_width, img_height);
+                    if img.is_empty() {
+                        // Never persist a dangling resource (see the write
+                        // path below): normalization produced nothing usable.
+                        continue;
+                    }
                     // One pass computes the raw + normalized hashes and checks
                     // them against recent self-writes; the raw hash doubles as
                     // the stored identity, avoiding a second SHA-256 of the
@@ -829,9 +866,10 @@ pub(crate) fn run_capture_loop(
 #[cfg(test)]
 mod tests {
     use super::{
-        captured_file_metadata, foreground_app_name, register_image_self_trigger,
-        should_skip_self_triggered_hash, should_skip_self_triggered_text,
-        store_captured_file_references, CapturedFileReference, RESOURCE_METADATA_SCHEMA_VERSION,
+        captured_file_metadata, foreground_app_name, normalize_platform_image_to_png,
+        register_image_self_trigger, should_skip_self_triggered_hash,
+        should_skip_self_triggered_text, store_captured_file_references, CapturedFileReference,
+        RESOURCE_METADATA_SCHEMA_VERSION,
     };
     use crate::content::self_trigger::SelfTriggerGuard;
     use crate::domain::ClipboardKind;
@@ -878,6 +916,42 @@ mod tests {
             exe_path: " ".to_owned(),
         };
         assert_eq!(foreground_app_name(&blank), None);
+    }
+
+    #[test]
+    fn normalize_platform_image_reencodes_raw_rgba_buffers() {
+        // 2x2 opaque red pixels — the exact shape the Linux/macOS adapters
+        // return (`rgba.into_raw()`).
+        let raw = vec![
+            255u8, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
+        ];
+        let png = normalize_platform_image_to_png(raw.clone(), 2, 2);
+        assert_ne!(png, raw, "raw pixels must be re-encoded");
+        let decoded = image::load_from_memory(&png).expect("normalized payload must decode");
+        assert_eq!((decoded.width(), decoded.height()), (2, 2));
+        assert_eq!(decoded.to_rgba8().into_raw(), raw);
+    }
+
+    #[test]
+    fn normalize_platform_image_keeps_encoded_and_malformed_payloads() {
+        // An already-encoded PNG (the Windows adapter shape) passes through
+        // untouched even when dimensions are provided.
+        let image = image::RgbaImage::from_pixel(3, 2, image::Rgba([10, 20, 30, 255]));
+        let mut encoded = Vec::new();
+        image
+            .write_to(
+                &mut std::io::Cursor::new(&mut encoded),
+                image::ImageFormat::Png,
+            )
+            .expect("encode fixture");
+        let passthrough =
+            normalize_platform_image_to_png(encoded.clone(), image.width(), image.height());
+        assert_eq!(passthrough, encoded);
+
+        // Empty payloads and length/dimension mismatches are not reinterpreted.
+        assert!(normalize_platform_image_to_png(Vec::new(), 2, 2).is_empty());
+        let short = vec![0u8; 4];
+        assert_eq!(normalize_platform_image_to_png(short.clone(), 2, 2), short);
     }
 
     #[test]
