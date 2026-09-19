@@ -61,7 +61,7 @@ Do not silently return `null` from a new wrapper unless the caller can distingui
 | `paths.ts`              | writable `iconsDir` used to resolve source icon keys                                    |
 | `settings-bootstrap.ts` | applies font/theme variables to `document.documentElement`                              |
 
-`settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping.
+`settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping. Long-lived windows that outlive the settings window (settings page, float panel) subscribe to `generalSettings` and re-apply it to the document on remote changes; the root layout only bootstraps once at load.
 
 ## Main route state boundaries
 

@@ -18,10 +18,17 @@
     persistFavorite,
   } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
+  import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
   import type { ClipboardItem, FloatPanelClickAction } from "$lib/types/clipboard";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
+
+  // The layout bootstraps theme/font styles once at load, but this webview
+  // outlives the settings window: remote changes arrive through the store
+  // (Tauri event or localStorage sync) and must be re-applied to the
+  // document live, exactly like the settings page does.
+  $effect(() => generalSettings.subscribe((v) => applyGeneralSettingsToDocument(v)));
 
   type FloatFilter = "all" | "favorite";
 
