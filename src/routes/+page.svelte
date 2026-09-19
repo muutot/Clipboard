@@ -2115,10 +2115,14 @@
         detailItem = previous.detailItem;
       }
 
-      if (successfulSoft.size > 0 || successfulPermanent.size > 0) {
+      // The snapshot rebuild above mirrors backend success, but any items
+      // that arrived via clipboard events during the async window are absent
+      // from the snapshot. Failed (and partially failed) batches skip the
+      // success-path invalidations, so resync from the backend explicitly.
+      if (successfulSoft.size > 0 || successfulPermanent.size > 0 || failedIds.size > 0) {
         invalidateDeletedHistoryPagination();
       }
-      if (successfulSoft.size > 0 || successfulHard.size > 0) {
+      if (successfulSoft.size > 0 || successfulHard.size > 0 || failedIds.size > 0) {
         invalidateActiveHistoryPagination();
       }
       if (failedIds.size > 0) {
