@@ -1,8 +1,14 @@
-use std::{ffi::OsStr, fs, io::Read, path::Path};
+use std::{
+    ffi::OsStr,
+    fs,
+    io::Read,
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use sha2::{Digest, Sha256};
 
-use crate::storage::StorageError;
+use crate::storage::{replace_file, StorageError};
 
 use super::resource_metadata::{
     created_at_ms, extension_for_path, mime_type_for_path, mime_type_from_bytes, modified_at_ms,
@@ -62,7 +68,9 @@ impl FileStore {
         }
 
         if !storage_path.exists() {
-            fs::copy(source_path, &storage_path)?;
+            store_atomically(&storage_path, |temporary| {
+                fs::copy(source_path, temporary).map(|_| ())
+            })?;
         }
 
         Ok(FileStorageInfo {
@@ -115,7 +123,7 @@ impl FileStore {
         let storage_path = screenshot_storage_dir.join(format!("{}.{}", content_hash, ext));
 
         if !storage_path.exists() {
-            fs::write(&storage_path, data)?;
+            store_atomically(&storage_path, |temporary| fs::write(temporary, data))?;
         }
 
         Ok(FileStorageInfo {
@@ -169,6 +177,37 @@ fn hash_file(path: &Path) -> Result<String, StorageError> {
         hasher.update(&buffer[..bytes_read]);
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Populates `target` through a process-unique temporary file in the same
+/// directory followed by an atomic replacement. Storage paths are
+/// content-addressed and `save_file`/`save_screenshot` skip writing when the
+/// target already exists, so a plain in-place write that is interrupted by a
+/// crash would leave a truncated file that is never repaired.
+fn store_atomically(
+    target: &Path,
+    populate: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), StorageError> {
+    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temporary_name = format!(
+        ".{}.tmp-{}-{}",
+        target
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "clipboard-resource".to_owned()),
+        std::process::id(),
+        sequence,
+    );
+    let temporary = target.with_file_name(temporary_name);
+
+    populate(&temporary)?;
+    if let Err(error) = replace_file(&temporary, target) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -299,6 +338,44 @@ mod tests {
 
         assert_eq!(info1.content_hash, info2.content_hash);
         assert_eq!(info1.storage_path, info2.storage_path);
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn atomic_store_leaves_no_temporary_files_behind() {
+        let temp = std::env::temp_dir().join(format!(
+            "clipboard-atomic-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp).unwrap();
+
+        let target = temp.join("resource.png");
+        store_atomically(&target, |temporary| fs::write(temporary, b"payload")).unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"payload");
+        let leftovers: Vec<_> = fs::read_dir(&temp)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(".tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
+
+        // A failing populate must not leave the temporary file behind either.
+        let failing = temp.join("failing.png");
+        let result = store_atomically(&failing, |_| Err(std::io::Error::other("populate failed")));
+        assert!(result.is_err());
+        assert!(!failing.exists());
+        let leftovers: Vec<_> = fs::read_dir(&temp)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(".tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
 
         let _ = fs::remove_dir_all(&temp);
     }
