@@ -26,7 +26,6 @@ export type KeyAction =
   | { type: "set-filter"; filterId: string; focusTab: boolean; prevent: boolean }
   | { type: "move-selection"; delta: 1 | -1; prevent: boolean }
   | { type: "cycle-filter"; delta: 1 | -1; prevent: boolean }
-  | { type: "activate-selected"; prevent: boolean }
   | { type: "open-detail"; id: string; prevent: boolean }
   | { type: "clear-selection"; prevent: boolean }
   | { type: "select-all"; prevent: boolean }
@@ -228,7 +227,16 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     if (editableTarget || isActivatableKeyboardTarget(event.target)) {
       return { type: "none", prevent: false };
     }
-    return { type: "activate-selected", prevent: true };
+    // Enter activates through the copyItem binding (the default config binds
+    // Enter to copyItem): removing that chord in settings now disables the
+    // behavior instead of being silently ignored, and multi-selections take
+    // the copyItem bulk semantics instead of copying only the anchor item.
+    if (!matchesAny(ctx.itemBindings.copyItem)) {
+      return { type: "none", prevent: false };
+    }
+    if (ctx.selectedCount > 0) return { type: "bulk-copy", prevent: true };
+    if (!ctx.selectedId) return { type: "none", prevent: false };
+    return { type: "copy-item", id: ctx.selectedId, prevent: true };
   }
 
   if (event.key === " ") {

@@ -2345,9 +2345,6 @@
         focusActiveFilterTab();
         break;
       }
-      case "activate-selected":
-        activateSelected();
-        break;
       case "open-detail":
         openDetail(action.id);
         break;

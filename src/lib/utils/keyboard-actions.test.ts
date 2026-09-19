@@ -260,10 +260,10 @@ describe("resolveKeyAction — filters and movement", () => {
 });
 
 describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
-  it("activates selection from plain surfaces only", () => {
+  it("activates the copyItem binding from plain surfaces only", () => {
     const div = targetOn("div");
     const onDiv = Object.defineProperty(keyEvent({ key: "Enter" }), "target", { value: div });
-    expect(resolveKeyAction(onDiv, ctx()).type).toBe("activate-selected");
+    expect(resolveKeyAction(onDiv, ctx()).type).toBe("copy-item");
     const button = targetOn("button");
     const onButton = Object.defineProperty(keyEvent({ key: "Enter" }), "target", {
       value: button,
@@ -273,10 +273,24 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
     const onOption = Object.defineProperty(keyEvent({ key: "Enter" }), "target", {
       value: option,
     });
-    expect(resolveKeyAction(onOption, ctx()).type).toBe("activate-selected");
+    expect(resolveKeyAction(onOption, ctx()).type).toBe("copy-item");
     div.remove();
     button.remove();
     option.remove();
+  });
+
+  it("routes Enter through the copyItem semantics (disable and bulk)", () => {
+    // Removing the Enter chord from copyItem in settings disables Enter.
+    const disabled = ctx();
+    disabled.itemBindings = { ...disabled.itemBindings, copyItem: ["Ctrl+C"] };
+    expect(resolveKeyAction(keyEvent({ key: "Enter" }), disabled).type).toBe("none");
+    // With a multi-selection Enter follows the copyItem bulk semantics
+    // instead of copying only the anchor item.
+    expect(resolveKeyAction(keyEvent({ key: "Enter" }), ctx({ selectedCount: 2 })).type).toBe(
+      "bulk-copy",
+    );
+    // No selection: Enter stays inert instead of copying a healed entry.
+    expect(resolveKeyAction(keyEvent({ key: "Enter" }), ctx({ selectedId: "" })).type).toBe("none");
   });
 
   it("opens detail on Space, preventing default even without a selection", () => {
