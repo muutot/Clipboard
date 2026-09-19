@@ -44,4 +44,23 @@ describe("quickActionKind", () => {
     const dateAction = actions.find((entry) => entry.kind === "date");
     expect(dateAction?.payload).toBe("2024-05-01");
   });
+
+  it("strips trailing sentence punctuation from URLs (firstOnly)", () => {
+    // Sentence punctuation glued to the address is not part of it, in both
+    // half-width and full-width (CJK) forms.
+    for (const [text, expected] of [
+      ["visit https://example.com/a, thanks", "https://example.com/a"],
+      ["visit https://example.com/a. done", "https://example.com/a"],
+      ["visit https://example.com/a。好的", "https://example.com/a"],
+      ["visit（https://example.com/a）好吗", "https://example.com/a"],
+    ] as const) {
+      const actions = detectQuickActions(text, true);
+      const urlAction = actions.find((entry) => entry.kind === "url");
+      expect(urlAction?.payload).toBe(expected);
+    }
+    // Legitimate trailing path punctuation survives: dots inside the URL
+    // body (e.g. file extensions) are not touched.
+    const keep = detectQuickActions("open https://example.com/a.b.c", true);
+    expect(keep.find((entry) => entry.kind === "url")?.payload).toBe("https://example.com/a.b.c");
+  });
 });

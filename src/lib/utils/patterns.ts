@@ -1,16 +1,25 @@
 import type { QuickAction } from "$lib/services/clipboard";
 
 export const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-export const URL_RE = /https?:\/\/[^\s)]+/g;
+export const URL_RE = /https?:\/\/[^\s)\u3000-\u303F\uFF00-\uFFEF]+/g;
 export const PHONE_RE = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g;
 export const COLOR_RE = /#(?:[0-9a-fA-F]{3}){1,2}\b/g;
+
+/** ASCII sentence punctuation commonly glued to a copied URL; it ends the
+ * sentence, not the address. Full-width/CJK punctuation never appears bare
+ * in a valid URL, so URL_RE itself stops there. */
+const URL_TRAILING_PUNCT = /[.,;:!?"'»…]+$/;
+
+function normalizeUrl(raw: string): string {
+  return raw.replace(URL_TRAILING_PUNCT, "");
+}
 
 export function extractEmails(text: string): string[] {
   return [...new Set(text.match(EMAIL_RE) ?? [])];
 }
 
 export function extractUrls(text: string): string[] {
-  return [...new Set(text.match(URL_RE) ?? [])];
+  return [...new Set((text.match(URL_RE) ?? []).map(normalizeUrl))];
 }
 
 export function extractPhones(text: string): string[] {
@@ -122,9 +131,16 @@ export function detectQuickActions(text: string, firstOnly?: boolean): QuickActi
         kind: "phone",
       });
 
-    const url = text.match(/https?:\/\/[^\s)]+/);
-    if (url)
-      actions.push({ label: `Open ${url[0]}`, actionType: "open", payload: url[0], kind: "url" });
+    const url = text.match(URL_RE)?.[0];
+    if (url) {
+      const normalized = normalizeUrl(url);
+      actions.push({
+        label: `Open ${normalized}`,
+        actionType: "open",
+        payload: normalized,
+        kind: "url",
+      });
+    }
 
     const color = text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/);
     if (color)
