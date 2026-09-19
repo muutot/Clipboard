@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildPositions,
@@ -6,6 +6,7 @@ import {
   editHeight,
   estimateTextLines,
   itemHeight,
+  measureVisualLines,
   trimTrailingBlankLines,
 } from "./virtual-scroll";
 
@@ -153,5 +154,42 @@ describe("createVirtualList", () => {
     const indexes = result.visibleItems.map((entry) => entry.index);
     expect(Math.min(...indexes)).toBeGreaterThan(0);
     expect(Math.max(...indexes)).toBeLessThan(99);
+  });
+});
+
+describe("measureVisualLines", () => {
+  const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+  afterEach(() => {
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+  });
+
+  function stubMeasureContext(charWidth: number) {
+    const fake = {
+      measureText: (text: string) => ({ width: text.length * charWidth }),
+    };
+    HTMLCanvasElement.prototype.getContext = vi
+      .fn()
+      .mockReturnValue(fake) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  }
+
+  it("counts each extra visual line of a wider-than-line token", () => {
+    // 10px per character, 100px lines: the long token spans 4 lines and the
+    // leading word shares the first line, so 5 lines total. The old estimate
+    // counted the token as one line.
+    stubMeasureContext(10);
+    const text = `short ${"x".repeat(35)}`;
+    expect(measureVisualLines(text, 10, 100, 12)).toBe(5);
+  });
+
+  it("still counts ordinary word wrapping one line at a time", () => {
+    stubMeasureContext(10);
+    // 12 chars = 120px wide paragraph over a 100px line -> 2 lines.
+    expect(measureVisualLines("aaa bbbbbbbb", 10, 100, 12)).toBe(2);
+  });
+
+  it("clamps the result to the line limit", () => {
+    stubMeasureContext(10);
+    expect(measureVisualLines("x".repeat(80), 10, 100, 3)).toBe(3);
   });
 });

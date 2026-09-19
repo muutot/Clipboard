@@ -189,6 +189,16 @@ export function measureVisualLines(
 
       for (const word of words) {
         const wordWidth = ctx.measureText(word).width;
+        if (wordWidth > maxWidth) {
+          // overflow-wrap: anywhere breaks a token wider than the line into
+          // multiple visual lines; counting it as one would underestimate
+          // the card height until the ResizeObserver corrects it.
+          if (lineWidth > 0) paraLines += 1;
+          paraLines += Math.ceil(wordWidth / maxWidth) - 1;
+          lineWidth = 0;
+          if (totalLines + paraLines > limit) break;
+          continue;
+        }
         if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
           paraLines += 1;
           if (totalLines + paraLines > limit) break;
