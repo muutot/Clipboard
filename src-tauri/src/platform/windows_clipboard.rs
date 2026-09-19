@@ -527,15 +527,18 @@ pub fn write_clipboard_files_with_self_trigger(paths: &[String]) -> Result<(), S
             .encode_wide()
             .chain(std::iter::once(0))
             .collect::<Vec<_>>();
-        let wide_byte_len = wide
-            .len()
-            .checked_mul(std::mem::size_of::<u16>())
-            .ok_or_else(|| "clipboard text is too large".to_owned())?;
-        let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
-        let text_memory = allocate_global_bytes(wide_bytes)?;
-        if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
-            GlobalFree(text_memory);
-            return Err("failed to write text to the system clipboard".to_owned());
+        // The file list is the primary payload. Once CF_HDROP is in place
+        // the user's previous clipboard contents are already gone, so a
+        // failure in the text form must not abort with an error: the files
+        // would still be pasteable while the caller reports failure. Treat
+        // the text form as best-effort instead.
+        if let Some(wide_byte_len) = wide.len().checked_mul(std::mem::size_of::<u16>()) {
+            let wide_bytes = std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len);
+            if let Ok(text_memory) = allocate_global_bytes(wide_bytes) {
+                if SetClipboardData(CF_UNICODETEXT, text_memory) == 0 {
+                    GlobalFree(text_memory);
+                }
+            }
         }
 
         if let Some(format) = self_trigger_format_id() {
