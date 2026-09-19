@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { detectQuickActions, quickActionKind } from "./patterns";
+import { COLOR_RE, detectQuickActions, extractColors, quickActionKind } from "./patterns";
 import type { QuickAction } from "$lib/services/clipboard";
 
 function action(overrides: Partial<QuickAction> & { payload: string }): QuickAction {
   return { label: "action", actionType: "open", ...overrides };
 }
+
+describe("COLOR_RE", () => {
+  it("matches shorthand, 6-digit, and 8-digit HEX colors", () => {
+    expect(extractColors("#f00 accent #ff0000 bold #ff000080 alpha")).toEqual([
+      "#f00",
+      "#ff0000",
+      "#ff000080",
+    ]);
+    // A 7-digit run is not a color and must not be truncated into one.
+    expect([..."#abcdefg".matchAll(COLOR_RE)]).toEqual([]);
+  });
+});
 
 describe("quickActionKind", () => {
   it("prefers the backend-provided kind", () => {

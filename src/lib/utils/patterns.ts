@@ -3,7 +3,10 @@ import type { QuickAction } from "$lib/services/clipboard";
 export const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 export const URL_RE = /https?:\/\/[^\s)\u3000-\u303F\uFF00-\uFFEF]+/g;
 export const PHONE_RE = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4,}/g;
-export const COLOR_RE = /#(?:[0-9a-fA-F]{3}){1,2}\b/g;
+/** HEX colors: 3/4-digit shorthand plus 6/8-digit #RRGGBB[AA] forms, matching
+ * the quickActionKind fallback classifier in this file. Alternation is
+ * longest-first so 8-digit values are not truncated to 6 by the boundary. */
+export const COLOR_RE = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/g;
 
 /** ASCII sentence punctuation commonly glued to a copied URL; it ends the
  * sentence, not the address. Full-width/CJK punctuation never appears bare
