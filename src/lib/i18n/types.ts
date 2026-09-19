@@ -133,6 +133,7 @@ export interface LocaleDefinition {
     syncNow: string;
     syncing: string;
     syncRunFailed: string;
+    syncSaveFailed: string;
     syncRunPartial: string;
     syncNoChanges: string;
     syncRunSummary: string;

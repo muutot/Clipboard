@@ -142,6 +142,7 @@ const en: LocaleDefinition = {
     syncNow: "Sync Now",
     syncing: "Syncing...",
     syncRunFailed: "Sync failed",
+    syncSaveFailed: "Failed to save sync configuration",
     syncRunPartial:
       "Sync partially completed: {failed} peer(s) failed; {uploaded} uploaded, {downloaded} downloaded, {applied} applied",
     syncNoChanges: "No changes to sync",

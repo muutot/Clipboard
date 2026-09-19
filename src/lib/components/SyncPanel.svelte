@@ -96,8 +96,18 @@
     }
   }
 
+  function clampSyncNumber(value: number, min: number, max: number, fallback: number): number {
+    // HTML min/max attributes never block typed values; normalize here so
+    // the inputs show the value that is actually persisted. The backend
+    // setters clamp again as the authoritative guard.
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(value)));
+  }
+
   async function persistSyncConfig() {
     if (!isTauriRuntime()) return;
+    syncAutoInterval = clampSyncNumber(syncAutoInterval, 10, 86_400, 300);
+    syncSegmentMaxEntries = clampSyncNumber(syncSegmentMaxEntries, 16, 10_000, 512);
     await setSyncConfig({
       provider: syncProvider,
       endpoint: syncEndpoint || null,
@@ -123,7 +133,10 @@
     try {
       await persistSyncConfig();
     } catch (e) {
+      // A silent failure would leave the panel claiming values the backend
+      // never stored; surface it through the shared settings feedback.
       console.error("Failed to save sync config", e);
+      onfeedback(_t("storage.syncSaveFailed"), false);
     }
   }
 

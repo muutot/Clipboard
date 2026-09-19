@@ -133,6 +133,7 @@ const zhCN: LocaleDefinition = {
     syncNow: "立即同步",
     syncing: "同步中…",
     syncRunFailed: "同步失败",
+    syncSaveFailed: "保存同步配置失败",
     syncRunPartial:
       "同步部分完成：{failed} 台设备失败；上传 {uploaded} 条，下载 {downloaded} 条，应用 {applied} 条",
     syncNoChanges: "没有需要同步的变更",
