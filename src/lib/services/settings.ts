@@ -723,7 +723,12 @@ function createSettingsStore() {
       if (event.key !== STORAGE_KEY || !event.newValue) return;
       try {
         applyingExternalValue = true;
-        store.set(normalizeGeneralSettings(JSON.parse(event.newValue), get(store)));
+        const normalized = normalizeGeneralSettings(JSON.parse(event.newValue), get(store));
+        store.set(normalized);
+        // The language lives in the same settings object: without syncing the
+        // locale store here, another tab's language change would leave this
+        // tab rendering in the previous locale.
+        setLocale(normalized.language);
       } catch {
         // Ignore malformed values from another browser tab.
       } finally {
@@ -758,6 +763,13 @@ function createSettingsStore() {
             const normalized = normalizeGeneralSettings(saved, get(store));
             store.set(normalized);
             setLocale(normalized.language);
+            // The backend now holds the canonical value for every key that
+            // was dirty when this snapshot was taken. Keeping the flags would
+            // make stale local values shadow later remote changes forever
+            // (applyDirtySettings would keep overriding them on hydration).
+            // Keys dirtied while this write was in flight re-populate the set
+            // and stay pending until their own write succeeds.
+            dirtyKeys.clear();
             if (legacyMigrationPending) {
               removeStorage(STORAGE_KEY);
               removeStorage(LOCALE_STORAGE_KEY);
