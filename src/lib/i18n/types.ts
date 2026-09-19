@@ -1015,6 +1015,18 @@ export interface LocaleDefinition {
     detail: string;
     delete: string;
   };
+  settingsSearch: {
+    databaseMaintenanceDesc: string;
+    quickCopyDesc: string;
+    ocrEngineDesc: string;
+    ocrModelTitle: string;
+    ocrModelDesc: string;
+    ocrScoreThresholdDesc: string;
+    ocrBoxThresholdDesc: string;
+    ocrUnclipRatioDesc: string;
+    searchIndexDesc: string;
+    ocrMemoryModelDesc: string;
+  };
 }
 
 export type LocaleMessages = Record<keyof LocaleDefinition, Record<string, string>>;

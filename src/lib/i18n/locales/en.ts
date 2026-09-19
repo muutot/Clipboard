@@ -1085,6 +1085,18 @@ const en: LocaleDefinition = {
     detail: "View detail",
     delete: "Delete",
   },
+  settingsSearch: {
+    databaseMaintenanceDesc: "Check database integrity and attempt repairs",
+    quickCopyDesc: "Set shortcuts that quick-copy the first 9 items; default Ctrl+1~9",
+    ocrEngineDesc: "Switch the text recognition engine between PP-OCRv6 and Tesseract",
+    ocrModelTitle: "OCR Model",
+    ocrModelDesc: "Download, install, and apply the tiny, small, or medium model",
+    ocrScoreThresholdDesc: "Tune the text region detection score to control candidate regions",
+    ocrBoxThresholdDesc: "Tune the text box detection threshold to control candidate regions",
+    ocrUnclipRatioDesc: "Adjust detection region looseness and space merging",
+    searchIndexDesc: "Size of the index files used for full-text search",
+    ocrMemoryModelDesc: "View OCR engine, model size, model file count, and disk usage",
+  },
 };
 
 export default en;

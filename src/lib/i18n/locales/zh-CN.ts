@@ -1038,6 +1038,18 @@ const zhCN: LocaleDefinition = {
     detail: "查看详情",
     delete: "删除",
   },
+  settingsSearch: {
+    databaseMaintenanceDesc: "检查数据库完整性并尝试修复",
+    quickCopyDesc: "设置快速复制列表前 9 个条目的快捷键，默认 Ctrl+1~9",
+    ocrEngineDesc: "在 PP-OCRv6 与 Tesseract 之间切换文字识别引擎",
+    ocrModelTitle: "OCR 模型",
+    ocrModelDesc: "下载、安装并应用 tiny、small 或 medium 模型",
+    ocrScoreThresholdDesc: "调整文本区域检测分数，控制候选区域数量",
+    ocrBoxThresholdDesc: "调整文本框检测阈值，控制候选区域数量",
+    ocrUnclipRatioDesc: "调整检测区域的宽松程度与空格合并效果",
+    searchIndexDesc: "用于全文搜索的索引文件大小",
+    ocrMemoryModelDesc: "查看 OCR 引擎、模型规格、模型文件数量与磁盘大小",
+  },
 };
 
 export default zhCN;
