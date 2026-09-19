@@ -184,8 +184,16 @@
     queueMicrotask(() => input?.focus());
   });
 
+  // Consume tagAddSignal as an edge: the parent only ever increments the
+  // sequence, so a plain level check would re-open the input every time
+  // `editing` flips back to false (or when this card mounts later under
+  // virtual scrolling). Track the highest sequence already handled.
+  let handledTagAddSeq = 0;
   $effect(() => {
-    if (tagAddSignal > 0 && !editing) {
+    const seq = tagAddSignal;
+    if (seq <= handledTagAddSeq) return;
+    handledTagAddSeq = seq;
+    if (!editing) {
       tagAdding = true;
       tagDraft = "";
     }
