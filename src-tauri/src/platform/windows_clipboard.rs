@@ -394,6 +394,21 @@ impl Drop for ClipboardGuard {
     }
 }
 
+/// Opens the clipboard with a bounded retry. Other applications can hold the
+/// clipboard open for short windows (MSDN explicitly recommends retrying):
+/// a single failed `OpenClipboard` would permanently miss that content on
+/// the capture path and fail pastes spuriously.
+#[cfg(target_os = "windows")]
+fn open_clipboard_with_retry() -> bool {
+    for _ in 0..20 {
+        if unsafe { OpenClipboard(0) } != 0 {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    false
+}
+
 #[cfg(target_os = "windows")]
 fn allocate_global_bytes(bytes: &[u8]) -> Result<isize, String> {
     const GMEM_MOVEABLE: u32 = 0x0002;
@@ -431,7 +446,7 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
     let marker = self_trigger_marker_for_text(text);
 
     unsafe {
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return Err("failed to open the system clipboard".to_owned());
         }
         let _clipboard_guard = ClipboardGuard;
@@ -508,7 +523,7 @@ pub fn write_clipboard_files_with_self_trigger(paths: &[String]) -> Result<(), S
     let marker = self_trigger_marker_for_text(&text);
 
     unsafe {
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return Err("failed to open the system clipboard".to_owned());
         }
         let _clipboard_guard = ClipboardGuard;
@@ -634,7 +649,7 @@ pub fn read_clipboard_text() -> Option<String> {
             return None;
         }
 
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return None;
         }
 
@@ -762,7 +777,7 @@ pub fn read_clipboard_html() -> Option<String> {
             return None;
         }
 
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return None;
         }
 
@@ -843,7 +858,7 @@ pub fn read_clipboard_rtf() -> Option<String> {
             return None;
         }
 
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return None;
         }
 
@@ -913,7 +928,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
             CF_BITMAP
         };
 
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return None;
         }
 
@@ -1247,7 +1262,7 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
             return vec![];
         }
 
-        if OpenClipboard(0) == 0 {
+        if !open_clipboard_with_retry() {
             return vec![];
         }
 
