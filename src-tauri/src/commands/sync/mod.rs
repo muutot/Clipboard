@@ -310,10 +310,13 @@ pub async fn test_sync_connection(
 }
 
 /// Async: a full sync run performs blocking S3 I/O and must not occupy the
-/// main thread, which would otherwise freeze the window event loop.
+/// async runtime worker threads; the blocking work therefore runs on the
+/// dedicated blocking pool instead of stalling other async commands.
 #[tauri::command]
 pub async fn sync_now(app: tauri::AppHandle) -> Result<SyncRunResult, String> {
-    run_sync(&app)
+    tauri::async_runtime::spawn_blocking(move || run_sync(&app))
+        .await
+        .map_err(|error| format!("sync task join failed: {error}"))?
 }
 
 /// Materializes the content-addressed resources for one record on demand.
