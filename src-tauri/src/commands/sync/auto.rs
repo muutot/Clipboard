@@ -83,12 +83,19 @@ impl AutoSyncWorker {
                                     as i64;
                             }
                             Err(e) => {
+                                // A manual sync holding SYNC_RUN_LOCK is not
+                                // a completed auto-sync cycle: keep the old
+                                // last_sync_ms so the next tick retries
+                                // immediately instead of deferring a full
+                                // interval.
+                                if e != "sync already in progress" {
+                                    last_sync_ms = SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis()
+                                        as i64;
+                                }
                                 crate::log_event!("[auto-sync] failed: {e}");
-                                last_sync_ms = SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_millis()
-                                    as i64;
                             }
                         }
                     }
