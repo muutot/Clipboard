@@ -142,6 +142,10 @@ Window-only (main window focused):
 - Frontend and backend registries must stay in parity: `global_action_ids()`
   order == `GLOBAL_ACTION_IDS` order (id ranges derive from position).
   `keyboard-registry.test.ts` fails the build if defaults and registry drift.
+- The frontend decision table ignores every keydown with `event.isComposing`
+  or `keyCode === 229`: while an IME composition is active the keys belong to
+  the IME, and cancelling a composition with Escape must not also hide the
+  window. Keep this guard on top of `resolveKeyAction` when extending it.
 
 ## Verification
 

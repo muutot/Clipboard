@@ -16,6 +16,16 @@ function keyEvent(
   });
 }
 
+/** keydown as browsers emit it inside an active IME composition. */
+function composingKeyEvent(key: string): KeyboardEvent {
+  return new KeyboardEvent("keydown", {
+    key,
+    isComposing: true,
+    cancelable: true,
+    bubbles: true,
+  });
+}
+
 const ITEMS: KeyActionItem[] = [
   { id: "a", favorite: false, kind: "text" },
   { id: "b", favorite: true, kind: "image" },
@@ -102,6 +112,18 @@ describe("resolveKeyAction — Escape", () => {
       type: "none",
       prevent: false,
     });
+  });
+
+  it("never fires while an IME composition is active", () => {
+    const tauriCtx = ctx({ isTauri: true });
+    // Cancelling a composition with Escape must not hide the window…
+    expect(resolveKeyAction(composingKeyEvent("Escape"), tauriCtx)).toEqual({
+      type: "none",
+      prevent: false,
+    });
+    // …and no other chord fires either while the IME owns the keys.
+    expect(resolveKeyAction(composingKeyEvent("/"), tauriCtx).type).toBe("none");
+    expect(resolveKeyAction(composingKeyEvent("Enter"), tauriCtx).type).toBe("none");
   });
 
   it("honors hideWindow rebinding and disabling", () => {

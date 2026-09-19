@@ -110,6 +110,14 @@ function isTextInput(target: EventTarget | null): boolean {
 }
 
 export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): KeyAction {
+  // IME composition: while composing (and on the synthetic keyCode-229
+  // keydowns some engines emit), every key belongs to the IME. Cancelling a
+  // composition with Escape must not also hide the window or fire any other
+  // global shortcut.
+  if (event.isComposing || event.keyCode === 229) {
+    return { type: "none", prevent: false };
+  }
+
   const editableTarget = isEditableKeyboardTarget(event.target);
   const matchesAny = (bindings: readonly string[]): boolean =>
     bindings.some((binding) => shortcutMatchesEvent(binding, event));
