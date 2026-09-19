@@ -97,6 +97,16 @@ describe("generalSettings store normalization", () => {
     expect(settings.language).toBe(get(generalSettings).language);
   });
 
+  it("clears activePresetId when explicitly updated to undefined", () => {
+    generalSettings.updateSetting("activePresetId", "preset-ocean");
+    expect(get(generalSettings).activePresetId).toBe("preset-ocean");
+
+    // The explicit clear must not be treated like a partial payload that
+    // falls back to the current value (which made it a silent no-op).
+    generalSettings.updateSetting("activePresetId", undefined);
+    expect(get(generalSettings).activePresetId).toBeUndefined();
+  });
+
   it("persists normalized values to localStorage after the debounce window", () => {
     vi.useFakeTimers();
     generalSettings.updateSetting("pinCopiedToTop", false);

@@ -471,11 +471,17 @@ function normalizeGeneralSettings(
     ...DARK_THEME_COLORS,
   });
   result.customPresets = normalizeCustomPresets(source.customPresets ?? fallback("customPresets"));
-  // Like every other optional field, a missing value falls back to the
+  // Like every other optional field, a *missing* value falls back to the
   // current store state so a partial payload (older backend, partial
-  // broadcast) cannot silently clear the active theme preset.
-  const activePresetSource = source.activePresetId ?? fallback("activePresetId");
-  result.activePresetId = typeof activePresetSource === "string" ? activePresetSource : undefined;
+  // broadcast) cannot silently clear the active theme preset. An own
+  // `activePresetId: undefined` property is different: it is how
+  // `updateSetting`/`merge` express an explicit clear (spreading keeps the
+  // key), and it must win over the fallback or the clear is a silent no-op.
+  result.activePresetId = Object.hasOwn(source, "activePresetId")
+    ? typeof source.activePresetId === "string"
+      ? source.activePresetId
+      : undefined
+    : (fallback("activePresetId") as string | undefined);
   result.imageFullscreenMode = validFullscreenMode(
     source.imageFullscreenMode ?? fallback("imageFullscreenMode"),
     "overlay",
