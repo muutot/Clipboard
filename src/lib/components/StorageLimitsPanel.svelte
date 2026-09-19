@@ -95,6 +95,12 @@
   }
 
   async function saveHistoryConfig() {
+    // HTML min/max attributes never block typed values; normalize here so
+    // the inputs show the value that is actually persisted. The backend
+    // setters clamp again as the authoritative guard.
+    maxItemCount = clampHistoryNumber(maxItemCount, 100, 1_000_000, 100);
+    retentionPeriodDays = clampHistoryNumber(retentionPeriodDays, 1, 365, 1);
+    recycleBinDays = clampHistoryNumber(recycleBinDays, 0, 365, 0);
     try {
       await invoke("set_history_config", {
         maxItems: maxItemCount,
@@ -105,6 +111,11 @@
       console.error("Unable to save history config", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     }
+  }
+
+  function clampHistoryNumber(value: number, min: number, max: number, fallback: number): number {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(value)));
   }
 
   async function loadStorageKindStats(): Promise<boolean> {

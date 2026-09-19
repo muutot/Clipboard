@@ -485,19 +485,22 @@ impl ConfigStore {
 
     pub fn set_retention_days(&mut self, value: u32) -> Result<(), StorageError> {
         self.mutate_and_save(|config| {
-            config.history.retention_days = value;
+            // The settings UI declares 1-365 via input attributes only, which
+            // never blocks typed values; clamp here so a stray entry cannot
+            // turn the next retention cleanup into a full history wipe.
+            config.history.retention_days = value.clamp(1, 365);
         })
     }
 
     pub fn set_max_items(&mut self, value: u32) -> Result<(), StorageError> {
         self.mutate_and_save(|config| {
-            config.history.max_items = value;
+            config.history.max_items = value.clamp(100, 1_000_000);
         })
     }
 
     pub fn set_recycle_bin_days(&mut self, value: u32) -> Result<(), StorageError> {
         self.mutate_and_save(|config| {
-            config.history.recycle_bin_days = value;
+            config.history.recycle_bin_days = value.clamp(0, 365);
         })
     }
 

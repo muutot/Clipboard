@@ -652,6 +652,25 @@ fn update_source_parses_unknown_values_as_gitcode() {
 }
 
 #[test]
+fn history_limits_clamp_out_of_range_values() {
+    let project = temporary_test_directory("history-clamp");
+    let mut store = ConfigStore::load(&project).unwrap();
+
+    store.set_max_items(0).unwrap();
+    assert_eq!(store.max_items(), 100);
+    store.set_max_items(500_000_000).unwrap();
+    assert_eq!(store.max_items(), 1_000_000);
+    store.set_retention_days(0).unwrap();
+    assert_eq!(store.retention_days(), 1);
+    store.set_retention_days(100_000).unwrap();
+    assert_eq!(store.retention_days(), 365);
+    store.set_recycle_bin_days(1_000).unwrap();
+    assert_eq!(store.recycle_bin_days(), 365);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn failed_save_rolls_back_the_in_memory_value() {
     let project = temporary_test_directory("rollback");
     let mut store = ConfigStore::load(&project).unwrap();
