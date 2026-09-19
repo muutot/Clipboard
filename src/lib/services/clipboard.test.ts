@@ -28,9 +28,19 @@ describe("deriveTextEditPatch", () => {
     expect(patch.isMedia).toBe(false);
     expect(patch.newTitle).toBe(generatedClipboardTitle("hello world"));
     expect(patch.newTextContent).toBe("hello world");
-    expect(patch.newPreview).toBe("old preview");
+    // Content equals the generated title, so the reload-time preview is empty
+    // and the optimistic patch must not keep the stale pre-edit preview.
+    expect(patch.newPreview).toBe("");
     expect(patch.newSizeBytes).toBe(11);
     expect(patch.newSizeLabel).toBe(formatTextLength(11));
+  });
+
+  it("derives the second-line preview for custom-titled multi-line text", () => {
+    const patch = deriveTextEditPatch(
+      item({ id: "a", customTitle: true, title: "pinned" }),
+      "first\nsecond",
+    );
+    expect(patch.newPreview).toBe("second");
   });
 
   it("keeps a custom title but refreshes the text content", () => {
@@ -48,10 +58,10 @@ describe("deriveTextEditPatch", () => {
     expect(patch.newTitle).toBe("https://example.com");
   });
 
-  it("derives the preview from content beyond 200 chars", () => {
+  it("keeps an empty preview for long single-line content (matches reload)", () => {
     const content = "x".repeat(250);
     const patch = deriveTextEditPatch(item({ id: "a" }), content);
-    expect(patch.newPreview).toBe(content.slice(200));
+    expect(patch.newPreview).toBe("");
   });
 
   it("renames media in place without touching the stored text", () => {

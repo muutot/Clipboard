@@ -298,12 +298,27 @@ export interface TextEditPatch {
  */
 export function deriveTextEditPatch(item: ClipboardItem, content: string): TextEditPatch {
   const isText = item.kind === "text" || item.kind === "link";
+  const newTitle = isText
+    ? (item.customTitle ? item.title : generatedClipboardTitle(content))
+    : content;
+  // Mirror the load-time preview rule in buildPreview so the card never shows
+  // a preview that silently changes or disappears on the next reload: for
+  // text records the preview is the second line while the content differs
+  // from the (generated) title, and empty otherwise. The previous in-place
+  // rule (stale preview, or content.slice(200) for long content) disagreed
+  // with that reload-time value.
+  const contentLines = isText ? content.split("\n") : [];
+  const newPreview = !isText
+    ? (item.preview ?? "")
+    : content && content !== newTitle && contentLines.length > 1
+      ? contentLines[1]
+      : "";
   return {
     isText,
     isMedia: item.kind === "image" || item.kind === "file",
-    newTitle: isText ? (item.customTitle ? item.title : generatedClipboardTitle(content)) : content,
+    newTitle,
     newTextContent: isText ? content : (item.textContent ?? null),
-    newPreview: isText && content.length > 200 ? content.slice(200) : (item.preview ?? ""),
+    newPreview,
     newSizeBytes: new TextEncoder().encode(content).byteLength,
     newSizeLabel: formatTextLength(content.length),
   };
