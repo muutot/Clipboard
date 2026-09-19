@@ -16,9 +16,14 @@ pub fn replace_file(temporary: &Path, target: &Path) -> Result<(), StorageError>
     #[cfg(unix)]
     {
         std::fs::rename(temporary, target)?;
+        // The rename has already taken effect, so a directory-fsync failure
+        // must not be reported as a write failure: callers roll back their
+        // in-memory state on Err, which would fork the runtime state from
+        // the (already replaced) file on disk. The fsync is a durability
+        // enhancement only; degrade to ignoring the error.
         if let Some(parent) = target.parent() {
             if let Ok(directory) = std::fs::File::open(parent) {
-                directory.sync_all()?;
+                let _ = directory.sync_all();
             }
         }
         Ok(())
