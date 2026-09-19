@@ -1009,6 +1009,7 @@ const zhCN: LocaleDefinition = {
     delete: "删除",
     deleteConfirm: "确认删除？",
     renameConflict: "已存在同名标签",
+    renameFailed: "重命名标签失败",
     renamed: "标签已重命名",
     deleted: "标签已删除",
     colorSaved: "颜色已更新",

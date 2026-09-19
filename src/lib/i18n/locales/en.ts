@@ -1054,6 +1054,7 @@ const en: LocaleDefinition = {
     delete: "Delete",
     deleteConfirm: "Delete?",
     renameConflict: "A tag with this name already exists",
+    renameFailed: "Failed to rename tag",
     renamed: "Tag renamed",
     deleted: "Tag deleted",
     colorSaved: "Color updated",

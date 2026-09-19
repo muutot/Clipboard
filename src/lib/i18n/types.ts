@@ -986,6 +986,7 @@ export interface LocaleDefinition {
     delete: string;
     deleteConfirm: string;
     renameConflict: string;
+    renameFailed: string;
     renamed: string;
     deleted: string;
     colorSaved: string;

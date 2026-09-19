@@ -44,17 +44,22 @@
       nameDraft = currentName;
       return;
     }
-    const all = (await listAllTags()) ?? [];
-    if (all.some((entry) => entry.name !== currentName && entry.name === name)) {
-      showToast(_t("tags.renameConflict"), "error");
-      return;
-    }
-    const ok = await renameTag(currentName, name);
-    if (ok !== null) {
-      showToast(_t("tags.renamed"), "success");
-      emitTagsChanged({ renamed: { old: currentName, new: name } });
-      currentName = name;
-      nameDraft = name;
+    try {
+      const all = (await listAllTags()) ?? [];
+      if (all.some((entry) => entry.name !== currentName && entry.name === name)) {
+        showToast(_t("tags.renameConflict"), "error");
+        return;
+      }
+      const ok = await renameTag(currentName, name);
+      if (ok !== null) {
+        showToast(_t("tags.renamed"), "success");
+        emitTagsChanged({ renamed: { old: currentName, new: name } });
+        currentName = name;
+        nameDraft = name;
+      }
+    } catch (error) {
+      console.error("Tag rename failed:", error);
+      showToast(_t("tags.renameFailed"), "error");
     }
   }
 
