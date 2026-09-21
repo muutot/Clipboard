@@ -328,7 +328,7 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
     });
   });
 
-  it("opens detail on Space, preventing default even without a selection", () => {
+  it("opens detail on Space, leaving default behavior without a selection", () => {
     expect(resolveKeyAction(keyEvent({ key: " " }), ctx())).toEqual({
       type: "open-detail",
       id: "a",
@@ -336,7 +336,7 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
     });
     expect(resolveKeyAction(keyEvent({ key: " " }), ctx({ selectedId: "" }))).toEqual({
       type: "none",
-      prevent: true,
+      prevent: false,
     });
   });
 

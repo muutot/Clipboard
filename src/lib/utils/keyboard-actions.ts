@@ -260,7 +260,7 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
       return { type: "none", prevent: false };
     }
     if (ctx.selectedId) return { type: "open-detail", id: ctx.selectedId, prevent: true };
-    return { type: "none", prevent: true };
+    return { type: "none", prevent: false };
   }
 
   if (ctx.clearSelectionBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
