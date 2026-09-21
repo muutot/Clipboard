@@ -40,13 +40,19 @@ pub(crate) fn import_from_ppaste_backup(
 
     let db_bytes = read_zip_entry(&mut archive, "PPaste2.db3")?;
     let db_path = extract_db_to_temp(&db_bytes)?;
-    let result = read_records(&db_path).and_then(|(rows, files_dropped)| {
+    let result = read_records(&db_path).and_then(|(rows, files_dropped, unreadable)| {
         let _ = std::fs::remove_file(&db_path);
         let mut summary = import_rows(&rows, &mut archive, database, paths)?;
         if files_dropped > 0 {
             summary.skipped_count += files_dropped;
             summary.errors.push(format!(
                 "{files_dropped} file record(s) were skipped: they reference files on the original machine and their contents are not included in the backup"
+            ));
+        }
+        if unreadable > 0 {
+            summary.skipped_count += unreadable;
+            summary.errors.push(format!(
+                "{unreadable} record(s) used an unknown type and were skipped"
             ));
         }
         Ok(summary)
@@ -66,7 +72,7 @@ fn extract_db_to_temp(db_bytes: &[u8]) -> Result<String, String> {
     Ok(db_path.to_string_lossy().to_string())
 }
 
-fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64), String> {
+fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64, u64), String> {
     let connection = Connection::open(db_path)
         .map_err(|error| format!("failed to read PPaste database: {error}"))?;
     let mut statement = connection
@@ -100,8 +106,10 @@ fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64), String> {
 
     let mut out = Vec::new();
     let mut files_dropped = 0u64;
+    let mut unreadable = 0u64;
     for row in rows {
         let Ok((record, is_files)) = row else {
+            unreadable += 1;
             continue;
         };
         if is_files {
@@ -110,9 +118,11 @@ fn read_records(db_path: &str) -> Result<(Vec<PpRow>, u64), String> {
         }
         if let Some(record) = record {
             out.push(record);
+        } else {
+            unreadable += 1;
         }
     }
-    Ok((out, files_dropped))
+    Ok((out, files_dropped, unreadable))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -762,6 +772,62 @@ mod tests {
             .unwrap()
             .iter()
             .any(|i| i.kind == ClipboardKind::Image));
+
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn unknown_record_types_are_counted_as_skipped() {
+        let temp = std::env::temp_dir().join(format!(
+            "ppaste-unknown-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("source.db3");
+        make_source_db(&db_path);
+        Connection::open(&db_path)
+            .unwrap()
+            .execute(
+                "INSERT INTO PPaste_Main
+                    (PUID, TYPE, TYPE_CHILD, VALUE, SEARCH, FAVORITE, CREATE_TIME, SOURCEPATH, WIDTH, HEIGHT)
+                 VALUES ('U1', 'Video', 'Mp4', 'movie.mp4', NULL, 0, '2026-04-27 12:15:27', 'Zen', 0, 0);",
+                [],
+            )
+            .unwrap();
+        let db_bytes = std::fs::read(&db_path).unwrap();
+
+        let backup = temp.join("unknown.Pastebackup");
+        let file = std::fs::File::create(&backup).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("PPaste2.db3", options).unwrap();
+        writer.write_all(&db_bytes).unwrap();
+        writer.start_file("PasteData/pixel.png", options).unwrap();
+        writer.write_all(&make_png()).unwrap();
+        writer.finish().unwrap();
+
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            temp.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let summary =
+            import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+        assert_eq!(summary.imported_count, 4);
+        assert_eq!(summary.skipped_count, 2);
+        assert!(summary
+            .errors
+            .iter()
+            .any(|error| error.contains("unknown type")));
 
         std::fs::remove_dir_all(&temp).unwrap();
     }
