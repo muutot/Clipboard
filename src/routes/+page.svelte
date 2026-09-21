@@ -1663,11 +1663,26 @@
 
     if (isMedia && content) {
       try {
-        const updated = await invoke<ClipboardItem>("rename_item", { id, newName: content });
+        const updated = await invoke<PersistedClipboardItem>("rename_item", {
+          id,
+          newName: content,
+        });
+        // Re-derive every path-dependent view field: fileName/fileMeta and
+        // the detail panel all read the mapped metadata, so patching only
+        // title/resourcePath would leave stale names until the next reload.
+        const mapped = toClipboardItem(updated);
         updateItem(id, () => ({
-          title: updated.title,
-          resourcePath: updated.resourcePath,
-          previewPath: updated.previewPath,
+          title: mapped.title,
+          preview: mapped.preview,
+          resourcePath: mapped.resourcePath,
+          previewPath: mapped.previewPath,
+          metadataJson: mapped.metadataJson,
+          fileName: mapped.fileName,
+          fileMeta: mapped.fileMeta,
+          resourceMetadata: mapped.resourceMetadata,
+          mimeType: mapped.mimeType,
+          imageMeta: mapped.imageMeta,
+          searchableText: mapped.searchableText,
         }));
         editingId = null;
         showToast(_t("toast.editSaved"), "success");
