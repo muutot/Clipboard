@@ -444,14 +444,22 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         if text.is_empty() {
             return Err("history item has no copyable text".to_owned());
         }
+        let owned = text.to_owned();
         if let Some(guard) = app.try_state::<SelfTriggerState>() {
             if let Ok(mut guard) = guard.0.lock() {
-                guard.mark_clipboard_write(text);
+                guard.mark_clipboard_write(&owned);
             }
         }
-        crate::platform::platform()
-            .write_clipboard_text_with_self_trigger(text)
-            .map_err(|error| format!("failed to write clipboard: {error}"))?;
+        if let Err(error) =
+            crate::platform::platform().write_clipboard_text_with_self_trigger(&owned)
+        {
+            if let Some(guard) = app.try_state::<SelfTriggerState>() {
+                if let Ok(mut guard) = guard.0.lock() {
+                    guard.unmark_clipboard_write(&owned);
+                }
+            }
+            return Err(format!("failed to write clipboard: {error}"));
+        }
         if let Some(cache) = app.try_state::<SearchResultCache>() {
             let _ = record_item_usage(&database, &cache, item_id);
         } else {

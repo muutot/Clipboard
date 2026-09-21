@@ -85,6 +85,7 @@ pub fn run_cli_command(
     // (A standalone CLI subprocess cannot reach this guard; on Windows its
     // OS-level marker still applies, on other platforms a re-capture there
     // remains a known limitation.)
+    let mut marked_text: Option<String> = None;
     if command == CliCommand::Copy {
         if let Some(id) = query.as_deref() {
             if let Ok(Some(item)) = database.get_item(id) {
@@ -92,9 +93,11 @@ pub fn run_cli_command(
                     .text_content
                     .as_deref()
                     .filter(|text| !text.is_empty())
-                    .unwrap_or(&item.title);
+                    .unwrap_or(&item.title)
+                    .to_owned();
                 if let Ok(mut guard) = self_trigger.0.lock() {
-                    guard.mark_clipboard_write(text);
+                    guard.mark_clipboard_write(&text);
+                    marked_text = Some(text);
                 } else {
                     crate::log_event!("[api] self-trigger lock poisoned; copy may re-capture");
                 }
@@ -114,12 +117,20 @@ pub fn run_cli_command(
     let search_page_size_limit =
         lock_state(&config, "configuration lock is poisoned")?.search_page_size_limit();
 
-    crate::cli::run_cli_command(
+    let result = crate::cli::run_cli_command(
         &args,
         database.inner(),
         page_size_limit,
         search_page_size_limit,
-    )
+    );
+    if result.is_err() {
+        if let Some(text) = marked_text.as_deref() {
+            if let Ok(mut guard) = self_trigger.0.lock() {
+                guard.unmark_clipboard_write(text);
+            }
+        }
+    }
+    result
 }
 
 #[tauri::command]
