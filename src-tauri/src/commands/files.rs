@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::content::{compute_content_hash, compute_normalized_media_hash, icon_key};
 use crate::domain::{ClipboardItem, ClipboardKind};
+use crate::state::SelfTriggerState;
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
 #[derive(Debug, Clone, Serialize)]
@@ -466,6 +467,7 @@ fn file_metadata_entries(
 pub fn copy_clipboard_item_files(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
+    self_trigger: tauri::State<'_, SelfTriggerState>,
     id: String,
 ) -> Result<(), String> {
     let item = database
@@ -477,7 +479,21 @@ pub fn copy_clipboard_item_files(
         .iter()
         .map(|path| path.to_string_lossy().to_string())
         .collect::<Vec<_>>();
-    crate::platform::platform().write_clipboard_files_with_self_trigger(&files)
+    // Register the pending write with the same joined-path hashes the capture
+    // loop checks, so our own file copy is not re-captured as new history.
+    // On Windows the private clipboard marker is an additional backstop.
+    let joined = files.join("\n");
+    if let Ok(mut guard) = self_trigger.0.lock() {
+        guard.mark_clipboard_write(&joined);
+    }
+    if let Err(error) = crate::platform::platform().write_clipboard_files_with_self_trigger(&files)
+    {
+        if let Ok(mut guard) = self_trigger.0.lock() {
+            guard.unmark_clipboard_write(&joined);
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[tauri::command]
