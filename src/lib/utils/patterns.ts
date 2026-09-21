@@ -145,12 +145,12 @@ export function detectQuickActions(text: string, firstOnly?: boolean): QuickActi
       });
     }
 
-    const color = text.match(/#(?:[0-9a-fA-F]{3}){1,2}\b/);
+    const color = text.match(COLOR_RE)?.[0];
     if (color)
       actions.push({
-        label: `Copy color ${color[0]}`,
+        label: `Copy color ${color}`,
         actionType: "copy",
-        payload: color[0],
+        payload: color,
         kind: "color",
       });
 
@@ -226,6 +226,10 @@ export function quickActionKind(
     (action.payload.startsWith("http://") || action.payload.startsWith("https://"))
   )
     return "url";
-  if (action.actionType === "copy" && /^#[0-9a-fA-F]{3,8}\b/.test(action.payload)) return "color";
+  if (
+    action.actionType === "copy" &&
+    /^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8})$/.test(action.payload)
+  )
+    return "color";
   return "copy";
 }

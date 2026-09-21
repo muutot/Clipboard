@@ -39,6 +39,13 @@ describe("quickActionKind", () => {
     expect(quickActionKind(action({ payload: "plain text" }))).toBe("copy");
     expect(quickActionKind(action({ payload: "ftp://example.com" }))).toBe("copy");
     expect(quickActionKind(action({ payload: "#ff0000", actionType: "open" }))).toBe("copy");
+    expect(quickActionKind(action({ payload: "#12345", actionType: "copy" }))).toBe("copy");
+    expect(quickActionKind(action({ payload: "#1234567", actionType: "copy" }))).toBe("copy");
+  });
+
+  it("detects 4/8-digit HEX colors in firstOnly mode", () => {
+    const actions = detectQuickActions("paint #ff000080 now", true);
+    expect(actions.find((entry) => entry.kind === "color")?.payload).toBe("#ff000080");
   });
 
   it("skips invalid date candidates instead of abandoning the scan (firstOnly)", () => {
