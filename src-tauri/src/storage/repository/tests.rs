@@ -1029,6 +1029,27 @@ fn favorite_must_be_removed_before_direct_deletion() {
 }
 
 #[test]
+fn favorite_ignores_soft_deleted_rows() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("active", "hash-active", 100))
+        .unwrap();
+    database
+        .save_item(&text_item("deleted", "hash-deleted", 200))
+        .unwrap();
+    assert!(database.soft_delete("deleted").unwrap());
+
+    // A deleted row must not become favorited: favorites are exempt from
+    // recycle-bin expiry, so this would pin invisible data forever.
+    assert!(!database.set_favorite("deleted", true).unwrap());
+    assert!(!database
+        .set_favorite_batch(&["active".to_owned(), "deleted".to_owned()], true)
+        .unwrap());
+    assert!(!database.get_item("deleted").unwrap().unwrap().is_favorite);
+    assert!(!database.get_item("active").unwrap().unwrap().is_favorite);
+}
+
+#[test]
 fn batch_favorite_is_atomic_and_deduplicates_ids() {
     let database = Database::open_in_memory().unwrap();
     database

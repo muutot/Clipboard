@@ -293,8 +293,11 @@ impl ClipboardRepository for Database {
 
     fn set_favorite(&self, id: &str, is_favorite: bool) -> Result<bool, StorageError> {
         self.with_connection(|connection| {
+            // Favorites protect recycle-bin rows from expiry cleanup, so a
+            // deleted row must not become favorited: it would pin invisible
+            // data that cleanup can never remove.
             Ok(connection.execute(
-                "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1",
+                "UPDATE clipboard_items SET is_favorite = ?2 WHERE id = ?1 AND deleted = 0",
                 params![id, is_favorite],
             )? > 0)
         })
@@ -528,7 +531,9 @@ impl ClipboardRepository for Database {
                 .collect();
             let where_clause = format!("id IN ({})", placeholders.join(", "));
             let count: i64 = transaction.query_row(
-                &format!("SELECT COUNT(*) FROM clipboard_items WHERE {where_clause}"),
+                &format!(
+                    "SELECT COUNT(*) FROM clipboard_items WHERE {where_clause} AND deleted = 0"
+                ),
                 params_from_iter(ids.iter().map(|id| id.as_str())),
                 |row| row.get(0),
             )?;
@@ -544,7 +549,9 @@ impl ClipboardRepository for Database {
             let fav_pos = ids.len() + 1;
             let set_clause = format!("is_favorite = ?{fav_pos}");
             transaction.execute(
-                &format!("UPDATE clipboard_items SET {set_clause} WHERE {where_clause}"),
+                &format!(
+                    "UPDATE clipboard_items SET {set_clause} WHERE {where_clause} AND deleted = 0"
+                ),
                 params_from_iter(params.iter().map(|p| p.as_ref())),
             )?;
 
