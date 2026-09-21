@@ -26,7 +26,7 @@ Owns the record boundary and list operations:
 
 - writing text/image/html with self-trigger registration;
 - loading active and deleted pages (`loadClipboardHistory(limit, offset, filter?)` passes an optional `HistoryFilterArgs` `{kind, favorite, tag, sourceApp, dateFromMs, dateToMs}` to `list_clipboard_items` so filtered pages are fetched from the backend);
-- searching with offset, limit, and optional sort rules;
+- searching with offset, limit, and optional sort rules (`searchClipboardHistory` returns a `SearchPage`: mapped `items` plus the backend `totalCount`/`truncated`, so pagination ends on the true total and truncation is announced);
 - favorite/delete/restore/permanent/batch operations;
 - tag persistence (`persistTags(id, tags)` invokes `set_clipboard_item_tags`);
 - tag management wrappers for the settings tag manager: `listAllTags()` (`list_all_tags` → `TagInfo[] {name,count,color}`), `renameTag(old,new)` (`rename_tag` → affected-count), `deleteTag(name)` (`delete_tag`), and `setTagColor(name,color)` (`set_tag_color`);

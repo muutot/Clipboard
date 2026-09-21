@@ -685,15 +685,17 @@
     searchPending = true;
     const timer = window.setTimeout(() => {
       void searchClipboardHistory(requestedQuery, requestedPageSize, 0, requestedSortRules)
-        .then((results) => {
-          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || results === null)
+        .then((page) => {
+          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
             return;
-          indexedItems = results;
+          indexedItems = page.items;
           indexedQuery = requestedQuery;
-          searchOffset = results.length;
-          searchHasMore = results.length === requestedPageSize;
-          updateSearchCache(results);
-          statusMessage = _t("app.searchHitSummary", { count: results.length });
+          searchOffset = page.items.length;
+          searchHasMore = searchOffset < page.totalCount;
+          updateSearchCache(page.items);
+          statusMessage = page.truncated
+            ? _t("app.searchTruncated", { shown: page.items.length, total: page.totalCount })
+            : _t("app.searchHitSummary", { count: page.items.length });
           if (
             $generalSettings.searchHistoryEnabled &&
             pendingSearchHistoryQuery === requestedQuery
@@ -1112,14 +1114,14 @@
     const requestId = ++searchLoadRequestId;
     const offset = searchOffset;
     try {
-      const results = await searchClipboardHistory(
+      const page = await searchClipboardHistory(
         indexedQuery,
         $generalSettings.display.searchPageSize,
         offset,
         $generalSettings.searchSortRules,
       );
       if (requestId !== searchLoadRequestId) return;
-      if (results === null || results.length === 0) {
+      if (page === null || page.items.length === 0) {
         searchHasMore = false;
         return;
       }
@@ -1127,11 +1129,11 @@
       // OFFSET pagination can replay a row after an out-of-band insertion;
       // drop ids already loaded so the keyed each never sees a duplicate key.
       const knownIds = new Set((indexedItems ?? []).map((item) => item.id));
-      const freshResults = results.filter((item) => !knownIds.has(item.id));
+      const freshResults = page.items.filter((item) => !knownIds.has(item.id));
       indexedItems = [...(indexedItems ?? []), ...freshResults];
-      searchOffset += results.length;
-      searchHasMore = results.length === $generalSettings.display.searchPageSize;
-      updateSearchCache(results);
+      searchOffset += page.items.length;
+      searchHasMore = searchOffset < page.totalCount;
+      updateSearchCache(page.items);
     } catch (error) {
       if (requestId !== searchLoadRequestId) return;
       console.error("Unable to load more search results", error);

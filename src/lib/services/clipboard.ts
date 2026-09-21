@@ -172,23 +172,39 @@ export async function materializeClipboardItem(item: ClipboardItem): Promise<Cli
   return request;
 }
 
+export interface SearchPage {
+  items: ClipboardItem[];
+  totalCount: number;
+  truncated: boolean;
+}
+
+interface PersistedSearchPage {
+  items: PersistedClipboardItem[];
+  totalCount: number;
+  truncated: boolean;
+}
+
 export async function searchClipboardHistory(
   query: string,
   limit = 100,
   offset = 0,
   sortRules?: SortRule[],
-): Promise<ClipboardItem[] | null> {
+): Promise<SearchPage | null> {
   if (!isTauriRuntime()) return null;
 
-  const records =
-    (await invokeTauri<PersistedClipboardItem[]>("search_clipboard_items", {
-      query,
-      limit,
-      offset,
-      sortRules,
-    })) ?? [];
+  const page = await invokeTauri<PersistedSearchPage>("search_clipboard_items", {
+    query,
+    limit,
+    offset,
+    sortRules,
+  });
+  if (!page) return null;
 
-  return records.map(toClipboardItem);
+  return {
+    items: (page.items ?? []).map(toClipboardItem),
+    totalCount: page.totalCount ?? 0,
+    truncated: page.truncated ?? false,
+  };
 }
 
 export async function persistFavorite(id: string, isFavorite: boolean): Promise<boolean | null> {

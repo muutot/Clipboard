@@ -8,10 +8,10 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 ## Backend Tantivy ID cache
 
-`SearchIndex` stores `cached_ids: Mutex<Option<(String, usize, Option<(i64, i64)>, Vec<String>)>>`.
+`SearchIndex` stores `cached_ids: Mutex<Option<(String, usize, Option<(i64, i64)>, Vec<String>, usize)>>`.
 
 - Key: normalized query plus requested `max_results` plus the resolved date range.
-- Hit: query matches, cached maximum is at least the new maximum, and the resolved date range matches; return only the requested prefix while retaining the cached total. The date range is part of the key because relative phrases ("今天", "本周", "本月") resolve against `Local::now()`; without it a cache entry created before midnight would serve yesterday's range after midnight.
+- Hit: query matches, cached maximum is at least the new maximum, and the resolved date range matches; return only the requested prefix plus the stored total match count. The `Count` collector records every match (not just the capped `TopDocs`), so the total stays truthful even when the id list was truncated at `max_results`; a first capped call already reports the full total. The date range is part of the key because relative phrases ("今天", "本周", "本月") resolve against `Local::now()`; without it a cache entry created before midnight would serve yesterday's range after midnight.
 - Miss: query differs or requested maximum grows; run Tantivy again and replace the cache.
 - Empty query stores/returns an empty ID set.
 - `apply_changes()` clears cached IDs after index mutations and reloads the reader, so a subsequent search reflects the commit without callers having to reload explicitly.
@@ -20,16 +20,16 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 
 ## Backend SearchResultCache
 
-`SearchResultCache` in `src-tauri/src/commands/clipboard/types.rs` stores fully-sorted, fetched `ClipboardItem` results keyed by `(query, sort_rules, max_results, local_date_bucket)`. The local calendar-day bucket invalidates the cache at the next local midnight so relative-date queries cannot serve a stale range.
+`SearchResultCache` in `src-tauri/src/commands/clipboard/types.rs` stores fully-sorted, fetched `ClipboardItem` results plus the true match total and the truncation flag, keyed by `(query, sort_rules, max_results, local_date_bucket)`. The local calendar-day bucket invalidates the cache at the next local midnight so relative-date queries cannot serve a stale range.
 
-- Hit: slice `[offset..offset+limit]` directly from the cached vector; no DB or index access needed.
+- Hit: slice `[offset..offset+limit]` directly from the cached vector and return it with the stored total/truncation; no DB or index access needed.
 - Miss: re-run the full search pipeline (Tantivy → SQL fetch → sort) and cache the result.
 - Usage stamps clear this cache explicitly: `record_item_usage` (called by the `set_clipboard_item_last_used` command and the tray copy path) drops the cached result after `set_last_used` succeeds, because usage is device-local, writes no `search_outbox` event, and would otherwise leave a cached `lastUsedAt` page serving the pre-usage order.
 - `rebuild_search_index` clears this cache along with Tantivy's `cached_ids`.
 - `search_clipboard_items` also clears this cache when it applies pending outbox events, so stale pages are not served after a mutation; see lazy sync below.
 - Cache miss when `max_results` is larger than the cached value ensures `searchPageSizeLimit` changes invalidate stale entries.
 
-`search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result, and only then slices the requested offset/limit. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order; a silent per-query cap truncates later search pages. Sorting after slicing breaks ordering across page boundaries and is forbidden. `apply_sort_rules` sorts stably on purpose: when sort fields tie, the incoming Tantivy relevance order deterministically remains the fallback order (an unstable sort permutes tied elements for larger inputs).
+`search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs plus the true match total, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result with its total/truncation, and only then slices the requested offset/limit. It returns a `SearchPage` envelope (`items`, `totalCount`, `truncated`); `truncated` is set when index matches beyond `max_results` were dropped, and the frontend (`searchClipboardHistory` → `SearchPage`) drives `searchHasMore` from the total and shows a truncation notice instead of ending pagination silently. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order. Sorting after slicing breaks ordering across page boundaries and is forbidden. `apply_sort_rules` sorts stably on purpose: when sort fields tie, the incoming Tantivy relevance order deterministically remains the fallback order (an unstable sort permutes tied elements for larger inputs).
 
 ### Lazy sync on search
 
@@ -53,9 +53,9 @@ The main route debounces a first-page indexed search by 300 ms.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
 - `searchEpoch` (bumped by the `clipboard-history-invalidated` listener) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
 - The same effect synchronously tracks `display.searchPageSize` and `searchSortRules`; either setting changing invalidates first-page and pagination request IDs before re-querying.
-- Successful first pages set `indexedItems`, `indexedQuery`, `searchOffset`, and `searchHasMore`.
+- Successful first pages set `indexedItems`, `indexedQuery`, `searchOffset`, `searchTotalCount`/`searchTruncated`, and `searchHasMore`.
 - `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already present in `indexedItems` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
-- `searchHasMore` is inferred from a full page; an empty/short page ends pagination.
+- `searchHasMore` is derived from the backend total (`searchOffset < totalCount`); an empty page still ends pagination as a backstop.
 
 When changing query, filter, sort, or mutation behavior, audit both first-page and pagination request IDs. A stale pagination response must never append to a newer query. Keep offset reset and result invalidation together.
 

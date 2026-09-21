@@ -35,7 +35,27 @@ pub struct SearchResultCache {
     inner: Mutex<Option<CachedSearchResult>>,
 }
 
-pub(crate) type CachedSearchResult = (String, Vec<SearchSortRule>, usize, i64, Vec<ClipboardItem>);
+pub(crate) type CachedSearchResult = (
+    String,
+    Vec<SearchSortRule>,
+    usize,
+    i64,
+    Vec<ClipboardItem>,
+    usize,
+    bool,
+);
+
+/// One page of search results with the true match total. `total_count` counts
+/// every index match (not just the capped candidate set) and `truncated` is
+/// set when matches beyond `max_results` were dropped, so the UI can say so
+/// instead of ending pagination silently.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchPage {
+    pub(crate) items: Vec<ClipboardItem>,
+    pub(crate) total_count: usize,
+    pub(crate) truncated: bool,
+}
 
 /// Local calendar-day bucket. Relative date phrases ("今天", "本周", "本月")
 /// resolve against the local day, so a cached page must not survive a local
@@ -65,9 +85,9 @@ impl SearchResultCache {
         max_results: usize,
         offset: usize,
         limit: usize,
-    ) -> Option<Vec<ClipboardItem>> {
+    ) -> Option<(Vec<ClipboardItem>, usize, bool)> {
         let cache = self.inner.lock().ok()?;
-        let (cached_query, cached_rules, cached_max, cached_bucket, cached_items) =
+        let (cached_query, cached_rules, cached_max, cached_bucket, cached_items, total, truncated) =
             cache.as_ref()?;
         if cached_query != query
             || cached_rules != rules
@@ -76,12 +96,12 @@ impl SearchResultCache {
         {
             return None;
         }
-        let total = cached_items.len();
-        if offset >= total {
-            return Some(Vec::new());
+        let reachable = cached_items.len();
+        if offset >= reachable {
+            return Some((Vec::new(), *total, *truncated));
         }
-        let end = (offset + limit).min(total);
-        Some(cached_items[offset..end].to_vec())
+        let end = (offset + limit).min(reachable);
+        Some((cached_items[offset..end].to_vec(), *total, *truncated))
     }
 
     pub fn set(
@@ -90,9 +110,19 @@ impl SearchResultCache {
         rules: Vec<SearchSortRule>,
         max_results: usize,
         items: Vec<ClipboardItem>,
+        total: usize,
+        truncated: bool,
     ) {
         if let Ok(mut cache) = self.inner.lock() {
-            *cache = Some((query, rules, max_results, current_date_bucket(), items));
+            *cache = Some((
+                query,
+                rules,
+                max_results,
+                current_date_bucket(),
+                items,
+                total,
+                truncated,
+            ));
         }
     }
 

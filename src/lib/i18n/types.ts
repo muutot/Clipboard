@@ -14,6 +14,7 @@ export interface LocaleDefinition {
     databaseLoadFailed: string;
     historyEmpty: string;
     searchHitSummary: string;
+    searchTruncated: string;
     searchFailed: string;
     copiedItem: string;
     favoriteFailed: string;

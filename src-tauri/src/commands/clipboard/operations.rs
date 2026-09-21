@@ -17,7 +17,7 @@ use crate::CaptureState;
 
 use super::types::{
     permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, HistoryFilterArgs,
-    SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
+    SearchPage, SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
     StorageKindDeleteExpectation, StorageKindDeleteResult,
 };
 
@@ -201,7 +201,7 @@ pub fn search_clipboard_items(
     limit: Option<usize>,
     offset: Option<usize>,
     sort_rules: Option<Vec<SearchSortRule>>,
-) -> Result<Vec<ClipboardItem>, String> {
+) -> Result<SearchPage, String> {
     let started = Instant::now();
 
     let (max_results, sync_mode) = {
@@ -248,21 +248,31 @@ pub fn search_clipboard_items(
         }
     }
 
-    if let Some(cached) = search_cache.get(&query, &rules, max_results, page_offset, page_size) {
+    if let Some((cached, total_count, truncated)) =
+        search_cache.get(&query, &rules, max_results, page_offset, page_size)
+    {
         performance_tracker.record_search(
             &query,
             started.elapsed().as_millis().min(u64::MAX as u128) as u64,
             cached.len(),
         );
-        return Ok(cached);
+        return Ok(SearchPage {
+            items: cached,
+            total_count,
+            truncated,
+        });
     }
 
-    let (_all_ids, _total) = search_index
+    let (all_ids, total_count) = search_index
         .search_all_ids(&query, max_results)
         .map_err(|error| error.to_string())?;
+    // The candidate list is capped at `max_results` while the total counts
+    // every index match, so later pages know matches were dropped instead of
+    // mistaking the cap for the end of the result set.
+    let truncated = total_count > all_ids.len();
 
     let items = database
-        .get_items_by_ids(&_all_ids)
+        .get_items_by_ids(&all_ids)
         .map_err(|error| error.to_string())?;
 
     let mut sorted = items;
@@ -270,23 +280,34 @@ pub fn search_clipboard_items(
 
     // Cache takes ownership of the full sorted vector; slice the requested
     // page from it before moving to avoid a full extra clone.
-    let total = sorted.len();
-    let page_end = (page_offset + page_size).min(total);
-    let page_start = page_offset.min(total);
+    let reachable = sorted.len();
+    let page_end = (page_offset + page_size).min(reachable);
+    let page_start = page_offset.min(reachable);
     let result: Vec<ClipboardItem> = if page_start < page_end {
         sorted[page_start..page_end].to_vec()
     } else {
         Vec::new()
     };
 
-    search_cache.set(query.clone(), rules.clone(), max_results, sorted);
+    search_cache.set(
+        query.clone(),
+        rules.clone(),
+        max_results,
+        sorted,
+        total_count,
+        truncated,
+    );
 
     performance_tracker.record_search(
         &query,
         started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         result.len(),
     );
-    Ok(result)
+    Ok(SearchPage {
+        items: result,
+        total_count,
+        truncated,
+    })
 }
 
 #[tauri::command]
@@ -1001,8 +1022,8 @@ mod tests {
         );
 
         let cache = SearchResultCache::new();
-        cache.set(String::new(), rules.clone(), 100, sorted);
-        assert_eq!(cache.get("", &rules, 100, 0, 10).unwrap()[0].id, "newer");
+        cache.set(String::new(), rules.clone(), 100, sorted, 2, false);
+        assert_eq!(cache.get("", &rules, 100, 0, 10).unwrap().0[0].id, "newer");
 
         // The user pastes the older entry out of history; the usage entry
         // point must drop the cached page since no outbox event fires.

@@ -8,7 +8,7 @@ use std::{
 };
 
 use tantivy::{
-    collector::TopDocs,
+    collector::{Count, TopDocs},
     directory::MmapDirectory,
     query::{BooleanQuery, Query, RangeQuery, TermQuery},
     schema::{IndexRecordOption, TantivyDocument, Value},
@@ -25,8 +25,9 @@ use super::{
 const INDEX_WRITER_MEMORY_BYTES: usize = 60_000_000;
 
 /// Cached `search_all_ids` snapshot: `(normalized query, max_results, date
-/// range, ids)`.
-type CachedIdSnapshot = (String, usize, Option<(i64, i64)>, Vec<String>);
+/// range, ids, total matches)`. The total is stored alongside the truncated
+/// id list so a cache hit still reports how many documents matched overall.
+type CachedIdSnapshot = (String, usize, Option<(i64, i64)>, Vec<String>, usize);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchHit {
@@ -281,13 +282,12 @@ impl SearchIndex {
                 .cached_ids
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
-            if let Some((ref cached_query, cached_max, cached_range, ref ids)) = *cache {
+            if let Some((ref cached_query, cached_max, cached_range, ref ids, total)) = *cache {
                 if cached_query.as_str() == normalized.as_str()
                     && cached_max >= max_results
                     && cached_range == date_range
                 {
-                    let total = ids.len();
-                    return Ok((ids[..max_results.min(total)].to_vec(), total));
+                    return Ok((ids[..max_results.min(ids.len())].to_vec(), total));
                 }
             }
         }
@@ -298,7 +298,7 @@ impl SearchIndex {
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
             if self.cache_generation.load(Ordering::Acquire) == generation {
-                *cache = Some((normalized, max_results, date_range, Vec::new()));
+                *cache = Some((normalized, max_results, date_range, Vec::new(), 0));
             }
             return Ok((Vec::new(), 0));
         }
@@ -324,6 +324,10 @@ impl SearchIndex {
         }
         let boolean_query = BooleanQuery::intersection(subqueries);
         let searcher = self.reader.searcher();
+        // Count every match, not just the capped TopDocs below: callers need
+        // the true total to report truncation instead of silently dropping
+        // matches beyond `max_results`.
+        let total_matches = searcher.search(&boolean_query, &Count)?;
         let top_documents = searcher.search(
             &boolean_query,
             &TopDocs::with_limit(max_results).order_by_score(),
@@ -339,7 +343,6 @@ impl SearchIndex {
                 ids.push(id.to_owned());
             }
         }
-        let total = ids.len();
 
         {
             let mut cache = self
@@ -347,11 +350,17 @@ impl SearchIndex {
                 .lock()
                 .map_err(|_| SearchError::WriterPoisoned)?;
             if self.cache_generation.load(Ordering::Acquire) == generation {
-                *cache = Some((normalized, max_results, date_range, ids.clone()));
+                *cache = Some((
+                    normalized,
+                    max_results,
+                    date_range,
+                    ids.clone(),
+                    total_matches,
+                ));
             }
         }
 
-        Ok((ids, total))
+        Ok((ids, total_matches))
     }
 
     /// Drops the cached id snapshot so the next sweep repopulates it, and
@@ -727,6 +736,31 @@ mod tests {
         assert_eq!(cached_ids.len(), 1);
         assert_eq!(cached_total, 2);
         assert_eq!(cached_ids[0], ids[0]);
+    }
+
+    #[test]
+    fn search_all_ids_reports_the_true_total_beyond_the_cap() {
+        let index = in_memory_index();
+        index
+            .apply_changes(&[
+                SearchIndexChange::Upsert(document("one", "shared truncation term")),
+                SearchIndexChange::Upsert(document("two", "shared truncation term")),
+                SearchIndexChange::Upsert(document("three", "shared truncation term")),
+                SearchIndexChange::Upsert(document("four", "shared truncation term")),
+                SearchIndexChange::Upsert(document("five", "shared truncation term")),
+            ])
+            .unwrap();
+        index.reload_reader().unwrap();
+
+        // A first call already capped must still report all 5 matches.
+        let (ids, total) = index.search_all_ids("shared truncation", 2).unwrap();
+        assert_eq!(ids.len(), 2);
+        assert_eq!(total, 5);
+
+        // A later larger call reuses the run and reports the same total.
+        let (all_ids, all_total) = index.search_all_ids("shared truncation", 10).unwrap();
+        assert_eq!(all_ids.len(), 5);
+        assert_eq!(all_total, 5);
     }
 
     #[test]

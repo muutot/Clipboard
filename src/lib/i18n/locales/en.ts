@@ -14,6 +14,7 @@ const en: LocaleDefinition = {
     databaseLoadFailed: "Failed to load clipboard history",
     historyEmpty: "Clipboard history is empty. Copied content will appear here.",
     searchHitSummary: "Search index returned {count} results",
+    searchTruncated: "Search index matched {total} records, showing the first {shown}",
     searchFailed: "Search index failed, showing local filter results",
     copiedItem: 'Copied "{title}"',
     favoriteFailed: "Failed to update favorite status",
