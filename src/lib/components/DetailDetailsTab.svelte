@@ -144,6 +144,7 @@
     void itemId;
     selectedFileIndex = 0;
     activeMarkerFilter = null;
+    tagDraft = "";
   });
 </script>
 
