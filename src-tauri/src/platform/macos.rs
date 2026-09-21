@@ -624,9 +624,22 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
         }
     }
 
-    // Fallback: write clipboard TIFF via osascript, convert with sips
-    let tiff_path = std::env::temp_dir().join("clipboard_img.tiff");
-    let png_path = std::env::temp_dir().join("clipboard_img.png");
+    // Fallback: write clipboard TIFF via osascript, convert with sips.
+    // Each call gets unique file names: the capture loop polls every 500ms
+    // and re-entrant reads would otherwise overwrite each other's TIFF
+    // mid-conversion and corrupt the image.
+    static IMAGE_TEMP_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let unique = format!(
+        "{}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+        IMAGE_TEMP_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    let tiff_path = std::env::temp_dir().join(format!("clipboard_img_{unique}.tiff"));
+    let png_path = std::env::temp_dir().join(format!("clipboard_img_{unique}.png"));
 
     let escaped = tiff_path
         .to_string_lossy()
