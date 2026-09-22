@@ -539,13 +539,19 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
                 } else {
                     "partial"
                 };
-                let _ = guard.update_sync_status(status, now_ms);
+                if let Err(error) = guard.update_sync_status(status, now_ms) {
+                    crate::log_event!("[sync] failed to persist sync status: {error}");
+                }
             }
             Ok(engine_result.into())
         }
         Err(error) => {
             if let Ok(mut guard) = config.lock() {
-                let _ = guard.update_sync_status("failed", now_ms);
+                if let Err(status_error) = guard.update_sync_status("failed", now_ms) {
+                    crate::log_event!(
+                        "[sync] failed to persist failed sync status: {status_error}"
+                    );
+                }
             }
             Err(error)
         }

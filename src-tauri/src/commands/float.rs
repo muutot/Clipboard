@@ -105,8 +105,16 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
 fn float_initial_position<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<(f64, f64)> {
     let place = {
         let config = app.try_state::<Mutex<ConfigStore>>()?;
-        let config = config.lock().ok()?;
-        config.general_settings().float_panel_position.clone()
+        let place = match config.lock() {
+            Ok(guard) => guard.general_settings().float_panel_position.clone(),
+            Err(error) => {
+                crate::log_event!(
+                    "[float] configuration lock poisoned while reading panel position ({error}); centering"
+                );
+                return None;
+            }
+        };
+        place
     };
     let monitor = app.primary_monitor().ok()??;
     let scale = monitor.scale_factor();
