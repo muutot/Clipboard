@@ -1641,10 +1641,29 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
         };
 
         let dc = GetDC(0);
+        if dc == 0 {
+            // A null display DC (session without a desktop, exhausted GDI
+            // handles) must not flow into CreateCompatibleDC/SelectObject:
+            // the subsequent GetDIBits would silently produce a zero-filled
+            // buffer and poison the icon cache with a black square.
+            DeleteObject(icon_info.hbmMask);
+            if icon_info.hbmColor != 0 {
+                DeleteObject(icon_info.hbmColor);
+            }
+            return false;
+        }
         let mem_dc = CreateCompatibleDC(dc);
+        if mem_dc == 0 {
+            ReleaseDC(0, dc);
+            DeleteObject(icon_info.hbmMask);
+            if icon_info.hbmColor != 0 {
+                DeleteObject(icon_info.hbmColor);
+            }
+            return false;
+        }
         let old_bmp = SelectObject(mem_dc, hbm);
         let mut pixels = vec![0u8; image_size as usize];
-        GetDIBits(
+        let scanned_lines = GetDIBits(
             mem_dc,
             hbm,
             0,
@@ -1656,6 +1675,15 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
         SelectObject(mem_dc, old_bmp);
         DeleteDC(mem_dc);
         ReleaseDC(0, dc);
+        if scanned_lines == 0 {
+            // No scanlines were produced: `pixels` is still all zeros and
+            // must never be encoded into the cache.
+            DeleteObject(icon_info.hbmMask);
+            if icon_info.hbmColor != 0 {
+                DeleteObject(icon_info.hbmColor);
+            }
+            return false;
+        }
 
         let mut rgba = vec![0u8; pixels.len()];
         for (i, chunk) in pixels.as_chunks::<4>().0.iter().enumerate() {
@@ -1671,7 +1699,10 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
                 let img = normalize_app_icon(img);
                 let mut buf = std::io::Cursor::new(Vec::new());
                 img.write_to(&mut buf, image::ImageFormat::Png).ok()?;
-                std::fs::write(path, buf.into_inner()).ok()
+                // Atomic write so a crash cannot leave a truncated icon that
+                // the cache would then serve forever.
+                crate::content::FileStore::save_bytes_atomically(path, buf.into_inner().as_slice())
+                    .ok()
             })
             .is_some();
 
