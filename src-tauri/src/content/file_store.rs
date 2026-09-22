@@ -37,7 +37,6 @@ impl FileStore {
     ) -> Result<FileStorageInfo, StorageError> {
         fs::create_dir_all(file_storage_dir)?;
         let metadata = fs::metadata(source_path)?;
-        let size_bytes = metadata.len();
         let extension = extension_for_path(source_path);
         let mime_type = mime_type_for_path(source_path);
         let created_at_ms = created_at_ms(&metadata);
@@ -49,16 +48,30 @@ impl FileStore {
             .unwrap_or("unnamed")
             .to_owned();
 
-        let content_hash = hash_file(source_path)?;
+        // Stage the source into a process-unique temp file and hash the
+        // STAGED bytes in a single pass. Hashing the live source first and
+        // copying second lets a concurrent writer slip different bytes under
+        // a stale hash, permanently mislabeling the content-addressed file
+        // (dedup, rename inheritance, and sync digests all derive identity
+        // from the name). Name-derived fields (extension/mime) come from the
+        // path, which a content race cannot change; size/hash always describe
+        // the bytes actually stored.
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let staging =
+            file_storage_dir.join(format!(".staging.tmp-{}-{}", std::process::id(), sequence));
+        if let Err(error) = fs::copy(source_path, &staging) {
+            let _ = fs::remove_file(&staging);
+            return Err(StorageError::Io(error));
+        }
+        let staged_size = fs::metadata(&staging)?.len();
+        let content_hash = hash_file(&staging)?;
 
-        let storage_path =
-            file_storage_dir.join(storage_file_name(&content_hash, source_path.extension()));
-
-        if max_copy_size > 0 && size_bytes > max_copy_size {
+        if max_copy_size > 0 && staged_size > max_copy_size {
+            let _ = fs::remove_file(&staging);
             return Ok(FileStorageInfo {
                 storage_path: source_path.display().to_string(),
                 original_name,
-                size_bytes,
+                size_bytes: staged_size,
                 content_hash,
                 extension,
                 mime_type,
@@ -67,16 +80,18 @@ impl FileStore {
             });
         }
 
-        if !storage_path.exists() {
-            store_atomically(&storage_path, |temporary| {
-                fs::copy(source_path, temporary).map(|_| ())
-            })?;
-        }
+        let storage_path =
+            file_storage_dir.join(storage_file_name(&content_hash, source_path.extension()));
 
+        if storage_path.exists() {
+            let _ = fs::remove_file(&staging);
+        } else {
+            sync_and_replace(&staging, &storage_path)?;
+        }
         Ok(FileStorageInfo {
             storage_path: storage_path.display().to_string(),
             original_name,
-            size_bytes,
+            size_bytes: staged_size,
             content_hash,
             extension,
             mime_type,
@@ -220,6 +235,13 @@ fn store_atomically(
     let temporary = target.with_file_name(temporary_name);
 
     populate(&temporary)?;
+    sync_and_replace(&temporary, target)?;
+    Ok(())
+}
+
+/// Flushes staged contents and atomically renames the temporary file over
+/// `target`, removing the temporary file on any failure.
+fn sync_and_replace(temporary: &Path, target: &Path) -> Result<(), StorageError> {
     // Flush the staged contents before the rename: without this the data may
     // still sit in the OS page cache and a crash/power loss can leave a
     // truncated target behind (content-addressed paths are never repaired).
@@ -227,14 +249,14 @@ fn store_atomically(
     // on a read-only handle fails with access denied.
     if let Err(error) = fs::OpenOptions::new()
         .write(true)
-        .open(&temporary)
+        .open(temporary)
         .and_then(|file| file.sync_all())
     {
-        let _ = fs::remove_file(&temporary);
+        let _ = fs::remove_file(temporary);
         return Err(StorageError::Io(error));
     }
-    if let Err(error) = replace_file(&temporary, target) {
-        let _ = fs::remove_file(&temporary);
+    if let Err(error) = replace_file(temporary, target) {
+        let _ = fs::remove_file(temporary);
         return Err(error);
     }
     Ok(())
