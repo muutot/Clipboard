@@ -567,7 +567,14 @@
     // measured height and cause a list-wide layout jitter.
     const detailSelected =
       detailDisplayMode === "split" && detailItem?.id === item.id ? "detail" : "";
-    return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}:${detailSelected}`;
+    // Tags, the rendered file names, and resource materialization all change
+    // the card's height, so they participate in the signature; otherwise a
+    // stale measurement is reused and the virtual list misplaces rows until
+    // the ResizeObserver corrects it.
+    const tagsKey = (item.tags ?? []).join("");
+    const fileNamesKey = (item.fileMeta ?? []).map((file) => file.name).join("");
+    const materialized = item.resourcePath ? "1" : "0";
+    return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}:${detailSelected}:${tagsKey}:${fileNamesKey}:${materialized}`;
   }
 
   function recordCardHeight(id: string, height: number) {
