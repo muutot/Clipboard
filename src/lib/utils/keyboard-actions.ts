@@ -56,6 +56,8 @@ export interface KeyActionContext {
   hasEditing: boolean;
   hasFullscreen: boolean;
   hasTagDialog: boolean;
+  /** A card context menu is open and owns Escape (closes the menu only). */
+  hasContextMenu: boolean;
   hasDetail: boolean;
   /** Tag currently used as a list filter, if any. */
   tagFilter: string | null;
@@ -123,7 +125,13 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     bindings.some((binding) => shortcutMatchesEvent(binding, event));
 
   if (event.key === "Escape") {
-    if (event.defaultPrevented || ctx.hasEditing || ctx.hasFullscreen || ctx.hasTagDialog) {
+    if (
+      event.defaultPrevented ||
+      ctx.hasEditing ||
+      ctx.hasFullscreen ||
+      ctx.hasTagDialog ||
+      ctx.hasContextMenu
+    ) {
       return { type: "none", prevent: false };
     }
     if (ctx.detailEditor) return { type: "none", prevent: false };

@@ -40,6 +40,7 @@
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
+  import { onContextMenuOpenChanged } from "$lib/services/context-menu";
   import { getKeyboardConfig } from "$lib/services/keyboard";
   import { defaultShortcutsFor } from "$lib/keyboard-defaults";
   import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
@@ -254,6 +255,12 @@
   let tagFilter = $state<string | null>(null);
   let tagColors = $state<Record<string, string>>({});
   let tagEditDialog = $state<string | null>(null);
+  // Mirrors the global card-context-menu visibility (reported by ClipboardCard
+  // through the context-menu service) so Escape yields to the open menu: one
+  // press closes the menu without clearing the bulk selection or hiding the
+  // window. Follows the `hasTagDialog` pattern in the key-action context.
+  let contextMenuOpen = $state(false);
+  $effect(() => onContextMenuOpenChanged((open) => (contextMenuOpen = open)));
   let sourceApps = $state<string[]>([]);
 
   let detailItem = $state<ClipboardItem | null>(null);
@@ -2315,6 +2322,7 @@
       event.key !== "Escape" ||
       selectedIds.size === 0 ||
       editingId ||
+      contextMenuOpen ||
       isEditableKeyboardTarget(event.target)
     ) {
       return;
@@ -2432,6 +2440,7 @@
         hasEditing: !!editingId,
         hasFullscreen: !!fullscreenFilePath,
         hasTagDialog: !!tagEditDialog,
+        hasContextMenu: contextMenuOpen,
         hasDetail: !!detailItem,
         tagFilter,
         isTauri: "__TAURI_INTERNALS__" in window,

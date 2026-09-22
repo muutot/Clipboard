@@ -24,7 +24,11 @@
   import { detectQuickActions, parseIsoDate, quickActionKind } from "$lib/utils/patterns";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { iconsDir } from "$lib/services/paths";
-  import { onContextMenuOpened, notifyContextMenuOpened } from "$lib/services/context-menu";
+  import {
+    onContextMenuOpened,
+    notifyContextMenuOpened,
+    trackContextMenuOpen,
+  } from "$lib/services/context-menu";
 
   let iconsBase = $derived($iconsDir);
 
@@ -167,6 +171,14 @@
       contextMenu = null;
     });
     return unsubscribe;
+  });
+
+  // Report visibility so the route yields Escape to the open menu. The
+  // cleanup covers every close path (Escape, outside click, action dispatch,
+  // bus close from another card, unmount), keeping the global count exact.
+  $effect(() => {
+    if (!contextMenu) return;
+    return trackContextMenuOpen();
   });
 
   let editing = $state(false);

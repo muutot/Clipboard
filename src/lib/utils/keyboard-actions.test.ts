@@ -36,6 +36,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     hasEditing: false,
     hasFullscreen: false,
     hasTagDialog: false,
+    hasContextMenu: false,
     hasDetail: false,
     tagFilter: null,
     isTauri: false,
@@ -85,6 +86,7 @@ describe("resolveKeyAction — Escape", () => {
       { hasEditing: true },
       { hasFullscreen: true },
       { hasTagDialog: true },
+      { hasContextMenu: true },
       { detailEditor: true },
       { hasDetail: true },
     ] as Partial<KeyActionContext>[]) {
