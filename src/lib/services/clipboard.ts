@@ -452,11 +452,16 @@ export async function copyClipboardItem(
     if (item.textContent && item.textContent.startsWith("[")) {
       try {
         const paths = JSON.parse(item.textContent) as string[];
-        if (paths.length > 1) {
-          await writeClipboardText(paths.join("\n"));
-          hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
-          showToast(t("toast.copySuccess"), "success");
-          return;
+        // Single-file records carry a one-element list; only a multi-file
+        // check here would leave them to fall through silently below.
+        if (Array.isArray(paths) && paths.length > 0) {
+          const joined = paths.join("\n");
+          if (joined.trim().length > 0) {
+            await writeClipboardText(joined);
+            hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
+            showToast(t("toast.copySuccess"), "success");
+            return;
+          }
         }
       } catch {
         /* ignore */
@@ -472,6 +477,10 @@ export async function copyClipboardItem(
       } catch {
         showToast(t("toast.copyFailed"), "error");
       }
+    } else {
+      // Neither a path list nor a resource path: report instead of
+      // returning silently so the click has visible feedback.
+      showToast(t("toast.copyFailed"), "error");
     }
     return;
   }
