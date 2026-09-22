@@ -111,7 +111,13 @@ impl KeyboardConfigStore {
             path.display(),
             quarantined.display()
         );
-        let _ = fs::rename(path, &quarantined);
+        if fs::rename(path, &quarantined).is_err() {
+            // Mirror `ConfigStore::load`: a locked or undeletable rename must
+            // not leave the corrupt file in place — `KeyboardConfigStore::load`
+            // only rewrites when the path is gone, so a failed rename alone
+            // would re-read the same bytes on every launch forever.
+            let _ = fs::remove_file(path);
+        }
     }
 
     pub fn path(&self) -> &Path {

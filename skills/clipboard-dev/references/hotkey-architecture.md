@@ -127,8 +127,9 @@ Window-only (main window focused):
   the same chord (`Ctrl+Esc` vs `Ctrl+Escape`) are rejected. `set_action_shortcuts`
   also rejects a key with no global-hotkey mapping instead of persisting it
   and dropping it silently at registration; a config that cannot be parsed or
-  validated is quarantined to `keyboard.json.corrupt-<unix-seconds>` and
-  replaced with defaults rather than aborting startup.
+  validated is quarantined to `keyboard.json.corrupt-<unix-seconds>` (or
+  removed if that rename fails) and replaced with defaults rather than
+  aborting startup.
 - Canonical shortcut format is the contract between layers (modifier order
   Ctrl/Alt/Shift/Meta, single-char upper-cased, multi-char first-upper
   rest-lower); both `ShortcutBinding::canonical` and
