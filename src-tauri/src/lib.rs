@@ -746,6 +746,7 @@ pub fn run() {
             save_clipboard_item_file,
             rename_item,
             update_clipboard_text,
+            save_clipboard_item_as_new,
             set_history_config,
             get_history_config,
             set_storage_config,

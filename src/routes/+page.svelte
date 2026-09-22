@@ -1847,9 +1847,8 @@
   async function saveAsNew(id: string, title: string, content: string) {
     editingId = null;
     try {
-      const newId: string = await invoke("duplicate_clipboard_item", { id });
-      await invoke("update_clipboard_text", {
-        id: newId,
+      await invoke("save_clipboard_item_as_new", {
+        id,
         newTitle: title,
         newTextContent: content,
       });

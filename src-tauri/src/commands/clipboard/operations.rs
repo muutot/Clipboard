@@ -442,14 +442,29 @@ pub fn permanently_delete_storage_kind(
 /// through reference-scanned orphan cleanup, so the file survives until every
 /// row pointing at it is gone, and `rename_item` renames the physical file
 /// only when this record is its sole owner.
+///
+/// `id` and `content_hash` are namespaced with a random UUID suffix so
+/// `UNIQUE (kind, content_hash)` admits a second row for the same content and
+/// two rapid duplicates never collapse into one upsert.
 #[tauri::command]
 pub fn duplicate_clipboard_item(
     database: tauri::State<'_, Database>,
     app: tauri::AppHandle,
     id: String,
 ) -> Result<String, String> {
+    let item = duplicate_clipboard_item_record(database.inner(), &id)?;
+    if let Err(error) = app.emit("clipboard-item-added", &item) {
+        crate::log_event!("[clipboard] failed to emit duplicate: {error}");
+    }
+    Ok(item.id)
+}
+
+pub fn duplicate_clipboard_item_record(
+    database: &Database,
+    id: &str,
+) -> Result<ClipboardItem, String> {
     let items = database
-        .get_items_by_ids(std::slice::from_ref(&id))
+        .get_items_by_ids(&[id.to_owned()])
         .map_err(|e| e.to_string())?;
     let mut item = items
         .into_iter()
@@ -459,14 +474,94 @@ pub fn duplicate_clipboard_item(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64;
-    item.id = format!("{}-{}", item.content_hash, now_ms);
-    item.content_hash = format!("{}-{}", item.content_hash, now_ms);
+    let unique = uuid::Uuid::new_v4().simple();
+    let namespaced = format!("{}-{unique}", item.content_hash);
+    item.id = namespaced.clone();
+    item.content_hash = namespaced;
     item.created_at_ms = now_ms;
     item.last_used_at_ms = None;
     item.is_favorite = false;
     database.save_item(&item).map_err(|e| e.to_string())?;
-    let _ = app.emit("clipboard-item-added", &item);
-    Ok(item.id.clone())
+    Ok(item)
+}
+
+/// Insert a new text/link record from an edited copy of `id` in one step.
+///
+/// Replaces the UI's former `duplicate_clipboard_item` + `update_clipboard_text`
+/// pair: a failure can no longer leave a half-created duplicate, and a content
+/// hash that already exists (including unchanged text saved beside its source)
+/// is UUID-namespaced instead of tripping `UNIQUE (kind, content_hash)`.
+#[tauri::command]
+pub fn save_clipboard_item_as_new(
+    database: tauri::State<'_, Database>,
+    app: tauri::AppHandle,
+    id: String,
+    new_title: String,
+    new_text_content: String,
+) -> Result<String, String> {
+    let item =
+        save_clipboard_item_as_new_record(database.inner(), &id, &new_title, &new_text_content)?;
+    if let Err(error) = app.emit("clipboard-item-added", &item) {
+        crate::log_event!("[clipboard] failed to emit save-as-new: {error}");
+    }
+    Ok(item.id)
+}
+
+pub fn save_clipboard_item_as_new_record(
+    database: &Database,
+    id: &str,
+    new_title: &str,
+    new_text_content: &str,
+) -> Result<ClipboardItem, String> {
+    if new_text_content.trim().is_empty() {
+        return Err("text content cannot be empty".to_owned());
+    }
+    let items = database
+        .get_items_by_ids(&[id.to_owned()])
+        .map_err(|e| e.to_string())?;
+    let source = items
+        .into_iter()
+        .next()
+        .ok_or_else(|| "item not found".to_string())?;
+    if !matches!(source.kind, ClipboardKind::Text | ClipboardKind::Link) {
+        return Err("only text and link items can be edited".to_owned());
+    }
+    let kind_name = match source.kind {
+        ClipboardKind::Text => "text",
+        ClipboardKind::Link => "link",
+        ClipboardKind::Image | ClipboardKind::File => unreachable!(),
+    };
+    let custom_title =
+        resolve_custom_title(new_title, new_text_content, source.metadata_json.as_deref());
+    let metadata_json = set_custom_title_metadata(source.metadata_json.as_deref(), custom_title)?;
+    let proposed_hash = content::hash::compute_content_hash(kind_name, new_text_content, None);
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let content_hash = if database
+        .content_exists(source.kind, &proposed_hash)
+        .map_err(|e| e.to_string())?
+    {
+        format!("{proposed_hash}-{unique}")
+    } else {
+        proposed_hash
+    };
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    let mut item = source;
+    item.id = format!("{content_hash}-{unique}");
+    item.title = new_title.to_owned();
+    item.text_content = Some(new_text_content.to_owned());
+    item.html_content = None;
+    item.rtf_content = None;
+    item.content_hash = content_hash;
+    item.size_bytes = new_text_content.len() as u64;
+    item.created_at_ms = now_ms;
+    item.last_used_at_ms = None;
+    item.is_favorite = false;
+    item.metadata_json = Some(metadata_json);
+    database.save_item(&item).map_err(|e| e.to_string())?;
+    Ok(item)
 }
 
 #[tauri::command]
@@ -672,9 +767,10 @@ fn replace_path_strings(value: &mut serde_json::Value, old_path: &str, new_path:
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_sort_rules, cmp_by_field, generated_clipboard_title, metadata_custom_title,
-        record_item_usage, rename_item_record, resolve_custom_title, rewrite_stored_resource_paths,
-        sanitize_file_stem, set_custom_title_metadata,
+        apply_sort_rules, cmp_by_field, duplicate_clipboard_item_record, generated_clipboard_title,
+        metadata_custom_title, record_item_usage, rename_item_record, resolve_custom_title,
+        rewrite_stored_resource_paths, sanitize_file_stem, save_clipboard_item_as_new_record,
+        set_custom_title_metadata,
     };
     use crate::commands::clipboard::types::{
         SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
@@ -702,6 +798,77 @@ mod tests {
             is_favorite: false,
             metadata_json: None,
         }
+    }
+
+    #[test]
+    fn duplicate_namespaces_hash_and_stays_unique_when_called_twice() {
+        let database = Database::open_in_memory().unwrap();
+        let mut source = item("src", "title");
+        source.content_hash = "abc".to_owned();
+        source.text_content = Some("hello".to_owned());
+        database.save_item(&source).unwrap();
+
+        let first = duplicate_clipboard_item_record(&database, "src").unwrap();
+        let second = duplicate_clipboard_item_record(&database, "src").unwrap();
+
+        assert_ne!(first.id, second.id);
+        assert_ne!(first.content_hash, second.content_hash);
+        assert_ne!(first.content_hash, "abc");
+        assert_eq!(
+            database.get_item("src").unwrap().unwrap().content_hash,
+            "abc"
+        );
+        assert!(database.get_item(&first.id).unwrap().is_some());
+        assert!(database.get_item(&second.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn save_as_new_persists_unchanged_content_without_hash_collision() {
+        let database = Database::open_in_memory().unwrap();
+        let mut source = item("src", "title");
+        source.content_hash = "real-hash".to_owned();
+        source.text_content = Some("same".to_owned());
+        database.save_item(&source).unwrap();
+
+        let created =
+            save_clipboard_item_as_new_record(&database, "src", "title2", "same").unwrap();
+
+        assert_ne!(created.id, "src");
+        assert_eq!(created.text_content.as_deref(), Some("same"));
+        assert_ne!(created.content_hash, "real-hash");
+        assert_eq!(
+            database.get_item("src").unwrap().unwrap().content_hash,
+            "real-hash"
+        );
+        assert!(database.get_item(&created.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn save_as_new_uses_real_hash_for_fresh_content() {
+        let database = Database::open_in_memory().unwrap();
+        let mut source = item("src", "title");
+        source.content_hash = "real-hash".to_owned();
+        source.text_content = Some("old".to_owned());
+        database.save_item(&source).unwrap();
+
+        let created =
+            save_clipboard_item_as_new_record(&database, "src", "title", "brand new").unwrap();
+        let expected = crate::content::hash::compute_content_hash("text", "brand new", None);
+        assert_eq!(created.content_hash, expected);
+    }
+
+    #[test]
+    fn save_as_new_rejects_empty_text_and_media_kinds() {
+        let database = Database::open_in_memory().unwrap();
+        let mut source = item("src", "title");
+        source.text_content = Some("body".to_owned());
+        database.save_item(&source).unwrap();
+        assert!(save_clipboard_item_as_new_record(&database, "src", "t", "   ").is_err());
+
+        let mut media = item("img", "shot");
+        media.kind = ClipboardKind::Image;
+        database.save_item(&media).unwrap();
+        assert!(save_clipboard_item_as_new_record(&database, "img", "t", "text").is_err());
     }
 
     #[test]
