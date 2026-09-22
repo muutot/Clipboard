@@ -1570,7 +1570,20 @@ fn expired_purge_keeps_favorited_recycle_bin_records() {
         .save_item(&text_item("kept", "hash-kept", 100))
         .unwrap();
     assert!(database.soft_delete("kept").unwrap());
-    assert!(database.set_favorite("kept", true).unwrap());
+    // Favoriting inside the bin is refused and deleting a favorite is
+    // rejected, so a favorited recycle-bin row can only be legacy
+    // (grandfathered before the refuse rule). NULL the timestamp like a
+    // legacy row so the record is actually expiry-eligible and the
+    // favorite guard in the purge is exercised.
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "UPDATE clipboard_items SET is_favorite = 1, deleted_at_ms = NULL WHERE id = 'kept'",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
 
     assert_eq!(database.permanently_delete_expired(30).unwrap(), 0);
     assert!(database.get_item("kept").unwrap().is_some());
