@@ -217,9 +217,11 @@ const REPLACE_MAX_SOURCE_BYTES: u64 = 10 * 1024 * 1024;
 
 /// Rejects non-image sources before they can be staged into the icons
 /// directory. Raster formats must header-decode via the `image` crate; `ico`
-/// and `svg` are extension-gated only (no decoder is bundled) and render inert
-/// inside `<img>`. Residual risk (a compromised renderer staging *other valid
-/// images*) is accepted: the dialog flow is explicit user consent.
+/// must carry its 4-byte magic and `svg` must start with `<` after an
+/// optional BOM/whitespace (any XML document does, so valid SVGs — including
+/// ones with prologs — pass while renamed binaries are rejected). Both still
+/// render inert inside `<img>`. Residual risk (a compromised renderer staging
+/// *other valid images*) is accepted: the dialog flow is explicit user consent.
 fn validate_replace_source(source: &std::path::Path) -> Result<(), String> {
     if !source.is_file() {
         return Err("source file not found".to_string());
@@ -238,11 +240,48 @@ fn validate_replace_source(source: &std::path::Path) -> Result<(), String> {
     if size > REPLACE_MAX_SOURCE_BYTES {
         return Err("source image exceeds the 10 MiB limit".to_string());
     }
-    if extension != "svg" && extension != "ico" {
+    if extension == "ico" {
+        validate_ico_magic(source)?;
+    } else if extension == "svg" {
+        validate_svg_prolog(source)?;
+    } else {
         image::image_dimensions(source)
             .map_err(|_| "source is not a decodable image".to_string())?;
     }
     Ok(())
+}
+
+/// ICO/CUR files start with a reserved zero word plus the 1 (icon) or 2
+/// (cursor) type word; anything else is a renamed foreign file.
+fn validate_ico_magic(source: &std::path::Path) -> Result<(), String> {
+    use std::io::Read;
+    let mut header = [0u8; 4];
+    std::fs::File::open(source)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .map_err(|_| "source is not a decodable image".to_string())?;
+    if header[0] == 0 && header[1] == 0 && (header[2] == 1 || header[2] == 2) && header[3] == 0 {
+        Ok(())
+    } else {
+        Err("source is not a decodable image".to_string())
+    }
+}
+
+/// SVG is XML text: after an optional UTF-8 BOM and whitespace the first
+/// byte must be `<` (this covers `<?xml?>` prologs and comments, which also
+/// start with `<`). Binary decoys fail here.
+fn validate_svg_prolog(source: &std::path::Path) -> Result<(), String> {
+    let bytes = std::fs::read(source).map_err(|_| "source is not a decodable image".to_string())?;
+    let mut start = bytes.as_slice();
+    if start.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        start = &start[3..];
+    }
+    let text =
+        std::str::from_utf8(start).map_err(|_| "source is not a decodable image".to_string())?;
+    if text.trim_start().starts_with('<') {
+        Ok(())
+    } else {
+        Err("source is not a decodable image".to_string())
+    }
 }
 
 // NOTE: the former `copy_file_to` command (an unrestricted src→dst file copy
@@ -614,6 +653,24 @@ mod tests {
         touch(&dir, "big.png", &big);
         let err = validate_replace_source(&dir.join("big.png")).unwrap_err();
         assert!(err.contains("10 MiB"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_replace_source_checks_ico_magic_and_svg_prolog() {
+        let dir = replace_source_dir("magic");
+        // Minimal single-image ICO: reserved word, type 1, one entry.
+        let mut icon = vec![0u8, 0, 1, 0, 1, 0];
+        icon.extend_from_slice(&[16, 16, 0, 0, 1, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        touch(&dir, "app.ico", &icon);
+        assert!(validate_replace_source(&dir.join("app.ico")).is_ok());
+        touch(&dir, "fake.ico", b"MZ-binary-masquerading-as-icon");
+        assert!(validate_replace_source(&dir.join("fake.ico")).is_err());
+
+        touch(&dir, "vector.svg", b"<?xml version=\"1.0\"?><svg></svg>");
+        assert!(validate_replace_source(&dir.join("vector.svg")).is_ok());
+        touch(&dir, "binary.svg", &[0x89, b'P', b'N', b'G', 0, 1, 2, 3]);
+        assert!(validate_replace_source(&dir.join("binary.svg")).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
