@@ -203,6 +203,19 @@ fn store_atomically(
     let temporary = target.with_file_name(temporary_name);
 
     populate(&temporary)?;
+    // Flush the staged contents before the rename: without this the data may
+    // still sit in the OS page cache and a crash/power loss can leave a
+    // truncated target behind (content-addressed paths are never repaired).
+    // The handle needs write access: on Windows `sync_all` (FlushFileBuffers)
+    // on a read-only handle fails with access denied.
+    if let Err(error) = fs::OpenOptions::new()
+        .write(true)
+        .open(&temporary)
+        .and_then(|file| file.sync_all())
+    {
+        let _ = fs::remove_file(&temporary);
+        return Err(StorageError::Io(error));
+    }
     if let Err(error) = replace_file(&temporary, target) {
         let _ = fs::remove_file(&temporary);
         return Err(error);
