@@ -1,6 +1,7 @@
 use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf};
 
+use super::file_store::FileStore;
 use crate::storage::StorageError;
 
 pub fn compute_content_hash(kind: &str, text: &str, resource_path: Option<&str>) -> String {
@@ -134,9 +135,11 @@ impl AppIconStore {
         let filename = format!("{}.{}", hash, ext);
         let path = self.icons_dir.join(&filename);
 
-        if !path.exists() {
-            fs::write(&path, data)?;
-        }
+        // Atomic write: concurrent extractions of the same app icon must not
+        // interleave into a truncated file, and a crash mid-write must not
+        // leave one behind (same-size files are skipped, shorter leftovers
+        // are repaired).
+        FileStore::save_bytes_atomically(&path, data)?;
 
         Ok(path)
     }
