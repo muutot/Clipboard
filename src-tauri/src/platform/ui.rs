@@ -191,7 +191,9 @@ impl SystemTray {
             });
         } else if id == Self::SETTINGS_MENU_ID {
             show_main_window(app);
-            let _ = app.emit("tray-open-settings", ());
+            if let Err(error) = app.emit("tray-open-settings", ()) {
+                crate::log_event!("[tray] failed to emit open-settings: {error}");
+            }
         } else if id == Self::PAUSE_MENU_ID {
             // Mirror the `toggle_privacy_pause` command ordering: the
             // PrivacyManager flips first and is the source of truth, the
@@ -220,7 +222,9 @@ impl SystemTray {
                     }
                 }
             }
-            let _ = app.emit("privacy-pause-changed", paused);
+            if let Err(error) = app.emit("privacy-pause-changed", paused) {
+                crate::log_event!("[tray] failed to emit pause-changed: {error}");
+            }
             // Rebuild so the checkbox reflects the toggled state; the
             // privacy listener rebuilds again on the event above, which is
             // idempotent.
@@ -236,7 +240,9 @@ impl SystemTray {
                 crate::log_event!(
                     "[tray] restart refused in a debug build; restart from the terminal instead"
                 );
-                let _ = app.emit("tray-restart-blocked-in-dev", ());
+                if let Err(error) = app.emit("tray-restart-blocked-in-dev", ()) {
+                    crate::log_event!("[tray] failed to emit restart-blocked: {error}");
+                }
             } else {
                 app.restart();
             }

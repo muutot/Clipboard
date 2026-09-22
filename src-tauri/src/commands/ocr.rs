@@ -313,7 +313,7 @@ async fn download_ppocr_file(
             .map_err(|e| format!("remove stale {}: {e}", temporary.display()))?;
     }
 
-    let _ = app.emit(
+    if let Err(error) = app.emit(
         "ppocr-download-progress",
         PpOcrDownloadProgress {
             filename: model_file.filename.to_owned(),
@@ -322,7 +322,9 @@ async fn download_ppocr_file(
             total: model_file.size_bytes,
             percentage: 0.0,
         },
-    );
+    ) {
+        crate::log_event!("[ocr] failed to emit download progress: {error}");
+    }
 
     let mut response = client
         .get(model_file.url)
@@ -349,7 +351,7 @@ async fn download_ppocr_file(
         } else {
             -1.0
         };
-        let _ = app.emit(
+        if let Err(error) = app.emit(
             "ppocr-download-progress",
             PpOcrDownloadProgress {
                 filename: model_file.filename.to_owned(),
@@ -358,7 +360,9 @@ async fn download_ppocr_file(
                 total,
                 percentage,
             },
-        );
+        ) {
+            crate::log_event!("[ocr] failed to emit download progress: {error}");
+        }
     }
 
     file.flush().await.map_err(|e| e.to_string())?;

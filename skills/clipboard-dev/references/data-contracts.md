@@ -164,7 +164,7 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 | `ppocr-download-progress`       | OCR installer                                                                                      | settings UI download progress                                                                                                          |
 | `privacy-pause-changed`         | tray pause toggle, or `toggle_privacy_pause` command                                               | settings `GeneralSettingsPanel` and tray menu item refresh recording pause state                                                       |
 
-Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function.
+Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function. Producers must not swallow `app.emit` failures silently: log them with `crate::log_event!` (or push a command warning) so a missed UI refresh is diagnosable; do not reintroduce bare `let _ = app.emit(...)` in library code.
 
 ## Resource metadata contract
 

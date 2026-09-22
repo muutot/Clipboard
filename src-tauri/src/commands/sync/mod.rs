@@ -524,12 +524,14 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
     match outcome {
         Ok(engine_result) => {
             if engine_result.applied_entries > 0 {
-                let _ = app.emit(
+                if let Err(error) = app.emit(
                     "clipboard-history-invalidated",
                     crate::commands::clipboard::ClipboardHistoryInvalidated {
                         deleted_ids: Vec::new(),
                     },
-                );
+                ) {
+                    crate::log_event!("[sync] failed to emit history-invalidated: {error}");
+                }
             }
             if let Ok(mut guard) = config.lock() {
                 let status = if engine_result.failed_peers == 0 {

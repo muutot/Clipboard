@@ -340,7 +340,11 @@ impl HotkeyManager {
                         // forwarded as events; listeners need no manager code.
                         let action_id = global_action_ids().nth(index).unwrap_or("unknown");
                         if let Some(app) = app.as_ref() {
-                            let _ = app.emit("global-hotkey", action_id);
+                            if let Err(error) = app.emit("global-hotkey", action_id) {
+                                crate::log_event!(
+                                    "[hotkey] failed to emit global-hotkey {action_id}: {error}"
+                                );
+                            }
                         } else {
                             crate::log_event!(
                                 "[hotkey] no app handle to forward global action {action_id}"

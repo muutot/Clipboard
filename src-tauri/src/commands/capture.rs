@@ -670,7 +670,12 @@ pub(crate) fn run_capture_loop(
                             }
                             thumbnail_queue.enqueue(saved_id.clone(), img_path.clone());
                             let emit_item = load_emit_item(&database, &saved_id, &item);
-                            let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                            if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item)
+                            {
+                                crate::log_event!(
+                                    "[clipboard-worker] failed to emit item-added: {error}"
+                                );
+                            }
                             crate::platform::refresh_tray_recent_menu(&app_handle);
                             continue;
                         }
@@ -736,7 +741,13 @@ pub(crate) fn run_capture_loop(
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
                                 let emit_item = load_emit_item(&database, &saved_id, &item);
-                                let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                if let Err(error) =
+                                    app_handle.emit("clipboard-item-added", &emit_item)
+                                {
+                                    crate::log_event!(
+                                        "[clipboard-worker] failed to emit item-added: {error}"
+                                    );
+                                }
                                 crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
@@ -792,7 +803,13 @@ pub(crate) fn run_capture_loop(
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
                                 let emit_item = load_emit_item(&database, &saved_id, &item);
-                                let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                                if let Err(error) =
+                                    app_handle.emit("clipboard-item-added", &emit_item)
+                                {
+                                    crate::log_event!(
+                                        "[clipboard-worker] failed to emit item-added: {error}"
+                                    );
+                                }
                                 crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
@@ -886,7 +903,11 @@ pub(crate) fn run_capture_loop(
                             }
                         }
                         let emit_item = load_emit_item(&database, &saved_id, &item);
-                        let _ = app_handle.emit("clipboard-item-added", &emit_item);
+                        if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item) {
+                            crate::log_event!(
+                                "[clipboard-worker] failed to emit item-added: {error}"
+                            );
+                        }
                         crate::platform::refresh_tray_recent_menu(&app_handle);
                     }
                     Err(e) => {

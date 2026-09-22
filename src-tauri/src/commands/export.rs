@@ -188,12 +188,14 @@ pub async fn import_from_file(
     }?;
     annotate_truncation_risk(&mut summary, &database, &config)?;
     if summary.imported_count > 0 {
-        let _ = app.emit(
+        if let Err(error) = app.emit(
             "clipboard-history-invalidated",
             ClipboardHistoryInvalidated {
                 deleted_ids: Vec::new(),
             },
-        );
+        ) {
+            crate::log_event!("[import] failed to emit history-invalidated: {error}");
+        }
     }
     Ok(summary)
 }

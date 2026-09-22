@@ -43,7 +43,9 @@ pub fn set_general_settings(
     };
 
     capture.set_max_text_capture_bytes(max_text_capture_bytes);
-    let _ = app.emit("general-settings-changed", &saved);
+    if let Err(error) = app.emit("general-settings-changed", &saved) {
+        crate::log_event!("[settings] failed to emit general-settings-changed: {error}");
+    }
     if saved.window_opacity_affects_text {
         apply_window_transparency_to_main(&app, saved.window_transparency);
     }
