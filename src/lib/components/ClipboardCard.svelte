@@ -703,8 +703,9 @@
           <span class="file-icon"><AppIcon name="file" size={15} /></span>
           {#if item.fileMeta && item.fileMeta.length > 1}
             <span
-              >{item.fileMeta[0].name}{item.fileMeta.length > 2 ? `, ${item.fileMeta[1].name}` : ""}
-              {_t("card.fileCountSuffix", { count: item.fileMeta.length })}</span
+              >{item.fileMeta[0].name}, {item.fileMeta[1].name}{item.fileMeta.length > 2
+                ? ` ${_t("card.fileCountSuffix", { count: item.fileMeta.length - 2 })}`
+                : ""}</span
             >
           {:else}
             <span class="file-name">{item.fileName ?? item.title}</span>
