@@ -105,7 +105,7 @@ impl From<v1::SyncEngineResult> for SyncRunResult {
 
 /// Immutable snapshot of every value needed by one network run. The config
 /// mutex is released before key derivation, hashing, SQLite export, or S3 I/O.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct SyncSettings {
     endpoint: String,
     remote_path: String,
@@ -117,6 +117,29 @@ struct SyncSettings {
     segment_max_entries: usize,
     max_sync_image_bytes: u64,
     max_sync_file_bytes: u64,
+}
+
+// Manual `Debug` so a future `{:?}` log or panic context cannot leak the S3
+// secret or the sync password (mirrors `S3ObjectStore`, which deliberately
+// does not derive `Debug` for the same reason).
+impl std::fmt::Debug for SyncSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SyncSettings")
+            .field("endpoint", &self.endpoint)
+            .field("remote_path", &self.remote_path)
+            .field("region", &self.region)
+            .field("bucket", &self.bucket)
+            .field("access_key", &self.access_key)
+            .field("secret_key", &"<redacted>")
+            .field(
+                "sync_password",
+                &self.sync_password.as_ref().map(|_| "<redacted>"),
+            )
+            .field("segment_max_entries", &self.segment_max_entries)
+            .field("max_sync_image_bytes", &self.max_sync_image_bytes)
+            .field("max_sync_file_bytes", &self.max_sync_file_bytes)
+            .finish()
+    }
 }
 
 impl SyncSettings {
@@ -744,6 +767,17 @@ mod tests {
         // Incomplete fields are still rejected by the test path.
         sync.s3_bucket = None;
         assert!(SyncSettings::validated_from_sync_config(&sync).is_err());
+    }
+
+    #[test]
+    fn debug_output_redacts_secrets() {
+        let mut sync = configured_sync();
+        sync.s3_secret_key = Some("s3-secret-value-xyz".to_string());
+        sync.sync_password = Some("sync-password-xyz".to_string());
+        let rendered = format!("{:?}", SyncSettings::from_sync_config(&sync).unwrap());
+        assert!(rendered.contains("<redacted>"));
+        assert!(!rendered.contains("s3-secret-value-xyz"));
+        assert!(!rendered.contains("sync-password-xyz"));
     }
 
     #[test]
