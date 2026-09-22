@@ -363,6 +363,18 @@ describe("resolveKeyAction — Enter, Space, Backspace, select-all", () => {
     });
   });
 
+  it("keeps Ctrl+A native inside contenteditable hosts (code editor)", () => {
+    // Guarded by the editable-target early return above the select-all
+    // branch (Ctrl+A is not a punch-through chord); this pins the behavior
+    // against branch reordering.
+    const editor = targetOn("div", { contenteditable: "true" });
+    const onEditor = Object.defineProperty(keyEvent({ key: "a", ctrlKey: true }), "target", {
+      value: editor,
+    });
+    expect(resolveKeyAction(onEditor, ctx())).toEqual({ type: "none", prevent: false });
+    editor.remove();
+  });
+
   it("honors clearSelection rebinding and disabling from settings", () => {
     // Empty bindings disable the action instead of keeping Backspace active.
     expect(
