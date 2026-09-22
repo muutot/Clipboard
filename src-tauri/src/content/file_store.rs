@@ -144,6 +144,23 @@ impl FileStore {
         }
         Ok(())
     }
+
+    /// Writes in-memory `data` to `target` atomically, skipping the write
+    /// when a same-size file already exists. Callers store bytes whose
+    /// identity implies their contents (content-hash names, or a stable
+    /// producer such as the icon cache), so an existing same-size file is
+    /// the same payload and rewriting it only wastes I/O. A shorter file is
+    /// a leftover truncation from a pre-atomic writer and is repaired by
+    /// rewriting through a temporary file plus rename.
+    pub fn save_bytes_atomically(target: &Path, data: &[u8]) -> Result<(), StorageError> {
+        if let Ok(metadata) = fs::metadata(target) {
+            if metadata.len() == data.len() as u64 {
+                return Ok(());
+            }
+        }
+        store_atomically(target, |temporary| fs::write(temporary, data))?;
+        Ok(())
+    }
 }
 
 fn storage_file_name(content_hash: &str, extension: Option<&OsStr>) -> String {
@@ -383,6 +400,41 @@ mod tests {
         let result = store_atomically(&failing, |_| Err(std::io::Error::other("populate failed")));
         assert!(result.is_err());
         assert!(!failing.exists());
+        let leftovers: Vec<_> = fs::read_dir(&temp)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(".tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp files: {leftovers:?}");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn save_bytes_atomically_skips_identical_and_repairs_truncated() {
+        let temp = std::env::temp_dir().join(format!(
+            "clipboard-bytes-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp).unwrap();
+
+        let target = temp.join("image.png");
+        FileStore::save_bytes_atomically(&target, b"image-bytes").unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"image-bytes");
+
+        // Same-size content is not rewritten.
+        FileStore::save_bytes_atomically(&target, b"image-bytes").unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"image-bytes");
+
+        // A truncated leftover (shorter than the payload) is repaired.
+        fs::write(&target, b"imag").unwrap();
+        FileStore::save_bytes_atomically(&target, b"image-bytes").unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"image-bytes");
+
         let leftovers: Vec<_> = fs::read_dir(&temp)
             .unwrap()
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())

@@ -603,7 +603,11 @@ pub(crate) fn run_capture_loop(
                         continue;
                     }
                     let img_path = image_dir.join(format!("{}.png", img_hash));
-                    if let Err(e) = std::fs::write(&img_path, &img) {
+                    // Content-addressed bytes go through the atomic writer:
+                    // a bare `fs::write` interrupted by a crash leaves a
+                    // truncated `{hash}.png` that later captures would never
+                    // repair, poisoning every OCR/thumbnail/copy job for it.
+                    if let Err(e) = FileStore::save_bytes_atomically(&img_path, &img) {
                         crate::log_event!(
                             "[clipboard-worker] failed to write image {}: {}",
                             img_path.display(),
