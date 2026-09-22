@@ -1,77 +1,128 @@
-﻿# Clipboard Desktop v1.6.0
+﻿# Clipboard Desktop v1.7.0
 
-> 悬浮速贴面板、自动标签规则、快捷键集中管理与一轮稳定性修复
+> 崩溃安全原子写入、同步可靠性强化、快捷键深度定制与一轮稳定性修复
 >
-> Released: 2026-09-16
+> Released: 2026-09-22
 
 ---
 
-## 悬浮速贴面板
+## 新功能
 
-- **后端托管窗口** — 悬浮窗由后端创建管理，主窗/悬浮窗切换与全局热键联动 | [`3a9f61d`](https://github.com/muutot/Clipboard/commit/3a9f61d0a14f242ab7f6358c60b023896b673a94) [`5572465`](https://github.com/muutot/Clipboard/commit/55724651dfb46e2e052f2eb2835ec9f17e65ce27)
-- **速贴面板** — 常置顶窄条，全部/收藏快速复制，默认位置与切换快捷键可配置 | [`f611f41`](https://github.com/muutot/Clipboard/commit/f611f4108ba1b33d4b2f8d1b82217eeaebb7840b) [`5c26014`](https://github.com/muutot/Clipboard/commit/5c26014360fd17faa5d676407168406428485fff)
-- **首绘与拖拽** — 隐藏构建后挂载揭示避免白屏卡死，透明窗口由主题 CSS 绘制，手动 header 拖拽（pointer capture、空隙 `startDragging`、按钮感知命中）| [`350f5ce`](https://github.com/muutot/Clipboard/commit/350f5ce5ed09c010c34516bf3ca877865c531a0b) [`e8886bd`](https://github.com/muutot/Clipboard/commit/e8886bd301bc090144d7aa550d3c59d9ffbd5006) [`d93e914`](https://github.com/muutot/Clipboard/commit/d93e914a16bc08ac704f0f11d537ba6dd6e412d9) [`2f6dc46`](https://github.com/muutot/Clipboard/commit/2f6dc466f41177b513a85ac17a29c4acd08860d0) [`0e6f1e6`](https://github.com/muutot/Clipboard/commit/0e6f1e6bd1e2a2ba0480529d75dafc7e58d01430) [`150a21b`](https://github.com/muutot/Clipboard/commit/150a21b9b65a7cd1d34c9a7ef85a1587e71fa678)
-- **行为对齐** — 悬浮切换镜像主窗显隐，构建前先隐藏主窗以匹配托盘条件，列表加载时保持可见并丢弃过期加载，切换筛选清空列表、按行守卫复制 | [`2ec1005`](https://github.com/muutot/Clipboard/commit/2ec10055a0d57d6c383c6c25eded73d460d584a6) [`20f1d9b`](https://github.com/muutot/Clipboard/commit/20f1d9bb029f1cab81f62e9c418aee63e985c061) [`fe7a211`](https://github.com/muutot/Clipboard/commit/fe7a21180e0e52e89852f53cfea5e9892775f985) [`c070ffc`](https://github.com/muutot/Clipboard/commit/c070ffcda560afe3b8c77060653de813e3d64bb1) [`4aaf24f`](https://github.com/muutot/Clipboard/commit/4aaf24fcb207331538408b200707b77d833aa6bd)
+### 悬浮面板与快捷键
 
----
+- **悬浮面板点击动作** — 设置可配置点击行为 | [`1c668a5`](https://github.com/muutot/Clipboard/commit/1c668a5df57f40ae4846dd65b7b41d715eaab65c)
+- **主窗自定义绑定生效** — 条目操作与快速复制绑定在主窗口内同样生效 | [`e2e3533`](https://github.com/muutot/Clipboard/commit/e2e3533422d266eff5f9a46893bd3b966fccebd3)
+- **悬浮粘贴目标记忆** — 切换悬浮面板时记住快速粘贴目标，粘贴跟踪前台窗口 | [`1ab1905`](https://github.com/muutot/Clipboard/commit/1ab19054d341bdc48afc274c8490d97af2ebdef6) [`6da9ab6`](https://github.com/muutot/Clipboard/commit/6da9ab621baf5e8df725dbeb81051e40322b5c0f)
 
-## 快捷键与托盘
+### 搜索与使用统计
 
-- **默认绑定集中管理** — 默认键位收敛到共享 `keyboard-defaults.json`，主窗切换默认 `Alt+C`、悬浮切换默认 `Alt+V`，缺失默认动作自动回填 | [`6209014`](https://github.com/muutot/Clipboard/commit/62090144e6dcc9534ee0e75a7034f0b47c695a68) [`1cfb348`](https://github.com/muutot/Clipboard/commit/1cfb348ab911a29726ac2a98e1982b379365b3fa) [`8b96fe5`](https://github.com/muutot/Clipboard/commit/8b96fe5358dd60ded041241af2a5ee9baf5e4398) [`fdfefc2`](https://github.com/muutot/Clipboard/commit/fdfefc20b037fa417fb4ee12a76f79516dd6c112) [`965c818`](https://github.com/muutot/Clipboard/commit/965c81836d3657b756223484688690d0a22f0610)
-- **被占用组合键可视** — OS 拒绝的组合键跳过并记日志，经 `hotkey-registration-failed` 事件在设置 UI 提示冲突；单个失败不再拖垮全部全局热键 | [`95dc881`](https://github.com/muutot/Clipboard/commit/95dc8817cab0317fe988e67e5ca723a121ec189d) [`0480772`](https://github.com/muutot/Clipboard/commit/048077201aff37267136fdeb2847967caebecad4)
-- **热键管线** — 全局/窗口分发统一到动作注册表，消息循环就绪握手后再 stop-join，stop 等待与超时收敛 | [`71d2e58`](https://github.com/muutot/Clipboard/commit/71d2e58d67c1d3732bb3cf485e3329558c620044) [`09f0343`](https://github.com/muutot/Clipboard/commit/09f0343ecdc0ea430adbe64630e0004b84c5a3d4) [`4043fb2`](https://github.com/muutot/Clipboard/commit/4043fb2f5e24a7102f4d452ffc60cb3bf7958a41) [`440c8ca`](https://github.com/muutot/Clipboard/commit/440c8ca8a8a907e7df8d9b2eb0493f133e6cd920) [`9bc8067`](https://github.com/muutot/Clipboard/commit/9bc8067df24a9952b59a6e34f6405d44bb4ecace) [`0e94c0a`](https://github.com/muutot/Clipboard/commit/0e94c0adaf1fe0878473d4b03378242d92f64056) [`79f2fb6`](https://github.com/muutot/Clipboard/commit/79f2fb618c38345178763b2b665d381851849fff)
-- **托盘** — 最近条目快速复制子菜单，历史分页填满文本子菜单，菜单刷新移出主线程，暂停状态多源同步，剪贴板 burst 下防抖重建 | [`a0ada8d`](https://github.com/muutot/Clipboard/commit/a0ada8dbf9f1c621559bddc826a1c03af85f2da1) [`8a4ba53`](https://github.com/muutot/Clipboard/commit/8a4ba53f7ec928ac37c08cb49b966723a4558cd9) [`a0fdbcb`](https://github.com/muutot/Clipboard/commit/a0fdbcbdb5e983933dfe8ce0277a5f45f92edae3) [`7ccd105`](https://github.com/muutot/Clipboard/commit/7ccd1055345a581f45a3a269821aa50664e9be2f) [`8ba9233`](https://github.com/muutot/Clipboard/commit/8ba9233ac8e3fceee8a97034cb883c7566ac75c8) [`da340b6`](https://github.com/muutot/Clipboard/commit/da340b6e0cf7838dcba23643a97be63948d444e7)
+- **真实匹配总数与截断提示** — 搜索页报告真实匹配总数与是否截断 | [`d34d4af`](https://github.com/muutot/Clipboard/commit/d34d4afe1a818a4ef21282629c70fcb872fc694c)
+- **重拷冻结采集时间** — 重拷不刷新采集时间，并盖戳使用记录，搜索缓存随戳失效 | [`1f51e0a`](https://github.com/muutot/Clipboard/commit/1f51e0a5638235e98a48ab3bc4f8aef65d9c7d7d) [`830c4dc`](https://github.com/muutot/Clipboard/commit/830c4dcd50d95ca68e32a9e9c9805ab202d4818c)
 
----
+### 安全
 
-## 自动标签与复制
-
-- **自动标签规则** — 设置新增可配置的自动标签规则区，采集时按配置打标，规则按持久化形态校验 | [`4d10866`](https://github.com/muutot/Clipboard/commit/4d10866133c815e24647f4841221a73988374870) [`70fc153`](https://github.com/muutot/Clipboard/commit/70fc1537bf18027d6e3b7b7396823b402258ce03) [`f38dd9c`](https://github.com/muutot/Clipboard/commit/f38dd9c295f9ce4b495fa7fd1727e57296df811f) [`7569d42`](https://github.com/muutot/Clipboard/commit/7569d429a935393f7aea4881e4103cf2c3ef2670)
-- **复制** — 媒体源文件复制与复制路径动作，粘贴恢复原始文件名，重拷内容保留上次文件名，批量复制全文而非截断标题 | [`c020bc5`](https://github.com/muutot/Clipboard/commit/c020bc57f4d75ae9f1a78cbf4bcb9e8ae04aa2d6) [`fd5fb0f`](https://github.com/muutot/Clipboard/commit/fd5fb0f21b95c176c17935f61e449a210e71e30b) [`b80b91b`](https://github.com/muutot/Clipboard/commit/b80b91b7e76b52419819962719f7909a8048ef95) [`bd272a5`](https://github.com/muutot/Clipboard/commit/bd272a56df646297f92591b5c53c1057404ee97)
-- **平台** — macOS 从粘贴板读取 Finder 文件路径，Linux 经 freedesktop 解析应用图标，非 Windows 监控支持图片/文件采集，文件 URI 解码并跳过远端主机 | [`4889d27`](https://github.com/muutot/Clipboard/commit/4889d2739cecc67ad5146bc45c9fd52f91abfbc0) [`16b8914`](https://github.com/muutot/Clipboard/commit/16b891470c7078be617684f2811b41c941669267) [`e48a1a7`](https://github.com/muutot/Clipboard/commit/e48a1a793f07426b399c3793070da5edf76e18eb) [`cf58947`](https://github.com/muutot/Clipboard/commit/cf589471547debd9be0d8cfe78d8c0dea71188bc) [`cfd4552`](https://github.com/muutot/Clipboard/commit/cfd4552c0e31c8c8caf44812b357c6565c8a2e57)
-- **本地 API** — 进程内 CLI 复制先标记自触发，Unix 下本地 API token 文件仅属主可读写 | [`96e6257`](https://github.com/muutot/Clipboard/commit/96e6257999afa58803d01ab7b894347972e5c9c7) [`137f2da`](https://github.com/muutot/Clipboard/commit/137f2dacfc059468f22e4bcba0dd3e9cc9bbb36f)
+- **本地 API 资源边界** — 限制请求读取字节数与并发连接槽 | [`b0a6638`](https://github.com/muutot/Clipboard/commit/b0a66380e3fc21b8f2771d6848a1d27117ccdb40)
+- **同步密钥脱敏** — `SyncSettings` 的 Debug 输出不再泄露密钥 | [`56b2ded`](https://github.com/muutot/Clipboard/commit/56b2deda4a0002a34bbb7c0b0bf73181e745ad55)
+- **替换图标源校验** — 检查 ICO magic 与 SVG prolog，拒绝伪造源 | [`11c6505`](https://github.com/muutot/Clipboard/commit/11c65050737b48e1f7b0685b9671de851fdc8039)
 
 ---
 
-## 稳定性修复
+## 崩溃安全与原子写入
 
-- **采集与缩略图** — 监控线程 panic 落盘日志并丢弃已死的隐私事件，静默死亡后允许重启，缩略图队列先排序再启动并始终停止 worker，spawn 错误返回而非 panic | [`0c35125`](https://github.com/muutot/Clipboard/commit/0c351250768a084dee11c2574bf01e1a22940460) [`d9dfd60`](https://github.com/muutot/Clipboard/commit/d9dfd6047505b41bcda59bb0821f393057b2ce2f) [`615ac4e`](https://github.com/muutot/Clipboard/commit/615ac4ecdef636cf0bafef894864fda71de8bbf8) [`6c6c84f`](https://github.com/muutot/Clipboard/commit/6c6c84f40ad6935d7b398849bc9ea7c3bb405bef) [`b306d9f`](https://github.com/muutot/Clipboard/commit/b306d9fa5e6b4aa56613b02dd9d6f98e1b524698)
-- **关闭流程** — 毒化锁可恢复以保证每个 worker 停止，自动同步 stop 等待收敛，锁状态消息不再重复 poison 后缀 | [`7e960c9`](https://github.com/muutot/Clipboard/commit/7e960c90adeafce44072e13bfe7352ededcaa4c6) [`0879b52`](https://github.com/muutot/Clipboard/commit/0879b52aebdcf5ecdf58a80f0ce7c0b26a2ac552) [`756c835`](https://github.com/muutot/Clipboard/commit/756c8357b50e0f69baaa5300131b5b4c4bfdc41c) [`9a7ab77`](https://github.com/muutot/Clipboard/commit/9a7ab778454e2b89e52de754f4d06fb4df4c40d7)
-- **存储** — 容量与截断告警仅统计可驱逐行，VACUUM INTO 路径不再翻倍反斜杠，数据目录迁移可重试，读写改用 immediate 事务，tagged 插入保持 `item_tags` 对齐，编辑文本清陈旧富内容，手动清理沿用孤儿文件宽限期 | [`b49b66a`](https://github.com/muutot/Clipboard/commit/b49b66a7e0872eef9157a48efa8ad8c600872e) [`7a988d0`](https://github.com/muutot/Clipboard/commit/7a988d0d7d405dc67b8eab18219ea5d41792b676) [`956afbc`](https://github.com/muutot/Clipboard/commit/956afbc26738948bb2833f452eb4124861332ec9) [`616e636`](https://github.com/muutot/Clipboard/commit/616e636bba506f2b93b57b9ccc801caa20b1fbb6) [`361559b`](https://github.com/muutot/Clipboard/commit/361559bae3362087021c369252b163a171703a4b) [`c36af68`](https://github.com/muutot/Clipboard/commit/c36af687d465e3701cfaeed2ae3ddc86b721c7e2) [`c9454c6`](https://github.com/muutot/Clipboard/commit/c9454c622b4fec0af8978279f24ac71cada83ecf) [`149857e`](https://github.com/muutot/Clipboard/commit/149857e75f0eab38478e5007ed553fc0f57d2c15) [`f5c9dd5`](https://github.com/muutot/Clipboard/commit/f5c9dd5310448d259a5d32987a317ebfa41effa9)
-- **搜索与列表** — 日期区间按日历算术处理 DST，本地日期边界失效缓存，列表偏移与单页上限解耦，虚拟高度复用前校验签名，分页到 trim 上限即停 | [`e6f4829`](https://github.com/muutot/Clipboard/commit/e6f4829247159ae1344e07fa890867b93855aae3) [`ad05ff8`](https://github.com/muutot/Clipboard/commit/ad05ff8a20e285e58e527066e0536b32fede6030) [`68b9b54`](https://github.com/muutot/Clipboard/commit/68b9b542b5410cfd5236c2eb889e2188d50ffc6c) [`5e44f1e`](https://github.com/muutot/Clipboard/commit/5e44f1e6ef53c99ed7311b7cd0a7a36bf4aeaa73) [`4551daa`](https://github.com/muutot/Clipboard/commit/4551daa7d60f3189080b80ca1a2675c564b1557f)
-- **OCR** — 详情页到达终态即停轮询，轮询按派生 id 与类型守卫，状态加载脱钩止 IPC 循环，模型选择同步配置变体，安装检查校验摘要，OAR_HOME 串行化，tesseract 识别加超时，worker 重启前先放配置锁 | [`d45078b`](https://github.com/muutot/Clipboard/commit/d45078b9f9c8571a1a8a6d830cde25beb9fdda0a) [`deb3d2d`](https://github.com/muutot/Clipboard/commit/deb3d2dde01bfd74e12798be52db98eab2a3b834) [`60e6a17`](https://github.com/muutot/Clipboard/commit/60e6a17b4c6cdb2d54206e265ab66b4e4a2f5d68) [`254ebc1`](https://github.com/muutot/Clipboard/commit/254ebc149d85398fb32f7b8d70d9028eddb1be05) [`d9513d3`](https://github.com/muutot/Clipboard/commit/d9513d36c0900feadf36356e2778e228d21a0ac6) [`9f53890`](https://github.com/muutot/Clipboard/commit/9f53890368d191563ae16e33266c5fc01201f6dc) [`d0c1828`](https://github.com/muutot/Clipboard/commit/d0c1828698cd55026e277ffa5f69012f04a63aa8) [`4b80254`](https://github.com/muutot/Clipboard/commit/4b8025465c9a5b6a58cd1ad2a2f2df7e6c26148) [`8c000b0`](https://github.com/muutot/Clipboard/commit/8c000b09b83bd66994b2bef64f5a70a3b83805fe)
-- **同步** — 资源字节上下限收敛到可用窗口，空文件路径回退 `resource_path`，历史 GC 跳过非 segment 键 | [`87f99d6`](https://github.com/muutot/Clipboard/commit/87f99d6cc468f47931fb78cb97939b1c57d7d80f) [`a476324`](https://github.com/muutot/Clipboard/commit/a476324ce62e86549761640c72372b73e2bf2f8a) [`de0cdbf`](https://github.com/muutot/Clipboard/commit/de0cdbfb97c12891ebabcb484e6aba16c32bfe57)
-- **前端状态** — 条目更新扇出到详情视图与搜索缓存，删除/批量走 four-copy 漏斗，批量流保持搜索缓存与详情，方向键不出可编辑区，空选落首行，详情 tab/文件重置按条目 id，DatePicker 月份与星期头对齐 | [`059b0b3`](https://github.com/muutot/Clipboard/commit/059b0b37e18cfc2335c1c40ea2e61916aa7893ce) [`8b1e37b`](https://github.com/muutot/Clipboard/commit/8b1e37b1f72b3cb4f8b0b17e4a8371bebddc316a) [`8c9355f`](https://github.com/muutot/Clipboard/commit/8c9355f0f14445278661444481bcac9e4622352f) [`ec3ff19`](https://github.com/muutot/Clipboard/commit/ec3ff197ccc53a245fb33f8a0f0d17167c8a7636) [`2259476`](https://github.com/muutot/Clipboard/commit/2259476fdcf8d981081d2103bc159c9e10a8932b) [`156b9e0`](https://github.com/muutot/Clipboard/commit/156b9e04738079c37e0108c7d85e848007293e49) [`44ae534`](https://github.com/muutot/Clipboard/commit/44ae53474db2b3ef01e42e352964dbc13ef608b4) [`b89830a`](https://github.com/muutot/Clipboard/commit/b89830a24a09c9c129ecfc2eee8265034fa47797) [`3e957ca`](https://github.com/muutot/Clipboard/commit/3e957ca22b8d4c85fd287d7a2241b1e1e76b924d)
-- **审计** — 2026-09-14 审计的高/中项、低危确认项与存疑可复现项均已处理 | [`345a96f`](https://github.com/muutot/Clipboard/commit/345a96ff0ad641a7213723c40fab91cd40b3f19c) [`77c817a`](https://github.com/muutot/Clipboard/commit/77c817aa17140c7333eb0db1d6aff2cbcf64f914) [`3c4cd5b`](https://github.com/muutot/Clipboard/commit/3c4cd5b8367522dfbc22285a5b04d3e539e8357b)
-- **构建修复** — 悬浮窗 `transparent` 仅在非 macOS 启用，修复 macOS `E0599` 编译失败 | [`b831691`](https://github.com/muutot/Clipboard/commit/b831691)
+- **文件与截图落盘** — 经 staging + fsync + 原子 rename，崩溃不再留下半截文件 | [`e650a8f`](https://github.com/muutot/Clipboard/commit/e650a8f52690f5d436e3e39e80fca5af8947218b) [`a03faf2`](https://github.com/muutot/Clipboard/commit/a03faf25d5579a020148d0159692cea453bfbb9e) [`d70e642`](https://github.com/muutot/Clipboard/commit/d70e6427ba93ae359bb2309a14363e123716e46c)
+- **剪贴板图片原子采集** — 图片经原子写入，带大小门控跳过；RGBA 重编码为 PNG | [`b39ec15`](https://github.com/muutot/Clipboard/commit/b39ec1551b260978741529ad5adafb63f8e37881) [`314f4dc`](https://github.com/muutot/Clipboard/commit/314f4dc6ab29f8f9a4834a88c43df07a9c701935)
+- **应用图标原子写入** — 图标经 atomic writer 落盘，拒绝失败的 GDI 捕获并写原子 PNG | [`d11e157`](https://github.com/muutot/Clipboard/commit/d11e1570c97314d89b34a894e2421d515d8aec02) [`eeb2e36`](https://github.com/muutot/Clipboard/commit/eeb2e3620f3f63232cf7d64207cd50686f1f06f5)
+- **导入与去重** — 导入按暂存字节哈希关闭竞态，重拷/另存为生成唯一内容哈希 | [`99a6552`](https://github.com/muutot/Clipboard/commit/99a6552863489b3d48cfa07a13ed85457965e0f7) [`5c60e77`](https://github.com/muutot/Clipboard/commit/5c60e77a9ec23a5afca597bc9ce3866ce362145d)
+- **搜索 manifest** — 容忍瞬时读取失败并原子写入，路径处理经 `Path` 保持 clippy 清洁 | [`aeb317c`](https://github.com/muutot/Clipboard/commit/aeb317cb01f22d9d89f3613119643dad63fc6586) [`3bbddc5`](https://github.com/muutot/Clipboard/commit/3bbddc53bec3558cfb777791c496a91b53465ee3)
 
 ---
 
-## 设置面板重构
+## 同步可靠性
 
-- **通用面板拆分** — 巨型 `GeneralSettingsPanel` 拆为通用/条目/搜索/窗口四个懒加载子面板，启动与托盘开关收敛到窗口 tab，录制暂停开关归入敏感内容面板 | [`a505ed4`](https://github.com/muutot/Clipboard/commit/a505ed4e6c4a89fb457867252828f7b2ca0d7578) [`f824a5d`](https://github.com/muutot/Clipboard/commit/f824a5d9eec0f06a77bcfc06bb938a7ab0b925fd) [`cf4b639`](https://github.com/muutot/Clipboard/commit/cf4b639fffd428e3917032abbe70d0a4960f8259) [`c8f30db`](https://github.com/muutot/Clipboard/commit/c8f30dbb3b287d80e5d059651cd84b7f10e98859)
-- **存储/标签/采集** — 存储上限与工具抽为懒加载面板，采集大小限制归入采集 tab，自动标签规则独立为第二个标签页 | [`61f0787`](https://github.com/muutot/Clipboard/commit/61f0787329dcdb9ff74fc20b32edc1fedc1f4a92) [`a3c856c`](https://github.com/muutot/Clipboard/commit/a3c856cece5eabb6f55d33bb6c2f8eb1f8a98398) [`42f41c1`](https://github.com/muutot/Clipboard/commit/42f41c14880208a30546d26fcccc86cf922a1475) [`0b4ea40`](https://github.com/muutot/Clipboard/commit/0b4ea40ad6ee116276497532925a0eab4ed14d96)
-- **反馈打磨** — 同步测试结果进面板反馈而非 toast，测试中禁用按钮并复位状态，窗口配置保存后刷新缓存，开关保存中不再闪烁，主题 tab 描述指向正确 key，搜索结果指向真实渲染面板，子对话框 Esc 不再关窗 | [`33e10e9`](https://github.com/muutot/Clipboard/commit/33e10e966e6d58dd29a915278c35614a3829a452) [`373d4cc`](https://github.com/muutot/Clipboard/commit/373d4cce328057131ab999277a4112d393e4c344) [`bc2acf2`](https://github.com/muutot/Clipboard/commit/bc2acf2a9df3d2332112da4261bfdcb3466cf29c) [`9050dae`](https://github.com/muutot/Clipboard/commit/9050dae12153e6ae47f4fd4f2ed774a7aba1a383) [`e63088e`](https://github.com/muutot/Clipboard/commit/e63088e94e723cce6c95d6aefcd703b15f653d04) [`263acaf`](https://github.com/muutot/Clipboard/commit/263acafdb2d047c9eed91e4137c9b06e599e1b85) [`df0e7ed`](https://github.com/muutot/Clipboard/commit/df0e7edbd9aeb56c884c0739b4c0d495857ca1ac) [`2021641`](https://github.com/muutot/Clipboard/commit/2021641ea8431e20ef74a3b69cdb27e5a5b6055a) [`eb79061`](https://github.com/muutot/Clipboard/commit/eb790614ca1bea6ebb90f008ec9666fa7110b52f) [`4c507f5`](https://github.com/muutot/Clipboard/commit/4c507f585878bc56261791fb6848dc36e2dacdb7) [`d30dcbd`](https://github.com/muutot/Clipboard/commit/d30dcbdad5f9cbf581e5aa4468ffe3b278fa77a0) [`ae65181`](https://github.com/muutot/Clipboard/commit/ae65181c38cabb3081e493c8c43caf5e4f2f9e10) [`2b8c777`](https://github.com/muutot/Clipboard/commit/2b8c777003593017994a1889c84b699b2573068b)
-- **非 Windows 提示** — 录制开关下标注非 Windows 轮询限制 | [`9ee7f4a`](https://github.com/muutot/Clipboard/commit/9ee7f4a85d2dac7c051af2d4abe97492fb0b0294)
-
----
-
-## 前后端重构
-
-- **前端** — 主路由拆出 `SearchHeader`、`HistoryList`、`Toolbar`、`StatusBar`、`BulkBar`，卡片经单一 snippet 渲染，过滤参数与回收站合并抽为 helper，搜索输入/全局按键走纯动作表，键盘目标守卫抽为带测试 utils，four-copy 同步抽为已测试 utils，粘贴回前台应用逻辑收敛到 clipboard service，invoke 经守卫 helper 漏斗，面板反馈经工厂共享 | [`ff78f09`](https://github.com/muutot/Clipboard/commit/ff78f09522b9aec58fbe3c278cd639198719566e) [`abefa2e`](https://github.com/muutot/Clipboard/commit/abefa2eb99c4a78fb7cc877704497dc8bc950633) [`162aee3`](https://github.com/muutot/Clipboard/commit/162aee3b7b0c47b020a45417ff1292fdf2aaa8eb) [`f81dd8f`](https://github.com/muutot/Clipboard/commit/f81dd8f4) [`8d66ecd`](https://github.com/muutot/Clipboard/commit/8d66ecd8138a1310c1bfa9a82ba2485a8a4a24f3) [`c8e7c4d`](https://github.com/muutot/Clipboard/commit/c8e7c4d48cf7caabd04ef882a1565a1f41629ec9) [`af55d97`](https://github.com/muutot/Clipboard/commit/af55d97bd9811e29792fc74b1e462b34918be797) [`892bb63`](https://github.com/muutot/Clipboard/commit/892bb6384728d946741418a750493bf85402a6c9) [`2590f23`](https://github.com/muutot/Clipboard/commit/2590f231fa96303c45ee83cb98eb1a78b3a59c4a) [`9dc1a74`](https://github.com/muutot/Clipboard/commit/9dc1a74bc6edda0d9069de3c002703730e9a57ee) [`e76d02f`](https://github.com/muutot/Clipboard/commit/e76d02ff19e1137eb534e5956a2cecd1556ad380) [`df3d76d`](https://github.com/muutot/Clipboard/commit/df3d76dbe7765d5e27d9cf798db98b88f0184dad) [`77ecebf`](https://github.com/muutot/Clipboard/commit/77ecebf76914bdca0901483437f49756debd3823) [`550681e`](https://github.com/muutot/Clipboard/commit/550681e848715b8b6e41527fd216d4f3d87c6725) [`f55ffd7`](https://github.com/muutot/Clipboard/commit/f55ffd765abcb6f515ac209ed603ef08992eca56)
-- **详情与卡片** — 日期弹窗与动作行抽为 `CardDateDialog`/`CardActions`，快捷动作类型判定收敛到 patterns utils，详情页拆出图片预览/文件预览/详情 tab/OCR tab/编辑动作行，文本编辑补丁经纯 helper 推导 | [`b8f8fcd`](https://github.com/muutot/Clipboard/commit/b8f8fcde58a8180b8fa45bde5b1ab07818920359) [`5e927c9`](https://github.com/muutot/Clipboard/commit/5e927c981ffa418b4702f959b8bdfe9f2b0dc2cc) [`f8106ac`](https://github.com/muutot/Clipboard/commit/f8106acaf56cf0a3e08d0ff9a670a89c623204e2) [`8ae2ec6`](https://github.com/muutot/Clipboard/commit/8ae2ec6137b413ebc1f629a727f7a6a009184534) [`d56dce6`](https://github.com/muutot/Clipboard/commit/d56dce6616d307a6786d3bac41c9dd156f3b8eac) [`7d1c3b2`](https://github.com/muutot/Clipboard/commit/7d1c3b2a612f35744a2a1ebf74787976762d7407) [`13db3f6`](https://github.com/muutot/Clipboard/commit/13db3f66e4a05d329f7ebe9e4855ebb1d55c1e2e) [`dbf37ac`](https://github.com/muutot/Clipboard/commit/dbf37ac7cfab4792e412ce936831dd0c617a73c5) [`c0a4e8d`](https://github.com/muutot/Clipboard/commit/c0a4e8d3074d2a498e245454ea5bf25ee51c34c1)
-- **后端** — 锁样板收敛到 `lock_state` helper，setter 落盘失败回滚内存值，ppaste 导入 id 按内容哈希派生防跨包覆盖，CSV 导入保留差异媒体行，重命名记录改写托管路径 | [`1b393ae`](https://github.com/muutot/Clipboard/commit/1b393ae52002ffc9d25c2350c3ee8e358e65c0e6) [`728910d`](https://github.com/muutot/Clipboard/commit/728910d2c32ef9bc9774b8c2465a79cc529181ac) [`2a96c19`](https://github.com/muutot/Clipboard/commit/2a96c1925454d4591bc8c0b35fef18988204f542) [`18d0e40`](https://github.com/muutot/Clipboard/commit/18d0e40fd5c088f7fdebbb973231c25c219cbf25) [`f5c9dd5`](https://github.com/muutot/Clipboard/commit/f5c9dd5310448d259a5d32987a317ebfa41effa9)
+- **孤儿段接纳** — 上传中断不再拖垮对端拉取 | [`abc7e36`](https://github.com/muutot/Clipboard/commit/abc7e3632b5dd5b95aa133f757cb45d78cbdc024)
+- **检查点游标与错误** — 游标领先于冻结检查点向量，恢复时保留原始拉取错误 | [`251c7f7`](https://github.com/muutot/Clipboard/commit/251c7f774ef130f5aea50d604f1a4dc85f0a8161) [`2298773`](https://github.com/muutot/Clipboard/commit/2298773fc75bdd0efb74068b508290aa8d0e31ba)
+- **锁与线程池** — `sync_now` 走阻塞线程池，手动同步锁竞争后尽快重试自动同步 | [`e553cd3`](https://github.com/muutot/Clipboard/commit/e553cd3c214768f68d8fd9ff8c5a3df2c5ebd482) [`16dcc33`](https://github.com/muutot/Clipboard/commit/16dcc33dd1deed509ea9bf065153242cc42363c4)
+- **对象存储兼容** — 压实阶段容忍缺失 ETag 的对象存储 | [`6a83bc2`](https://github.com/muutot/Clipboard/commit/6a83bc2afce291ad0f954df7b360a2371091777e)
 
 ---
 
-## 工程与文档
+## 剪贴板采集与粘贴
 
-- **文档** — 同步 tombstone 有意不裁剪的原因落盘，设置重构后 skill 引用更新，新窗口须注册 capabilities 记入 pitfalls，悬浮位置/快捷键/拖拽跟进事项与完成态归档，MAINT-01/MAINT-03 经验收标记完成 | [`646da63`](https://github.com/muutot/Clipboard/commit/646da63a16ef49257bdf7cfe8297d7aa592daf36) [`41d8633`](https://github.com/muutot/Clipboard/commit/41d8633455726e40797151ce952cf010f02d2ade) [`043e0f2`](https://github.com/muutot/Clipboard/commit/043e0f2e04e7fb9bb8f144d81ffebb2b7e2e61e2) [`3fd6a44`](https://github.com/muutot/Clipboard/commit/3fd6a448feae48b1074a8bcba6b241a50bece47a) [`e15bbb5`](https://github.com/muutot/Clipboard/commit/e15bbb56c4b3347344088ee53099c46e441e7316) [`2690ebf`](https://github.com/muutot/Clipboard/commit/2690ebf0859a71177e2218844138800c05b4ba9f) [`fb2a31f`](https://github.com/muutot/Clipboard/commit/fb2a31f7dfeae06984e2e9b5377d544bbb31eade) [`a73d1e5`](https://github.com/muutot/Clipboard/commit/a73d1e5328f11459bea3fe6f3860526abe20c2da) [`018f668`](https://github.com/muutot/Clipboard/commit/018f668c38686472d303c7eedf85e717dc945a2d)
-- **杂项** — 本地审计产物与 stray 日志纳入 git 忽略，大写 scheme URL 判为链接，macOS 图标提取解析 `.app` 包 | [`0d24a58`](https://github.com/muutot/Clipboard/commit/0d24a583085eb62fed2ee0d77d724d514e32507e) [`61ba019`](https://github.com/muutot/Clipboard/commit/61ba019169efb6fcfcc94560d44433b9c212564e) [`cfd4552`](https://github.com/muutot/Clipboard/commit/cfd4552c0e31c8c8caf44812b357c6565c8a2e57)
+- **Windows 剪贴板加固** — 先分配缓冲区再 EmptyClipboard，OpenClipboard 失败重试而非丢弃采集 | [`c64e5a6`](https://github.com/muutot/Clipboard/commit/c64e5a6c7738fbb1ac63c38ace5e591347e564f3) [`8af95c5`](https://github.com/muutot/Clipboard/commit/8af95c5e94840cca7f6d768557e84541e1e80941)
+- **DIB 解码** — 校验 biCompression、尊重 BITFIELDS 掩码布局、顶行 DIB 不再垂直翻转 | [`245b93c`](https://github.com/muutot/Clipboard/commit/245b93c3219989ee8139567b168a9dbf7f172cb7) [`abe8289`](https://github.com/muutot/Clipboard/commit/abe8289d0a828a71136b5de8d1325cfdf3aba975)
+- **自触发标记** — 文件复制注册自触发，写入失败清除标记，托盘/API 复制失败时取消标记 | [`01ad0b9`](https://github.com/muutot/Clipboard/commit/01ad0b9cea47221987a41c20ebd734ed5e343d95) [`51f922f`](https://github.com/muutot/Clipboard/commit/51f922fe5866c43ff2335fadede92fa9eeef546b) [`a3cca40`](https://github.com/muutot/Clipboard/commit/a3cca405d9cce84cf7f012ddf48d59ee10969eab)
+- **文件复制与粘贴** — HDROP 落地后文本负载为尽力而为，文件粘贴写为 OS file drop | [`85639c2`](https://github.com/muutot/Clipboard/commit/85639c2a0599cd8e70b54afa92c39eccaa560d5e) [`23f7046`](https://github.com/muutot/Clipboard/commit/23f7046545aeeb4fa2e65cf8feebeb3f8f108e6f)
+- **前景应用与大图** — 读剪贴板后复查前景应用，大图放宽媒体自触发窗口 | [`65e3daf`](https://github.com/muutot/Clipboard/commit/65e3daffeb8aeb5ccdf7dcac0dac1e2a446c7c2e) [`09062fa`](https://github.com/muutot/Clipboard/commit/09062fab11968e6775f053a5628094aa1b973b4b)
+- **重拷与缩略图** — 重拷提升 last-used 时间戳，重命名保留生成的 thumbnail `preview_path` | [`b0dfd1e`](https://github.com/muutot/Clipboard/commit/b0dfd1e647f1fb72477fdc012261bb0d63d3e5f2) [`13d6e66`](https://github.com/muutot/Clipboard/commit/13d6e662d3b27e953ba7636549b409f662d82c49)
+- **macOS 采集** — 镜像捕获使用唯一临时名 | [`54f1832`](https://github.com/muutot/Clipboard/commit/54f1832e420ab6d78f5d11fd34265a3c7040c23b)
+
+---
+
+## 快捷键与输入
+
+- **IME 合成期忽略 keydown** — 输入法合成中 Escape 不再隐藏窗口 | [`424c7a9`](https://github.com/muutot/Clipboard/commit/424c7a961c487c9c045351c745fbd3e78ef80ef0)
+- **可编辑宿主内按键** — Enter/Space 留在 contenteditable 内，Ctrl+A 透传有测试钉住 | [`13defb4`](https://github.com/muutot/Clipboard/commit/13defb46190a90e1e72418cbf5698b6275999400) [`4e673c6`](https://github.com/muutot/Clipboard/commit/4e673c6a09a6623fddbbdb6f03f3c30cae7057fe)
+- **自定义绑定全面生效** — Enter 走 copyItem 绑定语义，Space 尊重 openDetail 停用态，Backspace 清除选择可重绑，hideWindow 可重绑/停用 | [`0441380`](https://github.com/muutot/Clipboard/commit/04413808311b51cad6388a382cfbef53e4fcdbef) [`ac8e1ad`](https://github.com/muutot/Clipboard/commit/ac8e1ad1f1c601404ccae1e42b9e651742c5a524) [`4edd762`](https://github.com/muutot/Clipboard/commit/4edd762593ec9f560f6b5031fa6be947b48fed58) [`34fb382`](https://github.com/muutot/Clipboard/commit/34fb382c3a49274445e3121489d66a84b08e8776)
+- **Alt 组合与 Space 穿透** — Alt 修饰的聚焦搜索和弦可穿透可编辑目标，无选中时 Space 下落 | [`f892f7e`](https://github.com/muutot/Clipboard/commit/f892f7e46dd24238bc18b48be4404f20c9152424) [`61f7fa0`](https://github.com/muutot/Clipboard/commit/61f7fa018c78b3f30ffd5ccce4385548bc8ce21d)
+- **双击热键回绕** — GetTickCount 回绕后双击检测仍有效 | [`abe238d`](https://github.com/muutot/Clipboard/commit/abe238d80730856664b383043240511d66bb44b9)
+- **快捷配置损坏自愈** — 隔离重命名失败时移除损坏配置 | [`e6fb540`](https://github.com/muutot/Clipboard/commit/e6fb540221c792a5e43f8643e3ca14585f71e9e3)
+- **键盘选中可见** — 虚拟窗口滚动保持键盘选中可见 | [`70d197c`](https://github.com/muutot/Clipboard/commit/70d197c93e8d04550d223e8468f0f0d45d800b79)
+
+---
+
+## 搜索、历史与快捷动作
+
+- **日期区间** — 昨天/上周按日历算术处理 DST，上月区间正确落在月末，非法日期候选后继续扫描 | [`9e052a2`](https://github.com/muutot/Clipboard/commit/9e052a27961672cc4da78e0aa7f5bb33fb18cecf) [`6d364d5`](https://github.com/muutot/Clipboard/commit/6d364d509d3b3ebf068c3a00d89c6ba6c256d3db) [`9dd885d`](https://github.com/muutot/Clipboard/commit/9dd885d37b18ecdae23f780e291dba9703ddb1d0) [`c34af02`](https://github.com/muutot/Clipboard/commit/c34af02ed991f1fe9cbd922005802e5c8718294a)
+- **排序稳定** — 平局排序键保持输入相关性顺序，分页序加唯一 id 决胜 | [`0311301`](https://github.com/muutot/Clipboard/commit/031130162d00ea77863b2be720da0b24d2ca8c24) [`85acdda`](https://github.com/muutot/Clipboard/commit/85acdda22c477b4f84bf3e437aeb5b321d247035)
+- **快捷动作检测** — 统一 HEX 颜色检测（含 8 位），URL 在 CJK 标点处截断并剥离句尾符号 | [`36c4b91`](https://github.com/muutot/Clipboard/commit/36c4b91607aef05882f3ce1730acfc2f97a6763b) [`a8f575c`](https://github.com/muutot/Clipboard/commit/a8f575c7739876d255bce77a1026aef13a877c46) [`aa9b527`](https://github.com/muutot/Clipboard/commit/aa9b527fb358f0d8ca7a4bd48b5f7e306614c411)
+
+---
+
+## 存储与清理
+
+- **回收站与收藏** — 拒绝回收站行设收藏，关闭单删路径的收藏守卫竞态，过期清理保护已收藏回收站记录 | [`b0f9eba`](https://github.com/muutot/Clipboard/commit/b0f9ebaf58edeaf332db5a64011d5157a8cce2f8) [`d3fd029`](https://github.com/muutot/Clipboard/commit/d3fd029d11c058ff499fb0a918289c2e37ef558a) [`a9d127a`](https://github.com/muutot/Clipboard/commit/a9d127ab407fe3520007eba376fa01bd3631dc21)
+- **导入去重** — 重复记录跳过而非重写，未知 PPaste 记录计入跳过 | [`7f30726`](https://github.com/muutot/Clipboard/commit/7f3072630c25c562e991d4aa7d361dab292db372) [`b567dfe`](https://github.com/muutot/Clipboard/commit/b567dfec13f793e388fdac363dbdda33fe05940e)
+- **批量操作** — 批量删除失败回滚后重同步历史，一次性剪除非法批量选择 | [`4587262`](https://github.com/muutot/Clipboard/commit/4587262d57d9213fd7ded8d109940be0aacf670e) [`335b400`](https://github.com/muutot/Clipboard/commit/335b400b94fd14f5c5e7346abf8500dcab8aea46)
+- **修复与校验** — 丢弃 repair 中已忽略的 quick_check | [`d9a84e2`](https://github.com/muutot/Clipboard/commit/d9a84e27ba0a5f53c1d2e45171648fcec2206b8b)
+- **测试** — 收藏拒绝后重建 favorited-bin fixture | [`34b3045`](https://github.com/muutot/Clipboard/commit/34b30458a681215ede4fee1ec2d215879eb20c01)
+
+---
+
+## 设置与界面
+
+- **设置持久化** — 关闭时刷写挂起写入并收敛远端更新，远端可清除 activePresetId，部分负载保留当前预设 | [`772313c`](https://github.com/muutot/Clipboard/commit/772313c61cfb0a331900f5132d34ccc40c3bc247) [`d445d6a`](https://github.com/muutot/Clipboard/commit/d445d6adfb3c3babb565011306ba3464f1dfd740) [`6e0304c`](https://github.com/muutot/Clipboard/commit/6e0304cd8a5cabf17f0580f003b6422e0042fa04)
+- **数值钳制** — 同步与历史上限输入钳制，输入值不再清空保留策略 | [`ddc4f65`](https://github.com/muutot/Clipboard/commit/ddc4f654fa1f0721c63576dee2d1fd2be759f261) [`569af76`](https://github.com/muutot/Clipboard/commit/569af76c29de436c112584abaa37bb9da4ea25aa)
+- **多语言** — 占位符全量替换、`$` 模式忽略，设置搜索文案走 locale key，外观 eyebrow 文案可解析 | [`2a73383`](https://github.com/muutot/Clipboard/commit/2a733838bb219409698e6e0cc4d734d443e2e0aa) [`c506778`](https://github.com/muutot/Clipboard/commit/c5067780a9a1dff22c9713937799aea37d96b303) [`5787aa8`](https://github.com/muutot/Clipboard/commit/5787aa815cc5996b9ad9056ffe65b3bf244c9983)
+- **标签** — 标签添加信号按边沿触发，重命名失败可见，取消/失败后恢复重命名输入 | [`300bf92`](https://github.com/muutot/Clipboard/commit/300bf925670b303b01c9b9cedfb907669f8428df) [`97c61f1`](https://github.com/muutot/Clipboard/commit/97c61f1ed8fa0afd61c75efc7f935ba8cb260db3) [`0d40a41`](https://github.com/muutot/Clipboard/commit/0d40a410f04df83d629da6c72a505f03e989b12c) [`4b4627f`](https://github.com/muutot/Clipboard/commit/4b4627f2535da73f61d37b12a7d8e37f1127dfad)
+- **详情与查看器** — 重命名后刷新派生文件字段，切换条目重置标签草稿/标题草稿，无关更新不触发文件预览重载，右键子菜单贴边左翻 | [`7b8e28a`](https://github.com/muutot/Clipboard/commit/7b8e28a760965e9356b50ba4187659aeee4e617c) [`49a9a9f`](https://github.com/muutot/Clipboard/commit/49a9a9fe66b3c798c2c75f3bede38c71f2314610) [`7f05eba`](https://github.com/muutot/Clipboard/commit/7f05eba160e5852c39227e08946c94cbf02512dc) [`83942b3`](https://github.com/muutot/Clipboard/commit/83942b3242d064cba39d7091821438c3e06ca8b4) [`930434f`](https://github.com/muutot/Clipboard/commit/930434fcc2e017af3cd37b2fd196e90cd1c1a36c)
+- **卡片高度与列表** — 高度签名纳入标签/文件名/物化，自定义标题卡片走共享公式，宽 token 折行计入估算 | [`a4527f0`](https://github.com/muutot/Clipboard/commit/a4527f01265e479a0a819894b4570043d9052b7d) [`5cfb6ac`](https://github.com/muutot/Clipboard/commit/5cfb6ac0571bd1c6035e5777f3f172a7f54b2959) [`23648df`](https://github.com/muutot/Clipboard/commit/23648df9f27947343c0460b8fcaf824521ed8975)
+- **复制与文件展示** — 单文件路径列表可复制，无可复制时 toast，双文件条目显示双名与正确后缀计数 | [`dfd04e6`](https://github.com/muutot/Clipboard/commit/dfd04e671d1d67bc36553f1628e2cabe1ed034ce) [`90c9252`](https://github.com/muutot/Clipboard/commit/90c9252804bf0665c5e484828efe1ba39469a28c)
+- **悬浮与菜单** — 悬浮面板实时套用通用设置，复制/粘贴统一单 toast，Escape 让位于打开的右键菜单 | [`cf48078`](https://github.com/muutot/Clipboard/commit/cf480789f00d5a694c231dc8a9023ea4323b2739) [`1c20c90`](https://github.com/muutot/Clipboard/commit/1c20c9093e85383758452971b94ca22aa5b8e66e) [`f911f76`](https://github.com/muutot/Clipboard/commit/f911f76799b8e3b058e7105f3660afc58edf7dcb)
+- **事件与日志** — UI 刷新信号 emit 失败落日志，悬浮位置与同步状态写失败落日志 | [`e068518`](https://github.com/muutot/Clipboard/commit/e0685182a14f4be32dc034ab3d5c936cf1c7bc43) [`9e77f8f`](https://github.com/muutot/Clipboard/commit/9e77f8f398510c960de33112c6dc23fcd9b3e6e9)
+- **设置语言同步** — 各 tab 同步 locale，持久化后清除 dirty keys | [`2be0d53`](https://github.com/muutot/Clipboard/commit/2be0d53dbe4918233b04d2ab716250cb48a1e40f)
+- **文本编辑预览** — 文本编辑预览按重载时 `buildPreview` 规则派生 | [`dc19da1`](https://github.com/muutot/Clipboard/commit/dc19da1f45953623197ff90292f3a52e553dae19)
+
+---
+
+## OCR
+
+- **tesseract 探测** — 探测次数设界、语言代码消毒，探测前释放配置锁 | [`434c7bc`](https://github.com/muutot/Clipboard/commit/434c7bc7e1e16d1d93276e1b7772c88d7f6fb63b) [`15f083b`](https://github.com/muutot/Clipboard/commit/15f083ba18b26eb53401c0168a67ac96328ecb06)
+
+---
+
+## 安装、构建与发布
+
+- **安装器拒绝静默降级** — 解析已安装版本后拒绝降级安装 | [`a84db0a`](https://github.com/muutot/Clipboard/commit/a84db0adef06290251a9a08eb3dc8f0df9a11093)
+- **发布直发 + GitCode 同步** — 发布直接上架，并同步镜像到 GitCode | [`a22fe0f`](https://github.com/muutot/Clipboard/commit/a22fe0f463a01a95a453552fc3e4e2bae57a825f)
+- **下载修复** — 服务器忽略 Range 时重置部分下载 | [`81a3bcb`](https://github.com/muutot/Clipboard/commit/81a3bcb8d425840dc2395e260163c27f135debd1)
+- **CI** — 覆盖 workspace 成员，lockfile 检查用 `npm ci` | [`cc31e2f`](https://github.com/muutot/Clipboard/commit/cc31e2f848bc9c0f84646914042c536de47b6b07)
+- **依赖** — vitest 升至 5，npm 依赖升至最新 patch/minor | [`7eaa689`](https://github.com/muutot/Clipboard/commit/7eaa689b8715a1a596952c5147cd19939e0c8870) [`2334018`](https://github.com/muutot/Clipboard/commit/2334018b9e8bca773fbde2ec44d3186ca225e683)
+- **杂项** — 调试构建禁止自重启，平台层清理既有 clippy `-D warnings` 失败，发布说明对话框全宽 | [`8e1deb6`](https://github.com/muutot/Clipboard/commit/8e1deb644e85282c9a8aafa9a5e17ce179abbcef) [`9ace15a`](https://github.com/muutot/Clipboard/commit/9ace15afc604aa0e8975f12fc543d7162617f6c5) [`0dc40fb`](https://github.com/muutot/Clipboard/commit/0dc40fb19cd3dc2ec82a0e2defdea67808ddf7c3)
+- **文档** — README 增加 UI 截图与工具栏样式对比 | [`64de025`](https://github.com/muutot/Clipboard/commit/64de025a9a6ae24538225f925e78f2d4191f4d1e)
 
 ---
 
 ## 构建产物
 
-- **MSI 安装包**: `Clipboard_1.6.0_x64_en-US.msi`
-- **NSIS 安装包**: `Clipboard_1.6.0_x64-setup.exe`
+- **MSI 安装包**: `Clipboard_1.7.0_x64_en-US.msi`
+- **NSIS 安装包**: `Clipboard_1.7.0_x64-setup.exe`
