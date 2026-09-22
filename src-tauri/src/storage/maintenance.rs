@@ -20,9 +20,6 @@ impl Database {
             let integrity: String =
                 connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
             let integrity_ok = integrity == "ok";
-            if !integrity_ok {
-                let _ = connection.execute("PRAGMA quick_check", []);
-            }
 
             let page_count: i64 =
                 connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
