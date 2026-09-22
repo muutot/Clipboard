@@ -38,59 +38,85 @@ pub fn apply_ocr_runtime_settings(
     worker: &OcrWorkerManager,
     update: OcrConfigUpdate,
 ) -> Result<OcrConfigResponse, String> {
-    // The config lock only needs to cover the read-modify-write of the
-    // settings. `worker.restart` joins the OCR thread, which may be busy
-    // with a long inference; holding the lock across it would block every
-    // config-dependent command for seconds.
-    let (response, runtime_engine, database) = {
-        let mut cfg = lock_state(&config, "config lock poisoned")?;
+    // Snapshot everything the probe and the write-back need, then release
+    // the config lock BEFORE spawning any child process. The tesseract
+    // probes (`is_available` + `with_languages` → `detect_tesseract_version`)
+    // each allow up to PROBE_TIMEOUT (10s); holding the global config lock
+    // across them would stall every config-dependent command. This mirrors
+    // the release-before-probe pattern already used by `get_ocr_status` and
+    // `check_ppocr_status`. A concurrent writer between the snapshot and the
+    // write-back resolves as last-write-wins, matching single-lock semantics.
+    struct ResolvedOcrSettings {
+        engine: String,
+        model: &'static ocr::models::PpOcrModelSpec,
+        score_threshold: f32,
+        box_threshold: f32,
+        unclip_ratio: f32,
+        tesseract_languages: String,
+    }
+    let resolved = {
+        let cfg = lock_state(&config, "config lock poisoned")?;
         let engine = update.engine.unwrap_or_else(|| cfg.ocr_engine().to_owned());
         let model = match update.ppocr_model_variant {
             Some(variant) => ocr::models::model_spec(&variant)
                 .ok_or_else(|| format!("unsupported PP-OCR model variant: {variant}"))?,
             None => configured_ppocr_model(&cfg),
         };
-        let score_threshold = update
-            .det_score_threshold
-            .unwrap_or_else(|| cfg.det_score_threshold());
-        let box_threshold = update
-            .det_box_threshold
-            .unwrap_or_else(|| cfg.det_box_threshold());
-        let unclip_ratio = update
-            .det_unclip_ratio
-            .unwrap_or_else(|| cfg.det_unclip_ratio());
-
-        let runtime_engine: Arc<dyn OcrEngine> = match engine.as_str() {
-            "ppocr" => {
-                let ppocr = PpOcrEngine::new(
-                    ocr::models::models_dir(&paths.storage),
-                    model,
-                    score_threshold,
-                    box_threshold,
-                    unclip_ratio,
-                );
-                if !ppocr.is_available() {
-                    return Err(format!("PP-OCR {} model files are not installed", model.id));
-                }
-                Arc::new(ppocr)
-            }
-            "tesseract" if TesseractOcrEngine::is_available() => Arc::new(
-                TesseractOcrEngine::with_languages(cfg.tesseract_languages().to_owned()),
-            ),
-            "tesseract" => return Err("Tesseract is not available".to_owned()),
-            _ => return Err(format!("unsupported OCR engine: {engine}")),
-        };
-        let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
-
-        cfg.set_ocr_settings(
+        ResolvedOcrSettings {
             engine,
-            model.id.to_owned(),
-            score_threshold,
-            box_threshold,
-            unclip_ratio,
+            model,
+            score_threshold: update
+                .det_score_threshold
+                .unwrap_or_else(|| cfg.det_score_threshold()),
+            box_threshold: update
+                .det_box_threshold
+                .unwrap_or_else(|| cfg.det_box_threshold()),
+            unclip_ratio: update
+                .det_unclip_ratio
+                .unwrap_or_else(|| cfg.det_unclip_ratio()),
+            tesseract_languages: cfg.tesseract_languages().to_owned(),
+        }
+    };
+
+    // Probe and construct the runtime engine with no locks held. `worker.restart`
+    // joins the OCR thread, which may be busy with a long inference; that must
+    // also stay outside the critical section (see previous comment).
+    let runtime_engine: Arc<dyn OcrEngine> = match resolved.engine.as_str() {
+        "ppocr" => {
+            let ppocr = PpOcrEngine::new(
+                ocr::models::models_dir(&paths.storage),
+                resolved.model,
+                resolved.score_threshold,
+                resolved.box_threshold,
+                resolved.unclip_ratio,
+            );
+            if !ppocr.is_available() {
+                return Err(format!(
+                    "PP-OCR {} model files are not installed",
+                    resolved.model.id
+                ));
+            }
+            Arc::new(ppocr)
+        }
+        "tesseract" if TesseractOcrEngine::is_available() => Arc::new(
+            TesseractOcrEngine::with_languages(resolved.tesseract_languages),
+        ),
+        "tesseract" => return Err("Tesseract is not available".to_owned()),
+        _ => return Err(format!("unsupported OCR engine: {}", resolved.engine)),
+    };
+    let database = Database::open(&paths.database).map_err(|e| e.to_string())?;
+
+    let response = {
+        let mut cfg = lock_state(&config, "config lock poisoned")?;
+        cfg.set_ocr_settings(
+            resolved.engine,
+            resolved.model.id.to_owned(),
+            resolved.score_threshold,
+            resolved.box_threshold,
+            resolved.unclip_ratio,
         )
         .map_err(|e| e.to_string())?;
-        (ocr_config_response(&cfg), runtime_engine, database)
+        ocr_config_response(&cfg)
     };
 
     worker.restart(runtime_engine, Arc::new(database));
