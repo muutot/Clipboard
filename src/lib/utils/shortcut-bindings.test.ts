@@ -47,8 +47,8 @@ describe("resolveNavigationBindings", () => {
     expect(resolveNavigationBindings({})).toEqual({
       moveSelectionUp: ["Arrowup"],
       moveSelectionDown: ["Arrowdown"],
-      switchFilterNext: ["Arrowright", "Tab"],
-      switchFilterPrev: ["Arrowleft", "Shift+Tab"],
+      switchFilterNext: ["Tab"],
+      switchFilterPrev: ["Shift+Tab"],
     });
   });
 
@@ -60,7 +60,7 @@ describe("resolveNavigationBindings", () => {
     expect(bindings.moveSelectionUp).toEqual(["K"]);
     expect(bindings.moveSelectionDown).toEqual(["Arrowdown"]);
     expect(bindings.switchFilterNext).toEqual([]);
-    expect(bindings.switchFilterPrev).toEqual(["Arrowleft", "Shift+Tab"]);
+    expect(bindings.switchFilterPrev).toEqual(["Shift+Tab"]);
   });
 });
 

@@ -776,14 +776,14 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "keyboard_switch" },
     i18n("keyboard.switchFilterNext"),
     i18n("keyboard.switchFilterDesc"),
-    ["Arrowright", "Tab", "next", "下一个"],
+    ["Tab", "next", "下一个"],
   ),
   entry(
     "keyboard.switch-filter-prev",
     { section: "keyboard_switch" },
     i18n("keyboard.switchFilterPrev"),
     i18n("keyboard.switchFilterDesc"),
-    ["Arrowleft", "Shift+Tab", "prev", "上一个"],
+    ["Shift+Tab", "prev", "上一个"],
   ),
   entry(
     "keyboard.switch-filter-all",
