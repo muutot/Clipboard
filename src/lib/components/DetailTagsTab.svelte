@@ -146,41 +146,58 @@
     font-size: 11px;
   }
 
+  /* Single rounded control that mirrors the shared settings input look
+     (`--input-bg`, `--border-color`, control radius) with the add action
+     embedded as a trailing ghost button. */
   .tag-input-wrap {
     display: flex;
     align-items: center;
     gap: 6px;
+    height: 32px;
+    padding: 0 5px 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-bg);
+    transition: border-color 120ms ease;
+  }
+
+  .tag-input-wrap:focus-within {
+    border-color: var(--text-faint);
   }
 
   .tag-input-wrap input {
     flex: 1;
     min-width: 0;
-    padding: 2px 6px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    background: var(--surface-bg);
-    font: inherit;
-    font-size: 11px;
+    padding: 0;
+    border: 0;
     outline: none;
+    color: var(--text-primary);
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
   }
 
-  .tag-input-wrap input:focus {
-    border-color: var(--text-faint);
+  .tag-input-wrap input::placeholder {
+    color: var(--placeholder-color);
+    opacity: 1;
   }
 
   .tag-add {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
     padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    background: var(--surface-bg);
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-muted);
+    background: transparent;
     cursor: pointer;
+    transition:
+      color 120ms ease,
+      background 120ms ease;
   }
 
   .tag-add:hover:not(:disabled) {
@@ -189,7 +206,7 @@
   }
 
   .tag-add:disabled {
-    opacity: 0.35;
+    opacity: 0.4;
     cursor: default;
   }
 </style>
