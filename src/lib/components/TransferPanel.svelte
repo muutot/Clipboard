@@ -192,12 +192,12 @@
   }
 </script>
 
-<section class="setting-card">
+<section class="setting-card" data-settings-search-id="storage.import-data">
   <div class="setting-heading">
     <span class="setting-icon"><AppIcon name="download" size={17} /></span>
     <div>
-      <strong>{_t("storage.transferTitle")}</strong>
-      <p>{_t("storage.transferDesc")}</p>
+      <strong>{_t("storage.importTitle")}</strong>
+      <p>{_t("storage.importDesc")}</p>
     </div>
   </div>
   <div class="transfer-group">
@@ -234,69 +234,77 @@
       </button>
     </div>
   {/if}
-  <div class="export-section">
-    <div class="export-options">
-      <div class="export-option-row">
-        <span class="export-option-label">{_t("storage.exportFavorites")}</span>
-        <label class="export-check">
-          <Checkbox
-            checked={exportIncludeFavorites}
-            onchange={(checked) => (exportIncludeFavorites = checked)}
-            size={15}
-          />
-          <span>{_t("storage.exportIncludeFavorites")}</span>
-        </label>
-      </div>
-      <div class="export-option-row">
-        <span class="export-option-label">{_t("storage.exportContentTypes")}</span>
-        <div class="export-kind-checks">
-          {#each storageKinds as kindInfo (kindInfo.kind)}
-            <label class="export-check">
-              <Checkbox
-                checked={exportContentTypes.has(kindInfo.kind)}
-                onchange={() => toggleExportContentType(kindInfo.kind)}
-                size={15}
-              />
-              <span>{_t(kindInfo.labelKey)}</span>
-            </label>
-          {/each}
-        </div>
-      </div>
-      <div class="export-option-row export-date-row">
-        <span class="export-option-label">{_t("storage.exportDateRange")}</span>
-        <DatePicker
-          value={exportDateFrom}
-          onchange={(v) => (exportDateFrom = v)}
-          ariaLabel={_t("storage.exportDateFrom")}
+</section>
+
+<section class="setting-card" data-settings-search-id="storage.export-data">
+  <div class="setting-heading">
+    <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
+    <div>
+      <strong>{_t("storage.exportTitle")}</strong>
+      <p>{_t("storage.exportDesc")}</p>
+    </div>
+  </div>
+  <div class="export-options">
+    <div class="export-option-row">
+      <span class="export-option-label">{_t("storage.exportFavorites")}</span>
+      <label class="export-check">
+        <Checkbox
+          checked={exportIncludeFavorites}
+          onchange={(checked) => (exportIncludeFavorites = checked)}
+          size={15}
         />
-        <span class="export-date-separator">–</span>
-        <DatePicker
-          value={exportDateTo}
-          onchange={(v) => (exportDateTo = v)}
-          ariaLabel={_t("storage.exportDateTo")}
-        />
+        <span>{_t("storage.exportIncludeFavorites")}</span>
+      </label>
+    </div>
+    <div class="export-option-row">
+      <span class="export-option-label">{_t("storage.exportContentTypes")}</span>
+      <div class="export-kind-checks">
+        {#each storageKinds as kindInfo (kindInfo.kind)}
+          <label class="export-check">
+            <Checkbox
+              checked={exportContentTypes.has(kindInfo.kind)}
+              onchange={() => toggleExportContentType(kindInfo.kind)}
+              size={15}
+            />
+            <span>{_t(kindInfo.labelKey)}</span>
+          </label>
+        {/each}
       </div>
     </div>
-    <div class="transfer-group">
-      <span class="transfer-label">{_t("storage.exportLabel")}</span>
-      <CustomSelect
-        value={exportFormat}
-        disabled={exporting || importing || exportFormats.length === 0}
-        ariaLabel={_t("storage.exportLabel")}
-        options={exportFormats.map((format) => ({
-          value: format.id,
-          label: format.label,
-        }))}
-        onchange={(v) => (exportFormat = v as string)}
+    <div class="export-option-row export-date-row">
+      <span class="export-option-label">{_t("storage.exportDateRange")}</span>
+      <DatePicker
+        value={exportDateFrom}
+        onchange={(v) => (exportDateFrom = v)}
+        ariaLabel={_t("storage.exportDateFrom")}
       />
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={exporting || importing || exportFormats.length === 0}
-        onclick={handleExport}
-      >
-        {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
-      </button>
+      <span class="export-date-separator">–</span>
+      <DatePicker
+        value={exportDateTo}
+        onchange={(v) => (exportDateTo = v)}
+        ariaLabel={_t("storage.exportDateTo")}
+      />
     </div>
+  </div>
+  <div class="transfer-group">
+    <span class="transfer-label">{_t("storage.exportLabel")}</span>
+    <CustomSelect
+      value={exportFormat}
+      disabled={exporting || importing || exportFormats.length === 0}
+      ariaLabel={_t("storage.exportLabel")}
+      options={exportFormats.map((format) => ({
+        value: format.id,
+        label: format.label,
+      }))}
+      onchange={(v) => (exportFormat = v as string)}
+    />
+    <button
+      type="button"
+      class="settings-action-btn"
+      disabled={exporting || importing || exportFormats.length === 0}
+      onclick={handleExport}
+    >
+      {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
+    </button>
   </div>
 </section>

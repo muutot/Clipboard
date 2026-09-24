@@ -860,10 +860,9 @@ button {
 }
 
 /* --- Transfer import/export --- */
-/* Import sits on its own row; the export row and its options share one group
-   below a divider. The format select keeps a half-row width so it is not
-   stretched, and the action button stays pinned to the right edge like the
-   other maintenance cards. */
+/* Import and export are separate setting cards. In each card's row the format
+   select keeps a half-row width so it is not stretched, and the action button
+   stays pinned to the right edge like the other maintenance cards. */
 .transfer-group {
   display: flex;
   align-items: center;
@@ -901,14 +900,6 @@ button {
 }
 .transfer-limit-warning button {
   flex-shrink: 0;
-}
-.export-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
 }
 .export-options {
   display: flex;

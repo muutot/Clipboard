@@ -247,8 +247,10 @@ export interface LocaleDefinition {
     deleteKindFailed: string;
     deleteKindNoData: string;
     deleteKindRefreshFailed: string;
-    transferTitle: string;
-    transferDesc: string;
+    importTitle: string;
+    importDesc: string;
+    exportTitle: string;
+    exportDesc: string;
     exportLabel: string;
     importLabel: string;
     exportAction: string;

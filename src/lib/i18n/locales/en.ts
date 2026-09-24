@@ -270,9 +270,10 @@ const en: LocaleDefinition = {
     deleteKindFailed: "Failed to delete {kind} data: {error}",
     deleteKindNoData: "No non-favorite {kind} data remains to delete",
     deleteKindRefreshFailed: "Statistics could not be refreshed; reopen Settings to verify",
-    transferTitle: "Import & Export",
-    transferDesc:
-      "Export clipboard history to a JSON, CSV, or plain-text file, or import records from a backup file.",
+    importTitle: "Import",
+    importDesc: "Import clipboard records from a backup file.",
+    exportTitle: "Export",
+    exportDesc: "Export clipboard history to a JSON, CSV, or plain-text file.",
     exportLabel: "Export",
     importLabel: "Import",
     exportAction: "Export…",

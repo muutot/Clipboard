@@ -96,7 +96,6 @@ describe("i18n locales", () => {
       "statistics.storage.images",
       "statistics.storage.links",
       "statistics.storage.text",
-      "storage.transfer",
       "tags.autoTagRules",
       "tags.manage",
     ]);
