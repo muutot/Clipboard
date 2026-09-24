@@ -860,12 +860,13 @@ button {
 }
 
 /* --- Transfer import/export --- */
-/* Import and export are separate setting cards. Each card's row keeps the
-   format select at half width with its action button following right after,
-   separated by the standard row gap (no label, no giant void). */
+/* Import and export are separate setting cards. Each card's row right-aligns
+   the half-width format select and its action button, separated by the
+   standard row gap (no label, no giant void). */
 .transfer-group {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   min-width: 0;
 }
