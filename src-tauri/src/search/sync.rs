@@ -449,9 +449,12 @@ mod tests {
 
         database.save_item(&item("bg", "后台同步可见")).unwrap();
 
-        // Give the worker a couple of drain cycles to pick up the event.
-        for _ in 0..50 {
-            if index.search("后台", 20).unwrap().len() == 1 {
+        // Wait for the worker to complete a drain (apply + acknowledge), which
+        // it signals through the notification callback. Polling the index alone
+        // can observe the applied document before the outbox ack commits,
+        // making the ack assertion below flaky on a loaded machine.
+        for _ in 0..100 {
+            if notifications.load(Ordering::SeqCst) >= 1 {
                 break;
             }
             std::thread::sleep(Duration::from_millis(10));
