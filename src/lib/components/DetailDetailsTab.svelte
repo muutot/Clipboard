@@ -154,38 +154,6 @@
       <dt><AppIcon name="info" size={14} /> {_t("detail.sourceApp")}</dt>
       <dd>{item.sourceApp}</dd>
     </div>
-    <div class="detail-row tags-row">
-      <dt><AppIcon name="tag" size={14} /> {_t("detail.tags")}</dt>
-      <dd class="tags-editor">
-        {#each item.tags ?? [] as tag (tag)}
-          <TagChip
-            {tag}
-            accent={tagColors[tag]}
-            onremove={removeTag}
-            removeAriaLabel={_t("detail.removeTag")}
-          />
-        {/each}
-        <span class="tag-input-wrap">
-          <input
-            bind:value={tagDraft}
-            placeholder={_t("detail.addTagPlaceholder")}
-            onkeydown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTagFromInput();
-              }
-            }}
-          />
-          <button
-            type="button"
-            class="tag-add"
-            aria-label={_t("detail.addTag")}
-            disabled={!tagDraft.trim()}
-            onclick={addTagFromInput}><AppIcon name="plus" size={12} /></button
-          >
-        </span>
-      </dd>
-    </div>
     <div class="detail-row">
       <dt><AppIcon name="file" size={14} /> {_t("detail.contentType")}</dt>
       <dd>{kindLabel}</dd>
@@ -338,6 +306,45 @@
     {/if}
   </dl>
 
+  <section class="tags-section">
+    <strong class="section-title"><AppIcon name="tag" size={14} /> {_t("detail.tags")}</strong>
+    <div class="tags-list">
+      {#each item.tags ?? [] as tag (tag)}
+        <div class="tag-row">
+          <TagChip {tag} accent={tagColors[tag]} />
+          <button
+            type="button"
+            class="tag-remove"
+            aria-label={_t("detail.removeTag")}
+            title={_t("detail.removeTag")}
+            onclick={() => removeTag(tag)}
+          >
+            <AppIcon name="x" size={12} />
+          </button>
+        </div>
+      {/each}
+    </div>
+    <div class="tag-input-wrap">
+      <input
+        bind:value={tagDraft}
+        placeholder={_t("detail.addTagPlaceholder")}
+        onkeydown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            addTagFromInput();
+          }
+        }}
+      />
+      <button
+        type="button"
+        class="tag-add"
+        aria-label={_t("detail.addTag")}
+        disabled={!tagDraft.trim()}
+        onclick={addTagFromInput}><AppIcon name="plus" size={12} /></button
+      >
+    </div>
+  </section>
+
   {#if rawMetadata}
     <details class="raw-metadata">
       <summary>{_t("detail.rawMetadata")}</summary>
@@ -347,7 +354,7 @@
 
   {#if hasSpecialMarkers}
     <div class="special-section">
-      <strong class="special-title">{_t("detail.specialMarkers")}</strong>
+      <strong class="section-title">{_t("detail.specialMarkers")}</strong>
       {#if showMarkerFilters}
         <div class="marker-filters">
           <button
@@ -440,27 +447,16 @@
     gap: 12px;
   }
 
-  .detail-row.tags-row {
-    align-items: flex-start;
-  }
-
-  .tags-editor {
+  .tag-input-wrap {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
-    justify-content: flex-end;
-    max-width: 65%;
-  }
-
-  .tag-input-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
+    margin-top: 8px;
   }
 
   .tag-input-wrap input {
-    width: 90px;
+    flex: 1;
+    min-width: 0;
     padding: 2px 6px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -604,19 +600,66 @@
     background: color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
 
-  .special-section {
+  .special-section,
+  .tags-section {
     padding: 12px;
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--input-bg);
   }
 
-  .special-title {
-    display: block;
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin-bottom: 10px;
     color: var(--text-muted);
     font-size: 11px;
     font-weight: 560;
+  }
+
+  .tags-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .tag-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--input-bg);
+  }
+
+  .tag-row :global(.tag-chip) {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tag-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-faint);
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 100ms ease;
+  }
+
+  .tag-remove:hover {
+    color: var(--danger-color);
+    background: var(--hover-bg);
   }
 
   .markers-list {
