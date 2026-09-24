@@ -201,7 +201,6 @@
     </div>
   </div>
   <div class="transfer-group">
-    <span class="transfer-label">{_t("storage.importLabel")}</span>
     <CustomSelect
       value={importFormat}
       disabled={exporting || importing || importFormats.length === 0}
@@ -287,7 +286,6 @@
     </div>
   </div>
   <div class="transfer-group">
-    <span class="transfer-label">{_t("storage.exportLabel")}</span>
     <CustomSelect
       value={exportFormat}
       disabled={exporting || importing || exportFormats.length === 0}
