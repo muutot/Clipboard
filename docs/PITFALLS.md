@@ -85,6 +85,24 @@ Tauri 2 的 capability 按窗口授权：`src-tauri/capabilities/default.json` �
 
 新增窗口后对照该窗口用到的全部 `window.*` API 逐项核对 `core:window:allow-*` 权限。
 
+### 无边框窗口的阴影内边距会让定位溢出工作区
+
+Tauri 在 Windows 上为无边框（`decorations(false)`）窗口默认开启原生阴影。tao 创建窗口时会把阴影内边距（`calculate_insets_for_dpi`：左右下各 `SM_CXSIZEFRAME + SM_CXPADDEDBORDER`，Win11 顶部再加 1px）加到内尺寸上，实际外框比 `inner_size` 大一圈，而 builder 的 `position` 和 `set_position` 定位的都是**外框**左上角。用 `inner_size` 常量算右下角，会让面板越出工作区、压到任务栏或屏幕外（悬浮面板曾出现此问题）。
+
+```rust
+// BUG: 320x480 是内尺寸；外框更大，右下角溢出工作区
+builder.position(area_right - 320.0, area_bottom - 480.0)
+
+// FIX: 建窗后读实际外框尺寸，用物理坐标定位
+let outer = window.outer_size()?;
+window.set_position(PhysicalPosition::new(
+    area_right - outer.width as i32,
+    area_bottom - outer.height as i32,
+))?;
+```
+
+`outer_size()` 已含阴影内边距，按它对齐能让整窗外沿恰好贴住工作区边缘。
+
 ### 图片预览全屏模式
 
 桌面全屏模式 (`imageFullscreenMode === "desktop"`) 使用 `element.requestFullscreen()` 填满物理屏幕。全屏状态通过监听 `fullscreenchange` 事件同步，不能仅依赖本地布尔变量，因为用户可通过浏览器 ESC 退出全屏。全屏时仅右上角 X 按钮和 ESC 可关闭。

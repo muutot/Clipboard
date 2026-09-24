@@ -65,7 +65,7 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
             .map_err(|error| format!("failed to focus the float panel: {error}"))?;
         return Ok(());
     }
-    let mut builder =
+    let builder =
         WebviewWindowBuilder::new(&app, FLOAT_WINDOW_LABEL, WebviewUrl::App("/float".into()))
             .title("Float")
             .inner_size(FLOAT_WIDTH, FLOAT_HEIGHT)
@@ -79,94 +79,111 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
     // float page paints its own themed background, so the panel simply stays
     // opaque there.
     #[cfg(not(target_os = "macos"))]
-    {
-        builder = builder.transparent(true);
-    }
-    match float_initial_position(&app) {
-        Some((x, y)) => {
-            builder = builder.position(x, y);
-        }
-        None => {
-            builder = builder.center();
-        }
-    }
+    let builder = builder.transparent(true);
     crate::log_event!("[float] building window");
-    builder
+    let window = builder
         .build()
         .map_err(|error| format!("failed to open the float panel: {error}"))?;
+    // Position after creation instead of with the builder: an undecorated
+    // window carries an invisible shadow inset (see tao's
+    // `calculate_insets_for_dpi`), so the requested 320x480 inner size is
+    // smaller than the real outer size. The builder's `position` is the outer
+    // top-left, so centering on the inner size overflowed the work area and
+    // pushed the panel under the taskbar / off-screen. The real outer size
+    // keeps the whole window inside the work area.
+    position_float_panel(&app, &window);
     crate::log_event!("[float] window built");
     Ok(())
 }
 
-/// Initial position from `general.floatPanelPosition`, resolved against the
-/// primary monitor's work area. Builder coordinates are logical pixels while
-/// monitor geometry is physical, hence the scale conversion. `None` falls
-/// back to centered.
-fn float_initial_position<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<(f64, f64)> {
+/// Places the freshly built, still-hidden float panel at the configured
+/// work-area corner. Coordinates are computed from the window's actual outer
+/// size against the primary monitor's physical work area, so the native
+/// undecorated shadow inset stays inside the work area. Falls back to
+/// centering when the position cannot be resolved.
+fn position_float_panel<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    window: &tauri::WebviewWindow<R>,
+) {
+    let outer = match window.outer_size() {
+        Ok(size) => size,
+        Err(error) => {
+            crate::log_event!("[float] failed to read panel size ({error}); centering");
+            let _ = window.center();
+            return;
+        }
+    };
     let place = {
-        let config = app.try_state::<Mutex<ConfigStore>>()?;
+        let Some(config) = app.try_state::<Mutex<ConfigStore>>() else {
+            let _ = window.center();
+            return;
+        };
         let place = match config.lock() {
             Ok(guard) => guard.general_settings().float_panel_position.clone(),
             Err(error) => {
                 crate::log_event!(
                     "[float] configuration lock poisoned while reading panel position ({error}); centering"
                 );
-                return None;
+                let _ = window.center();
+                return;
             }
         };
         place
     };
-    let monitor = app.primary_monitor().ok()??;
-    let scale = monitor.scale_factor();
-    if !scale.is_finite() || scale <= 0.0 {
-        return None;
-    }
+    let Some(monitor) = app.primary_monitor().ok().flatten() else {
+        crate::log_event!("[float] primary monitor unavailable; centering");
+        let _ = window.center();
+        return;
+    };
     let area = monitor.work_area();
     crate::log_event!(
-        "[float] monitor scale={scale} work_area=({},{} {}x{})",
+        "[float] monitor scale={} work_area=({},{} {}x{})",
+        monitor.scale_factor(),
         area.position.x,
         area.position.y,
         area.size.width,
         area.size.height
     );
-    let origin_x = area.position.x as f64 / scale;
-    let origin_y = area.position.y as f64 / scale;
-    let area_w = area.size.width as f64 / scale;
-    let area_h = area.size.height as f64 / scale;
-    Some(corner_position(
+    let (x, y) = corner_position(
         place.as_str(),
-        origin_x,
-        origin_y,
-        area_w,
-        area_h,
-    ))
-    .inspect(|(x, y)| {
-        crate::log_event!("[float] place={place} at ({x},{y})");
-    })
+        area.position.x,
+        area.position.y,
+        area.size.width as i32,
+        area.size.height as i32,
+        outer.width as i32,
+        outer.height as i32,
+    );
+    match window.set_position(tauri::PhysicalPosition::new(x, y)) {
+        Ok(()) => crate::log_event!("[float] place={place} at ({x},{y})"),
+        Err(error) => {
+            crate::log_event!("[float] failed to place panel at ({x},{y}) for {place}: {error}");
+            let _ = window.center();
+        }
+    }
 }
 
-/// Maps a configured position name onto a work-area origin. Unknown names
-/// fall back to bottom-right (the default), never to an error.
+/// Maps a configured position name onto a work-area origin, keeping the whole
+/// `win_w` x `win_h` window inside it. Coordinates are physical pixels.
+/// Unknown names fall back to bottom-right (the default), never to an error.
 fn corner_position(
     place: &str,
-    origin_x: f64,
-    origin_y: f64,
-    area_w: f64,
-    area_h: f64,
-) -> (f64, f64) {
+    origin_x: i32,
+    origin_y: i32,
+    area_w: i32,
+    area_h: i32,
+    win_w: i32,
+    win_h: i32,
+) -> (i32, i32) {
     match place {
         "topLeft" => (origin_x, origin_y),
-        "topRight" => (origin_x + area_w - FLOAT_WIDTH, origin_y),
-        "bottomLeft" => (origin_x, origin_y + area_h - FLOAT_HEIGHT),
+        "topRight" => (origin_x + area_w - win_w, origin_y),
+        "bottomLeft" => (origin_x, origin_y + area_h - win_h),
         "center" => (
-            origin_x + (area_w - FLOAT_WIDTH) / 2.0,
-            origin_y + (area_h - FLOAT_HEIGHT) / 2.0,
+            origin_x + (area_w - win_w) / 2,
+            origin_y + (area_h - win_h) / 2,
         ),
         // "bottomRight" default; unknown values fall through here too.
-        _ => (
-            origin_x + area_w - FLOAT_WIDTH,
-            origin_y + area_h - FLOAT_HEIGHT,
-        ),
+        _ => (origin_x + area_w - win_w, origin_y + area_h - win_h),
     }
 }
 
@@ -176,26 +193,26 @@ mod tests {
 
     #[test]
     fn corners_resolve_inside_the_work_area() {
-        // 1920x1080 work area at origin, 320x480 panel.
+        // 1920x1080 work area at origin, 320x480 window.
         assert_eq!(
-            corner_position("topLeft", 0.0, 0.0, 1920.0, 1080.0),
-            (0.0, 0.0)
+            corner_position("topLeft", 0, 0, 1920, 1080, 320, 480),
+            (0, 0)
         );
         assert_eq!(
-            corner_position("topRight", 0.0, 0.0, 1920.0, 1080.0),
-            (1600.0, 0.0)
+            corner_position("topRight", 0, 0, 1920, 1080, 320, 480),
+            (1600, 0)
         );
         assert_eq!(
-            corner_position("bottomLeft", 0.0, 0.0, 1920.0, 1080.0),
-            (0.0, 600.0)
+            corner_position("bottomLeft", 0, 0, 1920, 1080, 320, 480),
+            (0, 600)
         );
         assert_eq!(
-            corner_position("bottomRight", 0.0, 0.0, 1920.0, 1080.0),
-            (1600.0, 600.0)
+            corner_position("bottomRight", 0, 0, 1920, 1080, 320, 480),
+            (1600, 600)
         );
         assert_eq!(
-            corner_position("center", 0.0, 0.0, 1920.0, 1080.0),
-            (800.0, 300.0)
+            corner_position("center", 0, 0, 1920, 1080, 320, 480),
+            (800, 300)
         );
     }
 
@@ -203,9 +220,24 @@ mod tests {
     fn unknown_positions_fall_back_to_bottom_right() {
         for unknown in ["", "corner", "BOTTOMRIGHT"] {
             assert_eq!(
-                corner_position(unknown, 0.0, 0.0, 1920.0, 1080.0),
-                (1600.0, 600.0)
+                corner_position(unknown, 0, 0, 1920, 1080, 320, 480),
+                (1600, 600)
             );
         }
+    }
+
+    #[test]
+    fn outer_size_and_shifted_work_area_stay_inside() {
+        // A taskbar on the left shifts the origin and shrinks the area; the
+        // outer size (including the undecorated shadow inset) must still fit.
+        assert_eq!(
+            corner_position("bottomRight", 48, 0, 1872, 1040, 336, 496),
+            (48 + 1872 - 336, 1040 - 496)
+        );
+        // A monitor left of the primary reports a negative origin.
+        assert_eq!(
+            corner_position("topLeft", -1920, 0, 1920, 1080, 320, 480),
+            (-1920, 0)
+        );
     }
 }
