@@ -257,7 +257,7 @@ const zhCN: LocaleDefinition = {
     importTitle: "数据导入",
     importDesc: "从备份文件导入剪贴板记录。",
     exportTitle: "数据导出",
-    exportDesc: "将剪贴板记录导出为 JSON、CSV 或纯文本文件。",
+    exportDesc: "将剪贴板记录导出。",
     exportLabel: "导出",
     importLabel: "导入",
     exportAction: "导出…",

@@ -273,7 +273,7 @@ const en: LocaleDefinition = {
     importTitle: "Import",
     importDesc: "Import clipboard records from a backup file.",
     exportTitle: "Export",
-    exportDesc: "Export clipboard history to a JSON, CSV, or plain-text file.",
+    exportDesc: "Export clipboard records.",
     exportLabel: "Export",
     importLabel: "Import",
     exportAction: "Export…",
