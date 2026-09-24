@@ -860,14 +860,10 @@ button {
 }
 
 /* --- Transfer import/export --- */
-/* One row per direction (import, then export); the format select keeps a
-   half-row width so it is not stretched, and the action button stays pinned
-   to the right edge like the other maintenance cards. */
-.transfer-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+/* Import sits on its own row; the export row and its options share one group
+   below a divider. The format select keeps a half-row width so it is not
+   stretched, and the action button stays pinned to the right edge like the
+   other maintenance cards. */
 .transfer-group {
   display: flex;
   align-items: center;
@@ -906,13 +902,18 @@ button {
 .transfer-limit-warning button {
   flex-shrink: 0;
 }
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
 .export-options {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  margin-top: 14px;
-  padding-top: 11px;
-  border-top: 1px solid var(--border-subtle);
 }
 .export-option-row {
   display: flex;
