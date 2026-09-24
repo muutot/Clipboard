@@ -38,6 +38,7 @@ function ctx(overrides: Partial<KeyActionContext> = {}): KeyActionContext {
     hasTagDialog: false,
     hasContextMenu: false,
     hasDetail: false,
+    detailOverlayOpen: false,
     tagFilter: null,
     isTauri: false,
     detailEditor: false,
@@ -476,9 +477,14 @@ describe("resolveKeyAction — item shortcuts", () => {
     expect(resolveKeyAction(keyEvent({ key: "p", ctrlKey: true }), custom).type).toBe(
       "focus-search",
     );
-    // Rebound away from the defaults: Ctrl+2 and `/` stay silent.
+    // Rebound away from the defaults: Ctrl+2 stays silent, and a now-unbound
+    // `/` falls through to type-to-search like any other printable key.
     expect(resolveKeyAction(keyEvent({ key: "2", ctrlKey: true }), custom).type).toBe("none");
-    expect(resolveKeyAction(keyEvent({ key: "/" }), custom).type).toBe("none");
+    expect(resolveKeyAction(keyEvent({ key: "/" }), custom)).toEqual({
+      type: "focus-search-type",
+      value: "/",
+      prevent: true,
+    });
   });
 
   it("fires Alt-modified focus-search chords inside editable targets", () => {
@@ -489,5 +495,64 @@ describe("resolveKeyAction — item shortcuts", () => {
     });
     expect(resolveKeyAction(onEditor, custom).type).toBe("focus-search");
     editor.remove();
+  });
+});
+
+describe("resolveKeyAction — type-to-search", () => {
+  it("starts a search from a plain printable key outside editables", () => {
+    expect(resolveKeyAction(keyEvent({ key: "a" }), ctx())).toEqual({
+      type: "focus-search-type",
+      value: "a",
+      prevent: true,
+    });
+    // Shift still types (uppercase / symbols); no modifiers are required.
+    expect(resolveKeyAction(keyEvent({ key: "A", shiftKey: true }), ctx())).toEqual({
+      type: "focus-search-type",
+      value: "A",
+      prevent: true,
+    });
+  });
+
+  it("does not fire inside editable surfaces", () => {
+    const input = targetOn("input");
+    const onInput = Object.defineProperty(keyEvent({ key: "a" }), "target", { value: input });
+    expect(resolveKeyAction(onInput, ctx()).type).toBe("none");
+    const editor = targetOn("div", { contenteditable: "true" });
+    const onEditor = Object.defineProperty(keyEvent({ key: "a" }), "target", { value: editor });
+    expect(resolveKeyAction(onEditor, ctx()).type).toBe("none");
+    input.remove();
+    editor.remove();
+  });
+
+  it("leaves modifier chords and multi-char keys to their bindings", () => {
+    expect(resolveKeyAction(keyEvent({ key: "z", ctrlKey: true }), ctx()).type).toBe("none");
+    expect(resolveKeyAction(keyEvent({ key: "z", altKey: true }), ctx()).type).toBe("none");
+    expect(resolveKeyAction(keyEvent({ key: "z", metaKey: true }), ctx()).type).toBe("none");
+    expect(resolveKeyAction(keyEvent({ key: "F1" }), ctx()).type).toBe("none");
+    expect(resolveKeyAction(keyEvent({ key: " " }), ctx()).type).toBe("open-detail");
+  });
+
+  it("does not fire while a modal or overlay surface owns the keyboard", () => {
+    for (const override of [
+      { hasEditing: true },
+      { hasFullscreen: true },
+      { hasTagDialog: true },
+      { hasContextMenu: true },
+      { detailOverlayOpen: true },
+    ] as Partial<KeyActionContext>[]) {
+      expect(resolveKeyAction(keyEvent({ key: "a" }), ctx(override)).type).toBe("none");
+    }
+  });
+
+  it("lets a custom single-letter binding win over type-to-search", () => {
+    const custom = ctx();
+    custom.itemBindings = { ...custom.itemBindings, copyItem: ["k"] };
+    expect(resolveKeyAction(keyEvent({ key: "k" }), custom)).toEqual({
+      type: "copy-item",
+      id: "a",
+      prevent: true,
+    });
+    // A different free letter still types.
+    expect(resolveKeyAction(keyEvent({ key: "a" }), custom).type).toBe("focus-search-type");
   });
 });

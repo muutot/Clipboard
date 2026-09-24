@@ -22,6 +22,7 @@ import {
 export type KeyAction =
   | { type: "none"; prevent: boolean }
   | { type: "focus-search"; prevent: boolean }
+  | { type: "focus-search-type"; value: string; prevent: boolean }
   | { type: "quick-copy"; index: number; prevent: boolean }
   | { type: "set-filter"; filterId: string; focusTab: boolean; prevent: boolean }
   | { type: "move-selection"; delta: 1 | -1; prevent: boolean }
@@ -59,6 +60,8 @@ export interface KeyActionContext {
   /** A card context menu is open and owns Escape (closes the menu only). */
   hasContextMenu: boolean;
   hasDetail: boolean;
+  /** The overlay (non-split) detail panel is open and owns the keyboard. */
+  detailOverlayOpen: boolean;
   /** Tag currently used as a list filter, if any. */
   tagFilter: string | null;
   isTauri: boolean;
@@ -287,36 +290,58 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
       // shortcut operates on a visible entry instead of silently no-opping.
       item = ctx.filteredItems[0];
     }
-    if (!item) return { type: "none", prevent: false };
-
-    // Priority order mirrors the historical hardcoded branches: when the
-    // user binds the same chord to two item actions, the first wins.
-    if (matchesAny(ctx.itemBindings.copyItem)) {
-      if (ctx.selectedCount > 0) return { type: "bulk-copy", prevent: true };
-      return { type: "copy-item", id: item.id, prevent: true };
-    }
-    if (matchesAny(ctx.itemBindings.deleteItem)) {
-      if (ctx.selectedCount > 0) return { type: "bulk-delete", prevent: true };
-      if (!item.favorite) return { type: "delete-item", id: item.id, prevent: true };
-      return { type: "none", prevent: false };
-    }
-    if (matchesAny(ctx.itemBindings.favoriteItem)) {
-      if (ctx.selectedCount > 0) return { type: "bulk-favorite", prevent: true };
-      return { type: "toggle-favorite", id: item.id, prevent: true };
-    }
-    if (matchesAny(ctx.itemBindings.openDetail)) {
-      return { type: "open-detail", id: item.id, prevent: true };
-    }
-    if (matchesAny(ctx.itemBindings.addTag)) {
-      if (ctx.selectedCount > 0) return { type: "none", prevent: false };
-      return { type: "tag-add", prevent: true };
-    }
-    if (matchesAny(ctx.itemBindings.downloadItem)) {
-      if (item.kind === "image" || item.kind === "file") {
-        return { type: "save-item", id: item.id, prevent: true };
+    if (item) {
+      // Priority order mirrors the historical hardcoded branches: when the
+      // user binds the same chord to two item actions, the first wins.
+      if (matchesAny(ctx.itemBindings.copyItem)) {
+        if (ctx.selectedCount > 0) return { type: "bulk-copy", prevent: true };
+        return { type: "copy-item", id: item.id, prevent: true };
       }
-      return { type: "none", prevent: false };
+      if (matchesAny(ctx.itemBindings.deleteItem)) {
+        if (ctx.selectedCount > 0) return { type: "bulk-delete", prevent: true };
+        if (!item.favorite) return { type: "delete-item", id: item.id, prevent: true };
+        return { type: "none", prevent: false };
+      }
+      if (matchesAny(ctx.itemBindings.favoriteItem)) {
+        if (ctx.selectedCount > 0) return { type: "bulk-favorite", prevent: true };
+        return { type: "toggle-favorite", id: item.id, prevent: true };
+      }
+      if (matchesAny(ctx.itemBindings.openDetail)) {
+        return { type: "open-detail", id: item.id, prevent: true };
+      }
+      if (matchesAny(ctx.itemBindings.addTag)) {
+        if (ctx.selectedCount > 0) return { type: "none", prevent: false };
+        return { type: "tag-add", prevent: true };
+      }
+      if (matchesAny(ctx.itemBindings.downloadItem)) {
+        if (item.kind === "image" || item.kind === "file") {
+          return { type: "save-item", id: item.id, prevent: true };
+        }
+        return { type: "none", prevent: false };
+      }
     }
+  }
+
+  // Type-to-search fallback: a printable character typed outside every
+  // editable surface and modal surface starts/continues a search. Bound
+  // shortcuts above win (a custom single-letter chord still fires), and
+  // modifier chords are excluded so Ctrl/Alt/⌘ keep their meaning. Space is
+  // excluded (it is bound to openDetail by default and is not a useful
+  // first search character).
+  if (
+    !editableTarget &&
+    !ctx.hasEditing &&
+    !ctx.hasFullscreen &&
+    !ctx.hasTagDialog &&
+    !ctx.hasContextMenu &&
+    !ctx.detailOverlayOpen &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    event.key.length === 1 &&
+    event.key !== " "
+  ) {
+    return { type: "focus-search-type", value: event.key, prevent: true };
   }
 
   return { type: "none", prevent: false };

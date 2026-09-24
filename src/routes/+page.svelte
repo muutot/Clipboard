@@ -2354,6 +2354,23 @@
       case "focus-search":
         searchInputEl?.focus();
         break;
+      case "focus-search-type": {
+        // Type-to-search: a printable key pressed outside any editable
+        // surface continues the query and moves focus into the search box.
+        query = `${query}${action.value}`;
+        searchSuggestionsOpen = true;
+        searchSuggestionIndex = -1;
+        if (pendingSearchHistoryQuery && query.trim() !== pendingSearchHistoryQuery) {
+          pendingSearchHistoryQuery = "";
+        }
+        void tick().then(() => {
+          const el = searchInputEl;
+          if (!el) return;
+          el.focus();
+          el.setSelectionRange(query.length, query.length);
+        });
+        break;
+      }
       case "quick-copy": {
         const item = filteredItems[action.index];
         if (item) {
@@ -2441,6 +2458,7 @@
         hasTagDialog: !!tagEditDialog,
         hasContextMenu: contextMenuOpen,
         hasDetail: !!detailItem,
+        detailOverlayOpen: detailItem != null && detailDisplayMode !== "split",
         tagFilter,
         isTauri: "__TAURI_INTERNALS__" in window,
         detailEditor:

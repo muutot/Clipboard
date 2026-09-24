@@ -75,7 +75,7 @@ action id — listeners need no manager changes.
 | `src/lib/utils/shortcut-bindings.ts`              | `resolveAllBindings` (every registry action), `resolveGlobalBindings` (global only), plus the legacy per-group resolvers (filter position, navigation, single action). Rule everywhere: absent → canonical default, explicitly empty → disabled. |
 | <br />                                            | <br />                                                                                                                                                                                                                                           |
 | `src/lib/utils/keyboard.ts`                       | Target guards (`isEditableKeyboardTarget`, `isItemActionShortcut`, `isActivatableKeyboardTarget`) and `shortcutMatchesEvent` (exact modifier set, canonical format).                                                                             |
-| `src/lib/utils/keyboard-actions.ts`               | Pure `resolveKeyAction` decision table (branch order is load-bearing; unit-tested).                                                                                                                                                              |
+| `src/lib/utils/keyboard-actions.ts`               | Pure `resolveKeyAction` decision table (branch order is load-bearing; unit-tested), ending in the type-to-search fallback.                                                                                                                       |
 | `src/routes/+page.svelte`                         | `executeKeyAction` handler switch; loads `keyboardShortcuts` on mount and window focus.                                                                                                                                                          |
 | `src/lib/components/KeyboardSettingsPanel.svelte` | Renders cards from `HOTKEY_ACTIONS` (no per-action markup); recording, add/remove binding, reset. Listens for `hotkey-registration-failed` to show occupied-chord conflicts.                                                                     |
 
@@ -147,6 +147,14 @@ Window-only (main window focused):
   or `keyCode === 229`: while an IME composition is active the keys belong to
   the IME, and cancelling a composition with Escape must not also hide the
   window. Keep this guard on top of `resolveKeyAction` when extending it.
+- Type-to-search is the final `resolveKeyAction` fallback (`focus-search-type`):
+  a printable single character typed outside every editable surface focuses the
+  search box and appends the character. Because it sits after all bound chords
+  a custom single-letter binding still wins; active Ctrl/Alt/⌘ modifiers,
+  multi-char keys, Space, and modal surfaces (`hasEditing`, `hasFullscreen`,
+  `hasTagDialog`, `hasContextMenu`, `detailOverlayOpen`) opt out. The route
+  updates `query`, opens suggestions, focuses the input and moves the caret to
+  the end.
 
 ## Verification
 
