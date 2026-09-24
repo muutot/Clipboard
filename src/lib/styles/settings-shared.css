@@ -860,9 +860,9 @@ button {
 }
 
 /* --- Transfer import/export --- */
-/* One row per direction (export, then import); the select grows to fill the
-   row so the space is distributed evenly and the card never overflows the
-   settings pane horizontally. */
+/* One row per direction (import, then export); the format select keeps a
+   half-row width so it is not stretched, and the action button stays pinned
+   to the right edge like the other maintenance cards. */
 .transfer-actions {
   display: flex;
   flex-direction: column;
@@ -875,12 +875,15 @@ button {
   min-width: 0;
 }
 .transfer-group .custom-select {
-  flex: 1 1 auto;
+  flex: 0 1 50%;
   min-width: 0;
 }
 .transfer-group .settings-select {
   width: 100%;
   height: 28px;
+}
+.transfer-group .settings-action-btn {
+  margin-left: auto;
 }
 .transfer-label {
   flex: 0 0 auto;
@@ -907,6 +910,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  margin-top: 14px;
   padding-top: 11px;
   border-top: 1px solid var(--border-subtle);
 }
