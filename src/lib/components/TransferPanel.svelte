@@ -235,27 +235,6 @@
     </div>
   {/if}
   <div class="export-section">
-    <div class="transfer-group">
-      <span class="transfer-label">{_t("storage.exportLabel")}</span>
-      <CustomSelect
-        value={exportFormat}
-        disabled={exporting || importing || exportFormats.length === 0}
-        ariaLabel={_t("storage.exportLabel")}
-        options={exportFormats.map((format) => ({
-          value: format.id,
-          label: format.label,
-        }))}
-        onchange={(v) => (exportFormat = v as string)}
-      />
-      <button
-        type="button"
-        class="settings-action-btn"
-        disabled={exporting || importing || exportFormats.length === 0}
-        onclick={handleExport}
-      >
-        {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
-      </button>
-    </div>
     <div class="export-options">
       <div class="export-option-row">
         <span class="export-option-label">{_t("storage.exportFavorites")}</span>
@@ -297,6 +276,27 @@
           ariaLabel={_t("storage.exportDateTo")}
         />
       </div>
+    </div>
+    <div class="transfer-group">
+      <span class="transfer-label">{_t("storage.exportLabel")}</span>
+      <CustomSelect
+        value={exportFormat}
+        disabled={exporting || importing || exportFormats.length === 0}
+        ariaLabel={_t("storage.exportLabel")}
+        options={exportFormats.map((format) => ({
+          value: format.id,
+          label: format.label,
+        }))}
+        onchange={(v) => (exportFormat = v as string)}
+      />
+      <button
+        type="button"
+        class="settings-action-btn"
+        disabled={exporting || importing || exportFormats.length === 0}
+        onclick={handleExport}
+      >
+        {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
+      </button>
     </div>
   </div>
 </section>
