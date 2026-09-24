@@ -567,13 +567,26 @@
     loadContentActions();
   }
 
+  // The card's select surface is a full-size overlay <button>. A mouse click
+  // focuses it, which would make `isActivatableKeyboardTarget` treat Space and
+  // Enter as button activation instead of the item shortcuts, so "click a row
+  // then press Space" never opened the detail panel. Moving focus onto the
+  // card div restores the keyboard contract; the flag keeps the resulting
+  // onfocus from re-running onselect (which would clobber the shift-click
+  // anchor).
+  let suppressFocusSelect = false;
+
   function handleFocus() {
     loadContentActions();
+    if (suppressFocusSelect) return;
     onselect(item.id);
   }
 
   function handleCardSelect(e: MouseEvent) {
     onselect(item.id, e);
+    suppressFocusSelect = true;
+    cardElement?.focus({ preventScroll: true });
+    suppressFocusSelect = false;
   }
 
   function handleToggleSelect() {
