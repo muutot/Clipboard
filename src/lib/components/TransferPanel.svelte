@@ -193,32 +193,34 @@
 </script>
 
 <section class="setting-card" data-settings-search-id="storage.import-data">
-  <div class="setting-heading">
-    <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-    <div>
-      <strong>{_t("storage.importTitle")}</strong>
-      <p>{_t("storage.importDesc")}</p>
+  <div class="transfer-row">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+      <div>
+        <strong>{_t("storage.importTitle")}</strong>
+        <p>{_t("storage.importDesc")}</p>
+      </div>
     </div>
-  </div>
-  <div class="transfer-group">
-    <CustomSelect
-      value={importFormat}
-      disabled={exporting || importing || importFormats.length === 0}
-      ariaLabel={_t("storage.importLabel")}
-      options={importFormats.map((format) => ({
-        value: format.id,
-        label: format.label,
-      }))}
-      onchange={(v) => (importFormat = v as string)}
-    />
-    <button
-      type="button"
-      class="settings-action-btn"
-      disabled={exporting || importing || importFormats.length === 0}
-      onclick={handleImport}
-    >
-      {importing ? _t("storage.importing") : _t("storage.importAction")}
-    </button>
+    <div class="transfer-group">
+      <CustomSelect
+        value={importFormat}
+        disabled={exporting || importing || importFormats.length === 0}
+        ariaLabel={_t("storage.importLabel")}
+        options={importFormats.map((format) => ({
+          value: format.id,
+          label: format.label,
+        }))}
+        onchange={(v) => (importFormat = v as string)}
+      />
+      <button
+        type="button"
+        class="settings-action-btn"
+        disabled={exporting || importing || importFormats.length === 0}
+        onclick={handleImport}
+      >
+        {importing ? _t("storage.importing") : _t("storage.importAction")}
+      </button>
+    </div>
   </div>
   {#if showLimitWarning}
     <div class="transfer-limit-warning">
@@ -236,11 +238,33 @@
 </section>
 
 <section class="setting-card" data-settings-search-id="storage.export-data">
-  <div class="setting-heading">
-    <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
-    <div>
-      <strong>{_t("storage.exportTitle")}</strong>
-      <p>{_t("storage.exportDesc")}</p>
+  <div class="transfer-row">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="upload" size={17} /></span>
+      <div>
+        <strong>{_t("storage.exportTitle")}</strong>
+        <p>{_t("storage.exportDesc")}</p>
+      </div>
+    </div>
+    <div class="transfer-group">
+      <CustomSelect
+        value={exportFormat}
+        disabled={exporting || importing || exportFormats.length === 0}
+        ariaLabel={_t("storage.exportLabel")}
+        options={exportFormats.map((format) => ({
+          value: format.id,
+          label: format.label,
+        }))}
+        onchange={(v) => (exportFormat = v as string)}
+      />
+      <button
+        type="button"
+        class="settings-action-btn"
+        disabled={exporting || importing || exportFormats.length === 0}
+        onclick={handleExport}
+      >
+        {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
+      </button>
     </div>
   </div>
   <div class="export-options">
@@ -284,25 +308,5 @@
         ariaLabel={_t("storage.exportDateTo")}
       />
     </div>
-  </div>
-  <div class="transfer-group">
-    <CustomSelect
-      value={exportFormat}
-      disabled={exporting || importing || exportFormats.length === 0}
-      ariaLabel={_t("storage.exportLabel")}
-      options={exportFormats.map((format) => ({
-        value: format.id,
-        label: format.label,
-      }))}
-      onchange={(v) => (exportFormat = v as string)}
-    />
-    <button
-      type="button"
-      class="settings-action-btn"
-      disabled={exporting || importing || exportFormats.length === 0}
-      onclick={handleExport}
-    >
-      {exporting ? _t("storage.exporting") : _t("storage.exportAction")}
-    </button>
   </div>
 </section>

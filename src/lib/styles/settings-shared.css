@@ -860,13 +860,21 @@ button {
 }
 
 /* --- Transfer import/export --- */
-/* Import and export are separate setting cards. Each card's row right-aligns
-   the half-width format select and its action button, separated by the
-   standard row gap (no label, no giant void). */
+/* Each card is one row: the heading (icon + title/description) on the left and
+   the format select plus its action button on the right. */
+.transfer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.transfer-row .setting-heading {
+  padding-bottom: 0;
+}
 .transfer-group {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
   min-width: 0;
 }
@@ -877,11 +885,6 @@ button {
 .transfer-group .settings-select {
   width: 100%;
   height: 28px;
-}
-/* The export action row follows the export options; leave a gap so it is not
-   flush against the date-range row above it. */
-.export-options + .transfer-group {
-  margin-top: 12px;
 }
 .transfer-limit-warning {
   display: flex;
@@ -903,6 +906,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  margin-top: 12px;
 }
 .export-option-row {
   display: flex;
