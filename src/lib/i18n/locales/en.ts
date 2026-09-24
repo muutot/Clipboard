@@ -659,6 +659,7 @@ const en: LocaleDefinition = {
     addTag: "Add tag",
     addTagPlaceholder: "Add tag…",
     removeTag: "Remove tag",
+    noTags: "No tags yet",
     copyTime: "Copy Time",
     size: "Size",
     dimensions: "Dimensions",

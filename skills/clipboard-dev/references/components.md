@@ -57,7 +57,8 @@ DetailPanel subcomponents (split out of the 2100+ line panel):
 - `DetailEditActions.svelte` — the save / save-as-new / cancel row shared by the code, markdown and plain-text edit modes. Props: `onsave`, `onsaveasnew`, `oncancel`; owns its scoped styles.
 - `DetailOcrTab.svelte` — the OCR tab: regenerate/copy actions, status dot, result `<pre>`, pending/failed/empty states. Props: `item`, `onocrupdate`. Owns the regeneration request, the transient feedback message and its timer, and routes OCR patches through `onocrupdate` so all four item copies stay in sync.
 - `DetailFilePreview.svelte` — the file preview: multi-file tree, single text-file content preview (fetch + 512 KiB truncation), loading/failed/unavailable states, and the fallback icon/name/size. Props: `item`. Owns its text-file detection and preview fetch effect.
-- `DetailDetailsTab.svelte` — the details tab: metadata rows, a dedicated tag group, file metadata + multi-file selector, image/resource paths, raw metadata `<details>`, and the special-marker list with filters. Props: `item`, `kindLabel`, `tagColors`, `onsavetags`. Owns marker extraction, formatting helpers, the tag draft, the selected file index and the marker filter; the `.ocr-badge` rules live here with the details row that uses them.
+- `DetailDetailsTab.svelte` — the details tab: metadata rows, file metadata + multi-file selector, image/resource paths, raw metadata `<details>`, and the special-marker list with filters. Props: `item`, `kindLabel`. Owns marker extraction, formatting helpers, the selected file index and the marker filter; the `.ocr-badge` rules live here with the details row that uses them.
+- `DetailTagsTab.svelte` — the tags tab: one `TagChip` row per tag with a trailing remove button, an empty state, and an inline add input/`+` below the list. Props: `item`, `tagColors`, `onsavetags`. Owns the tag draft and calls `onsavetags(id, tags)` (full replacement); reads/writes `item.tags`.
 - `DetailImagePreview.svelte` — the image preview (image or dimension placeholder) with the hover fullscreen button. Props: `item`, optional `onimagefullscreen`.
 
 Key contracts:
@@ -65,7 +66,7 @@ Key contracts:
 - `item` may be null and `mode` is `overlay` or `split`.
 - Async OCR listeners must be unregistered when the item changes, the panel closes, or the component is destroyed.
 - Keep resource metadata parsing consistent with `clipboard.ts` and backend `resource_metadata.rs`.
-- The Details tab renders tags as their own group (a `.tags-section` below the metadata list, not a metadata row): one `TagChip` per row with a trailing remove button, plus an inline input/`+` below the list that calls `onsavetags(id, tags)` (full replacement). It reads/writes `item.tags`.
+- The detail panel tabs are Preview / Details / Tags / OCR. The Tags tab (`DetailTagsTab`) is a second-level group of the panel, not a row inside the Details tab: one `TagChip` per row with a remove button plus an inline add input that calls `onsavetags(id, tags)` (full replacement). It reads/writes `item.tags`.
 
 ### `TagEditDialog.svelte`
 

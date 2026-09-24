@@ -631,6 +631,7 @@ const zhCN: LocaleDefinition = {
     addTag: "添加标签",
     addTagPlaceholder: "添加标签…",
     removeTag: "移除标签",
+    noTags: "暂无标签",
     copyTime: "时间",
     size: "大小",
     dimensions: "尺寸",

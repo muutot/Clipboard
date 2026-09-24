@@ -7,11 +7,11 @@
   import DetailOcrTab from "$lib/components/DetailOcrTab.svelte";
   import DetailFilePreview from "$lib/components/DetailFilePreview.svelte";
   import DetailDetailsTab from "$lib/components/DetailDetailsTab.svelte";
+  import DetailTagsTab from "$lib/components/DetailTagsTab.svelte";
   import DetailImagePreview from "$lib/components/DetailImagePreview.svelte";
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
-  import TagChip from "$lib/components/TagChip.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
@@ -114,7 +114,7 @@
     tagColors = {},
   }: Props = $props();
 
-  let activeTab = $state<"preview" | "details" | "ocr">("preview");
+  let activeTab = $state<"preview" | "details" | "tags" | "ocr">("preview");
   let editing = $state(false);
   let editingTitle = $state(false);
   let editContent = $state("");
@@ -387,6 +387,13 @@
       >
         {_t("detail.details")}
       </button>
+      <button
+        class:active={activeTab === "tags"}
+        type="button"
+        onclick={() => (activeTab = "tags")}
+      >
+        {_t("detail.tags")}
+      </button>
       <button class:active={activeTab === "ocr"} type="button" onclick={() => (activeTab = "ocr")}>
         {_t("detail.ocr")}
       </button>
@@ -531,7 +538,9 @@
           {/if}
         </div>
       {:else if activeTab === "details"}
-        <DetailDetailsTab {item} {tagColors} {onsavetags} kindLabel={getKindLabel(item.kind)} />
+        <DetailDetailsTab {item} kindLabel={getKindLabel(item.kind)} />
+      {:else if activeTab === "tags"}
+        <DetailTagsTab {item} {tagColors} {onsavetags} />
       {:else if activeTab === "ocr"}
         <DetailOcrTab {item} {onocrupdate} />
       {/if}

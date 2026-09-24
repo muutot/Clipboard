@@ -610,6 +610,7 @@ export interface LocaleDefinition {
     addTag: string;
     addTagPlaceholder: string;
     removeTag: string;
+    noTags: string;
     copyTime: string;
     size: string;
     dimensions: string;
