@@ -114,7 +114,7 @@ describe("resolveSearchInputAction — suggestions", () => {
       ),
     ).toMatchObject({ action: { type: "move-index", delta: -1 } });
     expect(resolveSearchInputAction(keyEvent({ key: "ArrowDown" }), ctx()).action.type).toBe(
-      "none",
+      "move-list-selection",
     );
   });
 
@@ -134,5 +134,47 @@ describe("resolveSearchInputAction — suggestions", () => {
     expect(
       resolveSearchInputAction(keyEvent({ key: "Escape" }), ctx({ query: "" })).action,
     ).toEqual({ type: "none" });
+  });
+});
+
+describe("resolveSearchInputAction — list navigation", () => {
+  it("moves the list selection on Up/Down when there is no hint or listbox", () => {
+    expect(resolveSearchInputAction(keyEvent({ key: "ArrowDown" }), ctx())).toMatchObject({
+      action: { type: "move-list-selection", delta: 1 },
+      prevent: true,
+      stop: true,
+    });
+    expect(resolveSearchInputAction(keyEvent({ key: "ArrowUp" }), ctx())).toMatchObject({
+      action: { type: "move-list-selection", delta: -1 },
+      prevent: true,
+      stop: true,
+    });
+  });
+
+  it("moves the list selection when the listbox is open but empty", () => {
+    expect(
+      resolveSearchInputAction(
+        keyEvent({ key: "ArrowDown" }),
+        ctx({ suggestionsOpen: true, optionCount: 0 }),
+      ),
+    ).toMatchObject({ action: { type: "move-list-selection", delta: 1 } });
+  });
+
+  it("keeps Up/Down for the inline hint, not the list", () => {
+    expect(
+      resolveSearchInputAction(
+        keyEvent({ key: "ArrowDown" }),
+        ctx({ inlineSuggestion: "hello world", caretAtEnd: true }),
+      ).action.type,
+    ).toBe("none");
+  });
+
+  it("still moves the suggestion highlight when the listbox has options", () => {
+    expect(
+      resolveSearchInputAction(
+        keyEvent({ key: "ArrowDown" }),
+        ctx({ suggestionsOpen: true, optionCount: 2, inlineSuggestion: "hello world" }),
+      ),
+    ).toMatchObject({ action: { type: "move-index", delta: 1 } });
   });
 });

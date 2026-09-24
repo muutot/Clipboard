@@ -1290,6 +1290,9 @@
             : (searchSuggestionIndex + resolved.action.delta + count) % count;
         break;
       }
+      case "move-list-selection":
+        moveSelection(resolved.action.delta);
+        break;
       case "commit-query":
         commitSearchQuery();
         break;

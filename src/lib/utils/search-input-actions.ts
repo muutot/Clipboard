@@ -4,12 +4,19 @@
  * including the 400ms double-Backspace window and the bubble-through case
  * (closed suggestions + empty query returns plain `none` so the event keeps
  * bubbling to the global handler).
+ *
+ * ArrowUp/ArrowDown move the suggestion highlight only while the suggestion
+ * listbox is open with options; with no listbox and no inline hint to accept
+ * they instead move the list selection (`move-list-selection`), so the user can
+ * arrow from the search box straight into the results. ArrowLeft/ArrowRight
+ * are deliberately untouched — they keep moving the caret.
  */
 export type SearchInputAction =
   | { type: "none" }
   | { type: "clear-query" }
   | { type: "accept-inline"; value: string }
   | { type: "move-index"; delta: 1 | -1 }
+  | { type: "move-list-selection"; delta: 1 | -1 }
   | { type: "commit-query" }
   | { type: "choose-option"; value: string }
   | { type: "close-suggestions" };
@@ -83,6 +90,17 @@ export function resolveSearchInputAction(
   ) {
     return {
       action: { type: "move-index", delta: event.key === "ArrowDown" ? 1 : -1 },
+      prevent: true,
+      stop: true,
+      backspaceAt: 0,
+    };
+  }
+
+  // No listbox to navigate and no inline hint to accept: Up/Down move the list
+  // selection instead of being swallowed by the focused input.
+  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && ctx.inlineSuggestion === null) {
+    return {
+      action: { type: "move-list-selection", delta: event.key === "ArrowDown" ? 1 : -1 },
       prevent: true,
       stop: true,
       backspaceAt: 0,
