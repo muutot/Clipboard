@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.7.1 (2026-09-24)
+
+### ✨ Features
+
+- **keyboard**: bind filter switching to Tab/Shift+Tab only (3bf789ca)
+- **search**: move list selection with arrow keys when no inline hint (570cf32f)
+- **detail**: move tags into their own detail-panel tab (efbe20fa)
+- **search**: focus search box when typing on the list (4f14f35a)
+
+### 🐛 Bug Fixes
+
+- **float**: position panel by real outer size so it stays inside the work area (4f8f9e8a)
+- **card**: keep keyboard focus on card after click so Space opens detail (e790e676)
+
+### 🎨 Styling
+
+- **settings**: put transfer title left and controls right in one row (22c80d37)
+- **settings**: narrow the transfer format select and shorten the export description (353e1096)
+- **settings**: right-align the transfer rows (905bf579)
+- **settings**: keep transfer select at half width and space the export action (489b83b9)
+- **detail**: modernize the tags tab input to match shared controls (5e765988)
+- **settings**: drop transfer labels and let the format select meet its button (86ee332d)
+- **settings**: split import and export into separate setting cards (f39d3fe2)
+- **settings**: move the export action below the export options (9d6e5373)
+- **settings**: move the divider above the export row and options (b3ee5441)
+- **settings**: put import above export and narrow the format select (d56b38d5)
+- **settings**: stack import/export rows to remove horizontal overflow (23c0f17a)
+- **detail**: render tags as their own group with one row each (3a085e35)
+
+### 🔧 Chores
+
+- **ci**: split GitCode release sync into its own manual workflow (ddc615bd)
+
+## 1.7.1 (2026-09-24)
+
+### ✨ Features
+
+- **keyboard**: bind filter switching to Tab/Shift+Tab only (3bf789ca)
+- **search**: move list selection with arrow keys when no inline hint (570cf32f)
+- **detail**: move tags into their own detail-panel tab (efbe20fa)
+- **search**: focus search box when typing on the list (4f14f35a)
+
+### 🐛 Bug Fixes
+
+- **float**: position panel by real outer size so it stays inside the work area (4f8f9e8a)
+- **card**: keep keyboard focus on card after click so Space opens detail (e790e676)
+
+### 🎨 Styling
+
+- **settings**: put transfer title left and controls right in one row (22c80d37)
+- **settings**: narrow the transfer format select and shorten the export description (353e1096)
+- **settings**: right-align the transfer rows (905bf579)
+- **settings**: keep transfer select at half width and space the export action (489b83b9)
+- **detail**: modernize the tags tab input to match shared controls (5e765988)
+- **settings**: drop transfer labels and let the format select meet its button (86ee332d)
+- **settings**: split import and export into separate setting cards (f39d3fe2)
+- **settings**: move the export action below the export options (9d6e5373)
+- **settings**: move the divider above the export row and options (b3ee5441)
+- **settings**: put import above export and narrow the format select (d56b38d5)
+- **settings**: stack import/export rows to remove horizontal overflow (23c0f17a)
+- **detail**: render tags as their own group with one row each (3a085e35)
+
+### 🔧 Chores
+
+- **ci**: split GitCode release sync into its own manual workflow (ddc615bd)
+
 ## 1.7.0 (2026-09-22)
 
 ### ✨ Features
