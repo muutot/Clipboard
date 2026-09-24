@@ -4,7 +4,7 @@ Usage:
   Local full sync (all missing tags):
     set GITCODE_TOKEN=xxx && python scripts/sync_release.py
 
-  CI single-tag sync (release.yml `sync-gitcode` job, after build):
+  CI single-tag sync (sync-gitcode.yml, manual workflow_dispatch):
     SYNC_TAG=v1.2.3 python scripts/sync_release.py
 
 All configuration comes from environment variables — no secrets in this file.
