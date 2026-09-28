@@ -287,12 +287,14 @@ pub fn run() {
                 config.image_storage_path().map(PathBuf::from),
                 config.file_storage_path().map(PathBuf::from),
             )?;
-            // The static asset scope in tauri.conf.json intentionally excludes
-            // a global "**" wildcard. Grant the webview read access only to
-            // the managed storage root — which follows the user's configured
-            // data directory, including after it changes — so image previews,
-            // file icons, and resource files render while arbitrary disk
-            // paths stay unreachable.
+            // The static asset scope in tauri.conf.json is empty on purpose:
+            // `$EXE` and `$RESOURCE` both resolve to the install directory on
+            // Windows, which also holds `conf/api.token`, `conf/conf.json`,
+            // and the clipboard database. Grant the webview read access only
+            // to the managed storage root at runtime — it follows the user's
+            // configured data directory, including after it changes — so image
+            // previews, file icons, and resource files render while arbitrary
+            // disk paths (and the app's own secrets) stay unreachable.
             let asset_scope = app.asset_protocol_scope();
             asset_scope
                 .allow_directory(&paths.storage, true)
