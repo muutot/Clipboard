@@ -261,6 +261,36 @@ pub fn set_storage_config(
 }
 
 pub fn copy_dir_contents(from: &Path, to: &Path) -> Result<(), String> {
+    let mut ancestors = std::collections::HashSet::new();
+    copy_dir_contents_inner(from, to, &mut ancestors)
+}
+
+fn copy_dir_contents_inner(
+    from: &Path,
+    to: &Path,
+    ancestors: &mut std::collections::HashSet<PathBuf>,
+) -> Result<(), String> {
+    // A junction/reparse point reports as a directory and can point at an
+    // ancestor, so a self-referential link would recurse until the stack
+    // overflows. Track the canonical path of the current chain; re-entering an
+    // ancestor is a cycle, not another directory to copy.
+    let canonical = std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
+    if !ancestors.insert(canonical.clone()) {
+        return Err(format!(
+            "refusing to copy a directory cycle at {}",
+            from.display()
+        ));
+    }
+    let result = copy_dir_contents_children(from, to, ancestors);
+    ancestors.remove(&canonical);
+    result
+}
+
+fn copy_dir_contents_children(
+    from: &Path,
+    to: &Path,
+    ancestors: &mut std::collections::HashSet<PathBuf>,
+) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| format!("create dir: {}", e))?;
     for entry in std::fs::read_dir(from).map_err(|e| format!("read dir: {}", e))? {
         let entry = entry.map_err(|e| format!("dir entry: {}", e))?;
@@ -270,7 +300,7 @@ pub fn copy_dir_contents(from: &Path, to: &Path) -> Result<(), String> {
             .map_err(|e| format!("read file type for {}: {e}", entry.path().display()))?
             .is_dir()
         {
-            copy_dir_contents(&entry.path(), &dest)?;
+            copy_dir_contents_inner(&entry.path(), &dest, ancestors)?;
         } else {
             std::fs::copy(entry.path(), &dest).map_err(|e| {
                 format!("copy {} to {}: {e}", entry.path().display(), dest.display())
@@ -292,17 +322,28 @@ pub fn file_or_dir_size(path: &PathBuf) -> u64 {
     dir_size(path)
 }
 
-pub fn dir_size(path: &PathBuf) -> u64 {
+pub fn dir_size(path: &Path) -> u64 {
+    let mut ancestors = std::collections::HashSet::new();
+    dir_size_inner(path, &mut ancestors)
+}
+
+fn dir_size_inner(path: &Path, ancestors: &mut std::collections::HashSet<PathBuf>) -> u64 {
+    // Same cycle guard as the copy walk: never descend back into an ancestor.
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if !ancestors.insert(canonical.clone()) {
+        return 0;
+    }
     let mut total = 0u64;
     if let Ok(entries) = std::fs::read_dir(path) {
         for entry in entries.flatten() {
             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                total += dir_size(&entry.path());
+                total += dir_size_inner(&entry.path(), ancestors);
             } else {
                 total += entry.metadata().map(|m| m.len()).unwrap_or(0);
             }
         }
     }
+    ancestors.remove(&canonical);
     total
 }
 
