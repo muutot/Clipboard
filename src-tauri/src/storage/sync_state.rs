@@ -1305,6 +1305,34 @@ impl Database {
         })
     }
 
+    /// Applies decoded pack batches one at a time.
+    ///
+    /// The iterator is consumed lazily and each item is released as soon as it has
+    /// been applied, so peak residency is one batch rather than the whole pack. This
+    /// is deliberately *not* a `collect()` into a `Vec` first: doing that made peak
+    /// memory scale with the pack, up to the 1 GiB global uncompressed limit.
+    ///
+    /// Generic over the item type so the laziness itself is unit-testable with a
+    /// drop-instrumented payload.
+    fn fold_decoded_batches<I, T, F>(batches: I, mut apply: F) -> Result<u64, StorageError>
+    where
+        I: IntoIterator<Item = Result<T, StorageError>>,
+        F: FnMut(&T) -> Result<u64, StorageError>,
+    {
+        let mut applied = 0u64;
+        for batch in batches {
+            // A decode failure propagates and the caller drops the transaction, so
+            // nothing partial is committed.
+            applied =
+                applied
+                    .checked_add(apply(&batch?)?)
+                    .ok_or(StorageError::ValueOutOfRange {
+                        field: "applied sync mutation count",
+                    })?;
+        }
+        Ok(applied)
+    }
+
     pub fn apply_sync_checkpoint_batches<I>(
         &self,
         remote_scope: &str,
@@ -1324,11 +1352,22 @@ impl Database {
         let generation = sequence_to_i64(generation, "sync checkpoint generation")?;
         validate_checkpoint_cursors(cursors)?;
 
-        // Decode the whole pack before opening the write transaction. The
-        // iterator reads and decompresses the downloaded file lazily, and
-        // doing that inside `with_connection` holds the shared connection mutex
-        // and the SQLite write lock across all of that CPU/IO work.
-        let batches: Vec<_> = batches.into_iter().collect::<Result<Vec<_>, _>>()?;
+        // Decode chunk by chunk *inside* the transaction instead of collecting
+        // the whole pack first.
+        //
+        // Collecting first made peak residency scale with the entire pack (up to
+        // the 1 GiB global uncompressed limit), because every decoded
+        // `MutationBatch` stayed alive while the transaction ran. Decoding here
+        // bounds residency to one chunk (16 MiB packing target) and drops each
+        // one after it is applied.
+        //
+        // The cost is that decompression of the already-downloaded local pack
+        // file runs while the write transaction is open. That is the deliberate
+        // trade: a longer write lock stalls concurrent capture writes, whereas
+        // unbounded residency risks the OOM killer on a low-memory machine.
+        // The pack's integrity is still verified by the caller's iterator, which
+        // reports a mismatch at the end of the sequence; a failure here rolls
+        // the transaction back, so nothing partial is committed.
 
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
@@ -1355,19 +1394,9 @@ impl Database {
             }
 
             set_changelog_suppressed(&transaction, true)?;
-            let mut applied = 0u64;
-            for (mutations, resource_refs) in batches {
-                applied = applied
-                    .checked_add(apply_mutations(
-                        &transaction,
-                        remote_scope,
-                        &mutations,
-                        &resource_refs,
-                    )?)
-                    .ok_or(StorageError::ValueOutOfRange {
-                        field: "applied sync mutation count",
-                    })?;
-            }
+            let applied = Self::fold_decoded_batches(batches, |(mutations, resource_refs)| {
+                apply_mutations(&transaction, remote_scope, mutations, resource_refs)
+            })?;
             set_changelog_suppressed(&transaction, false)?;
             // A checkpoint vector is frozen at publish time, so a device
             // whose segments were pulled after the publish has an existing
@@ -1476,10 +1505,9 @@ impl Database {
                 "snapshot cursor must not contain a segment key".to_string(),
             ));
         }
-        // Decode the whole pack before opening the write transaction (see
-        // `apply_sync_checkpoint_batches`): decompression must not hold the
-        // shared connection mutex or the SQLite write lock.
-        let batches: Vec<_> = batches.into_iter().collect::<Result<Vec<_>, _>>()?;
+        // See `apply_sync_checkpoint_batches`: decode chunk by chunk inside the
+        // transaction so residency is bounded by one chunk rather than by the
+        // whole pack.
 
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
@@ -1491,19 +1519,9 @@ impl Database {
                 }
             }
             set_changelog_suppressed(&transaction, true)?;
-            let mut applied = 0u64;
-            for (mutations, resource_refs) in batches {
-                applied = applied
-                    .checked_add(apply_mutations(
-                        &transaction,
-                        remote_scope,
-                        &mutations,
-                        &resource_refs,
-                    )?)
-                    .ok_or(StorageError::ValueOutOfRange {
-                        field: "applied sync mutation count",
-                    })?;
-            }
+            let applied = Self::fold_decoded_batches(batches, |(mutations, resource_refs)| {
+                apply_mutations(&transaction, remote_scope, mutations, resource_refs)
+            })?;
             set_changelog_suppressed(&transaction, false)?;
             upsert_cursor(&transaction, remote_scope, cursor, Some(snapshot_sha256))?;
             transaction.commit()?;
@@ -3285,6 +3303,132 @@ mod tests {
             )
             .is_err());
         assert!(database.get_item("remote-good").unwrap().is_none());
+        assert!(database
+            .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
+            .unwrap()
+            .is_none());
+    }
+
+    /// Peak residency during a pack apply must be one batch, not the whole pack.
+    ///
+    /// The apply used to `collect()` the decoded iterator before opening the
+    /// transaction, so a pack near the 1 GiB global uncompressed limit had every
+    /// decoded batch resident at once. The probe below records how many decoded
+    /// batches are alive at the moment the iterator is asked for the next one and
+    /// while the current one is applied. A materialising implementation would
+    /// show an ever-growing count; a lazy one shows exactly one.
+    #[test]
+    fn decoded_pack_batches_are_folded_lazily_so_residency_stays_bounded() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        struct Probe {
+            live: Rc<RefCell<usize>>,
+        }
+        impl Drop for Probe {
+            fn drop(&mut self) {
+                *self.live.borrow_mut() -= 1;
+            }
+        }
+
+        const BATCHES: usize = 8;
+        let live = Rc::new(RefCell::new(0usize));
+        let peak_at_yield = Rc::new(RefCell::new(0usize));
+        let peak_at_apply = Rc::new(RefCell::new(0usize));
+
+        let mut next_id = 0usize;
+        let yield_live = Rc::clone(&live);
+        let peak_on_yield = Rc::clone(&peak_at_yield);
+        let mut batches = std::iter::from_fn(move || {
+            if next_id == BATCHES {
+                return None;
+            }
+            next_id += 1;
+            // The moment before the next batch exists: whatever is still alive
+            // here is what the previous iteration failed to release.
+            let resident = *yield_live.borrow();
+            let mut peak = peak_on_yield.borrow_mut();
+            if resident > *peak {
+                *peak = resident;
+            }
+            *yield_live.borrow_mut() += 1;
+            Some(Ok(Probe {
+                live: Rc::clone(&yield_live),
+            }))
+        });
+
+        let apply_live = Rc::clone(&live);
+        let peak_in_apply = Rc::clone(&peak_at_apply);
+        let applied = Database::fold_decoded_batches(&mut batches, |_probe| {
+            let resident = *apply_live.borrow();
+            let mut peak = peak_in_apply.borrow_mut();
+            if resident > *peak {
+                *peak = resident;
+            }
+            assert!(
+                resident == 1,
+                "{resident} decoded batches were resident while one was being applied, so \
+                 residency is not bounded by a single batch"
+            );
+            Ok(1)
+        })
+        .expect("every batch applies cleanly");
+
+        assert_eq!(applied, BATCHES as u64, "every batch must be applied");
+        assert_eq!(
+            *peak_at_yield.borrow(),
+            0,
+            "the previous batch must be released before the next one is decoded"
+        );
+        assert_eq!(
+            *peak_at_apply.borrow(),
+            1,
+            "only the current batch is applied"
+        );
+        assert_eq!(*live.borrow(), 0, "every batch must be released");
+    }
+
+    /// A batch that fails to decode must roll the whole apply back, not leave
+    /// the earlier batches committed.
+    #[test]
+    fn a_failing_late_batch_rolls_back_the_earlier_ones() {
+        let database = Database::open_in_memory().unwrap();
+        database.initialize_sync().unwrap();
+        let first = MutationBatch {
+            upserts: vec![replicated(
+                "remote-first",
+                "remote-first-hash",
+                "first",
+                RecordVersion {
+                    modified_at_ms: 10,
+                    writer_device_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                },
+            )],
+            tombstones: Vec::new(),
+        };
+        let cursor = DeviceCursor {
+            device_id: "22222222-2222-4222-8222-222222222222".to_string(),
+            epoch: "33333333-3333-4333-8333-333333333333".to_string(),
+            sequence: 1,
+            last_segment_key: None,
+        };
+
+        let result = database.apply_sync_snapshot_batches(
+            REMOTE_SCOPE,
+            &cursor,
+            &"a".repeat(64),
+            [
+                Ok((first, BTreeMap::new())),
+                Err(StorageError::InvalidSyncState(
+                    "checkpoint payload does not match its reference".to_string(),
+                )),
+            ],
+        );
+        assert!(result.is_err(), "the decode failure must surface");
+        assert!(
+            database.get_item("remote-first").unwrap().is_none(),
+            "a batch applied before the failure must be rolled back"
+        );
         assert!(database
             .get_sync_cursor(REMOTE_SCOPE, &cursor.device_id)
             .unwrap()
