@@ -2,15 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [core]
+    # Every branch, so release branches and forks are validated too. The
+    # paths-ignore below is the only filter, which keeps the two concerns in
+    # one place instead of a branch list that silently rots.
+    branches: ["**"]
     # Only pure-documentation changes skip CI. Dependency and version
-    # manifests MUST still run clippy/tests/build — an upgrade commit that
+    # manifests MUST still run clippy/tests/build �?an upgrade commit that
     # skips CI would only be validated at the next code change or release.
     paths-ignore:
       - CHANGELOG.md
       - RELEASE.md
   pull_request:
-    branches: [master]
 
 jobs:
   frontend:
