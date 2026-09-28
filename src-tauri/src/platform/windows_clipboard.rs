@@ -1527,6 +1527,17 @@ pub fn extract_app_icon(
     None
 }
 
+/// Byte size of a 32-bpp top-down DIB for `width`×`height` pixels. Returns
+/// `None` instead of wrapping when the dimensions overflow, so a corrupt
+/// bitmap is rejected rather than under-allocated.
+#[cfg(target_os = "windows")]
+fn dib_32bpp_image_size(width: u32, height: u32) -> Option<u32> {
+    let row_size = width
+        .checked_mul(32)
+        .and_then(|bits| bits.div_ceil(32).checked_mul(4))?;
+    row_size.checked_mul(height)
+}
+
 #[cfg(target_os = "windows")]
 fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
     extern "system" {
@@ -1631,13 +1642,22 @@ fn save_hicon_to_png(hicon: isize, path: &std::path::Path) -> bool {
 
         let width = bmp.bmWidth.unsigned_abs();
         let height = bmp.bmHeight.unsigned_abs();
-        let row_size = (width * 32).div_ceil(32) * 4;
-        let image_size = row_size * height;
+        // `bmWidth`/`bmHeight` come from an OS bitmap. Keep the size math
+        // checked so a corrupt or extreme value cannot wrap and under-allocate
+        // the DIB buffer that `GetDIBits` then fills (the sibling
+        // `hbitmap_to_dib_bytes` does the same).
+        let Some(image_size) = dib_32bpp_image_size(width, height) else {
+            DeleteObject(icon_info.hbmMask);
+            if icon_info.hbmColor != 0 {
+                DeleteObject(icon_info.hbmColor);
+            }
+            return false;
+        };
 
         let mut bi = BITMAPINFOHEADER {
             biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
             biWidth: bmp.bmWidth,
-            biHeight: -bmp.bmHeight,
+            biHeight: bmp.bmHeight.saturating_neg(),
             biPlanes: 1,
             biBitCount: 32,
             biCompression: BI_RGB,
@@ -2209,6 +2229,14 @@ mod tests {
         dib.extend_from_slice(&0x0000_00FFu32.to_le_bytes());
         dib.extend_from_slice(&[0u8; 4]);
         assert_eq!(dib_to_png(&dib), None);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn dib_size_rejects_overflowing_dimensions() {
+        assert_eq!(dib_32bpp_image_size(2, 3), Some(24));
+        assert_eq!(dib_32bpp_image_size(u32::MAX, 1), None);
+        assert_eq!(dib_32bpp_image_size(1, u32::MAX), None);
     }
 
     #[cfg(target_os = "windows")]
