@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -121,15 +122,16 @@ impl OcrEngine for TesseractOcrEngine {
 }
 
 /// Runs `tesseract` with the engine's fixed flags, killing the child if it
-/// exceeds `timeout`. OCR text output is small, so polling `try_wait` while
-/// the pipes buffer is safe; a hung process is killed and reported instead
-/// of stalling the worker queue.
+/// exceeds `timeout`. The child's stdout/stderr are drained on dedicated
+/// threads so a recognition result larger than the OS pipe buffer cannot
+/// deadlock the child on `write`; a hung process is killed and reported
+/// instead of stalling the worker queue.
 fn run_tesseract_with_timeout(
     image_path: &str,
     languages: &str,
     timeout: Duration,
 ) -> Result<std::process::Output, OcrEngineError> {
-    let mut child = Command::new("tesseract")
+    let child = Command::new("tesseract")
         .arg(image_path)
         .arg("stdout")
         .arg("-l")
@@ -153,29 +155,71 @@ fn run_tesseract_with_timeout(
             ))
         })?;
 
+    wait_for_child_with_drain(child, timeout).map_err(OcrEngineError::new)
+}
+
+/// Waits for `child` up to `timeout` while draining stdout/stderr on separate
+/// threads, killing it and returning an error on timeout or wait failure.
+fn wait_for_child_with_drain(
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> Result<std::process::Output, String> {
+    // Drain both pipes concurrently. `try_wait` alone does not read them, so a
+    // result larger than the pipe buffer would block the child in `write`
+    // forever and only surface as a timeout after nothing was recognized.
+    let stdout_reader = spawn_pipe_reader(child.stdout.take());
+    let stderr_reader = spawn_pipe_reader(child.stderr.take());
+
     let started = Instant::now();
-    loop {
-        match child.try_wait().map_err(|error| {
-            OcrEngineError::new(format!("failed to wait for tesseract: {error}"))
-        })? {
-            Some(_) => {
-                return child.wait_with_output().map_err(|error| {
-                    OcrEngineError::new(format!("failed to read tesseract output: {error}"))
-                });
-            }
-            None => {
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
                 if started.elapsed() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err(OcrEngineError::new(format!(
-                        "tesseract timed out after {}s",
-                        timeout.as_secs()
-                    )));
+                    let _ = join_pipe_reader(stdout_reader);
+                    let _ = join_pipe_reader(stderr_reader);
+                    return Err(format!("command timed out after {}s", timeout.as_secs()));
                 }
                 std::thread::sleep(Duration::from_millis(50));
             }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = join_pipe_reader(stdout_reader);
+                let _ = join_pipe_reader(stderr_reader);
+                return Err(format!("failed to wait for command: {error}"));
+            }
         }
-    }
+    };
+
+    let stdout = join_pipe_reader(stdout_reader).unwrap_or_default();
+    let stderr = join_pipe_reader(stderr_reader).unwrap_or_default();
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+/// Reads a child pipe to EOF on its own thread so the parent can wait for the
+/// process without the child blocking on a full pipe buffer.
+fn spawn_pipe_reader<R>(pipe: Option<R>) -> Option<std::thread::JoinHandle<Vec<u8>>>
+where
+    R: Read + Send + 'static,
+{
+    pipe.map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = pipe.read_to_end(&mut buffer);
+            buffer
+        })
+    })
+}
+
+fn join_pipe_reader(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> Option<Vec<u8>> {
+    handle.and_then(|handle| handle.join().ok())
 }
 
 /// Runs a short probe command, killing the child if it exceeds `timeout`.
@@ -268,5 +312,34 @@ mod tests {
     #[test]
     fn is_available_does_not_panic_when_tesseract_is_optional() {
         let _ = TesseractOcrEngine::is_available();
+    }
+
+    #[test]
+    fn drains_child_output_larger_than_the_pipe_buffer() {
+        // A child whose stdout exceeds the OS pipe buffer would deadlock in
+        // `write` if the parent only polled `try_wait`. Draining both pipes
+        // must let it finish and preserve the full output.
+        #[cfg(windows)]
+        let mut command = {
+            let mut command = Command::new("cmd");
+            command.args(["/C", "for /L %i in (1,1,20000) do @echo 0123456789"]);
+            command
+        };
+        #[cfg(not(windows))]
+        let mut command = {
+            let mut command = Command::new("sh");
+            command.args(["-c", "yes 0123456789 | head -n 20000"]);
+            command
+        };
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let child = command.spawn().expect("spawn large-output child");
+        let output =
+            wait_for_child_with_drain(child, Duration::from_secs(30)).expect("child completes");
+        assert!(output.status.success());
+        assert!(
+            output.stdout.len() > 64 * 1024,
+            "expected drained output above the pipe buffer, got {} bytes",
+            output.stdout.len()
+        );
     }
 }
