@@ -37,17 +37,41 @@ fn load_or_create_api_token(project_directory: &Path) -> Result<String, String> 
     Ok(token)
 }
 
-/// Tightens the token file to owner-only on Unix. The token authorizes the
-/// loopback API, so a world-readable file would let another local account
-/// read or delete the clipboard history. Best-effort: a failure leaves the
-/// previous permissions rather than blocking the API.
+/// Tightens the token file to owner-only. The token authorizes the loopback
+/// API, so a world-readable file would let another local account read or
+/// delete the clipboard history. Best-effort: a failure leaves the previous
+/// permissions rather than blocking the API.
 #[cfg(unix)]
 fn restrict_api_token_permissions(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
 }
 
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
+fn restrict_api_token_permissions(path: &Path) {
+    use std::process::Command;
+
+    // Best-effort owner-only ACL on Windows, where `set_permissions` cannot
+    // express a DACL. `icacls` is a Windows built-in; the principal comes from
+    // the environment so this stays dependency-free. A failure leaves the
+    // inherited ACL, matching the Unix path's best-effort contract.
+    let user = std::env::var("USERNAME").unwrap_or_default();
+    if user.is_empty() {
+        return;
+    }
+    let principal = match std::env::var("USERDOMAIN") {
+        Ok(domain) if !domain.is_empty() => format!("{domain}\\{user}"),
+        _ => user,
+    };
+    let _ = Command::new("icacls")
+        .arg(path)
+        .arg("/inheritance:r")
+        .arg("/grant:r")
+        .arg(format!("{principal}:F"))
+        .status();
+}
+
+#[cfg(all(not(unix), not(target_os = "windows")))]
 fn restrict_api_token_permissions(_path: &Path) {}
 
 #[derive(Debug, Serialize)]
