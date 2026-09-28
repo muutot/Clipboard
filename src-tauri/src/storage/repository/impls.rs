@@ -953,7 +953,9 @@ impl ClipboardRepository for Database {
                     "resource" => paths.resource_paths.push(path),
                     "preview" => paths.preview_paths.push(path),
                     "icon" => paths.icon_paths.push(path),
-                    _ => unreachable!("storage reference query returned an unknown kind"),
+                    // The discriminator is a SQL literal, so this is only
+                    // reachable if the query changes; skip instead of panicking.
+                    _ => continue,
                 }
             }
 

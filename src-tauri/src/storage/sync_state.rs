@@ -691,7 +691,14 @@ impl Database {
                         icon_path = Some(stored_path.clone());
                         set_metadata_path(&mut metadata, "iconPath", stored_path);
                     }
-                    _ => unreachable!(),
+                    other => {
+                        // Validation above rejects unknown slots, but return an
+                        // error (rolling back) rather than panicking if a future
+                        // path or stored row slips through.
+                        return Err(StorageError::InvalidSyncState(format!(
+                            "unknown materialized resource slot: {other}"
+                        )));
+                    }
                 }
             }
             let encoded_metadata = serde_json::to_string(&metadata).map_err(|error| {
