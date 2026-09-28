@@ -52,7 +52,13 @@ pub(super) fn insert_item_row(
          ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
          )
-         ON CONFLICT DO UPDATE SET
+         -- Limit the upsert to the content-dedup key. A bare `ON CONFLICT`
+         -- would also match an `id` primary-key collision and silently
+         -- overwrite (and un-delete) an unrelated row when an import supplies
+         -- a forged/reused id, because the SET list deliberately omits
+         -- `kind`/`content_hash`. With an explicit target, an `id` collision
+         -- surfaces as an error instead of corrupting the victim row.
+         ON CONFLICT (kind, content_hash) DO UPDATE SET
             title = excluded.title,
             text_content = excluded.text_content,
             html_content = COALESCE(

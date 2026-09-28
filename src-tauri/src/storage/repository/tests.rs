@@ -53,6 +53,33 @@ fn dedup_upsert_preserves_existing_tags() {
 }
 
 #[test]
+fn bulk_import_does_not_overwrite_a_row_on_id_collision() {
+    let database = Database::open_in_memory().unwrap();
+    let mut victim = text_item("shared-id", "hash-victim", 100);
+    victim.text_content = Some("original".to_owned());
+    database.save_item(&victim).unwrap();
+
+    // Regression: a bare `ON CONFLICT DO UPDATE` also matched the `id` primary
+    // key, so an imported record that reused an existing id with a different
+    // content hash rewrote and un-deleted the victim row. The bulk path only
+    // guards `(kind, content_hash)`, so the id collision must surface as a skip.
+    let mut forged = text_item("shared-id", "hash-forged", 500);
+    forged.text_content = Some("forged".to_owned());
+    let summary = database
+        .save_items_transactional(&[("forged".to_owned(), forged)])
+        .unwrap();
+
+    assert_eq!(summary.imported_count, 0);
+    assert_eq!(summary.skipped_count, 1);
+    let stored = database.get_item("shared-id").unwrap().unwrap();
+    assert_eq!(stored.content_hash, "hash-victim");
+    assert_eq!(stored.text_content.as_deref(), Some("original"));
+    assert!(!database
+        .content_exists(ClipboardKind::Text, "hash-forged")
+        .unwrap());
+}
+
+#[test]
 fn insert_populates_item_tags_from_metadata() {
     let database = Database::open_in_memory().unwrap();
     let mut item = text_item("duplicated", "hash-duplicated", 100);
