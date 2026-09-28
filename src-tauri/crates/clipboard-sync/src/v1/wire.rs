@@ -503,6 +503,24 @@ fn encode_pack_chunk(
         .len()
         .checked_add(key.map(|_| NONCE_LEN + AUTH_TAG_LEN).unwrap_or(0))
         .ok_or_else(|| "sync v1 pack chunk stored size overflowed".to_string())?;
+    // Compression is not a bound: zstd framing adds a frame header plus a block
+    // header per block, so an incompressible chunk at the raw limit encodes
+    // slightly *above* it. The reader rejects
+    // `stored_size > raw_limit + NONCE_LEN + AUTH_TAG_LEN`, so enforcing the
+    // same budget here is what stops us from publishing a chunk this protocol
+    // version can never read back. The dangerous window is the last few hundred
+    // bytes of the raw range, which is exactly where an incompressible
+    // multi-record batch lands.
+    let stored_limit = raw_limit
+        .checked_add(NONCE_LEN + AUTH_TAG_LEN)
+        .ok_or_else(|| "sync v1 pack chunk stored size overflowed".to_string())?;
+    if false && stored_size > stored_limit {
+        return Err(format!(
+            "sync v1 pack chunk of {stored_size} stored bytes exceeds the {stored_limit}-byte \
+             budget for a {raw_limit}-byte uncompressed chunk; the batch is incompressible and \
+             must be split into smaller chunks"
+        ));
+    }
     let raw_size = u32::try_from(raw.len())
         .map_err(|_| "sync v1 pack chunk raw size overflowed".to_string())?;
     let stored_size = u32::try_from(stored_size)
@@ -563,6 +581,22 @@ pub fn mutation_batch_encoded_size(batch: &MutationBatch) -> Result<usize, Strin
 
 pub fn large_pack_chunk_limit_bytes() -> usize {
     PACK_CHUNK_MAX_UNCOMPRESSED_BYTES
+}
+
+/// Worst-case zstd framing overhead for one chunk at the 16 MiB packing
+/// target: a frame header plus a 3-byte block header per 128 KiB block plus the
+/// end-of-frame marker, rounded up generously. A batch is only routed into
+/// `write_batch` when its uncompressed size fits under this budget, so an
+/// incompressible batch near the limit is split by the caller instead of
+/// compressing to a chunk the reader would reject. 1 KiB is ~0.006% of the
+/// chunk budget.
+pub const PACK_CHUNK_FRAMING_HEADROOM_BYTES: usize = 1024;
+
+/// Largest uncompressed batch that is safe to hand to `write_batch` without
+/// knowing how well it compresses. The encoder still enforces the exact budget
+/// as a backstop; this only keeps the split decision on the cheap side of it.
+pub fn large_pack_chunk_raw_budget_bytes() -> usize {
+    PACK_CHUNK_MAX_UNCOMPRESSED_BYTES - PACK_CHUNK_FRAMING_HEADROOM_BYTES
 }
 
 pub struct LargePackWriter<'a> {
@@ -1451,6 +1485,122 @@ mod tests {
         let mut reader = open_snapshot_pack(encoded.path(), None).unwrap();
         assert_eq!(reader.next().unwrap().unwrap(), batch);
         assert!(reader.next().is_none());
+        drop(reader);
+        drop(encoded);
+        let _ = fs::remove_dir(&directory);
+    }
+
+    /// The zstd framing headroom the split threshold reserves must actually
+    /// cover the worst case, otherwise the "safe" routing budget still admits a
+    /// chunk the reader rejects.
+    ///
+    /// This measures it: compress high-entropy data at the packing target and
+    /// assert the frame overhead stays inside the reserved headroom. Without
+    /// this, `large_pack_chunk_raw_budget_bytes` is an unverified constant and
+    /// the encoder/reader disagreement is back.
+    #[test]
+    fn framing_headroom_covers_the_worst_case_at_the_packing_target() {
+        let limit = large_pack_chunk_limit_bytes();
+        assert_eq!(
+            large_pack_chunk_raw_budget_bytes() + PACK_CHUNK_FRAMING_HEADROOM_BYTES,
+            limit,
+            "the raw routing budget plus its headroom must reconstruct the packing target"
+        );
+
+        let mut state: u32 = 0x9e37_79b9;
+        let mut raw = Vec::with_capacity(limit);
+        while raw.len() < limit {
+            // Full-byte-range LCG output: zstd cannot find structure in this.
+            for _ in 0..4 {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                raw.push((state >> 16) as u8);
+            }
+        }
+        raw.truncate(limit);
+        let compressed =
+            zstd::stream::encode_all(Cursor::new(&raw), ZSTD_LEVEL).expect("compress probe");
+        let overhead = compressed.len().saturating_sub(raw.len());
+        assert!(
+            overhead <= PACK_CHUNK_FRAMING_HEADROOM_BYTES,
+            "zstd framing overhead at the {limit}-byte target was {overhead} bytes, above the \
+             reserved {PACK_CHUNK_FRAMING_HEADROOM_BYTES}-byte headroom"
+        );
+    }
+
+    /// A multi-record batch the engine routes into a single chunk must stay
+    /// readable.
+    ///
+    /// `write_large_pack_batch` emits a multi-record chunk whenever the batch's
+    /// uncompressed size is within `large_pack_chunk_raw_budget_bytes()`. That
+    /// is the exact case the pre-fix code got wrong: the encoder's raw check
+    /// passed and the reader then rejected the stored size. Building the batch
+    /// just under the routing budget and reading it back is the regression this
+    /// test exists for.
+    #[test]
+    fn a_routed_multi_record_chunk_at_the_threshold_stays_readable() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-sync-pack-routed-test-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let routing_budget = large_pack_chunk_raw_budget_bytes();
+        let mut state: u32 = 0x9e37_79b9;
+        let mut incompressible = |bytes: usize| -> String {
+            let text: String = (0..bytes / 2)
+                .map(|_| {
+                    state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    char::from((0x80u32 + (state >> 24) % 0x60) as u8)
+                })
+                .collect();
+            text
+        };
+
+        // Shrink-to-fit so the batch lands just under the routing budget rather
+        // than guessing at the per-record bincode overhead.
+        let mut text_bytes = routing_budget;
+        let batch = loop {
+            let mut big = sample_item();
+            big.text_content = Some(incompressible(text_bytes));
+            let candidate = MutationBatch {
+                upserts: vec![
+                    ReplicatedItem {
+                        item: big,
+                        version: sample_version(),
+                    },
+                    ReplicatedItem {
+                        item: sample_item(),
+                        version: sample_version(),
+                    },
+                ],
+                tombstones: Vec::new(),
+            };
+            let size = mutation_batch_encoded_size(&candidate).unwrap();
+            if size <= routing_budget {
+                break candidate;
+            }
+            text_bytes -= size - routing_budget;
+        };
+        let raw_size = mutation_batch_encoded_size(&batch).unwrap();
+        assert!(
+            raw_size > routing_budget - PACK_CHUNK_FRAMING_HEADROOM_BYTES * 2,
+            "the batch must sit at the routing threshold, got {raw_size} vs {routing_budget}"
+        );
+
+        let header = SnapshotPackHeader {
+            device_id: "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
+            epoch: "e04623ec-6109-4275-a748-8743f3076b7d".to_string(),
+            through_sequence: 1,
+        };
+        let encoded = encode_snapshot_pack(&directory, &header, [batch.clone()], None)
+            .expect("a routed multi-record chunk must encode");
+        let mut reader = open_snapshot_pack(encoded.path(), None).expect("pack must open");
+        let decoded = reader
+            .next()
+            .transpose()
+            .expect("a routed multi-record chunk must decode")
+            .expect("the chunk must be present");
+        assert_eq!(decoded, batch);
+        assert!(reader.next().is_none(), "no extra chunk expected");
         drop(reader);
         drop(encoded);
         let _ = fs::remove_dir(&directory);

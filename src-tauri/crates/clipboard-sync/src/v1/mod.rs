@@ -31,9 +31,10 @@ pub use resources::{
 };
 pub use wire::{
     decode_checkpoint_head, decode_device_head, decode_segment, encode_checkpoint_head,
-    encode_device_head, encode_segment, large_pack_chunk_limit_bytes, mutation_batch_encoded_size,
-    open_checkpoint_pack, open_snapshot_pack, CheckpointHead, CheckpointPackHeader,
-    CheckpointPackReader, DeviceCursor, DeviceHead, EncodedFile, EncodedObject, LargePackKind,
-    LargePackWriter, MutationBatch, ObjectRef, RecordVersion, ReplicatedItem, Segment, SessionKey,
-    SnapshotPackHeader, SnapshotPackReader, SyncItem, SyncItemKind, Tombstone,
+    encode_device_head, encode_segment, large_pack_chunk_limit_bytes,
+    large_pack_chunk_raw_budget_bytes, mutation_batch_encoded_size, open_checkpoint_pack,
+    open_snapshot_pack, CheckpointHead, CheckpointPackHeader, CheckpointPackReader, DeviceCursor,
+    DeviceHead, EncodedFile, EncodedObject, LargePackKind, LargePackWriter, MutationBatch,
+    ObjectRef, RecordVersion, ReplicatedItem, Segment, SessionKey, SnapshotPackHeader,
+    SnapshotPackReader, SyncItem, SyncItemKind, Tombstone,
 };

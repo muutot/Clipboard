@@ -6,14 +6,14 @@ use super::wire::envelope_is_encrypted;
 use super::{
     cleanup_obsolete_objects, collect_mutation_resource_refs, decode_checkpoint_head,
     decode_device_head, decode_segment, defer_mutation_resources, encode_device_head,
-    encode_segment, head_object_key, large_pack_chunk_limit_bytes, mutation_batch_encoded_size,
-    open_checkpoint_pack, open_snapshot_pack, parse_checkpoint_key, parse_head_key,
-    parse_segment_key, prepare_mutation_resources, segment_object_key, segment_prefix,
-    snapshot_object_key, CheckpointHead, CheckpointPackHeader, DeviceCursor, DeviceHead,
-    EncodedFile, EncodedObject, LargePackKind, LargePackWriter, MutationBatch, ObjectInfo,
-    ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment, SessionKey,
-    SnapshotPackHeader, SyncEnginePaths, SyncHeadCache, SyncOutboxBatch, SyncRemoteState,
-    SyncRepository, SyncSnapshotExport, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
+    encode_segment, head_object_key, large_pack_chunk_raw_budget_bytes,
+    mutation_batch_encoded_size, open_checkpoint_pack, open_snapshot_pack, parse_checkpoint_key,
+    parse_head_key, parse_segment_key, prepare_mutation_resources, segment_object_key,
+    segment_prefix, snapshot_object_key, CheckpointHead, CheckpointPackHeader, DeviceCursor,
+    DeviceHead, EncodedFile, EncodedObject, LargePackKind, LargePackWriter, MutationBatch,
+    ObjectInfo, ObjectRef, ObjectStore, PutCondition, PutOutcome, ResourceLimits, Segment,
+    SessionKey, SnapshotPackHeader, SyncEnginePaths, SyncHeadCache, SyncOutboxBatch,
+    SyncRemoteState, SyncRepository, SyncSnapshotExport, CHECKPOINT_HEAD_KEY, HEADS_PREFIX,
 };
 
 const CHECKPOINT_SEQUENCE_DELTA_THRESHOLD: u64 = 50_000;
@@ -28,7 +28,11 @@ fn write_large_pack_batch(
         return Ok(());
     }
     let encoded_size = mutation_batch_encoded_size(&mutations)?;
-    if encoded_size <= large_pack_chunk_limit_bytes() {
+    // Route on the *raw* budget, not the packing target: a batch that only just
+    // fits uncompressed can compress to slightly more than the reader accepts
+    // when its content is incompressible, and such a chunk would be written but
+    // could never be read back. Splitting here keeps the export progressing.
+    if encoded_size <= large_pack_chunk_raw_budget_bytes() {
         return writer.write_batch(&mutations);
     }
     if mutations.len() == 1 {
