@@ -328,7 +328,9 @@ mod capture_tests {
         assert_eq!(stored[0].size_bytes, 32);
         assert_eq!(stored[0].mime_type, "application/octet-stream");
         assert_eq!(stored[0].extension.as_deref(), Some("bin"));
-        assert_eq!(std::fs::read_dir(&storage_dir).unwrap().count(), 0);
+        // An oversized source is rejected before staging, so no managed file
+        // (and, when nothing else created it, no staging directory) remains.
+        assert!(!storage_dir.exists() || std::fs::read_dir(&storage_dir).unwrap().count() == 0);
 
         let _ = std::fs::remove_dir_all(root);
     }
