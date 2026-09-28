@@ -65,17 +65,20 @@
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
-  import { captureBulkSnapshot, planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
+  import { planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
   import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
   import { resolveSearchInputAction } from "$lib/utils/search-input-actions";
   import {
     applyItemPatchesToCopies,
+    captureAffectedItems,
     findLoadedItemInCopies,
     mergeDeletedHistoryPage,
     removeItemTag,
     removeItemsFromCopies,
     replaceItemInCopies,
+    restoreAffectedItemsToCopies,
     rewriteItemTags,
+    type ItemCopies,
   } from "$lib/utils/item-sync";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import {
@@ -176,6 +179,36 @@
 
   function revertItem(id: string, fields: Partial<ClipboardItem>) {
     applyItemPatches(new Map([[id, fields]]));
+  }
+
+  /// Replaces every copy at once, for funnels that rebuild the whole set rather
+  /// than patching entry by entry.
+  function applyItemCopies(next: ItemCopies) {
+    items = next.items;
+    indexedItems = next.indexedItems;
+    searchCache = next.searchCache;
+    detailItem = next.detailItem;
+  }
+
+  function itemCopies(): ItemCopies {
+    return { items, indexedItems, searchCache, detailItem };
+  }
+
+  /// Records just the ids a bulk mutation is about to change, so its rollback
+  /// cannot discard a capture, search, or favorite toggle that landed while the
+  /// persist call was in flight.
+  function captureAffected(ids: ReadonlySet<string>): ReturnType<typeof captureAffectedItems> {
+    return captureAffectedItems(itemCopies(), ids, selectedIds);
+  }
+
+  /// Undoes a failed bulk mutation: restores only the captured ids through the
+  /// funnel and re-selects the rows the user had selected, leaving every other
+  /// change made during the window alone.
+  function rollbackAffected(snapshot: ReturnType<typeof captureAffectedItems>) {
+    applyItemCopies(restoreAffectedItemsToCopies(itemCopies(), snapshot));
+    if (snapshot.selected.size > 0) {
+      selectedIds = new Set([...selectedIds, ...snapshot.selected]);
+    }
   }
 
   function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
@@ -1982,14 +2015,8 @@
     const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
     if (ids.length === 0) return;
 
-    const previousItems = captureBulkSnapshot({
-      items,
-      indexedItems,
-      searchCache,
-      selectedIds,
-      detailItem,
-    });
     const idSet = new Set(ids);
+    const snapshot = captureAffected(idSet);
     for (const id of ids) addSuppressedId(id);
     items = setDeletedFlags(items, idSet, false);
     if (indexedItems) {
@@ -2011,11 +2038,7 @@
       .catch((error) => {
         console.error("Bulk restore failed", error);
         for (const id of ids) deletedHistorySuppressedIds.delete(id);
-        items = previousItems.items;
-        indexedItems = previousItems.indexedItems;
-        searchCache = previousItems.searchCache;
-        selectedIds = previousItems.selectedIds;
-        detailItem = previousItems.detailItem;
+        rollbackAffected(snapshot);
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -2025,14 +2048,8 @@
     const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
     if (ids.length === 0) return;
 
-    const previous = captureBulkSnapshot({
-      items,
-      indexedItems,
-      searchCache,
-      selectedIds,
-      detailItem,
-    });
     const idSet = new Set(ids);
+    const snapshot = captureAffected(idSet);
     for (const id of ids) addSuppressedId(id);
     removeItems(idSet);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
@@ -2046,11 +2063,7 @@
       .catch((error) => {
         console.error("Bulk permanent delete failed", error);
         for (const id of ids) deletedHistorySuppressedIds.delete(id);
-        items = previous.items;
-        indexedItems = previous.indexedItems;
-        searchCache = previous.searchCache;
-        selectedIds = previous.selectedIds;
-        detailItem = previous.detailItem;
+        rollbackAffected(snapshot);
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -2065,13 +2078,7 @@
     const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
     if (operationIds.size === 0) return;
 
-    const previous = captureBulkSnapshot({
-      items,
-      indexedItems,
-      searchCache,
-      selectedIds,
-      detailItem,
-    });
+    const snapshot = captureAffected(operationIds);
     const softSet = new Set(softIds);
 
     for (const id of softIds) deletedHistorySuppressedIds.delete(id);
@@ -2156,34 +2163,22 @@
       }
       for (const id of softIds) deletedHistorySuppressedIds.delete(id);
 
-      // Rebuild from the snapshot so a partially failed mixed batch mirrors
-      // exactly which backend transaction succeeded.
-      items = previous.items
-        .filter((item) => !removedIds.has(item.id))
-        .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
-      if (previous.indexedItems) {
-        indexedItems = previous.indexedItems
-          .filter((item) => !removedIds.has(item.id))
-          .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
-      } else {
-        indexedItems = null;
-      }
-      searchCache = previous.searchCache
-        .filter((item) => !removedIds.has(item.id))
-        .map((item) => (successfulSoft.has(item.id) ? { ...item, deleted: true } : item));
-      selectedIds = new Set([...previous.selectedIds].filter((id) => !succeededIds.has(id)));
-      if (previous.detailItem && removedIds.has(previous.detailItem.id)) {
-        detailItem = null;
-      } else if (previous.detailItem && successfulSoft.has(previous.detailItem.id)) {
-        detailItem = { ...previous.detailItem, deleted: true };
-      } else {
-        detailItem = previous.detailItem;
-      }
+      // Mirror exactly which backend transaction succeeded: return the ids this
+      // batch touched to their pre-mutation state, then re-apply the per-outcome
+      // transitions. Going through the funnel (rather than rebuilding whole
+      // arrays from a snapshot) keeps records that arrived via clipboard events
+      // during the async window — a whole-array rebuild dropped them entirely.
+      let next = restoreAffectedItemsToCopies(itemCopies(), snapshot);
+      next = removeItemsFromCopies(next, removedIds);
+      next = applyItemPatchesToCopies(
+        next,
+        new Map([...successfulSoft].map((id) => [id, { deleted: true }])),
+      );
+      applyItemCopies(next);
+      selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
 
-      // The snapshot rebuild above mirrors backend success, but any items
-      // that arrived via clipboard events during the async window are absent
-      // from the snapshot. Failed (and partially failed) batches skip the
-      // success-path invalidations, so resync from the backend explicitly.
+      // Failed (and partially failed) batches skip the success-path
+      // invalidations, so resync from the backend explicitly.
       if (successfulSoft.size > 0 || successfulPermanent.size > 0 || failedIds.size > 0) {
         invalidateDeletedHistoryPagination();
       }
@@ -2257,11 +2252,7 @@
     const ids = nonFavorites.map((item) => item.id);
     const idSet = new Set(ids);
     for (const id of ids) deletedHistorySuppressedIds.delete(id);
-    const previousItems = items.map((entry) => ({ ...entry }));
-    const previousIndexedItems = indexedItems?.map((entry) => ({ ...entry })) ?? null;
-    const previousSearchCache = searchCache.map((entry) => ({ ...entry }));
-    const previousDetailItem = detailItem ? { ...detailItem } : null;
-    const previousSelectedIds = new Set(selectedIds);
+    const snapshot = captureAffected(idSet);
 
     if ($generalSettings.useRecycleBin) {
       // Soft clear: retain rows locally so they immediately appear in the
@@ -2288,11 +2279,7 @@
         })
         .catch((error) => {
           console.error("Unable to clear history", error);
-          items = previousItems;
-          indexedItems = previousIndexedItems;
-          searchCache = previousSearchCache;
-          detailItem = previousDetailItem;
-          selectedIds = previousSelectedIds;
+          rollbackAffected(snapshot);
           showToast(_t("app.deleteFailed"), "error");
         });
       return;
@@ -2324,18 +2311,11 @@
       );
       if (successfulIds.size > 0) invalidateActiveHistoryPagination();
       if (failedIds.size > 0) {
-        items = previousItems.filter((item) => !successfulIds.has(item.id));
-        if (previousIndexedItems) {
-          indexedItems = previousIndexedItems.filter((item) => !successfulIds.has(item.id));
-        } else {
-          indexedItems = null;
-        }
-        searchCache = previousSearchCache.filter((item) => !successfulIds.has(item.id));
-        detailItem =
-          previousDetailItem && !successfulIds.has(previousDetailItem.id)
-            ? previousDetailItem
-            : null;
-        selectedIds = new Set([...previousSelectedIds].filter((id) => !successfulIds.has(id)));
+        // Only the rows this batch could not remove come back; everything that
+        // arrived during the window stays.
+        rollbackAffected(snapshot);
+        applyItemCopies(removeItemsFromCopies(itemCopies(), successfulIds));
+        selectedIds = new Set([...selectedIds].filter((id) => !successfulIds.has(id)));
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
         return;

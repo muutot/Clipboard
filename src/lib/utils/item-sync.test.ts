@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { ClipboardItem } from "$lib/types/clipboard";
 import {
   applyItemPatchesToCopies,
+  captureAffectedItems,
   findLoadedItemInCopies,
   mergeDeletedHistoryPage,
   removeItemTag,
   removeItemsFromCopies,
   replaceItemInCopies,
   rewriteItemTags,
+  restoreAffectedItemsToCopies,
   type ItemCopies,
 } from "./item-sync";
 
@@ -185,5 +187,103 @@ describe("mergeDeletedHistoryPage", () => {
       new Set(["purged"]),
     );
     expect(merged.map((entry) => entry.id)).toEqual(["keep"]);
+  });
+});
+
+describe("captureAffectedItems / restoreAffectedItemsToCopies", () => {
+  it("rolls back only the affected ids and keeps records that arrived meanwhile", () => {
+    // The persist call is async, so a capture can land while it is in flight.
+    const before: ItemCopies = {
+      items: [item("a"), item("b"), item("c")],
+      indexedItems: [item("a"), item("b"), item("c")],
+      searchCache: [item("b")],
+      detailItem: null,
+    };
+    const snapshot = captureAffectedItems(before, new Set(["a", "b"]));
+
+    // Mutation removes "b" and reorders "a"; meanwhile a new capture arrives.
+    const during: ItemCopies = {
+      items: [item("c"), item("new"), item("a", { favorite: true })],
+      indexedItems: [item("c"), item("new"), item("a", { favorite: true })],
+      searchCache: [item("new"), item("a", { favorite: true })],
+      detailItem: null,
+    };
+
+    const next = restoreAffectedItemsToCopies(during, snapshot);
+
+    // "new" survived: a whole-array rollback would have dropped it, because it is
+    // absent from any pre-mutation snapshot. "b" is re-inserted at the index it
+    // held, and "a" is patched in place rather than moved, so nothing the user
+    // can currently see is reordered behind their back.
+    expect(next.items.map((entry) => entry.id)).toEqual(["c", "b", "new", "a"]);
+    expect(next.items[3].favorite).toBe(false);
+    expect(next.items[1].title).toBe("title-b");
+    expect(next.indexedItems?.map((entry) => entry.id)).toEqual(["c", "b", "new", "a"]);
+    // searchCache held "b" only, so "b" is re-inserted at its recorded index and
+    // the two records the window produced stay where the user left them.
+    expect(next.searchCache.map((entry) => entry.id)).toEqual(["new", "b", "a"]);
+  });
+
+  it("captures an id that only a secondary copy holds", () => {
+    const before: ItemCopies = {
+      items: [item("a")],
+      indexedItems: [item("a"), item("cached-only")],
+      searchCache: [item("cached-only", { title: "stale" })],
+      detailItem: null,
+    };
+    // No copy of `items` holds it, so the capture falls back to the same
+    // display priority the rest of the funnel uses: indexedItems, then
+    // searchCache, then detailItem.
+    const snapshot = captureAffectedItems(before, new Set(["cached-only"]));
+    expect(snapshot.previous.get("cached-only")?.title).toBe("title-cached-only");
+
+    const next = restoreAffectedItemsToCopies(
+      { ...before, searchCache: [], indexedItems: [] },
+      snapshot,
+    );
+    expect(next.searchCache.map((entry) => entry.id)).toEqual(["cached-only"]);
+    expect(next.searchCache[0].title).toBe("title-cached-only");
+  });
+
+  it("reclaims an emptied detail pane but not one the user re-pointed", () => {
+    const before: ItemCopies = {
+      items: [item("a"), item("b")],
+      indexedItems: null,
+      searchCache: [],
+      detailItem: item("a"),
+    };
+    const snapshot = captureAffectedItems(before, new Set(["a"]));
+    expect(snapshot.detailItem?.id).toBe("a");
+
+    const cleared = restoreAffectedItemsToCopies({ ...before, detailItem: null }, snapshot);
+    expect(cleared.detailItem?.id).toBe("a");
+
+    const userOpenedAnother = restoreAffectedItemsToCopies(
+      { ...before, detailItem: item("b") },
+      snapshot,
+    );
+    expect(userOpenedAnother.detailItem?.id).toBe("b");
+  });
+
+  it("records only the selected ids it was given", () => {
+    const before: ItemCopies = {
+      items: [item("a"), item("b")],
+      indexedItems: null,
+      searchCache: [],
+      detailItem: null,
+    };
+    const snapshot = captureAffectedItems(before, new Set(["a", "b"]), new Set(["b", "unrelated"]));
+    expect([...snapshot.selected]).toEqual(["b"]);
+  });
+
+  it("is a no-op for an empty capture", () => {
+    const before: ItemCopies = {
+      items: [item("a")],
+      indexedItems: null,
+      searchCache: [],
+      detailItem: null,
+    };
+    const snapshot = captureAffectedItems(before, new Set());
+    expect(restoreAffectedItemsToCopies(before, snapshot)).toBe(before);
   });
 });

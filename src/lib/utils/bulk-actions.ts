@@ -36,31 +36,6 @@ export function planBulkDelete(
   return { softIds, permanentIds, hardIds };
 }
 
-export interface BulkSnapshot {
-  items: ClipboardItem[];
-  indexedItems: ClipboardItem[] | null;
-  searchCache: ClipboardItem[];
-  selectedIds: Set<string>;
-  detailItem: ClipboardItem | null;
-}
-
-/** Deep-enough snapshot for rollback after a failed async bulk mutation. */
-export function captureBulkSnapshot(state: {
-  items: ClipboardItem[];
-  indexedItems: ClipboardItem[] | null;
-  searchCache: ClipboardItem[];
-  selectedIds: ReadonlySet<string>;
-  detailItem: ClipboardItem | null;
-}): BulkSnapshot {
-  return {
-    items: state.items.map((entry) => ({ ...entry })),
-    indexedItems: state.indexedItems?.map((entry) => ({ ...entry })) ?? null,
-    searchCache: state.searchCache.map((entry) => ({ ...entry })),
-    selectedIds: new Set(state.selectedIds),
-    detailItem: state.detailItem ? { ...state.detailItem } : null,
-  };
-}
-
 /** Applies a deleted/undeleted flag to the given ids across both lists. */
 export function setDeletedFlags(
   items: ClipboardItem[],
