@@ -191,6 +191,11 @@ const zhCN: LocaleDefinition = {
     resourcePathsSaved: "资源目录配置已保存",
     resourcePathsCleanupDisabled:
       "检测到未确认由 Clipboard 托管的资源目录，已跳过孤儿文件清理以保护目录中的其他文件。",
+    claimMarkerAction: "添加归属标记",
+    claimMarkerHint: "写入 Clipboard 归属标记，重启后即可对这些目录执行孤儿清理。",
+    claimMarkerConfirm:
+      "确定添加 Clipboard 归属标记？重启后清理会删除这些目录中未被任何记录引用的文件，被记录引用的文件会保留。",
+    claimMarkerAdded: "归属标记已添加，重启应用后启用清理。",
     restartNow: "立即重启",
     custom: "自定义",
     default: "默认",

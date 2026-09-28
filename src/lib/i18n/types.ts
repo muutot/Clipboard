@@ -187,6 +187,10 @@ export interface LocaleDefinition {
     resourcePathsSavedAndRestart: string;
     resourcePathsSaved: string;
     resourcePathsCleanupDisabled: string;
+    claimMarkerAction: string;
+    claimMarkerHint: string;
+    claimMarkerConfirm: string;
+    claimMarkerAdded: string;
     restartNow: string;
     custom: string;
     default: string;

@@ -5,7 +5,7 @@ use std::{
 };
 
 use super::store::resource_root_marker_content;
-use super::{StoragePaths, RESOURCE_ROOT_MARKER};
+use super::{ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER};
 use crate::storage::StorageError;
 
 #[test]
@@ -292,6 +292,42 @@ fn invalid_or_foreign_markers_never_enable_cleanup() {
         ),
         Err(StorageError::ResourceDirectoryMustBeEmptyOrOwned { .. })
     ));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn claiming_an_unowned_resource_root_enables_cleanup_on_the_next_startup() {
+    let root = temporary_test_directory("claim-resource-root");
+    let project = root.join("project");
+    let data_directory = root.join("data");
+    let image_directory = data_directory.join("storage/image");
+    fs::create_dir_all(&image_directory).unwrap();
+    fs::write(image_directory.join("keep.png"), b"existing managed file").unwrap();
+
+    // First startup against an unmarked, non-empty custom root: cleanup stays
+    // off and the existing files are untouched.
+    let paths =
+        StoragePaths::initialize_with_data_directory(project.clone(), Some(data_directory.clone()))
+            .unwrap();
+    assert!(!paths.image_cleanup_enabled);
+    assert!(!paths.file_cleanup_enabled);
+    assert!(!image_directory.join(RESOURCE_ROOT_MARKER).exists());
+
+    // The explicit claim writes only the marker, never touching file contents.
+    paths.claim_resource_root(ResourceRootRole::Image).unwrap();
+    assert_eq!(
+        fs::read(image_directory.join(RESOURCE_ROOT_MARKER)).unwrap(),
+        resource_root_marker_content(&project, "image")
+    );
+    assert!(image_directory.join("keep.png").exists());
+
+    // A later non-claiming startup now sees the valid marker and enables
+    // cleanup for that root only.
+    let reloaded =
+        StoragePaths::initialize_with_data_directory(project, Some(data_directory)).unwrap();
+    assert!(reloaded.image_cleanup_enabled);
+    assert!(!reloaded.file_cleanup_enabled);
 
     fs::remove_dir_all(root).unwrap();
 }

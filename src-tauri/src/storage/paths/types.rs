@@ -3,6 +3,22 @@ use std::path::PathBuf;
 pub const RESOURCE_ROOT_MARKER: &str = ".clipboard-resource-root";
 pub(super) const RESOURCE_ROOT_MARKER_HEADER: &str = "clipboard-resource-root-v1";
 
+/// Which resource root an ownership marker belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceRootRole {
+    Image,
+    File,
+}
+
+impl ResourceRootRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::File => "file",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StoragePaths {
     pub project: PathBuf,

@@ -3,6 +3,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import {
+    claimResourceMarkers,
     configureStorageDirectory,
     setResourceStoragePaths,
     type StorageDirectoryUpdate,
@@ -32,6 +33,8 @@
     restartRequired: boolean;
   } | null>(null);
   let resourceStorageRestartNeeded = $state(false);
+  let claimingMarkers = $state(false);
+  let markerRestartNeeded = $state(false);
 
   $effect(() => {
     dataDirectory = status?.dataDirectoryPath ?? "";
@@ -120,6 +123,21 @@
     imageStoragePath = "";
     fileStoragePath = "";
     await saveResourceStoragePaths();
+  }
+
+  async function addOwnershipMarker() {
+    if (!window.confirm(_t("storage.claimMarkerConfirm"))) return;
+    claimingMarkers = true;
+    try {
+      const result = await claimResourceMarkers();
+      markerRestartNeeded = result.restartRequired;
+      onfeedback(_t("storage.claimMarkerAdded"), true);
+    } catch (error) {
+      console.error("Unable to claim resource ownership markers", error);
+      onfeedback(error instanceof Error ? error.message : String(error), false);
+    } finally {
+      claimingMarkers = false;
+    }
   }
 </script>
 
@@ -226,6 +244,23 @@
         <AppIcon name="info" size={14} />
         <span>{_t("storage.resourcePathsCleanupDisabled")}</span>
       </div>
+      <div class="dir-input-row resource-path-actions">
+        <span>{_t("storage.claimMarkerHint")}</span>
+        <button
+          type="button"
+          disabled={claimingMarkers || markerRestartNeeded}
+          onclick={addOwnershipMarker}
+        >
+          {claimingMarkers ? _t("storage.saving") : _t("storage.claimMarkerAction")}
+        </button>
+      </div>
+      {#if markerRestartNeeded}
+        <div class="resource-path-summary">
+          <button class="restart-btn" type="button" onclick={restartApp}>
+            {_t("storage.restartNow")}
+          </button>
+        </div>
+      {/if}
     {/if}
     {#if pendingResourceStorage}
       <div class="resource-path-summary">

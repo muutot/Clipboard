@@ -3,7 +3,9 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use super::types::{StoragePaths, RESOURCE_ROOT_MARKER, RESOURCE_ROOT_MARKER_HEADER};
+use super::types::{
+    ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER, RESOURCE_ROOT_MARKER_HEADER,
+};
 use crate::storage::StorageError;
 
 impl StoragePaths {
@@ -192,6 +194,26 @@ impl StoragePaths {
 
     pub fn uses_custom_data_directory(&self) -> bool {
         self.data_directory != self.project
+    }
+
+    /// Writes this project's ownership marker into one resource root so orphan
+    /// cleanup may scan it. This backs the explicit settings action that lets a
+    /// user claim a directory the app already uses (for example a custom data
+    /// directory created before marker support). It overwrites a missing or
+    /// foreign marker but never touches the directory's contents, and it does
+    /// not delete anything itself; cleanup still only removes files that are
+    /// not referenced by the database, and only after the next startup.
+    pub fn claim_resource_root(&self, role: ResourceRootRole) -> Result<(), StorageError> {
+        let path = match role {
+            ResourceRootRole::Image => &self.images,
+            ResourceRootRole::File => &self.files,
+        };
+        fs::create_dir_all(path)?;
+        fs::write(
+            path.join(RESOURCE_ROOT_MARKER),
+            resource_root_marker_content(&self.project, role.as_str()),
+        )?;
+        Ok(())
     }
 }
 

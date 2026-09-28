@@ -17,7 +17,7 @@ pub use database::Database;
 pub use error::StorageError;
 pub use maintenance::RepairResult;
 pub use ocr_repository::OcrRepository;
-pub use paths::{StoragePaths, RESOURCE_ROOT_MARKER};
+pub use paths::{ResourceRootRole, StoragePaths, RESOURCE_ROOT_MARKER};
 pub use recovery::{
     backup_path, discard_database_backups, discard_database_quarantine, quarantine_search_index,
     recover_database_if_needed, refresh_database_backup, reset_search_index,

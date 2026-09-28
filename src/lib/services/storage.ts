@@ -48,6 +48,10 @@ export interface ResourceStorageUpdate {
   restartRequired: boolean;
 }
 
+export interface ResourceMarkerUpdate {
+  restartRequired: boolean;
+}
+
 export interface PerformanceMetrics {
   startup: {
     totalStartupMs: number;
@@ -194,6 +198,14 @@ export async function setResourceStoragePaths(
       imageStoragePath,
       fileStoragePath,
     },
+    "Storage configuration is only available in the desktop app",
+  );
+}
+
+export async function claimResourceMarkers(): Promise<ResourceMarkerUpdate> {
+  return invokeTauriRequired<ResourceMarkerUpdate>(
+    "claim_resource_markers",
+    undefined,
     "Storage configuration is only available in the desktop app",
   );
 }

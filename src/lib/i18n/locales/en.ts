@@ -203,6 +203,12 @@ const en: LocaleDefinition = {
     resourcePathsSaved: "Resource directory configuration saved",
     resourcePathsCleanupDisabled:
       "Orphan cleanup is disabled for resource directories that are not confirmed as Clipboard-owned.",
+    claimMarkerAction: "Add Ownership Marker",
+    claimMarkerHint:
+      "Write a Clipboard ownership marker so orphan cleanup can run for these directories after a restart.",
+    claimMarkerConfirm:
+      "Add the Clipboard ownership marker? After restarting, cleanup deletes files in these directories that are not referenced by any record. Referenced files are kept.",
+    claimMarkerAdded: "Ownership marker added. Restart the app to enable cleanup.",
     restartNow: "Restart Now",
     custom: "Custom",
     default: "Default",

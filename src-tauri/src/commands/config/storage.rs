@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use rusqlite::{params, TransactionBehavior};
+use serde::Serialize;
 
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
@@ -9,7 +10,7 @@ use crate::domain::ClipboardKind;
 use crate::keyboard::KeyboardManager;
 use crate::platform;
 use crate::search::{SearchIndex, SEARCH_INDEX_VERSION};
-use crate::storage::{ClipboardRepository, Database, StorageError, StoragePaths};
+use crate::storage::{ClipboardRepository, Database, ResourceRootRole, StorageError, StoragePaths};
 use crate::{CaptureState, STORAGE_KIND_DELETE_SCOPE};
 
 use super::{
@@ -172,6 +173,40 @@ pub fn set_resource_storage_paths(
         file_storage_path: target_paths.files.display().to_string(),
         restart_required: target_paths.images != active_paths.images
             || target_paths.files != active_paths.files,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceMarkerUpdate {
+    restart_required: bool,
+}
+
+/// Explicitly claims the active resource roots for this project by writing the
+/// ownership marker that enables orphan cleanup. This is the recovery path for
+/// roots that are already in use but unmarked (for example a custom data
+/// directory created before marker support, or one configured outside the
+/// migration flow). It never deletes files; cleanup only runs on the next
+/// startup and still preserves everything referenced by the database.
+#[tauri::command]
+pub fn claim_resource_markers(
+    paths: tauri::State<'_, StoragePaths>,
+) -> Result<ResourceMarkerUpdate, String> {
+    let mut claimed = false;
+    if !paths.image_cleanup_enabled {
+        paths
+            .claim_resource_root(ResourceRootRole::Image)
+            .map_err(|error| error.to_string())?;
+        claimed = true;
+    }
+    if !paths.file_cleanup_enabled {
+        paths
+            .claim_resource_root(ResourceRootRole::File)
+            .map_err(|error| error.to_string())?;
+        claimed = true;
+    }
+    Ok(ResourceMarkerUpdate {
+        restart_required: claimed,
     })
 }
 
