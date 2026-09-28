@@ -29,6 +29,7 @@
     notifyContextMenuOpened,
     trackContextMenuOpen,
   } from "$lib/services/context-menu";
+  import { showToast } from "$lib/services/toast";
 
   let iconsBase = $derived($iconsDir);
 
@@ -421,13 +422,34 @@
     onedit(item.id);
   }
 
+  /** Selected text in the inline editor, if the user highlighted any. */
+  function editSelection(): string | null {
+    if (!editing || !editTextarea) return null;
+    const { selectionStart, selectionEnd, value } = editTextarea;
+    if (selectionEnd <= selectionStart) return null;
+    return value.slice(selectionStart, selectionEnd);
+  }
+
   function runCardAction(action: CardActionId, event?: Event) {
     event?.stopPropagation();
 
     switch (action) {
-      case "copy":
+      case "copy": {
+        // While editing, copy the highlighted text instead of the whole item so
+        // the context menu matches what the user selected in the editor.
+        const selected = editSelection();
+        if (selected) {
+          void writeClipboardText(selected)
+            .then(() => showToast(_t("toast.copySuccess"), "success"))
+            .catch((error) => {
+              console.error("Unable to copy the selected text", error);
+              showToast(_t("toast.copyFailed"), "error");
+            });
+          return;
+        }
         oncopy(item.id);
         return;
+      }
       case "plainpaste":
         onplainpaste(item.id);
         return;
