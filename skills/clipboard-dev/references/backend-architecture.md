@@ -90,7 +90,7 @@ The clipboard monitor produces change notifications; a capture thread reads plat
 
 ## Privacy and cleanup
 
-Privacy pause, ignored applications, and sensitive-source checks happen before persistence, file writes, OCR, or index work. Cleanup reads current config periodically, protects favorites, respects recycle-bin policy, removes database rows through repository rules, and removes only positively owned orphan resources.
+Privacy pause, ignored applications, and sensitive-source checks happen before persistence, file writes, OCR, or index work. Cleanup reads current config periodically, protects favorites, respects recycle-bin policy, removes database rows through repository rules, and removes only positively owned orphan resources. The retention inputs are snapshotted into a `CleanupPolicy` value (`retention_days`, `max_items`, `recycle_bin_days`) before any work starts: the cleanup walks every resource root and canonicalizes every referenced path, so holding `Mutex<ConfigStore>` across it would stall every other config-reading command and the auto-sync worker's per-tick read. `enforce_history_cleanup_with_policy` therefore takes no `ConfigStore` at all, and the scheduled worker keeps loading its own store per tick.
 
 ## Platform adapters
 

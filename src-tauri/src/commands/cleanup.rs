@@ -25,14 +25,45 @@ pub struct StorageCleanupResult {
 /// they run without the ingestion lock that excludes concurrent captures.
 pub const ORPHAN_FILE_GRACE: Duration = Duration::from_secs(10 * 60);
 
+/// The retention inputs a cleanup run needs, snapshotted from configuration.
+///
+/// The cleanup walks every resource root and canonicalizes every referenced
+/// path, which can take minutes on a large library. Passing the values instead
+/// of a `&ConfigStore` is what lets the command read the global config mutex for
+/// a few statements rather than for the whole run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CleanupPolicy {
+    pub retention_days: u32,
+    pub max_items: u64,
+    pub recycle_bin_days: u32,
+}
+
+impl CleanupPolicy {
+    pub fn from_config(config: &ConfigStore) -> Self {
+        Self {
+            retention_days: config.retention_days(),
+            max_items: config.max_items() as u64,
+            recycle_bin_days: config.recycle_bin_days(),
+        }
+    }
+}
+
 #[tauri::command]
 pub fn enforce_history_cleanup(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     paths: tauri::State<'_, StoragePaths>,
 ) -> Result<u64, String> {
-    let guard = lock_state(&config, "configuration lock is poisoned")?;
-    enforce_history_cleanup_for(&database, &guard, &paths, ORPHAN_FILE_GRACE)
+    // Read the three values and drop the guard before doing any work: the
+    // cleanup walks every resource root and canonicalizes every referenced
+    // path, so holding the process-wide config mutex across it would stall
+    // every other command that reads configuration (settings, window config, the
+    // tray) and the auto-sync worker's per-tick read.
+    let policy = {
+        let guard = lock_state(&config, "configuration lock is poisoned")?;
+        CleanupPolicy::from_config(&guard)
+    };
+    enforce_history_cleanup_with_policy(&database, &paths, policy, ORPHAN_FILE_GRACE)
 }
 
 pub fn enforce_history_cleanup_for(
@@ -41,18 +72,29 @@ pub fn enforce_history_cleanup_for(
     paths: &StoragePaths,
     orphan_file_grace: Duration,
 ) -> Result<u64, String> {
-    let retention_days = config.retention_days();
-    let max_items = config.max_items();
-    let recycle_bin_days = config.recycle_bin_days();
+    enforce_history_cleanup_with_policy(
+        database,
+        paths,
+        CleanupPolicy::from_config(config),
+        orphan_file_grace,
+    )
+}
+
+pub fn enforce_history_cleanup_with_policy(
+    database: &Database,
+    paths: &StoragePaths,
+    policy: CleanupPolicy,
+    orphan_file_grace: Duration,
+) -> Result<u64, String> {
     let mut total_deleted = 0u64;
     total_deleted += database
-        .delete_older_than(retention_days)
+        .delete_older_than(policy.retention_days)
         .map_err(|error| error.to_string())?;
     total_deleted += database
-        .enforce_capacity_limit(max_items as u64)
+        .enforce_capacity_limit(policy.max_items)
         .map_err(|error| error.to_string())?;
     total_deleted += database
-        .permanently_delete_expired(recycle_bin_days)
+        .permanently_delete_expired(policy.recycle_bin_days)
         .map_err(|error| error.to_string())?;
 
     if let Err(error) = cleanup_orphan_storage_files_with_grace(database, paths, orphan_file_grace)
@@ -63,6 +105,49 @@ pub fn enforce_history_cleanup_for(
     }
 
     Ok(total_deleted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn policy_paths() -> StoragePaths {
+        let project = std::env::temp_dir().join(format!(
+            "clipboard-cleanup-policy-test-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        StoragePaths::initialize(project).expect("temporary storage paths")
+    }
+
+    #[test]
+    fn cleanup_policy_reads_the_clamped_configuration_values() {
+        let paths = policy_paths();
+        let config = ConfigStore::load(&paths.project).expect("temporary config");
+        let policy = CleanupPolicy::from_config(&config);
+        assert_eq!(policy.retention_days, config.retention_days());
+        assert_eq!(policy.max_items, config.max_items() as u64);
+        assert_eq!(policy.recycle_bin_days, config.recycle_bin_days());
+        let _ = std::fs::remove_dir_all(&paths.project);
+    }
+
+    #[test]
+    fn cleanup_runs_from_a_snapshotted_policy_without_the_config_store() {
+        let paths = policy_paths();
+        let database = Database::open(&paths.database).expect("temporary database");
+        let policy = CleanupPolicy {
+            retention_days: 30,
+            max_items: 10_000,
+            recycle_bin_days: 7,
+        };
+        // The point of the snapshot is that the run needs no `ConfigStore` at
+        // all, so a long cleanup can never hold the shared configuration mutex.
+        let total =
+            enforce_history_cleanup_with_policy(&database, &paths, policy, ORPHAN_FILE_GRACE)
+                .expect("cleanup must run");
+        assert_eq!(total, 0, "an empty library deletes nothing");
+        let _ = std::fs::remove_dir_all(&paths.project);
+    }
 }
 
 pub fn cleanup_orphan_storage_files(
