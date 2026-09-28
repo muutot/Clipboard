@@ -416,7 +416,7 @@ pub fn run() {
                 Arc::new(NoopOcrEngine)
             };
             let ocr_database = Database::open(&paths.database)?;
-            let ocr_worker = OcrWorkerManager::start(ocr_engine, Arc::new(ocr_database));
+            let ocr_worker = OcrWorkerManager::start(ocr_engine, Arc::new(ocr_database))?;
 
             let thumbnail_database = Database::open(&paths.database)?;
             let thumbnail_worker =

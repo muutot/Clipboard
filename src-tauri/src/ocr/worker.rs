@@ -31,16 +31,21 @@ pub struct OcrWorkerManager {
 }
 
 impl OcrWorkerManager {
-    pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Self {
-        Self {
-            worker: Arc::new(Mutex::new(OcrWorker::start(engine, database))),
-        }
+    pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Result<Self, String> {
+        Ok(Self {
+            worker: Arc::new(Mutex::new(OcrWorker::start(engine, database)?)),
+        })
     }
 
-    pub fn restart(&self, engine: Arc<dyn OcrEngine>, database: Arc<Database>) {
+    pub fn restart(
+        &self,
+        engine: Arc<dyn OcrEngine>,
+        database: Arc<Database>,
+    ) -> Result<(), String> {
         let mut worker = lock_unpoisoned(&self.worker);
         worker.stop();
-        *worker = OcrWorker::start(engine, database);
+        *worker = OcrWorker::start(engine, database)?;
+        Ok(())
     }
 
     pub fn stop(&self) {
@@ -53,7 +58,7 @@ impl OcrWorkerManager {
 }
 
 impl OcrWorker {
-    pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Self {
+    pub fn start(engine: Arc<dyn OcrEngine>, database: Arc<Database>) -> Result<Self, String> {
         // A previous process may have exited after claiming a task.  Recover
         // those rows before this worker starts claiming new work.  The startup
         // path also performs this repair, but doing it here covers hot engine
@@ -76,11 +81,11 @@ impl OcrWorker {
             .spawn(move || {
                 Self::run_loop(engine, database, worker_running, stop_receiver);
             })
-            .expect("failed to spawn OCR worker thread");
+            .map_err(|error| format!("failed to spawn OCR worker thread: {error}"))?;
 
         *lock_unpoisoned(&inner.handle) = Some(handle);
 
-        Self { inner }
+        Ok(Self { inner })
     }
 
     /// Requests shutdown and waits for the worker thread to finish.
@@ -369,7 +374,7 @@ mod tests {
             dropped: Arc::clone(&dropped),
         });
 
-        let worker = OcrWorker::start(engine, database);
+        let worker = OcrWorker::start(engine, database).unwrap();
         worker.stop();
 
         assert!(!worker.is_running());
@@ -388,7 +393,7 @@ mod tests {
         });
 
         {
-            let _worker = OcrWorker::start(engine, database);
+            let _worker = OcrWorker::start(engine, database).unwrap();
         }
 
         assert!(dropped.load(Ordering::SeqCst));
@@ -405,7 +410,7 @@ mod tests {
             calls: Arc::clone(&calls),
             dropped: Arc::new(AtomicBool::new(false)),
         });
-        let worker = OcrWorker::start(engine, Arc::clone(&database));
+        let worker = OcrWorker::start(engine, Arc::clone(&database)).unwrap();
 
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -440,7 +445,7 @@ mod tests {
         let engine = Arc::new(SuccessfulEngine {
             calls: Arc::clone(&calls),
         });
-        let worker = OcrWorker::start(engine, Arc::clone(&database));
+        let worker = OcrWorker::start(engine, Arc::clone(&database)).unwrap();
 
         let deadline = Instant::now() + Duration::from_secs(2);
         while database
@@ -485,7 +490,8 @@ mod tests {
                 calls: Arc::clone(&calls),
             }),
             Arc::clone(&database),
-        );
+        )
+        .unwrap();
 
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -517,19 +523,22 @@ mod tests {
                 dropped: Arc::clone(&first_engine_dropped),
             }),
             first_database,
-        );
+        )
+        .unwrap();
         let observer = manager.clone();
 
         let second_database = Arc::new(Database::open_in_memory().unwrap());
         second_database.save_item(&image_item("image")).unwrap();
         second_database.enqueue_ocr("image").unwrap();
         let second_calls = Arc::new(AtomicUsize::new(0));
-        manager.restart(
-            Arc::new(SuccessfulEngine {
-                calls: Arc::clone(&second_calls),
-            }),
-            Arc::clone(&second_database),
-        );
+        manager
+            .restart(
+                Arc::new(SuccessfulEngine {
+                    calls: Arc::clone(&second_calls),
+                }),
+                Arc::clone(&second_database),
+            )
+            .unwrap();
 
         assert!(first_engine_dropped.load(Ordering::SeqCst));
         let deadline = Instant::now() + Duration::from_secs(2);

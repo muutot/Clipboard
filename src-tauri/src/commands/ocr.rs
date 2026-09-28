@@ -119,7 +119,7 @@ pub fn apply_ocr_runtime_settings(
         ocr_config_response(&cfg)
     };
 
-    worker.restart(runtime_engine, Arc::new(database));
+    worker.restart(runtime_engine, Arc::new(database))?;
 
     Ok(response)
 }
