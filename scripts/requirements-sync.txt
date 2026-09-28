@@ -1,0 +1,10 @@
+# Pinned dependencies for scripts/sync_release.py, installed by the
+# Sync to GitCode workflow. Every transitive dependency is pinned so a
+# compromised or freshly published package cannot be pulled into the job that
+# holds GITHUB_TOKEN and GITCODE_TOKEN.
+requests==2.34.2
+tqdm==4.70.1
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.1
+idna==3.20

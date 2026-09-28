@@ -192,7 +192,7 @@ Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 - Intel macOS (x86_64-apple-darwin) is excluded: ort-sys ships no prebuilt ONNX Runtime for it
 - Publishes the GitHub Release directly (`releaseDraft: false`) with artifacts using `RELEASE.md` as the release body
 
-The separate `.github/workflows/sync-gitcode.yml` workflow mirrors the published release body + assets to GitCode via `scripts/sync_release.py`. It is decoupled from `release.yml` and is triggered **manually** (`workflow_dispatch` with the release tag) after a release is published, so it can be run once all assets are attached. It requires repo secret `GITCODE_TOKEN` (rotate immediately if ever committed in plaintext); optional `GITCODE_OWNER` overrides the default owner.
+The separate `.github/workflows/sync-gitcode.yml` workflow mirrors the published release body + assets to GitCode via `scripts/sync_release.py`. It is decoupled from `release.yml` and is triggered **manually** (`workflow_dispatch` with the release tag) after a release is published, so it can be run once all assets are attached. It requires repo secret `GITCODE_TOKEN` (rotate immediately if ever committed in plaintext); optional `GITCODE_OWNER` overrides the default owner. All actions are pinned to commit SHAs and its Python dependencies come from the pinned `scripts/requirements-sync.txt` (installed with `pip install -r`) rather than an unpinned `pip install`, because this job holds `GITCODE_TOKEN` and `GITHUB_TOKEN`.
 
 ## Version source files
 
