@@ -535,21 +535,27 @@ pub fn copy_clipboard_item_files(
     Ok(())
 }
 
+/// Returns true when the URL uses a scheme the OS opener may be given.
+/// `http(s)` covers web links; `mailto`/`tel` let the detected email/phone
+/// quick actions reach the OS handler. Everything else (`file://`, bare
+/// paths, `javascript:`) stays rejected because the text can come from
+/// clipboard content.
+fn openable_scheme(url: &str) -> bool {
+    let trimmed = url.trim();
+    ["http://", "https://", "mailto:", "tel:"]
+        .iter()
+        .any(|scheme| {
+            trimmed
+                .get(..scheme.len())
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
+        })
+}
+
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
-    // Only real web URLs may reach the OS opener. The URL text can originate
-    // from clipboard content, so anything else (`file://`, bare paths,
-    // `javascript:`) must never be handed to `open::that`.
     let trimmed = url.trim();
-    // RFC 3986 schemes are case-insensitive; accept any casing but still
-    // require an http(s) scheme.
-    let scheme_ok = ["http://", "https://"].iter().any(|scheme| {
-        trimmed
-            .get(..scheme.len())
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
-    });
-    if !scheme_ok {
-        return Err("only http(s) URLs can be opened".to_string());
+    if !openable_scheme(trimmed) {
+        return Err("only http(s), mailto, and tel URLs can be opened".to_string());
     }
     open::that(trimmed).map_err(|e| format!("failed to open URL: {e}"))
 }
@@ -996,6 +1002,19 @@ mod tests {
         // panic, so the scheme check must use a char-boundary-safe accessor.
         assert!(open_external_url("中中中".to_owned()).is_err());
         assert!(open_external_url("javascript:alert(1)".to_owned()).is_err());
+    }
+
+    #[test]
+    fn open_external_url_scheme_allowlist() {
+        // Pure check so asserting accepted schemes never launches a handler.
+        assert!(openable_scheme("https://example.com"));
+        assert!(openable_scheme("HTTP://EXAMPLE.COM"));
+        assert!(openable_scheme("mailto:user@example.com"));
+        assert!(openable_scheme("tel:+123456789"));
+        assert!(!openable_scheme("javascript:alert(1)"));
+        assert!(!openable_scheme("file:///etc/passwd"));
+        assert!(!openable_scheme(r"C:\Windows\notepad.exe"));
+        assert!(!openable_scheme("中中中"));
     }
 
     #[test]

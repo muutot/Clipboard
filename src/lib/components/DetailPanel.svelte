@@ -498,7 +498,7 @@
                 type="button"
                 onclick={() => {
                   const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
-                  invoke("open_external_url", { url: folder }).catch(() => {});
+                  invoke("reveal_in_explorer", { path: folder }).catch(() => {});
                 }}
               >
                 <AppIcon name="download" size={15} />

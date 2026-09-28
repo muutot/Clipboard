@@ -307,7 +307,12 @@
           <button
             type="button"
             class="config-bar-btn"
-            onclick={() => invoke("open_external_url", { url: configPath ?? "conf/keyboard.json" })}
+            onclick={() => {
+              if (!configPath) return;
+              invoke("reveal_in_explorer", { path: configPath }).catch((error) =>
+                feedback.show(String(error), false),
+              );
+            }}
           >
             <AppIcon name="file" size={13} />
             {_t("keyboard.openFile")}

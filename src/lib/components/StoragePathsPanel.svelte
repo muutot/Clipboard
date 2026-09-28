@@ -164,7 +164,13 @@
     <button
       type="button"
       class="open-btn"
-      onclick={() => invoke("open_external_url", { url: status?.configPath ?? "" })}
+      onclick={() => {
+        const configPath = status?.configPath;
+        if (!configPath) return;
+        invoke("reveal_in_explorer", { path: configPath }).catch((error) =>
+          onfeedback(String(error), false),
+        );
+      }}
     >
       <AppIcon name="file" size={14} />
       {_t("storage.open")}
