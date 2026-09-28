@@ -52,7 +52,7 @@ The main route debounces a first-page indexed search by 300 ms.
 - Queries shorter than two characters, empty queries, recycle-bin filtering, and recognized date queries do not use Tantivy.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
 - `searchEpoch` (bumped by the `clipboard-history-invalidated` listener) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
-- The same effect synchronously tracks `display.searchPageSize` and `searchSortRules`; either setting changing invalidates first-page and pagination request IDs before re-querying.
+- The same effect reacts only to a narrow `searchSettingsKey` derived from `display.searchPageSize` and `searchSortRules` (the values themselves are read with `untrack`); either setting changing invalidates first-page and pagination request IDs before re-querying, while an unrelated settings change no longer restarts the search or resets pagination.
 - Successful first pages set `indexedItems`, `indexedQuery`, `searchOffset`, `searchTotalCount`/`searchTruncated`, and `searchHasMore`.
 - `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already present in `indexedItems` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
 - `searchHasMore` is derived from the backend total (`searchOffset < totalCount`); an empty page still ends pagination as a backstop.

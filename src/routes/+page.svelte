@@ -667,10 +667,20 @@
 
   // --- Effects ---
 
+  // Only an actual page-size or sort-rule change should restart the search.
+  // Reading the whole `$generalSettings` store in the effect below would re-run
+  // it (and reset pagination) on every unrelated settings change, because the
+  // store emits a fresh object each time. This key is a primitive that only
+  // changes when those two settings do.
+  const searchSettingsKey = $derived(
+    `${$generalSettings.display.searchPageSize}\u0000${JSON.stringify($generalSettings.searchSortRules)}`,
+  );
+
   $effect(() => {
     const requestedQuery = query.trim();
-    const requestedPageSize = $generalSettings.display.searchPageSize;
-    const requestedSortRules = $generalSettings.searchSortRules;
+    void searchSettingsKey; // dependency: narrow key, not the whole store
+    const requestedPageSize = untrack(() => $generalSettings.display.searchPageSize);
+    const requestedSortRules = untrack(() => $generalSettings.searchSortRules);
     const requestedEpoch = searchEpoch;
     const requestId = ++searchRequestId;
     searchLoadRequestId += 1;
