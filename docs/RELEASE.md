@@ -28,10 +28,9 @@ node skills/version-release/scripts/release.mjs --regenerate 0.1.0
 
 ### 1. Pre-flight
 
-The release script checks:
-
-- Working directory is clean
-- No uncommitted changes
+The release script refuses to start unless the working directory is clean: the
+release commit stages every changed path, so an unreviewed in-progress edit
+would otherwise be tagged and shipped. Commit or stash first.
 
 ### 2. Verification
 

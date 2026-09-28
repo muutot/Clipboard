@@ -91,16 +91,6 @@ if (isRegenerate) {
 
   const gitOutput = (cmd) => execSync(cmd, { cwd: ROOT, encoding: "utf-8", stdio: "pipe" }).trim();
 
-  const isCleanTree = () => {
-    try {
-      execSync("git diff --quiet", { cwd: ROOT, stdio: "pipe" });
-      execSync("git diff --cached --quiet", { cwd: ROOT, stdio: "pipe" });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   // Find the old release commit for the target version: from the local tag, or by
   // scanning history (including remote-tracking refs) for the release message.
   let tagCommit = "";
@@ -228,9 +218,37 @@ if (isRegenerate) {
   }
 }
 
+/**
+ * True when nothing is staged and nothing is modified in the working tree.
+ *
+ * The commit step stages every `git diff --name-only` path, so a dirty tree
+ * would put unreviewed in-progress edits into the tagged release commit. Both
+ * the normal flow and `--regenerate` refuse on this.
+ */
+function isCleanTree() {
+  try {
+    execSync("git diff --quiet", { cwd: ROOT, stdio: "pipe" });
+    execSync("git diff --cached --quiet", { cwd: ROOT, stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // --- Normal flow ---
 let currentVersion = getVersion();
 let tagVersion = `v${currentVersion}`;
+// The commit step below stages every `git diff --name-only` path, so a dirty
+// working tree would put unreviewed in-progress edits into the tagged release
+// commit. Refuse before any mutation rather than after.
+if (!isCleanTree()) {
+  console.error(
+    "\n  ERROR: the working tree is not clean.\n" +
+      "  The release commit stages every changed path, so an unreviewed edit would ship.\n" +
+      "  Commit or stash your changes, then re-run.",
+  );
+  process.exit(1);
+}
 
 // Step 1: Bump version
 console.log(`\n[1/6] Bumping version (${BRANCH})...`);
