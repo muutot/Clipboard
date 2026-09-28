@@ -104,7 +104,8 @@ Snapshots and checkpoints keep one immutable S3 object each, but their v1 payloa
 chunk stream rather than one monolithic bincode value. The small identity header is authenticated,
 then deterministic batches of at most 2,048 records are independently bincode encoded, zstd
 compressed and (when enabled) AES-256-GCM authenticated. A batch that exceeds the 16 MiB decoded
-chunk cap is bisected deterministically; one record larger than that cap is rejected. Publication
+chunk target is bisected deterministically; a lone record cannot be split, so it is emitted as one
+chunk up to the global 1 GiB uncompressed limit instead of being rejected. Publication
 first creates a point-in-time SQLite copy, releases the live database lock, exports that copy in
 bounded batches to a temporary pack file, and performs one streaming S3 PUT. Pull performs one
 streaming GET to a temporary file and applies decoded batches inside one SQLite transaction; any

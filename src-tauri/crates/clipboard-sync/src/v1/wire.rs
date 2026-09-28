@@ -32,6 +32,11 @@ const PACK_CHUNK_HEADER_LEN: usize = 24;
 const PACK_CHUNK_MAX_UNCOMPRESSED_BYTES: usize = 16 * 1024 * 1024;
 const PACK_CHUNK_MAX_ENTRIES: usize = 4096;
 const PACK_MAX_CHUNKS: u64 = 1_000_000;
+/// A lone record cannot be split across chunks, so a chunk holding exactly one
+/// record may exceed the 16 MiB packing target up to the global uncompressed
+/// limit. Without this an individual item larger than `PACK_CHUNK_MAX_*` could
+/// never be published in a snapshot or checkpoint and wedged sync forever.
+const PACK_CHUNK_SINGLE_RECORD_MAX_UNCOMPRESSED_BYTES: usize = MAX_UNCOMPRESSED_BYTES as usize;
 
 pub(crate) const RESOURCE_HEADER_LEN: usize = HEADER_LEN;
 pub(crate) const RESOURCE_AUTH_TAG_LEN: usize = AUTH_TAG_LEN;
@@ -480,12 +485,13 @@ fn encode_pack_chunk(
     chunk_index: u64,
     batch: &MutationBatch,
     key: Option<&SessionKey>,
+    raw_limit: usize,
 ) -> Result<(Vec<u8>, u64), String> {
     if batch.is_empty() || batch.len() > PACK_CHUNK_MAX_ENTRIES {
         return Err("sync v1 pack chunk has an invalid record count".to_string());
     }
     let raw = encode_bincode(batch, "pack chunk")?;
-    if raw.len() > PACK_CHUNK_MAX_UNCOMPRESSED_BYTES {
+    if raw.len() > raw_limit {
         return Err("sync v1 pack chunk exceeds the uncompressed size limit".to_string());
     }
     let compressed = zstd::stream::encode_all(Cursor::new(&raw), ZSTD_LEVEL)
@@ -625,10 +631,29 @@ impl<'a> LargePackWriter<'a> {
     }
 
     pub fn write_batch(&mut self, batch: &MutationBatch) -> Result<(), String> {
+        self.write_encoded_chunk(batch, PACK_CHUNK_MAX_UNCOMPRESSED_BYTES)
+    }
+
+    /// Writes a batch holding exactly one record larger than the normal chunk
+    /// limit. A lone record cannot be split, so it is emitted as one chunk up
+    /// to the global uncompressed limit instead of failing the whole pack.
+    pub fn write_single_oversized_batch(&mut self, batch: &MutationBatch) -> Result<(), String> {
+        if batch.len() != 1 {
+            return Err("oversized sync pack chunk must hold exactly one record".to_string());
+        }
+        self.write_encoded_chunk(batch, PACK_CHUNK_SINGLE_RECORD_MAX_UNCOMPRESSED_BYTES)
+    }
+
+    fn write_encoded_chunk(
+        &mut self,
+        batch: &MutationBatch,
+        raw_limit: usize,
+    ) -> Result<(), String> {
         if batch.is_empty() {
             return Ok(());
         }
-        let (chunk, raw_size) = encode_pack_chunk(self.kind, self.chunk_index, batch, self.key)?;
+        let (chunk, raw_size) =
+            encode_pack_chunk(self.kind, self.chunk_index, batch, self.key, raw_limit)?;
         self.file
             .as_mut()
             .ok_or_else(|| "sync pack writer is already finished".to_string())?
@@ -868,12 +893,20 @@ impl<T> Iterator for LargePackReader<'_, T> {
             let record_count = u32::from_le_bytes(chunk_header[8..12].try_into().unwrap()) as usize;
             let raw_size = u32::from_le_bytes(chunk_header[12..16].try_into().unwrap()) as usize;
             let stored_size = u32::from_le_bytes(chunk_header[16..20].try_into().unwrap()) as usize;
+            // A single record may legitimately exceed the 16 MiB chunk target
+            // (it cannot be split); accept it up to the global uncompressed
+            // limit. Multi-record chunks keep the tighter packing bound.
+            let raw_limit = if record_count == 1 {
+                PACK_CHUNK_SINGLE_RECORD_MAX_UNCOMPRESSED_BYTES
+            } else {
+                PACK_CHUNK_MAX_UNCOMPRESSED_BYTES
+            };
             if record_count == 0
                 || record_count > PACK_CHUNK_MAX_ENTRIES
                 || raw_size == 0
-                || raw_size > PACK_CHUNK_MAX_UNCOMPRESSED_BYTES
+                || raw_size > raw_limit
                 || stored_size == 0
-                || stored_size > PACK_CHUNK_MAX_UNCOMPRESSED_BYTES + NONCE_LEN + AUTH_TAG_LEN
+                || stored_size > raw_limit + NONCE_LEN + AUTH_TAG_LEN
             {
                 return Err("sync v1 pack chunk declares invalid sizes".to_string());
             }
@@ -1415,6 +1448,53 @@ mod tests {
         let mut reader = open_snapshot_pack(encoded.path(), None).unwrap();
         assert_eq!(reader.next().unwrap().unwrap(), batch);
         assert!(reader.next().is_none());
+        drop(reader);
+        drop(encoded);
+        let _ = fs::remove_dir(&directory);
+    }
+
+    #[test]
+    fn oversized_single_record_chunk_round_trips() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-sync-pack-oversize-test-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        // One record above the 16 MiB packing target must still be storable: a
+        // lone record cannot be split, and failing here previously wedged every
+        // snapshot/checkpoint publication for the whole database.
+        let mut item = sample_item();
+        item.text_content = Some("a".repeat(large_pack_chunk_limit_bytes() + 4096));
+        let batch = MutationBatch {
+            upserts: vec![ReplicatedItem {
+                item,
+                version: sample_version(),
+            }],
+            tombstones: Vec::new(),
+        };
+        assert!(
+            mutation_batch_encoded_size(&batch).unwrap() > large_pack_chunk_limit_bytes(),
+            "test batch must exceed the normal chunk limit"
+        );
+
+        let header = SnapshotPackHeader {
+            device_id: "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
+            epoch: "e04623ec-6109-4275-a748-8743f3076b7d".to_string(),
+            through_sequence: 1,
+        };
+        // The normal chunk writer rejects it; the single-record writer stores it.
+        let mut rejected =
+            LargePackWriter::new(&directory, LargePackKind::Snapshot, &header, None).unwrap();
+        assert!(rejected.write_batch(&batch).is_err());
+
+        let mut writer =
+            LargePackWriter::new(&directory, LargePackKind::Snapshot, &header, None).unwrap();
+        writer.write_single_oversized_batch(&batch).unwrap();
+        let encoded = writer.finish().unwrap();
+        let mut reader = open_snapshot_pack(encoded.path(), None).unwrap();
+        assert_eq!(reader.next().unwrap().unwrap(), batch);
+        assert!(reader.next().is_none());
+        assert!(reader.is_complete());
         drop(reader);
         drop(encoded);
         let _ = fs::remove_dir(&directory);

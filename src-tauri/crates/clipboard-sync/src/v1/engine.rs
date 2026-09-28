@@ -32,25 +32,44 @@ fn write_large_pack_batch(
         return writer.write_batch(&mutations);
     }
     if mutations.len() == 1 {
-        return Err("one sync record exceeds the large-pack chunk size limit".to_string());
+        // A lone record cannot be split, so emit it as one oversized chunk
+        // (bounded by the global uncompressed limit) instead of failing every
+        // snapshot/checkpoint publication of the whole database.
+        return writer.write_single_oversized_batch(&mutations);
     }
 
-    if !mutations.upserts.is_empty() {
+    // Split upserts by halves first. A single upsert is emitted on its own so
+    // the recursion always makes progress even when it is paired with
+    // tombstones (both `len()/2 == 0` previously recursed on identical input).
+    if mutations.upserts.len() > 1 {
         let middle = mutations.upserts.len() / 2;
-        if middle > 0 {
-            let mut left = mutations;
-            let right = left.upserts.split_off(middle);
-            write_large_pack_batch(writer, left)?;
-            return write_large_pack_batch(
-                writer,
-                MutationBatch {
-                    upserts: right,
-                    tombstones: Vec::new(),
-                },
-            );
-        }
+        let mut left = mutations;
+        let right = left.upserts.split_off(middle);
+        write_large_pack_batch(writer, left)?;
+        return write_large_pack_batch(
+            writer,
+            MutationBatch {
+                upserts: right,
+                tombstones: Vec::new(),
+            },
+        );
+    }
+    if mutations.upserts.len() == 1 {
+        let mut remaining = mutations;
+        let tombstones = std::mem::take(&mut remaining.tombstones);
+        writer.write_single_oversized_batch(&remaining)?;
+        return write_large_pack_batch(
+            writer,
+            MutationBatch {
+                upserts: Vec::new(),
+                tombstones,
+            },
+        );
     }
 
+    if mutations.tombstones.len() == 1 {
+        return writer.write_single_oversized_batch(&mutations);
+    }
     let middle = mutations.tombstones.len() / 2;
     let mut left = mutations;
     let right = left.tombstones.split_off(middle);
