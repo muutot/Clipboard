@@ -452,11 +452,16 @@ pub fn run() {
             // Route interrupt signals through the Tauri event loop so every
             // runtime service follows the same shutdown path.
             let app_handle_for_shutdown = app.handle().clone();
-            ctrlc::set_handler(move || {
+            if let Err(error) = ctrlc::set_handler(move || {
                 crate::log_event!("[shutdown] received interrupt signal");
                 app_handle_for_shutdown.exit(0);
-            })
-            .ok();
+            }) {
+                // A foreign handler that installed first would otherwise send
+                // Ctrl+C straight to process exit, bypassing the unified stop.
+                crate::log_warn!(
+                    "[shutdown] failed to install the interrupt handler; Ctrl+C will not run the unified shutdown: {error}"
+                );
+            }
 
             clipboard_monitor.set_ignored_apps(initial_ignored);
 
