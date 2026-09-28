@@ -66,7 +66,8 @@ impl AutoSyncWorker {
                         .unwrap_or_default()
                         .as_millis() as i64;
 
-                    if enabled && now_ms - last_sync_ms >= interval_secs as i64 * 1000 {
+                    let interval_ms = interval_secs.saturating_mul(1000) as i64;
+                    if enabled && now_ms - last_sync_ms >= interval_ms {
                         match run_sync(&app) {
                             Ok(result) => {
                                 crate::log_event!(

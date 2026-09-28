@@ -570,7 +570,10 @@ impl ConfigStore {
     }
 
     pub fn auto_sync_interval_secs(&self) -> u64 {
-        self.config.sync.auto_sync_interval_secs.max(10)
+        // Clamp on read as well as on write: a hand-edited `conf.json` could
+        // otherwise carry a huge value that overflows the worker's millisecond
+        // comparison (or turns negative and syncs every tick).
+        self.config.sync.auto_sync_interval_secs.clamp(10, 86_400)
     }
 
     pub fn set_auto_sync_interval_secs(&mut self, value: u64) -> Result<(), StorageError> {

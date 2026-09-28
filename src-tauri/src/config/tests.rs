@@ -60,6 +60,23 @@ fn creates_the_single_project_configuration_file() {
 }
 
 #[test]
+fn clamps_a_hand_edited_auto_sync_interval_on_read() {
+    let project = temporary_test_directory("auto-sync-clamp");
+    let config_directory = project.join("conf");
+    fs::create_dir_all(&config_directory).unwrap();
+    fs::write(
+        config_directory.join("conf.json"),
+        serde_json::to_vec(&json!({ "sync": { "autoSyncIntervalSecs": u64::MAX } })).unwrap(),
+    )
+    .unwrap();
+
+    let store = ConfigStore::load(&project).unwrap();
+    assert_eq!(store.auto_sync_interval_secs(), 86_400);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn quarantines_a_corrupt_configuration_file_and_starts_with_defaults() {
     let project = temporary_test_directory("corrupt");
     let config_directory = project.join("conf");
