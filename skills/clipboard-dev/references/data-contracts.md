@@ -22,7 +22,7 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 ### Import summary and truncation warning
 
-`ImportSummary` (used by `import_from_file` and `import_clipboard_items`) carries `importedCount`, `skippedCount`, `errors`, plus `pendingTruncation` and `maxItems` (both `#[serde(default)]`; default 0). The file import command `import_from_file` takes `config` and `paths` state, reads `max_items`, and reports `pendingTruncation = active_count.saturating_sub(max_items)` after importing so the settings UI can warn that the oldest non-favorite items will be removed by the next scheduled capacity cleanup. Capacity is enforced by the history-cleanup worker (`enforce_capacity_limit`), not by the import itself; the import only reports the risk.
+`ImportSummary` (used by `import_from_file` and `import_clipboard_items`) carries `importedCount`, `skippedCount`, `errors`, plus `pendingTruncation` and `maxItems` (both `#[serde(default)]`; default 0). The file import command `import_from_file` resolves the managed database/config/paths from an injected `AppHandle`, reads `max_items`, and reports `pendingTruncation = active_count.saturating_sub(max_items)` after importing so the settings UI can warn that the oldest non-favorite items will be removed by the next scheduled capacity cleanup. Both `import_from_file` and `export_to_file` call `tauri::async_runtime::spawn_blocking` and only inject `AppHandle`, so their blocking SQLite/file work never occupies an async worker; the frontend call arguments are unchanged. Capacity is enforced by the history-cleanup worker (`enforce_capacity_limit`), not by the import itself; the import only reports the risk.
 
 ### CSV export/import
 

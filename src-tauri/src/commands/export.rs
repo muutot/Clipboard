@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use crate::commands::clipboard::ClipboardHistoryInvalidated;
 use crate::config::ConfigStore;
@@ -94,11 +94,12 @@ fn export_database_to_path(
     })
 }
 
-/// Async: large exports run on the async runtime instead of the main thread,
-/// which would otherwise freeze the window event loop.
+/// Async: large exports perform blocking SQLite and file work, so the work runs
+/// on the dedicated blocking pool instead of occupying an async worker (which
+/// would also stall other commands while the database mutex is held).
 #[tauri::command]
 pub async fn export_to_file(
-    database: tauri::State<'_, Database>,
+    app: tauri::AppHandle,
     path: String,
     format: String,
     include_favorites: Option<bool>,
@@ -106,15 +107,20 @@ pub async fn export_to_file(
     date_to_ms: Option<i64>,
     content_types: Option<Vec<String>>,
 ) -> Result<ExportFileResult, String> {
-    export_database_to_path(
-        database.inner(),
-        &path,
-        &format,
-        include_favorites,
-        date_from_ms,
-        date_to_ms,
-        content_types,
-    )
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        export_database_to_path(
+            database.inner(),
+            &path,
+            &format,
+            include_favorites,
+            date_from_ms,
+            date_to_ms,
+            content_types,
+        )
+    })
+    .await
+    .map_err(|error| format!("export task join failed: {error}"))?
 }
 
 #[tauri::command]
@@ -170,40 +176,44 @@ fn import_database_from_path(database: &Database, path: &str) -> Result<ImportSu
     }
 }
 
-/// Async: importing a large backup runs on the async runtime instead of the
-/// main thread, which would otherwise freeze the window event loop.
+/// Async: importing a large backup performs blocking SQLite and file work, so
+/// it runs on the dedicated blocking pool instead of an async worker.
 #[tauri::command]
 pub async fn import_from_file(
-    database: tauri::State<'_, Database>,
-    config: tauri::State<'_, Mutex<ConfigStore>>,
-    paths: tauri::State<'_, StoragePaths>,
     app: tauri::AppHandle,
     path: String,
 ) -> Result<ImportSummary, String> {
-    let lower = path.to_ascii_lowercase();
-    let mut summary = if lower.ends_with(BACKUP_EXTENSION) {
-        import_from_ppaste_backup(&path, database.inner(), paths.inner())
-    } else {
-        import_database_from_path(database.inner(), &path)
-    }?;
-    annotate_truncation_risk(&mut summary, &database, &config)?;
-    if summary.imported_count > 0 {
-        if let Err(error) = app.emit(
-            "clipboard-history-invalidated",
-            ClipboardHistoryInvalidated {
-                deleted_ids: Vec::new(),
-            },
-        ) {
-            crate::log_error!("[import] failed to emit history-invalidated: {error}");
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = app.state::<Database>();
+        let config = app.state::<Mutex<ConfigStore>>();
+        let paths = app.state::<StoragePaths>();
+        let lower = path.to_ascii_lowercase();
+        let mut summary = if lower.ends_with(BACKUP_EXTENSION) {
+            import_from_ppaste_backup(&path, database.inner(), paths.inner())?
+        } else {
+            import_database_from_path(database.inner(), &path)?
+        };
+        annotate_truncation_risk(&mut summary, database.inner(), config.inner())?;
+        if summary.imported_count > 0 {
+            if let Err(error) = app.emit(
+                "clipboard-history-invalidated",
+                ClipboardHistoryInvalidated {
+                    deleted_ids: Vec::new(),
+                },
+            ) {
+                crate::log_event!("[import] failed to emit history-invalidated: {error}");
+            }
         }
-    }
-    Ok(summary)
+        Ok(summary)
+    })
+    .await
+    .map_err(|error| format!("import task join failed: {error}"))?
 }
 
 fn annotate_truncation_risk(
     summary: &mut ImportSummary,
     database: &Database,
-    config: &tauri::State<'_, Mutex<ConfigStore>>,
+    config: &Mutex<ConfigStore>,
 ) -> Result<(), String> {
     let max_items = {
         // Read the config value, then release the config lock before touching
