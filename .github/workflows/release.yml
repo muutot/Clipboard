@@ -169,7 +169,11 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: "v__VERSION__"
           releaseBody: ${{ steps.release_body.outputs.body }}
-          releaseDraft: false
+          # Draft until every matrix leg has succeeded: `build` fans out to
+          # three independent legs, so a non-draft release would be published
+          # from whichever legs finished first. The `publish` job below is the
+          # single writer that flips it live.
+          releaseDraft: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
 
@@ -177,7 +181,6 @@ jobs:
       # verified independently of the release asset itself. Per-platform file
       # names avoid concurrent jobs clobbering each other.
       - name: Upload checksums
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -185,12 +188,37 @@ jobs:
         run: |
           set -euo pipefail
           out="checksums-${{ matrix.platform }}.txt"
+          # Basenames only: a downloader has the file, not the runner-relative
+          # path, so `sha256sum -c` must not be handed a path it cannot resolve.
+          # `-r` keeps an empty result from producing an empty-but-valid file.
           find src-tauri/target -type f \( \
             -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' -o \
             -name '*.app.tar.gz' -o -name '*.AppImage' -o \
             -name '*.deb' -o -name '*.rpm' \) \
             -not -path '*/deps/*' -not -path '*/build/*' -print0 \
-          | xargs -0 sha256sum > "$out"
+          | xargs -0 -r sha256sum \
+          | sed 's|  .*/|  |' > "$out"
           sort -k2 -u -o "$out" "$out"
+          test -s "$out" || { echo "no artifacts to checksum"; exit 1; }
           cat "$out"
           gh release upload "$RELEASE_TAG" "$out" --clobber --repo "$GITHUB_REPOSITORY"
+
+  publish:
+    name: Publish release
+    needs: build
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The only step that makes a release visible, and it runs only after every
+      # platform leg has succeeded. A partial matrix therefore leaves a draft
+      # behind for inspection instead of a published release that silently lacks
+      # a platform.
+      - name: Publish the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
