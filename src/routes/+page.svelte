@@ -2744,6 +2744,7 @@
       onimagefullscreen={handleImageFullscreen}
       onmaterialize={prepareItemMaterialization}
       onedit={startEdit}
+      {editingId}
       onsaveedit={saveEdit}
       onsaveasnew={saveAsNew}
       oncanceledit={cancelEdit}

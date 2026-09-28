@@ -48,6 +48,7 @@
     onimagefullscreen: (id: string) => void;
     onmaterialize: (id: string) => void;
     onedit: (id: string) => void;
+    editingId?: string | null;
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     onsaveasnew: (id: string, title: string, content: string) => void;
     oncanceledit: (id: string) => void;
@@ -101,6 +102,7 @@
     onimagefullscreen,
     onmaterialize,
     onedit,
+    editingId = null,
     onsaveedit,
     onsaveasnew,
     oncanceledit,
@@ -150,6 +152,7 @@
       {onimagefullscreen}
       {onmaterialize}
       {onedit}
+      {editingId}
       {onsaveedit}
       {onsaveasnew}
       {oncanceledit}

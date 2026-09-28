@@ -94,6 +94,7 @@
     onsave?: (id: string) => void;
     ondetail: (id: string) => void;
     onedit: (id: string) => void;
+    editingId?: string | null;
     onsaveedit: (id: string, content: string) => void | Promise<boolean>;
     oncanceledit: (id: string) => void;
     onplainpaste: (id: string) => void;
@@ -143,6 +144,7 @@
     onsave,
     ondetail,
     onedit,
+    editingId = null,
     onsaveedit,
     oncanceledit,
     onplainpaste,
@@ -186,6 +188,12 @@
   let editContent = $state("");
   let editTitle = $state("");
   let editTextarea = $state<HTMLTextAreaElement | null>(null);
+
+  // Editing is owned by the route's single `editingId`. When another card
+  // starts editing, this card must close its editor so two are never open.
+  $effect(() => {
+    if (editingId !== item.id && editing) editing = false;
+  });
 
   let tagAdding = $state(false);
   let tagDraft = $state("");
