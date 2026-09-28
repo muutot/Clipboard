@@ -621,6 +621,7 @@ const en: LocaleDefinition = {
     unfavoriteSuccess: "Unfavorited",
     deleteSuccess: "Deleted",
     copyFailed: "Copy failed",
+    pasteFailed: "Paste failed",
     bulkCopySuccess: "Copied {count} items",
     bulkFavoriteSuccess: "Favorited {count} items",
     bulkUnfavoriteSuccess: "Unfavorited {count} items",
@@ -723,6 +724,10 @@ const en: LocaleDefinition = {
     cancel: "Cancel",
     placeholder: "Enter text content...",
     saveAsNew: "Save as new",
+    cut: "Cut",
+    copy: "Copy",
+    paste: "Paste",
+    selectAll: "Select All",
   },
   copy: {
     plainText: "Paste as plain text",

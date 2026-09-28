@@ -593,6 +593,7 @@ const zhCN: LocaleDefinition = {
     unfavoriteSuccess: "已取消收藏",
     deleteSuccess: "已删除",
     copyFailed: "复制失败",
+    pasteFailed: "粘贴失败",
     bulkCopySuccess: "已复制 {count} 项",
     bulkFavoriteSuccess: "已收藏 {count} 项",
     bulkUnfavoriteSuccess: "已取消收藏 {count} 项",
@@ -695,6 +696,10 @@ const zhCN: LocaleDefinition = {
     cancel: "取消",
     placeholder: "输入文本内容...",
     saveAsNew: "另存为新条目",
+    cut: "剪切",
+    copy: "复制",
+    paste: "粘贴",
+    selectAll: "全选",
   },
   copy: {
     plainText: "纯文本粘贴",

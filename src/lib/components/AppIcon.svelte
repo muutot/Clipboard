@@ -80,6 +80,12 @@
   {:else if name === "copy"}
     <rect x="8" y="8" width="12" height="12" rx="2" />
     <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+  {:else if name === "scissors"}
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M20 4 8.12 15.88" />
+    <path d="M14.47 14.48 20 20" />
+    <path d="M8.12 8.12 12 12" />
   {:else if name === "download"}
     <path d="M12 3v12" />
     <path d="m7 10 5 5 5-5" />

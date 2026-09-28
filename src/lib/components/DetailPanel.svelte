@@ -11,6 +11,7 @@
   import DetailImagePreview from "$lib/components/DetailImagePreview.svelte";
   import CodeEditor from "$lib/components/CodeEditor.svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
+  import EditableContextMenu from "$lib/components/EditableContextMenu.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
@@ -118,6 +119,16 @@
   let editing = $state(false);
   let editingTitle = $state(false);
   let editContent = $state("");
+  // Themed cut/copy/paste/select-all menu for the inline textarea editors.
+  let editorContextMenu = $state<{ x: number; y: number; target: HTMLElement } | null>(null);
+
+  function openEditorContextMenu(event: MouseEvent) {
+    const element = event.currentTarget;
+    if (!(element instanceof HTMLTextAreaElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    editorContextMenu = { x: event.clientX, y: event.clientY, target: element };
+  }
   let editTitleContent = $state("");
 
   // Depend only on the item id so OCR polling patches (which replace the
@@ -430,7 +441,8 @@
                 <textarea
                   bind:value={editContent}
                   rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
-                  placeholder={_t("edit.placeholder")}></textarea>
+                  placeholder={_t("edit.placeholder")}
+                  oncontextmenu={openEditorContextMenu}></textarea>
               </div>
               <DetailEditActions
                 onsave={saveEdit}
@@ -446,7 +458,8 @@
                 <textarea
                   bind:value={editContent}
                   rows={Math.min(20, Math.max(5, editContent.split("\n").length))}
-                  placeholder={_t("edit.placeholder")}></textarea>
+                  placeholder={_t("edit.placeholder")}
+                  oncontextmenu={openEditorContextMenu}></textarea>
               </div>
               <DetailEditActions
                 onsave={saveEdit}
@@ -459,84 +472,86 @@
           {/if}
         </div>
 
-        <div class="detail-actions">
-          <button type="button" onclick={() => oncopy(item.id)}>
-            <AppIcon name="copy" size={15} />
-            {_t("card.copy")}
-          </button>
-          {#if item.kind === "image" || item.kind === "file"}
-            <button type="button" onclick={() => oncopyPath(item.id)}>
-              <AppIcon name="link" size={15} />
-              {_t("card.copyPath")}
+        {#if !editing}
+          <div class="detail-actions">
+            <button type="button" onclick={() => oncopy(item.id)}>
+              <AppIcon name="copy" size={15} />
+              {_t("card.copy")}
             </button>
-          {/if}
-          {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
-            <button
-              type="button"
-              onclick={() => {
-                invoke("reveal_in_explorer", { path: item.resourcePath }).catch(() => {});
-              }}
-            >
-              <AppIcon name="file" size={15} />
-              {_t("detail.locateFile")}
-            </button>
-            <button
-              type="button"
-              onclick={() => {
-                const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
-                invoke("open_external_url", { url: folder }).catch(() => {});
-              }}
-            >
-              <AppIcon name="download" size={15} />
-              {_t("detail.openFolder")}
-            </button>
-          {/if}
-          {#if !editing && (item.kind === "text" || item.kind === "link")}
-            <button
-              type="button"
-              onclick={() => {
-                editContent = item.textContent || item.title;
-                editing = true;
-              }}
-            >
-              <AppIcon name="edit" size={15} />
-              {_t("edit.edit")}
-            </button>
-          {/if}
-          {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
-            <button
-              type="button"
-              onclick={() => {
-                editContent = getDisplayTitle(item.title);
-                editing = true;
-              }}
-            >
-              <AppIcon name="edit" size={15} />
-              {_t("edit.editFileName")}
-            </button>
-          {/if}
-          {#if item.kind === "image" || item.kind === "file"}
-            <button type="button" onclick={() => oncopyfilename(item.id)}>
-              <AppIcon name="file" size={15} />
-              {_t("copy.copyFileName")}
-            </button>
-          {:else}
-            <button type="button" onclick={() => onplainpaste(item.id)}>
-              <AppIcon name="type" size={15} />
-              {_t("copy.plainText")}
-            </button>
-            {#if item.htmlContent}
-              <button type="button" onclick={() => onformatpaste(item.id)}>
-                <AppIcon name="clipboard" size={15} />
-                {_t("card.pasteFormat")}
+            {#if item.kind === "image" || item.kind === "file"}
+              <button type="button" onclick={() => oncopyPath(item.id)}>
+                <AppIcon name="link" size={15} />
+                {_t("card.copyPath")}
               </button>
             {/if}
-            <button type="button" onclick={() => oncleanpaste(item.id)}>
-              <AppIcon name="scan" size={15} />
-              {_t("card.cleanPaste")}
-            </button>
-          {/if}
-        </div>
+            {#if (item.kind === "image" || item.kind === "file") && item.resourcePath}
+              <button
+                type="button"
+                onclick={() => {
+                  invoke("reveal_in_explorer", { path: item.resourcePath }).catch(() => {});
+                }}
+              >
+                <AppIcon name="file" size={15} />
+                {_t("detail.locateFile")}
+              </button>
+              <button
+                type="button"
+                onclick={() => {
+                  const folder = item.resourcePath!.replace(/[^\\/]+$/, "");
+                  invoke("open_external_url", { url: folder }).catch(() => {});
+                }}
+              >
+                <AppIcon name="download" size={15} />
+                {_t("detail.openFolder")}
+              </button>
+            {/if}
+            {#if !editing && (item.kind === "text" || item.kind === "link")}
+              <button
+                type="button"
+                onclick={() => {
+                  editContent = item.textContent || item.title;
+                  editing = true;
+                }}
+              >
+                <AppIcon name="edit" size={15} />
+                {_t("edit.edit")}
+              </button>
+            {/if}
+            {#if !editing && (item.kind === "image" || item.kind === "file") && (!item.fileMeta || item.fileMeta.length <= 1)}
+              <button
+                type="button"
+                onclick={() => {
+                  editContent = getDisplayTitle(item.title);
+                  editing = true;
+                }}
+              >
+                <AppIcon name="edit" size={15} />
+                {_t("edit.editFileName")}
+              </button>
+            {/if}
+            {#if item.kind === "image" || item.kind === "file"}
+              <button type="button" onclick={() => oncopyfilename(item.id)}>
+                <AppIcon name="file" size={15} />
+                {_t("copy.copyFileName")}
+              </button>
+            {:else}
+              <button type="button" onclick={() => onplainpaste(item.id)}>
+                <AppIcon name="type" size={15} />
+                {_t("copy.plainText")}
+              </button>
+              {#if item.htmlContent}
+                <button type="button" onclick={() => onformatpaste(item.id)}>
+                  <AppIcon name="clipboard" size={15} />
+                  {_t("card.pasteFormat")}
+                </button>
+              {/if}
+              <button type="button" onclick={() => oncleanpaste(item.id)}>
+                <AppIcon name="scan" size={15} />
+                {_t("card.cleanPaste")}
+              </button>
+            {/if}
+          </div>
+        {/if}
       {:else if activeTab === "details"}
         <DetailDetailsTab {item} kindLabel={getKindLabel(item.kind)} />
       {:else if activeTab === "tags"}
@@ -546,6 +561,15 @@
       {/if}
     </div>
   </div>
+{/if}
+
+{#if editorContextMenu}
+  <EditableContextMenu
+    x={editorContextMenu.x}
+    y={editorContextMenu.y}
+    target={editorContextMenu.target}
+    onclose={() => (editorContextMenu = null)}
+  />
 {/if}
 
 <style>

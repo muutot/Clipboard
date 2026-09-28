@@ -43,6 +43,19 @@ export async function writeClipboardText(text: string): Promise<void> {
   }
 }
 
+/**
+ * Reads the current system clipboard text (empty when it holds no text).
+ * Tauri reads through the backend platform adapter so the editor context
+ * menu's Paste does not depend on the WebView's clipboard-read permission.
+ */
+export async function readClipboardText(): Promise<string> {
+  if (isTauriRuntime()) {
+    const text = await invoke<string | null>("read_clipboard_text");
+    return text ?? "";
+  }
+  return await navigator.clipboard.readText();
+}
+
 export async function writeClipboardImage(
   blob: Blob,
   resourcePath?: string | null,

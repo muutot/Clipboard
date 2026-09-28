@@ -322,6 +322,13 @@ pub fn rebuild_search_index(
         .map_err(|error| error.to_string())
 }
 
+/// Reads the current system clipboard text for the themed editor context menu,
+/// so Paste does not depend on the WebView granting clipboard-read permission.
+#[tauri::command]
+pub fn read_clipboard_text() -> Option<String> {
+    crate::platform::platform().read_clipboard_text()
+}
+
 #[tauri::command]
 pub fn soft_delete_clipboard_item(
     database: tauri::State<'_, Database>,

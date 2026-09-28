@@ -572,6 +572,7 @@ export interface LocaleDefinition {
     unfavoriteSuccess: string;
     deleteSuccess: string;
     copyFailed: string;
+    pasteFailed: string;
     bulkCopySuccess: string;
     bulkFavoriteSuccess: string;
     bulkUnfavoriteSuccess: string;
@@ -674,6 +675,10 @@ export interface LocaleDefinition {
     cancel: string;
     placeholder: string;
     saveAsNew: string;
+    cut: string;
+    copy: string;
+    paste: string;
+    selectAll: string;
   };
   copy: {
     plainText: string;

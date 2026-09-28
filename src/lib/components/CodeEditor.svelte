@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import CodePreview from "$lib/components/CodePreview.svelte";
+  import EditableContextMenu from "$lib/components/EditableContextMenu.svelte";
 
   interface Props {
     content: string;
@@ -21,7 +22,14 @@
   }: Props = $props();
 
   let editor = $state<HTMLElement | null>(null);
+  let contextMenu = $state<{ x: number; y: number } | null>(null);
   let lastEditorValue = "";
+
+  function handleContextMenu(event: MouseEvent) {
+    if (!editor) return;
+    event.preventDefault();
+    contextMenu = { x: event.clientX, y: event.clientY };
+  }
 
   const lineCount = $derived(Math.max(1, content.split("\n").length));
   const languageLabel = $derived(language || "CODE");
@@ -140,6 +148,7 @@
       oninput={handleInput}
       onkeydown={handleKeydown}
       onpaste={handlePaste}
+      oncontextmenu={handleContextMenu}
     ></div>
   </div>
 
@@ -148,6 +157,15 @@
     <CodePreview {content} {language} />
   </div>
 </div>
+
+{#if contextMenu && editor}
+  <EditableContextMenu
+    x={contextMenu.x}
+    y={contextMenu.y}
+    target={editor}
+    onclose={() => (contextMenu = null)}
+  />
+{/if}
 
 <style>
   .code-editor-shell {

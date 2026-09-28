@@ -128,6 +128,8 @@ The only wire namespace is `v1/`, and every object has the `CLPSYNC1` magic plus
 
 Commands are registered in `src-tauri/src/lib.rs` with `tauri::generate_handler!`. Frontend wrappers live primarily under `src/lib/services/`.
 
+`read_clipboard_text` (registered in `lib.rs`, returns `Option<String>`, no arguments) exposes the active `platform::platform()` adapter's clipboard text read so the editor context menu can Paste without depending on the WebView granting `navigator.clipboard.readText`. It only reads; unlike the copy paths it writes nothing and registers no self-trigger. `services/clipboard.ts::readClipboardText()` wraps it (empty string when the clipboard holds no text) and falls back to `navigator.clipboard.readText()` outside Tauri.
+
 For each command change:
 
 1. preserve or intentionally update the registered name;

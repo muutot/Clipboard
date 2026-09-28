@@ -676,6 +676,7 @@ pub fn run() {
             get_application_filter_settings,
             configure_ignored_applications,
             list_clipboard_items,
+            read_clipboard_text,
             set_clipboard_item_favorite,
             set_clipboard_item_tags,
             set_clipboard_item_last_used,
