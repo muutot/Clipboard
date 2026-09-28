@@ -451,9 +451,42 @@ fn signed_request_with_payload_hash(
     Ok(req_builder)
 }
 
+/// Absolute in-memory ceiling for a single S3 object body read. Protocol
+/// objects (segments/pointers) are bounded well below this; the limit exists so
+/// a malicious, misconfigured, or broken endpoint cannot stream an unbounded
+/// body into memory before any validation runs.
+const MAX_S3_IN_MEMORY_OBJECT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// Error bodies are only echoed (first 300 chars) into an error string.
+const MAX_S3_ERROR_BODY_BYTES: u64 = 64 * 1024;
+
+/// Reads a response body into memory, refusing to buffer more than `limit`
+/// bytes (early-rejecting via `Content-Length` when present, and hard-capping
+/// the stream otherwise).
+fn read_body_bounded(
+    resp: reqwest::blocking::Response,
+    limit: u64,
+    op: &str,
+) -> Result<Vec<u8>, String> {
+    if let Some(len) = resp.content_length() {
+        if len > limit {
+            return Err(format!("{op} response body exceeds the {limit}-byte limit"));
+        }
+    }
+    let mut bytes = Vec::new();
+    resp.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("{op} response body read failed: {e}"))?;
+    if bytes.len() as u64 > limit {
+        return Err(format!("{op} response body exceeds the {limit}-byte limit"));
+    }
+    Ok(bytes)
+}
+
 fn err_from_response(resp: reqwest::blocking::Response, op: &str) -> String {
     let status = resp.status();
-    let body = resp.text().unwrap_or_default();
+    let body = read_body_bounded(resp, MAX_S3_ERROR_BODY_BYTES, op)
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default();
     format!(
         "{op} failed: HTTP {status}: {}",
         body.chars().take(300).collect::<String>()
@@ -776,7 +809,7 @@ pub fn get_s3_object(
 
     if resp.status().is_success() {
         let etag = response_etag(&resp)?;
-        let bytes = resp.bytes().map_err(|e| e.to_string())?.to_vec();
+        let bytes = read_body_bounded(resp, MAX_S3_IN_MEMORY_OBJECT_BYTES, "download")?;
         Ok(Some(S3DownloadedObject { bytes, etag }))
     } else if resp.status().as_u16() == 404 {
         Ok(None)
@@ -1014,7 +1047,12 @@ pub(crate) fn list_s3_objects_after_with_metrics(
             return Err(err_from_response(resp, "list"));
         }
 
-        let xml = resp.text().map_err(|e| e.to_string())?;
+        let xml = String::from_utf8_lossy(&read_body_bounded(
+            resp,
+            MAX_S3_IN_MEMORY_OBJECT_BYTES,
+            "list",
+        )?)
+        .into_owned();
         if let Some(metrics) = metrics {
             metrics.record_list_page(xml.len() as u64);
         }
