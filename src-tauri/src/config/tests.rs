@@ -652,6 +652,26 @@ fn update_source_parses_unknown_values_as_gitcode() {
 }
 
 #[test]
+fn log_level_defaults_to_info_and_round_trips() {
+    let project = temporary_test_directory("log-level");
+    let mut store = ConfigStore::load(&project).unwrap();
+
+    // Fresh and legacy configurations default to info so diagnostics are not
+    // silently suppressed after an upgrade.
+    assert_eq!(store.log_level(), crate::logging::LogLevel::Info);
+
+    let mut settings = store.general_settings().clone();
+    settings.log_level = "debug".to_owned();
+    store.set_general_settings(settings).unwrap();
+    assert_eq!(store.log_level(), crate::logging::LogLevel::Debug);
+
+    let reloaded = ConfigStore::load(&project).unwrap();
+    assert_eq!(reloaded.log_level(), crate::logging::LogLevel::Debug);
+
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
 fn history_limits_clamp_out_of_range_values() {
     let project = temporary_test_directory("history-clamp");
     let mut store = ConfigStore::load(&project).unwrap();

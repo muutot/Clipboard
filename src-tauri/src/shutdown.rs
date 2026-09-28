@@ -12,7 +12,7 @@ fn lock_or_recover<'a, T>(lock: &'a Mutex<T>, label: &str) -> std::sync::MutexGu
     match lock.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
-            crate::log_event!("[shutdown] {label} lock is poisoned; recovering the guard");
+            crate::log_error!("[shutdown] {label} lock is poisoned; recovering the guard");
             poisoned.into_inner()
         }
     }
@@ -35,7 +35,7 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
 
     if let Some(monitor) = app.try_state::<Mutex<crate::platform::ClipboardMonitor>>() {
         if let Err(error) = lock_or_recover(&monitor, "clipboard monitor").stop() {
-            crate::log_event!("[shutdown] failed to stop clipboard monitor: {error}");
+            crate::log_error!("[shutdown] failed to stop clipboard monitor: {error}");
         }
     }
 
@@ -57,7 +57,7 @@ pub fn stop_runtime_services(app: &tauri::AppHandle) {
 
     if let Some(api) = app.try_state::<Mutex<crate::cli::LocalApiServer>>() {
         if let Err(error) = lock_or_recover(&api, "local API").stop() {
-            crate::log_event!("[shutdown] failed to stop local API: {error}");
+            crate::log_error!("[shutdown] failed to stop local API: {error}");
         }
     }
 

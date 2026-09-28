@@ -13,7 +13,7 @@ use crate::storage::{Database, OcrRepository, StoragePaths};
 
 pub fn configured_ppocr_model(config: &ConfigStore) -> &'static ocr::models::PpOcrModelSpec {
     ocr::models::model_spec(config.ppocr_model_variant()).unwrap_or_else(|| {
-        crate::log_event!(
+        crate::log_warn!(
             "[ocr] unsupported configured PP-OCR model variant '{}', using small",
             config.ppocr_model_variant()
         );
@@ -298,7 +298,7 @@ async fn download_ppocr_file(
         if ocr::models::model_digest_matches(models_dir, &model_file) {
             return Ok(());
         }
-        crate::log_event!(
+        crate::log_warn!(
             "[ocr] {} no longer matches its recorded digest; redownloading",
             model_file.filename
         );
@@ -323,7 +323,7 @@ async fn download_ppocr_file(
             percentage: 0.0,
         },
     ) {
-        crate::log_event!("[ocr] failed to emit download progress: {error}");
+        crate::log_error!("[ocr] failed to emit download progress: {error}");
     }
 
     let mut response = client
@@ -361,7 +361,7 @@ async fn download_ppocr_file(
                 percentage,
             },
         ) {
-            crate::log_event!("[ocr] failed to emit download progress: {error}");
+            crate::log_error!("[ocr] failed to emit download progress: {error}");
         }
     }
 

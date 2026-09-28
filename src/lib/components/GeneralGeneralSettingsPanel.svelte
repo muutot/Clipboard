@@ -2,7 +2,7 @@
   import SettingEntry from "$lib/components/SettingEntry.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { WindowConfig } from "$lib/types/clipboard";
+  import type { GeneralSettings, WindowConfig } from "$lib/types/clipboard";
   import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
   import { onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/feedback.svelte";
@@ -143,6 +143,21 @@
       desc: _t("general.showSettingsCloseButtonDescription"),
       get: () => s.showSettingsCloseButton,
       set: (v) => generalSettings.updateSetting("showSettingsCloseButton", v),
+    },
+    {
+      type: "select",
+      id: "general.log-level",
+      icon: "info",
+      label: _t("general.logLevel"),
+      desc: _t("general.logLevelDescription"),
+      get: () => s.logLevel,
+      set: (v) => generalSettings.updateSetting("logLevel", v as GeneralSettings["logLevel"]),
+      options: [
+        { value: "error", label: _t("general.logLevelError") },
+        { value: "warn", label: _t("general.logLevelWarn") },
+        { value: "info", label: _t("general.logLevelInfo") },
+        { value: "debug", label: _t("general.logLevelDebug") },
+      ],
     },
   ]);
 </script>

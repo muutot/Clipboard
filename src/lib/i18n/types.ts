@@ -844,6 +844,12 @@ export interface LocaleDefinition {
     loadTolerance: string;
     loadToleranceDescription: string;
     loadToleranceUnit: string;
+    logLevel: string;
+    logLevelDescription: string;
+    logLevelError: string;
+    logLevelWarn: string;
+    logLevelInfo: string;
+    logLevelDebug: string;
   };
   layout: {
     title: string;

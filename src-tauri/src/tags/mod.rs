@@ -25,7 +25,7 @@ pub fn compile_auto_tag_rules(rules: &[AutoTagRule]) -> Vec<CompiledAutoTagRule>
                 pattern,
             }),
             Err(error) => {
-                crate::log_event!(
+                crate::log_warn!(
                     "[autotag] ignoring invalid auto-tag pattern {:?}: {error}",
                     rule.pattern
                 );

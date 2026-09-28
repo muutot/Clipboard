@@ -242,7 +242,7 @@ pub fn search_clipboard_items(
                 Ok(summary) if summary.processed_events > 0 => search_cache.clear(),
                 Ok(_) => {}
                 Err(error) => {
-                    crate::log_event!("[search] outbox sync before search failed: {error}")
+                    crate::log_error!("[search] outbox sync before search failed: {error}")
                 }
             }
         }
@@ -461,7 +461,7 @@ pub fn duplicate_clipboard_item(
 ) -> Result<String, String> {
     let item = duplicate_clipboard_item_record(database.inner(), &id)?;
     if let Err(error) = app.emit("clipboard-item-added", &item) {
-        crate::log_event!("[clipboard] failed to emit duplicate: {error}");
+        crate::log_error!("[clipboard] failed to emit duplicate: {error}");
     }
     Ok(item.id)
 }
@@ -509,7 +509,7 @@ pub fn save_clipboard_item_as_new(
     let item =
         save_clipboard_item_as_new_record(database.inner(), &id, &new_title, &new_text_content)?;
     if let Err(error) = app.emit("clipboard-item-added", &item) {
-        crate::log_event!("[clipboard] failed to emit save-as-new: {error}");
+        crate::log_error!("[clipboard] failed to emit save-as-new: {error}");
     }
     Ok(item.id)
 }

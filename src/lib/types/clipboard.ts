@@ -323,6 +323,9 @@ export type Language = "zh-CN" | "en";
 
 export type WindowEffect = "off" | "acrylic" | "mica";
 
+/** Minimum severity written to the diagnostics log; lower levels are dropped. */
+export type LogLevel = "error" | "warn" | "info" | "debug";
+
 export interface GeneralSettings {
   language: Language;
   fontSizes: FontSizeSettings;
@@ -388,6 +391,8 @@ export interface GeneralSettings {
   /** 每个 AppIcon 的可选自定义颜色；缺省时使用 DEFAULT_ICON_COLORS 内置色板 */
   iconColors?: IconColors;
   loadTolerance: number;
+  /** 写入诊断日志的最低等级；低于该等级的日志会被丢弃 */
+  logLevel: LogLevel;
 }
 
 export type SortField = "createdAt" | "lastUsedAt" | "title" | "size" | "kind" | "favorite";

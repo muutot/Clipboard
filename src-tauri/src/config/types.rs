@@ -114,6 +114,7 @@ pub struct GeneralConfig {
     pub search_index_sync_mode: String,
     pub update_source: String,
     pub max_text_capture_bytes: u64,
+    pub log_level: String,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -154,6 +155,7 @@ impl Default for GeneralConfig {
             search_index_sync_mode: "lazy".to_owned(),
             update_source: "gitcode".to_owned(),
             max_text_capture_bytes: 500_000,
+            log_level: "info".to_owned(),
             extra: BTreeMap::new(),
         }
     }

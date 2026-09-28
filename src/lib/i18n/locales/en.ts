@@ -907,6 +907,13 @@ const en: LocaleDefinition = {
     loadToleranceDescription:
       'When loaded items exceed "Max Load Items" plus this value, the oldest batch is evicted',
     loadToleranceUnit: "items",
+    logLevel: "Log Level",
+    logLevelDescription:
+      "Lowest severity written to the diagnostics log; lines below it are discarded",
+    logLevelError: "Errors",
+    logLevelWarn: "Warnings",
+    logLevelInfo: "Info",
+    logLevelDebug: "Debug",
   },
   layout: {
     title: "Layout Settings",

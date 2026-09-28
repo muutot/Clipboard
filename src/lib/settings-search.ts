@@ -66,6 +66,7 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
     "通知",
     "剪切板记录",
     "暂停",
+    "日志",
   ],
   layout: [
     i18n("storage.appearanceTab"),
@@ -347,6 +348,22 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     i18n("general.showSettingsCloseButton"),
     i18n("general.showSettingsCloseButtonDescription"),
     ["关闭按钮", "Esc", "settings close"],
+  ),
+  entry(
+    "general.log-level",
+    { section: "general_general" },
+    i18n("general.logLevel"),
+    i18n("general.logLevelDescription"),
+    [
+      i18n("general.logLevelError"),
+      i18n("general.logLevelWarn"),
+      i18n("general.logLevelInfo"),
+      i18n("general.logLevelDebug"),
+      "日志",
+      "log",
+      "diagnostics",
+      "verbose",
+    ],
   ),
   entry(
     "general.desktop-fullscreen",

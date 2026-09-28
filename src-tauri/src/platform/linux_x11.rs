@@ -669,7 +669,7 @@ impl X11ClipboardMonitor {
             // A panicked monitor explains why captures silently stopped;
             // swallowing the payload hid that from every log.
             if let Err(panic) = handle.join() {
-                crate::log_event!(
+                crate::log_error!(
                     "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
                 );
             }

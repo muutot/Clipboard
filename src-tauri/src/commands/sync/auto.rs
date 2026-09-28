@@ -40,7 +40,7 @@ impl AutoSyncWorker {
                         let config = app.state::<std::sync::Mutex<ConfigStore>>();
                         let lock_result = config.lock();
                         if let Err(e) = &lock_result {
-                            crate::log_event!("[auto-sync] config lock poisoned: {e}");
+                            crate::log_error!("[auto-sync] config lock poisoned: {e}");
                         }
                         let guard = match lock_result {
                             Ok(guard) => guard,
@@ -95,7 +95,7 @@ impl AutoSyncWorker {
                                         .as_millis()
                                         as i64;
                                 }
-                                crate::log_event!("[auto-sync] failed: {e}");
+                                crate::log_error!("[auto-sync] failed: {e}");
                             }
                         }
                     }
@@ -123,20 +123,20 @@ impl AutoSyncWorker {
                 .name("auto-sync-join".to_owned())
                 .spawn(move || {
                     if let Err(panic) = handle.join() {
-                        crate::log_event!("[auto-sync] worker terminated with a panic: {panic:?}");
+                        crate::log_error!("[auto-sync] worker terminated with a panic: {panic:?}");
                     }
                     let _ = done_tx.send(());
                 });
             match join_helper {
                 Ok(_) => {
                     if done_rx.recv_timeout(STOP_JOIN_TIMEOUT).is_err() {
-                        crate::log_event!(
+                        crate::log_warn!(
                             "[auto-sync] worker still running after 30s; leaking the thread so shutdown can proceed"
                         );
                     }
                 }
                 Err(error) => {
-                    crate::log_event!("[auto-sync] failed to spawn the join helper: {error}");
+                    crate::log_error!("[auto-sync] failed to spawn the join helper: {error}");
                 }
             }
         }

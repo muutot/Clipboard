@@ -47,7 +47,7 @@ pub fn toggle_privacy_pause(
     capture.set_paused(paused);
 
     if let Err(error) = app.emit("privacy-pause-changed", paused) {
-        crate::log_event!("[privacy] failed to emit pause-changed: {error}");
+        crate::log_error!("[privacy] failed to emit pause-changed: {error}");
     }
 
     Ok(paused)

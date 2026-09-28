@@ -144,13 +144,13 @@ impl ThumbnailWorker {
                         Ok(info) => {
                             let preview_path = &info.preview_path;
                             if let Err(e) = database.set_preview_path(&item_id, preview_path) {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[thumbnail] failed to update preview for {item_id}: {e}"
                                 );
                             }
                         }
                         Err(e) => {
-                            crate::log_event!(
+                            crate::log_error!(
                                 "[thumbnail] thumbnail generation failed for {item_id}: {e}"
                             );
                         }
@@ -182,7 +182,7 @@ impl ThumbnailWorker {
         let _ = self.sender.send(ThumbnailTask::Shutdown);
         if let Some(handle) = self.handle.take() {
             if handle.thread().id() != thread::current().id() && handle.join().is_err() {
-                crate::log_event!("[thumbnail] worker thread terminated with a panic");
+                crate::log_error!("[thumbnail] worker thread terminated with a panic");
             }
         }
     }

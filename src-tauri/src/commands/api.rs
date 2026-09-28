@@ -99,7 +99,7 @@ pub fn run_cli_command(
                     guard.mark_clipboard_write(&text);
                     marked_text = Some(text);
                 } else {
-                    crate::log_event!("[api] self-trigger lock poisoned; copy may re-capture");
+                    crate::log_error!("[api] self-trigger lock poisoned; copy may re-capture");
                 }
             }
         }

@@ -194,7 +194,7 @@ pub async fn import_from_file(
                 deleted_ids: Vec::new(),
             },
         ) {
-            crate::log_event!("[import] failed to emit history-invalidated: {error}");
+            crate::log_error!("[import] failed to emit history-invalidated: {error}");
         }
     }
     Ok(summary)

@@ -90,6 +90,7 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `colorIcons`                  | boolean                                     | `false`      | —                                                                                |
 | `iconColors`                  | `IconColors` map (hex strings)              | `{}`         | keys limited to `ICON_NAMES`; values must be `#rrggbb`/`#rrggbbaa`               |
 | `loadTolerance`               | number                                      | `100`        | 50–500                                                                           |
+| `logLevel`                    | `"error"`, `"warn"`, `"info"`, or `"debug"` | `"info"`     | —                                                                                |
 
 ## Theme and sort structures
 
@@ -117,6 +118,8 @@ History/storage/OCR/privacy/export settings are separate Rust config groups and 
 `update_source` is an explicit `GeneralConfig` member (`"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` in `config/types.rs`. `ConfigStore::update_source()` returns `UpdateSource`, and the About-panel `check_for_update` reads it per call, so switching the dropdown applies immediately without a restart.
 
 `max_text_capture_bytes` is an explicit `GeneralConfig` member (`u64` bytes, default `500_000`) because the capture loop reads it per iteration for typed behavior. `ConfigStore::max_text_capture_bytes()` clamps to 10000–10000000. At startup `CaptureState::new` receives the value into an `Arc<AtomicU64>`; `set_general_settings` also pushes the saved value into the capture state, so a slider change applies immediately without a restart. The capture loop caps plain text, HTML, and RTF captures at this limit; over-limit content is skipped.
+
+`log_level` is an explicit `GeneralConfig` member (`"error"`/`"warn"`/`"info"`/`"debug"`, default `"info"`) with a typed `LogLevel` in `logging.rs`; unknown values parse as `Info`. `lib.rs` applies it after config load and `set_general_settings` re-applies it live, so the dropdown changes the diagnostic verbosity without a restart. See `backend-architecture.md`.
 
 When backend startup, validation, or native behavior needs one of these fields, add a typed Rust field with a default and tests instead of parsing it opportunistically from `extra`.
 

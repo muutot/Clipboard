@@ -106,7 +106,7 @@ impl KeyboardConfigStore {
             .unwrap_or(0);
         let quarantined =
             config_directory.join(format!("{KEYBOARD_CONFIG_FILE_NAME}.corrupt-{stamp}"));
-        crate::log_event!(
+        crate::log_error!(
             "[keyboard] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
             path.display(),
             quarantined.display()

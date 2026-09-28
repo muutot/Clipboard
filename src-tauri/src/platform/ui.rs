@@ -186,13 +186,13 @@ impl SystemTray {
             let app = app.clone();
             std::thread::spawn(move || {
                 if let Err(error) = crate::commands::float::toggle_float_panel(app) {
-                    crate::log_event!("[tray] failed to toggle the float panel: {error}");
+                    crate::log_error!("[tray] failed to toggle the float panel: {error}");
                 }
             });
         } else if id == Self::SETTINGS_MENU_ID {
             show_main_window(app);
             if let Err(error) = app.emit("tray-open-settings", ()) {
-                crate::log_event!("[tray] failed to emit open-settings: {error}");
+                crate::log_error!("[tray] failed to emit open-settings: {error}");
             }
         } else if id == Self::PAUSE_MENU_ID {
             // Mirror the `toggle_privacy_pause` command ordering: the
@@ -205,7 +205,7 @@ impl SystemTray {
                 return;
             };
             let Ok(mut privacy) = privacy.lock() else {
-                crate::log_event!("[tray] privacy manager lock is poisoned; pause state unchanged");
+                crate::log_error!("[tray] privacy manager lock is poisoned; pause state unchanged");
                 return;
             };
             privacy.toggle_pause();
@@ -218,12 +218,12 @@ impl SystemTray {
             if let Some(config) = app.try_state::<Mutex<ConfigStore>>() {
                 if let Ok(mut config) = config.lock() {
                     if let Err(error) = config.set_privacy_paused(paused) {
-                        crate::log_event!("[tray] failed to persist the pause state: {error}");
+                        crate::log_error!("[tray] failed to persist the pause state: {error}");
                     }
                 }
             }
             if let Err(error) = app.emit("privacy-pause-changed", paused) {
-                crate::log_event!("[tray] failed to emit pause-changed: {error}");
+                crate::log_error!("[tray] failed to emit pause-changed: {error}");
             }
             // Rebuild so the checkbox reflects the toggled state; the
             // privacy listener rebuilds again on the event above, which is
@@ -237,11 +237,11 @@ impl SystemTray {
             // orphaned process unable to open any new window. Refuse with
             // guidance instead of self-destructing.
             if cfg!(debug_assertions) {
-                crate::log_event!(
+                crate::log_warn!(
                     "[tray] restart refused in a debug build; restart from the terminal instead"
                 );
                 if let Err(error) = app.emit("tray-restart-blocked-in-dev", ()) {
-                    crate::log_event!("[tray] failed to emit restart-blocked: {error}");
+                    crate::log_error!("[tray] failed to emit restart-blocked: {error}");
                 }
             } else {
                 app.restart();
@@ -352,7 +352,7 @@ fn schedule_trailing_tray_refresh<R: Runtime>(app: &AppHandle<R>) {
             refresh_tray_recent_menu(&app_for_timer);
         });
     if let Err(error) = spawn {
-        crate::log_event!("[tray] failed to spawn the refresh debounce helper: {error}");
+        crate::log_error!("[tray] failed to spawn the refresh debounce helper: {error}");
         if let Ok(mut state) = TRAY_REFRESH_DEBOUNCE.lock() {
             state.trailing_scheduled = false;
         }
@@ -373,15 +373,15 @@ fn tray_refresh_now<R: Runtime>(app: &AppHandle<R>) {
                 Ok(menu) => {
                     if let Some(tray) = app_for_task.tray_by_id("main-tray") {
                         if let Err(error) = tray.set_menu(Some(menu)) {
-                            crate::log_event!("[tray] failed to refresh recent menu: {error}");
+                            crate::log_error!("[tray] failed to refresh recent menu: {error}");
                         }
                     }
                 }
-                Err(error) => crate::log_event!("[tray] failed to rebuild menu: {error}"),
+                Err(error) => crate::log_error!("[tray] failed to rebuild menu: {error}"),
             },
         )
     {
-        crate::log_event!("[tray] failed to schedule menu refresh: {error}");
+        crate::log_error!("[tray] failed to schedule menu refresh: {error}");
     }
 }
 
@@ -474,13 +474,13 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         Ok(())
     })();
     if let Err(error) = result {
-        crate::log_event!("[tray] failed to copy history item: {error}");
+        crate::log_error!("[tray] failed to copy history item: {error}");
     }
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
-        crate::log_event!("[tray] main window is unavailable");
+        crate::log_warn!("[tray] main window is unavailable");
         return;
     };
 
@@ -497,13 +497,13 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 
     if let Err(error) = window.show() {
-        crate::log_event!("[tray] failed to show the main window: {error}");
+        crate::log_error!("[tray] failed to show the main window: {error}");
     }
     if let Err(error) = window.unminimize() {
-        crate::log_event!("[tray] failed to restore the main window: {error}");
+        crate::log_error!("[tray] failed to restore the main window: {error}");
     }
     if let Err(error) = window.set_focus() {
-        crate::log_event!("[tray] failed to focus the main window: {error}");
+        crate::log_error!("[tray] failed to focus the main window: {error}");
     }
 }
 

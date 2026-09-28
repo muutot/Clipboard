@@ -178,7 +178,7 @@ pub fn store_captured_file_references(
                     modified_at_ms: info.modified_at_ms,
                 },
                 Err(error) => {
-                    crate::log_event!(
+                    crate::log_error!(
                         "[clipboard-worker] failed to store file {}: {error}",
                         source_path.display()
                     );
@@ -301,7 +301,7 @@ pub fn start_clipboard_monitoring(
             let database = match Database::open(&db_path) {
                 Ok(db) => db,
                 Err(e) => {
-                    crate::log_event!("[clipboard-worker] failed to open database: {e}");
+                    crate::log_error!("[clipboard-worker] failed to open database: {e}");
                     return;
                 }
             };
@@ -592,7 +592,7 @@ pub(crate) fn run_capture_loop(
                     if let Err(e) = std::fs::create_dir_all(&image_dir) {
                         // Without the directory the write below reports a
                         // misleading error, so name the root cause here.
-                        crate::log_event!(
+                        crate::log_error!(
                             "[clipboard-worker] failed to create image directory {}: {}",
                             image_dir.display(),
                             e
@@ -608,7 +608,7 @@ pub(crate) fn run_capture_loop(
                     // truncated `{hash}.png` that later captures would never
                     // repair, poisoning every OCR/thumbnail/copy job for it.
                     if let Err(e) = FileStore::save_bytes_atomically(&img_path, &img) {
-                        crate::log_event!(
+                        crate::log_error!(
                             "[clipboard-worker] failed to write image {}: {}",
                             img_path.display(),
                             e
@@ -664,7 +664,7 @@ pub(crate) fn run_capture_loop(
                             if let Err(e) = database.enqueue_ocr(&saved_id) {
                                 // A missed enqueue means the screenshot never
                                 // becomes searchable text; at least log it.
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[clipboard-worker] failed to enqueue OCR for {saved_id}: {e}"
                                 );
                             }
@@ -672,7 +672,7 @@ pub(crate) fn run_capture_loop(
                             let emit_item = load_emit_item(&database, &saved_id, &item);
                             if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item)
                             {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[clipboard-worker] failed to emit item-added: {error}"
                                 );
                             }
@@ -680,7 +680,7 @@ pub(crate) fn run_capture_loop(
                             continue;
                         }
                         Err(e) => {
-                            crate::log_event!("[clipboard-worker] failed to save image: {e}");
+                            crate::log_error!("[clipboard-worker] failed to save image: {e}");
                         }
                     }
                     continue;
@@ -744,14 +744,14 @@ pub(crate) fn run_capture_loop(
                                 if let Err(error) =
                                     app_handle.emit("clipboard-item-added", &emit_item)
                                 {
-                                    crate::log_event!(
+                                    crate::log_error!(
                                         "[clipboard-worker] failed to emit item-added: {error}"
                                     );
                                 }
                                 crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
-                                crate::log_event!("[clipboard-worker] failed to save file: {e}");
+                                crate::log_error!("[clipboard-worker] failed to save file: {e}");
                             }
                         }
                     } else {
@@ -806,14 +806,14 @@ pub(crate) fn run_capture_loop(
                                 if let Err(error) =
                                     app_handle.emit("clipboard-item-added", &emit_item)
                                 {
-                                    crate::log_event!(
+                                    crate::log_error!(
                                         "[clipboard-worker] failed to emit item-added: {error}"
                                     );
                                 }
                                 crate::platform::refresh_tray_recent_menu(&app_handle);
                             }
                             Err(e) => {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[clipboard-worker] failed to save file batch: {e}"
                                 );
                             }
@@ -897,24 +897,24 @@ pub(crate) fn run_capture_loop(
                         let auto_tags = capture_state.match_auto_tags(&text);
                         if !auto_tags.is_empty() {
                             if let Err(error) = database.set_tags(&saved_id, &auto_tags) {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[clipboard-worker] failed to apply auto tags for {saved_id}: {error}"
                                 );
                             }
                         }
                         let emit_item = load_emit_item(&database, &saved_id, &item);
                         if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item) {
-                            crate::log_event!(
+                            crate::log_error!(
                                 "[clipboard-worker] failed to emit item-added: {error}"
                             );
                         }
                         crate::platform::refresh_tray_recent_menu(&app_handle);
                     }
                     Err(e) => {
-                        crate::log_event!("[clipboard-worker] failed to save item: {e}");
+                        crate::log_error!("[clipboard-worker] failed to save item: {e}");
                         consecutive_errors += 1;
                         if consecutive_errors >= 10 {
-                            crate::log_event!("[clipboard-worker] too many errors, pausing");
+                            crate::log_warn!("[clipboard-worker] too many errors, pausing");
                             if wait_for_stop(&stop_receiver, &stop_flag, Duration::from_secs(5)) {
                                 break;
                             }

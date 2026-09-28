@@ -76,7 +76,7 @@ impl SearchIndex {
                 // though the index is intact. A full rebuild of a large
                 // history costs minutes of I/O, so give the open exactly one
                 // short-delay retry before falling back to recreation.
-                crate::log_event!(
+                crate::log_warn!(
                     "[search] opening index at {} failed ({first_error}); retrying once",
                     layout.index_directory.display()
                 );
@@ -94,7 +94,7 @@ impl SearchIndex {
                         // drives the re-index), so a persistent open failure
                         // gets exactly one delete-and-recreate attempt
                         // instead of hard-failing startup.
-                        crate::log_event!(
+                        crate::log_warn!(
                             "[search] retry failed ({retry_error}); recreating index at {}",
                             layout.index_directory.display()
                         );

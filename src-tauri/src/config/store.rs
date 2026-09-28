@@ -31,7 +31,7 @@ impl ConfigStore {
                         .unwrap_or(0);
                     let quarantined =
                         config_directory.join(format!("{CONFIG_FILE_NAME}.corrupt-{stamp}"));
-                    crate::log_event!(
+                    crate::log_error!(
                         "[config] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
                         path.display(),
                         quarantined.display()
@@ -447,6 +447,10 @@ impl ConfigStore {
             .clamp(10_000, 10_000_000)
     }
 
+    pub fn log_level(&self) -> crate::logging::LogLevel {
+        crate::logging::LogLevel::from_str_lossy(&self.config.general.log_level)
+    }
+
     pub fn det_box_threshold(&self) -> f32 {
         self.config.ocr.det_box_threshold
     }
@@ -530,7 +534,7 @@ impl ConfigStore {
             if !secret.is_empty() && !is_protected(secret) {
                 match protect_secret(SecretAccount::S3SecretKey, secret) {
                     Some(protected) => sync.s3_secret_key = Some(protected),
-                    None => crate::log_event!(
+                    None => crate::log_warn!(
                         "[config] credential store unavailable; keeping sync.s3SecretKey in plaintext"
                     ),
                 }
@@ -540,7 +544,7 @@ impl ConfigStore {
             if !password.is_empty() && !is_protected(password) {
                 match protect_secret(SecretAccount::SyncPassword, password) {
                     Some(protected) => sync.sync_password = Some(protected),
-                    None => crate::log_event!(
+                    None => crate::log_warn!(
                         "[config] credential store unavailable; keeping sync.syncPassword in plaintext"
                     ),
                 }
@@ -649,7 +653,7 @@ fn decrypt_sync_secret(stored: Option<&str>, label: &str) -> Option<String> {
         return match crate::platform::secret_store::unprotect_secret(stored) {
             Some(plain) => Some(plain),
             None => {
-                crate::log_event!(
+                crate::log_warn!(
                     "[config] {label} is encrypted and cannot be decrypted on this machine or user profile; re-enter the credential in sync settings"
                 );
                 None

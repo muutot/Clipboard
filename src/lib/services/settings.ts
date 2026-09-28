@@ -80,6 +80,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   colorIcons: false,
   iconColors: {},
   loadTolerance: 100,
+  logLevel: "info",
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -263,6 +264,15 @@ function validSearchIndexSyncMode(
 
 function validUpdateSource(value: unknown, fallback: "github" | "gitcode"): "github" | "gitcode" {
   return value === "github" || value === "gitcode" ? value : fallback;
+}
+
+function validLogLevel(
+  value: unknown,
+  fallback: GeneralSettings["logLevel"],
+): GeneralSettings["logLevel"] {
+  return value === "error" || value === "warn" || value === "info" || value === "debug"
+    ? value
+    : fallback;
 }
 
 function validSearchPlaceholder(value: unknown, fallback: string): string {
@@ -593,6 +603,10 @@ function normalizeGeneralSettings(
     defaultSettings.loadTolerance,
     50,
     500,
+  );
+  result.logLevel = validLogLevel(
+    source.logLevel ?? fallback("logLevel"),
+    defaultSettings.logLevel,
   );
 
   return result;

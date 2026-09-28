@@ -43,8 +43,9 @@ pub fn set_general_settings(
     };
 
     capture.set_max_text_capture_bytes(max_text_capture_bytes);
+    crate::logging::set_level(crate::logging::LogLevel::from_str_lossy(&saved.log_level));
     if let Err(error) = app.emit("general-settings-changed", &saved) {
-        crate::log_event!("[settings] failed to emit general-settings-changed: {error}");
+        crate::log_error!("[settings] failed to emit general-settings-changed: {error}");
     }
     if saved.window_opacity_affects_text {
         apply_window_transparency_to_main(&app, saved.window_transparency);
@@ -64,11 +65,11 @@ pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
                 if let Err(error) =
                     crate::platform::apply_window_transparency(hwnd.0 as isize, percent)
                 {
-                    crate::log_event!("[window] failed to apply transparency: {error}");
+                    crate::log_error!("[window] failed to apply transparency: {error}");
                 }
             }
             Err(error) => {
-                crate::log_event!("[window] failed to resolve the main window handle: {error}");
+                crate::log_error!("[window] failed to resolve the main window handle: {error}");
             }
         }
     }
@@ -83,7 +84,7 @@ pub fn apply_window_effect_to_main(app: &tauri::AppHandle, effect: &str) {
         return;
     };
     if let Err(error) = crate::platform::apply_window_effect(&window, effect) {
-        crate::log_event!("[window] failed to apply window effect: {error}");
+        crate::log_error!("[window] failed to apply window effect: {error}");
     }
 }
 
@@ -219,7 +220,7 @@ pub fn restore_window_position(
             })
             .collect::<Vec<_>>(),
         Err(error) => {
-            crate::log_event!(
+            crate::log_error!(
                 "[window] failed to enumerate monitors while restoring bounds: {error}"
             );
             Vec::new()

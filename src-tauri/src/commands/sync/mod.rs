@@ -530,7 +530,7 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
                         deleted_ids: Vec::new(),
                     },
                 ) {
-                    crate::log_event!("[sync] failed to emit history-invalidated: {error}");
+                    crate::log_error!("[sync] failed to emit history-invalidated: {error}");
                 }
             }
             if let Ok(mut guard) = config.lock() {
@@ -540,7 +540,7 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
                     "partial"
                 };
                 if let Err(error) = guard.update_sync_status(status, now_ms) {
-                    crate::log_event!("[sync] failed to persist sync status: {error}");
+                    crate::log_error!("[sync] failed to persist sync status: {error}");
                 }
             }
             Ok(engine_result.into())
@@ -548,7 +548,7 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
         Err(error) => {
             if let Ok(mut guard) = config.lock() {
                 if let Err(status_error) = guard.update_sync_status("failed", now_ms) {
-                    crate::log_event!(
+                    crate::log_error!(
                         "[sync] failed to persist failed sync status: {status_error}"
                     );
                 }

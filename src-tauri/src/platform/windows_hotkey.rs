@@ -199,7 +199,7 @@ fn spawn_hotkey_thread_with_registrations(
         );
         clear_hotkey_state();
         if let Err(error) = result {
-            crate::log_event!("[hotkey] message loop exited with error: {error}");
+            crate::log_error!("[hotkey] message loop exited with error: {error}");
         }
         drop(tx);
     });
@@ -207,7 +207,7 @@ fn spawn_hotkey_thread_with_registrations(
         .recv_timeout(std::time::Duration::from_secs(10))
         .is_err()
     {
-        crate::log_event!("[hotkey] message loop did not signal readiness; a later stop may block");
+        crate::log_warn!("[hotkey] message loop did not signal readiness; a later stop may block");
     }
     handle
 }
@@ -346,7 +346,7 @@ fn hotkey_message_loop(
                 let action = action_index_for_hotkey_id(*id)
                     .and_then(|index| global_action_ids().nth(index))
                     .unwrap_or("unknown");
-                crate::log_event!(
+                crate::log_error!(
                     "[hotkey] failed to register {action} chord (hotkey id {id}): {error}"
                 );
                 // Tell the settings UI the chord is not actually live —
@@ -360,7 +360,7 @@ fn hotkey_message_loop(
                             error: error.clone(),
                         },
                     ) {
-                        crate::log_event!("[hotkey] failed to emit registration-failed: {error}");
+                        crate::log_error!("[hotkey] failed to emit registration-failed: {error}");
                     }
                 }
                 continue;
@@ -383,7 +383,7 @@ fn hotkey_message_loop(
             );
             if hook == 0 {
                 clear_double_modifier_tracker();
-                crate::log_event!(
+                crate::log_error!(
                     "[hotkey] failed to install the double-modifier keyboard hook (Windows error {})",
                     GetLastError()
                 );
@@ -408,7 +408,7 @@ fn hotkey_message_loop(
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
         );
         if foreground_hook == 0 {
-            crate::log_event!(
+            crate::log_error!(
                 "[hotkey] failed to install the foreground watcher (Windows error {})",
                 GetLastError()
             );
@@ -816,7 +816,7 @@ impl HotkeyManager {
                             if let Err(error) =
                                 crate::commands::float::toggle_float_panel(app.clone())
                             {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[hotkey] failed to toggle the float panel: {error}"
                                 );
                             }
@@ -828,12 +828,12 @@ impl HotkeyManager {
                         let action_id = global_action_ids().nth(index).unwrap_or("unknown");
                         if let Some(app) = app.as_ref() {
                             if let Err(error) = app.emit("global-hotkey", action_id) {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[hotkey] failed to emit global-hotkey {action_id}: {error}"
                                 );
                             }
                         } else {
-                            crate::log_event!(
+                            crate::log_warn!(
                                 "[hotkey] no app handle to forward global action {action_id}"
                             );
                         }
@@ -885,12 +885,12 @@ impl HotkeyManager {
         if let Some(handle) = handle {
             if joinable {
                 if let Err(panic) = handle.join() {
-                    crate::log_event!(
+                    crate::log_error!(
                         "[hotkey] message loop thread terminated with a panic: {panic:?}"
                     );
                 }
             } else {
-                crate::log_event!(
+                crate::log_warn!(
                     "[hotkey] message loop thread never became stoppable; leaking it so shutdown can proceed"
                 );
             }

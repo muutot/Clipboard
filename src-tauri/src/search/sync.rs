@@ -205,7 +205,7 @@ impl SearchSyncWorker {
                             Ok(summary) if summary.processed_events > 0 => on_changes_applied(),
                             Ok(_) => {}
                             Err(error) => {
-                                crate::log_event!(
+                                crate::log_error!(
                                     "[search-sync] background rebuild failed: {error}"
                                 );
                             }
@@ -219,7 +219,7 @@ impl SearchSyncWorker {
                                 }
                                 Ok(_) => {}
                                 Err(error) => {
-                                    crate::log_event!(
+                                    crate::log_error!(
                                         "[search-sync] background drain failed: {error}"
                                     );
                                 }

@@ -20,21 +20,21 @@ const FLOAT_HEIGHT: f64 = 480.0;
 /// behavior is uniform.
 #[tauri::command]
 pub fn toggle_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
-    crate::log_event!("[float] toggle requested");
+    crate::log_debug!("[float] toggle requested");
     if let Some(window) = app.get_webview_window(FLOAT_WINDOW_LABEL) {
         let is_visible = window.is_visible().unwrap_or(false);
         let is_focused = window.is_focused().unwrap_or(false);
-        crate::log_event!("[float] existing visible: {is_visible}, focused: {is_focused}");
+        crate::log_debug!("[float] existing visible: {is_visible}, focused: {is_focused}");
         if is_visible && is_focused {
             window
                 .hide()
                 .map_err(|error| format!("failed to hide the float panel: {error}"))?;
-            crate::log_event!("[float] toggle done");
+            crate::log_debug!("[float] toggle done");
             return Ok(());
         }
     }
     let result = open_float_panel(app);
-    crate::log_event!("[float] toggle done");
+    crate::log_debug!("[float] toggle done");
     result
 }
 
@@ -80,7 +80,7 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
     // opaque there.
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
-    crate::log_event!("[float] building window");
+    crate::log_debug!("[float] building window");
     let window = builder
         .build()
         .map_err(|error| format!("failed to open the float panel: {error}"))?;
@@ -92,7 +92,7 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
     // pushed the panel under the taskbar / off-screen. The real outer size
     // keeps the whole window inside the work area.
     position_float_panel(&app, &window);
-    crate::log_event!("[float] window built");
+    crate::log_debug!("[float] window built");
     Ok(())
 }
 
@@ -108,7 +108,7 @@ fn position_float_panel<R: tauri::Runtime>(
     let outer = match window.outer_size() {
         Ok(size) => size,
         Err(error) => {
-            crate::log_event!("[float] failed to read panel size ({error}); centering");
+            crate::log_error!("[float] failed to read panel size ({error}); centering");
             let _ = window.center();
             return;
         }
@@ -121,7 +121,7 @@ fn position_float_panel<R: tauri::Runtime>(
         let place = match config.lock() {
             Ok(guard) => guard.general_settings().float_panel_position.clone(),
             Err(error) => {
-                crate::log_event!(
+                crate::log_error!(
                     "[float] configuration lock poisoned while reading panel position ({error}); centering"
                 );
                 let _ = window.center();
@@ -131,12 +131,12 @@ fn position_float_panel<R: tauri::Runtime>(
         place
     };
     let Some(monitor) = app.primary_monitor().ok().flatten() else {
-        crate::log_event!("[float] primary monitor unavailable; centering");
+        crate::log_warn!("[float] primary monitor unavailable; centering");
         let _ = window.center();
         return;
     };
     let area = monitor.work_area();
-    crate::log_event!(
+    crate::log_debug!(
         "[float] monitor scale={} work_area=({},{} {}x{})",
         monitor.scale_factor(),
         area.position.x,
@@ -154,9 +154,9 @@ fn position_float_panel<R: tauri::Runtime>(
         outer.height as i32,
     );
     match window.set_position(tauri::PhysicalPosition::new(x, y)) {
-        Ok(()) => crate::log_event!("[float] place={place} at ({x},{y})"),
+        Ok(()) => crate::log_debug!("[float] place={place} at ({x},{y})"),
         Err(error) => {
-            crate::log_event!("[float] failed to place panel at ({x},{y}) for {place}: {error}");
+            crate::log_error!("[float] failed to place panel at ({x},{y}) for {place}: {error}");
             let _ = window.center();
         }
     }

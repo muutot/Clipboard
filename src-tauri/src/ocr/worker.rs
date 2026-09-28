@@ -59,7 +59,7 @@ impl OcrWorker {
         // path also performs this repair, but doing it here covers hot engine
         // restarts and keeps worker construction self-contained.
         if let Err(error) = database.requeue_interrupted_ocr() {
-            crate::log_event!("[ocr] failed to requeue interrupted tasks: {error}");
+            crate::log_error!("[ocr] failed to requeue interrupted tasks: {error}");
         }
 
         let running = Arc::new(AtomicBool::new(true));
@@ -124,7 +124,7 @@ impl OcrWorker {
         }
 
         if handle.join().is_err() {
-            crate::log_event!("[ocr] worker thread terminated with a panic");
+            crate::log_error!("[ocr] worker thread terminated with a panic");
         }
     }
 
@@ -195,7 +195,7 @@ impl OcrWorker {
                         }
                         Err(error) => {
                             let message = error.to_string();
-                            crate::log_event!(
+                            crate::log_error!(
                                 "[ocr] recognition failed for {}: {}",
                                 input.item_id,
                                 message
@@ -208,10 +208,10 @@ impl OcrWorker {
                 }
                 Ok(None) => false,
                 Err(error) => {
-                    crate::log_event!("[ocr] failed to claim next task: {error}");
+                    crate::log_error!("[ocr] failed to claim next task: {error}");
                     consecutive_errors = consecutive_errors.saturating_add(1);
                     if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                        crate::log_event!(
+                        crate::log_warn!(
                             "[ocr] too many consecutive errors ({}), pausing",
                             consecutive_errors
                         );
@@ -235,7 +235,7 @@ impl OcrWorker {
 
 fn persist_failure(database: &Database, item_id: &str, message: &str) {
     if let Err(error) = database.mark_ocr_failed(item_id, message) {
-        crate::log_event!("[ocr] failed to persist failure for {item_id}: {error}");
+        crate::log_error!("[ocr] failed to persist failure for {item_id}: {error}");
     }
 }
 

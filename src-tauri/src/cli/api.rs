@@ -220,20 +220,20 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
                             &token,
                             port,
                         ) {
-                            crate::log_event!("[local-api] request failed: {error}");
+                            crate::log_error!("[local-api] request failed: {error}");
                         }
                         connection_counter.fetch_sub(1, Ordering::SeqCst);
                     });
                 if let Err(error) = spawned {
                     active_connections.fetch_sub(1, Ordering::SeqCst);
-                    crate::log_event!("[local-api] failed to spawn connection thread: {error}");
+                    crate::log_error!("[local-api] failed to spawn connection thread: {error}");
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(10));
             }
             Err(error) => {
-                crate::log_event!("[local-api] listener failed: {error}");
+                crate::log_error!("[local-api] listener failed: {error}");
                 break;
             }
         }

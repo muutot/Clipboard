@@ -59,7 +59,7 @@ pub fn enforce_history_cleanup_for(
     {
         // Surface the failure instead of reporting a clean run that silently
         // left orphan files on disk.
-        crate::log_event!("[cleanup] orphan file cleanup failed: {error}");
+        crate::log_error!("[cleanup] orphan file cleanup failed: {error}");
     }
 
     Ok(total_deleted)
@@ -95,7 +95,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
 
     for (dir, cleanup_enabled) in scan_dirs {
         if !cleanup_enabled {
-            crate::log_event!(
+            crate::log_warn!(
                 "[cleanup] skipping unowned resource directory {}",
                 dir.display()
             );
@@ -109,7 +109,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
             Err(error) => {
                 // A single unreadable root must not abort cleanup of the
                 // remaining roots; log it and keep scanning.
-                crate::log_event!(
+                crate::log_error!(
                     "[cleanup] failed to read directory {}: {error}",
                     dir.display()
                 );
@@ -143,7 +143,7 @@ pub fn cleanup_orphan_storage_files_with_grace(
             }
             let size_bytes = metadata.len();
             if let Err(e) = std::fs::remove_file(&entry_path) {
-                crate::log_event!(
+                crate::log_error!(
                     "[cleanup] failed to remove orphan file {}: {e}",
                     entry_path.display()
                 );

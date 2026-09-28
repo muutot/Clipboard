@@ -867,6 +867,12 @@ const zhCN: LocaleDefinition = {
     loadTolerance: "加载容忍阈值",
     loadToleranceDescription: "列表条目超过「最大加载条目 + 此值」时，自动移除最早的一批条目",
     loadToleranceUnit: "条",
+    logLevel: "日志等级",
+    logLevelDescription: "写入诊断日志的最低等级，低于该等级的日志会被丢弃",
+    logLevelError: "错误",
+    logLevelWarn: "警告",
+    logLevelInfo: "信息",
+    logLevelDebug: "调试",
   },
   layout: {
     title: "布局设置",
