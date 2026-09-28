@@ -451,11 +451,25 @@ fn signed_request_with_payload_hash(
     Ok(req_builder)
 }
 
-/// Absolute in-memory ceiling for a single S3 object body read. Protocol
-/// objects (segments/pointers) are bounded well below this; the limit exists so
-/// a malicious, misconfigured, or broken endpoint cannot stream an unbounded
-/// body into memory before any validation runs.
-const MAX_S3_IN_MEMORY_OBJECT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// Hard ceiling for one object buffered fully in memory.
+///
+/// Only three kinds of object take the in-memory read path: device heads, the
+/// checkpoint pointer, and peer segments. All three are a single sync envelope
+/// written by a conforming publisher, which never exceeds
+/// [`MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES`]. Everything larger (snapshots,
+/// checkpoints, resources) streams to a file with its own caller-supplied limit.
+///
+/// The ceiling is what stops a broken, misconfigured, or hostile peer from
+/// choosing this process's peak memory allocation. It is deliberately much
+/// larger than the 16 MiB that sized the transfer budget historically, so a
+/// legitimately large segment batch still syncs, and the budget is now derived
+/// from this constant instead of being a separate assumption.
+pub const MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Ceiling for a ListObjectsV2 response body. A full 1000-key page is well
+/// under 1 MiB, so this is ~40x headroom and cannot reject a legitimate page.
+const MAX_S3_LIST_BODY_BYTES: u64 = 8 * 1024 * 1024;
+
 /// Error bodies are only echoed (first 300 chars) into an error string.
 const MAX_S3_ERROR_BODY_BYTES: u64 = 64 * 1024;
 
@@ -653,6 +667,16 @@ pub fn put_s3_object(
     secret_key: &str,
     condition: S3PutCondition,
 ) -> Result<S3PutOutcome, String> {
+    // Refuse locally rather than publish an object that this protocol version's
+    // readers would reject: every object written through the in-memory path is
+    // also read back through the in-memory path, so exceeding the ceiling has to
+    // be a visible error here, not a remote rejection on the next device.
+    if data.len() as u64 > MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES {
+        return Err(format!(
+            "refusing to publish a {key:?} object of {} bytes: the in-memory protocol ceiling is {MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES} bytes",
+            data.len()
+        ));
+    }
     let client = shared_client()?;
     let (scheme, host) = parse_endpoint(endpoint);
     let content_md5 = content_md5_base64(&data);
@@ -803,13 +827,13 @@ pub fn get_s3_object(
         extra_headers: &[],
     };
     let resp = signed_request(&client, &req)?
-        .timeout(streaming_timeout(IN_MEMORY_OBJECT_MAX_BYTES))
+        .timeout(streaming_timeout(MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES))
         .send()
         .map_err(|e| format!("download failed: {e}"))?;
 
     if resp.status().is_success() {
         let etag = response_etag(&resp)?;
-        let bytes = read_body_bounded(resp, MAX_S3_IN_MEMORY_OBJECT_BYTES, "download")?;
+        let bytes = read_body_bounded(resp, MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES, "download")?;
         Ok(Some(S3DownloadedObject { bytes, etag }))
     } else if resp.status().as_u16() == 404 {
         Ok(None)
@@ -1047,12 +1071,12 @@ pub(crate) fn list_s3_objects_after_with_metrics(
             return Err(err_from_response(resp, "list"));
         }
 
-        let xml = String::from_utf8_lossy(&read_body_bounded(
-            resp,
-            MAX_S3_IN_MEMORY_OBJECT_BYTES,
-            "list",
-        )?)
-        .into_owned();
+        // Decode in place: `from_utf8_lossy().into_owned()` would keep the
+        // bounded `Vec` and the `String` alive at the same time, doubling the
+        // peak allocation for no benefit.
+        let xml =
+            String::from_utf8_lossy(&read_body_bounded(resp, MAX_S3_LIST_BODY_BYTES, "list")?)
+                .into_owned();
         if let Some(metrics) = metrics {
             metrics.record_list_page(xml.len() as u64);
         }
@@ -1164,13 +1188,12 @@ fn validate_payload_sha256(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Size budget used for in-memory (non-file-streamed) object transfers:
-/// segments and checkpoint/device pointers. They are metadata-only and small,
-/// but must not inherit the fixed 60 s shared-client timeout, or a slow link
-/// aborts a legitimate transfer that the size-scaled streaming paths would
-/// have completed.
-const IN_MEMORY_OBJECT_MAX_BYTES: u64 = 16 * 1024 * 1024;
-
+/// Size budget used to size the in-memory (non-file-streamed) object transfer
+/// timeout. Segments and checkpoint/device pointers must not inherit the fixed
+/// 60 s shared-client timeout, or a slow link aborts a legitimate transfer that
+/// the size-scaled streaming paths would have completed. The budget is derived
+/// from the same constant that bounds the buffered body, so the two cannot
+/// disagree.
 fn streaming_timeout(size_limit_bytes: u64) -> Duration {
     const ASSUMED_MIN_BYTES_PER_SECOND: u64 = 64 * 1024;
     const BASE_SECONDS: u64 = 60;

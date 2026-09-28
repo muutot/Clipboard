@@ -33,7 +33,7 @@ use crate::{
 /// the in-memory `ObjectStore::get` path must reject anything above this
 /// instead of trusting a remote-declared size. A real oversized object is
 /// published to prove the bound is enforced end to end.
-const SEGMENT_IN_MEMORY_BUDGET_BYTES: u64 = 16 * 1024 * 1024;
+const SEGMENT_IN_MEMORY_BUDGET_BYTES: u64 = s3::MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES;
 
 #[derive(Clone)]
 struct SmokeConfig {
@@ -442,19 +442,57 @@ fn real_s3_in_memory_object_read_is_bounded_for_segments() {
     // Shape the key like a peer segment: the in-memory `ObjectStore::get` path
     // is what pulls segments, and it is the only S3 read that buffers a whole
     // body without a protocol budget.
-    let key = scope.object_key("v1/segments/oversized-segment");
-    let oversized = vec![b'x'; (SEGMENT_IN_MEMORY_BUDGET_BYTES + 1024) as usize];
-    s3::put_s3_object(
+    //
+    // A conforming publisher must refuse the oversized object locally, so the
+    // publisher guard is asserted first and the reader bound is then exercised
+    // through the file-streamed upload path, which is a different code path and
+    // therefore a fair way to place a hostile object in the bucket.
+    let oversized_len = SEGMENT_IN_MEMORY_BUDGET_BYTES + 1024;
+    let publish = s3::put_s3_object(
         &config.endpoint,
         &config.region,
         &config.bucket,
-        &key,
-        oversized.clone(),
+        &scope.object_key("v1/segments/oversized-segment"),
+        vec![b'x'; oversized_len.try_into().expect("probe size fits usize")],
         &config.access_key,
         &config.secret_key,
         s3::S3PutCondition::IfAbsent,
-    )
-    .expect("oversized probe object must be publishable");
+    );
+    let publish_error = match publish {
+        Ok(outcome) => panic!(
+            "publishing above the {SEGMENT_IN_MEMORY_BUDGET_BYTES}-byte ceiling must fail \
+             locally, got {outcome:?}"
+        ),
+        Err(error) => error,
+    };
+    assert!(
+        publish_error.contains(&SEGMENT_IN_MEMORY_BUDGET_BYTES.to_string()),
+        "the publish refusal must name the byte ceiling, got: {publish_error}"
+    );
+
+    let staged = std::env::temp_dir().join(format!(
+        "clipboard-s3-smoke-oversized-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let staged_body = vec![b'x'; oversized_len.try_into().expect("probe size fits usize")];
+    let staged_sha256 = hex::encode(Sha256::digest(&staged_body));
+    std::fs::write(&staged, &staged_body).expect("stage the oversized probe body");
+    let uploaded = s3::put_s3_file(
+        &config.endpoint,
+        &config.region,
+        &config.bucket,
+        &scope.object_key("v1/segments/bypassed-segment"),
+        &staged,
+        &staged_sha256,
+        staged_body.len() as u64,
+        &config.access_key,
+        &config.secret_key,
+        s3::S3PutCondition::IfAbsent,
+    );
+    drop(staged_body);
+    let _ = std::fs::remove_file(&staged);
+    uploaded.expect("the file-streamed upload path is not the path under test");
 
     // `ObjectStore::get` is what `get_verified_object` uses for segments, so it
     // must refuse a body above the segment budget instead of buffering it.
@@ -462,7 +500,7 @@ fn real_s3_in_memory_object_read_is_bounded_for_segments() {
     // Match instead of `expect_err` on purpose: the success branch would
     // `Debug`-print the whole buffered body and drown the failure output.
     let store = scope.store(None);
-    match store.get("v1/segments/oversized-segment") {
+    match store.get("v1/segments/bypassed-segment") {
         Ok(Some(object)) => panic!(
             "an in-memory segment read above the {SEGMENT_IN_MEMORY_BUDGET_BYTES}-byte budget must \
              fail, but the transport buffered {} bytes",

@@ -401,6 +401,8 @@ The bucket is shared and idempotently created (`ensure_test_bucket`); every run 
 object prefix and deletes only that prefix on drop. Never point these tests at a bucket that holds
 user data.
 
+Every object read into memory is bounded by `MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES` (256 MiB), and `put_s3_object` refuses locally to publish above it, so a conforming publisher never leaves an object that a conforming reader would reject. Segment batches are entry-bounded rather than byte-bounded, so a pathologically large capture burst surfaces as a publication error instead of a permanently unreadable segment.
+
 The head cache is recorded while a head is published, so the first converged run after a publication
 legitimately re-reads the objects that were just written. The steady state is the _second_
 converged run, which the smoke test asserts performs listing only and transfers no object body.
