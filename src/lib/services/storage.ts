@@ -21,6 +21,8 @@ export interface StorageStatus {
   imagePath: string;
   imageCleanupEnabled: boolean;
   fileCleanupEnabled: boolean;
+  resourceOwnershipRequired: boolean;
+  resourceOwned: boolean;
   searchIndexPath: string;
   searchIndexSizeBytes: number;
   searchIndexVersion: number;
@@ -202,10 +204,10 @@ export async function setResourceStoragePaths(
   );
 }
 
-export async function claimResourceMarkers(): Promise<ResourceMarkerUpdate> {
+export async function setResourceOwnership(owned: boolean): Promise<ResourceMarkerUpdate> {
   return invokeTauriRequired<ResourceMarkerUpdate>(
-    "claim_resource_markers",
-    undefined,
+    "set_resource_ownership",
+    { owned },
     "Storage configuration is only available in the desktop app",
   );
 }

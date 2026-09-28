@@ -186,11 +186,13 @@ export interface LocaleDefinition {
     resourcePathsRestartHint: string;
     resourcePathsSavedAndRestart: string;
     resourcePathsSaved: string;
-    resourcePathsCleanupDisabled: string;
-    claimMarkerAction: string;
-    claimMarkerHint: string;
-    claimMarkerConfirm: string;
-    claimMarkerAdded: string;
+    ownershipMarkerTitle: string;
+    ownershipMarkerDefaultDesc: string;
+    ownershipMarkerEnabledDesc: string;
+    ownershipMarkerDisabledDesc: string;
+    ownershipMarkerEnableConfirm: string;
+    ownershipMarkerEnabledFeedback: string;
+    ownershipMarkerDisabledFeedback: string;
     restartNow: string;
     custom: string;
     default: string;
@@ -732,7 +734,6 @@ export interface LocaleDefinition {
     launchAtStartupDescription: string;
     closeToTray: string;
     closeToTrayDescription: string;
-    windowConfigLoadFailed: string;
     windowConfigUpdateFailed: string;
     alwaysOnTop: string;
     alwaysOnTopDescription: string;

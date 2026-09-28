@@ -3,8 +3,8 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import { messages, resolvePath } from "$lib/i18n";
   import {
-    claimResourceMarkers,
     configureStorageDirectory,
+    setResourceOwnership,
     setResourceStoragePaths,
     type StorageDirectoryUpdate,
     type StorageStatus,
@@ -33,13 +33,17 @@
     restartRequired: boolean;
   } | null>(null);
   let resourceStorageRestartNeeded = $state(false);
-  let claimingMarkers = $state(false);
+  let ownershipEnabled = $state(false);
+  let togglingOwnership = $state(false);
   let markerRestartNeeded = $state(false);
 
   $effect(() => {
     dataDirectory = status?.dataDirectoryPath ?? "";
   });
 
+  $effect(() => {
+    ownershipEnabled = Boolean(status?.resourceOwned);
+  });
   function relativePath(absolute: string): string {
     const bases = [status?.dataDirectoryPath, status?.storagePath, status?.projectPath];
     for (const basePath of bases) {
@@ -125,18 +129,25 @@
     await saveResourceStoragePaths();
   }
 
-  async function addOwnershipMarker() {
-    if (!window.confirm(_t("storage.claimMarkerConfirm"))) return;
-    claimingMarkers = true;
+  async function toggleOwnership(next: boolean) {
+    if (!status?.resourceOwnershipRequired || togglingOwnership) return;
+    if (next && !window.confirm(_t("storage.ownershipMarkerEnableConfirm"))) return;
+    togglingOwnership = true;
     try {
-      const result = await claimResourceMarkers();
+      const result = await setResourceOwnership(next);
+      ownershipEnabled = next;
       markerRestartNeeded = result.restartRequired;
-      onfeedback(_t("storage.claimMarkerAdded"), true);
+      onfeedback(
+        next
+          ? _t("storage.ownershipMarkerEnabledFeedback")
+          : _t("storage.ownershipMarkerDisabledFeedback"),
+        true,
+      );
     } catch (error) {
-      console.error("Unable to claim resource ownership markers", error);
+      console.error("Unable to change resource ownership markers", error);
       onfeedback(error instanceof Error ? error.message : String(error), false);
     } finally {
-      claimingMarkers = false;
+      togglingOwnership = false;
     }
   }
 </script>
@@ -239,29 +250,6 @@
         >{savingResourceStorage ? _t("storage.saving") : _t("storage.saveDirectory")}</button
       >
     </div>
-    {#if !status?.imageCleanupEnabled || !status?.fileCleanupEnabled}
-      <div class="resource-path-warning">
-        <AppIcon name="info" size={14} />
-        <span>{_t("storage.resourcePathsCleanupDisabled")}</span>
-      </div>
-      <div class="dir-input-row resource-path-actions">
-        <span>{_t("storage.claimMarkerHint")}</span>
-        <button
-          type="button"
-          disabled={claimingMarkers || markerRestartNeeded}
-          onclick={addOwnershipMarker}
-        >
-          {claimingMarkers ? _t("storage.saving") : _t("storage.claimMarkerAction")}
-        </button>
-      </div>
-      {#if markerRestartNeeded}
-        <div class="resource-path-summary">
-          <button class="restart-btn" type="button" onclick={restartApp}>
-            {_t("storage.restartNow")}
-          </button>
-        </div>
-      {/if}
-    {/if}
     {#if pendingResourceStorage}
       <div class="resource-path-summary">
         <code title={pendingResourceStorage.imageStoragePath}
@@ -277,6 +265,41 @@
         {/if}
       </div>
     {/if}
+  </section>
+
+  <section class="setting-card toggle-card">
+    <div class="setting-heading">
+      <span class="setting-icon"><AppIcon name="lock" size={17} /></span>
+      <div>
+        <strong>{_t("storage.ownershipMarkerTitle")}</strong>
+        <p>
+          {!status?.resourceOwnershipRequired
+            ? _t("storage.ownershipMarkerDefaultDesc")
+            : ownershipEnabled
+              ? _t("storage.ownershipMarkerEnabledDesc")
+              : _t("storage.ownershipMarkerDisabledDesc")}
+        </p>
+      </div>
+    </div>
+    <div class="ownership-controls">
+      {#if markerRestartNeeded}
+        <button class="restart-btn danger" type="button" onclick={restartApp}>
+          {_t("storage.restartNow")}
+        </button>
+      {/if}
+      <button
+        type="button"
+        class="toggle-switch"
+        class:active={ownershipEnabled}
+        aria-checked={ownershipEnabled}
+        aria-label={_t("storage.ownershipMarkerTitle")}
+        role="switch"
+        disabled={!status?.resourceOwnershipRequired || togglingOwnership}
+        onclick={() => void toggleOwnership(!ownershipEnabled)}
+      >
+        <span class="toggle-knob"></span>
+      </button>
+    </div>
   </section>
 
   <section class="setting-card directory-tree-card">

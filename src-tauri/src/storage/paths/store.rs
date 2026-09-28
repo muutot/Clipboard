@@ -143,6 +143,8 @@ impl StoragePaths {
             database_directory,
             image_cleanup_enabled: false,
             file_cleanup_enabled: false,
+            image_marker_required: image_directory.requires_marker,
+            file_marker_required: file_directory.requires_marker,
         };
 
         let image_cleanup_enabled = if image_directory.requires_marker {
@@ -214,6 +216,36 @@ impl StoragePaths {
             resource_root_marker_content(&self.project, role.as_str()),
         )?;
         Ok(())
+    }
+
+    /// Removes one resource root's ownership marker so orphan cleanup stops
+    /// scanning it after the next startup. Callers only reach this for a root
+    /// whose marker is currently valid (cleanup enabled), so it cannot delete a
+    /// foreign marker that was never recognized as ours.
+    pub fn remove_resource_root_marker(&self, role: ResourceRootRole) -> Result<(), StorageError> {
+        let path = match role {
+            ResourceRootRole::Image => &self.images,
+            ResourceRootRole::File => &self.files,
+        };
+        let marker = path.join(RESOURCE_ROOT_MARKER);
+        if marker.is_file() {
+            fs::remove_file(&marker)?;
+        }
+        Ok(())
+    }
+
+    /// Whether a resource root currently carries this project's valid ownership
+    /// marker, read from disk. Unlike [`Self::image_cleanup_enabled`] this does
+    /// not depend on values captured at startup, so it reflects a marker just
+    /// written or removed by the settings action before a restart.
+    pub fn resource_root_marker_valid(&self, role: ResourceRootRole) -> bool {
+        let path = match role {
+            ResourceRootRole::Image => &self.images,
+            ResourceRootRole::File => &self.files,
+        };
+        fs::read(path.join(RESOURCE_ROOT_MARKER))
+            .map(|content| content == resource_root_marker_content(&self.project, role.as_str()))
+            .unwrap_or(false)
     }
 }
 

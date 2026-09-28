@@ -312,10 +312,12 @@ fn claiming_an_unowned_resource_root_enables_cleanup_on_the_next_startup() {
             .unwrap();
     assert!(!paths.image_cleanup_enabled);
     assert!(!paths.file_cleanup_enabled);
+    assert!(!paths.resource_root_marker_valid(ResourceRootRole::Image));
     assert!(!image_directory.join(RESOURCE_ROOT_MARKER).exists());
 
     // The explicit claim writes only the marker, never touching file contents.
     paths.claim_resource_root(ResourceRootRole::Image).unwrap();
+    assert!(paths.resource_root_marker_valid(ResourceRootRole::Image));
     assert_eq!(
         fs::read(image_directory.join(RESOURCE_ROOT_MARKER)).unwrap(),
         resource_root_marker_content(&project, "image")
@@ -325,9 +327,21 @@ fn claiming_an_unowned_resource_root_enables_cleanup_on_the_next_startup() {
     // A later non-claiming startup now sees the valid marker and enables
     // cleanup for that root only.
     let reloaded =
-        StoragePaths::initialize_with_data_directory(project, Some(data_directory)).unwrap();
+        StoragePaths::initialize_with_data_directory(project.clone(), Some(data_directory.clone()))
+            .unwrap();
     assert!(reloaded.image_cleanup_enabled);
     assert!(!reloaded.file_cleanup_enabled);
+    assert!(reloaded.image_marker_required);
+    assert!(reloaded.file_marker_required);
+
+    // Removing the marker disables cleanup again on the next startup.
+    reloaded
+        .remove_resource_root_marker(ResourceRootRole::Image)
+        .unwrap();
+    assert!(!image_directory.join(RESOURCE_ROOT_MARKER).exists());
+    let unclaimed =
+        StoragePaths::initialize_with_data_directory(project, Some(data_directory)).unwrap();
+    assert!(!unclaimed.image_cleanup_enabled);
 
     fs::remove_dir_all(root).unwrap();
 }

@@ -858,6 +858,28 @@ button {
   background: var(--hover-bg);
   border-color: var(--text-faint);
 }
+.resource-path-actions .restart-btn {
+  margin-left: 6px;
+}
+.ownership-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ownership-controls .restart-btn {
+  margin-left: 0;
+}
+.restart-btn.danger {
+  border-color: var(--danger-color);
+  color: #ffffff;
+  background: var(--danger-color);
+}
+.restart-btn.danger:hover {
+  color: #ffffff;
+  border-color: color-mix(in srgb, var(--danger-color) 82%, black);
+  background: color-mix(in srgb, var(--danger-color) 82%, black);
+}
 
 /* --- Transfer import/export --- */
 /* Each card is one row: the heading (icon + title/description) on the left and

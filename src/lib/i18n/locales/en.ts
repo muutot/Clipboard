@@ -201,14 +201,17 @@ const en: LocaleDefinition = {
     resourcePathsRestartHint: "Directory changes apply after restart",
     resourcePathsSavedAndRestart: "Resource directories saved. Restart the app to apply them.",
     resourcePathsSaved: "Resource directory configuration saved",
-    resourcePathsCleanupDisabled:
-      "Orphan cleanup is disabled for resource directories that are not confirmed as Clipboard-owned.",
-    claimMarkerAction: "Add Ownership Marker",
-    claimMarkerHint:
-      "Write a Clipboard ownership marker so orphan cleanup can run for these directories after a restart.",
-    claimMarkerConfirm:
-      "Add the Clipboard ownership marker? After restarting, cleanup deletes files in these directories that are not referenced by any record. Referenced files are kept.",
-    claimMarkerAdded: "Ownership marker added. Restart the app to enable cleanup.",
+    ownershipMarkerTitle: "Ownership Marker",
+    ownershipMarkerDefaultDesc:
+      "The default data directory is always Clipboard-owned, so no ownership marker is needed.",
+    ownershipMarkerEnabledDesc:
+      "These directories carry a Clipboard ownership marker. After a restart, cleanup removes unreferenced files while keeping every referenced file.",
+    ownershipMarkerDisabledDesc:
+      "No ownership marker: orphan cleanup is skipped to protect the other files in these directories. Turn on and restart to enable it.",
+    ownershipMarkerEnableConfirm:
+      "Enable the ownership marker? After restarting, cleanup deletes files in these directories that are not referenced by any record. Referenced files are kept.",
+    ownershipMarkerEnabledFeedback: "Ownership marker enabled. Restart the app to apply it.",
+    ownershipMarkerDisabledFeedback: "Ownership marker removed. Restart the app to stop cleanup.",
     restartNow: "Restart Now",
     custom: "Custom",
     default: "Default",
@@ -784,7 +787,6 @@ const en: LocaleDefinition = {
     launchAtStartupDescription: "Start Clipboard automatically when you sign in",
     closeToTray: "Close to System Tray",
     closeToTrayDescription: "Keep Clipboard running in the tray when the main window closes",
-    windowConfigLoadFailed: "Failed to load startup and tray settings",
     windowConfigUpdateFailed: "Failed to update the system setting",
     alwaysOnTop: "Always on Top",
     alwaysOnTopDescription: "Window stays on top of other applications",

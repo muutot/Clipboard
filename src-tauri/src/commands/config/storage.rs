@@ -36,6 +36,10 @@ pub fn get_storage_status(
         .to_string();
 
     let disk_space = platform::disk_space(&paths.data_directory);
+    let resource_owned = (!paths.image_marker_required
+        || paths.resource_root_marker_valid(ResourceRootRole::Image))
+        && (!paths.file_marker_required
+            || paths.resource_root_marker_valid(ResourceRootRole::File));
 
     Ok(StorageStatus {
         item_count: database.item_count().map_err(|error| error.to_string())?,
@@ -58,6 +62,8 @@ pub fn get_storage_status(
         image_path: paths.images.display().to_string(),
         image_cleanup_enabled: paths.image_cleanup_enabled,
         file_cleanup_enabled: paths.file_cleanup_enabled,
+        resource_ownership_required: paths.image_marker_required || paths.file_marker_required,
+        resource_owned,
         search_index_path: paths.search_index.display().to_string(),
         search_index_size_bytes: dir_size(&paths.search_index),
         search_index_version: SEARCH_INDEX_VERSION,
@@ -182,31 +188,41 @@ pub struct ResourceMarkerUpdate {
     restart_required: bool,
 }
 
-/// Explicitly claims the active resource roots for this project by writing the
-/// ownership marker that enables orphan cleanup. This is the recovery path for
-/// roots that are already in use but unmarked (for example a custom data
-/// directory created before marker support, or one configured outside the
-/// migration flow). It never deletes files; cleanup only runs on the next
-/// startup and still preserves everything referenced by the database.
+/// Enables or disables ownership of the active resource roots by writing or
+/// removing the `.clipboard-resource-root` marker that gates orphan cleanup.
+/// This is the recovery path for roots that are already in use but unmarked
+/// (for example a custom data directory created before marker support). It
+/// never deletes files: enabling only takes effect after a restart, and cleanup
+/// still preserves everything referenced by the database; disabling removes the
+/// marker so cleanup stops scanning the directory.
 #[tauri::command]
-pub fn claim_resource_markers(
+pub fn set_resource_ownership(
     paths: tauri::State<'_, StoragePaths>,
+    owned: bool,
 ) -> Result<ResourceMarkerUpdate, String> {
-    let mut claimed = false;
-    if !paths.image_cleanup_enabled {
-        paths
-            .claim_resource_root(ResourceRootRole::Image)
-            .map_err(|error| error.to_string())?;
-        claimed = true;
-    }
-    if !paths.file_cleanup_enabled {
-        paths
-            .claim_resource_root(ResourceRootRole::File)
-            .map_err(|error| error.to_string())?;
-        claimed = true;
+    let mut changed = false;
+    for (role, required) in [
+        (ResourceRootRole::Image, paths.image_marker_required),
+        (ResourceRootRole::File, paths.file_marker_required),
+    ] {
+        // Default project data directories never need a marker; skip them so
+        // the switch cannot report a change it did not make.
+        if !required || paths.resource_root_marker_valid(role) == owned {
+            continue;
+        }
+        if owned {
+            paths
+                .claim_resource_root(role)
+                .map_err(|error| error.to_string())?;
+        } else {
+            paths
+                .remove_resource_root_marker(role)
+                .map_err(|error| error.to_string())?;
+        }
+        changed = true;
     }
     Ok(ResourceMarkerUpdate {
-        restart_required: claimed,
+        restart_required: changed,
     })
 }
 

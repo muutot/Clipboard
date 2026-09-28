@@ -189,13 +189,16 @@ const zhCN: LocaleDefinition = {
     resourcePathsRestartHint: "目录切换将在重启后应用",
     resourcePathsSavedAndRestart: "资源目录已保存，重启应用后生效",
     resourcePathsSaved: "资源目录配置已保存",
-    resourcePathsCleanupDisabled:
-      "检测到未确认由 Clipboard 托管的资源目录，已跳过孤儿文件清理以保护目录中的其他文件。",
-    claimMarkerAction: "添加归属标记",
-    claimMarkerHint: "写入 Clipboard 归属标记，重启后即可对这些目录执行孤儿清理。",
-    claimMarkerConfirm:
-      "确定添加 Clipboard 归属标记？重启后清理会删除这些目录中未被任何记录引用的文件，被记录引用的文件会保留。",
-    claimMarkerAdded: "归属标记已添加，重启应用后启用清理。",
+    ownershipMarkerTitle: "归属标记",
+    ownershipMarkerDefaultDesc: "默认数据目录始终归 Clipboard 所有，无需归属标记。",
+    ownershipMarkerEnabledDesc:
+      "这些目录已带有 Clipboard 归属标记。重启后清理会删除未被记录引用的文件，同时保留所有被引用的文件。",
+    ownershipMarkerDisabledDesc:
+      "未启用归属标记：为保护目录中的其他文件，已跳过孤儿清理。开启并重启后即可启用。",
+    ownershipMarkerEnableConfirm:
+      "启用归属标记？重启后清理会删除这些目录中未被任何记录引用的文件，被记录引用的文件会保留。",
+    ownershipMarkerEnabledFeedback: "归属标记已启用，重启应用后生效。",
+    ownershipMarkerDisabledFeedback: "归属标记已移除，重启应用后停止清理。",
     restartNow: "立即重启",
     custom: "自定义",
     default: "默认",
@@ -754,7 +757,6 @@ const zhCN: LocaleDefinition = {
     launchAtStartupDescription: "登录系统后自动启动 Clipboard",
     closeToTray: "关闭到系统托盘",
     closeToTrayDescription: "关闭主窗口后继续在系统托盘运行",
-    windowConfigLoadFailed: "无法加载开机自启动和托盘设置",
     windowConfigUpdateFailed: "系统设置更新失败",
     alwaysOnTop: "窗口置顶",
     alwaysOnTopDescription: "窗口始终悬浮在其他应用上方",

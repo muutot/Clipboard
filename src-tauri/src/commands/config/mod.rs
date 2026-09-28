@@ -34,6 +34,8 @@ pub struct StorageStatus {
     image_path: String,
     image_cleanup_enabled: bool,
     file_cleanup_enabled: bool,
+    resource_ownership_required: bool,
+    resource_owned: bool,
     search_index_path: String,
     search_index_size_bytes: u64,
     search_index_version: u32,

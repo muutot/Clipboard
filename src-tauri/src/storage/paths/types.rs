@@ -39,4 +39,10 @@ pub struct StoragePaths {
     pub image_cleanup_enabled: bool,
     /// Whether orphan cleanup is allowed to scan the file resource root.
     pub file_cleanup_enabled: bool,
+    /// Whether the image root only becomes cleanup-eligible with an ownership
+    /// marker (true for a custom data directory or a custom resource path).
+    pub image_marker_required: bool,
+    /// Whether the file root only becomes cleanup-eligible with an ownership
+    /// marker.
+    pub file_marker_required: bool,
 }

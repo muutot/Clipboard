@@ -754,7 +754,7 @@ pub fn run() {
             get_history_config,
             set_storage_config,
             set_resource_storage_paths,
-            claim_resource_markers,
+            set_resource_ownership,
             get_storage_config,
             detect_content_actions,
             soft_delete_clipboard_item,
