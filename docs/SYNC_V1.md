@@ -353,6 +353,28 @@ claims.
 
 The server and bucket are opt-in. Never point these tests at a prefix containing user data.
 
+`MemoryStore` proves engine semantics, not the wire: only a real server can confirm our SigV4
+signing, path-style addressing, conditional writes, ETag quoting, and ListObjectsV2 continuation
+tokens. Two harnesses exist, both `#[ignore]`d and both skipping cleanly when
+`CLIPBOARD_S3_TEST_ENDPOINT` is unset:
+
+| Target                        | Runtime | Scope                                                                                                                                                                                                |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sync::v1::s3_smoke`          | ~10 s   | Correctness smoke: two-device convergence, idle steady-state transfer counts, conditional-write/ETag contract, and the in-memory segment-read budget. Run this after any transport or engine change. |
+| `sync::v1::scale_bench::s3_*` | ~60 s+  | The 1001-segment pagination and three-device scale benchmarks. Needs the optimized profile to reproduce the documented numbers.                                                                      |
+
+On Windows, `scripts/sync-s3-test.ps1` provisions a pinned rustfs release, verifies its published
+SHA-256, starts it on a loopback port, exports the variables below, runs the tests, and stops it.
+Nothing is installed system-wide and no server binary is committed; the archive lands under the
+gitignored `.tools/` directory.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/sync-s3-test.ps1            # smoke
+powershell -ExecutionPolicy Bypass -File scripts/sync-s3-test.ps1 -Test all  # smoke + benchmarks
+```
+
+The same variables drive a hand-provisioned server (any S3-compatible implementation works):
+
 ```powershell
 $env:CLIPBOARD_S3_TEST_ENDPOINT = "http://127.0.0.1:9200"
 $env:CLIPBOARD_S3_TEST_REGION = "us-east-1"
@@ -372,6 +394,16 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib --release `
   sync::v1::scale_bench::s3_three_device_target_scale_benchmark `
   -- --ignored --exact --nocapture
 ```
+
+### Isolation contract
+
+The bucket is shared and idempotently created (`ensure_test_bucket`); every run writes under a random
+object prefix and deletes only that prefix on drop. Never point these tests at a bucket that holds
+user data.
+
+The head cache is recorded while a head is published, so the first converged run after a publication
+legitimately re-reads the objects that were just written. The steady state is the _second_
+converged run, which the smoke test asserts performs listing only and transfers no object body.
 
 The pagination benchmark publishes 1,001 one-record segments, requires at least one heads LIST page
 plus two segment LIST pages, applies all 1,001 records and compares streaming SQLite content

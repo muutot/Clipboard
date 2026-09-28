@@ -7,6 +7,8 @@
 #[cfg(test)]
 mod engine_tests;
 #[cfg(test)]
+mod s3_smoke;
+#[cfg(test)]
 mod scale_bench;
 
 pub use clipboard_sync::v1::{engine, layout, remote, repository, resources, wire};

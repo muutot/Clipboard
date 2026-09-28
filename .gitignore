@@ -40,3 +40,6 @@ audit-report-*.md
 # Stray local tooling stubs (untracked)
 pyproject.toml
 
+# Locally provisioned test servers (untracked; see scripts/sync-s3-test.ps1)
+.tools/
+
