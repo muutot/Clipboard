@@ -65,7 +65,11 @@ The script does the following:
 | 5    | Create git tag `vx.x.x`                                                                    |
 | 6    | **Local-only: no remote push.** Print the `git push` commands for the user to run manually |
 
-The script is **idempotent**: re-running with the same version skips already-done steps.
+The script is **idempotent**: re-running with the same version skips already-done steps, and
+`changelog.mjs` replaces this version's existing `## <version> (` section instead of prepending a
+second copy of it, so running both passes leaves exactly one section. It also accepts both
+`[scope]` and `(scope)` commit subjects and warns on a subject or type it cannot map, rather
+than dropping the commit silently.
 
 ### Pass 1 — Script bumps + generates changelog
 
