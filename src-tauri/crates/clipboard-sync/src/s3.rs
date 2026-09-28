@@ -378,6 +378,15 @@ fn signed_request_with_payload_hash(
     req: &S3Request,
     payload_hash: &str,
 ) -> Result<RequestBuilder, String> {
+    // The access key and the region are embedded verbatim in the `Authorization`
+    // header and the credential scope, so both must be header-safe before we
+    // sign. `HeaderValue::from_str` happily accepts non-ASCII as opaque bytes,
+    // which silently produces a signature the endpoint cannot match; a control
+    // character is rejected outright, and the old `unwrap` turned that rejection
+    // into a panic that killed the auto-sync worker thread for good.
+    validate_signing_component("access key", req.access_key)?;
+    validate_signing_component("region", req.region)?;
+
     let signer = SigV4::new(req.access_key, req.secret_key, req.region, "s3", now_ms());
 
     let url = s3_url(
@@ -420,24 +429,12 @@ fn signed_request_with_payload_hash(
     );
 
     let mut header_map = HeaderMap::new();
-    header_map.insert(
-        HeaderName::from_static("x-amz-date"),
-        HeaderValue::from_str(&signer.amz_date).unwrap(),
-    );
-    header_map.insert(
-        HeaderName::from_static("x-amz-content-sha256"),
-        HeaderValue::from_str(payload_hash).unwrap(),
-    );
+    insert_header(&mut header_map, "x-amz-date", &signer.amz_date)?;
+    insert_header(&mut header_map, "x-amz-content-sha256", payload_hash)?;
     for (name, value) in req.extra_headers {
-        header_map.insert(
-            HeaderName::from_bytes(name.as_bytes()).unwrap(),
-            HeaderValue::from_str(value).unwrap(),
-        );
+        insert_header(&mut header_map, name, value)?;
     }
-    header_map.insert(
-        HeaderName::from_static("authorization"),
-        HeaderValue::from_str(&authorization).unwrap(),
-    );
+    insert_header(&mut header_map, "authorization", &authorization)?;
 
     let req_builder = match req.method {
         "GET" => client.get(&url).headers(header_map),
@@ -449,6 +446,38 @@ fn signed_request_with_payload_hash(
         _ => return Err(format!("unsupported S3 method {}", req.method)),
     };
     Ok(req_builder)
+}
+
+/// Rejects a signing component that cannot survive a header round-trip.
+///
+/// Visible ASCII only: no empty value, no control characters, and no non-ASCII
+/// bytes (which `HeaderValue` would accept as opaque octets and then mismatch on
+/// the wire).
+fn validate_signing_component(field: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("S3 {field} must not be empty"));
+    }
+    if !value.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return Err(format!(
+            "S3 {field} contains characters that cannot be sent in a request header"
+        ));
+    }
+    Ok(())
+}
+
+/// Inserts one header, reporting invalid names and values instead of panicking.
+///
+/// Every signed value is attacker- or user-reachable: `if-match` carries an ETag
+/// a remote endpoint chose, and `authorization` embeds the configured access key
+/// and region. A hostile endpoint answering with a CR/LF in its ETag used to
+/// abort the sync worker with a panic instead of a sync error.
+fn insert_header(map: &mut HeaderMap, name: &str, value: &str) -> Result<(), String> {
+    let name = HeaderName::from_bytes(name.as_bytes())
+        .map_err(|_| format!("invalid S3 request header name {name:?}"))?;
+    let value = HeaderValue::from_str(value)
+        .map_err(|_| format!("invalid S3 request header value for {name:?}"))?;
+    map.insert(name, value);
+    Ok(())
 }
 
 /// Hard ceiling for one object buffered fully in memory.
@@ -1491,6 +1520,85 @@ mod tests {
 
         assert!(authorization
             .contains("SignedHeaders=host;if-none-match;x-amz-content-sha256;x-amz-date"));
+    }
+
+    /// A `PUT` request with the credential and condition header under test.
+    fn put_request(
+        access_key: &'static str,
+        region: &'static str,
+        extra_headers: &'static [(&'static str, &'static str)],
+    ) -> S3Request<'static> {
+        S3Request {
+            method: "PUT",
+            scheme: "https",
+            endpoint_host: "s3.example.test",
+            bucket: "clipboard",
+            key: "v1/checkpoint.bin",
+            query: None,
+            payload: Some(b"checkpoint"),
+            access_key,
+            secret_key: SECRET,
+            region,
+            extra_headers,
+        }
+    }
+
+    /// `HeaderValue::from_str` accepts non-ASCII as opaque octets, so an unsafe
+    /// credential silently produced an Authorization header the endpoint could
+    /// never match — sync failing forever with an opaque 403. A CR/LF in the
+    /// credential is rejected outright, and the old `unwrap` turned that into a
+    /// panic that killed the auto-sync worker thread for good.
+    #[test]
+    fn unsafe_signing_components_are_rejected_before_signing() {
+        let client = Client::new();
+
+        for (access_key, region) in [
+            ("AKID\r\nx-evil: 1", "us-east-1"),
+            ("\u{5bc6}\u{94a5}", "us-east-1"),
+            ("", "us-east-1"),
+            (AKID, "us-east-1\n"),
+            (AKID, "\u{00e9}"),
+            (AKID, ""),
+        ] {
+            let error = signed_request(&client, &put_request(access_key, region, &[]))
+                .expect_err("unsafe credential must be reported");
+            assert!(
+                error.contains("access key") || error.contains("region"),
+                "expected the offending field to be named, got {error:?}"
+            );
+        }
+    }
+
+    /// A hostile endpoint answering with a header-injection ETag must produce a
+    /// sync error, not a panic that takes down the sync worker.
+    #[test]
+    fn a_malicious_etag_is_reported_instead_of_panicking() {
+        let client = Client::new();
+        let error = signed_request(
+            &client,
+            &put_request(AKID, "us-east-1", &[("if-match", "\"abc\"\r\nx-evil: 1")]),
+        )
+        .expect_err("a CRLF ETag must be reported");
+        assert!(
+            error.contains("if-match"),
+            "expected the if-match header to be named, got {error:?}"
+        );
+    }
+
+    /// An invalid header *name* is reported the same way, so adding a
+    /// caller-supplied header can never panic the worker either.
+    #[test]
+    fn an_invalid_header_name_is_reported_instead_of_panicking() {
+        let client = Client::new();
+        let error = signed_request(
+            &client,
+            &put_request(AKID, "us-east-1", &[("if match", "value")]),
+        )
+        .expect_err("a malformed header name must be reported");
+        assert!(
+            error.contains("header name"),
+            "expected the invalid header name to be reported, got {error:?}"
+        );
     }
 
     #[test]
