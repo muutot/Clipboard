@@ -446,6 +446,74 @@ fn independent_snapshots_and_incremental_segments_converge() {
 }
 
 #[test]
+fn pull_tolerates_a_stray_key_under_a_peer_segment_prefix() {
+    let store = MemoryStore::default();
+    let first_paths = temp_paths("stray-pull-first");
+    let second_paths = temp_paths("stray-pull-second");
+    let first = Database::open(&first_paths.database).unwrap();
+    let second = Database::open(&second_paths.database).unwrap();
+    first.save_item(&text_item("first-item", "first")).unwrap();
+
+    sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+    sync_database(
+        &store,
+        &second,
+        &second_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    assert!(second.get_item("first-item").unwrap().is_some());
+
+    // Publish one more segment, then drop a key that sorts just below it under
+    // the same prefix (a foreign tool object / truncation). One stray object
+    // must not abort the entire device pull.
+    first
+        .save_item(&text_item("incremental", "second"))
+        .unwrap();
+    sync_database(&store, &first, &first_paths, REMOTE_SCOPE, None, options()).unwrap();
+
+    let newest_segment = store
+        .objects
+        .lock()
+        .unwrap()
+        .keys()
+        .filter(|key| key.starts_with("v1/segments/"))
+        .max()
+        .cloned()
+        .expect("a segment key exists");
+    let stray = format!(
+        "{}.pac",
+        newest_segment
+            .strip_suffix(".pack")
+            .expect("segment keys end in .pack")
+    );
+    store
+        .objects
+        .lock()
+        .unwrap()
+        .insert(stray.clone(), b"stray".to_vec());
+
+    let pulled = sync_database(
+        &store,
+        &second,
+        &second_paths,
+        REMOTE_SCOPE,
+        None,
+        options(),
+    )
+    .unwrap();
+    assert!(pulled.applied_entries >= 1);
+    assert!(second.get_item("incremental").unwrap().is_some());
+
+    drop(first);
+    drop(second);
+    fs::remove_dir_all(first_paths.project).unwrap();
+    fs::remove_dir_all(second_paths.project).unwrap();
+}
+
+#[test]
 fn empty_peer_joins_without_rewriting_checkpoint_and_source_keeps_publishing() {
     let store = MemoryStore::default();
     let source_paths = temp_paths("empty-peer-source");

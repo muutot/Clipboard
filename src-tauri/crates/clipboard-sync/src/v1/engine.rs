@@ -1595,7 +1595,12 @@ fn pull_device(
         if info.key.as_str() > head_last_key {
             break;
         }
-        let parsed = parse_segment_key(&info.key)?;
+        // Tolerate non-canonical keys under the prefix (directory markers,
+        // foreign tool objects) exactly like GC does: one stray object must not
+        // abort the whole device pull forever.
+        let Ok(parsed) = parse_segment_key(&info.key) else {
+            continue;
+        };
         if parsed.device_id != head.device_id || parsed.epoch != head.epoch {
             return Err(format!(
                 "segment {:?} does not belong to its device head",
