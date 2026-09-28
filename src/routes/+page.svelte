@@ -810,9 +810,11 @@
     // persisted desktop state even before the user opens the deleted view.
     void loadDeletedHistoryPage();
 
-    void listSourceApplications().then((apps) => {
-      if (apps) sourceApps = apps;
-    });
+    void listSourceApplications()
+      .then((apps) => {
+        if (apps) sourceApps = apps;
+      })
+      .catch((error) => console.error("Unable to list source applications", error));
 
     refreshTagColors();
 
@@ -1794,13 +1796,18 @@
   }
 
   async function refreshTagColors() {
-    const tags = await listAllTags();
-    if (!tags) return;
-    const map: Record<string, string> = {};
-    for (const tag of tags) {
-      if (tag.color) map[tag.name] = tag.color;
+    try {
+      const tags = await listAllTags();
+      if (!tags) return;
+      const map: Record<string, string> = {};
+      for (const tag of tags) {
+        if (tag.color) map[tag.name] = tag.color;
+      }
+      tagColors = map;
+    } catch (error) {
+      // Fire-and-forget callers rely on this never rejecting.
+      console.error("Unable to refresh tag colors", error);
     }
-    tagColors = map;
   }
 
   async function saveTags(id: string, tags: string[]) {

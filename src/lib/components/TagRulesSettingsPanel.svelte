@@ -29,6 +29,8 @@
   async function loadRules() {
     try {
       rules = (await getAutoTagRules()) ?? [];
+    } catch (error) {
+      console.error("Unable to load auto-tag rules", error);
     } finally {
       loading = false;
     }

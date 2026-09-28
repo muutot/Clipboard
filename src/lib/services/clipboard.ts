@@ -429,7 +429,9 @@ export async function copyClipboardItem(
 
   hooks.moveToTop?.(item.id);
 
-  void persistLastUsed(item.id);
+  void persistLastUsed(item.id).catch((error) =>
+    console.error("Unable to persist last-used item", error),
+  );
 
   if (item.kind === "image" || item.kind === "file") {
     if (isTauriRuntime()) {
@@ -983,7 +985,9 @@ async function pasteToPreviousApp(
     showToast(t(keys.failed), "error");
     return;
   }
-  void persistLastUsed(item.id);
+  void persistLastUsed(item.id).catch((error) =>
+    console.error("Unable to persist last-used item", error),
+  );
 
   if (!isTauriRuntime()) {
     showToast(t(keys.copy), "success");
