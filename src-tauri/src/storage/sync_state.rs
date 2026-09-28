@@ -1317,6 +1317,12 @@ impl Database {
         let generation = sequence_to_i64(generation, "sync checkpoint generation")?;
         validate_checkpoint_cursors(cursors)?;
 
+        // Decode the whole pack before opening the write transaction. The
+        // iterator reads and decompresses the downloaded file lazily, and
+        // doing that inside `with_connection` holds the shared connection mutex
+        // and the SQLite write lock across all of that CPU/IO work.
+        let batches: Vec<_> = batches.into_iter().collect::<Result<Vec<_>, _>>()?;
+
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
             if let Some((stored_generation, stored_sha256)) = transaction
@@ -1343,8 +1349,7 @@ impl Database {
 
             set_changelog_suppressed(&transaction, true)?;
             let mut applied = 0u64;
-            for batch in batches {
-                let (mutations, resource_refs) = batch?;
+            for (mutations, resource_refs) in batches {
                 applied = applied
                     .checked_add(apply_mutations(
                         &transaction,
@@ -1464,6 +1469,11 @@ impl Database {
                 "snapshot cursor must not contain a segment key".to_string(),
             ));
         }
+        // Decode the whole pack before opening the write transaction (see
+        // `apply_sync_checkpoint_batches`): decompression must not hold the
+        // shared connection mutex or the SQLite write lock.
+        let batches: Vec<_> = batches.into_iter().collect::<Result<Vec<_>, _>>()?;
+
         self.with_connection(|connection| {
             let transaction = connection.transaction()?;
             if let Some(existing) = load_cursor(&transaction, remote_scope, &cursor.device_id)? {
@@ -1475,8 +1485,7 @@ impl Database {
             }
             set_changelog_suppressed(&transaction, true)?;
             let mut applied = 0u64;
-            for batch in batches {
-                let (mutations, resource_refs) = batch?;
+            for (mutations, resource_refs) in batches {
                 applied = applied
                     .checked_add(apply_mutations(
                         &transaction,
