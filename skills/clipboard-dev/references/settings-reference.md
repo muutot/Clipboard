@@ -105,7 +105,7 @@ See `css-theming.md` for the full ThemeColors → CSS variable contract.
 
 ## Related but separate settings
 
-`WindowConfig` is retrieved/saved by separate commands and currently defaults to launch-at-startup false, close-to-tray true, and single-instance true. Position is stored in the same backend window config group.
+`WindowConfig` is retrieved/saved by separate commands and currently defaults to launch-at-startup false, close-to-tray true, and single-instance true. The frontend mirrors it in the shared `windowConfig` store (`settings.ts`), loaded once at startup, so the General panel toggles render the real value without a load animation. Position is stored in the same backend window config group.
 
 History/storage/OCR/privacy/export settings are separate Rust config groups and settings commands. Keyboard bindings remain in `conf/keyboard.json`. Do not add their fields to `GeneralSettings` merely because the controls appear in the same settings window.
 

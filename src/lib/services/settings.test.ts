@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { get } from "svelte/store";
-import { DEFAULT_GENERAL_SETTINGS, generalSettings, validHexColor } from "./settings";
+import { DEFAULT_GENERAL_SETTINGS, generalSettings, validHexColor, windowConfig } from "./settings";
 
 const STORAGE_KEY = "generalSettings";
 
@@ -27,6 +27,14 @@ describe("validHexColor", () => {
     expect(validHexColor("#12345", fallback)).toBe(fallback);
     expect(validHexColor(123 as unknown as string, fallback)).toBe(fallback);
     expect(validHexColor(null, fallback)).toBe(fallback);
+  });
+});
+
+describe("windowConfig store", () => {
+  it("exposes defaults and applies updates optimistically in browser mode", async () => {
+    expect(get(windowConfig).closeToTray).toBe(true);
+    await windowConfig.update({ launchAtStartup: true });
+    expect(get(windowConfig).launchAtStartup).toBe(true);
   });
 });
 

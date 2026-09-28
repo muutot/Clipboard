@@ -671,12 +671,14 @@ export async function setGeneralSettings(value: GeneralSettings): Promise<Genera
   return invokeTauri<GeneralSettings>("set_general_settings", { settings }, settings);
 }
 
+export const DEFAULT_WINDOW_CONFIG: WindowConfig = {
+  launchAtStartup: false,
+  closeToTray: true,
+  singleInstance: true,
+};
+
 export async function getWindowConfig(): Promise<WindowConfig> {
-  return invokeTauri<WindowConfig>("get_window_config", undefined, {
-    launchAtStartup: false,
-    closeToTray: true,
-    singleInstance: true,
-  });
+  return invokeTauri<WindowConfig>("get_window_config", undefined, { ...DEFAULT_WINDOW_CONFIG });
 }
 
 export async function setWindowConfig(settings: Partial<WindowConfig>): Promise<void> {
@@ -686,6 +688,54 @@ export async function setWindowConfig(settings: Partial<WindowConfig>): Promise<
     singleInstance: settings.singleInstance ?? null,
   });
 }
+
+/**
+ * Shared window-config store. Loading once at module scope keeps the
+ * startup/tray toggles populated before any settings panel mounts, so the
+ * lazy General panel shows the real value on first paint instead of flipping
+ * from the default after `get_window_config` resolves.
+ */
+function createWindowConfigStore() {
+  const store = writable<WindowConfig>({ ...DEFAULT_WINDOW_CONFIG });
+  let loaded = false;
+  let loading: Promise<void> | undefined;
+
+  function ensureLoaded(): Promise<void> {
+    if (loaded) return Promise.resolve();
+    if (!loading) {
+      loading = getWindowConfig()
+        .then((config) => {
+          store.set(config);
+          loaded = true;
+        })
+        .catch((error) => {
+          console.error("Window config load failed:", error);
+        })
+        .finally(() => {
+          loading = undefined;
+        });
+    }
+    return loading;
+  }
+
+  async function update(partial: Partial<WindowConfig>): Promise<void> {
+    const previous = get(store);
+    const next = { ...previous, ...partial };
+    store.set(next);
+    try {
+      await setWindowConfig(partial);
+    } catch (error) {
+      store.set(previous);
+      throw error;
+    }
+  }
+
+  void ensureLoaded();
+
+  return { ...store, ensureLoaded, update };
+}
+
+export const windowConfig = createWindowConfigStore();
 
 export async function restoreWindowPosition(): Promise<WindowPosition | null> {
   return invokeTauri<WindowPosition>("restore_window_position");

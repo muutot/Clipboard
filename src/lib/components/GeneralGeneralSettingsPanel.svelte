@@ -2,8 +2,8 @@
   import SettingEntry from "$lib/components/SettingEntry.svelte";
   import { messages, resolvePath, locale } from "$lib/i18n";
   import type { Locale } from "$lib/i18n/types";
-  import type { GeneralSettings, WindowConfig } from "$lib/types/clipboard";
-  import { generalSettings, getWindowConfig, setWindowConfig } from "$lib/services/settings";
+  import type { GeneralSettings } from "$lib/types/clipboard";
+  import { generalSettings, windowConfig } from "$lib/services/settings";
   import { onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/feedback.svelte";
   import type { SettingEntryConfig } from "$lib/types/settings-entry";
@@ -19,6 +19,7 @@
   let { onclose, showHeader = true }: Props = $props();
 
   let s = $state($generalSettings);
+  let wc = $state($windowConfig);
   let feedback = createFeedback(2000);
 
   onDestroy(() => feedback.dispose());
@@ -30,47 +31,22 @@
     return unsub;
   });
 
-  let _cachedWindowConfig: WindowConfig | null = null;
-
-  let windowConfig = $state<WindowConfig | null>(
-    _cachedWindowConfig ?? { launchAtStartup: false, closeToTray: true, singleInstance: true },
-  );
-  let windowConfigLoading = $state(!_cachedWindowConfig);
-  let windowConfigSaving = $state(false);
+  $effect(() => {
+    const unsub = windowConfig.subscribe((v) => {
+      wc = v;
+    });
+    return unsub;
+  });
 
   $effect(() => {
-    let cancelled = false;
-    void getWindowConfig()
-      .then((config) => {
-        if (!cancelled) {
-          _cachedWindowConfig = config;
-          windowConfig = config;
-        }
-      })
-      .catch(() => {
-        if (!cancelled) feedback.show(_t("general.windowConfigLoadFailed"), false);
-      })
-      .finally(() => {
-        if (!cancelled) windowConfigLoading = false;
-      });
-    return () => {
-      cancelled = true;
-    };
+    void windowConfig.ensureLoaded();
   });
 
   async function changeWindowSetting(key: "launchAtStartup" | "closeToTray", value: boolean) {
-    if (!windowConfig || windowConfigSaving) return;
-    const previous = windowConfig;
-    windowConfig = { ...previous, [key]: value };
-    windowConfigSaving = true;
     try {
-      await setWindowConfig({ [key]: value });
-      _cachedWindowConfig = windowConfig;
+      await windowConfig.update({ [key]: value });
     } catch {
-      windowConfig = previous;
       feedback.show(_t("general.windowConfigUpdateFailed"), false);
-    } finally {
-      windowConfigSaving = false;
     }
   }
 
@@ -98,9 +74,8 @@
       icon: "clock",
       label: _t("general.launchAtStartup"),
       desc: _t("general.launchAtStartupDescription"),
-      get: () => windowConfig?.launchAtStartup ?? false,
+      get: () => wc.launchAtStartup,
       set: (v) => void changeWindowSetting("launchAtStartup", v),
-      disabled: () => windowConfigLoading || !windowConfig,
     },
     {
       type: "toggle",
@@ -108,9 +83,8 @@
       icon: "clipboard",
       label: _t("general.closeToTray"),
       desc: _t("general.closeToTrayDescription"),
-      get: () => windowConfig?.closeToTray ?? false,
+      get: () => wc.closeToTray,
       set: (v) => void changeWindowSetting("closeToTray", v),
-      disabled: () => windowConfigLoading || !windowConfig,
     },
     {
       type: "toggle",
