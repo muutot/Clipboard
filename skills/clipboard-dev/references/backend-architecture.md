@@ -86,7 +86,7 @@ Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLit
 
 The clipboard monitor produces change notifications; a capture thread reads platform content, applies privacy and self-trigger checks, stores resources/metadata, saves through the repository, queues OCR/thumbnails, and emits the saved record. Platform access goes through `PlatformClipboard` adapters. Text capture may include HTML/RTF fragments, each capped by `maxTextCaptureBytes`. The monitor's `start` detects a dead monitor thread (the capture worker's receiver was dropped after a worker panic or spawn failure) via `JoinHandle::is_finished` and resets its flag so a restart is not permanently blocked by "already running".
 
-`content/` owns detection/actions, canonical hashes and `SelfTriggerGuard`, managed file copies, resource metadata, thumbnails, and text transforms. Write-back registration and capture-side checks must use identical canonical hashing rules for text, links, images, and files.
+`content/` owns detection/actions, canonical hashes and `SelfTriggerGuard`, managed file copies, resource metadata, thumbnails, and text transforms. Write-back registration and capture-side checks must use identical canonical hashing rules for text, links, images, and files. Untrusted clipboard/thumbnail images are decoded through `content/hash.rs::decode_image_bytes`/`decode_image_file`, which enforce a strict `MAX_DECODE_DIMENSION` plus the `image` crate's allocation budget, so a crafted decompression bomb cannot exhaust memory.
 
 ## Privacy and cleanup
 

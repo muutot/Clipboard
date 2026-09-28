@@ -875,7 +875,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
             .output()
         {
             if output.status.success() && !output.stdout.is_empty() {
-                if let Ok(img) = image::load_from_memory(&output.stdout) {
+                if let Some(img) = crate::content::hash::decode_image_bytes(&output.stdout) {
                     let rgba = img.to_rgba8();
                     let (w, h) = rgba.dimensions();
                     return Some((rgba.into_raw(), w, h));

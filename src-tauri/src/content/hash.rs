@@ -21,6 +21,41 @@ pub fn compute_media_hash(kind: &str, data: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Strict maximum width or height for a decoded clipboard/thumbnail image.
+/// Generous for multi-monitor and 16K screenshots while rejecting a crafted
+/// decompression bomb that would otherwise allocate gigabytes.
+pub const MAX_DECODE_DIMENSION: u32 = 16_384;
+
+/// Decodes untrusted image bytes with a strict dimension limit plus the
+/// `image` crate's default 512 MiB allocation budget, so a crafted clipboard
+/// image cannot exhaust memory. Returns `None` when the image is too large or
+/// cannot be decoded.
+pub fn decode_image_bytes(data: &[u8]) -> Option<image::DynamicImage> {
+    let reader = image::ImageReader::new(std::io::Cursor::new(data))
+        .with_guessed_format()
+        .ok()?;
+    decode_with_limits(reader)
+}
+
+/// Decodes an image file with the same strict limits as [`decode_image_bytes`].
+pub fn decode_image_file(path: &std::path::Path) -> Option<image::DynamicImage> {
+    let reader = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?;
+    decode_with_limits(reader)
+}
+
+fn decode_with_limits<R: std::io::BufRead + std::io::Seek>(
+    mut reader: image::ImageReader<R>,
+) -> Option<image::DynamicImage> {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DECODE_DIMENSION);
+    limits.max_image_height = Some(MAX_DECODE_DIMENSION);
+    reader.limits(limits);
+    reader.decode().ok()
+}
+
 /// Computes an image hash from decoded RGBA pixels instead of the source
 /// container bytes. Windows exposes a `ClipboardItem` image as DIB data and
 /// the capture path re-encodes it as PNG, so hashing pixels keeps a copied
@@ -35,7 +70,7 @@ pub fn compute_normalized_media_hash(kind: &str, data: &[u8]) -> String {
         return compute_media_hash(kind, data);
     }
 
-    let Ok(image) = image::load_from_memory(data) else {
+    let Some(image) = decode_image_bytes(data) else {
         return compute_media_hash(kind, data);
     };
     let rgba = image.to_rgba8();
@@ -238,5 +273,31 @@ mod tests {
     #[test]
     fn infer_icon_extension_detects_jpg() {
         assert_eq!(infer_icon_extension(&[0xff, 0xd8, 0xff, 0]), "jpg");
+    }
+
+    #[test]
+    fn decode_limits_reject_oversized_dimensions() {
+        use image::ImageEncoder;
+
+        let encode = |image: &image::RgbaImage| {
+            let mut bytes = Vec::new();
+            image::codecs::png::PngEncoder::new(&mut bytes)
+                .write_image(
+                    image.as_raw(),
+                    image.width(),
+                    image.height(),
+                    image::ExtendedColorType::Rgba8,
+                )
+                .unwrap();
+            bytes
+        };
+
+        // One pixel over the strict width limit: only 65 KiB of pixels, but the
+        // declared width must be rejected before any large allocation.
+        let too_wide = encode(&image::RgbaImage::new(MAX_DECODE_DIMENSION + 1, 1));
+        assert!(decode_image_bytes(&too_wide).is_none());
+
+        let small = encode(&image::RgbaImage::new(2, 2));
+        assert!(decode_image_bytes(&small).is_some());
     }
 }

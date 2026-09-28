@@ -609,7 +609,7 @@ pub fn read_clipboard_rtf() -> Option<String> {
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     // Try pngpaste first (brew install pngpaste)
     if let Some(data) = try_clipboard_image_tool("pngpaste", &["-"]) {
-        if let Ok(img) = image::load_from_memory(&data) {
+        if let Some(img) = crate::content::hash::decode_image_bytes(&data) {
             let rgba = img.to_rgba8();
             let (w, h) = rgba.dimensions();
             return Some((rgba.into_raw(), w, h));
@@ -617,7 +617,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     }
     // Try imgpaste (alternative tool)
     if let Some(data) = try_clipboard_image_tool("imgpaste", &[]) {
-        if let Ok(img) = image::load_from_memory(&data) {
+        if let Some(img) = crate::content::hash::decode_image_bytes(&data) {
             let rgba = img.to_rgba8();
             let (w, h) = rgba.dimensions();
             return Some((rgba.into_raw(), w, h));
@@ -680,7 +680,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     let data = std::fs::read(&png_path).ok()?;
     let _ = std::fs::remove_file(&png_path);
 
-    if let Ok(img) = image::load_from_memory(&data) {
+    if let Some(img) = crate::content::hash::decode_image_bytes(&data) {
         let rgba = img.to_rgba8();
         let (w, h) = rgba.dimensions();
         Some((rgba.into_raw(), w, h))

@@ -43,8 +43,10 @@ impl ThumbnailGenerator {
         preview_dir: &Path,
     ) -> Result<ThumbnailInfo, StorageError> {
         let original_size = fs::metadata(image_path)?.len();
-        let img = image::open(image_path).map_err(|e| {
-            StorageError::Io(std::io::Error::other(format!("image decode error: {e}")))
+        let img = super::hash::decode_image_file(image_path).ok_or_else(|| {
+            StorageError::Io(std::io::Error::other(
+                "image decode error or image dimensions exceed the decode limit",
+            ))
         })?;
         let (orig_w, orig_h) = img.dimensions();
         let (w, h) = if orig_w > self.max_width {
