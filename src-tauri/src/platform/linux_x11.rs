@@ -805,12 +805,15 @@ pub fn read_clipboard_text() -> Option<String> {
 
         let text = if result == 0 && !prop.is_null() && nitems > 0 {
             let slice = std::slice::from_raw_parts(prop, nitems as usize);
-            let s = String::from_utf8(slice.to_vec()).ok();
-            x11_ffi::XFree(prop as *mut std::ffi::c_void);
-            s
+            String::from_utf8(slice.to_vec()).ok()
         } else {
             None
         };
+        // `XGetWindowProperty` allocates `prop` even when the property is empty
+        // or has an unexpected format, so it must be freed on every path.
+        if !prop.is_null() {
+            x11_ffi::XFree(prop as *mut std::ffi::c_void);
+        }
 
         x11_ffi::XDestroyWindow(display, window);
         x11_ffi::XCloseDisplay(display);
@@ -951,14 +954,19 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             &mut prop,
         );
 
-        let window_id = if res == 0 && !prop.is_null() && nitems > 0 && actual_format == 32 {
-            let w = *(prop as *mut u32) as u64;
-            x11_ffi::XFree(prop as *mut std::ffi::c_void);
-            w
+        let active_window_ok = res == 0 && !prop.is_null() && nitems > 0 && actual_format == 32;
+        let window_id = if active_window_ok {
+            *(prop as *mut u32) as u64
         } else {
+            0
+        };
+        if !prop.is_null() {
+            x11_ffi::XFree(prop as *mut std::ffi::c_void);
+        }
+        if !active_window_ok {
             x11_ffi::XCloseDisplay(display);
             return crate::platform::ForegroundApp::empty();
-        };
+        }
 
         // Get _NET_WM_PID from the active window
         let mut actual_type2: x11_ffi::Atom = 0;
@@ -984,12 +992,13 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
 
         let pid: Option<u32> =
             if res2 == 0 && !prop2.is_null() && nitems2 > 0 && actual_format2 == 32 {
-                let p = *(prop2 as *mut u32);
-                x11_ffi::XFree(prop2 as *mut std::ffi::c_void);
-                Some(p)
+                Some(*(prop2 as *mut u32))
             } else {
                 None
             };
+        if !prop2.is_null() {
+            x11_ffi::XFree(prop2 as *mut std::ffi::c_void);
+        }
 
         x11_ffi::XCloseDisplay(display);
 
