@@ -1333,10 +1333,18 @@ pub fn read_clipboard_file_paths() -> Vec<String> {
         let mut paths = Vec::new();
 
         for i in 0..file_count {
-            let mut buffer = [0u16; 520];
-            let len = DragQueryFileW(handle, i, buffer.as_mut_ptr(), 520);
-            if len > 0 {
-                let wide: Vec<u16> = buffer[..len as usize].to_vec();
+            // Query the required length first. `DragQueryFileW` returns the
+            // required buffer size (excluding the NUL) when the buffer is too
+            // small, so a fixed 520-unit buffer would index out of bounds for
+            // a long (`\\?\`) path and abort the process under `panic=abort`.
+            let len = DragQueryFileW(handle, i, std::ptr::null_mut(), 0);
+            if len == 0 {
+                continue;
+            }
+            let mut buffer = vec![0u16; len as usize + 1];
+            let copied = DragQueryFileW(handle, i, buffer.as_mut_ptr(), buffer.len() as u32);
+            if copied > 0 {
+                let wide: Vec<u16> = buffer[..copied as usize].to_vec();
                 paths.push(OsString::from_wide(&wide).to_string_lossy().to_string());
             }
         }
@@ -2204,8 +2212,7 @@ mod tests {
     }
 
     #[cfg(target_os = "windows")]
-    #[test]
-    fn read_clipboard_file_paths_reads_a_cf_hdrop() {
+    fn set_cf_hdrop(path: &str) {
         use std::os::windows::ffi::OsStrExt;
 
         extern "system" {
@@ -2221,7 +2228,6 @@ mod tests {
         const CF_HDROP: u32 = 15;
         const DROPFILES_SIZE: usize = 20;
 
-        let path = r"C:\Windows\notepad.exe";
         let mut wide: Vec<u16> = std::ffi::OsStr::new(path).encode_wide().collect();
         wide.push(0);
         wide.push(0);
@@ -2263,9 +2269,21 @@ mod tests {
             );
             CloseClipboard();
         }
+    }
 
-        let paths = read_clipboard_file_paths();
-        assert_eq!(paths, vec![path.to_owned()]);
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn read_clipboard_file_paths_reads_a_cf_hdrop() {
+        let path = r"C:\Windows\notepad.exe";
+        set_cf_hdrop(path);
+        assert_eq!(read_clipboard_file_paths(), vec![path.to_owned()]);
+
+        // Regression: `DragQueryFileW` returns the required length when the
+        // buffer is too small, so a path above the old fixed 520-unit buffer
+        // overran the slice and aborted the process under `panic = "abort"`.
+        let long_path = format!(r"C:\{}", "a".repeat(600));
+        set_cf_hdrop(&long_path);
+        assert_eq!(read_clipboard_file_paths(), vec![long_path]);
     }
 
     /// Builds a CF_HTML payload with accurate byte offsets. Header widths are
