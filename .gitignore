@@ -23,7 +23,7 @@ node_modules
 # Output
 /.svelte-kit
 src-tauri/target-platform-validation
-export
+/export
 /build
 
 # Logs
