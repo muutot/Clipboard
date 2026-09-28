@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 const OAR_HOME_DIR: &str = "ppocr";
 
@@ -199,28 +201,73 @@ pub fn file_matches_sha256(path: &Path, expected: &str) -> std::io::Result<bool>
 pub fn record_model_digest(dir: &Path, file: &PpOcrModelFile) -> std::io::Result<()> {
     let digest = compute_file_sha256(&dir.join(file.filename))?;
     std::fs::write(model_digest_path(dir, file), digest)
-        .map_err(|error| error_with_path("record model digest", dir.join(file.filename), error))
+        .map_err(|error| error_with_path("record model digest", dir.join(file.filename), error))?;
+    invalidate_digest_cache(&dir.join(file.filename));
+    Ok(())
+}
+
+/// Process-wide cache of digest verification results, keyed by model path and
+/// invalidated by length/mtime. Diagnostics and status commands poll every few
+/// seconds; without this they would re-read and SHA-256 hundreds of MB of ONNX
+/// weights on every poll while the file is unchanged.
+fn digest_cache() -> &'static Mutex<HashMap<PathBuf, (DigestCacheKey, bool)>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, (DigestCacheKey, bool)>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct DigestCacheKey {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+fn invalidate_digest_cache(path: &Path) {
+    if let Ok(mut cache) = digest_cache().lock() {
+        cache.remove(path);
+    }
 }
 
 /// Returns `false` when a locally recorded digest exists but the model file
 /// no longer matches it. Missing digests (models installed before TOFU
 /// pinning was introduced) fall back to the size-only check.
 pub fn model_digest_matches(dir: &Path, file: &PpOcrModelFile) -> bool {
-    let digest_path = model_digest_path(dir, file);
-    let Ok(recorded) = std::fs::read_to_string(&digest_path) else {
-        return true;
+    let model_path = dir.join(file.filename);
+    let Ok(metadata) = std::fs::metadata(&model_path) else {
+        return false;
     };
-    let recorded = recorded.trim();
-    match compute_file_sha256(&dir.join(file.filename)) {
-        Ok(actual) => actual.eq_ignore_ascii_case(recorded),
-        Err(error) => {
-            crate::log_event!(
-                "[ocr] cannot hash {} for digest verification: {error}",
-                file.filename
-            );
-            false
+    let key = DigestCacheKey {
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+    };
+    if let Ok(cache) = digest_cache().lock() {
+        if let Some((cached_key, matches)) = cache.get(&model_path) {
+            if *cached_key == key {
+                return *matches;
+            }
         }
     }
+
+    let digest_path = model_digest_path(dir, file);
+    let matches = match std::fs::read_to_string(&digest_path) {
+        Ok(recorded) => {
+            let recorded = recorded.trim();
+            match compute_file_sha256(&model_path) {
+                Ok(actual) => actual.eq_ignore_ascii_case(recorded),
+                Err(error) => {
+                    crate::log_event!(
+                        "[ocr] cannot hash {} for digest verification: {error}",
+                        file.filename
+                    );
+                    false
+                }
+            }
+        }
+        Err(_) => true,
+    };
+    if let Ok(mut cache) = digest_cache().lock() {
+        cache.insert(model_path, (key, matches));
+    }
+    matches
 }
 
 fn error_with_path(context: &str, path: PathBuf, error: std::io::Error) -> std::io::Error {
@@ -360,8 +407,11 @@ mod tests {
 
         record_model_digest(&dir, &file).unwrap();
         assert!(model_digest_matches(&dir, &file));
+        // Second read is served from the length/mtime cache.
+        assert!(model_digest_matches(&dir, &file));
 
-        // Flip one byte in place: same size, different content.
+        // Flip one byte in place: same size, different content. The mtime
+        // changes, so the cache must invalidate and report the mismatch.
         let path = dir.join(file.filename);
         let mut bytes = fs::read(&path).unwrap();
         bytes[0] ^= 0xff;
