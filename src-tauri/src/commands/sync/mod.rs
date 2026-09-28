@@ -159,7 +159,10 @@ impl SyncSettings {
     /// every required field.
     fn validated_from_sync_config(sync: &SyncConfig) -> Result<Self, String> {
         Ok(Self {
-            endpoint: required_value(sync.endpoint.as_deref(), "S3 endpoint")?,
+            endpoint: validate_sync_endpoint(&required_value(
+                sync.endpoint.as_deref(),
+                "S3 endpoint",
+            )?)?,
             remote_path: sync
                 .remote_path
                 .as_deref()
@@ -303,6 +306,9 @@ pub fn set_sync_config(
         max_sync_file_bytes: max_sync_file_bytes
             .clamp(MIN_SYNC_RESOURCE_BYTES, MAX_SYNC_RESOURCE_BYTES),
     };
+    if let Some(endpoint) = sync.endpoint.as_deref() {
+        validate_sync_endpoint(endpoint)?;
+    }
     guard
         .set_sync_config(sync)
         .map_err(|error| error.to_string())
@@ -566,6 +572,28 @@ fn required_value(value: Option<&str>, label: &str) -> Result<String, String> {
         .ok_or_else(|| format!("{label} is not configured"))
 }
 
+/// Rejects a plaintext `http://` S3 endpoint unless it points at loopback,
+/// where credentials and clipboard data never leave the machine. Everything
+/// else must use `https://` (a scheme-less host is upgraded to https).
+fn validate_sync_endpoint(endpoint: &str) -> Result<String, String> {
+    let trimmed = endpoint.trim();
+    if !trimmed.to_ascii_lowercase().starts_with("http://") {
+        return Ok(trimmed.to_string());
+    }
+    let host_port = &trimmed["http://".len()..];
+    let host_part = host_port.split('/').next().unwrap_or("");
+    let host = if let Some(rest) = host_part.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else {
+        host_part.split(':').next().unwrap_or("")
+    };
+    if host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1" {
+        Ok(trimmed.to_string())
+    } else {
+        Err("S3 endpoint must use https (plaintext http is only allowed for localhost)".to_string())
+    }
+}
+
 fn normalized_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
@@ -602,6 +630,23 @@ mod tests {
             RecordVersion, ReplicatedItem,
         },
     };
+
+    #[test]
+    fn sync_endpoint_requires_https_except_loopback() {
+        assert_eq!(
+            validate_sync_endpoint("s3.amazonaws.com").unwrap(),
+            "s3.amazonaws.com"
+        );
+        assert_eq!(
+            validate_sync_endpoint("https://minio.example.com").unwrap(),
+            "https://minio.example.com"
+        );
+        assert!(validate_sync_endpoint("http://127.0.0.1:9000").is_ok());
+        assert!(validate_sync_endpoint("http://localhost:9000").is_ok());
+        assert!(validate_sync_endpoint("HTTP://[::1]:9000").is_ok());
+        assert!(validate_sync_endpoint("http://minio.example.com").is_err());
+        assert!(validate_sync_endpoint("http://10.0.0.5:9000").is_err());
+    }
 
     #[derive(Default)]
     struct MaterializationStore {
