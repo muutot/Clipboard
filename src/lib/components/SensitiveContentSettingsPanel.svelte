@@ -151,40 +151,40 @@
 {/if}
 
 <div class="settings-scroll">
-  <CustomEntry
-    searchId="recording.pause"
-    config={{
-      type: "custom",
-      variant: "toggle",
-      icon: "pause",
-      label: _t("capture.pauseTitle"),
-      desc: _t("capture.pauseDescription"),
-    }}
-  >
-    <div class="pause-control">
-      <span class="pause-state">{_t(privacyPaused ? "capture.paused" : "capture.active")}</span>
-      <button
-        type="button"
-        class="toggle-switch"
-        class:active={!privacyPaused}
-        role="switch"
-        aria-checked={!privacyPaused}
-        aria-label={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
-        title={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
-        disabled={pauseLoading || !isTauriRuntime()}
-        onclick={togglePrivacyPause}
-      >
-        <span class="toggle-knob"></span>
-      </button>
-    </div>
-    {#if nonWindowsDesktop}
-      <p class="polling-note">{_t("capture.pollingNote")}</p>
-    {/if}
-  </CustomEntry>
-
-  {#if loading || !privacy}
+  {#if loading || pauseLoading || !privacy}
     <div class="settings-state">{_t("storage.readingConfig")}</div>
   {:else}
+    <CustomEntry
+      searchId="recording.pause"
+      config={{
+        type: "custom",
+        variant: "toggle",
+        icon: "pause",
+        label: _t("capture.pauseTitle"),
+        desc: _t("capture.pauseDescription"),
+      }}
+    >
+      <div class="pause-control">
+        <span class="pause-state">{_t(privacyPaused ? "capture.paused" : "capture.active")}</span>
+        <button
+          type="button"
+          class="toggle-switch"
+          class:active={!privacyPaused}
+          role="switch"
+          aria-checked={!privacyPaused}
+          aria-label={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
+          title={_t(privacyPaused ? "capture.resumeAction" : "capture.pauseAction")}
+          disabled={pauseLoading || !isTauriRuntime()}
+          onclick={togglePrivacyPause}
+        >
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+      {#if nonWindowsDesktop}
+        <p class="polling-note">{_t("capture.pollingNote")}</p>
+      {/if}
+    </CustomEntry>
+
     <ToggleEntry
       searchId="capture.local-only"
       config={{

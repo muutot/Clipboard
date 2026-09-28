@@ -16,6 +16,7 @@
   let { onclose, showHeader = true }: Props = $props();
 
   let rules = $state<AutoTagRule[]>([]);
+  let loading = $state(true);
   let rulesSaving = $state(false);
   let feedback = createFeedback(3000);
 
@@ -26,7 +27,11 @@
   });
 
   async function loadRules() {
-    rules = (await getAutoTagRules()) ?? [];
+    try {
+      rules = (await getAutoTagRules()) ?? [];
+    } finally {
+      loading = false;
+    }
   }
 
   function addRule() {
@@ -75,46 +80,50 @@
         <p>{_t("tags.autoTagDescription")}</p>
       </div>
     </div>
-    {#each rules as rule, index (index)}
-      <div class="autotag-row">
-        <input
-          class="autotag-pattern"
-          type="text"
-          bind:value={rule.pattern}
-          placeholder={_t("tags.autoTagPatternPlaceholder")}
-          aria-label={_t("tags.autoTagPatternPlaceholder")}
-          spellcheck={false}
-        />
-        <input
-          class="autotag-tag"
-          type="text"
-          bind:value={rule.tag}
-          placeholder={_t("tags.autoTagTagPlaceholder")}
-          aria-label={_t("tags.autoTagTagPlaceholder")}
-          spellcheck={false}
-        />
+    {#if loading}
+      <p class="settings-state">{_t("storage.readingConfig")}</p>
+    {:else}
+      {#each rules as rule, index (index)}
+        <div class="autotag-row">
+          <input
+            class="autotag-pattern"
+            type="text"
+            bind:value={rule.pattern}
+            placeholder={_t("tags.autoTagPatternPlaceholder")}
+            aria-label={_t("tags.autoTagPatternPlaceholder")}
+            spellcheck={false}
+          />
+          <input
+            class="autotag-tag"
+            type="text"
+            bind:value={rule.tag}
+            placeholder={_t("tags.autoTagTagPlaceholder")}
+            aria-label={_t("tags.autoTagTagPlaceholder")}
+            spellcheck={false}
+          />
+          <button
+            type="button"
+            class="autotag-remove"
+            aria-label={_t("tags.autoTagDelete")}
+            title={_t("tags.autoTagDelete")}
+            onclick={() => removeRule(index)}>×</button
+          >
+        </div>
+      {/each}
+      <div class="autotag-actions">
+        <button type="button" class="autotag-add" onclick={addRule}>
+          {_t("tags.autoTagAdd")}
+        </button>
         <button
           type="button"
-          class="autotag-remove"
-          aria-label={_t("tags.autoTagDelete")}
-          title={_t("tags.autoTagDelete")}
-          onclick={() => removeRule(index)}>×</button
+          class="autotag-save"
+          disabled={rulesSaving || !isTauriRuntime()}
+          onclick={() => void saveRules()}
         >
+          {_t("tags.autoTagSave")}
+        </button>
       </div>
-    {/each}
-    <div class="autotag-actions">
-      <button type="button" class="autotag-add" onclick={addRule}>
-        {_t("tags.autoTagAdd")}
-      </button>
-      <button
-        type="button"
-        class="autotag-save"
-        disabled={rulesSaving || !isTauriRuntime()}
-        onclick={() => void saveRules()}
-      >
-        {_t("tags.autoTagSave")}
-      </button>
-    </div>
+    {/if}
   </section>
 
   {#if feedback.message}

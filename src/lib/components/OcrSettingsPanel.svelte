@@ -21,6 +21,10 @@
   let ocrEngineAvailable = $state(false);
   let ocrHasEngine = $state(false);
   let ocrStatusLoading = $state(false);
+  // The engine/model/detection controls must not render the placeholder
+  // defaults and then jump to the stored values once `loadOcrStatus`
+  // resolves; gate them until the first load finishes.
+  let ocrReady = $state(false);
   let ocrTotal = $state(0);
   let ocrPending = $state(0);
   let ocrCompleted = $state(0);
@@ -144,6 +148,7 @@
       }
     } finally {
       ocrStatusLoading = false;
+      ocrReady = true;
     }
   }
 
@@ -257,166 +262,170 @@
 </script>
 
 <div class="settings-scroll">
-  <SelectEntry
-    searchId="ocr.engine"
-    config={{
-      type: "select",
-      variant: "row",
-      icon: "eye",
-      label: _t("storage.ocrEngineLabel"),
-      options: [
-        { value: "ppocr", label: "PP-OCRv6" },
-        { value: "tesseract", label: "Tesseract" },
-      ],
-      get: () => ocrEngine,
-      set: (v) => saveOcrEngine(v as string),
-    }}
-  />
-
-  <section class="setting-card setting-card-row" data-settings-search-id="ocr.model">
-    <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-    <span class="setting-label">{_t("storage.ocrModelLabel")}</span>
-    <CustomSelect
-      className="ocr-model-select"
-      value={modelVariant}
-      disabled={ocrInstalling}
-      options={[
-        {
-          value: "tiny",
-          label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ?" : ""}`,
-        },
-        {
-          value: "small",
-          label: `small (~30MB)${installedVariants.includes("small") ? " ?" : ""}`,
-        },
-        {
-          value: "medium",
-          label: `medium (~135MB)${installedVariants.includes("medium") ? " ?" : ""}`,
-        },
-      ]}
-      onchange={(v) => (modelVariant = v as string)}
+  {#if !ocrReady}
+    <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else}
+    <SelectEntry
+      searchId="ocr.engine"
+      config={{
+        type: "select",
+        variant: "row",
+        icon: "eye",
+        label: _t("storage.ocrEngineLabel"),
+        options: [
+          { value: "ppocr", label: "PP-OCRv6" },
+          { value: "tesseract", label: "Tesseract" },
+        ],
+        get: () => ocrEngine,
+        set: (v) => saveOcrEngine(v as string),
+      }}
     />
-    {#if installedVariants.includes(modelVariant)}
-      <button
-        type="button"
-        disabled={ocrInstalling || activeVariant === modelVariant}
-        onclick={applyModel}
-      >
-        {activeVariant === modelVariant
-          ? _t("storage.ocrModelApplied")
-          : _t("storage.ocrModelApply")}
-      </button>
-    {:else}
-      <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
-        {ocrInstalling
-          ? ocrProgressPct >= 0
-            ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%`
-            : _t("storage.ocrModelInstalling")
-          : _t("storage.ocrModelDownload")}
-      </button>
-    {/if}
-  </section>
 
-  <section class="setting-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-      <div>
-        <strong>{_t("storage.ocrDetectionTitle")}</strong>
-        <p>{_t("storage.ocrDetectionDesc")}</p>
-      </div>
-    </div>
-    <div class="parameter-grid">
-      <div class="parameter-item">
-        <SliderEntry
-          config={{
-            type: "slider",
-            label: _t("storage.ocrScoreThreshold"),
-            min: 0.05,
-            max: 0.95,
-            step: 0.05,
-            display: (v) => v.toFixed(2),
-            scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
-            get: () => detScoreThreshold,
-            set: (v) => (detScoreThreshold = v),
-            onchange: () => void saveDetConfig(),
-          }}
-        />
-      </div>
-      <div class="parameter-item">
-        <SliderEntry
-          config={{
-            type: "slider",
-            label: _t("storage.ocrBoxThreshold"),
-            min: 0.1,
-            max: 0.95,
-            step: 0.05,
-            display: (v) => v.toFixed(2),
-            scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
-            get: () => detBoxThreshold,
-            set: (v) => (detBoxThreshold = v),
-            onchange: () => void saveDetConfig(),
-          }}
-        />
-      </div>
-      <div class="parameter-item">
-        <SliderEntry
-          config={{
-            type: "slider",
-            label: _t("storage.ocrUnclip"),
-            min: 1.0,
-            max: 4.0,
-            step: 0.1,
-            display: (v) => v.toFixed(1),
-            scale: [_t("storage.ocrSmall"), _t("storage.ocrLarge")],
-            get: () => detUnclipRatio,
-            set: (v) => (detUnclipRatio = v),
-            onchange: () => void saveDetConfig(),
-          }}
-        />
-      </div>
-    </div>
-  </section>
+    <section class="setting-card setting-card-row" data-settings-search-id="ocr.model">
+      <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+      <span class="setting-label">{_t("storage.ocrModelLabel")}</span>
+      <CustomSelect
+        className="ocr-model-select"
+        value={modelVariant}
+        disabled={ocrInstalling}
+        options={[
+          {
+            value: "tiny",
+            label: `tiny (~6MB)${installedVariants.includes("tiny") ? " ?" : ""}`,
+          },
+          {
+            value: "small",
+            label: `small (~30MB)${installedVariants.includes("small") ? " ?" : ""}`,
+          },
+          {
+            value: "medium",
+            label: `medium (~135MB)${installedVariants.includes("medium") ? " ?" : ""}`,
+          },
+        ]}
+        onchange={(v) => (modelVariant = v as string)}
+      />
+      {#if installedVariants.includes(modelVariant)}
+        <button
+          type="button"
+          disabled={ocrInstalling || activeVariant === modelVariant}
+          onclick={applyModel}
+        >
+          {activeVariant === modelVariant
+            ? _t("storage.ocrModelApplied")
+            : _t("storage.ocrModelApply")}
+        </button>
+      {:else}
+        <button type="button" disabled={ocrInstalling} onclick={() => installPpocr()}>
+          {ocrInstalling
+            ? ocrProgressPct >= 0
+              ? `${ocrProgressLabel} ${Math.round(ocrProgressPct)}%`
+              : _t("storage.ocrModelInstalling")
+            : _t("storage.ocrModelDownload")}
+        </button>
+      {/if}
+    </section>
 
-  <section class="setting-card">
-    <div class="setting-heading">
-      <span class="setting-icon"><AppIcon name="search" size={17} /></span>
-      <div>
-        <strong>{_t("storage.ocrTaskStatus")}</strong>
-        <p>{_t("storage.ocrTaskStatusDesc")}</p>
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div>
+          <strong>{_t("storage.ocrDetectionTitle")}</strong>
+          <p>{_t("storage.ocrDetectionDesc")}</p>
+        </div>
       </div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-item">
-        <span class="stat-value">{ocrTotal}</span><span class="stat-label"
-          >{_t("statistics.ocrTotal")}</span
-        >
+      <div class="parameter-grid">
+        <div class="parameter-item">
+          <SliderEntry
+            config={{
+              type: "slider",
+              label: _t("storage.ocrScoreThreshold"),
+              min: 0.05,
+              max: 0.95,
+              step: 0.05,
+              display: (v) => v.toFixed(2),
+              scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
+              get: () => detScoreThreshold,
+              set: (v) => (detScoreThreshold = v),
+              onchange: () => void saveDetConfig(),
+            }}
+          />
+        </div>
+        <div class="parameter-item">
+          <SliderEntry
+            config={{
+              type: "slider",
+              label: _t("storage.ocrBoxThreshold"),
+              min: 0.1,
+              max: 0.95,
+              step: 0.05,
+              display: (v) => v.toFixed(2),
+              scale: [_t("storage.ocrLow"), _t("storage.ocrHigh")],
+              get: () => detBoxThreshold,
+              set: (v) => (detBoxThreshold = v),
+              onchange: () => void saveDetConfig(),
+            }}
+          />
+        </div>
+        <div class="parameter-item">
+          <SliderEntry
+            config={{
+              type: "slider",
+              label: _t("storage.ocrUnclip"),
+              min: 1.0,
+              max: 4.0,
+              step: 0.1,
+              display: (v) => v.toFixed(1),
+              scale: [_t("storage.ocrSmall"), _t("storage.ocrLarge")],
+              get: () => detUnclipRatio,
+              set: (v) => (detUnclipRatio = v),
+              onchange: () => void saveDetConfig(),
+            }}
+          />
+        </div>
       </div>
-      <div class="stat-item">
-        <span class="stat-value">{ocrPending}</span><span class="stat-label"
-          >{_t("statistics.ocrPending")}</span
-        >
+    </section>
+
+    <section class="setting-card">
+      <div class="setting-heading">
+        <span class="setting-icon"><AppIcon name="search" size={17} /></span>
+        <div>
+          <strong>{_t("storage.ocrTaskStatus")}</strong>
+          <p>{_t("storage.ocrTaskStatusDesc")}</p>
+        </div>
       </div>
-      <div class="stat-item">
-        <span class="stat-value">{ocrCompleted}</span><span class="stat-label"
-          >{_t("statistics.ocrCompleted")}</span
-        >
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-value">{ocrTotal}</span><span class="stat-label"
+            >{_t("statistics.ocrTotal")}</span
+          >
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{ocrPending}</span><span class="stat-label"
+            >{_t("statistics.ocrPending")}</span
+          >
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{ocrCompleted}</span><span class="stat-label"
+            >{_t("statistics.ocrCompleted")}</span
+          >
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{ocrFailed}</span><span class="stat-label"
+            >{_t("statistics.ocrFailed")}</span
+          >
+        </div>
       </div>
-      <div class="stat-item">
-        <span class="stat-value">{ocrFailed}</span><span class="stat-label"
-          >{_t("statistics.ocrFailed")}</span
-        >
+      <div class:available={ocrEngineAvailable} class="status-pill">
+        <span class="status-pill-label">{_t("statistics.ocrEngine")}</span>
+        <strong>{ocrEngine === "ppocr" ? "PP-OCRv6" : "Tesseract"}</strong>
+        <span class="status-pill-state">
+          {ocrEngineAvailable
+            ? _t("statistics.ocrEngineAvailable")
+            : ocrHasEngine
+              ? _t("statistics.ocrEngineUnavailable")
+              : _t("statistics.ocrNoEngine")}
+        </span>
       </div>
-    </div>
-    <div class:available={ocrEngineAvailable} class="status-pill">
-      <span class="status-pill-label">{_t("statistics.ocrEngine")}</span>
-      <strong>{ocrEngine === "ppocr" ? "PP-OCRv6" : "Tesseract"}</strong>
-      <span class="status-pill-state">
-        {ocrEngineAvailable
-          ? _t("statistics.ocrEngineAvailable")
-          : ocrHasEngine
-            ? _t("statistics.ocrEngineUnavailable")
-            : _t("statistics.ocrNoEngine")}
-      </span>
-    </div>
-  </section>
+    </section>
+  {/if}
 </div>

@@ -44,6 +44,9 @@
   let maxFileCopySize = $state(50 * 1024 * 1024);
   let maxFileCopySizeUnit = $state<"byte" | "KB" | "MB" | "GB">("MB");
   let maxFileCopyDisplay = $state(50);
+  // The stored copy-size arrives from the backend; hold the input until then so
+  // it does not show the 50 MB placeholder and then jump to the real value.
+  let fileCopySizeLoaded = $state(false);
   let maxTextCaptureSize = $state(500 * 1024);
   let maxTextCaptureSizeUnit = $state<"byte" | "KB" | "MB" | "GB">("KB");
   let maxTextCaptureDisplay = $state(500);
@@ -85,6 +88,8 @@
       }
     } catch (error) {
       console.error("Unable to load storage config", error);
+    } finally {
+      fileCopySizeLoaded = true;
     }
   }
 
@@ -208,31 +213,35 @@
 {/if}
 
 <div class="settings-scroll">
-  <section
-    class="setting-card setting-card-row"
-    data-settings-search-id="storage.max-file-copy-size"
-  >
-    <span class="setting-icon"><AppIcon name="download" size={17} /></span>
-    <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
-    <input
-      type="number"
-      bind:value={maxFileCopyDisplay}
-      min="1"
-      oninput={updateMaxFileSizeFromDisplay}
-      onchange={saveMaxFileCopySize}
-    />
-    <CustomSelect
-      className="unit-select"
-      value={maxFileCopySizeUnit}
-      options={[
-        { value: "byte", label: "B" },
-        { value: "KB", label: "KB" },
-        { value: "MB", label: "MB" },
-        { value: "GB", label: "GB" },
-      ]}
-      onchange={(v) => changeFileSizeUnit(v as "byte" | "KB" | "MB" | "GB")}
-    />
-  </section>
+  {#if !fileCopySizeLoaded}
+    <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else}
+    <section
+      class="setting-card setting-card-row"
+      data-settings-search-id="storage.max-file-copy-size"
+    >
+      <span class="setting-icon"><AppIcon name="download" size={17} /></span>
+      <span class="setting-label">{_t("captureSettings.maxFileCopySize")}</span>
+      <input
+        type="number"
+        bind:value={maxFileCopyDisplay}
+        min="1"
+        oninput={updateMaxFileSizeFromDisplay}
+        onchange={saveMaxFileCopySize}
+      />
+      <CustomSelect
+        className="unit-select"
+        value={maxFileCopySizeUnit}
+        options={[
+          { value: "byte", label: "B" },
+          { value: "KB", label: "KB" },
+          { value: "MB", label: "MB" },
+          { value: "GB", label: "GB" },
+        ]}
+        onchange={(v) => changeFileSizeUnit(v as "byte" | "KB" | "MB" | "GB")}
+      />
+    </section>
+  {/if}
 
   <section
     class="setting-card setting-card-row"

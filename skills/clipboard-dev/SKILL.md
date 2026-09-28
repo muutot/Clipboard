@@ -59,6 +59,7 @@ Also read the focused project document when relevant: `docs/PITFALLS.md`, `docs/
 
 - **Tauri contract:** keep command name, Rust arguments/result, frontend `invoke`, serde casing, error handling, and tests aligned.
 - **Settings contract:** update TypeScript type, defaults, normalization/ranges, Rust config serde/defaults, UI, persistence, cross-window application, i18n, tests, and references as applicable.
+- **Async settings contract:** a control bound to backend-loaded state must hydrate before it renders — a shared module-level store (`generalSettings`, `windowConfig`) or a load gate — never a placeholder default that the fetch later overwrites. Lazy settings panels are destroyed and recreated on every section switch, so a per-mount fetch makes the wrong value (and any toggle animation) flash on each visit. See [settings-panels.md](references/settings-panels.md).
 - **Database contract:** update schema/migration, row mapping, repository behavior, derived search/OCR cleanup, recovery expectations, and tests.
 - **i18n contract:** update `src/lib/i18n/locales/en.ts`, `zh-CN.ts`, and `src/lib/i18n/types.ts` together unless the string is intentionally non-localized and documented.
 - **Worker/listener contract:** retain stop signals, join handles, unlisten functions, and the unified shutdown path.

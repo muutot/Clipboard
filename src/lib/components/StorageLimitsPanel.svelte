@@ -35,6 +35,9 @@
   let retentionPeriodDays = $state(90);
   let maxItemCount = $state(10000);
   let recycleBinDays = $state(30);
+  // Hold the number inputs until the stored history config arrives so they do
+  // not render the placeholder defaults and then jump to the real values.
+  let historyConfigLoaded = $state(false);
   let storageKindStats = $state<Record<StorageKind, StorageKindStats>>({
     text: { itemCount: 0, sizeBytes: 0 },
     link: { itemCount: 0, sizeBytes: 0 },
@@ -91,6 +94,8 @@
       }
     } catch (error) {
       console.error("Unable to load history config", error);
+    } finally {
+      historyConfigLoaded = true;
     }
   }
 
@@ -215,44 +220,54 @@
 </script>
 
 <div class="settings-scroll">
-  <section class="setting-card setting-card-row" data-settings-search-id="storage.retention-period">
-    <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
-    <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
-    <input
-      type="number"
-      bind:value={retentionPeriodDays}
-      min="1"
-      max="365"
-      onchange={saveHistoryConfig}
-    />
-    <span class="number-suffix">{_t("captureSettings.days")}</span>
-  </section>
+  {#if !historyConfigLoaded}
+    <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else}
+    <section
+      class="setting-card setting-card-row"
+      data-settings-search-id="storage.retention-period"
+    >
+      <span class="setting-icon"><AppIcon name="filter" size={17} /></span>
+      <span class="setting-label">{_t("captureSettings.retentionPeriod")}</span>
+      <input
+        type="number"
+        bind:value={retentionPeriodDays}
+        min="1"
+        max="365"
+        onchange={saveHistoryConfig}
+      />
+      <span class="number-suffix">{_t("captureSettings.days")}</span>
+    </section>
 
-  <section class="setting-card setting-card-row" data-settings-search-id="storage.max-item-count">
-    <span class="setting-icon"><AppIcon name="file" size={17} /></span>
-    <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
-    <input
-      type="number"
-      bind:value={maxItemCount}
-      min="100"
-      step="100"
-      onchange={saveHistoryConfig}
-    />
-    <span class="number-suffix">{_t("storage.recordCountUnit")}</span>
-  </section>
+    <section class="setting-card setting-card-row" data-settings-search-id="storage.max-item-count">
+      <span class="setting-icon"><AppIcon name="file" size={17} /></span>
+      <span class="setting-label">{_t("captureSettings.maxItemCount")}</span>
+      <input
+        type="number"
+        bind:value={maxItemCount}
+        min="100"
+        step="100"
+        onchange={saveHistoryConfig}
+      />
+      <span class="number-suffix">{_t("storage.recordCountUnit")}</span>
+    </section>
 
-  <section class="setting-card setting-card-row" data-settings-search-id="storage.recycle-bin-days">
-    <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
-    <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
-    <input
-      type="number"
-      bind:value={recycleBinDays}
-      min="0"
-      max="365"
-      onchange={saveHistoryConfig}
-    />
-    <span class="number-suffix">{_t("captureSettings.days")}</span>
-  </section>
+    <section
+      class="setting-card setting-card-row"
+      data-settings-search-id="storage.recycle-bin-days"
+    >
+      <span class="setting-icon"><AppIcon name="trash" size={17} /></span>
+      <span class="setting-label">{_t("captureSettings.recycleBinDays")}</span>
+      <input
+        type="number"
+        bind:value={recycleBinDays}
+        min="0"
+        max="365"
+        onchange={saveHistoryConfig}
+      />
+      <span class="number-suffix">{_t("captureSettings.days")}</span>
+    </section>
+  {/if}
 
   <section
     class="setting-card storage-kind-delete-card"

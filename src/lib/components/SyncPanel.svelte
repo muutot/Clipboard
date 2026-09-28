@@ -54,6 +54,9 @@
   let syncEncryptPassword = $state("");
   let syncHasS3SecretKey = $state(false);
   let syncHasEncryptionPassword = $state(false);
+  // Hold the sync controls until the stored config arrives so a saved
+  // provider/auto-sync value does not render as the default and then flip.
+  let syncConfigLoaded = $state(false);
 
   $effect(() => {
     void loadSyncConfig();
@@ -68,7 +71,10 @@
   }
 
   async function loadSyncConfig() {
-    if (!isTauriRuntime()) return;
+    if (!isTauriRuntime()) {
+      syncConfigLoaded = true;
+      return;
+    }
     try {
       const cfg: SyncConfig = await getSyncConfig();
       syncProvider = cfg.provider;
@@ -93,6 +99,8 @@
       syncEncryptPassword = "";
     } catch (e) {
       console.error("Failed to load sync config", e);
+    } finally {
+      syncConfigLoaded = true;
     }
   }
 
@@ -202,7 +210,9 @@
 </script>
 
 <div class="settings-scroll">
-  {#if tab === "cloud"}
+  {#if !syncConfigLoaded}
+    <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else if tab === "cloud"}
     <SelectEntry
       config={{
         type: "select",

@@ -100,6 +100,15 @@ Do not mutate nested store state in place and assume persistence will notice. Cr
 
 Use `generalSettings.flush()` before a close/restart boundary when the UI must guarantee that the latest debounced write reached the backend.
 
+### Never bind a control to an async placeholder default
+
+Every settings panel is a lazy import that `StorageSettingsDialog` destroys and recreates on each section switch, so a value fetched in a mount `$effect` is re-fetched on every visit. A control seeded with a hardcoded default (`$state(false)`, `$state(90)`, `$state("")`) and corrected after the fetch resolves will flash the wrong value on **every** visit — and an animated control (`.toggle-switch`, `.transparency-slider`) visibly animates the correction. Use one of the two approved hydration patterns instead:
+
+- **Shared store (preferred for app-global config):** load once into a module-level writable store in the owning service (`generalSettings`, `windowConfig`) and subscribe in the panel. The value is ready before first paint and cached across remounts. Keep `ensureLoaded()` idempotent and `update()` optimistic with rollback on failure.
+- **Load gate:** while the async value is pending, render the shared `.settings-state` line (e.g. `storage.readingConfig`) instead of the control, then render the control with the real value once it resolves. This is what `KeyboardSettingsPanel`, `TagManagementSettingsPanel`, `IconCacheSettingsPanel`, `IgnoredAppsSettingsPanel`, `OcrSettingsPanel`, `StorageLimitsPanel`, `SyncPanel`, `SensitiveContentSettingsPanel`, and `TagRulesSettingsPanel` do for backend-loaded config.
+
+Do not fetch per mount and correct later. When only part of a panel is async, gate just the affected control (or the smallest wrapping block) so the rest stays visible.
+
 ## Canonical card patterns
 
 ### Toggle/control card
@@ -153,6 +162,7 @@ Do not wrap the range input merely for styling. Initialize/update `--slider-pct`
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.
 - Roll optimistic switches back when the backend save or OS synchronization fails.
 - Keep restart-required state explicit for path/config changes that do not apply live.
+- Hydrate async-loaded values before the control renders (shared store or load gate); never leave a placeholder default in the control. See [Never bind a control to an async placeholder default](#never-bind-a-control-to-an-async-placeholder-default).
 
 ## Settings search
 
@@ -200,9 +210,10 @@ Before adding CSS:
 1. Update `GeneralSettings`, defaults, normalizer/range, nested cloning, and browser migration behavior.
 2. Update Rust `GeneralConfig` explicitly when backend behavior/defaults should be typed; do not rely on flattened extras accidentally.
 3. Add/update panel UI using the approved shell and shared primitives.
-4. Apply live document/window/worker behavior or clearly mark restart-required behavior.
-5. Update English, Chinese, and typed i18n shape.
-6. Update settings-search metadata.
-7. Add tests for normalization/persistence and backend behavior.
-8. Update `settings-reference.md`, `data-contracts.md`, and style references when applicable.
-9. Run static/build checks plus rendered dark/light/custom and narrow-window verification when visual.
+4. For any value loaded from the backend, hydrate before render using a shared store or a load gate; do not seed a control with a placeholder default that the fetch later overwrites.
+5. Apply live document/window/worker behavior or clearly mark restart-required behavior.
+6. Update English, Chinese, and typed i18n shape.
+7. Update settings-search metadata.
+8. Add tests for normalization/persistence and backend behavior.
+9. Update `settings-reference.md`, `data-contracts.md`, and style references when applicable.
+10. Run static/build checks plus rendered dark/light/custom and narrow-window verification when visual.
