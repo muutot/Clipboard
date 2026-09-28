@@ -60,18 +60,21 @@ impl ThumbnailGenerator {
         let preview_path = preview_dir.join(&preview_filename);
 
         let rgb = resized.into_rgb8();
-        let file = fs::File::create(&preview_path)?;
-        let mut encoder = JpegEncoder::new_with_quality(file, self.quality);
-        encoder
-            .encode(
-                rgb.as_raw(),
-                rgb.width(),
-                rgb.height(),
-                image::ExtendedColorType::Rgb8,
-            )
-            .map_err(|e| {
-                StorageError::Io(std::io::Error::other(format!("jpeg encode error: {e}")))
-            })?;
+        // Write through a temporary file and rename: the preview path is
+        // deterministic, so an in-place encode that fails or is interrupted by
+        // a crash would truncate the JPEG the database already references.
+        super::file_store::store_atomically(&preview_path, |temporary| {
+            let file = fs::File::create(temporary)?;
+            let mut encoder = JpegEncoder::new_with_quality(file, self.quality);
+            encoder
+                .encode(
+                    rgb.as_raw(),
+                    rgb.width(),
+                    rgb.height(),
+                    image::ExtendedColorType::Rgb8,
+                )
+                .map_err(|e| std::io::Error::other(format!("jpeg encode error: {e}")))
+        })?;
 
         let preview_size = fs::metadata(&preview_path)?.len();
 

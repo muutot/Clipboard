@@ -251,7 +251,7 @@ static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 /// content-addressed and `save_file`/`save_screenshot` skip writing when the
 /// target already exists, so a plain in-place write that is interrupted by a
 /// crash would leave a truncated file that is never repaired.
-fn store_atomically(
+pub(crate) fn store_atomically(
     target: &Path,
     populate: impl FnOnce(&Path) -> std::io::Result<()>,
 ) -> Result<(), StorageError> {
