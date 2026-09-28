@@ -376,6 +376,24 @@ async fn download_ppocr_file(
             model_file.filename, model_file.size_bytes, downloaded
         ));
     }
+    // Verify the downloaded bytes against the pinned upstream digest before
+    // activating them: a replaced release asset, an intercepted TLS stream, or
+    // corruption must never reach the native ONNX runtime.
+    let temporary_for_hash = temporary.clone();
+    let expected_sha256 = model_file.sha256;
+    let digest_ok = tauri::async_runtime::spawn_blocking(move || {
+        ocr::models::file_matches_sha256(&temporary_for_hash, expected_sha256)
+    })
+    .await
+    .map_err(|e| format!("verify {} digest: {e}", model_file.filename))?
+    .map_err(|e| format!("verify {} digest: {e}", model_file.filename))?;
+    if !digest_ok {
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err(format!(
+            "downloaded {} failed SHA-256 verification",
+            model_file.filename
+        ));
+    }
     if tokio::fs::try_exists(&destination).await.unwrap_or(false) {
         tokio::fs::remove_file(&destination)
             .await

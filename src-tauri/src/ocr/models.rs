@@ -7,6 +7,10 @@ pub struct PpOcrModelFile {
     pub filename: &'static str,
     pub label: &'static str,
     pub size_bytes: u64,
+    /// Pinned SHA-256 of the upstream release asset (from the GitHub release
+    /// digest). The downloaded bytes must match before the file is activated,
+    /// so a replaced asset, TLS interception, or corruption is rejected.
+    pub sha256: &'static str,
     pub url: &'static str,
 }
 
@@ -32,6 +36,7 @@ const TINY_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "pp-ocrv6_tiny_det.onnx",
         label: "检测模型",
         size_bytes: 1_780_590,
+        sha256: "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_tiny_det.onnx"
@@ -41,6 +46,7 @@ const TINY_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "pp-ocrv6_tiny_rec.onnx",
         label: "识别模型",
         size_bytes: 4_462_639,
+        sha256: "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_tiny_rec.onnx"
@@ -50,6 +56,7 @@ const TINY_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "ppocrv6_tiny_dict.txt",
         label: "字典文件",
         size_bytes: 27_156,
+        sha256: "c5cbe34ef40c29c4df07ed012bf96569cb69a2d2a01a07027e9f13cb832bd9cd",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/ppocrv6_tiny_dict.txt"
@@ -64,6 +71,7 @@ const SMALL_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "pp-ocrv6_small_det.onnx",
         label: "检测模型",
         size_bytes: 9_880_512,
+        sha256: "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_small_det.onnx"
@@ -73,6 +81,7 @@ const SMALL_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "pp-ocrv6_small_rec.onnx",
         label: "识别模型",
         size_bytes: 21_159_378,
+        sha256: "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_small_rec.onnx"
@@ -82,6 +91,7 @@ const SMALL_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "ppocrv6_dict.txt",
         label: "字典文件",
         size_bytes: 74_947,
+        sha256: "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/ppocrv6_dict.txt"
@@ -96,6 +106,7 @@ const MEDIUM_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "pp-ocrv6_medium_det.onnx",
         label: "检测模型",
         size_bytes: 62_032_837,
+        sha256: "eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_medium_det.onnx"
@@ -105,6 +116,7 @@ const MEDIUM_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "pp-ocrv6_medium_rec.onnx",
         label: "识别模型",
         size_bytes: 76_554_979,
+        sha256: "9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/pp-ocrv6_medium_rec.onnx"
@@ -114,6 +126,7 @@ const MEDIUM_MODEL: PpOcrModelSpec = PpOcrModelSpec {
         filename: "ppocrv6_dict.txt",
         label: "字典文件",
         size_bytes: 74_947,
+        sha256: "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
         url: concat!(
             "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0",
             "/ppocrv6_dict.txt"
@@ -171,6 +184,13 @@ fn compute_file_sha256(path: &Path) -> std::io::Result<String> {
         hasher.update(&buffer[..read]);
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+/// Returns whether `path` hashes to the expected lowercase hex SHA-256. Used to
+/// verify a downloaded model against its pinned upstream digest before it is
+/// renamed into place.
+pub fn file_matches_sha256(path: &Path, expected: &str) -> std::io::Result<bool> {
+    Ok(compute_file_sha256(path)?.eq_ignore_ascii_case(expected))
 }
 
 /// Hashes `path` and persists the digest next to the model file so later
@@ -234,8 +254,43 @@ mod tests {
     use std::time::SystemTime;
 
     use super::{
-        model_digest_matches, model_is_installed, model_spec, record_model_digest, PpOcrModelFile,
+        file_matches_sha256, model_digest_matches, model_is_installed, model_spec,
+        record_model_digest, PpOcrModelFile, SUPPORTED_MODEL_SPECS,
     };
+
+    #[test]
+    fn every_supported_model_file_has_a_pinned_sha256() {
+        for spec in SUPPORTED_MODEL_SPECS {
+            for file in spec.files() {
+                assert_eq!(file.sha256.len(), 64, "{}", file.filename);
+                assert!(
+                    file.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+                    "{} pinned digest is not hex",
+                    file.filename
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pinned_digest_verifies_downloaded_bytes() {
+        let dir = temporary_test_directory("pinned-digest");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("model.bin");
+        fs::write(&path, b"hello").unwrap();
+        // SHA-256("hello").
+        assert!(file_matches_sha256(
+            &path,
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+        .unwrap());
+        assert!(!file_matches_sha256(
+            &path,
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        )
+        .unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn maps_supported_and_legacy_variant_names_to_canonical_specs() {
