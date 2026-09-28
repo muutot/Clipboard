@@ -267,6 +267,9 @@
   // Guards the async materialization in `openDetail`: a late result must not
   // reopen a panel the user already closed or replaced with another item.
   let detailRequestId = 0;
+  // Same guard for `handleImageFullscreen`: a slow download must not replace a
+  // newer fullscreen image or reopen a closed viewer.
+  let fullscreenRequestId = 0;
 
   let fullscreenFilePath = $state<string | null>(null);
   let fullscreenOpacity = $state(0.92);
@@ -1627,6 +1630,7 @@
   async function handleImageFullscreen(id: string) {
     let item = findLoadedItem(id);
     if (!item) return;
+    const requestId = ++fullscreenRequestId;
     const needsMaterialization = !item.resourcePath && !item.previewPath;
     if (needsMaterialization) {
       try {
@@ -1637,6 +1641,9 @@
         return;
       }
     }
+    // Drop a stale materialization: the user may have opened another image (or
+    // closed the viewer) while this download was in flight.
+    if (requestId !== fullscreenRequestId) return;
     const filePath = item?.resourcePath || item?.previewPath;
     if (!filePath) return;
 
@@ -1653,6 +1660,7 @@
   }
 
   function closeFullscreen() {
+    fullscreenRequestId += 1;
     fullscreenFilePath = null;
   }
 
