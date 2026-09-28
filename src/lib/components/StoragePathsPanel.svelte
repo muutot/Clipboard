@@ -139,8 +139,12 @@
       markerRestartNeeded = result.restartRequired;
       onfeedback(
         next
-          ? _t("storage.ownershipMarkerEnabledFeedback")
-          : _t("storage.ownershipMarkerDisabledFeedback"),
+          ? result.restartRequired
+            ? _t("storage.ownershipMarkerEnabledFeedback")
+            : _t("storage.ownershipMarkerEnabledFeedbackLive")
+          : result.restartRequired
+            ? _t("storage.ownershipMarkerDisabledFeedback")
+            : _t("storage.ownershipMarkerDisabledFeedbackLive"),
         true,
       );
     } catch (error) {

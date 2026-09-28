@@ -200,7 +200,6 @@ pub fn set_resource_ownership(
     paths: tauri::State<'_, StoragePaths>,
     owned: bool,
 ) -> Result<ResourceMarkerUpdate, String> {
-    let mut changed = false;
     for (role, required) in [
         (ResourceRootRole::Image, paths.image_marker_required),
         (ResourceRootRole::File, paths.file_marker_required),
@@ -219,10 +218,12 @@ pub fn set_resource_ownership(
                 .remove_resource_root_marker(role)
                 .map_err(|error| error.to_string())?;
         }
-        changed = true;
     }
+    // Only flag a restart when the resulting ownership differs from the cleanup
+    // flags the running workers captured at startup. Removing and re-adding a
+    // marker in one session ends where it started, so it needs no restart.
     Ok(ResourceMarkerUpdate {
-        restart_required: changed,
+        restart_required: !paths.cleanup_flags_match_markers(),
     })
 }
 

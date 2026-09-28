@@ -334,11 +334,23 @@ fn claiming_an_unowned_resource_root_enables_cleanup_on_the_next_startup() {
     assert!(reloaded.image_marker_required);
     assert!(reloaded.file_marker_required);
 
-    // Removing the marker disables cleanup again on the next startup.
+    // The running state matches the marker. Removing and re-adding it in one
+    // session ends where it started, so it must not require a restart.
+    assert!(reloaded.cleanup_flags_match_markers());
     reloaded
         .remove_resource_root_marker(ResourceRootRole::Image)
         .unwrap();
     assert!(!image_directory.join(RESOURCE_ROOT_MARKER).exists());
+    assert!(!reloaded.cleanup_flags_match_markers());
+    reloaded
+        .claim_resource_root(ResourceRootRole::Image)
+        .unwrap();
+    assert!(reloaded.cleanup_flags_match_markers());
+
+    // Removing the marker for good disables cleanup on the next startup.
+    reloaded
+        .remove_resource_root_marker(ResourceRootRole::Image)
+        .unwrap();
     let unclaimed =
         StoragePaths::initialize_with_data_directory(project, Some(data_directory)).unwrap();
     assert!(!unclaimed.image_cleanup_enabled);

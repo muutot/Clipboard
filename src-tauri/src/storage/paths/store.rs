@@ -247,6 +247,18 @@ impl StoragePaths {
             .map(|content| content == resource_root_marker_content(&self.project, role.as_str()))
             .unwrap_or(false)
     }
+
+    /// Whether the on-disk ownership markers still match the cleanup flags
+    /// captured at startup. A settings change that leaves them matching (for
+    /// example a marker removed and re-added in the same session) does not
+    /// change what the running cleanup workers will do, so it needs no restart.
+    pub fn cleanup_flags_match_markers(&self) -> bool {
+        let image_owned =
+            !self.image_marker_required || self.resource_root_marker_valid(ResourceRootRole::Image);
+        let file_owned =
+            !self.file_marker_required || self.resource_root_marker_valid(ResourceRootRole::File);
+        image_owned == self.image_cleanup_enabled && file_owned == self.file_cleanup_enabled
+    }
 }
 
 struct ResourceDirectory {

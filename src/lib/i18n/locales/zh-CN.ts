@@ -198,7 +198,9 @@ const zhCN: LocaleDefinition = {
     ownershipMarkerEnableConfirm:
       "启用归属标记？重启后清理会删除这些目录中未被任何记录引用的文件，被记录引用的文件会保留。",
     ownershipMarkerEnabledFeedback: "归属标记已启用，重启应用后生效。",
+    ownershipMarkerEnabledFeedbackLive: "归属标记已启用。",
     ownershipMarkerDisabledFeedback: "归属标记已移除，重启应用后停止清理。",
+    ownershipMarkerDisabledFeedbackLive: "归属标记已移除。",
     restartNow: "立即重启",
     custom: "自定义",
     default: "默认",

@@ -192,7 +192,9 @@ export interface LocaleDefinition {
     ownershipMarkerDisabledDesc: string;
     ownershipMarkerEnableConfirm: string;
     ownershipMarkerEnabledFeedback: string;
+    ownershipMarkerEnabledFeedbackLive: string;
     ownershipMarkerDisabledFeedback: string;
+    ownershipMarkerDisabledFeedbackLive: string;
     restartNow: string;
     custom: string;
     default: string;

@@ -211,7 +211,9 @@ const en: LocaleDefinition = {
     ownershipMarkerEnableConfirm:
       "Enable the ownership marker? After restarting, cleanup deletes files in these directories that are not referenced by any record. Referenced files are kept.",
     ownershipMarkerEnabledFeedback: "Ownership marker enabled. Restart the app to apply it.",
+    ownershipMarkerEnabledFeedbackLive: "Ownership marker enabled.",
     ownershipMarkerDisabledFeedback: "Ownership marker removed. Restart the app to stop cleanup.",
+    ownershipMarkerDisabledFeedbackLive: "Ownership marker removed.",
     restartNow: "Restart Now",
     custom: "Custom",
     default: "Default",

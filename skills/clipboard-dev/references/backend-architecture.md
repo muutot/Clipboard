@@ -68,7 +68,7 @@ Resource-root safety is mandatory:
 - custom roots require an explicit `.clipboard-resource-root` marker before orphan cleanup is enabled;
 - startup may use an unmarked custom root but must not auto-claim it;
 - explicit settings may claim only a safe empty root or validate a matching marker;
-- the `set_resource_ownership(owned)` command is the explicit recovery action for an already-used unmarked root: it writes or removes only the marker (never deleting or touching file contents), reports `restartRequired`, and skips roots that do not require a marker (default project data directories); cleanup still applies only after restart;
+- the `set_resource_ownership(owned)` command is the explicit recovery action for an already-used unmarked root: it writes or removes only the marker (never deleting or touching file contents), skips roots that do not require a marker (default project data directories), and reports `restartRequired` only when the resulting ownership differs from the cleanup flags captured at startup (an off-and-on round trip in one session needs no restart);
 - image and file roots must not overlap each other or reserved project/data/database/index/icon paths;
 - cleanup skips the ownership marker and runs only when the corresponding cleanup flag is true.
 
