@@ -35,7 +35,6 @@ impl FileStore {
         file_storage_dir: &Path,
         max_copy_size: u64,
     ) -> Result<FileStorageInfo, StorageError> {
-        fs::create_dir_all(file_storage_dir)?;
         let metadata = fs::metadata(source_path)?;
         let extension = extension_for_path(source_path);
         let mime_type = mime_type_for_path(source_path);
@@ -48,6 +47,25 @@ impl FileStore {
             .unwrap_or("unnamed")
             .to_owned();
 
+        // Reject oversized files BEFORE staging them. Copying a multi-GB source
+        // into the managed directory only to delete it can fill the disk and
+        // stall the capture worker. The source is not stored in this branch, so
+        // the staged-bytes race described below does not apply; hash it
+        // directly for dedup identity.
+        if max_copy_size > 0 && metadata.len() > max_copy_size {
+            let content_hash = hash_file(source_path)?;
+            return Ok(FileStorageInfo {
+                storage_path: source_path.display().to_string(),
+                original_name,
+                size_bytes: metadata.len(),
+                content_hash,
+                extension,
+                mime_type,
+                created_at_ms,
+                modified_at_ms,
+            });
+        }
+
         // Stage the source into a process-unique temp file and hash the
         // STAGED bytes in a single pass. Hashing the live source first and
         // copying second lets a concurrent writer slip different bytes under
@@ -56,6 +74,7 @@ impl FileStore {
         // from the name). Name-derived fields (extension/mime) come from the
         // path, which a content race cannot change; size/hash always describe
         // the bytes actually stored.
+        fs::create_dir_all(file_storage_dir)?;
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let staging =
             file_storage_dir.join(format!(".staging.tmp-{}-{}", std::process::id(), sequence));
@@ -63,9 +82,23 @@ impl FileStore {
             let _ = fs::remove_file(&staging);
             return Err(StorageError::Io(error));
         }
-        let staged_size = fs::metadata(&staging)?.len();
-        let content_hash = hash_file(&staging)?;
+        let staged_size = match fs::metadata(&staging) {
+            Ok(metadata) => metadata.len(),
+            Err(error) => {
+                let _ = fs::remove_file(&staging);
+                return Err(StorageError::Io(error));
+            }
+        };
+        let content_hash = match hash_file(&staging) {
+            Ok(content_hash) => content_hash,
+            Err(error) => {
+                let _ = fs::remove_file(&staging);
+                return Err(error);
+            }
+        };
 
+        // The source can grow between the metadata check and the copy, so keep
+        // a post-copy guard as well.
         if max_copy_size > 0 && staged_size > max_copy_size {
             let _ = fs::remove_file(&staging);
             return Ok(FileStorageInfo {
@@ -319,7 +352,9 @@ mod tests {
         let info = FileStore::save_file(&source, &storage_dir, 50).unwrap();
 
         assert_eq!(info.storage_path, source.display().to_string());
-        assert!(!storage_dir.exists() || fs::read_dir(&storage_dir).unwrap().count() == 0);
+        // The oversized source must not be staged into the managed directory at
+        // all: no copy, no leftover temp file.
+        assert!(!storage_dir.exists());
 
         let _ = fs::remove_dir_all(&temp);
     }
