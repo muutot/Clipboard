@@ -4,6 +4,7 @@ use rusqlite::Connection;
 
 use crate::content::hash::compute_media_hash;
 use crate::content::resource_metadata::RESOURCE_METADATA_SCHEMA_VERSION;
+use crate::content::FileStore;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::ImportSummary;
 use crate::storage::{Database, StoragePaths};
@@ -298,9 +299,10 @@ fn build_item(
         let image_dir = paths.images.clone();
         std::fs::create_dir_all(&image_dir).map_err(|e| e.to_string())?;
         let img_path = image_dir.join(format!("{content_hash}.png"));
-        if !img_path.exists() {
-            std::fs::write(&img_path, &bytes).map_err(|e| e.to_string())?;
-        }
+        // Atomic write (and repair a previous truncated file): a plain write
+        // that is interrupted leaves a broken PNG at a content-addressed path
+        // that the `exists` guard would never revisit.
+        FileStore::save_bytes_atomically(&img_path, &bytes).map_err(|e| e.to_string())?;
         let resource_path = img_path.to_string_lossy().to_string();
 
         let (width, height) = match (row.width, row.height) {
@@ -599,6 +601,48 @@ mod tests {
         );
         assert_eq!(metadata["contentHash"], image_item.content_hash);
 
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn reimport_repairs_a_truncated_image_file() {
+        let temp = std::env::temp_dir().join(format!(
+            "ppaste-truncated-image-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let backup = make_backup(&temp);
+
+        let database = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize_with_resource_directories_for_configuration(
+            temp.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+        let stored = database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap();
+        let image_item = stored
+            .iter()
+            .find(|i| i.kind == ClipboardKind::Image)
+            .unwrap();
+        let image_path = image_item.resource_path.clone().unwrap();
+        let full_bytes = std::fs::read(&image_path).unwrap();
+
+        // Simulate a crash-truncated content-addressed file. The old
+        // `if !exists` guard skipped it forever; the atomic write must repair it.
+        std::fs::write(&image_path, b"truncated").unwrap();
+        import_from_ppaste_backup(backup.to_str().unwrap(), &database, &paths).unwrap();
+
+        assert_eq!(std::fs::read(&image_path).unwrap(), full_bytes);
         std::fs::remove_dir_all(&temp).unwrap();
     }
 
