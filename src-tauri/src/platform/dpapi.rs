@@ -15,6 +15,8 @@ const ENVELOPE_PREFIX: &str = "dpapi1:";
 mod windows {
     use std::ffi::c_void;
 
+    use zeroize::Zeroize;
+
     const CRYPTPROTECT_UI_FORBIDDEN: u32 = 0x1;
 
     #[repr(C)]
@@ -68,15 +70,17 @@ mod windows {
             )
         };
         if ok == 0 || output.pb_data.is_null() {
+            // Scrub the local plaintext copy before returning on the failure
+            // path too; the success path scrubs below.
+            input_bytes.zeroize();
             return None;
         }
         let protected =
             unsafe { std::slice::from_raw_parts(output.pb_data, output.cb_data as usize).to_vec() };
         unsafe { LocalFree(output.pb_data as isize) };
-        // Best-effort scrub of the local plaintext copy.
-        for byte in input_bytes.iter_mut() {
-            *byte = 0;
-        }
+        // Volatile scrub of the local plaintext copy (the compiler must not
+        // elide it).
+        input_bytes.zeroize();
         Some(protected)
     }
 

@@ -12,6 +12,7 @@ use bincode::{Decode, Encode};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 const MAGIC: &[u8; 8] = b"CLPSYNC1";
 const FORMAT_VERSION: u16 = 1;
@@ -165,7 +166,9 @@ impl std::fmt::Debug for SessionKey {
 
 impl Drop for SessionKey {
     fn drop(&mut self) {
-        self.key.fill(0);
+        // `zeroize` issues a volatile write so the optimizer cannot elide the
+        // scrub of the derived AES key.
+        self.key.zeroize();
     }
 }
 
