@@ -639,10 +639,17 @@ impl ClipboardRepository for Database {
             return Ok(0);
         }
         self.with_connection(|connection| {
+            // The COUNT and the DELETE must share one Immediate transaction. The
+            // scheduled cleanup worker and the manual command run on separate
+            // `Database` instances with their own connections, so two autocommit
+            // statements let both read the same pre-trim count and each delete
+            // the full excess — twice the configured eviction.
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             // Count only evictable rows: favorites are protected from the
             // DELETE below, so counting them would report a phantom excess
             // (and spin every cleanup tick) when the library is all-favorite.
-            let count: i64 = connection.query_row(
+            let count: i64 = transaction.query_row(
                 "SELECT COUNT(*) FROM clipboard_items WHERE deleted = 0 AND is_favorite = 0",
                 [],
                 |row| row.get(0),
@@ -651,7 +658,7 @@ impl ClipboardRepository for Database {
                 return Ok(0);
             }
             let excess = count - max_items as i64;
-            let deleted = connection.execute(
+            let deleted = transaction.execute(
                 "DELETE FROM clipboard_items WHERE id IN (
                     SELECT id FROM clipboard_items
                     WHERE is_favorite = 0 AND deleted = 0
@@ -660,6 +667,7 @@ impl ClipboardRepository for Database {
                 )",
                 [excess],
             )?;
+            transaction.commit()?;
             Ok(deleted as u64)
         })
     }
