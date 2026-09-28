@@ -171,8 +171,14 @@ export function resolveKeyAction(event: KeyboardEvent, ctx: KeyActionContext): K
     }
   }
 
-  // Dedicated action bindings win over generic filter shortcuts below.
-  if (ctx.toggleFloatBindings.some((binding) => shortcutMatchesEvent(binding, event))) {
+  // Dedicated action bindings win over generic filter shortcuts below. A bare
+  // chord must not fire while the user is typing in a field: the shipped
+  // Alt+V keeps working (modifier present), while a custom bare key is only
+  // honored outside editables, matching the focus-search rule above.
+  if (
+    ctx.toggleFloatBindings.some((binding) => shortcutMatchesEvent(binding, event)) &&
+    (!editableTarget || event.ctrlKey || event.metaKey || event.altKey)
+  ) {
     return { type: "toggle-float", prevent: true };
   }
 

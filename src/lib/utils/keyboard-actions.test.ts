@@ -185,6 +185,26 @@ describe("resolveKeyAction — search and quick copy", () => {
     ).toBe("none");
   });
 
+  it("does not fire a bare toggle-float binding while editing", () => {
+    const input = document.createElement("input");
+    const withTarget = (init: Partial<KeyboardEvent> & { key: string }) => {
+      const event = keyEvent({ ...init, cancelable: true });
+      Object.defineProperty(event, "target", { value: input });
+      return event;
+    };
+
+    expect(
+      resolveKeyAction(withTarget({ key: "v" }), ctx({ toggleFloatBindings: ["V"] })).type,
+    ).not.toBe("toggle-float");
+    // A modifier chord (the shipped Alt+V) still toggles from a field.
+    expect(
+      resolveKeyAction(
+        withTarget({ key: "v", altKey: true }),
+        ctx({ toggleFloatBindings: ["Alt+V"] }),
+      ).type,
+    ).toBe("toggle-float");
+  });
+
   it("quick-pastes the selected item on its binding, unbound by default", () => {
     expect(resolveKeyAction(keyEvent({ key: "q", ctrlKey: true }), ctx()).type).toBe("none");
     expect(

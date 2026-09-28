@@ -155,6 +155,11 @@ Window-only (main window focused):
   `hasTagDialog`, `hasContextMenu`, `detailOverlayOpen`) opt out. The route
   updates `query`, opens suggestions, focuses the input and moves the caret to
   the end.
+- A dedicated binding whose chord has no Ctrl/Alt/⌘ modifier must not hijack
+  typing: the `toggleFloatBindings` check applies the same
+  `(!editableTarget || ctrlKey || metaKey || altKey)` guard as focus-search, so
+  the shipped Alt+V still works from a field while a custom bare key only fires
+  outside editables.
 
 ## Verification
 
