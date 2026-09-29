@@ -1,4 +1,4 @@
-﻿use std::{
+use std::{
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Cursor, ErrorKind, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -783,6 +783,11 @@ pub struct LargePackReader<'a, T> {
     decoded_record_count: u64,
     next_chunk_index: u64,
     finished: bool,
+    /// Total on-disk size of the pack, captured once in `open`.
+    total_stored_bytes: u64,
+    /// Bytes of the pack already read, so `next` can require a declared chunk
+    /// size to fit in what actually remains instead of trusting the header.
+    consumed_bytes: u64,
 }
 
 impl<'a, T: Decode<()>> LargePackReader<'a, T> {
@@ -796,6 +801,7 @@ impl<'a, T: Decode<()>> LargePackReader<'a, T> {
         if metadata.len() < (HEADER_LEN + 4) as u64 || metadata.len() > MAX_STORED_BYTES as u64 {
             return Err("sync v1 pack has an invalid stored size".to_string());
         }
+        let total_stored_bytes = metadata.len();
         let mut reader = BufReader::new(
             File::open(path).map_err(|error| format!("failed to open sync pack: {error}"))?,
         );
@@ -867,6 +873,10 @@ impl<'a, T: Decode<()>> LargePackReader<'a, T> {
             decoded_record_count: 0,
             next_chunk_index: 0,
             finished: false,
+            total_stored_bytes,
+            // The envelope header, the metadata length prefix, and the protected
+            // metadata itself are already off the wire.
+            consumed_bytes: (HEADER_LEN + 4 + header_size) as u64,
         })
     }
 
@@ -922,6 +932,7 @@ impl<T> Iterator for LargePackReader<'_, T> {
                 )));
             }
         }
+        self.consumed_bytes += PACK_CHUNK_HEADER_LEN as u64;
         let result = (|| {
             let chunk_index = u64::from_le_bytes(chunk_header[0..8].try_into().unwrap());
             if chunk_index != self.next_chunk_index || chunk_index >= PACK_MAX_CHUNKS {
@@ -947,6 +958,19 @@ impl<T> Iterator for LargePackReader<'_, T> {
             {
                 return Err("sync v1 pack chunk declares invalid sizes".to_string());
             }
+            // Require the declared payload to fit in the bytes that actually
+            // remain on disk, before anything is allocated. The size checks
+            // above only compare the declared sizes against the protocol limit:
+            // a ~100-byte unencrypted pack can declare a 1 GiB single-record
+            // chunk, pass every one of them, and then make the reader
+            // zero-fill a gigabyte before `read_exact` reports the truncation.
+            let remaining = self.total_stored_bytes.saturating_sub(self.consumed_bytes);
+            if stored_size as u64 > remaining {
+                return Err(format!(
+                    "sync v1 pack chunk declares {stored_size} bytes but only {remaining} remain"
+                ));
+            }
+            self.consumed_bytes += stored_size as u64;
             let mut stored = vec![0u8; stored_size];
             self.reader
                 .read_exact(&mut stored)
@@ -977,7 +1001,11 @@ impl<T> Iterator for LargePackReader<'_, T> {
             };
             let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed))
                 .map_err(|error| format!("failed to open sync v1 pack zstd payload: {error}"))?;
-            let mut raw = Vec::with_capacity(raw_size);
+            // Reserve a packed chunk outright; a lone oversized record grows into
+            // the rest. Reserving the declared `raw_size` up front would let a
+            // crafted header demand a gigabyte of address space before a single
+            // byte has been verified.
+            let mut raw = Vec::with_capacity(raw_size.min(PACK_CHUNK_MAX_UNCOMPRESSED_BYTES));
             decoder
                 .take(raw_size as u64 + 1)
                 .read_to_end(&mut raw)
@@ -1442,6 +1470,93 @@ mod tests {
         drop(reader);
         drop(encoded);
         let _ = fs::remove_dir(&directory);
+    }
+
+    /// Writes a byte-exact unencrypted snapshot pack by hand so a test can lie
+    /// about the chunk sizes the real writer would never emit.
+    ///
+    /// `declared_chunk` is written verbatim as the 24-byte chunk header, and
+    /// `payload` supplies the bytes that follow it.
+    fn write_crafted_snapshot_pack(
+        path: &Path,
+        uncompressed_size: u64,
+        declared_chunk: [u8; PACK_CHUNK_HEADER_LEN],
+        payload: &[u8],
+    ) {
+        let header_bytes = encode_pack_header(&SnapshotPackHeader {
+            device_id: "c527a31e-7f42-43cf-bf73-6e5fbed4be18".to_string(),
+            epoch: "e04623ec-6109-4275-a748-8743f3076b7d".to_string(),
+            through_sequence: 1,
+        })
+        .unwrap();
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&header(
+            ObjectKind::Snapshot,
+            PACK_FLAG_CHUNKED,
+            uncompressed_size,
+        ));
+        bytes.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&header_bytes);
+        bytes.extend_from_slice(&declared_chunk);
+        bytes.extend_from_slice(payload);
+        fs::write(path, bytes).unwrap();
+    }
+
+    /// The declared chunk sizes are attacker-controlled, and the size checks only
+    /// compared them against the protocol limit. A single-record chunk may declare
+    /// up to 1 GiB, so a ~100-byte unencrypted pack passed every check and then
+    /// made the reader zero-fill a gigabyte before `read_exact` noticed the file
+    /// was truncated. Nothing authenticates an unencrypted pack header, so this is
+    /// reachable from any object an attacker can publish under a `*.pack` key.
+    #[test]
+    fn crafts_a_tiny_pack_that_declares_a_gigabyte() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-sync-pack-oversized-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("crafted.pack");
+
+        // A lone record may declare up to the global uncompressed limit, and a
+        // stored payload may add the nonce and auth tag on top of that.
+        let raw_size = (PACK_CHUNK_SINGLE_RECORD_MAX_UNCOMPRESSED_BYTES - 1) as u32;
+        let stored_size =
+            (PACK_CHUNK_SINGLE_RECORD_MAX_UNCOMPRESSED_BYTES + NONCE_LEN + AUTH_TAG_LEN) as u32;
+        let mut chunk = [0u8; PACK_CHUNK_HEADER_LEN];
+        chunk[0..8].copy_from_slice(&0u64.to_le_bytes());
+        chunk[8..12].copy_from_slice(&1u32.to_le_bytes());
+        chunk[12..16].copy_from_slice(&raw_size.to_le_bytes());
+        chunk[16..20].copy_from_slice(&stored_size.to_le_bytes());
+        // Trailing 16 bytes keep this well inside the other size checks so the
+        // remaining-bytes check is the one that has to fire.
+        write_crafted_snapshot_pack(&path, raw_size as u64, chunk, &[0u8; 16]);
+
+        assert!(
+            fs::metadata(&path).unwrap().len() < 1024,
+            "the crafted pack must stay tiny so the test proves a small input cannot \
+             demand a large allocation"
+        );
+
+        let mut reader = open_snapshot_pack(&path, None).expect("the header itself is well formed");
+        let message = reader
+            .next()
+            .expect("the chunk header is present, so the pack is not empty")
+            .expect_err("a chunk larger than the remaining file must be rejected");
+        // The message names the remaining byte count, which is what proves the
+        // rejection happened before the allocation rather than after the failed
+        // read.
+        assert!(
+            message.contains("remain"),
+            "expected a remaining-bytes rejection, got {message:?}"
+        );
+        assert!(
+            !message.contains("truncated"),
+            "the payload is not truncated, it never fit: {message:?}"
+        );
+
+        let _ = fs::remove_dir_all(&directory);
     }
 
     #[test]
