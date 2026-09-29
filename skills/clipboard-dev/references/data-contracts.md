@@ -162,6 +162,8 @@ The pack chunk budget is bounded on both sides. The reader accepts `stored_size 
 
 The in-memory S3 object ceiling is `clipboard_sync::s3::MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES` (256 MiB). Only device heads, the checkpoint pointer, and peer segments take the in-memory read path, and `put_s3_object` refuses locally to publish anything above the ceiling so a conforming publisher can never leave an object that this protocol version's readers would reject. `get_s3_object` applies the same constant as the body limit and derives its transfer timeout from it, so the documented budget and the enforced budget cannot drift apart. Snapshots, checkpoints, and resources stream to a file with a caller-supplied limit and are unaffected. ListObjectsV2 response bodies are separately capped (`MAX_S3_LIST_BODY_BYTES`, 8 MiB).
 
+Every S3 request is issued through `s3::send_with_retry`, which allows four attempts with exponential backoff and retries only 429/500/502/503/504 and the transport errors `is_timeout`/`is_connect`/`is_request`; 412 (modelled as `PreconditionFailed`), 403, 404, and 501/505 are returned to the caller on the first response, and a `Retry-After` delta-seconds hint overrides the backoff up to a 4 s cap (an HTTP-date hint is ignored). The retry covers the request/response exchange only, never a partially applied body: each streaming attempt re-opens its source in the builder closure, the streaming download creates its destination only after a response, and the in-memory upload hashes before signing and re-sends through a `SharedBuffer` over one `Arc` rather than copying a payload that can reach 256 MiB.
+
 A direct `invoke` in a component is still a public cross-layer contract and receives the same audit.
 
 ## Event contract

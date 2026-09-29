@@ -480,6 +480,113 @@ fn insert_header(map: &mut HeaderMap, name: &str, value: &str) -> Result<(), Str
     Ok(())
 }
 
+/// A `Read` view over a shared buffer.
+///
+/// `reqwest`'s `Body` only accepts a `'static` payload, and the in-memory upload
+/// path can carry the full 256 MiB protocol ceiling, so a retry must re-send the
+/// same bytes without copying them. Each attempt gets a fresh view over the same
+/// `Arc`.
+struct SharedBuffer {
+    bytes: Arc<Vec<u8>>,
+    offset: usize,
+}
+
+impl Read for SharedBuffer {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let start = self.offset.min(self.bytes.len());
+        let remaining = &self.bytes[start..];
+        let count = remaining.len().min(buffer.len());
+        buffer[..count].copy_from_slice(&remaining[..count]);
+        self.offset += count;
+        Ok(count)
+    }
+}
+
+/// Attempts allowed for one request/response exchange.
+///
+/// The retry covers only the exchange, never a partially applied body: every
+/// streaming site opens its source inside the builder closure, and the
+/// streaming download creates its destination only after a response arrives.
+/// So an attempt either transferred an object completely or transferred
+/// nothing, and re-issuing it is safe.
+const MAX_SEND_ATTEMPTS: u32 = 4;
+
+/// First backoff step; each further attempt doubles it up to the cap.
+const SEND_RETRY_BASE_DELAY: Duration = Duration::from_millis(250);
+const SEND_RETRY_MAX_DELAY: Duration = Duration::from_secs(4);
+
+/// Statuses worth another attempt: the request was understood but the server
+/// could not serve it at that moment.
+///
+/// Deliberately absent:
+/// - 412, which the conditional-put path models as `PreconditionFailed` and
+///   which must reach the caller so it can re-read the ETag and re-decide;
+/// - 403, an authorization decision that will not change on a retry;
+/// - 404, a normal "absent" answer that callers branch on;
+/// - 501 and 505, which are permanent server configuration problems.
+fn is_retryable_status(status: u16) -> bool {
+    matches!(status, 429 | 500 | 502 | 503 | 504)
+}
+
+/// Transport failures that another attempt can plausibly survive.
+///
+/// `is_body` is excluded on purpose: a body error means the request was already
+/// on the wire, so this stays a conservative list — connect, request, and
+/// timeout only.
+fn is_retryable_transport(error: &reqwest::Error) -> bool {
+    error.is_timeout() || error.is_connect() || error.is_request()
+}
+
+/// Reads a `Retry-After` delta-seconds hint, capped at the backoff ceiling.
+fn retry_after_delay(headers: &HeaderMap) -> Option<Duration> {
+    let value = headers.get("retry-after")?.to_str().ok()?.trim().to_owned();
+    let seconds: u64 = value.parse().ok()?;
+    Some(Duration::from_secs(seconds).min(SEND_RETRY_MAX_DELAY))
+}
+
+/// Sends one request, retrying transient failures with exponential backoff.
+///
+/// `build` is called once per attempt so a streaming body can be re-created;
+/// a failure inside it is returned immediately, because a request that cannot
+/// even be signed is not going to become signable on a second try. The response
+/// is returned for *any* non-retryable status, leaving the caller's existing
+/// status handling — 412, 404, and the rest — exactly as it was.
+fn send_with_retry(
+    build: impl Fn() -> Result<reqwest::blocking::RequestBuilder, String>,
+    label: &str,
+) -> Result<reqwest::blocking::Response, String> {
+    let mut backoff = SEND_RETRY_BASE_DELAY;
+    let mut last_error = format!("{label} failed");
+    for attempt in 0..MAX_SEND_ATTEMPTS {
+        if attempt > 0 {
+            std::thread::sleep(backoff);
+            backoff = (backoff * 2).min(SEND_RETRY_MAX_DELAY);
+        }
+        match build()?.send() {
+            Ok(response) if !is_retryable_status(response.status().as_u16()) => {
+                return Ok(response);
+            }
+            Ok(response) => {
+                last_error = format!("{label} failed: HTTP {}", response.status().as_u16());
+                if attempt + 1 == MAX_SEND_ATTEMPTS {
+                    break;
+                }
+                if let Some(hint) = retry_after_delay(response.headers()) {
+                    backoff = hint;
+                }
+            }
+            Err(error) if is_retryable_transport(&error) => {
+                last_error = format!("{label} failed: {error}");
+                if attempt + 1 == MAX_SEND_ATTEMPTS {
+                    break;
+                }
+            }
+            Err(error) => return Err(format!("{label} failed: {error}")),
+        }
+    }
+    Err(last_error)
+}
+
 /// Hard ceiling for one object buffered fully in memory.
 ///
 /// Only three kinds of object take the in-memory read path: device heads, the
@@ -719,6 +826,9 @@ pub fn put_s3_object(
         S3PutCondition::IfAbsent => extra_headers.push(("if-none-match", "*")),
         S3PutCondition::IfMatch(etag) => extra_headers.push(("if-match", etag.as_str())),
     }
+    // Hash the payload up front so the request no longer borrows `data`; the
+    // buffer then moves into the shared reader the retry closure rebuilds from.
+    let payload_hash = sha256_hex(&data);
     let req = S3Request {
         method: "PUT",
         scheme: &scheme,
@@ -726,17 +836,27 @@ pub fn put_s3_object(
         bucket,
         key,
         query: None,
-        payload: Some(&data),
+        payload: None,
         access_key,
         secret_key,
         region,
         extra_headers: &extra_headers,
     };
-    let resp = signed_request(&client, &req)?
-        .timeout(streaming_timeout(payload_len))
-        .body(data)
-        .send()
-        .map_err(|e| format!("upload failed: {e}"))?;
+    let payload = Arc::new(data);
+    let resp = send_with_retry(
+        || {
+            let view = SharedBuffer {
+                bytes: Arc::clone(&payload),
+                offset: 0,
+            };
+            Ok(
+                signed_request_with_payload_hash(&client, &req, &payload_hash)?
+                    .timeout(streaming_timeout(payload_len))
+                    .body(reqwest::blocking::Body::sized(view, payload_len)),
+            )
+        },
+        "upload",
+    )?;
 
     if resp.status().is_success() {
         Ok(S3PutOutcome::Stored {
@@ -802,11 +922,20 @@ pub fn put_s3_file(
         region,
         extra_headers: &extra_headers,
     };
-    let response = signed_request_with_payload_hash(&client, &req, payload_sha256)?
-        .timeout(streaming_timeout(size_bytes))
-        .body(reqwest::blocking::Body::sized(file, size_bytes))
-        .send()
-        .map_err(|error| format!("streaming upload failed: {error}"))?;
+    let response = send_with_retry(
+        || {
+            // Each attempt needs its own handle: the previous one is owned by the
+            // request body that just failed.
+            let source = File::open(path)
+                .map_err(|error| format!("failed to open S3 upload file: {error}"))?;
+            Ok(
+                signed_request_with_payload_hash(&client, &req, payload_sha256)?
+                    .timeout(streaming_timeout(size_bytes))
+                    .body(reqwest::blocking::Body::sized(source, size_bytes)),
+            )
+        },
+        "streaming upload",
+    )?;
 
     if response.status().is_success() {
         Ok(S3PutOutcome::Stored {
@@ -855,10 +984,13 @@ pub fn get_s3_object(
         region,
         extra_headers: &[],
     };
-    let resp = signed_request(&client, &req)?
-        .timeout(streaming_timeout(MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES))
-        .send()
-        .map_err(|e| format!("download failed: {e}"))?;
+    let resp = send_with_retry(
+        || {
+            Ok(signed_request(&client, &req)?
+                .timeout(streaming_timeout(MAX_IN_MEMORY_PROTOCOL_OBJECT_BYTES)))
+        },
+        "download",
+    )?;
 
     if resp.status().is_success() {
         let etag = response_etag(&resp)?;
@@ -895,9 +1027,7 @@ pub fn head_s3_object(
         region,
         extra_headers: &[],
     };
-    let response = signed_request(&client, &req)?
-        .send()
-        .map_err(|error| format!("metadata request failed: {error}"))?;
+    let response = send_with_retry(|| signed_request(&client, &req), "metadata request")?;
 
     if response.status().is_success() {
         Ok(Some(S3ObjectMetadata {
@@ -940,10 +1070,10 @@ pub fn get_s3_object_to_file(
         region,
         extra_headers: &[],
     };
-    let mut response = signed_request(&client, &req)?
-        .timeout(streaming_timeout(max_bytes))
-        .send()
-        .map_err(|error| format!("streaming download failed: {error}"))?;
+    let mut response = send_with_retry(
+        || Ok(signed_request(&client, &req)?.timeout(streaming_timeout(max_bytes))),
+        "streaming download",
+    )?;
 
     if response.status().as_u16() == 404 {
         return Ok(None);
@@ -1092,9 +1222,7 @@ pub(crate) fn list_s3_objects_after_with_metrics(
             region,
             extra_headers: &[],
         };
-        let resp = signed_request(&client, &req)?
-            .send()
-            .map_err(|e| format!("list failed: {e}"))?;
+        let resp = send_with_retry(|| signed_request(&client, &req), "list")?;
 
         if !resp.status().is_success() {
             return Err(err_from_response(resp, "list"));
@@ -1153,9 +1281,7 @@ pub fn delete_from_s3(
         region,
         extra_headers: &[],
     };
-    let resp = signed_request(&client, &req)?
-        .send()
-        .map_err(|e| format!("delete failed: {e}"))?;
+    let resp = send_with_retry(|| signed_request(&client, &req), "delete")?;
 
     if resp.status().is_success() || resp.status().as_u16() == 404 {
         Ok(())
@@ -1571,6 +1697,236 @@ mod tests {
 
     /// A hostile endpoint answering with a header-injection ETag must produce a
     /// sync error, not a panic that takes down the sync worker.
+    /// Accepts one connection, consumes the request, and leaves the stream closed.
+    fn drain_request(stream: &mut std::net::TcpStream) {
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let header_end = loop {
+            match stream.read(&mut chunk) {
+                Ok(0) | Err(_) => return,
+                Ok(read) => {
+                    buffer.extend_from_slice(&chunk[..read]);
+                    if let Some(end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                        break end + 4;
+                    }
+                }
+            }
+        };
+        let headers = String::from_utf8_lossy(&buffer[..header_end]).to_ascii_lowercase();
+        let declared = headers
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length:"))
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        let mut remaining = declared.saturating_sub(buffer.len() - header_end);
+        while remaining > 0 {
+            match stream.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => remaining = remaining.saturating_sub(read),
+            }
+        }
+    }
+
+    /// Serves `statuses` in order, then 200 forever, and counts the requests it
+    /// actually received. Returns the port and the counter.
+    fn spawn_scripted_server(
+        statuses: Vec<u16>,
+    ) -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a loopback port");
+        let port = listener.local_addr().expect("read the bound port").port();
+        let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = std::sync::Arc::clone(&requests);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                drain_request(&mut stream);
+                let index = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                // The final status sticks, so a single-element list scripts an
+                // unrelenting failure.
+                let status = statuses
+                    .get(index)
+                    .or_else(|| statuses.last())
+                    .copied()
+                    .unwrap_or(200);
+                let response = format!(
+                    "HTTP/1.1 {status} Scripted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        (port, requests)
+    }
+
+    fn retry_test_client() -> reqwest::blocking::Client {
+        reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("build the test client")
+    }
+
+    /// The point of the whole change: one 503 used to abort a run, and this is
+    /// the end-to-end proof that a scripted failure is survived.
+    #[test]
+    fn a_transient_server_error_is_retried_until_it_succeeds() {
+        let (port, requests) = spawn_scripted_server(vec![503, 500, 200]);
+        let client = retry_test_client();
+        let url = format!("http://127.0.0.1:{port}/bucket/key");
+
+        let response =
+            send_with_retry(|| Ok(client.get(&url)), "test").expect("the third attempt succeeds");
+        assert!(response.status().is_success());
+        assert_eq!(
+            requests.load(std::sync::atomic::Ordering::SeqCst),
+            3,
+            "both failures must have been retried"
+        );
+    }
+
+    /// The budget is finite, and the caller still learns the real status.
+    #[test]
+    fn an_exhausted_retry_budget_reports_the_last_status() {
+        let (port, requests) = spawn_scripted_server(vec![503]);
+        let client = retry_test_client();
+        let url = format!("http://127.0.0.1:{port}/bucket/key");
+
+        let error = send_with_retry(|| Ok(client.get(&url)), "test")
+            .expect_err("an unrelenting 503 must eventually surface");
+        assert!(error.contains("503"), "the status must survive: {error}");
+        assert_eq!(
+            requests.load(std::sync::atomic::Ordering::SeqCst),
+            MAX_SEND_ATTEMPTS as usize,
+            "every allowed attempt must be used, and no more"
+        );
+    }
+
+    /// A precondition failure is a decision, not a transient fault. Retrying it
+    /// would hide the ETag conflict the caller has to act on.
+    #[test]
+    fn a_precondition_failure_is_not_retried() {
+        let (port, requests) = spawn_scripted_server(vec![412]);
+        let client = retry_test_client();
+        let url = format!("http://127.0.0.1:{port}/bucket/key");
+
+        let response = send_with_retry(|| Ok(client.get(&url)), "test")
+            .expect("a 412 is returned, not treated as an error");
+        assert_eq!(response.status().as_u16(), 412);
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// Absence is a normal answer that callers branch on, so it is returned once.
+    #[test]
+    fn a_missing_object_is_not_retried() {
+        let (port, requests) = spawn_scripted_server(vec![404]);
+        let client = retry_test_client();
+        let url = format!("http://127.0.0.1:{port}/bucket/key");
+
+        let response = send_with_retry(|| Ok(client.get(&url)), "test").expect("404 is an answer");
+        assert_eq!(response.status().as_u16(), 404);
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// A refused connection is the other retryable class, and it must not be
+    /// confused with a permanent failure.
+    #[test]
+    fn a_refused_connection_is_retried_then_reported() {
+        // Bind and immediately drop, so the port is almost certainly free.
+        let port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        let client = retry_test_client();
+        let url = format!("http://127.0.0.1:{port}/bucket/key");
+
+        let error = send_with_retry(|| Ok(client.get(&url)), "test")
+            .expect_err("nothing is listening, so every attempt must fail");
+        assert!(
+            error.contains("test failed"),
+            "the label must be reported: {error}"
+        );
+    }
+
+    /// `reqwest`'s `Body` needs a `'static` payload, so the retry path re-sends
+    /// through a `SharedBuffer` over the same `Arc`. If the second attempt read
+    /// from where the first stopped, every retry would upload a truncated
+    /// object — the failure mode this indirection exists to avoid.
+    #[test]
+    fn shared_buffer_rereads_its_payload_from_the_start() {
+        let bytes = Arc::new(b"the quick brown fox".to_vec());
+        let mut view = SharedBuffer {
+            bytes: Arc::clone(&bytes),
+            offset: 0,
+        };
+
+        let mut first = [0u8; 8];
+        assert_eq!(view.read(&mut first).unwrap(), 8);
+        assert_eq!(&first, b"the quic");
+        // A short read must not lose the remainder.
+        let mut tiny = [0u8; 4];
+        assert_eq!(view.read(&mut tiny).unwrap(), 4);
+        assert_eq!(&tiny, b"k br");
+
+        // A fresh attempt over the same buffer replays the whole payload.
+        let mut retry = SharedBuffer {
+            bytes: Arc::clone(&bytes),
+            offset: 0,
+        };
+        let mut replayed = Vec::new();
+        retry.read_to_end(&mut replayed).unwrap();
+        assert_eq!(replayed, *bytes);
+        assert_eq!(retry.offset, bytes.len());
+
+        // Draining the rest terminates rather than looping.
+        let mut sink = Vec::new();
+        view.read_to_end(&mut sink).unwrap();
+        assert_eq!(&sink, b"own fox");
+    }
+
+    /// The retry set is the whole point of the change, and its exclusions are
+    /// load-bearing: retrying 412 would hide a precondition failure the caller
+    /// must see, and retrying 403 or 404 would only burn the backoff.
+    #[test]
+    fn only_transient_statuses_are_retried() {
+        for status in [429, 500, 502, 503, 504] {
+            assert!(is_retryable_status(status), "{status} must be retried");
+        }
+        for status in [
+            200, 201, 204, 206, 301, 400, 401, 403, 404, 409, 412, 416, 501, 505,
+        ] {
+            assert!(
+                !is_retryable_status(status),
+                "{status} must reach the caller unchanged"
+            );
+        }
+    }
+
+    /// A `Retry-After` hint is honoured, capped, and must not make the backoff
+    /// unbounded. An HTTP-date form is ignored rather than misparsed as seconds.
+    #[test]
+    fn retry_after_hints_are_capped_and_validated() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(retry_after_delay(&headers), None);
+
+        headers.insert("retry-after", HeaderValue::from_static("1"));
+        assert_eq!(retry_after_delay(&headers), Some(Duration::from_secs(1)));
+
+        headers.insert("retry-after", HeaderValue::from_static("3600"));
+        assert_eq!(
+            retry_after_delay(&headers),
+            Some(SEND_RETRY_MAX_DELAY),
+            "a one-hour hint must be capped at the backoff ceiling"
+        );
+
+        headers.insert(
+            "retry-after",
+            HeaderValue::from_static("Wed, 21 Oct 2026 07:28:00 GMT"),
+        );
+        assert_eq!(retry_after_delay(&headers), None);
+
+        headers.insert("retry-after", HeaderValue::from_static("-5"));
+        assert_eq!(retry_after_delay(&headers), None);
+    }
+
     #[test]
     fn a_malicious_etag_is_reported_instead_of_panicking() {
         let client = Client::new();

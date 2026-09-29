@@ -349,6 +349,26 @@ Benchmarks must report elapsed encode/decode/apply time, peak pack size, SQLite 
 GET/LIST/DELETE counts and total uploaded/downloaded bytes. Correctness gates precede performance
 claims.
 
+### Transport retry policy
+
+Every S3 request goes through `s3::send_with_retry`. It allows four attempts with exponential
+backoff (250 ms doubling to a 4 s cap) and retries only two classes: the statuses 429, 500, 502,
+503 and 504, and the transport errors `is_timeout`, `is_connect`, and `is_request`. Everything
+else is returned to the caller on the first response. Deliberately not retried: 412, which the
+conditional-put path models as `PreconditionFailed` so the caller can re-read the ETag and
+re-decide; 403, an authorization decision; 404, a normal "absent" answer that callers branch on;
+and 501/505, which are permanent server configuration problems. `is_body` is excluded from the
+transport class because a body error means the request was already on the wire. A `Retry-After`
+delta-seconds hint overrides the computed backoff, capped at the same ceiling; an HTTP-date hint is
+ignored rather than misread as seconds.
+
+The retry covers only the request/response exchange, never a partially applied body. Each streaming
+attempt re-opens its source inside the builder closure, and the streaming download creates its
+destination only after a response arrives, so an attempt either transferred an object completely or
+transferred nothing. The in-memory upload path hashes its payload before signing and re-sends
+through a `SharedBuffer` over one `Arc`, so a retry over a payload at the 256 MiB protocol ceiling
+costs a refcount bump rather than a copy.
+
 ### Real S3 benchmark commands
 
 The server and bucket are opt-in. Never point these tests at a prefix containing user data.
