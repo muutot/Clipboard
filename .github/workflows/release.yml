@@ -30,11 +30,11 @@ jobs:
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: npm
@@ -46,7 +46,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: src-tauri
-          env-cache-key: RUSTFLAGS
+          # env-vars defaults to "CARGO CC CFLAGS CXX CMAKE RUST" prefixes,
+          # which already covers RUSTFLAGS and the CARGO_PROFILE_* knobs this
+          # workflow sets; the `env-cache-key` input we used to pass does not
+          # exist and was silently ignored.
           # The extreme release build (fat LTO, codegen-units=1) can push target/
           # past GitHub's 10GB cache-entry limit. cache-on-failure keeps the job
           # green even if the cache upload is refused; the build still succeeds.
@@ -114,11 +117,11 @@ jobs:
             rustflags: -C target-cpu=x86-64-v3 -C link-arg=-fuse-ld=mold
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: npm
@@ -132,7 +135,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: src-tauri
-          env-cache-key: CARGO_PROFILE_RELEASE_OPT_LEVEL CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS RUSTFLAGS
+          # See the verify job's rust-cache note: RUSTFLAGS and the
+          # CARGO_PROFILE_* env vars are already part of the default key.
           # Fat-LTO release artifacts per platform can be large; if the cache
           # entry exceeds GitHub's 10GB limit the upload is skipped but the job
           # still passes.
