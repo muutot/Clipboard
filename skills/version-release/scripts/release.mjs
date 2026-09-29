@@ -285,6 +285,45 @@ if (currentVersion !== versionArg) {
   console.log(`  ✓ Already at ${currentVersion}`);
 }
 
+// Step 1b: Rust crate ↔ npm package minor sync.
+// `cargo generate-lockfile` can move the Rust-side tauri crates to a newer
+// minor while the npm-side @tauri-apps packages stay behind; the tauri CLI's
+// consistency check then aborts every release build after the tag is pushed
+// (this is exactly how the v1.7.2 release lost all three build jobs). Fail
+// here, before the changelog and tag, with the exact fix.
+function cargoLockVersion(crate) {
+  const m = readFileSync(resolve(ROOT, "src-tauri/Cargo.lock"), "utf-8").match(
+    new RegExp(`name = "${crate}"\\r?\\nversion = "([^"]+)"`),
+  );
+  return m ? m[1] : null;
+}
+function npmDependencyVersion(pkg) {
+  const deps = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf-8")).dependencies;
+  return deps[pkg] ? deps[pkg].replace(/^[^\d]*/, "") : null;
+}
+const PAIRS = [
+  ["tauri", "@tauri-apps/api"],
+  ["tauri-plugin-dialog", "@tauri-apps/plugin-dialog"],
+];
+const mismatches = PAIRS.flatMap(([crate, npmPkg]) => {
+  const rust = cargoLockVersion(crate);
+  const npm = npmDependencyVersion(npmPkg);
+  if (!rust || !npm) return [`  ${crate}=${rust ?? "missing"} / ${npmPkg}=${npm ?? "missing"}`];
+  if (rust.split(".").slice(0, 2).join(".") !== npm.split(".").slice(0, 2).join(".")) {
+    return [`  ${crate} ${rust} : ${npmPkg} ${npm} — run: npm install ${npmPkg}@${rust}`];
+  }
+  return [];
+});
+if (mismatches.length > 0) {
+  console.error(
+    "\n  ERROR: Tauri crate and npm package minors diverge; the tauri CLI refuses\n" +
+      "  to build such a tree, so the release would fail on every platform:\n" +
+      mismatches.join("\n"),
+  );
+  exit(1);
+}
+console.log("  ✓ Tauri crates and npm packages on the same minor");
+
 // Step 2: Generate changelog
 console.log("\n[2/6] Generating changelog...");
 run("node skills/version-release/scripts/changelog.mjs");
