@@ -3,8 +3,8 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
 use crate::storage::{Database, OcrRepository, SearchOperation, SearchRepository, StorageError};
 
 use super::{
-    ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope, KindStorageStats,
-    TextItemUpdate,
+    current_time_ms, ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope,
+    KindStorageStats, TextItemUpdate,
 };
 
 fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
@@ -1686,4 +1686,162 @@ fn concurrent_capacity_enforcement_does_not_over_evict() {
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(format!("{}-wal", path.display()));
     let _ = std::fs::remove_file(format!("{}-shm", path.display()));
+}
+
+/// Turns the sync outbox triggers on for one test database, which is what makes
+/// `modified_at_ms` a replication version at all.
+fn enable_sync_versioning(database: &Database) {
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES ('sync_enabled', '1')",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn column_type(database: &Database, id: &str, column: &str) -> String {
+    database
+        .with_connection(|connection| {
+            let sql = format!("SELECT typeof({column}) FROM clipboard_items WHERE id = ?1");
+            Ok(connection.query_row(&sql, [id], |row| row.get::<_, String>(0))?)
+        })
+        .unwrap()
+}
+
+fn read_version(database: &Database, id: &str) -> Result<i64, String> {
+    database
+        .with_connection(|connection| {
+            Ok(connection.query_row(
+                "SELECT modified_at_ms FROM clipboard_items WHERE id = ?1",
+                [id],
+                |row| row.get::<_, i64>(0),
+            )?)
+        })
+        .map_err(|error| format!("{error:?}"))
+}
+
+/// An import may not hand the replication version clock a saturated value.
+///
+/// `created_at_ms` is copied straight into `modified_at_ms` by the insert
+/// trigger, and SQLite promotes an overflowing `+ 1` in the update trigger to
+/// REAL. A REAL version is unreadable as `i64` by
+/// `sync_state::winning_local_version`, so a single poisoned row aborted every
+/// later sync apply — a permanent, invisible failure for the user. The import
+/// funnel now rejects a timestamp that is negative or implausibly far ahead, and
+/// the triggers saturate so a value that is already at the ceiling can still
+/// never change type.
+#[test]
+fn an_import_cannot_saturate_the_sync_version_clock() {
+    let database = Database::open_in_memory().unwrap();
+    enable_sync_versioning(&database);
+
+    let summary = database
+        .save_items_transactional(&[
+            (
+                "saturated.csv".to_owned(),
+                text_item("poison", "hash-poison", i64::MAX),
+            ),
+            ("negative.json".to_owned(), text_item("neg", "hash-neg", -1)),
+            (
+                "valid.csv".to_owned(),
+                text_item("valid", "hash-valid", current_time_ms() - 60_000),
+            ),
+        ])
+        .unwrap();
+
+    assert_eq!(summary.imported_count, 1, "only the sane row may import");
+    assert_eq!(summary.skipped_count, 2);
+    assert!(
+        summary
+            .errors
+            .iter()
+            .any(|e| e.contains("saturated.csv") && e.contains("too far in the future")),
+        "the saturated row must be reported: {:?}",
+        summary.errors
+    );
+    assert!(
+        summary
+            .errors
+            .iter()
+            .any(|e| e.contains("negative.json") && e.contains("negative")),
+        "the negative row must be reported: {:?}",
+        summary.errors
+    );
+    assert_eq!(database.item_count().unwrap(), 1);
+
+    // The surviving row is a normal version, not a poisoned one.
+    let version = read_version(&database, "valid").expect("a normal version reads as i64");
+    assert!(version < i64::MAX / 2, "unexpected version {version}");
+}
+
+/// The saturation must hold even for a row that reached the ceiling before this
+/// fix existed: a watched-column update may advance the version, but it may never
+/// change its SQLite type.
+#[test]
+fn a_saturated_version_never_becomes_a_real_column() {
+    let database = Database::open_in_memory().unwrap();
+    enable_sync_versioning(&database);
+
+    // Plant the poisoned row directly, as an older build would have written it.
+    database
+        .with_connection(|connection| {
+            connection.execute(
+                "INSERT INTO clipboard_items (id, kind, title, content_hash, size_bytes, created_at_ms, modified_at_ms)
+                 VALUES ('legacy', 'text', 'legacy', 'hash-legacy', 12, 9223372036854775807, 9223372036854775807)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(
+        column_type(&database, "legacy", "modified_at_ms"),
+        "integer"
+    );
+
+    // `is_favorite` is a watched column, so the update trigger fires.
+    database.set_favorite("legacy", true).unwrap();
+
+    assert_eq!(
+        column_type(&database, "legacy", "modified_at_ms"),
+        "integer",
+        "the version must saturate, not overflow into REAL"
+    );
+    let version = read_version(&database, "legacy").expect("the version must stay readable as i64");
+    assert_eq!(version, i64::MAX, "saturation pins the value at i64::MAX");
+}
+
+/// The capture limit only ever applies to what the clipboard produced, so an
+/// import was a way around it and straight into the search index.
+#[test]
+fn an_import_cannot_exceed_the_capture_size_limit() {
+    let database = Database::open_in_memory().unwrap();
+    let oversized = "a".repeat(10_000_001);
+    let mut item = text_item("huge", "hash-huge", current_time_ms());
+    item.text_content = Some(oversized);
+    let mut titled = text_item("titled", "hash-titled", current_time_ms());
+    titled.title = "t".repeat(4_097);
+
+    let summary = database
+        .save_items_transactional(&[
+            ("huge.json".to_owned(), item),
+            ("titled.json".to_owned(), titled),
+        ])
+        .unwrap();
+
+    assert_eq!(summary.imported_count, 0);
+    assert_eq!(summary.skipped_count, 2);
+    assert!(
+        summary.errors.iter().any(|e| e.contains("text_content")),
+        "the oversized body must be reported: {:?}",
+        summary.errors
+    );
+    assert!(
+        summary.errors.iter().any(|e| e.contains("title")),
+        "the oversized title must be reported: {:?}",
+        summary.errors
+    );
+    assert_eq!(database.item_count().unwrap(), 0);
 }

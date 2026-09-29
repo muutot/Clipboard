@@ -344,6 +344,13 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             VALUES (NEW.item_id, 'upsert', NEW.created_at_ms);
         END;
 
+-- The two sync outbox triggers below derive the replication version from
+-- `modified_at_ms` with a `+ 1` step. SQLite promotes an overflowing INTEGER
+-- sum to REAL, and a REAL version is unreadable as `i64` by
+-- `sync_state::winning_local_version`, so one poisoned row would abort every
+-- subsequent sync apply. Saturate at i64::MAX instead: the value stops being
+-- able to advance, which is bad for that row, but it can never change type and
+-- take the rest of the sync engine down with it.
         CREATE TRIGGER IF NOT EXISTS clipboard_items_sync_outbox_insert
         AFTER INSERT ON clipboard_items
         WHEN EXISTS (
@@ -360,7 +367,7 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
                        CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
                        COALESCE(NEW.modified_at_ms, NEW.created_at_ms, 0),
                        COALESCE((
-                           SELECT modified_at_ms + 1
+                           SELECT MIN(9223372036854775807, modified_at_ms + 1)
                            FROM sync_tombstones
                            WHERE item_id = NEW.id
                        ), 0)
@@ -411,7 +418,7 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             UPDATE clipboard_items
                SET modified_at_ms = MAX(
                        CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
-                       COALESCE(OLD.modified_at_ms, OLD.created_at_ms, 0) + 1,
+                       MIN(9223372036854775807, COALESCE(OLD.modified_at_ms, OLD.created_at_ms, 0) + 1),
                        COALESCE(NEW.modified_at_ms, NEW.created_at_ms, 0)
                    ),
                    sync_writer_device_id = COALESCE((
