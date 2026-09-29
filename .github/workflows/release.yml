@@ -161,6 +161,25 @@ jobs:
             echo "body=See CHANGELOG.md for details." >> "$GITHUB_OUTPUT"
           fi
 
+      # tauri-bundler stores the AppImage launcher it downloads (AppRun, which
+      # linuxdeploy renames to AppRun.wrapped) with mode 770, so only its owner
+      # and group may run it. Files belong to whoever starts an AppImage, so
+      # this is invisible locally, but root-mounted sandboxes that run it as
+      # another user — firejail, the appimage.github.io catalog test — die with
+      # "AppRun.wrapped: Permission denied" (tauri-apps/tauri#16155). Seeding
+      # the bundler's cache with a 755 copy fixes it: the bundler only
+      # downloads when the file is missing and `fs::copy` keeps the mode.
+      - name: Seed AppImage launcher with mode 755
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          dir="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/AppRun-x86_64" \
+            "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64"
+          echo "f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f  $dir/AppRun-x86_64" | sha256sum -c -
+          chmod 755 "$dir/AppRun-x86_64"
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
@@ -176,6 +195,32 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
+
+      # Gate, not just the fix above: fail the build if any file in the
+      # AppImage is still limited to its owner or group, so the defect can
+      # never ship silently even if the bundler changes where it puts the
+      # launcher. Fails before checksums, leaving the draft release incomplete.
+      - name: Check AppImage file modes
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          appimage=$(find src-tauri/target -type f -name '*.AppImage' \
+            -not -path '*/deps/*' -not -path '*/build/*' -print -quit)
+          test -n "$appimage" || { echo "no AppImage was built"; exit 1; }
+          work="$(mktemp -d)"
+          (cd "$work" && "$(realpath "$appimage")" --appimage-extract >/dev/null)
+          # Every file readable by everyone, executable wherever its owner can
+          # execute it, and every directory openable and traversable by all.
+          bad="$(cd "$work/squashfs-root" && find . \
+            \( -type f \( ! -perm -o+r -o \( -perm -u+x ! -perm -o+x \) \) \) \
+            -o \( -type d ! -perm -o+rx \) | sort)"
+          rm -rf "$work"
+          if [ -n "$bad" ]; then
+            echo "::error::$(basename "$appimage"): files only their owner or group can use; root-mounted sandboxes running as another user get Permission denied"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          echo "All AppImage files are readable/executable by every user."
 
       # Publish SHA-256 checksums alongside the artifacts so downloads can be
       # verified independently of the release asset itself. Per-platform file
