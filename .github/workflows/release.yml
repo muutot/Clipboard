@@ -224,7 +224,7 @@ jobs:
           # are already executable for their owner; drop group/other write.
           chmod -R a+rX,go-w "$work/squashfs-root"
           curl -fsSL --retry 3 -o "$work/appimagetool.AppImage" \
-            "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+            "https://github.com/AppImage/AppImageKit/releases/download/13/obsolete-appimagetool-x86_64.AppImage"
           chmod +x "$work/appimagetool.AppImage"
           "$work/appimagetool.AppImage" --appimage-extract-and-run \
             "$work/squashfs-root" "$appimage"
