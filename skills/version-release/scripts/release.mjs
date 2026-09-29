@@ -238,14 +238,37 @@ function isCleanTree() {
 // --- Normal flow ---
 let currentVersion = getVersion();
 let tagVersion = `v${currentVersion}`;
-// The commit step below stages every `git diff --name-only` path, so a dirty
-// working tree would put unreviewed in-progress edits into the tagged release
-// commit. Refuse before any mutation rather than after.
-if (!isCleanTree()) {
+// The commit step below stages every `git diff --name-only` path, so edits to
+// files outside the release set would ship unreviewed. Refuse on those before
+// any mutation rather than after. The six release files themselves are the
+// expected output of Pass 1 (bump + changelog) and the curated RELEASE.md, so
+// they are allow-listed — a blanket dirty-tree refusal would make the
+// documented two-pass flow impossible to complete.
+const RELEASE_FILES = new Set([
+  "package.json",
+  "src-tauri/tauri.conf.json",
+  "src-tauri/Cargo.toml",
+  "src-tauri/Cargo.lock",
+  "CHANGELOG.md",
+  "RELEASE.md",
+]);
+const changedPaths = [
+  ...new Set(
+    [
+      execSync("git diff --name-only", { cwd: ROOT, encoding: "utf-8" }).trim(),
+      execSync("git diff --cached --name-only", { cwd: ROOT, encoding: "utf-8" }).trim(),
+    ]
+      .filter(Boolean)
+      .flatMap((block) => block.split("\n")),
+  ),
+];
+const unexpectedChanges = changedPaths.filter((path) => !RELEASE_FILES.has(path));
+if (unexpectedChanges.length > 0) {
   console.error(
-    "\n  ERROR: the working tree is not clean.\n" +
+    "\n  ERROR: the working tree has changes outside the release files.\n" +
       "  The release commit stages every changed path, so an unreviewed edit would ship.\n" +
-      "  Commit or stash your changes, then re-run.",
+      "  Commit or stash these first:\n" +
+      unexpectedChanges.map((path) => `    ${path}`).join("\n"),
   );
   process.exit(1);
 }
