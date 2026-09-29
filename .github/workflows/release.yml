@@ -200,6 +200,39 @@ jobs:
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
 
+      # The bundler's linuxdeploy/appimagetool toolchain (all moving targets:
+      # tauri-apps binary-releases + the plugin's "continuous" tag) leaves
+      # directories inside the squashfs without other-rx (run 36535865624:
+      # every directory flagged, no files), which blocks non-owner users the
+      # same way the 0770 AppRun did. Normalize the modes and repack with a
+      # pinned appimagetool, then replace the draft-release asset that
+      # tauri-action already uploaded.
+      - name: Repair AppImage modes and repack
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          appimage=$(find src-tauri/target -type f -name '*.AppImage' \
+            -not -path '*/deps/*' -not -path '*/build/*' -print -quit)
+          test -n "$appimage" || { echo "no AppImage was built"; exit 1; }
+          appimage="$PWD/$appimage"
+          work="$(mktemp -d)"
+          (cd "$work" && "$appimage" --appimage-extract >/dev/null) || {
+            echo "::error::could not extract $appimage"; exit 1; }
+          # a+rX: read for everyone; execute on directories and on files that
+          # are already executable for their owner; drop group/other write.
+          chmod -R a+rX,go-w "$work/squashfs-root"
+          curl -fsSL --retry 3 -o "$work/appimagetool.AppImage" \
+            "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+          chmod +x "$work/appimagetool.AppImage"
+          "$work/appimagetool.AppImage" --appimage-extract-and-run \
+            "$work/squashfs-root" "$appimage"
+          rm -rf "$work"
+          gh release upload "$RELEASE_TAG" "$appimage" --clobber \
+            --repo "$GITHUB_REPOSITORY"
+          echo "Repacked $(basename "$appimage") with normalized modes and replaced the draft asset."
+
       # Gate, not just the fix above: fail the build if any file in the
       # AppImage is still limited to its owner or group, so the defect can
       # never ship silently even if the bundler changes where it puts the
@@ -226,12 +259,16 @@ jobs:
           bad="$(cd "$work/squashfs-root" && find . \
             \( -type f \( ! -perm -o+r -o \( -perm -u+x ! -perm -o+x \) \) \) \
             -o \( -type d ! -perm -o+rx \) | sort)"
-          rm -rf "$work"
           if [ -n "$bad" ]; then
             echo "::error::$(basename "$appimage"): files only their owner or group can use; root-mounted sandboxes running as another user get Permission denied"
             printf '%s\n' "$bad"
+            printf '%s\n' "$bad" | head -5 | while IFS= read -r p; do
+              stat -c '%A %n' "$work/squashfs-root/$p" || true
+            done
+            rm -rf "$work"
             exit 1
           fi
+          rm -rf "$work"
           echo "All AppImage files are readable/executable by every user."
 
       # Publish SHA-256 checksums alongside the artifacts so downloads can be
