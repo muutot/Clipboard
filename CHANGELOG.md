@@ -1,5 +1,96 @@
 # Changelog
 
+## 1.7.2 (2026-09-29)
+
+### ✨ Features
+
+- **sync**: retry transient S3 failures with bounded backoff (1f0ed007)
+- **security**: zeroize the derived sync key and DPAPI plaintext (1e2265a4)
+- **ci**: pin sync-gitcode actions and Python dependencies (61581a22)
+- **api**: apply owner-only ACL to the Windows loopback token (af113f7a)
+- **sync**: reject non-loopback plaintext http S3 endpoints (70ef1840)
+- **ocr**: pin and verify upstream SHA-256 for model downloads (772458d6)
+- **storage**: make the resource ownership marker an always-visible toggle (f3a2fe55)
+- **storage**: let users claim resource-root ownership markers from settings (c4f123ca)
+- **logging**: add leveled diagnostics with a settings-controlled threshold (aa141d32)
+- **detail**: add themed editor context menu and hide preview actions while editing (442c739a)
+
+### 🐛 Bug Fixes
+
+- **release**: use the renamed appimagetool v13 asset name (2ce38707)
+- **release**: normalize AppImage directory modes and repack (0ab11b21)
+- **release**: harden the AppImage mode gate against realpath flakiness (630f5e62)
+- **deps**: align @tauri-apps npm packages with Rust crate minors (5e24d920)
+- **storage**: stop an import from poisoning the sync version clock (e1a49bf2)
+- **startup**: never read a failed liveness probe as a dead owner (35f178f0)
+- **sync**: require a pack chunk to fit the bytes remaining on disk (ecd29fe8)
+- **ui**: roll bulk mutations back per id, not from a whole-array snapshot (9c6d0406)
+- **sync**: report unsafe S3 signing components instead of panicking (55db26c0)
+- **storage**: enforce the item cap in one immediate transaction (f7b17284)
+- **search**: keep the index when the manifest is merely unreadable (e6a1ce93)
+- **cleanup**: stop holding the config lock across the history cleanup (c0b2f165)
+- **release**: publish the GitHub release only after every platform succeeds (30766c4c)
+- **release**: refuse to release from a dirty working tree (98a3dd2e)
+- **release**: make changelog generation replace its own version section (b46115a6)
+- **sync**: bound the pack chunk stored size on the writer side too (e99eb814)
+- **sync**: bound the in-memory S3 object read to the protocol ceiling (8af63309)
+- **shutdown**: log a failed interrupt-handler installation (367e8e55)
+- **storage**: return errors instead of panicking on unknown resource kinds (a243d8f7)
+- **keyboard**: don't fire a bare toggle-float binding while typing (df8e4ca6)
+- **frontend**: handle rejections from fire-and-forget IPC calls (26b4a326)
+- **search**: stop unrelated settings changes from resetting pagination (2b7c2bdd)
+- **platform**: use checked size math for Windows icon DIBs (4ae6e791)
+- **platform**: free X11 window properties on every branch (84c590d0)
+- **config**: clamp the auto-sync interval when reading config (f6a97125)
+- **cards**: keep only one card in inline edit mode (6a68a246)
+- **viewer**: drop stale fullscreen materialization results (d058c5c0)
+- **storage**: guard migration directory walks against junction cycles (9166652d)
+- **ocr**: return an error instead of panicking when the worker thread fails (b786d362)
+- **sync**: skip stray segment keys during pull instead of aborting (e8e2bdbc)
+- **content**: bound untrusted image decoding to prevent decompression bombs (a765989f)
+- **sync**: hard-cap in-memory S3 response bodies (0df511f2)
+- **export**: write ppaste images atomically and repair truncated files (fdef8453)
+- **content**: write thumbnails atomically to avoid truncating live previews (ab9a6bde)
+- **content**: reject oversized files before staging and clean up staging errors (44bfe4d6)
+- **commands**: run file export and import on the blocking pool (1a7b5bb8)
+- **ui**: route local open buttons to reveal and accept mailto/tel URLs (c89373c0)
+- **sync**: allow one oversized record per pack chunk so big items publish (5dd2362c)
+- **security**: empty static asset scope to stop exposing install-dir secrets (c175ed8a)
+- **platform**: size CF_HDROP buffer from query to prevent overflow panic (2900a7ce)
+- **ocr**: drain tesseract pipes to prevent large-output deadlock (01888a25)
+- **storage**: scope dedup upsert to content key to prevent import id overwrite (95b50df4)
+- **settings**: gate async panel controls until hydrated (3a6738ff)
+- **settings**: load window config into a shared store (7608f8ac)
+- **storage**: only require a restart when ownership actually changes (2bb5a42a)
+- **card**: copy the editor selection from the context menu (a381e6f5)
+
+### 🚀 Performance
+
+- **sync**: fold pack batches lazily so apply residency stays at one chunk (0d0d78dd)
+- **sync**: decode packs before opening the apply transaction (df6c9e12)
+- **ocr**: cache model digest checks by length and mtime (7fa2d342)
+
+### 📝 Documentation
+
+- **changelog**: drop the duplicated release sections (261b887c)
+
+### ✅ Testing
+
+- **sync**: add an opt-in real-S3 smoke suite and a rustfs harness (eb099395)
+- **content**: accept absent staging directory for oversized captures (d8f035ff)
+- **search**: wait for outbox ack via worker notification (98b62b13)
+
+### 🔧 Chores
+
+- **release**: reattach the branch after the regenerate rebase (cad855ca)
+- **release**: bump version to 1.7.2 (8e43bd74)
+- **release**: fail the release when tauri crate and npm minors diverge (e753eb6c)
+- **ci**: drop invalid rust-cache input and bump actions to node24 (bb6c8e5f)
+- **release**: let the two-pass release flow pass the dirty-tree gate (820a3394)
+- **release**: fix AppImage Permission denied under root-mounted sandboxes (a27dbc75)
+- **ci**: run CI for every branch and every pull request (811a6813)
+- **git**: anchor the ignored export directory to the repository root (ff6a7fe0)
+
 ## 1.7.1 (2026-09-24)
 
 ### ✨ Features
