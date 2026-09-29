@@ -193,6 +193,13 @@ if (isRegenerate) {
           }
 
           const newTip = gitOutput(`git rev-parse ${BRANCH}`);
+          // `git rebase --onto <parent> <commit> <branch>` updated the branch
+          // ref but left HEAD detached: with our release branch and tag sharing
+          // a name (v1.7.2), the branch argument is ambiguous and rebase treats
+          // it as a commit-ish. Reattach so the release commit below lands on
+          // the branch instead of a detached HEAD.
+          const branchShort = BRANCH.replace(/^heads\//, "");
+          gitOutput(`git checkout -q "${branchShort}"`);
           console.log(
             `  ✓ Dropped ${shortSha}: '${BRANCH}' ${tip.slice(0, 12)} → ${newTip.slice(0, 12)}`,
           );
