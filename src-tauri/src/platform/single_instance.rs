@@ -305,12 +305,27 @@ impl Drop for SingleInstanceGuard {
     }
 }
 
+/// What a failed `OpenProcess` says about the lock owner's liveness.
+///
+/// The classification itself is a pure function of the Win32 error code, so it
+/// stays platform-independent and testable everywhere; only the `GetLastError`
+/// call site is Windows-only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+enum OwnerLiveness {
+    /// The process exists. We may simply not be allowed to open it.
+    Running,
+    /// The pid does not exist, so the lock file is genuinely stale.
+    Dead,
+}
+
 #[cfg(target_os = "windows")]
 fn is_process_running(pid: u32) -> bool {
     extern "system" {
         fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> isize;
         fn CloseHandle(handle: isize) -> i32;
         fn GetExitCodeProcess(process: isize, exit_code: *mut u32) -> i32;
+        fn GetLastError() -> u32;
     }
 
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
@@ -319,12 +334,31 @@ fn is_process_running(pid: u32) -> bool {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle == 0 {
-            return false;
+            return classify_open_process_failure(GetLastError()) == OwnerLiveness::Running;
         }
         let mut exit_code = 0u32;
         GetExitCodeProcess(handle, &mut exit_code);
         CloseHandle(handle);
         exit_code == STILL_ACTIVE
+    }
+}
+
+/// Decides whether a failed `OpenProcess` means the owner is dead.
+///
+/// Only `ERROR_INVALID_PARAMETER` is documented to mean "no such process".
+/// Every other failure must be read as *running*: `ERROR_ACCESS_DENIED` (5) is
+/// what Windows returns when the owner is elevated or runs as a different user,
+/// and treating that as dead made a second launch delete the live instance's
+/// lock and start alongside it — two clipboard monitors, two capture loops, two
+/// OCR workers, and two hotkey registrations on one database. The only safe
+/// reading of an inconclusive error is the one that refuses to start.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn classify_open_process_failure(error_code: u32) -> OwnerLiveness {
+    const ERROR_INVALID_PARAMETER: u32 = 87;
+    if error_code == ERROR_INVALID_PARAMETER {
+        OwnerLiveness::Dead
+    } else {
+        OwnerLiveness::Running
     }
 }
 
@@ -334,6 +368,8 @@ fn is_process_running(pid: u32) -> bool {
         extern "C" {
             fn kill(pid: i32, sig: i32) -> i32;
         }
+        // Signal 0 probes for existence and permission alike, so `EPERM` already
+        // counts as running here.
         kill(pid as i32, 0) == 0
     }
 }
@@ -458,6 +494,42 @@ mod tests {
 
         fs::remove_file(&lock_path).unwrap();
         fs::remove_dir(&directory).unwrap();
+    }
+
+    /// A failed `OpenProcess` is not evidence that the owner is dead. Only
+    /// `ERROR_INVALID_PARAMETER` says "no such process"; `ERROR_ACCESS_DENIED`
+    /// (5) is what Windows returns for an elevated or cross-session owner, and
+    /// reading that as dead made a second launch delete the live instance's lock
+    /// and start alongside it — duplicate capture, OCR workers, and hotkeys on
+    /// one database.
+    #[test]
+    fn an_access_denied_owner_is_never_reported_as_dead() {
+        const ERROR_ACCESS_DENIED: u32 = 5;
+        const ERROR_INVALID_PARAMETER: u32 = 87;
+        const STILL_ACTIVE: u32 = 259;
+
+        // The bug's exact trigger.
+        assert_eq!(
+            classify_open_process_failure(ERROR_ACCESS_DENIED),
+            OwnerLiveness::Running
+        );
+        // The only failure that genuinely means the pid is gone.
+        assert_eq!(
+            classify_open_process_failure(ERROR_INVALID_PARAMETER),
+            OwnerLiveness::Dead
+        );
+        // Anything unrecognised is inconclusive, and the safe reading of
+        // inconclusive is "do not start a second instance".
+        for error_code in [0u32, 1, 6, 50, 87 + 1, 999, STILL_ACTIVE, u32::MAX] {
+            if error_code == ERROR_INVALID_PARAMETER {
+                continue;
+            }
+            assert_eq!(
+                classify_open_process_failure(error_code),
+                OwnerLiveness::Running,
+                "error {error_code} must not be read as a dead owner"
+            );
+        }
     }
 
     #[test]
