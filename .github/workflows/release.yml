@@ -211,8 +211,16 @@ jobs:
           appimage=$(find src-tauri/target -type f -name '*.AppImage' \
             -not -path '*/deps/*' -not -path '*/build/*' -print -quit)
           test -n "$appimage" || { echo "no AppImage was built"; exit 1; }
+          # Absolutize with pwd, not realpath: realpath has failed with
+          # "No such file or directory" on a path find itself just listed
+          # (run 36531684969), and the bundler also writes lower/upper-case
+          # variants of the same name, so trust nothing exotic here.
+          appimage="$PWD/$appimage"
+          ls -la "$(dirname "$appimage")"
+          chmod +x "$appimage"
           work="$(mktemp -d)"
-          (cd "$work" && "$(realpath "$appimage")" --appimage-extract >/dev/null)
+          (cd "$work" && "$appimage" --appimage-extract >/dev/null) || {
+            echo "::error::could not extract $appimage"; exit 1; }
           # Every file readable by everyone, executable wherever its owner can
           # execute it, and every directory openable and traversable by all.
           bad="$(cd "$work/squashfs-root" && find . \
