@@ -1815,6 +1815,11 @@ pub struct WindowsClipboardMonitor {
     sender: Option<mpsc::Sender<ClipboardChange>>,
     stop_sender: Option<mpsc::Sender<()>>,
     handle: Option<JoinHandle<()>>,
+    /// Write end of the self-pipe that wakes an event-driven monitor
+    /// (XFixes / Wayland data-control) on stop. The poll fallback uses the
+    /// mpsc stop channel instead.
+    #[cfg(target_os = "linux")]
+    stop_writer: Option<crate::platform::stop_pipe::StopPipeWriter>,
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1839,6 +1844,8 @@ impl WindowsClipboardMonitor {
             sender: None,
             stop_sender: None,
             handle: None,
+            #[cfg(target_os = "linux")]
+            stop_writer: None,
         }
     }
 
@@ -1863,7 +1870,90 @@ impl WindowsClipboardMonitor {
         let (stop_sender, stop_receiver) = mpsc::channel();
         let sender_for_thread = sender.clone();
 
-        let handle = thread::Builder::new()
+        // Event-driven monitors push a change notification as soon as the
+        // selection owner changes. Linux tries XFixes (X11) and the
+        // data-control protocols (Wayland); any failure returns None and the
+        // generic 500 ms poll loop below takes over. macOS has no clipboard
+        // change push API at all (`NSPasteboard` exposes only a change count),
+        // so polling is the platform standard there — see Maccy/Paste.
+        #[cfg(target_os = "linux")]
+        let event_handle: Option<(
+            JoinHandle<()>,
+            crate::platform::stop_pipe::StopPipeWriter,
+        )> = match crate::platform::Platform::detect() {
+            crate::platform::Platform::LinuxX11 => {
+                crate::platform::linux_x11::try_spawn_xfixes_monitor(sender_for_thread.clone())
+            }
+            crate::platform::Platform::LinuxWayland => {
+                crate::platform::linux_wayland::try_spawn_data_control_monitor(
+                    sender_for_thread.clone(),
+                )
+            }
+            _ => None,
+        };
+
+        #[cfg(target_os = "linux")]
+        if let Some((event_thread, stop_writer)) = event_handle {
+            self.sender = Some(sender);
+            self.stop_sender = Some(stop_sender);
+            self.handle = Some(event_thread);
+            self.stop_writer = Some(stop_writer);
+            self.running = true;
+            return Ok(receiver);
+        }
+
+        let handle = Self::spawn_poll_monitor(sender_for_thread, stop_receiver)?;
+
+        self.sender = Some(sender);
+        self.stop_sender = Some(stop_sender);
+        self.handle = Some(handle);
+        self.running = true;
+
+        Ok(receiver)
+    }
+
+    pub fn stop(&mut self) {
+        self.running = false;
+        if let Some(sender) = self.stop_sender.take() {
+            let _ = sender.send(());
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(writer) = self.stop_writer.take() {
+            // Wakes the event-driven monitor thread out of its blocking poll.
+            writer.trigger();
+        }
+        self.sender = None;
+        if let Some(handle) = self.handle.take() {
+            if handle.thread().id() != thread::current().id() {
+                // A panicked monitor explains why captures silently stopped;
+                // swallowing the payload hid that from every log.
+                if let Err(panic) = handle.join() {
+                    crate::log_error!(
+                        "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+
+    pub fn set_ignored_apps(&mut self, apps: Vec<String>) {
+        self.ignored_apps = apps;
+    }
+
+    /// The generic 500 ms poll loop. This is the fallback everywhere: on Linux
+    /// when XFixes / data-control are unavailable, and permanently on macOS
+    /// (no clipboard change push API — `NSPasteboard` only exposes a change
+    /// count, so polling is what every clipboard manager does there).
+    #[cfg(not(target_os = "windows"))]
+    fn spawn_poll_monitor(
+        sender_for_thread: mpsc::Sender<ClipboardChange>,
+        stop_receiver: mpsc::Receiver<()>,
+    ) -> Result<JoinHandle<()>, String> {
+        thread::Builder::new()
             .name("clipboard-monitor".to_owned())
             .spawn(move || {
                 let mut poll_state = crate::platform::ClipboardPollState::new();
@@ -1899,41 +1989,7 @@ impl WindowsClipboardMonitor {
                     }
                 }
             })
-            .map_err(|error| format!("failed to spawn clipboard monitor: {error}"))?;
-
-        self.sender = Some(sender);
-        self.stop_sender = Some(stop_sender);
-        self.handle = Some(handle);
-        self.running = true;
-
-        Ok(receiver)
-    }
-
-    pub fn stop(&mut self) {
-        self.running = false;
-        if let Some(sender) = self.stop_sender.take() {
-            let _ = sender.send(());
-        }
-        self.sender = None;
-        if let Some(handle) = self.handle.take() {
-            if handle.thread().id() != thread::current().id() {
-                // A panicked monitor explains why captures silently stopped;
-                // swallowing the payload hid that from every log.
-                if let Err(panic) = handle.join() {
-                    crate::log_error!(
-                        "[clipboard-monitor] monitor thread terminated with a panic: {panic:?}"
-                    );
-                }
-            }
-        }
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.running
-    }
-
-    pub fn set_ignored_apps(&mut self, apps: Vec<String>) {
-        self.ignored_apps = apps;
+            .map_err(|error| format!("failed to spawn clipboard monitor: {error}"))
     }
 }
 

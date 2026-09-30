@@ -40,6 +40,8 @@ pub mod monitor;
 pub mod platform_info;
 pub mod secret_store;
 pub mod single_instance;
+#[cfg(target_os = "linux")]
+pub mod stop_pipe;
 pub mod ui;
 
 use std::path::Path;

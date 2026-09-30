@@ -281,6 +281,7 @@ mod x11_ffi {
         // Connection management
         pub fn XOpenDisplay(name: *const i8) -> *mut Display;
         pub fn XCloseDisplay(display: *mut Display) -> i32;
+        pub fn XConnectionNumber(display: *mut Display) -> i32;
         pub fn XDefaultRootWindow(display: *mut Display) -> Window;
         pub fn XFlush(display: *mut Display) -> i32;
         pub fn XPending(display: *mut Display) -> i32;
@@ -373,12 +374,185 @@ mod x11_ffi {
             event_base: *mut i32,
             error_base: *mut i32,
         ) -> Bool;
+        pub fn XFixesQueryVersion(
+            display: *mut Display,
+            major_version: *mut i32,
+            minor_version: *mut i32,
+        ) -> Status;
         pub fn XFixesSelectSelectionInput(
             display: *mut Display,
             window: Window,
             selection: Atom,
             event_mask: u64,
         ) -> i32;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// XFixes event-driven clipboard monitor (Linux only)
+// ---------------------------------------------------------------------------
+
+/// `XFixesSetSelectionOwnerNotifyMask` — subscribe to selection owner changes.
+#[cfg(target_os = "linux")]
+const XFIXES_SET_SELECTION_OWNER_NOTIFY_MASK: u64 = 1 << 0;
+
+/// Spawns the event-driven clipboard monitor backed by the XFixes extension.
+///
+/// The monitor thread subscribes to `XFixesSelectionNotify` for the CLIPBOARD
+/// selection and sends a [`ClipboardChange`] as soon as the selection owner
+/// changes — no polling. It blocks in `poll(2)` on the X connection fd plus
+/// the read end of a stop pipe, so `stop()` wakes it immediately.
+///
+/// Returns `None` when XFixes is unavailable (no X display, extension missing,
+/// thread spawn failure); the caller then falls back to the generic poll loop.
+///
+/// The returned [`StopPipeWriter`] must be triggered (or dropped) on stop; the
+/// monitor thread owns and closes the pipe's read end.
+#[cfg(target_os = "linux")]
+pub fn try_spawn_xfixes_monitor(
+    sender: std::sync::mpsc::Sender<crate::platform::windows_clipboard::ClipboardChange>,
+) -> Option<(
+    thread::JoinHandle<()>,
+    crate::platform::stop_pipe::StopPipeWriter,
+)> {
+    use crate::platform::stop_pipe::StopPipePair;
+    use crate::platform::windows_clipboard::ClipboardChange;
+
+    // Raw Xlib display pointer. The monitor thread takes exclusive
+    // ownership of the connection, so wrapping it in a Send marker is
+    // sound even though `*mut c_void` itself is not Send.
+    #[repr(transparent)]
+    struct XDisplayPtr(*mut std::ffi::c_void);
+    unsafe impl Send for XDisplayPtr {}
+    impl XDisplayPtr {
+        fn ptr(self) -> *mut std::ffi::c_void {
+            self.0
+        }
+    }
+
+    let stop = StopPipePair::new().ok()?;
+
+    // SAFETY: Xlib FFI. The display is opened, configured, and consumed
+    // entirely on this thread; on any setup failure every created resource is
+    // closed before returning None. After a successful spawn, ownership of
+    // `display` and `window` moves to the monitor thread.
+    let (display, event_base, window) = unsafe {
+        let display = x11_ffi::XOpenDisplay(std::ptr::null());
+        if display.is_null() {
+            return None;
+        }
+        let mut event_base: i32 = 0;
+        let mut error_base: i32 = 0;
+        if x11_ffi::XFixesQueryExtension(display, &mut event_base, &mut error_base) == 0 {
+            x11_ffi::XCloseDisplay(display);
+            return None;
+        }
+        // XFixes requires a version negotiation before requests are used;
+        // selection input exists since XFixes 1.0.
+        let (mut major, mut minor) = (1, 0);
+        x11_ffi::XFixesQueryVersion(display, &mut major, &mut minor);
+        let root = x11_ffi::XDefaultRootWindow(display);
+        let window = x11_ffi::XCreateSimpleWindow(display, root, 0, 0, 1, 1, 0, 0, 0);
+        if window == 0 {
+            x11_ffi::XCloseDisplay(display);
+            return None;
+        }
+        let clipboard = x11_ffi::XInternAtom(display, b"CLIPBOARD\0".as_ptr().cast(), 0);
+        if clipboard == 0 {
+            x11_ffi::XDestroyWindow(display, window);
+            x11_ffi::XCloseDisplay(display);
+            return None;
+        }
+        x11_ffi::XFixesSelectSelectionInput(
+            display,
+            window,
+            clipboard,
+            XFIXES_SET_SELECTION_OWNER_NOTIFY_MASK,
+        );
+        // Make sure the subscription is on the server before we start waiting.
+        x11_ffi::XSync(display, 0);
+        (display, event_base, window)
+    };
+    let x_fd = unsafe { x11_ffi::XConnectionNumber(display) };
+    // Copy of the raw pointer kept on this thread so the spawn-failure path
+    // can still clean up after the closure took ownership of the wrapper.
+    let raw_display = display;
+    let display = XDisplayPtr(display);
+    let stop_reader_fd = stop.reader_fd();
+
+    let spawn_result = thread::Builder::new()
+        .name("x11-clipboard-monitor".to_owned())
+        .spawn(move || {
+            // Method call (instead of `display.0`) so the closure captures
+            // the whole Send wrapper, not the raw pointer field.
+            let display = display.ptr();
+            let mut fds = [
+                libc::pollfd {
+                    fd: x_fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: stop_reader_fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            let mut sequence: u32 = 0;
+            loop {
+                // SAFETY: both fds are valid for the lifetime of the loop.
+                let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
+                if ready < 0 {
+                    let error = std::io::Error::last_os_error();
+                    if error.kind() == std::io::ErrorKind::Interrupted {
+                        continue;
+                    }
+                    break;
+                }
+                if fds[1].revents != 0 {
+                    break; // stop requested
+                }
+                if fds[0].revents & libc::POLLIN == 0 {
+                    continue;
+                }
+                // Drain everything already queued on the connection.
+                while unsafe { x11_ffi::XPending(display) } > 0 {
+                    // SAFETY: `event` is a valid XEvent storage; XNextEvent
+                    // fully initialises it before we read the type tag.
+                    let mut event: x11_ffi::XEvent = unsafe { std::mem::zeroed() };
+                    unsafe { x11_ffi::XNextEvent(display, &mut event) };
+                    // XFixesSelectionNotify is event 0 in the XFixes event
+                    // space, so the wire type is exactly `event_base`.
+                    let event_type = unsafe { event.data.any.type_ };
+                    if event_type == event_base {
+                        sequence = sequence.wrapping_add(1);
+                        if sender.send(ClipboardChange { sequence }).is_err() {
+                            // Capture worker is gone; stop the monitor.
+                            break;
+                        }
+                    }
+                }
+            }
+            // SAFETY: this thread owns the display connection and window.
+            unsafe {
+                x11_ffi::XDestroyWindow(display, window);
+                x11_ffi::XCloseDisplay(display);
+                libc::close(stop_reader_fd);
+            }
+        });
+    match spawn_result {
+        Ok(handle) => Some((handle, stop.into_writer())),
+        // The pair's Drop closes both pipe fds; the display/window were never
+        // handed to a thread.
+        Err(_) => {
+            let display = raw_display;
+            // SAFETY: this thread still owns the display connection.
+            unsafe {
+                x11_ffi::XDestroyWindow(display, window);
+                x11_ffi::XCloseDisplay(display);
+            }
+            None
+        }
     }
 }
 
