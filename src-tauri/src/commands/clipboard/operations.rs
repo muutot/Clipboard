@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex};
+﻿use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tauri::Emitter;
+use tauri::{AppHandle, Emitter};
 
 use crate::commands::lock::lock_state;
 use crate::config::{ConfigStore, SearchIndexSyncMode};
@@ -16,10 +16,62 @@ use crate::storage::{
 use crate::CaptureState;
 
 use super::types::{
-    permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, HistoryFilterArgs,
-    SearchPage, SearchResultCache, SearchSortDirection, SearchSortField, SearchSortRule,
-    StorageKindDeleteExpectation, StorageKindDeleteResult,
+    permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, ClipboardItemsChanged,
+    HistoryFilterArgs, SearchPage, SearchResultCache, SearchSortDirection, SearchSortField,
+    SearchSortRule, StorageKindDeleteExpectation, StorageKindDeleteResult,
 };
+
+/// Announces a content change: the mutated rows are read back and attached, so
+/// a receiver replaces what it displays instead of guessing a patch.
+fn broadcast_content_changed(app: &AppHandle, database: &Database, ids: &[String]) {
+    if ids.is_empty() {
+        return;
+    }
+    let items = match database.get_items_by_ids(ids) {
+        Ok(rows) => rows,
+        Err(error) => {
+            crate::log_warn!("[clipboard] unable to read back mutated items: {error}");
+            return;
+        }
+    };
+    emit_items_changed(
+        app,
+        ClipboardItemsChanged {
+            items,
+            ..ClipboardItemsChanged::default()
+        },
+    );
+}
+
+/// Announces a membership transition. No read-back: the receiver flips its own
+/// deleted flag or drops the id, and the row itself is unchanged.
+fn broadcast_membership_changed(
+    app: &AppHandle,
+    deleted_ids: &[String],
+    restored_ids: &[String],
+    removed_ids: &[String],
+) {
+    if deleted_ids.is_empty() && restored_ids.is_empty() && removed_ids.is_empty() {
+        return;
+    }
+    emit_items_changed(
+        app,
+        ClipboardItemsChanged {
+            deleted_ids: deleted_ids.to_vec(),
+            restored_ids: restored_ids.to_vec(),
+            removed_ids: removed_ids.to_vec(),
+            ..ClipboardItemsChanged::default()
+        },
+    );
+}
+
+/// Broadcast failures are logged and swallowed: the mutation itself already
+/// succeeded, and the next event or a reload repairs a missed announcement.
+fn emit_items_changed(app: &AppHandle, payload: ClipboardItemsChanged) {
+    if let Err(error) = app.emit("clipboard-items-changed", &payload) {
+        crate::log_warn!("[clipboard] unable to broadcast clipboard-items-changed: {error}");
+    }
+}
 
 #[tauri::command]
 pub fn list_clipboard_items(
@@ -52,24 +104,34 @@ pub fn list_clipboard_items(
 
 #[tauri::command]
 pub fn set_clipboard_item_favorite(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
     is_favorite: bool,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .set_favorite(&id, is_favorite)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_content_changed(&app, &database, std::slice::from_ref(&id));
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
 pub fn set_clipboard_item_tags(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
     tags: Vec<String>,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .set_tags(&id, &tags)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_content_changed(&app, &database, std::slice::from_ref(&id));
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -134,13 +196,18 @@ pub fn set_tag_color(
 
 #[tauri::command]
 pub fn batch_set_favorite(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     ids: Vec<String>,
     is_favorite: bool,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .set_favorite_batch(&ids, is_favorite)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_content_changed(&app, &database, &ids);
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -153,12 +220,17 @@ pub fn delete_clipboard_item(
 
 #[tauri::command]
 pub fn batch_delete_clipboard_items(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     ids: Vec<String>,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .soft_delete_batch(&ids)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_membership_changed(&app, &ids, &[], &[]);
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -332,10 +404,17 @@ pub fn read_clipboard_text() -> Option<String> {
 
 #[tauri::command]
 pub fn soft_delete_clipboard_item(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    database.soft_delete(&id).map_err(|error| error.to_string())
+    let updated = database
+        .soft_delete(&id)
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_membership_changed(&app, std::slice::from_ref(&id), &[], &[]);
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -347,12 +426,17 @@ pub fn clear_all_non_favorite_items(database: tauri::State<'_, Database>) -> Res
 
 #[tauri::command]
 pub fn restore_clipboard_item(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .restore_deleted(&id)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_membership_changed(&app, &[], std::slice::from_ref(&id), &[]);
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -373,32 +457,47 @@ pub fn list_deleted_clipboard_items(
 
 #[tauri::command]
 pub fn batch_restore_clipboard_items(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     ids: Vec<String>,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .restore_deleted_batch(&ids)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_membership_changed(&app, &[], &ids, &[]);
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
 pub fn permanently_delete_clipboard_item(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .permanently_delete(&id)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_membership_changed(&app, &[], &[], std::slice::from_ref(&id));
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
 pub fn batch_permanently_delete_clipboard_items(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     ids: Vec<String>,
 ) -> Result<bool, String> {
-    database
+    let updated = database
         .permanently_delete_batch(&ids)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if updated {
+        broadcast_membership_changed(&app, &[], &[], &ids);
+    }
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -574,20 +673,24 @@ pub fn save_clipboard_item_as_new_record(
 
 #[tauri::command]
 pub fn rename_item(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     capture: tauri::State<'_, CaptureState>,
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
     // The rename persists the new paths before moving the file. Hold the
-    // storage maintenance lock so a concurrent orphan cleanup cannot judge
-    // the not-yet-moved old file unreferenced, delete it, and leave the
+    // storage maintenance lock so a concurrent orphan cleanup cannot judge the
+    // not-yet-moved old file unreferenced, delete it, and leave the
     // rolled-back record pointing at a missing file.
     let _maintenance = lock_state(
         &capture.storage_maintenance_lock,
         "storage maintenance lock is poisoned",
     )?;
-    rename_item_record(&database, id, new_name)
+    let renamed = rename_item_record(&database, id, new_name)?;
+    // Other windows render the title and paths, so they need the renamed row.
+    broadcast_content_changed(&app, &database, std::slice::from_ref(&renamed.id));
+    Ok(renamed)
 }
 
 fn rename_item_record(
@@ -1338,6 +1441,7 @@ mod tests {
 
 #[tauri::command]
 pub fn update_clipboard_text(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
     new_title: String,
@@ -1369,7 +1473,7 @@ pub fn update_clipboard_text(
     let content_hash = content::hash::compute_content_hash(kind_name, &new_text_content, None);
     let size_bytes = new_text_content.len() as u64;
 
-    database
+    let updated = database
         .update_text_item(&TextItemUpdate {
             id: &id,
             kind: item.kind,
@@ -1379,7 +1483,12 @@ pub fn update_clipboard_text(
             size_bytes,
             metadata_json: Some(&metadata_json),
         })
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if updated {
+        // The edited title and body are what the other windows render.
+        broadcast_content_changed(&app, &database, std::slice::from_ref(&id));
+    }
+    Ok(updated)
 }
 
 pub fn cmp_by_field(

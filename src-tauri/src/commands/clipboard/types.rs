@@ -208,6 +208,32 @@ pub(crate) struct ClipboardHistoryInvalidated {
     pub(crate) deleted_ids: Vec<String>,
 }
 
+/// Broadcast for item-level mutations (favorite, tags, edit, soft delete,
+/// restore, permanent delete, and their batch forms).
+///
+/// Every window keeps its own in-memory copy of the loaded rows, and a Tauri
+/// command can only be invoked from the window that asked for it — so without
+/// this event a favorite toggled in the float panel stays stale in the main
+/// window until something unrelated forces a full reload.
+///
+/// The four lists exist because a soft delete and a restore cannot be expressed
+/// as "an updated record": `deleted` is not a column the record carries, it is
+/// which query produced the row (`list_recent` vs `list_deleted`), and the flag
+/// lives in the receiver's own display state. So content changes travel as
+/// records and the three membership transitions travel as ids.
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ClipboardItemsChanged {
+    /// Rows whose content changed and that still exist.
+    pub(crate) items: Vec<ClipboardItem>,
+    /// Ids that moved into the recycle bin: the receiver marks them deleted.
+    pub(crate) deleted_ids: Vec<String>,
+    /// Ids that came back out of the recycle bin: the receiver clears the flag.
+    pub(crate) restored_ids: Vec<String>,
+    /// Ids that are gone for good: the receiver drops them everywhere.
+    pub(crate) removed_ids: Vec<String>,
+}
+
 pub(crate) fn permanently_delete_storage_kind_for(
     database: &Database,
     paths: &StoragePaths,
