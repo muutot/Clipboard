@@ -54,7 +54,7 @@
 - [x] 服务调用收敛：`invokeTauri`/`invokeTauriRequired`（`services/runtime.ts`），63 处守卫→单行，对象字面量/void/throw 全形态覆盖。
 - [x] 命令锁样板收敛：`commands/lock.rs::lock_state`（Deref 泛型，State/Arc 通吃），69 处→单行，消息逐字保留；`MaterializationStore` 自定义 `lock()` 保持原样。
 - [x] 面板 feedback 收敛：`utils/feedback.svelte.ts` 工厂（Keyboard/Sensitive/General；TagManagement 的 `{message,kind}|null` 形态不同，明确除外）。
-- [ ] 不做（已决议）：config store 宏化（伤显式错误类型）、`_t` 收敛（丢语言切换响应式）、`sync_state.rs` 拆分（等同步 v2）。
+- [x] 不做（已决议）：config store 宏化（伤显式错误类型）、`_t` 收敛（丢语言切换响应式）、`sync_state.rs` 拆分（等同步 v2）。
 
 ## 1.6 — 结构还债 + 平台渐进 + 用户功能
 
