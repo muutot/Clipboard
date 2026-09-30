@@ -5,11 +5,15 @@ use crate::content::hash::{
     compute_media_write_hashes,
 };
 
-/// How long a text/file self-trigger marker stays valid. Covers the short
-/// window between the frontend writing the clipboard and the capture thread
-/// observing the resulting sequence-number change.
-const ENTRY_TTL: Duration = Duration::from_secs(2);
-/// Media markers need a wider window: the capture thread can spend several
+/// How long a text/file self-trigger marker stays valid. Matches the media
+/// window on purpose: the capture thread can be blocked for several seconds
+/// while it ingests a large image (DIB read + PNG re-encode + database write)
+/// before it reaches the hash check for a text written right after, and an
+/// expired marker would re-capture the app's own paste. The cost — an external
+/// copy of identical content within the window is swallowed once — is the same
+/// trade the media path already accepts.
+const ENTRY_TTL: Duration = Duration::from_secs(5);
+/// Media markers use the same window: the capture thread can spend several
 /// seconds waking up (500ms poll), reading the DIB and re-encoding a large
 /// screenshot to PNG before it reaches the hash check, and an expired marker
 /// would re-capture the image the app itself just pasted.
