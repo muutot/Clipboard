@@ -837,9 +837,17 @@ impl ClipboardRepository for Database {
             // The `clipboard_items_search_update` trigger already enqueues the
             // upsert event for the restored row, so no explicit outbox insert
             // is needed here.
+            // Refreshing `created_at_ms` on restore is deliberate: the
+            // retention cleanup hard-deletes non-favorite active rows whose
+            // `created_at_ms` is older than the retention window, so a
+            // restored old record would be silently purged within the hour.
+            // The restore moment becomes the new retention baseline (and the
+            // row resurfaces at the top of history, matching user intent).
             let affected = connection.execute(
-                "UPDATE clipboard_items SET deleted = 0, deleted_at_ms = NULL WHERE id = ?1 AND deleted = 1",
-                [id],
+                "UPDATE clipboard_items
+                 SET deleted = 0, deleted_at_ms = NULL, created_at_ms = ?2
+                 WHERE id = ?1 AND deleted = 1",
+                params![id, current_time_ms()],
             )?;
             Ok(affected > 0)
         })
@@ -867,12 +875,14 @@ impl ClipboardRepository for Database {
                 }
             }
 
+            // Same retention-baseline refresh as `restore_deleted`: without it
+            // the scheduled cleanup would hard-delete restored old records.
             for id in &ids {
                 transaction.execute(
                     "UPDATE clipboard_items
-                     SET deleted = 0, deleted_at_ms = NULL
+                     SET deleted = 0, deleted_at_ms = NULL, created_at_ms = ?2
                      WHERE id = ?1 AND deleted = 1",
-                    [id],
+                    params![id, current_time_ms()],
                 )?;
             }
             transaction.commit()?;

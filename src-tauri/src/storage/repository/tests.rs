@@ -1470,6 +1470,38 @@ fn item_count_includes_restored_items() {
 }
 
 #[test]
+fn restore_refreshes_retention_baseline_against_cleanup() {
+    let database = Database::open_in_memory().unwrap();
+    // Created far inside the retention window's past.
+    database
+        .save_item(&text_item("ancient", "hash-ancient", 1_000))
+        .unwrap();
+    database.soft_delete("ancient").unwrap();
+    database.restore_deleted("ancient").unwrap();
+
+    // The restored row must survive retention cleanup instead of being
+    // hard-deleted behind the user's back, and its restore moment becomes
+    // the new history position.
+    assert_eq!(database.delete_older_than(30).unwrap(), 0);
+    let restored = database
+        .get_item("ancient")
+        .unwrap()
+        .expect("restored record must survive retention cleanup");
+    assert!(restored.created_at_ms > 1_000);
+
+    // Batch restore carries the same guarantee.
+    database
+        .save_item(&text_item("ancient-2", "hash-ancient-2", 2_000))
+        .unwrap();
+    database.soft_delete("ancient-2").unwrap();
+    database
+        .restore_deleted_batch(&["ancient-2".to_owned()])
+        .unwrap();
+    assert_eq!(database.delete_older_than(30).unwrap(), 0);
+    assert!(database.get_item("ancient-2").unwrap().is_some());
+}
+
+#[test]
 fn capacity_counts_only_evictable_records() {
     let database = Database::open_in_memory().unwrap();
     let mut favorite = text_item("favorite", "hash-fav", 100);
