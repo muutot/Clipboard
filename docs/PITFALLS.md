@@ -302,6 +302,26 @@ END;
 
 写入远端数据的代码路径（`apply_sync_snapshot`、`apply_sync_segment`）必须在**同一事务内**先置 `sync_suppress_changelog=1`、提交前再删除该标记。因为标记随事务回滚而回滚，崩溃也不会残留永久抑制；搜索触发器不读该标记，接收到的条目仍需进 `search_outbox` 以便索引。
 
+## 平台专属代码是本地门禁的盲区
+
+`platform/` 下的 Linux/macOS 实现整体挂在 `#[cfg(target_os = "linux")]` / `"macos"` 后面。**在 Windows 上跑 `npm run verify`（fmt + clippy + test + build）时它们根本不会被编译**，所以"本地三关全绿"不等于"代码能编过"。真实的门禁只有对应平台的 CI job。
+
+实例：`v1.7.4` 分支从 `3006f94` 基线起 CI 一直红，而本地全绿——
+
+```
+error[E0658]: use of unstable library feature `int_roundings`
+  --> src/platform/linux_x11.rs:1047
+   | offset_units += (nitems as i64).div_ceil(4);
+```
+
+`div_ceil` **只对无符号整数稳定**（1.73），这里先 `as i64` 变成有符号就落到 nightly 特性上。修掉编译错误后，clippy 才刚跑起来，又陆续暴露 3 个同族问题：`private_interfaces` ×2（`pub fn` 返回 `pub(crate)` 类型）、`manual_c_str_literals`、以及我第一版修法自己引入的 `unnecessary_min_or_max`（`nitems` 其实是 `u64`，clamp 是死代码）。
+
+规则：
+
+- 改 `#[cfg(target_os = ...)]` 后的代码，**必须**看对应平台的 CI job 结果再算通过；本地无法用 `cargo check --target x86_64-unknown-linux-gnu` 替代，因为 `cc-rs` 之类原生依赖需要交叉 C 工具链。
+- 整数取整优先在**无符号域**做（`(n / d) + (n % d != 0) as u64` 或稳定的 `u64::div_ceil`），最后再 cast；不要为了对齐累加器类型而把无符号量先转成有符号。
+- 用 C 字符串字面量 `c"NAME"` 时注意 `c_char` 在 aarch64 Linux 是无符号的，而手写 FFI 常声明 `*const i8`——保留 `.cast()`，别让"更干净"的写法破坏可移植性。
+
 ## Rust 模块结构
 
 添加新功能时按模块归属放置：

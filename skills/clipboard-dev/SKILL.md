@@ -63,7 +63,7 @@ Also read the focused project document when relevant: `docs/PITFALLS.md`, `docs/
 - **Database contract:** update schema/migration, row mapping, repository behavior, derived search/OCR cleanup, recovery expectations, and tests.
 - **i18n contract:** update `src/lib/i18n/locales/en.ts`, `zh-CN.ts`, and `src/lib/i18n/types.ts` together unless the string is intentionally non-localized and documented.
 - **Worker/listener contract:** retain stop signals, join handles, unlisten functions, and the unified shutdown path.
-- **Platform contract:** separate shared behavior from per-platform implementation and degradation. Do not infer macOS/Linux completion from a compiled adapter or documentation scaffold.
+- **Platform contract:** separate shared behavior from per-platform implementation and degradation. Do not infer macOS/Linux completion from a compiled adapter or documentation scaffold. Code behind `#[cfg(target_os = ...)]` is not compiled by a local run on another OS, so its only gate is the matching CI job — see `docs/PITFALLS.md`.
 - **Visual contract:** type/build checks do not prove appearance. Use structural comparison and, when available, rendered/runtime inspection at the target window size and theme.
 
 ## Verification commands

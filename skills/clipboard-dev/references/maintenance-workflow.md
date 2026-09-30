@@ -73,6 +73,7 @@ Do not promote a niche exception into a general rule. Record newly discovered lo
 - Run `npm run lint:rust` for Rust changes and `npm run format:check` before commit.
 - Run `npm run verify` for cross-layer changes and integration milestones.
 - Inspect rendered/runtime behavior for layout, theme, focus, multi-window, platform, or OS integration claims; static checks alone are insufficient.
+- Treat platform-gated code as unverified locally. Anything behind `#[cfg(target_os = ...)]` (the Linux/macOS halves of `src-tauri/src/platform/`) is not compiled by a Windows `npm run verify`, and cross-`cargo check` is not a substitute because native dependencies still need a cross C toolchain. After touching such code, the matching CI job is the only real gate — read its result, and do not treat a green local run as coverage. `docs/PITFALLS.md` ("平台专属代码是本地门禁的盲区") records a branch that stayed red through many green local runs.
 
 Report skipped checks and why. Do not convert missing evidence into a passing claim.
 
