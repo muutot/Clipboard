@@ -188,10 +188,21 @@ flag lives in the receiving window's display state. So content changes travel as
 read-back records (`items`) and the three membership transitions as ids
 (`deletedIds`, `restoredIds`, `removedIds`) — broadcasting a soft delete as "an
 updated row" would show a deleted row as still active in the other window.
+
+A fifth list, `usedIds`, exists for the same reason: a `last_used_at_ms` stamp
+changes **no field and no membership**, only the position the row sorts at. It was
+the one mutation with no broadcast at all, so a copy made in the float panel or from
+the tray looked like a no-op until a reload re-sorted from the database — "it only
+sorts after a refresh". Receivers promote these ids to the top of the loaded
+history, gated on `general.pinCopiedToTop`, and never touch a search result set or
+a row they have not loaded. Because the database order changes regardless of the
+setting, promotion only decides _when_ the row moves, not whether.
+
 `utils/item-changes.ts::applyItemsChangedEvent` is the only consumer shape both
-windows use: content first, then the flag flips, then removals, so a removal
-always wins. Applying a window's own event back to itself is a no-op in effect
-(the payload equals the optimistic state it already shows), which is why the
+windows use: content first, then the flag flips, then removals, then the promotion
+of used rows, so a removal always wins — a removed id cannot be pulled back to the
+top by the same payload. Applying a window's own event back to itself is a no-op in
+effect (the payload equals the optimistic state it already shows), which is why the
 mutators do not filter by origin.
 
 Every item-level mutator takes an `AppHandle` and broadcasts on success; without

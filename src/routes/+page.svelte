@@ -888,7 +888,9 @@
         // harmless: the payload is the stored row, so it equals the optimistic
         // state this window already shows.
         const payload = event.payload;
-        itemStore.current = applyItemsChangedEvent(itemStore.current, payload);
+        itemStore.current = applyItemsChangedEvent(itemStore.current, payload, {
+          promoteUsed: $generalSettings.pinCopiedToTop,
+        });
 
         if (payload.removedIds?.length) {
           const removedIds = new Set(payload.removedIds);

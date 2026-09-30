@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type {
   ClipboardItem,
   ClipboardItemsChangedPayload,
@@ -58,6 +58,7 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: [],
       restoredIds: [],
       removedIds: [],
+      usedIds: [],
     });
     expect(getItems(next, "history")[0].favorite).toBe(true);
     expect(getItems(next, "indexed")![0].favorite).toBe(true);
@@ -71,6 +72,7 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: [],
       restoredIds: [],
       removedIds: [],
+      usedIds: [],
     });
     // Writing it in would resurrect a row the user cannot see.
     expect(next.byId.has("not-loaded")).toBe(false);
@@ -83,6 +85,7 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: [],
       restoredIds: [],
       removedIds: ["a"],
+      usedIds: [],
     });
     expect(getItems(next, "history").map((i) => i.id)).toEqual(["b"]);
     expect(getItems(next, "indexed")).toEqual([]);
@@ -98,6 +101,7 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: [],
       restoredIds: [],
       removedIds: ["a"],
+      usedIds: [],
     });
     expect(getDetailItem(next)).toBeNull();
   });
@@ -110,6 +114,7 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: ["a"],
       restoredIds: [],
       removedIds: [],
+      usedIds: [],
     });
     expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "b"]);
     expect(getItems(next, "history")[0].deleted).toBe(true);
@@ -124,12 +129,14 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: ["a"],
       restoredIds: [],
       removedIds: [],
+      usedIds: [],
     });
     const next = applyItemsChangedEvent(deleted, {
       items: [],
       deletedIds: [],
       restoredIds: ["a"],
       removedIds: [],
+      usedIds: [],
     });
     expect(getItems(next, "history")[0].deleted).toBe(false);
   });
@@ -141,6 +148,7 @@ describe("applyItemsChangedEvent", () => {
       deletedIds: [],
       restoredIds: [],
       removedIds: ["a"],
+      usedIds: [],
     });
     expect(getItems(next, "history").map((i) => i.id)).toEqual(["b"]);
     expect(getItems(next, "history")[0].title).toBe("edited");
@@ -150,5 +158,101 @@ describe("applyItemsChangedEvent", () => {
   it("tolerates a payload with the lists omitted", () => {
     const next = applyItemsChangedEvent(shared(), {} as ClipboardItemsChangedPayload);
     expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "b"]);
+  });
+
+  it("promotes a used row to the top of the history", () => {
+    // A copy stamped in the float panel or the tray. The row itself is
+    // unchanged, so without this the order only caught up on the next reload.
+    const next = applyItemsChangedEvent(
+      shared(),
+      {
+        items: [],
+        deletedIds: [],
+        restoredIds: [],
+        removedIds: [],
+        usedIds: ["b"],
+      },
+      { promoteUsed: true },
+    );
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["b", "a"]);
+    // Only the position moved.
+    expect(next.byId.get("b")!.title).toBe("title-b");
+  });
+
+  it("leaves the order alone when promotion is off", () => {
+    // `Pin Copied to Top` turned off: the stamp still happened, so a reload
+    // reorders, but nothing jumps under the user's cursor.
+    const next = applyItemsChangedEvent(shared(), {
+      items: [],
+      deletedIds: [],
+      restoredIds: [],
+      removedIds: [],
+      usedIds: ["b"],
+    });
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "b"]);
+  });
+
+  it("keeps a search result set in relevance order", () => {
+    const next = applyItemsChangedEvent(
+      shared(),
+      {
+        items: [],
+        deletedIds: [],
+        restoredIds: [],
+        removedIds: [],
+        usedIds: ["b"],
+      },
+      { promoteUsed: true },
+    );
+    expect(getItems(next, "indexed")!.map((i) => i.id)).toEqual(["a"]);
+    expect(getItems(next, "cache")!.map((i) => i.id)).toEqual(["a"]);
+  });
+
+  it("ignores a used row this window never loaded", () => {
+    const next = applyItemsChangedEvent(
+      shared(),
+      {
+        items: [],
+        deletedIds: [],
+        restoredIds: [],
+        removedIds: [],
+        usedIds: ["not-loaded"],
+      },
+      { promoteUsed: true },
+    );
+    expect(next.byId.has("not-loaded")).toBe(false);
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "b"]);
+  });
+
+  it("promotes several used rows in payload order", () => {
+    const next = applyItemsChangedEvent(
+      shared(),
+      {
+        items: [],
+        deletedIds: [],
+        restoredIds: [],
+        removedIds: [],
+        usedIds: ["b", "a"],
+      },
+      { promoteUsed: true },
+    );
+    // The first id stays on top instead of being pushed down by the second.
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["b", "a"]);
+  });
+
+  it("never resurrects a removed row through the usage list", () => {
+    const next = applyItemsChangedEvent(
+      shared(),
+      {
+        items: [],
+        deletedIds: [],
+        restoredIds: [],
+        removedIds: ["a"],
+        usedIds: ["a"],
+      },
+      { promoteUsed: true },
+    );
+    expect(next.byId.has("a")).toBe(false);
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["b"]);
   });
 });

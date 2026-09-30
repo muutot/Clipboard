@@ -6,12 +6,32 @@
 // deleted in the other window, or show a soft-deleted row as still active.
 //
 // The four lists in the payload map onto three store operations, and the order
-// matters: content first, then the flag flips, then removals. A removal has to
-// win, because an id that is gone must not survive a later patch.
+// matters: content first, then the flag flips, then removals, then the promotion
+// of used rows. A removal has to win, because an id that is gone must not survive
+// a later patch — or be pulled back to the top after it was dropped.
 
 import { toClipboardItem } from "$lib/services/clipboard";
 import type { ClipboardItemsChangedPayload, PersistedClipboardItem } from "$lib/types/clipboard";
-import { applyItemPatches, removeItems, replaceItem, type ItemStore } from "./item-store";
+import {
+  applyItemPatches,
+  promoteItem,
+  removeItems,
+  replaceItem,
+  type ItemStore,
+} from "./item-store";
+
+export interface ApplyItemsChangedOptions {
+  /**
+   * Whether a stamped usage moves rows to the top of the history.
+   *
+   * Left to the caller because it is the `Pin Copied to Top` setting, and the
+   * setting lives with the route. The database order changes either way — usage
+   * is stamped for every copy and paste — so this only decides whether the jump
+   * is instant or waits for the next reload, exactly like the same setting does
+   * for a copy started in this window.
+   */
+  promoteUsed?: boolean;
+}
 
 export function applyItemsChanged(
   store: ItemStore,
@@ -31,6 +51,7 @@ export function applyItemsChanged(
 export function applyItemsChangedEvent(
   store: ItemStore,
   payload: ClipboardItemsChangedPayload,
+  options: ApplyItemsChangedOptions = {},
 ): ItemStore {
   let next = applyItemsChanged(store, payload.items ?? []);
 
@@ -51,6 +72,18 @@ export function applyItemsChangedEvent(
     // Permanent delete leaves every view at once, the spare search cache
     // included — otherwise a deleted row could resurface from it.
     next = removeItems(next, new Set(removed));
+  }
+
+  if (options.promoteUsed) {
+    // Back to front, so the first id in the payload ends up on top: promoting
+    // pushes to the front, and two copies in one payload would otherwise land in
+    // reverse order.
+    for (const id of [...(payload.usedIds ?? [])].reverse()) {
+      // Promotion is a history-view operation: a search result set stays in
+      // relevance order, and a row this window never loaded cannot be shown.
+      const item = next.byId.get(id);
+      if (item) next = promoteItem(next, item, "history");
+    }
   }
 
   return next;

@@ -474,6 +474,11 @@ export interface ClipboardItemsChangedPayload {
   restoredIds: string[];
   /** Ids that are gone for good: the receiver drops them from every view. */
   removedIds: string[];
+  /**
+   * Ids whose `last_used_at_ms` was stamped: only the position changed, so the
+   * receiver promotes them instead of replacing the rows.
+   */
+  usedIds: string[];
 }
 
 export interface PersistedClipboardItem {

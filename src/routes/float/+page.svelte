@@ -203,7 +203,12 @@
       // main route uses, so the two windows cannot drift apart.
       listen<ClipboardItemsChangedPayload>("clipboard-items-changed", (event) => {
         if (disposed) return;
-        itemStore.current = applyItemsChangedEvent(itemStore.current, event.payload);
+        itemStore.current = applyItemsChangedEvent(itemStore.current, event.payload, {
+          // This panel has no copy-side promotion of its own — it used to leave the
+          // row where it was and let the next reload sort it out — so the usage
+          // broadcast is what moves a copied entry up here.
+          promoteUsed: $generalSettings.pinCopiedToTop,
+        });
       }).then((unlisten) => {
         if (disposed) unlisten();
         else unlistenItemsChanged = unlisten;

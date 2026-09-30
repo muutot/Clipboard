@@ -1,7 +1,7 @@
 ﻿use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::commands::lock::lock_state;
 use crate::config::{ConfigStore, SearchIndexSyncMode};
@@ -136,11 +136,43 @@ pub fn set_clipboard_item_tags(
 
 #[tauri::command]
 pub fn set_clipboard_item_last_used(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     search_cache: tauri::State<'_, SearchResultCache>,
     id: String,
 ) -> Result<bool, String> {
-    record_item_usage(&database, &search_cache, &id)
+    let updated = record_item_usage(&database, &search_cache, &id)?;
+    if updated {
+        broadcast_item_usage(&app, std::iter::once(id.as_str()));
+    }
+    Ok(updated)
+}
+
+/// Announces rows whose `last_used_at_ms` was stamped.
+///
+/// Usage is not a content change, so it travels on its own field: the receiving
+/// window only has to move the row up. Without this the copy looked inert in the
+/// window that did not initiate it — the database order was already correct, so
+/// the row jumped to the top on the next reload, which is exactly the confusing
+/// "it only sorts after a refresh" behaviour this replaces.
+///
+/// Generic over the runtime because the tray, which has no view of its own to
+/// reorder, announces its copies through here too.
+pub(crate) fn broadcast_item_usage<R: Runtime>(
+    app: &AppHandle<R>,
+    ids: impl IntoIterator<Item = impl AsRef<str>>,
+) {
+    let ids: Vec<String> = ids.into_iter().map(|id| id.as_ref().to_owned()).collect();
+    if ids.is_empty() {
+        return;
+    }
+    let payload = ClipboardItemsChanged {
+        used_ids: ids,
+        ..ClipboardItemsChanged::default()
+    };
+    if let Err(error) = app.emit("clipboard-items-changed", &payload) {
+        crate::log_warn!("[clipboard] unable to broadcast clipboard-items-changed: {error}");
+    }
 }
 
 /// Stamps usage and invalidates the search result cache in one step.

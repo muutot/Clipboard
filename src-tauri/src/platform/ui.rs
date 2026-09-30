@@ -8,7 +8,7 @@ use tauri::{
     AppHandle, Emitter, Listener, Manager, Runtime,
 };
 
-use crate::commands::clipboard::{record_item_usage, SearchResultCache};
+use crate::commands::clipboard::{broadcast_item_usage, record_item_usage, SearchResultCache};
 use crate::config::ConfigStore;
 use crate::domain::ClipboardKind;
 use crate::platform::windows_hotkey::HotkeyManager;
@@ -472,6 +472,9 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         } else {
             let _ = database.set_last_used(item_id);
         }
+        // Announced so both windows move the row up straight away, like every
+        // other copy path; the tray has no view of its own to reorder.
+        broadcast_item_usage(app, std::iter::once(item_id));
         Ok(())
     })();
     if let Err(error) = result {
