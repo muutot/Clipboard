@@ -632,6 +632,7 @@ const en: LocaleDefinition = {
     unfavoriteSuccess: "Unfavorited",
     deleteSuccess: "Deleted",
     copyFailed: "Copy failed",
+    copySourceMissing: "The file behind this entry is no longer on disk",
     pasteFailed: "Paste failed",
     bulkCopySuccess: "Copied {count} items",
     bulkFavoriteSuccess: "Favorited {count} items",

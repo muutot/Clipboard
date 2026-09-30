@@ -580,6 +580,7 @@ export interface LocaleDefinition {
     unfavoriteSuccess: string;
     deleteSuccess: string;
     copyFailed: string;
+    copySourceMissing: string;
     pasteFailed: string;
     bulkCopySuccess: string;
     bulkFavoriteSuccess: string;

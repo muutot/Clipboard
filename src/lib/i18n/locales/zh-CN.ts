@@ -603,6 +603,7 @@ const zhCN: LocaleDefinition = {
     unfavoriteSuccess: "已取消收藏",
     deleteSuccess: "已删除",
     copyFailed: "复制失败",
+    copySourceMissing: "该记录对应的文件已不在磁盘上",
     pasteFailed: "粘贴失败",
     bulkCopySuccess: "已复制 {count} 项",
     bulkFavoriteSuccess: "已收藏 {count} 项",

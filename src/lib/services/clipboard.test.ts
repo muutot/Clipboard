@@ -4,6 +4,7 @@ import {
   deriveTextEditPatch,
   generatedClipboardTitle,
   formatTextLength,
+  isFilesCopySourceMissing,
 } from "./clipboard";
 import type { ClipboardItem } from "$lib/types/clipboard";
 
@@ -128,5 +129,29 @@ describe("clipboardPathLines", () => {
         item({ id: "file", kind: "file", fileMeta: [{ name: "x.pdf", size: 1, sizeBytes: 1 }] }),
       ),
     ).toEqual([]);
+  });
+});
+
+// `copy_clipboard_item_files` rejects with a tagged payload so a vanished file
+// can be told apart from a busy clipboard. The tag is the whole point of the
+// contract, so pin both the recognised and the unrecognised shapes.
+describe("isFilesCopySourceMissing", () => {
+  it("recognises the resource-missing tag", () => {
+    expect(
+      isFilesCopySourceMissing({
+        kind: "resource-missing",
+        message: "clipboard item has no available files on disk",
+      }),
+    ).toBe(true);
+  });
+
+  it("treats every other rejection as the generic failure", () => {
+    expect(isFilesCopySourceMissing({ kind: "failed", message: "clipboard is busy" })).toBe(false);
+    // A plain string rejection (an unconverted command, or a bridge error) must
+    // not be mistaken for the tagged case.
+    expect(isFilesCopySourceMissing("clipboard item has no available files on disk")).toBe(false);
+    expect(isFilesCopySourceMissing(undefined)).toBe(false);
+    expect(isFilesCopySourceMissing(null)).toBe(false);
+    expect(isFilesCopySourceMissing({})).toBe(false);
   });
 });

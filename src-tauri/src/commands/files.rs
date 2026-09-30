@@ -5,6 +5,8 @@ use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::state::SelfTriggerState;
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
+use super::clipboard::ClipboardFilesCopyError;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IconCacheEntry {
@@ -361,11 +363,14 @@ pub fn save_clipboard_item_file(
 /// Pass-through files that exceed the copy-size limit keep their original
 /// absolute location and are accepted here: the paths originate from the
 /// record, never from the webview.
+///
+/// The error type doubles as the command's rejection payload, so "the files are
+/// gone" reaches the frontend as a distinct kind rather than as prose.
 fn resolve_clipboard_file_paths(
     item: &ClipboardItem,
     paths: &StoragePaths,
     database: Option<&Database>,
-) -> Result<Vec<std::path::PathBuf>, String> {
+) -> Result<Vec<std::path::PathBuf>, ClipboardFilesCopyError> {
     let mut candidates = Vec::new();
     match item.kind {
         ClipboardKind::Image => {
@@ -407,7 +412,11 @@ fn resolve_clipboard_file_paths(
                 }
             }
         }
-        _ => return Err("clipboard item is not an image or file".to_string()),
+        _ => {
+            return Err(ClipboardFilesCopyError::Failed(
+                "clipboard item is not an image or file".to_owned(),
+            ));
+        }
     }
 
     let mut resolved = Vec::new();
@@ -428,7 +437,9 @@ fn resolve_clipboard_file_paths(
     }
 
     if resolved.is_empty() {
-        return Err("clipboard item has no available files on disk".to_string());
+        return Err(ClipboardFilesCopyError::ResourceMissing(
+            "clipboard item has no available files on disk".to_owned(),
+        ));
     }
     Ok(resolved)
 }
@@ -502,17 +513,20 @@ fn file_metadata_entries(
 /// as dropped file references (CF_HDROP on Windows). The record id is the only
 /// input from the webview; the actual paths are resolved from the database, so
 /// no arbitrary-path clipboard primitive is re-exposed.
+///
+/// Rejects with a tagged [`ClipboardFilesCopyError`] so the caller can tell a
+/// vanished file from a busy clipboard.
 #[tauri::command]
 pub fn copy_clipboard_item_files(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
     self_trigger: tauri::State<'_, SelfTriggerState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<(), ClipboardFilesCopyError> {
     let item = database
         .get_item(&id)
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "clipboard item not found".to_string())?;
+        .map_err(|error| ClipboardFilesCopyError::Failed(error.to_string()))?
+        .ok_or_else(|| ClipboardFilesCopyError::Failed("clipboard item not found".to_owned()))?;
     let resolved = resolve_clipboard_file_paths(&item, paths.inner(), Some(&database))?;
     let files = resolved
         .iter()
@@ -530,7 +544,7 @@ pub fn copy_clipboard_item_files(
         if let Ok(mut guard) = self_trigger.0.lock() {
             guard.unmark_clipboard_write(&joined);
         }
-        return Err(error);
+        return Err(ClipboardFilesCopyError::Failed(error));
     }
     Ok(())
 }
@@ -962,16 +976,20 @@ mod tests {
         let project = save_file_test_project("cleanup");
         let paths = StoragePaths::initialize(project.clone()).unwrap();
 
-        assert!(
-            resolve_clipboard_file_paths(&item(ClipboardKind::Text, None, None), &paths, None)
-                .is_err()
-        );
-        assert!(resolve_clipboard_file_paths(
-            &item(ClipboardKind::File, Some("gone.txt".to_string()), None),
-            &paths,
-            None
-        )
-        .is_err());
+        assert!(matches!(
+            resolve_clipboard_file_paths(&item(ClipboardKind::Text, None, None), &paths, None),
+            Err(ClipboardFilesCopyError::Failed(_))
+        ));
+        // A record whose file vanished is the one case the frontend reports
+        // differently, so the distinction has to survive resolution.
+        assert!(matches!(
+            resolve_clipboard_file_paths(
+                &item(ClipboardKind::File, Some("gone.txt".to_string()), None),
+                &paths,
+                None
+            ),
+            Err(ClipboardFilesCopyError::ResourceMissing(_))
+        ));
         let _ = std::fs::remove_dir_all(&project);
     }
 

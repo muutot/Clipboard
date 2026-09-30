@@ -198,6 +198,25 @@ Every item-level mutator takes an `AppHandle` and broadcasts on success; without
 it the two windows cannot see each other at all, since separate WebviewWindows
 are separate JS realms and the frontend cannot reconcile this on its own.
 
+## Rejection payloads
+
+Most commands reject with a plain string. `copy_clipboard_item_files` is the
+exception: it rejects with a tagged object, `{ kind, message }`, because its two
+failure modes need opposite reactions from the user.
+
+| kind               | Meaning                                                      | User action               |
+| ------------------ | ------------------------------------------------------------ | ------------------------- |
+| `resource-missing` | The record is intact but none of its files exist on disk     | Permanent for that record |
+| `failed`           | Clipboard contention, missing record, platform write failure | Transient, retry          |
+
+`resolve_clipboard_file_paths` returns the same type, so the distinction is made
+where it is known (the empty-resolution branch) instead of being recovered from
+prose on the frontend. `services/clipboard.ts::isFilesCopySourceMissing` is the
+only reader, and it treats a plain string or any untagged rejection as `failed`,
+so a command that has not been converted keeps working. Both the copy path and
+the file-paste path map the tag onto `toast.copySourceMissing`; every other
+rejection still shows `toast.copyFailed` / `toast.filePasteFailed`.
+
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function. Producers must not swallow `app.emit` failures silently: log them with `crate::log_event!` (or push a command warning) so a missed UI refresh is diagnosable; do not reintroduce bare `let _ = app.emit(...)` in library code.
 
 ## Resource metadata contract

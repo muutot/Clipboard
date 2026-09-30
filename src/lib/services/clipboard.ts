@@ -97,6 +97,35 @@ export async function copyClipboardItemFiles(id: string): Promise<void> {
   await invoke("copy_clipboard_item_files", { id });
 }
 
+/**
+ * Rejection shape of `copy_clipboard_item_files`.
+ *
+ * The backend tags the failure so "the file is gone from disk" does not look
+ * like "the clipboard was busy": the first is permanent for that record, the
+ * second is worth a retry. Anything else (a plain string, or a rejection from a
+ * command that has not been converted) is treated as the generic failure.
+ */
+interface FilesCopyFailure {
+  kind?: string;
+  message?: string;
+}
+
+/** True when the copy failed because the record's files are no longer on disk. */
+export function isFilesCopySourceMissing(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  return (error as FilesCopyFailure).kind === "resource-missing";
+}
+
+/** Renders a rejection for the console, whether it is a tag or a plain string. */
+function describeInvokeFailure(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null) {
+    const { kind, message } = error as FilesCopyFailure;
+    if (kind) return `${kind}: ${message ?? ""}`.trim();
+  }
+  return String(error);
+}
+
 export async function writeClipboardHtml(
   html: string,
   plainText?: string | null,
@@ -441,8 +470,14 @@ export async function copyClipboardItem(
         showToast(t("toast.copySuccess"), "success");
         return;
       } catch (error) {
-        console.error("Unable to copy media files", error);
-        showToast(t("toast.copyFailed"), "error");
+        // A vanished file is permanent for this record; anything else (a busy
+        // clipboard, a platform write failure) is worth retrying, so the toast
+        // has to say which one happened.
+        console.error("Unable to copy media files", describeInvokeFailure(error));
+        showToast(
+          t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : "toast.copyFailed"),
+          "error",
+        );
         return;
       }
     }
@@ -998,8 +1033,13 @@ async function pasteToPreviousApp(
   try {
     await write();
   } catch (error) {
-    console.error("Unable to prepare clipboard content for paste", error);
-    showToast(t(keys.failed), "error");
+    // Same split as the copy path: a record whose file is gone must not read as
+    // a transient paste failure.
+    console.error("Unable to prepare clipboard content for paste", describeInvokeFailure(error));
+    showToast(
+      t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : keys.failed),
+      "error",
+    );
     return;
   }
   void persistLastUsed(item.id).catch((error) =>
