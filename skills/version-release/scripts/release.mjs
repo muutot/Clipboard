@@ -362,6 +362,21 @@ if (!isDryRun) {
 // Step 5: Tag
 if (!isDryRun) {
   console.log("\n[5/6] Tagging...");
+  // HARD RULE: the version tag may ONLY ever point at the release commit
+  // (`🔖 chore[release]: bump version to x.x.x`). Never tag any other commit —
+  // the tag drives the release build, so a tag on a non-release commit ships
+  // an unverified tree. Verify HEAD's subject before creating the tag and
+  // refuse to proceed on any mismatch.
+  const expectedSubject = `🔖 chore[release]: bump version to ${tagVersion.slice(1)}`;
+  const headSubject = execSync(`git log -1 --pretty=%s`, { cwd: ROOT, encoding: "utf-8" }).trim();
+  if (headSubject !== expectedSubject) {
+    console.error(
+      `\nERROR: refusing to tag ${tagVersion}: HEAD is '${headSubject}', ` +
+        `but the tag must point at the release commit '${expectedSubject}'. ` +
+        `Commit any pending work first so the release commit is HEAD.`,
+    );
+    process.exit(1);
+  }
   const exists =
     execSync(`git tag -l "${tagVersion}"`, { cwd: ROOT, encoding: "utf-8" }).trim() === tagVersion;
   if (!exists) {

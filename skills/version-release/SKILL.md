@@ -15,6 +15,26 @@ Start this skill when the user says any of:
 - "升级 patch/minor/major 版本"
 - "release" combined with a version number or bump type
 
+## 🚨 HARD RULE — the tag points at the release commit and nothing else
+
+The version tag `vx.x.x` may **ONLY** ever be bound to the release commit
+`🔖 chore[release]: bump version to x.x.x`. **Never bind it to any other commit** —
+not a fix, not a chore, not a merge. The tag is what triggers the GitHub Actions
+release build, so a tag on a non-release commit ships an unversioned, unverified
+tree and can publish broken artifacts.
+
+**Every release, every re-tag, every regenerate — this rule is non-negotiable:**
+
+1. The release script creates the tag at HEAD right after the release commit, and
+   its hard-rule guard **refuses to tag** if HEAD's subject is not exactly
+   `🔖 chore[release]: bump version to x.x.x`.
+2. When reordering, rebase-rebuilding, or manually moving a tag: **rewrite the
+   history first so the release commit is the tip**, then tag _that_ commit.
+3. Before pushing, verify the binding: `git rev-parse <tag>^{}` must resolve to a
+   commit whose subject is `🔖 chore[release]: bump version to x.x.x`
+   (`git log -1 --pretty=%s <tag>^{}`).
+4. Push the branch first, the tag last.
+
 ## Release workflow (single script, two passes for RELEASE.md)
 
 ### Pre-release Check Gate
