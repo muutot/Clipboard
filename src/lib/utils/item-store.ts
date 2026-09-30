@@ -258,6 +258,33 @@ function withView(
       : { ...store, byId, cacheIds: ids };
 }
 
+/** Replaces a view's contents with `records`, releasing what it dropped. */
+export function replaceViewItems(
+  store: ItemStore,
+  records: readonly ClipboardItem[],
+  view: ItemView,
+): ItemStore {
+  const cleared = clearView(store, view);
+  // An empty result page is still a *displayed* search: the panel has to show
+  // "no match" rather than silently fall back to the history list, so the
+  // indexed view must switch on even with nothing in it.
+  if (view === "indexed" && records.length === 0 && cleared.indexedIds === null) {
+    return { ...cleared, indexedIds: [] };
+  }
+  return appendItems(cleared, records, view);
+}
+
+/**
+ * Drops back to "no search displayed" (`indexedIds: null`), which is not the
+ * same state as an active search that matched zero rows.
+ */
+export function closeSearchResults(store: ItemStore): ItemStore {
+  if (store.indexedIds === null) return store;
+  const byId = new Map(store.byId);
+  pruneUnreferenced(byId, store.historyIds, null, store.cacheIds, store.detailId);
+  return { ...store, byId, indexedIds: null };
+}
+
 export interface AffectedItemSnapshot {
   /** Previous version of each affected id, taken from the record map. */
   readonly previous: ReadonlyMap<string, ClipboardItem>;
@@ -449,6 +476,57 @@ export function mergeDeletedHistoryPage(
 
   pruneUnreferenced(byId, historyIds, store.indexedIds, store.cacheIds, store.detailId);
   return { ...store, byId, historyIds };
+}
+
+/**
+ * Merges a freshly fetched backend search page into the spare cache. Records
+ * already displayed by the loaded history are dropped from the cache (that
+ * view owns them now); re-encountering a cached id refreshes its content and,
+ * under LRU, its recency. The cache is then trimmed to `max` entries by
+ * evicting the least recently used/inserted ids first.
+ */
+export function mergeSearchCachePage(
+  store: ItemStore,
+  options: {
+    results: readonly ClipboardItem[];
+    loadedIds: ReadonlySet<string>;
+    policy: "fifo" | "lru";
+    max: number;
+  },
+): ItemStore {
+  if (options.results.length === 0) return store;
+  const byId = new Map(store.byId);
+  // A record can leave the map entirely while an id lingers in the order list,
+  // so reconcile the order against the map before merging.
+  let cacheIds = store.cacheIds.filter((id) => byId.has(id));
+
+  for (const record of options.results) {
+    if (options.loadedIds.has(record.id)) {
+      // Only the cache membership goes: the loaded history view still displays
+      // the record, so it must stay in the map.
+      cacheIds = cacheIds.filter((id) => id !== record.id);
+      continue;
+    }
+    const cached = cacheIds.includes(record.id);
+    byId.set(record.id, record);
+    if (!cached) {
+      cacheIds.push(record.id);
+    } else if (options.policy === "lru") {
+      cacheIds = [...cacheIds.filter((id) => id !== record.id), record.id];
+    }
+  }
+
+  while (cacheIds.length > options.max) cacheIds.shift();
+  pruneUnreferenced(byId, store.historyIds, store.indexedIds, cacheIds, store.detailId);
+  return { ...store, byId, cacheIds };
+}
+
+/** Removes promoted ids from the spare cache once the live list holds them. */
+export function promoteFromCache(store: ItemStore, loadedIds: ReadonlySet<string>): ItemStore {
+  if (!loadedIds.size) return store;
+  const promoted = store.cacheIds.filter((id) => loadedIds.has(id));
+  if (!promoted.length) return store;
+  return { ...store, cacheIds: store.cacheIds.filter((id) => !loadedIds.has(id)) };
 }
 
 /**

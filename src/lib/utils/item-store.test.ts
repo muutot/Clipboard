@@ -5,16 +5,20 @@ import {
   applyItemPatches,
   captureAffectedItems,
   clearView,
+  closeSearchResults,
   createItemStore,
   findLoadedItem,
   getDetailItem,
   getIndexedItems,
   getItems,
   mergeDeletedHistoryPage,
+  mergeSearchCachePage,
+  promoteFromCache,
   promoteItem,
   removeItemTag,
   removeItems,
   replaceItem,
+  replaceViewItems,
   restoreAffectedItems,
   rewriteItemTags,
   setDetailItem,
@@ -444,6 +448,148 @@ describe("trimLoadedHistory", () => {
       item("del", { deleted: true }),
     ]);
     expect(trimLoadedHistory(before, { limit: 0, tolerance: 1 })).toBe(before);
+  });
+});
+
+describe("mergeSearchCachePage", () => {
+  const cached = (...ids: string[]) => {
+    let store = createItemStore();
+    for (const id of ids) store = appendItems(store, [item(id)], "cache");
+    return store;
+  };
+
+  it("drops results the loaded history already displays and inserts the rest in order", () => {
+    const store = createItemStore([item("loaded")]);
+    const next = mergeSearchCachePage(store, {
+      results: [item("loaded"), item("new-1"), item("new-2")],
+      loadedIds: new Set(["loaded"]),
+      policy: "fifo",
+      max: 10,
+    });
+    assertConsistent(next);
+    expect(getItems(next, "cache").map((i) => i.id)).toEqual(["new-1", "new-2"]);
+    // Dropping the cache copy must not evict the record the history owns.
+    expect(findLoadedItem(next, "loaded")).toBeDefined();
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["loaded"]);
+  });
+
+  it("refreshes cached content without reordering under fifo", () => {
+    const next = mergeSearchCachePage(cached("a", "b"), {
+      results: [item("a", { title: "updated" })],
+      loadedIds: new Set(),
+      policy: "fifo",
+      max: 10,
+    });
+    assertConsistent(next);
+    expect(getItems(next, "cache").map((i) => i.id)).toEqual(["a", "b"]);
+    expect(getItems(next, "cache")[0].title).toBe("updated");
+  });
+
+  it("bumps recency of a re-encountered id under lru but not fifo", () => {
+    const base = cached("old", "mid");
+    const results = [item("old")];
+    expect(
+      getItems(
+        mergeSearchCachePage(base, { results, loadedIds: new Set(), policy: "fifo", max: 10 }),
+        "cache",
+      ).map((i) => i.id),
+    ).toEqual(["old", "mid"]);
+    expect(
+      getItems(
+        mergeSearchCachePage(base, { results, loadedIds: new Set(), policy: "lru", max: 10 }),
+        "cache",
+      ).map((i) => i.id),
+    ).toEqual(["mid", "old"]);
+  });
+
+  it("evicts least recently used entries beyond the maximum", () => {
+    let store = createItemStore();
+    for (let round = 0; round < 5; round += 1) {
+      store = mergeSearchCachePage(store, {
+        results: [item(`n${round}`)],
+        loadedIds: new Set(),
+        policy: "fifo",
+        max: 3,
+      });
+    }
+    assertConsistent(store);
+    expect(getItems(store, "cache").map((i) => i.id)).toEqual(["n2", "n3", "n4"]);
+  });
+
+  it("re-inserts an evicted id when the backend returns it again", () => {
+    let store = createItemStore();
+    for (let round = 0; round < 4; round += 1) {
+      store = mergeSearchCachePage(store, {
+        results: [item(`n${round}`)],
+        loadedIds: new Set(),
+        policy: "fifo",
+        max: 2,
+      });
+    }
+    store = mergeSearchCachePage(store, {
+      results: [item("n1")],
+      loadedIds: new Set(),
+      policy: "fifo",
+      max: 2,
+    });
+    assertConsistent(store);
+    expect(getItems(store, "cache").map((i) => i.id)).toEqual(["n3", "n1"]);
+  });
+
+  it("is a no-op for an empty result page", () => {
+    const before = cached("a");
+    expect(
+      mergeSearchCachePage(before, {
+        results: [],
+        loadedIds: new Set(),
+        policy: "lru",
+        max: 1,
+      }),
+    ).toBe(before);
+  });
+});
+
+describe("promoteFromCache", () => {
+  it("removes promoted ids from the cache and keeps the loaded records", () => {
+    const before = createItemStore([item("a"), item("c")]);
+    const seeded = appendItems(appendItems(before, [item("b")], "cache"), [item("c")], "cache");
+    const next = promoteFromCache(seeded, new Set(["a", "c"]));
+    assertConsistent(next);
+    expect(getItems(next, "cache").map((i) => i.id)).toEqual(["b"]);
+    // "a" and "c" are loaded history rows; only their cache copies went away.
+    expect(getItems(next, "history").map((i) => i.id)).toEqual(["a", "c"]);
+  });
+
+  it("returns the same store for empty or non-matching sets", () => {
+    const before = appendItems(createItemStore(), [item("a")], "cache");
+    expect(promoteFromCache(before, new Set())).toBe(before);
+    expect(promoteFromCache(before, new Set(["missing"]))).toBe(before);
+  });
+});
+
+describe("closeSearchResults / replaceViewItems", () => {
+  it("distinguishes no search from a search with no rows", () => {
+    const searching = appendItems(createItemStore([item("a")]), [item("z")], "cache");
+    const withResults = appendItems(searching, [item("z")], "indexed");
+    assertConsistent(withResults);
+
+    const hidden = closeSearchResults(withResults);
+    assertConsistent(hidden);
+    expect(getIndexedItems(hidden)).toBeNull();
+    // The result is still in the spare cache, so it can come back.
+    expect(getItems(hidden, "cache").map((i) => i.id)).toEqual(["z"]);
+    expect(closeSearchResults(hidden)).toBe(hidden);
+
+    const emptied = replaceViewItems(hidden, [], "indexed");
+    expect(getIndexedItems(emptied)).toEqual([]);
+  });
+
+  it("replaces a view's contents and releases what it dropped", () => {
+    const before = appendItems(createItemStore(), [item("old")], "cache");
+    const next = replaceViewItems(before, [item("new")], "cache");
+    assertConsistent(next);
+    expect(getItems(next, "cache").map((i) => i.id)).toEqual(["new"]);
+    expect(findLoadedItem(next, "old")).toBeUndefined();
   });
 });
 

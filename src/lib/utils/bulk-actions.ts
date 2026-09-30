@@ -1,6 +1,6 @@
-// Pure bulk-selection planning/snapshot helpers extracted from the main
-// route. They contain no IPC, stores, or DOM — the route applies the returned
-// plan through its persistence wrappers and applyItemPatches funnel.
+// Pure bulk-selection planning helper extracted from the main route. It
+// contains no IPC, stores, or DOM — the route applies the returned plan
+// through its persistence wrappers and the item-store mutators.
 
 import type { ClipboardItem } from "$lib/types/clipboard";
 
@@ -34,15 +34,4 @@ export function planBulkDelete(
     }
   }
   return { softIds, permanentIds, hardIds };
-}
-
-/** Applies a deleted/undeleted flag to the given ids across both lists. */
-export function setDeletedFlags(
-  items: ClipboardItem[],
-  ids: ReadonlySet<string>,
-  deleted: boolean,
-): ClipboardItem[] {
-  return items.map((item) =>
-    ids.has(item.id) && item.deleted !== deleted ? { ...item, deleted } : item,
-  );
 }

@@ -57,6 +57,17 @@ let s = $state($generalSettings); // 取的是当前值的副本
 // 需要手动订阅: generalSettings.subscribe((v) => { s = v; })
 ```
 
+### 集合状态用 `$state.raw` + 纯函数整体替换，不要放进深代理
+
+`ClipboardItem` 是宽对象（含 `metadataJson`/`fileMeta`/`imageMeta` 等），主路由曾把同一条记录放进 `items`/`indexedItems`/`searchCache`/`detailItem` 四个 `$state` 数组。现在改为 `itemStore: ItemStore`（`$state.raw`）+ `byId: Map<id, item>` + 四个只存 id 的视图，`items` 等由 `$derived` 投影。
+
+理由与实测：
+
+- **深代理成本与身份陷阱**：`$state`（非 `.raw`）会把 `Map` 之外的普通对象递归包成 `Proxy`，宽记录每次读取都返回新代理，`{ ...item }` 快照与 `toBe` 同一性断言全部失效；这些记录还会被带进 `invoke` 载荷。`$state.raw` + 纯函数返回新 store，让 `Map` 保持普通对象、`$derived` 只在 store 引用变化时重算。
+- **`Map` 不会被 `$state` 深度代理**：就地 `map.set()` 不会触发任何更新。要么用 `SvelteMap`，要么（本项目采用）整体替换 store 引用——所有 mutator 都是 `store => store` 形式，天然满足。
+- **视图只存 id 之后，"四副本不一致"这个 bug 类别直接消失**：写一次记录，所有视图同帧生效；不变量（`byId` == 四视图并集）在 `item-store.test.ts` 里对每个操作断言。
+- **新泄漏点：map 持有生命周期**。数组时代"某条记录没人引用"只是被 GC；改由 map 持有后，详情面板改指向另一条记录会把旧记录留在 map 里，必须显式 prune。`setDetailItem`/`removeItems`/`clearView` 都因此调用 `pruneUnreferenced`，400 步混合操作走查就是靠它抓到过这个泄漏。
+
 ## Tauri 多窗口
 
 ### 每个窗口有独立的 JS 上下文

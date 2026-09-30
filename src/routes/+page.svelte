@@ -61,30 +61,39 @@
   import { parseDateQuery } from "$lib/utils/date-query";
   import { buildHistoryFilterArgs, filterHistoryItems } from "$lib/utils/history-filter";
   import {
-    mergeSearchCachePage,
-    promoteFromCache as promoteCachedEntries,
-    trimLoadedItems as trimLoadedHistory,
-  } from "$lib/utils/search-cache";
-  import {
     resolveActionBindings,
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
-  import { planBulkDelete, setDeletedFlags } from "$lib/utils/bulk-actions";
+  import { planBulkDelete } from "$lib/utils/bulk-actions";
   import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
   import { resolveSearchInputAction } from "$lib/utils/search-input-actions";
   import {
-    applyItemPatchesToCopies,
+    appendItems,
+    applyItemPatches,
     captureAffectedItems,
-    findLoadedItemInCopies,
+    clearView,
+    closeSearchResults,
+    createItemStore,
+    findLoadedItem as findRecord,
+    getDetailItem,
+    getIndexedItems,
+    getItems,
     mergeDeletedHistoryPage,
+    mergeSearchCachePage,
+    promoteFromCache as promoteCachedEntries,
+    promoteItem,
     removeItemTag,
-    removeItemsFromCopies,
-    replaceItemInCopies,
-    restoreAffectedItemsToCopies,
+    removeItems,
+    replaceItem,
+    replaceViewItems,
+    restoreAffectedItems,
     rewriteItemTags,
-    type ItemCopies,
-  } from "$lib/utils/item-sync";
+    setDetailItem,
+    trimLoadedHistory,
+    type AffectedItemSnapshot,
+    type ItemStore,
+  } from "$lib/utils/item-store";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import {
     SEARCH_HISTORY_LIMIT,
@@ -138,95 +147,54 @@
 
   // Browser preview shows demo data; the Tauri runtime starts empty so real
   // history load failures can never be masked by fake entries.
-  let items = $state<ClipboardItem[]>(
-    isTauriRuntime() ? [] : demoClipboardItems.map((item) => ({ ...item })),
+  //
+  // `itemStore` is the single source of truth: `byId` owns each record once and
+  // the four views below own only ids. `$state.raw` keeps the plain Map out of
+  // Svelte's deep proxy, and every mutation replaces the whole store, so the
+  // `$derived` views recompute from a fresh map in one pass.
+  let itemStore = $state.raw<ItemStore>(
+    createItemStore(isTauriRuntime() ? [] : demoClipboardItems.map((item) => ({ ...item }))),
   );
+  const items = $derived(getItems(itemStore, "history"));
 
   function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
-    // Resolve across every copy: a search result can live only in
-    // `indexedItems`/`searchCache` while the loaded history page is `items`.
-    // Looking in `items` alone silently no-ops every action on such a row.
+    // Resolve through the store, not `items`: a search result can be displayed
+    // only by the indexed view or the spare cache, and looking in `items` alone
+    // silently no-ops every action on such a row.
     const original = findLoadedItem(id);
     if (!original) return false;
-    applyItemPatches(new Map([[id, mutator(original)]]));
+    itemStore = applyItemPatches(itemStore, new Map([[id, mutator(original)]]));
     return true;
   }
 
-  /// Fans one patch set out to every copy (items, indexedItems, searchCache,
-  /// detailItem) in a single pass over each list. THE funnel for item
-  /// mutations — direct per-copy mapping loops are how the searchCache drift
-  /// happened. Pure logic lives in `utils/item-sync.ts` (covered by
-  /// `item-sync.test.ts`); this wrapper only reassigns route state.
-  function applyItemPatches(patches: ReadonlyMap<string, Partial<ClipboardItem>>) {
-    if (patches.size === 0) return;
-    const next = applyItemPatchesToCopies(
-      { items, indexedItems, searchCache, detailItem },
-      patches,
-    );
-    items = next.items;
-    indexedItems = next.indexedItems;
-    searchCache = next.searchCache;
-    detailItem = next.detailItem;
-  }
-
-  /// Removal counterpart of [`applyItemPatches`]: drops ids from every copy
-  /// (items, indexedItems, searchCache, detailItem) in one pass per list.
-  /// Purging searchCache here closes the gap where a permanently deleted
-  /// entry could later resurface from the spare-result cache.
-  function removeItems(ids: ReadonlySet<string>) {
-    if (ids.size === 0) return;
-    const next = removeItemsFromCopies({ items, indexedItems, searchCache, detailItem }, ids);
-    items = next.items;
-    indexedItems = next.indexedItems;
-    searchCache = next.searchCache;
-    detailItem = next.detailItem;
-  }
-
   function revertItem(id: string, fields: Partial<ClipboardItem>) {
-    applyItemPatches(new Map([[id, fields]]));
-  }
-
-  /// Replaces every copy at once, for funnels that rebuild the whole set rather
-  /// than patching entry by entry.
-  function applyItemCopies(next: ItemCopies) {
-    items = next.items;
-    indexedItems = next.indexedItems;
-    searchCache = next.searchCache;
-    detailItem = next.detailItem;
-  }
-
-  function itemCopies(): ItemCopies {
-    return { items, indexedItems, searchCache, detailItem };
+    itemStore = applyItemPatches(itemStore, new Map([[id, fields]]));
   }
 
   /// Records just the ids a bulk mutation is about to change, so its rollback
   /// cannot discard a capture, search, or favorite toggle that landed while the
   /// persist call was in flight.
-  function captureAffected(ids: ReadonlySet<string>): ReturnType<typeof captureAffectedItems> {
-    return captureAffectedItems(itemCopies(), ids, selectedIds);
+  function captureAffected(ids: ReadonlySet<string>): AffectedItemSnapshot {
+    return captureAffectedItems(itemStore, ids, selectedIds);
   }
 
-  /// Undoes a failed bulk mutation: restores only the captured ids through the
-  /// funnel and re-selects the rows the user had selected, leaving every other
-  /// change made during the window alone.
-  function rollbackAffected(snapshot: ReturnType<typeof captureAffectedItems>) {
-    applyItemCopies(restoreAffectedItemsToCopies(itemCopies(), snapshot));
+  /// Undoes a failed bulk mutation: restores only the captured ids and
+  /// re-selects the rows the user had selected, leaving every other change made
+  /// during the window alone.
+  function rollbackAffected(snapshot: AffectedItemSnapshot) {
+    itemStore = restoreAffectedItems(itemStore, snapshot);
     if (snapshot.selected.size > 0) {
       selectedIds = new Set([...selectedIds, ...snapshot.selected]);
     }
   }
 
   function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
-    const next = replaceItemInCopies({ items, indexedItems, searchCache, detailItem }, updated);
-    items = next.items;
-    indexedItems = next.indexedItems;
-    searchCache = next.searchCache;
-    detailItem = next.detailItem;
+    itemStore = replaceItem(itemStore, updated);
     return updated;
   }
 
   function findLoadedItem(id: string): ClipboardItem | undefined {
-    return findLoadedItemInCopies({ items, indexedItems, searchCache, detailItem }, id);
+    return findRecord(itemStore, id);
   }
 
   async function ensureItemMaterialized(item: ClipboardItem): Promise<ClipboardItem> {
@@ -274,7 +242,7 @@
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
   let lastBackspaceAt = $state(0);
-  let indexedItems = $state<ClipboardItem[] | null>(null);
+  let indexedItems = $derived(getIndexedItems(itemStore));
   let indexedQuery = $state("");
   let searchPending = $state(false);
   let searchRequestId = 0;
@@ -290,8 +258,9 @@
   let searchSuggestionIndex = $state(-1);
   let searchBlurTimer: number | undefined;
   let pendingSearchHistoryQuery = "";
-  let searchCache = $state<ClipboardItem[]>([]);
-  let searchCacheAccessOrder = $state<string[]>([]);
+  // The spare-result cache is never rendered directly: its records and its
+  // insertion/access order live in the store (`cacheIds`), and only
+  // `updateSearchCache`/`promoteFromCache` touch it.
 
   let dateFilter = $state<string>("all");
   let sourceAppFilter = $state("");
@@ -306,7 +275,7 @@
   $effect(() => onContextMenuOpenChanged((open) => (contextMenuOpen = open)));
   let sourceApps = $state<string[]>([]);
 
-  let detailItem = $state<ClipboardItem | null>(null);
+  const detailItem = $derived(getDetailItem(itemStore));
   // Guards the async materialization in `openDetail`: a late result must not
   // reopen a panel the user already closed or replaced with another item.
   let detailRequestId = 0;
@@ -528,9 +497,10 @@
   );
 
   const selectedIndex = $derived(filteredItems.findIndex((item) => item.id === selectedId));
-  // Resolve every selected id across all four copies: a search result can live
-  // only in `indexedItems`/`searchCache`, so counting against `items` alone
-  // undercounts and makes bulk operations skip search-only rows.
+  // Resolve every selected id against the whole store: a search result can be
+  // displayed only by the indexed or cache view, so counting against the
+  // history view alone undercounts and makes bulk operations skip search-only
+  // rows.
   const selectedLoadedItems = $derived(
     [...selectedIds]
       .map((id) => findLoadedItem(id))
@@ -732,21 +702,21 @@
     searchOffset = 0;
 
     if (!requestedQuery || activeFilter === "deleted") {
-      indexedItems = null;
+      itemStore = closeSearchResults(itemStore);
       indexedQuery = "";
       searchPending = false;
       return;
     }
 
     if (requestedQuery.length < 2) {
-      indexedItems = null;
+      itemStore = closeSearchResults(itemStore);
       indexedQuery = "";
       searchPending = false;
       return;
     }
 
     if (parseDateQuery(requestedQuery)) {
-      indexedItems = null;
+      itemStore = closeSearchResults(itemStore);
       indexedQuery = "";
       searchPending = false;
       return;
@@ -758,7 +728,9 @@
         .then((page) => {
           if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
             return;
-          indexedItems = page.items;
+          // A first page replaces the previous query's results outright; an
+          // empty page is still a displayed search, so the view stays on.
+          itemStore = replaceViewItems(itemStore, page.items, "indexed");
           indexedQuery = requestedQuery;
           searchOffset = page.items.length;
           searchHasMore = searchOffset < page.totalCount;
@@ -862,44 +834,24 @@
     refreshTagColors();
 
     const unlisten = listen<PersistedClipboardItem>("clipboard-item-added", (event) => {
-      const record = event.payload;
-      const newItem = toClipboardItem(record);
-      const existingIdx = items.findIndex((i) => i.id === newItem.id);
-      if (existingIdx >= 0) {
-        // Re-copying an existing entry is de-duplicated on (kind, content_hash)
-        // and keeps the same row id with a refreshed last_used_at_ms (the
-        // original created_at_ms stays frozen), but the list order is driven
-        // by array position rather than the timestamp. Promote it to the top
-        // so the just-copied entry is visibly pinned.
-        items.splice(existingIdx, 1);
-        items = [newItem, ...items];
-        selectedId = newItem.id;
-        // The timestamp bump shifts every row behind the OFFSET cursor just
-        // like a fresh insertion does. Rebuild the cursor so a later
-        // scroll-load cannot replay an already-loaded row as a duplicate.
-        invalidateActiveHistoryPagination();
-      } else {
-        items = [newItem, ...items];
-        selectedId = newItem.id;
-        invalidateActiveHistoryPagination();
+      const newItem = toClipboardItem(event.payload);
+      // Re-copying an existing entry is de-duplicated on (kind, content_hash)
+      // and keeps the same row id with a refreshed last_used_at_ms (the
+      // original created_at_ms stays frozen), but list order follows view
+      // position rather than the timestamp — so pin the just-copied entry. One
+      // record write refreshes the spare cache and the open detail pane too,
+      // which each held their own copy of it before.
+      itemStore = promoteItem(itemStore, newItem, "history");
+      // During a search the visible list is the indexed view, so promote there
+      // as well or the copied row does not move there.
+      if (itemStore.indexedIds?.includes(newItem.id)) {
+        itemStore = promoteItem(itemStore, newItem, "indexed");
       }
-      if (indexedItems) {
-        const indexedIdx = indexedItems.findIndex((i) => i.id === newItem.id);
-        if (indexedIdx >= 0) {
-          indexedItems.splice(indexedIdx, 1);
-          indexedItems = [newItem, ...indexedItems];
-        }
-      }
-      // A promoted entry may also sit in the spare search cache with its old
-      // created_at_ms; patch it so the search panel does not show a stale
-      // relative time until the next pagination-driven promoteFromCache.
-      if (searchCache.some((i) => i.id === newItem.id)) {
-        applyItemPatches(new Map([[newItem.id, newItem]]));
-      }
-      // The open detail panel holds its own object reference; refresh it so
-      // a re-copied entry does not keep showing the previous timestamp or
-      // resource paths.
-      if (detailItem?.id === newItem.id) detailItem = newItem;
+      selectedId = newItem.id;
+      // The timestamp bump shifts every row behind the OFFSET cursor just like
+      // a fresh insertion does. Rebuild the cursor so a later scroll-load
+      // cannot replay an already-loaded row as a duplicate.
+      invalidateActiveHistoryPagination();
     });
 
     const unlistenHistoryInvalidated = listen<ClipboardHistoryInvalidation>(
@@ -910,13 +862,10 @@
         for (const item of items) {
           if (item.deleted && removedIds.has(item.id)) addSuppressedId(item.id);
         }
-        items = items.filter((item) => !removedIds.has(item.id));
-        if (indexedItems) indexedItems = indexedItems.filter((item) => !removedIds.has(item.id));
-        // The spare search cache is also a copy of live rows; evict removed
-        // ids so a later promoteFromCache cannot resurrect deleted entries.
-        if (searchCache.some((item) => removedIds.has(item.id))) {
-          searchCache = searchCache.filter((item) => !removedIds.has(item.id));
-        }
+        // One removal covers every view that displayed the id — including the
+        // spare search cache, so a later promoteFromCache cannot resurrect a
+        // deleted entry — and closes the detail pane if it showed one.
+        itemStore = removeItems(itemStore, removedIds);
         // Re-run the search effect instead of only cancelling the in-flight
         // request; otherwise a search that lands during this event is dropped
         // and never retried.
@@ -924,7 +873,6 @@
         searchPending = false;
         selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
         if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
-        if (detailItem && removedIds.has(detailItem.id)) detailItem = null;
         invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
       },
@@ -983,23 +931,17 @@
     const unsubTagsChanged = listen<TagsChangedPayload>("tags-changed", (event) => {
       const { renamed, deleted } = event.payload;
       if (!renamed && !deleted) return;
-      // Compute per-entry patches across every copy's members, then fan them
-      // out through the single funnel — including searchCache, which a
-      // hand-rolled loop once missed.
+      // Compute one patch per loaded record — the store is the only place a
+      // record lives, so enumerating it cannot miss the spare search cache or
+      // the detail pane the way a hand-rolled per-copy loop once did.
       const transform = (entry: ClipboardItem) =>
         renamed ? rewriteItemTags(entry, renamed.old, renamed.new) : removeItemTag(entry, deleted!);
       const patches = new Map<string, Partial<ClipboardItem>>();
-      for (const entry of [
-        ...items,
-        ...(indexedItems ?? []),
-        ...searchCache,
-        ...(detailItem ? [detailItem] : []),
-      ]) {
-        if (patches.has(entry.id)) continue;
+      for (const entry of itemStore.byId.values()) {
         const rewritten = transform(entry);
         if (rewritten !== entry) patches.set(entry.id, { tags: rewritten.tags });
       }
-      applyItemPatches(patches);
+      itemStore = applyItemPatches(itemStore, patches);
       if (renamed) {
         if (tagFilter === renamed.old) tagFilter = renamed.new;
       } else if (tagFilter === deleted) {
@@ -1089,34 +1031,23 @@
   }
 
   function updateSearchCache(results: ClipboardItem[]) {
-    const next = mergeSearchCachePage(
-      { cache: searchCache, accessOrder: searchCacheAccessOrder },
-      {
-        results,
-        loadedIds: new Set(items.map((i) => i.id)),
-        policy: $generalSettings.searchCacheEviction,
-        max: $generalSettings.searchCacheSize,
-      },
-    );
-    searchCacheAccessOrder = next.accessOrder;
-    searchCache = next.cache;
+    itemStore = mergeSearchCachePage(itemStore, {
+      results,
+      loadedIds: new Set(itemStore.historyIds),
+      policy: $generalSettings.searchCacheEviction,
+      max: $generalSettings.searchCacheSize,
+    });
   }
 
   function promoteFromCache(loadedIds: Set<string>) {
-    const next = promoteCachedEntries(
-      { cache: searchCache, accessOrder: searchCacheAccessOrder },
-      loadedIds,
-    );
-    searchCache = next.cache;
-    searchCacheAccessOrder = next.accessOrder;
+    itemStore = promoteCachedEntries(itemStore, loadedIds);
   }
 
   function trimLoadedItems() {
-    items = trimLoadedHistory(
-      items,
-      $generalSettings.pageSizeLimit,
-      $generalSettings.loadTolerance,
-    );
+    itemStore = trimLoadedHistory(itemStore, {
+      limit: $generalSettings.pageSizeLimit,
+      tolerance: $generalSettings.loadTolerance,
+    });
   }
 
   async function loadActiveHistoryPage(): Promise<void> {
@@ -1145,15 +1076,22 @@
       if (isFirstPage) {
         const deletedItems = items.filter((item) => item.deleted);
         const storedIds = new Set(page.map((item) => item.id));
-        items = [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))];
+        itemStore = replaceViewItems(
+          itemStore,
+          [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))],
+          "history",
+        );
       } else {
         // Keyset pagination cannot replay rows the backend already served
         // below the cursor, but keep the guard anyway: an entry promoted and
         // then re-captured could theoretically round-trip its timestamps, and
         // the keyed each below must never see a duplicate key.
-        const knownIds = new Set(items.map((item) => item.id));
-        const freshPage = page.filter((item) => !knownIds.has(item.id));
-        items = [...items, ...freshPage];
+        const knownIds = new Set(itemStore.historyIds);
+        itemStore = appendItems(
+          itemStore,
+          page.filter((item) => !knownIds.has(item.id)),
+          "history",
+        );
       }
       // The anchor is the last row of the backend page — never the tail of
       // `items`, which mixes in recycled deleted entries and deduplicated rows.
@@ -1212,9 +1150,12 @@
 
       // OFFSET pagination can replay a row after an out-of-band insertion;
       // drop ids already loaded so the keyed each never sees a duplicate key.
-      const knownIds = new Set((indexedItems ?? []).map((item) => item.id));
-      const freshResults = page.items.filter((item) => !knownIds.has(item.id));
-      indexedItems = [...(indexedItems ?? []), ...freshResults];
+      const knownIds = new Set(itemStore.indexedIds ?? []);
+      itemStore = appendItems(
+        itemStore,
+        page.items.filter((item) => !knownIds.has(item.id)),
+        "indexed",
+      );
       searchOffset += page.items.length;
       searchHasMore = searchOffset < page.totalCount;
       updateSearchCache(page.items);
@@ -1250,7 +1191,7 @@
         return;
       }
 
-      items = mergeDeletedHistoryPage(items, page, deletedHistorySuppressedIds);
+      itemStore = mergeDeletedHistoryPage(itemStore, page, deletedHistorySuppressedIds);
       deletedHistoryOffset += page.length;
       deletedHistoryLoaded = true;
       deletedHistoryHasMore = page.length === DELETED_HISTORY_PAGE_SIZE;
@@ -1442,7 +1383,7 @@
     if (activeFilter !== filter) resetHistoryScroll();
     activeFilter = filter;
     selectedIds = new Set();
-    indexedItems = null;
+    itemStore = closeSearchResults(itemStore);
     indexedQuery = "";
     if (enteringDeleted) {
       if (!deletedHistoryLoaded) {
@@ -1517,19 +1458,6 @@
       });
   }
 
-  /// Re-adds an optimistically removed row after a failed hard/permanent
-  /// delete without replacing the whole array, so rows captured during the
-  /// request survive.
-  function reinsertItem(item: ClipboardItem, wasSelected: boolean) {
-    if (!items.some((entry) => entry.id === item.id)) {
-      items = [item, ...items];
-    }
-    if (indexedItems && !indexedItems.some((entry) => entry.id === item.id)) {
-      indexedItems = [item, ...indexedItems];
-    }
-    if (wasSelected) selectedIds = new Set([...selectedIds, item.id]);
-  }
-
   function deleteItem(id: string) {
     const item = findLoadedItem(id);
     if (item?.deleted) {
@@ -1567,13 +1495,12 @@
     const target = findLoadedItem(id);
     if (!target) return;
 
-    const wasSelected = selectedIds.has(id);
-    const previousDetailItem = detailItem;
-    const previousSearchCache = searchCache;
+    // Capture before removing: a failed delete has to put the row back exactly
+    // where it was, in every view that held it, without disturbing rows the
+    // user captured while the request was in flight.
+    const snapshot = captureAffected(new Set([id]));
     addSuppressedId(id);
-    // Route through the shared funnel so `detailItem`/`searchCache` cannot keep
-    // rendering a row that no longer exists.
-    removeItems(new Set([id]));
+    itemStore = removeItems(itemStore, new Set([id]));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistPermanentDelete(id)
@@ -1585,9 +1512,7 @@
       .catch((error) => {
         console.error("Unable to permanently delete clipboard item", error);
         deletedHistorySuppressedIds.delete(id);
-        reinsertItem(target, wasSelected);
-        detailItem = previousDetailItem;
-        searchCache = previousSearchCache;
+        rollbackAffected(snapshot);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1599,12 +1524,8 @@
     const target = findLoadedItem(id);
     if (!target) return;
 
-    const wasSelected = selectedIds.has(id);
-    const previousDetailItem = detailItem;
-    const previousSearchCache = searchCache;
-    // Route through the shared funnel so `detailItem`/`searchCache` cannot keep
-    // rendering a row that no longer exists.
-    removeItems(new Set([id]));
+    const snapshot = captureAffected(new Set([id]));
+    itemStore = removeItems(itemStore, new Set([id]));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistHardDelete(id)
@@ -1615,9 +1536,7 @@
       })
       .catch((error) => {
         console.error("Unable to delete clipboard item", error);
-        reinsertItem(target, wasSelected);
-        detailItem = previousDetailItem;
-        searchCache = previousSearchCache;
+        rollbackAffected(snapshot);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1644,20 +1563,19 @@
   }
 
   function moveToTop(id: string) {
-    const promote = (list: ClipboardItem[]): ClipboardItem[] => {
-      const idx = list.findIndex((i) => i.id === id);
-      if (idx <= 0) return list;
-      const next = [...list];
-      const [item] = next.splice(idx, 1);
-      return [item, ...next];
-    };
-    items = promote(items);
+    const item = findLoadedItem(id);
+    if (!item) return;
+    itemStore = promoteItem(itemStore, item, "history");
     // During a search the visible list is `indexedItems`, so the copied row
     // must be promoted there too or "pin copied to top" silently no-ops.
-    if (indexedItems) indexedItems = promote(indexedItems);
+    if (itemStore.indexedIds?.includes(id)) {
+      itemStore = promoteItem(itemStore, item, "indexed");
+    }
     // The spare search cache keeps its own order; promote there as well so
     // a later promoteFromCache does not restore the pre-copy position.
-    searchCache = promote(searchCache);
+    if (itemStore.cacheIds.includes(id)) {
+      itemStore = promoteItem(itemStore, item, "cache");
+    }
   }
 
   async function copyItem(id: string) {
@@ -1681,12 +1599,12 @@
     const item = findLoadedItem(id);
     if (!item) return;
     const requestId = ++detailRequestId;
-    detailItem = item;
+    itemStore = setDetailItem(itemStore, item);
     if (item.kind === "image" || item.kind === "file") {
       try {
         const materialized = await ensureItemMaterialized(item);
         if (requestId === detailRequestId && detailItem?.id === id) {
-          detailItem = materialized;
+          itemStore = setDetailItem(itemStore, materialized);
         }
       } catch (error) {
         console.error("Unable to materialize clipboard item for detail", error);
@@ -1733,7 +1651,7 @@
 
   function closeDetail() {
     detailRequestId += 1;
-    detailItem = null;
+    itemStore = setDetailItem(itemStore, null);
     void tick().then(() => {
       const el = document.querySelector(`[data-id="${selectedId}"]`);
       if (el instanceof HTMLElement) {
@@ -1870,8 +1788,8 @@
     if (!item) return;
     const previousTags = item.tags ?? [];
     const deduped = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
-    // updateItem fans the patch out to items, indexedItems, searchCache, and
-    // detailItem so no copy of the entry keeps stale tags.
+    // The store holds one record, so every view that displays the row shows the
+    // new tags in the same pass.
     updateItem(id, () => ({ tags: deduped }));
     try {
       const ok = await persistTags(id, deduped);
@@ -2014,7 +1932,7 @@
     const snapshot = captureAffected(idSet);
     const patch = new Map<string, Partial<ClipboardItem>>();
     for (const id of ids) patch.set(id, { favorite: !unfavorite });
-    applyItemPatches(patch);
+    itemStore = applyItemPatches(itemStore, patch);
 
     void persistBatchFavorite(ids, !unfavorite)
       .then((updated) => {
@@ -2042,14 +1960,7 @@
     const idSet = new Set(ids);
     const snapshot = captureAffected(idSet);
     for (const id of ids) addSuppressedId(id);
-    items = setDeletedFlags(items, idSet, false);
-    if (indexedItems) {
-      indexedItems = setDeletedFlags(indexedItems, idSet, false);
-    }
-    searchCache = setDeletedFlags(searchCache, idSet, false);
-    if (detailItem && idSet.has(detailItem.id)) {
-      detailItem = { ...detailItem, deleted: false };
-    }
+    itemStore = applyItemPatches(itemStore, new Map(ids.map((id) => [id, { deleted: false }])));
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchRestore(ids)
@@ -2075,7 +1986,7 @@
     const idSet = new Set(ids);
     const snapshot = captureAffected(idSet);
     for (const id of ids) addSuppressedId(id);
-    removeItems(idSet);
+    itemStore = removeItems(itemStore, idSet);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchPermanentDelete(ids)
@@ -2103,31 +2014,16 @@
     if (operationIds.size === 0) return;
 
     const snapshot = captureAffected(operationIds);
-    const softSet = new Set(softIds);
 
     for (const id of softIds) deletedHistorySuppressedIds.delete(id);
     for (const id of permanentIds) addSuppressedId(id);
 
-    const hardSet = new Set(hardIds);
-    const permanentSet = new Set(permanentIds);
-    const removedOptimistic = new Set([...permanentSet, ...hardSet]);
-    items = items
-      .filter((item) => !removedOptimistic.has(item.id))
-      .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
-    if (indexedItems) {
-      indexedItems = indexedItems
-        .filter((item) => !removedOptimistic.has(item.id))
-        .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
-    }
-    searchCache = searchCache
-      .filter((item) => !removedOptimistic.has(item.id))
-      .map((item) => (softSet.has(item.id) ? { ...item, deleted: true } : item));
+    const removedOptimistic = new Set([...permanentIds, ...hardIds]);
+    // Removed rows leave every view at once; soft rows are flagged in place, so
+    // the open detail pane follows along without a write of its own.
+    itemStore = removeItems(itemStore, removedOptimistic);
+    itemStore = applyItemPatches(itemStore, new Map(softIds.map((id) => [id, { deleted: true }])));
     selectedIds = new Set();
-    if (detailItem && removedOptimistic.has(detailItem.id)) {
-      detailItem = null;
-    } else if (detailItem && softSet.has(detailItem.id)) {
-      detailItem = { ...detailItem, deleted: true };
-    }
 
     const operations: {
       ids: string[];
@@ -2192,13 +2088,13 @@
       // transitions. Going through the funnel (rather than rebuilding whole
       // arrays from a snapshot) keeps records that arrived via clipboard events
       // during the async window — a whole-array rebuild dropped them entirely.
-      let next = restoreAffectedItemsToCopies(itemCopies(), snapshot);
-      next = removeItemsFromCopies(next, removedIds);
-      next = applyItemPatchesToCopies(
+      let next = restoreAffectedItems(itemStore, snapshot);
+      next = removeItems(next, removedIds);
+      next = applyItemPatches(
         next,
         new Map([...successfulSoft].map((id) => [id, { deleted: true }])),
       );
-      applyItemCopies(next);
+      itemStore = next;
       selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
 
       // Failed (and partially failed) batches skip the success-path
@@ -2281,18 +2177,7 @@
     if ($generalSettings.useRecycleBin) {
       // Soft clear: retain rows locally so they immediately appear in the
       // recycle-bin filter and can be restored without a reload.
-      items = items.map((item) => (idSet.has(item.id) ? { ...item, deleted: true } : item));
-      if (indexedItems) {
-        indexedItems = indexedItems.map((item) =>
-          idSet.has(item.id) ? { ...item, deleted: true } : item,
-        );
-      }
-      searchCache = searchCache.map((item) =>
-        idSet.has(item.id) ? { ...item, deleted: true } : item,
-      );
-      if (detailItem && idSet.has(detailItem.id)) {
-        detailItem = { ...detailItem, deleted: true };
-      }
+      itemStore = applyItemPatches(itemStore, new Map(ids.map((id) => [id, { deleted: true }])));
       selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
       void invoke<number>("clear_all_non_favorite_items")
@@ -2312,10 +2197,7 @@
     // Direct clear when the recycle bin is disabled. The backend's compact
     // clear command is intentionally soft-delete-only, so use the existing
     // direct-delete command for each active record instead.
-    items = items.filter((item) => !idSet.has(item.id));
-    if (indexedItems) indexedItems = indexedItems.filter((item) => !idSet.has(item.id));
-    searchCache = searchCache.filter((item) => !idSet.has(item.id));
-    if (detailItem && idSet.has(detailItem.id)) detailItem = null;
+    itemStore = removeItems(itemStore, idSet);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void Promise.all(
@@ -2338,7 +2220,7 @@
         // Only the rows this batch could not remove come back; everything that
         // arrived during the window stays.
         rollbackAffected(snapshot);
-        applyItemCopies(removeItemsFromCopies(itemCopies(), successfulIds));
+        itemStore = removeItems(itemStore, successfulIds);
         selectedIds = new Set([...selectedIds].filter((id) => !successfulIds.has(id)));
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");

@@ -3,8 +3,29 @@
 Search currently has three distinct pieces of state. Do not collapse them conceptually:
 
 1. backend Tantivy ID cache in `src-tauri/src/search/index.rs`;
-2. active paginated search results in `src/routes/+page.svelte::indexedItems`;
-3. frontend spare-result cache in `src/routes/+page.svelte::searchCache`.
+2. active paginated search results, the `indexed` id view of the item store;
+3. frontend spare-result cache, the `cache` id view of the same store.
+
+## Frontend item store
+
+`src/lib/utils/item-store.ts` is the single source of truth for every loaded
+record. `ItemStore` holds `byId: ReadonlyMap<string, ClipboardItem>` plus four
+id-only views — `historyIds`, `indexedIds` (`null` = no search displayed),
+`cacheIds`, and the single `detailId` — so two views cannot disagree about a
+record's content: there is only one record to read. `+page.svelte` keeps the
+store in `$state.raw` and exposes `items`/`indexedItems`/`searchCache`/
+`detailItem` as `$derived` projections, which keeps the plain `Map` out of
+Svelte's deep proxy (see `docs/PITFALLS.md`).
+
+Invariants every mutator preserves, asserted after each operation in
+`item-store.test.ts`:
+
+- `byId` holds exactly the union of the four views; a view never displays an id
+  the map lost, and a record that leaves every view is released from the map.
+- One id may appear in several views at once (that overlap is the point), but
+  never twice inside one view.
+- Every mutator is pure and returns the next store, so the route reassigns
+  `itemStore` and no write can be applied to one view only.
 
 ## Backend Tantivy ID cache
 
@@ -53,34 +74,34 @@ The main route debounces a first-page indexed search by 300 ms.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
 - `searchEpoch` (bumped by the `clipboard-history-invalidated` listener) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
 - The same effect reacts only to a narrow `searchSettingsKey` derived from `display.searchPageSize` and `searchSortRules` (the values themselves are read with `untrack`); either setting changing invalidates first-page and pagination request IDs before re-querying, while an unrelated settings change no longer restarts the search or resets pagination.
-- Successful first pages set `indexedItems`, `indexedQuery`, `searchOffset`, `searchTotalCount`/`searchTruncated`, and `searchHasMore`.
-- `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already present in `indexedItems` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
+- Successful first pages replace the `indexed` view (`replaceViewItems`) and set `indexedQuery`, `searchOffset`, `searchTotalCount`/`searchTruncated`, and `searchHasMore`. An empty first page still switches the view on, so the panel shows "no match" instead of falling back to the history list; `closeSearchResults` is what returns to "no search displayed".
+- `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already in `indexedIds` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
 - `searchHasMore` is derived from the backend total (`searchOffset < totalCount`); an empty page still ends pagination as a backstop.
 
 When changing query, filter, sort, or mutation behavior, audit both first-page and pagination request IDs. A stale pagination response must never append to a newer query. Keep offset reset and result invalidation together.
 
 ## Frontend spare-result cache
 
-The pure maintenance logic lives in `src/lib/utils/search-cache.ts` (`mergeSearchCachePage`, `promoteFromCache`, `trimLoadedItems`) with Vitest coverage in `search-cache.test.ts`; the route's `updateSearchCache(results)` stores first and subsequent-page search results that are not already in the loaded active-history `items` list.
+The pure maintenance logic lives in `src/lib/utils/item-store.ts` (`mergeSearchCachePage`, `promoteFromCache`, `trimLoadedHistory`) with Vitest coverage in `item-store.test.ts`; the route's `updateSearchCache(results)` stores first and subsequent-page search results whose ids the loaded active-history view does not already hold.
 
 - Capacity is `searchCacheSize` (normalized 200–2000; default 500).
-- `searchCacheAccessOrder` records insertion order.
-- `promoteFromCache(loadedIds)` removes entries once normal history pagination loads them.
-- The cache is separate from `indexedItems`; it is not the source of search ordering.
+- `cacheIds` records insertion order — the access order lives in the store now, so there is no second id list to keep in step.
+- `promoteFromCache(loadedIds)` removes ids once normal history pagination loads them; the record itself stays in `byId` because the history view owns it.
+- The cache is separate from the `indexed` view; it is not the source of search ordering.
 
 ### FIFO/LRU evidence
 
-`searchCacheEviction` exposes `fifo` and `lru`. FIFO preserves an existing entry's insertion position when it appears in another result page; LRU moves that entry to the end of `searchCacheAccessOrder`. Both policies evict from the front at capacity. Loaded-history promotion removes entries and their order records from the spare cache.
+`searchCacheEviction` exposes `fifo` and `lru`. FIFO preserves an existing entry's insertion position when it appears in another result page; LRU moves that id to the end of `cacheIds`. Both policies evict from the front at capacity, and eviction only drops the `byId` record once no view references it. Loaded-history promotion removes the promoted ids from the spare cache.
 
 ## Loaded-history tolerance trimming
 
-`trimLoadedItems()` limits ordinary loaded history separately:
+`trimLoadedHistory()` limits ordinary loaded history separately:
 
 - threshold: `pageSizeLimit + loadTolerance`;
 - when exceeded, remove up to `loadTolerance` oldest non-deleted, non-favorite items;
-- favorites and recycle-bin items are protected from this in-memory trimming;
+- favorites and recycle-bin items are protected from this in-memory trimming, and so is any record the detail pane still displays;
 - default `pageSizeLimit` is 500 and default tolerance is 100;
-- the window is a cap, not a target: once `items.length` reaches the threshold, `loadActiveHistoryPage` sets `activeHistoryHasMore = false` because deeper OFFSET pages hold the oldest rows and would be evicted immediately (previously pagination kept fetch-then-evicting on every scroll event at the cap).
+- the window is a cap, not a target: once the history view reaches the threshold, `loadActiveHistoryPage` sets `activeHistoryHasMore = false` because deeper OFFSET pages hold the oldest rows and would be evicted immediately (previously pagination kept fetch-then-evicting on every scroll event at the cap).
 
 Changing this logic requires checking selected/detail items, virtual-scroll height state, active/deleted offsets, and the spare-result cache. In-memory trimming must not be confused with database history cleanup.
 
@@ -88,7 +109,7 @@ Active history is backed by `created_at_ms DESC LIMIT/OFFSET`. A committed inser
 
 ## Mutation invalidation
 
-Single-entry patches MUST go through `updateItem`/`revertItem`, which delegate to `applyItemPatches` — the single funnel that maps a patch over `items`, `indexedItems`, `searchCache`, and `detailItem` in one pass per list (this funnel exists because a hand-rolled mapping loop once left `searchCache` with stale tags). `updateItem` resolves the original through `findLoadedItem` (all four copies), not `items` alone: a search result can live only in `indexedItems`/`searchCache` while the loaded history page is `items`, and resolving against `items` silently no-ops the action. Bulk mutations use the same helper and roll back only the ids they touched, never a whole-array snapshot: `bulkFavorite` re-patches the batch, and `bulkRestore`, `bulkPermanentDelete`, `clearHistory`, and `bulkDelete` capture the affected ids with `captureAffectedItems` and undo them with `restoreAffectedItemsToCopies` (patch in place, re-insert what the mutation removed at its recorded index, and re-select only the rows that were selected). A whole-array snapshot cannot be rolled back safely because the persist call is async: a capture, search, or favorite toggle that lands in that window is discarded by the restore, and records that arrived during it are absent from the snapshot entirely, so they vanish from the history. The same holds for single-row delete/restore. Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs, bumps `searchEpoch`, and resets affected deleted-history pagination.
+Record patches MUST go through the item store — `applyItemPatches` writes each patched record once and every view projects it, so a view cannot miss the update (the fan-out funnel this replaced existed because a hand-rolled mapping loop once left the spare cache with stale tags). `updateItem` resolves the original through `findLoadedItem` (the whole store), not the history view alone: a search result can be displayed only by the `indexed` or `cache` view, and resolving against the history view silently no-ops the action. Bulk mutations use the same helpers and roll back only the ids they touched, never a whole-view snapshot: `bulkFavorite` re-patches the batch, and `bulkRestore`, `bulkPermanentDelete`, `clearHistory`, `bulkDelete`, and the single-row permanent/hard delete paths capture the affected ids with `captureAffectedItems` and undo them with `restoreAffectedItems` (patch in place, re-insert what the mutation removed at the index it held in each view, and re-select only the rows that were selected). A whole-view snapshot cannot be rolled back safely because the persist call is async: a capture, search, or favorite toggle that lands in that window is discarded by the restore, and records that arrived during it are absent from the snapshot entirely, so they vanish from the history. Destructive storage-kind operations emit `clipboard-history-invalidated`, which removes IDs from the store, bumps `searchEpoch`, and resets affected deleted-history pagination.
 
 Search index freshness still depends on SQLite outbox synchronization. When adding a mutation:
 
