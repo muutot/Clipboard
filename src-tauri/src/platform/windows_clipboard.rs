@@ -451,11 +451,16 @@ pub fn write_clipboard_text_with_self_trigger(text: &str) -> Result<(), String> 
     let text_memory = allocate_global_bytes(unsafe {
         std::slice::from_raw_parts(wide.as_ptr().cast::<u8>(), wide_byte_len)
     })?;
-    let marker_memory = self_trigger_format_id().and_then(|format| {
-        allocate_global_bytes(&marker)
+    // `match` rather than `Option::zip`: the marker buffer must stay unallocated
+    // when no self-trigger format is registered, and every cleanup path below
+    // only frees the buffer when this is `Some`. `zip` would evaluate the
+    // allocation eagerly and leak it in exactly that case.
+    let marker_memory = match self_trigger_format_id() {
+        Some(format) => allocate_global_bytes(&marker)
             .ok()
-            .map(|memory| (format, memory))
-    });
+            .map(|memory| (format, memory)),
+        None => None,
+    };
 
     unsafe {
         if !open_clipboard_with_retry() {
@@ -559,11 +564,15 @@ pub fn write_clipboard_files_with_self_trigger(paths: &[String]) -> Result<(), S
                 })
                 .ok()
             });
-    let marker_memory = self_trigger_format_id().and_then(|format| {
-        allocate_global_bytes(&marker)
+    // Lazy on purpose, like the site above: the cleanup paths only free the
+    // marker buffer when this is `Some`, so an eager `Option::zip` allocation
+    // would leak it whenever no self-trigger format is registered.
+    let marker_memory = match self_trigger_format_id() {
+        Some(format) => allocate_global_bytes(&marker)
             .ok()
-            .map(|memory| (format, memory))
-    });
+            .map(|memory| (format, memory)),
+        None => None,
+    };
 
     unsafe {
         if !open_clipboard_with_retry() {
