@@ -820,6 +820,7 @@ mod storage_cleanup_tests {
             paths.project.clone(),
             database,
             paths.clone(),
+            Arc::new(Mutex::new(())),
             Duration::from_millis(5),
         )
         .unwrap();

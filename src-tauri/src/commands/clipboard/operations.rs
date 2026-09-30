@@ -574,9 +574,18 @@ pub fn save_clipboard_item_as_new_record(
 #[tauri::command]
 pub fn rename_item(
     database: tauri::State<'_, Database>,
+    capture: tauri::State<'_, CaptureState>,
     id: String,
     new_name: String,
 ) -> Result<ClipboardItem, String> {
+    // The rename persists the new paths before moving the file. Hold the
+    // storage maintenance lock so a concurrent orphan cleanup cannot judge
+    // the not-yet-moved old file unreferenced, delete it, and leave the
+    // rolled-back record pointing at a missing file.
+    let _maintenance = lock_state(
+        &capture.storage_maintenance_lock,
+        "storage maintenance lock is poisoned",
+    )?;
     rename_item_record(&database, id, new_name)
 }
 

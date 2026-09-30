@@ -101,14 +101,22 @@ impl CleanupWorker {
         project_directory: PathBuf,
         database: Database,
         paths: StoragePaths,
+        storage_maintenance_lock: Arc<Mutex<()>>,
     ) -> Result<Self, String> {
-        Self::start_with_interval(project_directory, database, paths, HISTORY_CLEANUP_INTERVAL)
+        Self::start_with_interval(
+            project_directory,
+            database,
+            paths,
+            storage_maintenance_lock,
+            HISTORY_CLEANUP_INTERVAL,
+        )
     }
 
     fn start_with_interval(
         project_directory: PathBuf,
         database: Database,
         paths: StoragePaths,
+        storage_maintenance_lock: Arc<Mutex<()>>,
         interval: Duration,
     ) -> Result<Self, String> {
         let stop_flag = Arc::new(AtomicBool::new(false));
@@ -122,22 +130,32 @@ impl CleanupWorker {
                 }
 
                 match ConfigStore::load(&project_directory) {
-                    Ok(config) => match commands::cleanup::enforce_history_cleanup_for(
-                        &database,
-                        &config,
-                        &paths,
-                        commands::cleanup::ORPHAN_FILE_GRACE,
-                    ) {
-                        Ok(total_deleted) if total_deleted > 0 => {
-                            crate::log_event!(
-                                "[cleanup] removed {total_deleted} expired history entries"
-                            );
+                    Ok(config) => {
+                        // Hold the storage maintenance lock for the whole run:
+                        // the orphan scan inside must not race a concurrent
+                        // rename's DB-first-then-move sequence, or it can
+                        // delete the not-yet-moved old file and leave the
+                        // rolled-back record pointing at a missing file.
+                        let _maintenance = storage_maintenance_lock
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        match commands::cleanup::enforce_history_cleanup_for(
+                            &database,
+                            &config,
+                            &paths,
+                            commands::cleanup::ORPHAN_FILE_GRACE,
+                        ) {
+                            Ok(total_deleted) if total_deleted > 0 => {
+                                crate::log_event!(
+                                    "[cleanup] removed {total_deleted} expired history entries"
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                crate::log_error!("[cleanup] scheduled cleanup failed: {error}")
+                            }
                         }
-                        Ok(_) => {}
-                        Err(error) => {
-                            crate::log_error!("[cleanup] scheduled cleanup failed: {error}")
-                        }
-                    },
+                    }
                     Err(error) => {
                         crate::log_error!("[cleanup] failed to load configuration: {error}")
                     }
@@ -517,8 +535,12 @@ pub fn run() {
         }
 
             let cleanup_database = Database::open(&paths.database)?;
-            let cleanup_worker =
-                CleanupWorker::start(project_directory.clone(), cleanup_database, paths.clone())?;
+            let cleanup_worker = CleanupWorker::start(
+                project_directory.clone(),
+                cleanup_database,
+                paths.clone(),
+                Arc::clone(&capture_state.storage_maintenance_lock),
+            )?;
 
             // Optional background search-index synchronizer. In `Lazy` mode the
             // search command drains the outbox itself; in `Background` mode this

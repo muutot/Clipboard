@@ -17,6 +17,14 @@ pub struct CaptureState {
     pub(crate) ignored_apps: Arc<Mutex<Vec<String>>>,
     pub(crate) policy: Arc<CapturePolicy>,
     pub ingestion_guard: Arc<Mutex<()>>,
+    /// Serializes managed-storage tree mutations (record renames) against
+    /// orphan-cleanup scans. A rename persists the new paths in the database
+    /// before moving the file; without this lock a concurrent cleanup could
+    /// judge the not-yet-moved old file an orphan, delete it, and leave the
+    /// rolled-back record pointing at a missing file. Deliberately separate
+    /// from `ingestion_guard`: a minutes-long cleanup scan must never stall
+    /// the capture loop.
+    pub storage_maintenance_lock: Arc<Mutex<()>>,
     pub(crate) worker: Arc<Mutex<Option<CaptureWorker>>>,
 }
 
@@ -54,6 +62,7 @@ impl CaptureState {
                 auto_tag_rules: Arc::new(RwLock::new(Vec::new())),
             }),
             ingestion_guard: Arc::new(Mutex::new(())),
+            storage_maintenance_lock: Arc::new(Mutex::new(())),
             worker: Arc::new(Mutex::new(None)),
         }
     }

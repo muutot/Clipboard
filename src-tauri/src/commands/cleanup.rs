@@ -6,6 +6,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::commands::lock::lock_state;
+use crate::state::CaptureState;
 use crate::config::ConfigStore;
 use crate::storage::{
     ClipboardRepository, Database, StorageFileReferences, StoragePaths, RESOURCE_ROOT_MARKER,
@@ -53,6 +54,7 @@ pub fn enforce_history_cleanup(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     paths: tauri::State<'_, StoragePaths>,
+    capture: tauri::State<'_, CaptureState>,
 ) -> Result<u64, String> {
     // Read the three values and drop the guard before doing any work: the
     // cleanup walks every resource root and canonicalizes every referenced
@@ -63,6 +65,10 @@ pub fn enforce_history_cleanup(
         let guard = lock_state(&config, "configuration lock is poisoned")?;
         CleanupPolicy::from_config(&guard)
     };
+    let _maintenance = lock_state(
+        &capture.storage_maintenance_lock,
+        "storage maintenance lock is poisoned",
+    )?;
     enforce_history_cleanup_with_policy(&database, &paths, policy, ORPHAN_FILE_GRACE)
 }
 
@@ -251,7 +257,12 @@ pub fn cleanup_orphan_storage_files_with_grace(
 pub fn cleanup_storage_files(
     database: tauri::State<'_, Database>,
     paths: tauri::State<'_, StoragePaths>,
+    capture: tauri::State<'_, CaptureState>,
 ) -> Result<StorageCleanupResult, String> {
+    let _maintenance = lock_state(
+        &capture.storage_maintenance_lock,
+        "storage maintenance lock is poisoned",
+    )?;
     cleanup_orphan_storage_files_with_grace(&database, &paths, ORPHAN_FILE_GRACE)
 }
 
