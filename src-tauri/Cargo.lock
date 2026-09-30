@@ -769,6 +769,7 @@ dependencies = [
  "apple-native-keyring-store",
  "base64 0.23.1",
  "bincode",
+ "cc",
  "chrono",
  "clipboard-sync",
  "ctrlc",
