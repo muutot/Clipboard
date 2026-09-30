@@ -459,6 +459,32 @@ pub fn unmark_self_triggered_image(
 /// flag, stop receiver, app handle) and returns once the loop has terminated.
 /// Callers are responsible for spawning the thread and installing the
 /// resulting `CaptureWorker`.
+/// Counts one failed `save_item` and applies the shared backoff: after 10
+/// consecutive failures the capture loop pauses briefly so a persistently
+/// broken database cannot spin the worker. Returns true when a stop signal
+/// arrived during the pause and the loop should exit. Media captures use the
+/// same breaker as text captures — image/file writes fail just as hard when
+/// the database is down.
+fn note_capture_save_failure(
+    consecutive_errors: &mut u32,
+    stop_receiver: &mpsc::Receiver<()>,
+    stop_flag: &AtomicBool,
+) -> bool {
+    *consecutive_errors += 1;
+    if *consecutive_errors >= 10 {
+        crate::log_warn!("[clipboard-worker] too many errors, pausing");
+        if wait_for_stop(stop_receiver, stop_flag, Duration::from_secs(5)) {
+            return true;
+        }
+        *consecutive_errors = 0;
+    }
+    false
+}
+
+/// The function owns the worker thread's lifecycle resources (database, stop
+/// flag, stop receiver, app handle) and returns once the loop has terminated.
+/// Callers are responsible for spawning the thread and installing the
+/// resulting `CaptureWorker`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_capture_loop(
     receiver: mpsc::Receiver<ClipboardChange>,
@@ -681,6 +707,13 @@ pub(crate) fn run_capture_loop(
                         }
                         Err(e) => {
                             crate::log_error!("[clipboard-worker] failed to save image: {e}");
+                            if note_capture_save_failure(
+                                &mut consecutive_errors,
+                                &stop_receiver,
+                                &stop_flag,
+                            ) {
+                                break;
+                            }
                         }
                     }
                     continue;
@@ -752,6 +785,13 @@ pub(crate) fn run_capture_loop(
                             }
                             Err(e) => {
                                 crate::log_error!("[clipboard-worker] failed to save file: {e}");
+                                if note_capture_save_failure(
+                                    &mut consecutive_errors,
+                                    &stop_receiver,
+                                    &stop_flag,
+                                ) {
+                                    break;
+                                }
                             }
                         }
                     } else {
@@ -816,6 +856,13 @@ pub(crate) fn run_capture_loop(
                                 crate::log_error!(
                                     "[clipboard-worker] failed to save file batch: {e}"
                                 );
+                                if note_capture_save_failure(
+                                    &mut consecutive_errors,
+                                    &stop_receiver,
+                                    &stop_flag,
+                                ) {
+                                    break;
+                                }
                             }
                         }
                     }
