@@ -39,9 +39,9 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["windowTransparency"], 95);
     assert_eq!(saved["general"]["windowEffect"], "off");
     assert_eq!(saved["general"]["windowOpacityAffectsText"], false);
-    assert_eq!(saved["general"]["cardPaddingTop"], 1);
-    assert_eq!(saved["general"]["cardPaddingBottom"], 1);
-    assert_eq!(saved["general"]["cardGap"], 1);
+    assert_eq!(saved["general"]["cardPaddingTop"], 3);
+    assert_eq!(saved["general"]["cardPaddingBottom"], 3);
+    assert_eq!(saved["general"]["cardGap"], 2);
     assert_eq!(saved["general"]["cardTextHeight"], 42);
     assert_eq!(saved["general"]["cardTallTextHeight"], 42);
     assert_eq!(saved["general"]["cardImageHeight"], 80);

@@ -41,9 +41,9 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 
 | Field                | Default | Normalized range |
 | -------------------- | ------- | ---------------- |
-| `cardPaddingTop`     | `1`     | 0–20             |
-| `cardPaddingBottom`  | `1`     | 0–20             |
-| `cardGap`            | `1`     | 0–20             |
+| `cardPaddingTop`     | `3`     | 0–20             |
+| `cardPaddingBottom`  | `3`     | 0–20             |
+| `cardGap`            | `2`     | 0–20             |
 | `cardTextHeight`     | `42`    | 36–90            |
 | `cardTallTextHeight` | `42`    | 42–100           |
 | `cardImageHeight`    | `80`    | 64–200           |
