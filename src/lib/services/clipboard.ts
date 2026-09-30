@@ -927,6 +927,16 @@ function sourceTone(sourceApp: string, locale: string): ClipboardItem["sourceTon
   return "red";
 }
 
+/**
+ * Dot colors for the source-app tone shown on each card.
+ *
+ * These are content semantics, not theme chrome: the tone encodes which family
+ * an app belongs to, so the hues stay fixed instead of following the theme —
+ * recoloring them per theme would make "red app" mean something different in
+ * light and dark. `neutral` is the exception because it means "no signal" and
+ * should recede with the rest of the muted text. Reviewed and kept as a local
+ * exception; see `references/niche_ui_style.md`.
+ */
 export const SOURCE_TONE_COLORS: Record<ClipboardItem["sourceTone"], string> = {
   neutral: "var(--text-muted)",
   red: "#ff4655",

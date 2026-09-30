@@ -292,10 +292,13 @@ label.visually-hidden {
 }
 
 /* ── select ── */
+/* The trigger is a <button> rendered by `CustomSelect.svelte` inside
+   `.custom-select`; its arrow is an `AppIcon` colored with `--text-faint` (see
+   `.custom-select .settings-select > svg`). This base rule therefore carries
+   only the box, and must not reintroduce an inline data-URI arrow or
+   `appearance` resets — a native <select> is not used anywhere in the app, and
+   if one is added later it is better off with the platform arrow. */
 .settings-select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
   box-sizing: border-box;
   padding: 6px 28px 6px 10px;
   border: 1px solid var(--border-color);
@@ -303,9 +306,6 @@ label.visually-hidden {
   outline: none;
   color: var(--text-primary);
   background-color: var(--input-bg);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23777'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 9px center;
   font-family: inherit;
   font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
   cursor: pointer;
@@ -345,7 +345,6 @@ label.visually-hidden {
   flex: 1;
   min-width: 0;
   padding-right: 10px;
-  background-image: none;
 }
 
 .custom-select .settings-select > svg {
