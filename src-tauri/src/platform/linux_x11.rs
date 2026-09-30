@@ -990,39 +990,79 @@ pub fn read_clipboard_text() -> Option<String> {
             return None;
         }
 
-        // Read the property data
-        let mut actual_type: x11_ffi::Atom = 0;
-        let mut actual_format: i32 = 0;
-        let mut nitems: u64 = 0;
-        let mut bytes_after: u64 = 0;
-        let mut prop: *mut u8 = std::ptr::null_mut();
+        // Read the property data. A single request cannot return arbitrarily
+        // large properties, so loop with a rising 32-bit-unit offset until the
+        // server reports nothing left. INCR transfers (the owner delivers
+        // chunks only after we delete the property, driven by PropertyNotify)
+        // are detected and rejected explicitly: reading them here would
+        // silently corrupt or truncate large texts, which is worse than no
+        // capture.
+        let atom_incr = x11_ffi::XInternAtom(display, c"INCR".as_ptr(), 0);
+        const CHUNK_UNITS: i64 = 1_000_000; // 4 MiB of 8-bit data per request
+        let mut data: Vec<u8> = Vec::new();
+        let mut offset_units: i64 = 0;
+        let mut read_failed = false;
+        let mut is_incr = false;
+        loop {
+            let mut actual_type: x11_ffi::Atom = 0;
+            let mut actual_format: i32 = 0;
+            let mut nitems: u64 = 0;
+            let mut bytes_after: u64 = 0;
+            let mut prop: *mut u8 = std::ptr::null_mut();
 
-        let result = x11_ffi::XGetWindowProperty(
-            display,
-            window,
-            atom_property,
-            0,
-            !0i64 >> 1,
-            0,
-            0,
-            &mut actual_type,
-            &mut actual_format,
-            &mut nitems,
-            &mut bytes_after,
-            &mut prop,
-        );
-
-        let text = if result == 0 && !prop.is_null() && nitems > 0 {
-            let slice = std::slice::from_raw_parts(prop, nitems as usize);
-            String::from_utf8(slice.to_vec()).ok()
-        } else {
-            None
-        };
-        // `XGetWindowProperty` allocates `prop` even when the property is empty
-        // or has an unexpected format, so it must be freed on every path.
-        if !prop.is_null() {
-            x11_ffi::XFree(prop as *mut std::ffi::c_void);
+            let result = x11_ffi::XGetWindowProperty(
+                display,
+                window,
+                atom_property,
+                offset_units,
+                CHUNK_UNITS,
+                0,
+                0,
+                &mut actual_type,
+                &mut actual_format,
+                &mut nitems,
+                &mut bytes_after,
+                &mut prop,
+            );
+            if result != 0 {
+                read_failed = true;
+                break;
+            }
+            if actual_type == atom_incr {
+                is_incr = true;
+                if !prop.is_null() {
+                    x11_ffi::XFree(prop as *mut std::ffi::c_void);
+                }
+                break;
+            }
+            if !prop.is_null() && nitems > 0 && actual_format == 8 {
+                let slice = std::slice::from_raw_parts(prop, nitems as usize);
+                data.extend_from_slice(slice);
+            }
+            // `XGetWindowProperty` allocates `prop` on every call, so it must
+            // be freed on every path.
+            if !prop.is_null() {
+                x11_ffi::XFree(prop as *mut std::ffi::c_void);
+            }
+            // `long_offset` counts 32-bit units; for 8-bit data one unit holds
+            // 4 bytes, so advance by the rounded-up byte count just read.
+            offset_units += (nitems as i64).div_ceil(4);
+            if bytes_after == 0 || nitems == 0 {
+                break;
+            }
         }
+
+        if is_incr {
+            crate::log_warn!(
+                "[clipboard] X11 owner uses INCR transfer; text larger than one property \
+                 chunk is not read — capture skipped instead of corrupted"
+            );
+        }
+        let text = if read_failed || is_incr {
+            None
+        } else {
+            String::from_utf8(data).ok()
+        };
 
         x11_ffi::XDestroyWindow(display, window);
         x11_ffi::XCloseDisplay(display);
