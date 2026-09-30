@@ -10,7 +10,9 @@
  *       glibc 2.38.
  *   std::string::_M_replace_cold
  *       An out-of-line cold path of basic_string::replace(), introduced in
- *       GCC 13's libstdc++.
+ *       GCC 13's libstdc++. Both the char and wchar_t instantiations are
+ *       referenced by pyke's prebuilt objects (e.g. logging.cc.o uses
+ *       std::wstring), so both are provided here.
  *
  * This translation unit provides the missing symbols so the final binary
  * still floors at the glibc version the rest of the build targets (2.35):
@@ -26,6 +28,13 @@
  *   std::allocator<char>>::_M_replace_cold(char*, unsigned long,
  *   char const*, unsigned long, unsigned long)
  *
+ * - The wchar_t instantiation is the same port with _S_move -> wmemmove
+ *   and _S_copy -> wmemcpy (wchar_t is 4 bytes on Linux; lengths are in
+ *   elements, not bytes), exported as:
+ *   std::__cxx11::basic_string<wchar_t, std::char_traits<wchar_t>,
+ *   std::allocator<wchar_t>>::_M_replace_cold(wchar_t*, unsigned long,
+ *   wchar_t const*, unsigned long, unsigned long)
+ *
  * Compiled and linked by build.rs only for linux targets; on glibc >= 2.38
  * systems the dynamic linker resolves these definitions (in the executable)
  * ahead of libc's, which is fine — they are behaviorally equivalent.
@@ -36,6 +45,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 /* ---- glibc 2.38 C23 strtol/scanf-family entry points -------------------- */
 
@@ -129,6 +139,44 @@ void clipboard__replace_cold(char *p, unsigned long len1, const char *s,
       const unsigned long nleft = (unsigned long)((p + len1) - s);
       memmove(p, s, nleft);
       memcpy(p + nleft, p + len2, len2 - nleft);
+    }
+  }
+}
+
+/* ---- GCC 13 libstdc++ basic_string<wchar_t>::_M_replace_cold ------------ */
+
+void clipboard__replace_cold_wide(wchar_t *p, unsigned long len1,
+                                  const wchar_t *s, unsigned long len2,
+                                  unsigned long how_much);
+
+/* Alias to the same-TU implementation below, exported under the mangled
+ * name the GCC-13-compiled ort objects reference (Itanium ABI mangling of
+ * the wchar_t instantiation, identical to the char version with
+ * c -> w). */
+void _ZNSt7__cxx1112basic_stringIwSt11char_traitsIwESaIwEE15_M_replace_coldEPwmPKwmm(
+    wchar_t *p, unsigned long len1, const wchar_t *s, unsigned long len2,
+    unsigned long how_much)
+    __attribute__((alias("clipboard__replace_cold_wide")));
+
+void clipboard__replace_cold_wide(wchar_t *p, unsigned long len1,
+                                  const wchar_t *s, unsigned long len2,
+                                  unsigned long how_much) {
+  /* Work in-place; verbatim port of GCC 13.3 basic_string.tcc:480-506
+   * (_S_move -> wmemmove, _S_copy -> wmemcpy for char_traits<wchar_t>). */
+  if (len2 && len2 <= len1)
+    wmemmove(p, s, len2);
+  if (how_much && len1 != len2)
+    wmemmove(p + len2, p + len1, how_much);
+  if (len2 > len1) {
+    if (s + len2 <= p + len1) {
+      wmemmove(p, s, len2);
+    } else if (s >= p + len1) {
+      const unsigned long poff = (unsigned long)(s - p) + (len2 - len1);
+      wmemcpy(p, p + poff, len2);
+    } else {
+      const unsigned long nleft = (unsigned long)((p + len1) - s);
+      wmemmove(p, s, nleft);
+      wmemcpy(p + nleft, p + len2, len2 - nleft);
     }
   }
 }
