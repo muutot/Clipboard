@@ -72,13 +72,9 @@
     appendItems,
     applyItemPatches,
     captureAffectedItems,
-    clearView,
     closeSearchResults,
     createItemStore,
     findLoadedItem as findRecord,
-    getDetailItem,
-    getIndexedItems,
-    getItems,
     mergeDeletedHistoryPage,
     mergeSearchCachePage,
     promoteFromCache as promoteCachedEntries,
@@ -92,8 +88,8 @@
     setDetailItem,
     trimLoadedHistory,
     type AffectedItemSnapshot,
-    type ItemStore,
   } from "$lib/utils/item-store";
+  import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import {
     SEARCH_HISTORY_LIMIT,
@@ -148,14 +144,15 @@
   // Browser preview shows demo data; the Tauri runtime starts empty so real
   // history load failures can never be masked by fake entries.
   //
-  // `itemStore` is the single source of truth: `byId` owns each record once and
-  // the four views below own only ids. `$state.raw` keeps the plain Map out of
-  // Svelte's deep proxy, and every mutation replaces the whole store, so the
-  // `$derived` views recompute from a fresh map in one pass.
-  let itemStore = $state.raw<ItemStore>(
+  // `itemStore` owns the single source of truth: `byId` holds each loaded
+  // record once and the four views keep only ids. `$state.raw` inside the view
+  // keeps the plain Map out of Svelte's deep proxy, and every mutation replaces
+  // the whole store, so the projections recompute from a fresh map in one pass.
+  // See `utils/item-store-view.svelte.ts` and `docs/PITFALLS.md`.
+  const itemStore = createItemStoreView(
     createItemStore(isTauriRuntime() ? [] : demoClipboardItems.map((item) => ({ ...item }))),
   );
-  const items = $derived(getItems(itemStore, "history"));
+  const items = $derived(itemStore.history);
 
   function updateItem(id: string, mutator: (item: ClipboardItem) => Partial<ClipboardItem>) {
     // Resolve through the store, not `items`: a search result can be displayed
@@ -163,38 +160,38 @@
     // silently no-ops every action on such a row.
     const original = findLoadedItem(id);
     if (!original) return false;
-    itemStore = applyItemPatches(itemStore, new Map([[id, mutator(original)]]));
+    itemStore.current = applyItemPatches(itemStore.current, new Map([[id, mutator(original)]]));
     return true;
   }
 
   function revertItem(id: string, fields: Partial<ClipboardItem>) {
-    itemStore = applyItemPatches(itemStore, new Map([[id, fields]]));
+    itemStore.current = applyItemPatches(itemStore.current, new Map([[id, fields]]));
   }
 
   /// Records just the ids a bulk mutation is about to change, so its rollback
   /// cannot discard a capture, search, or favorite toggle that landed while the
   /// persist call was in flight.
   function captureAffected(ids: ReadonlySet<string>): AffectedItemSnapshot {
-    return captureAffectedItems(itemStore, ids, selectedIds);
+    return captureAffectedItems(itemStore.current, ids, selectedIds);
   }
 
   /// Undoes a failed bulk mutation: restores only the captured ids and
   /// re-selects the rows the user had selected, leaving every other change made
   /// during the window alone.
   function rollbackAffected(snapshot: AffectedItemSnapshot) {
-    itemStore = restoreAffectedItems(itemStore, snapshot);
+    itemStore.current = restoreAffectedItems(itemStore.current, snapshot);
     if (snapshot.selected.size > 0) {
       selectedIds = new Set([...selectedIds, ...snapshot.selected]);
     }
   }
 
   function replaceMaterializedItem(updated: ClipboardItem): ClipboardItem {
-    itemStore = replaceItem(itemStore, updated);
+    itemStore.current = replaceItem(itemStore.current, updated);
     return updated;
   }
 
   function findLoadedItem(id: string): ClipboardItem | undefined {
-    return findRecord(itemStore, id);
+    return findRecord(itemStore.current, id);
   }
 
   async function ensureItemMaterialized(item: ClipboardItem): Promise<ClipboardItem> {
@@ -242,7 +239,7 @@
   let runtimeLabel = $state(_t("app.browserPreview"));
   let statusMessage = $state(_t("app.activateHint"));
   let lastBackspaceAt = $state(0);
-  let indexedItems = $derived(getIndexedItems(itemStore));
+  let indexedItems = $derived(itemStore.indexed);
   let indexedQuery = $state("");
   let searchPending = $state(false);
   let searchRequestId = 0;
@@ -275,7 +272,7 @@
   $effect(() => onContextMenuOpenChanged((open) => (contextMenuOpen = open)));
   let sourceApps = $state<string[]>([]);
 
-  const detailItem = $derived(getDetailItem(itemStore));
+  const detailItem = $derived(itemStore.detail);
   // Guards the async materialization in `openDetail`: a late result must not
   // reopen a panel the user already closed or replaced with another item.
   let detailRequestId = 0;
@@ -702,21 +699,21 @@
     searchOffset = 0;
 
     if (!requestedQuery || activeFilter === "deleted") {
-      itemStore = closeSearchResults(itemStore);
+      itemStore.current = closeSearchResults(itemStore.current);
       indexedQuery = "";
       searchPending = false;
       return;
     }
 
     if (requestedQuery.length < 2) {
-      itemStore = closeSearchResults(itemStore);
+      itemStore.current = closeSearchResults(itemStore.current);
       indexedQuery = "";
       searchPending = false;
       return;
     }
 
     if (parseDateQuery(requestedQuery)) {
-      itemStore = closeSearchResults(itemStore);
+      itemStore.current = closeSearchResults(itemStore.current);
       indexedQuery = "";
       searchPending = false;
       return;
@@ -730,7 +727,7 @@
             return;
           // A first page replaces the previous query's results outright; an
           // empty page is still a displayed search, so the view stays on.
-          itemStore = replaceViewItems(itemStore, page.items, "indexed");
+          itemStore.current = replaceViewItems(itemStore.current, page.items, "indexed");
           indexedQuery = requestedQuery;
           searchOffset = page.items.length;
           searchHasMore = searchOffset < page.totalCount;
@@ -841,11 +838,11 @@
       // position rather than the timestamp — so pin the just-copied entry. One
       // record write refreshes the spare cache and the open detail pane too,
       // which each held their own copy of it before.
-      itemStore = promoteItem(itemStore, newItem, "history");
+      itemStore.current = promoteItem(itemStore.current, newItem, "history");
       // During a search the visible list is the indexed view, so promote there
       // as well or the copied row does not move there.
-      if (itemStore.indexedIds?.includes(newItem.id)) {
-        itemStore = promoteItem(itemStore, newItem, "indexed");
+      if (itemStore.current.indexedIds?.includes(newItem.id)) {
+        itemStore.current = promoteItem(itemStore.current, newItem, "indexed");
       }
       selectedId = newItem.id;
       // The timestamp bump shifts every row behind the OFFSET cursor just like
@@ -865,7 +862,7 @@
         // One removal covers every view that displayed the id — including the
         // spare search cache, so a later promoteFromCache cannot resurrect a
         // deleted entry — and closes the detail pane if it showed one.
-        itemStore = removeItems(itemStore, removedIds);
+        itemStore.current = removeItems(itemStore.current, removedIds);
         // Re-run the search effect instead of only cancelling the in-flight
         // request; otherwise a search that lands during this event is dropped
         // and never retried.
@@ -937,11 +934,11 @@
       const transform = (entry: ClipboardItem) =>
         renamed ? rewriteItemTags(entry, renamed.old, renamed.new) : removeItemTag(entry, deleted!);
       const patches = new Map<string, Partial<ClipboardItem>>();
-      for (const entry of itemStore.byId.values()) {
+      for (const entry of itemStore.current.byId.values()) {
         const rewritten = transform(entry);
         if (rewritten !== entry) patches.set(entry.id, { tags: rewritten.tags });
       }
-      itemStore = applyItemPatches(itemStore, patches);
+      itemStore.current = applyItemPatches(itemStore.current, patches);
       if (renamed) {
         if (tagFilter === renamed.old) tagFilter = renamed.new;
       } else if (tagFilter === deleted) {
@@ -1031,20 +1028,20 @@
   }
 
   function updateSearchCache(results: ClipboardItem[]) {
-    itemStore = mergeSearchCachePage(itemStore, {
+    itemStore.current = mergeSearchCachePage(itemStore.current, {
       results,
-      loadedIds: new Set(itemStore.historyIds),
+      loadedIds: new Set(itemStore.current.historyIds),
       policy: $generalSettings.searchCacheEviction,
       max: $generalSettings.searchCacheSize,
     });
   }
 
   function promoteFromCache(loadedIds: Set<string>) {
-    itemStore = promoteCachedEntries(itemStore, loadedIds);
+    itemStore.current = promoteCachedEntries(itemStore.current, loadedIds);
   }
 
   function trimLoadedItems() {
-    itemStore = trimLoadedHistory(itemStore, {
+    itemStore.current = trimLoadedHistory(itemStore.current, {
       limit: $generalSettings.pageSizeLimit,
       tolerance: $generalSettings.loadTolerance,
     });
@@ -1076,8 +1073,8 @@
       if (isFirstPage) {
         const deletedItems = items.filter((item) => item.deleted);
         const storedIds = new Set(page.map((item) => item.id));
-        itemStore = replaceViewItems(
-          itemStore,
+        itemStore.current = replaceViewItems(
+          itemStore.current,
           [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))],
           "history",
         );
@@ -1086,9 +1083,9 @@
         // below the cursor, but keep the guard anyway: an entry promoted and
         // then re-captured could theoretically round-trip its timestamps, and
         // the keyed each below must never see a duplicate key.
-        const knownIds = new Set(itemStore.historyIds);
-        itemStore = appendItems(
-          itemStore,
+        const knownIds = new Set(itemStore.current.historyIds);
+        itemStore.current = appendItems(
+          itemStore.current,
           page.filter((item) => !knownIds.has(item.id)),
           "history",
         );
@@ -1150,9 +1147,9 @@
 
       // OFFSET pagination can replay a row after an out-of-band insertion;
       // drop ids already loaded so the keyed each never sees a duplicate key.
-      const knownIds = new Set(itemStore.indexedIds ?? []);
-      itemStore = appendItems(
-        itemStore,
+      const knownIds = new Set(itemStore.current.indexedIds ?? []);
+      itemStore.current = appendItems(
+        itemStore.current,
         page.items.filter((item) => !knownIds.has(item.id)),
         "indexed",
       );
@@ -1191,7 +1188,11 @@
         return;
       }
 
-      itemStore = mergeDeletedHistoryPage(itemStore, page, deletedHistorySuppressedIds);
+      itemStore.current = mergeDeletedHistoryPage(
+        itemStore.current,
+        page,
+        deletedHistorySuppressedIds,
+      );
       deletedHistoryOffset += page.length;
       deletedHistoryLoaded = true;
       deletedHistoryHasMore = page.length === DELETED_HISTORY_PAGE_SIZE;
@@ -1383,7 +1384,7 @@
     if (activeFilter !== filter) resetHistoryScroll();
     activeFilter = filter;
     selectedIds = new Set();
-    itemStore = closeSearchResults(itemStore);
+    itemStore.current = closeSearchResults(itemStore.current);
     indexedQuery = "";
     if (enteringDeleted) {
       if (!deletedHistoryLoaded) {
@@ -1500,7 +1501,7 @@
     // user captured while the request was in flight.
     const snapshot = captureAffected(new Set([id]));
     addSuppressedId(id);
-    itemStore = removeItems(itemStore, new Set([id]));
+    itemStore.current = removeItems(itemStore.current, new Set([id]));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistPermanentDelete(id)
@@ -1525,7 +1526,7 @@
     if (!target) return;
 
     const snapshot = captureAffected(new Set([id]));
-    itemStore = removeItems(itemStore, new Set([id]));
+    itemStore.current = removeItems(itemStore.current, new Set([id]));
     selectedIds = new Set([...selectedIds].filter((x) => x !== id));
 
     void persistHardDelete(id)
@@ -1565,16 +1566,16 @@
   function moveToTop(id: string) {
     const item = findLoadedItem(id);
     if (!item) return;
-    itemStore = promoteItem(itemStore, item, "history");
+    itemStore.current = promoteItem(itemStore.current, item, "history");
     // During a search the visible list is `indexedItems`, so the copied row
     // must be promoted there too or "pin copied to top" silently no-ops.
-    if (itemStore.indexedIds?.includes(id)) {
-      itemStore = promoteItem(itemStore, item, "indexed");
+    if (itemStore.current.indexedIds?.includes(id)) {
+      itemStore.current = promoteItem(itemStore.current, item, "indexed");
     }
     // The spare search cache keeps its own order; promote there as well so
     // a later promoteFromCache does not restore the pre-copy position.
-    if (itemStore.cacheIds.includes(id)) {
-      itemStore = promoteItem(itemStore, item, "cache");
+    if (itemStore.current.cacheIds.includes(id)) {
+      itemStore.current = promoteItem(itemStore.current, item, "cache");
     }
   }
 
@@ -1599,12 +1600,12 @@
     const item = findLoadedItem(id);
     if (!item) return;
     const requestId = ++detailRequestId;
-    itemStore = setDetailItem(itemStore, item);
+    itemStore.current = setDetailItem(itemStore.current, item);
     if (item.kind === "image" || item.kind === "file") {
       try {
         const materialized = await ensureItemMaterialized(item);
         if (requestId === detailRequestId && detailItem?.id === id) {
-          itemStore = setDetailItem(itemStore, materialized);
+          itemStore.current = setDetailItem(itemStore.current, materialized);
         }
       } catch (error) {
         console.error("Unable to materialize clipboard item for detail", error);
@@ -1651,7 +1652,7 @@
 
   function closeDetail() {
     detailRequestId += 1;
-    itemStore = setDetailItem(itemStore, null);
+    itemStore.current = setDetailItem(itemStore.current, null);
     void tick().then(() => {
       const el = document.querySelector(`[data-id="${selectedId}"]`);
       if (el instanceof HTMLElement) {
@@ -1932,7 +1933,7 @@
     const snapshot = captureAffected(idSet);
     const patch = new Map<string, Partial<ClipboardItem>>();
     for (const id of ids) patch.set(id, { favorite: !unfavorite });
-    itemStore = applyItemPatches(itemStore, patch);
+    itemStore.current = applyItemPatches(itemStore.current, patch);
 
     void persistBatchFavorite(ids, !unfavorite)
       .then((updated) => {
@@ -1960,7 +1961,10 @@
     const idSet = new Set(ids);
     const snapshot = captureAffected(idSet);
     for (const id of ids) addSuppressedId(id);
-    itemStore = applyItemPatches(itemStore, new Map(ids.map((id) => [id, { deleted: false }])));
+    itemStore.current = applyItemPatches(
+      itemStore.current,
+      new Map(ids.map((id) => [id, { deleted: false }])),
+    );
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchRestore(ids)
@@ -1986,7 +1990,7 @@
     const idSet = new Set(ids);
     const snapshot = captureAffected(idSet);
     for (const id of ids) addSuppressedId(id);
-    itemStore = removeItems(itemStore, idSet);
+    itemStore.current = removeItems(itemStore.current, idSet);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void persistBatchPermanentDelete(ids)
@@ -2021,8 +2025,11 @@
     const removedOptimistic = new Set([...permanentIds, ...hardIds]);
     // Removed rows leave every view at once; soft rows are flagged in place, so
     // the open detail pane follows along without a write of its own.
-    itemStore = removeItems(itemStore, removedOptimistic);
-    itemStore = applyItemPatches(itemStore, new Map(softIds.map((id) => [id, { deleted: true }])));
+    itemStore.current = removeItems(itemStore.current, removedOptimistic);
+    itemStore.current = applyItemPatches(
+      itemStore.current,
+      new Map(softIds.map((id) => [id, { deleted: true }])),
+    );
     selectedIds = new Set();
 
     const operations: {
@@ -2088,13 +2095,13 @@
       // transitions. Going through the funnel (rather than rebuilding whole
       // arrays from a snapshot) keeps records that arrived via clipboard events
       // during the async window — a whole-array rebuild dropped them entirely.
-      let next = restoreAffectedItems(itemStore, snapshot);
+      let next = restoreAffectedItems(itemStore.current, snapshot);
       next = removeItems(next, removedIds);
       next = applyItemPatches(
         next,
         new Map([...successfulSoft].map((id) => [id, { deleted: true }])),
       );
-      itemStore = next;
+      itemStore.current = next;
       selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
 
       // Failed (and partially failed) batches skip the success-path
@@ -2177,7 +2184,10 @@
     if ($generalSettings.useRecycleBin) {
       // Soft clear: retain rows locally so they immediately appear in the
       // recycle-bin filter and can be restored without a reload.
-      itemStore = applyItemPatches(itemStore, new Map(ids.map((id) => [id, { deleted: true }])));
+      itemStore.current = applyItemPatches(
+        itemStore.current,
+        new Map(ids.map((id) => [id, { deleted: true }])),
+      );
       selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
       void invoke<number>("clear_all_non_favorite_items")
@@ -2197,7 +2207,7 @@
     // Direct clear when the recycle bin is disabled. The backend's compact
     // clear command is intentionally soft-delete-only, so use the existing
     // direct-delete command for each active record instead.
-    itemStore = removeItems(itemStore, idSet);
+    itemStore.current = removeItems(itemStore.current, idSet);
     selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
 
     void Promise.all(
@@ -2220,7 +2230,7 @@
         // Only the rows this batch could not remove come back; everything that
         // arrived during the window stays.
         rollbackAffected(snapshot);
-        itemStore = removeItems(itemStore, successfulIds);
+        itemStore.current = removeItems(itemStore.current, successfulIds);
         selectedIds = new Set([...selectedIds].filter((id) => !successfulIds.has(id)));
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");

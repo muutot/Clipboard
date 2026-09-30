@@ -145,6 +145,10 @@ src-tauri/              # 后端（Rust）
 npm run test:rust       # cargo test
 cargo test -p clipboard_desktop_lib -- --nocapture
 
+# 前端单元测试（Vitest + jsdom）
+npm run test            # vitest run
+npm run test:watch
+
 # Rust 代码检查
 npm run lint:rust       # cargo clippy -D warnings
 
@@ -155,6 +159,8 @@ npm run check           # svelte-check
 npm run format:check    # Prettier + cargo fmt
 npm run format          # 自动修复
 ```
+
+前端测试约定：纯函数放 `src/lib/utils/*.ts` 直接测；需要验证 rune 响应式时，把逻辑放进 `.svelte.ts` 模块或 `.svelte` 组件，用 `mount()`（jsdom）驱动——`vitest.config.ts` 已设 `resolve.conditions: ["browser"]`，否则 `mount()` 会解析到 Svelte 的服务端版本而报 `lifecycle_function_unavailable`。
 
 ## 问题反馈
 

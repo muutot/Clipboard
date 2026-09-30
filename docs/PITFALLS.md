@@ -68,6 +68,26 @@ let s = $state($generalSettings); // 取的是当前值的副本
 - **视图只存 id 之后，"四副本不一致"这个 bug 类别直接消失**：写一次记录，所有视图同帧生效；不变量（`byId` == 四视图并集）在 `item-store.test.ts` 里对每个操作断言。
 - **新泄漏点：map 持有生命周期**。数组时代"某条记录没人引用"只是被 GC；改由 map 持有后，详情面板改指向另一条记录会把旧记录留在 map 里，必须显式 prune。`setDetailItem`/`removeItems`/`clearView` 都因此调用 `pruneUnreferenced`，400 步混合操作走查就是靠它抓到过这个泄漏。
 
+### `$derived` 必须在组件/反应域内创建，且只能用 getter 暴露
+
+```typescript
+// BUG 1：组件外创建的 $derived 是 unowned，不再追踪依赖，读到的是旧值
+let store = $state.raw(initial);
+const history = $derived(getItems(store, "history"));
+const view = { history }; // BUG 2 也在这里
+// 之后 store 被替换，view.history 仍是旧数组
+
+// FIX：derived 在组件 init 里创建，并且用 getter 转发
+const history = $derived(getItems(store, "history"));
+return {
+  get history() {
+    return history; // 每次读取都是 get(derived)
+  },
+};
+```
+
+两条都是实测踩到的：`{ history }` 会把 derived 的**当前值**拍成普通属性（不是 getter），store 替换后投影永久陈旧；`$derived` 若在组件外创建，则变成 unowned、不再订阅依赖，同样陈旧。回归由 `item-store-view.test.ts` 通过 `mount()` 真实组件守住——纯 `.test.ts` 里没有反应域，测不出这两类问题。
+
 ## Tauri 多窗口
 
 ### 每个窗口有独立的 JS 上下文

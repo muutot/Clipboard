@@ -12,10 +12,11 @@ Search currently has three distinct pieces of state. Do not collapse them concep
 record. `ItemStore` holds `byId: ReadonlyMap<string, ClipboardItem>` plus four
 id-only views — `historyIds`, `indexedIds` (`null` = no search displayed),
 `cacheIds`, and the single `detailId` — so two views cannot disagree about a
-record's content: there is only one record to read. `+page.svelte` keeps the
-store in `$state.raw` and exposes `items`/`indexedItems`/`searchCache`/
-`detailItem` as `$derived` projections, which keeps the plain `Map` out of
-Svelte's deep proxy (see `docs/PITFALLS.md`).
+record's content: there is only one record to read. `+page.svelte` drives
+`createItemStoreView()` from `item-store-view.svelte.ts`, which owns the only
+reactive declaration (`$state.raw` plus `$derived` projections exposed through
+getters) and keeps the plain `Map` out of Svelte's deep proxy. See
+`docs/PITFALLS.md` for why the runes live in that module and not inline.
 
 Invariants every mutator preserves, asserted after each operation in
 `item-store.test.ts`:
@@ -25,7 +26,13 @@ Invariants every mutator preserves, asserted after each operation in
 - One id may appear in several views at once (that overlap is the point), but
   never twice inside one view.
 - Every mutator is pure and returns the next store, so the route reassigns
-  `itemStore` and no write can be applied to one view only.
+  `itemStore.current` and no write can be applied to one view only.
+
+The rune contract itself (projections recompute on a store replacement, records
+stay plain objects) is covered by `item-store-view.test.ts`, which mounts
+`item-store-view.probe.svelte` with `mount()`. A plain `.test.ts` has no
+reaction context, so `$derived` values created there are unowned and go stale —
+rune behaviour cannot be asserted without a component.
 
 ## Backend Tantivy ID cache
 
