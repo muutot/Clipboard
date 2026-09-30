@@ -425,7 +425,7 @@ extern "C" fn x11_io_error_handler(_display: *mut x11_ffi::Display) -> i32 {
 /// The returned [`StopPipeWriter`] must be triggered (or dropped) on stop; the
 /// monitor thread owns and closes the pipe's read end.
 #[cfg(target_os = "linux")]
-pub fn try_spawn_xfixes_monitor(
+pub(crate) fn try_spawn_xfixes_monitor(
     sender: std::sync::mpsc::Sender<crate::platform::windows_clipboard::ClipboardChange>,
 ) -> Option<(
     thread::JoinHandle<()>,
@@ -473,7 +473,9 @@ pub fn try_spawn_xfixes_monitor(
             x11_ffi::XCloseDisplay(display);
             return None;
         }
-        let clipboard = x11_ffi::XInternAtom(display, b"CLIPBOARD\0".as_ptr().cast(), 0);
+        // CStr literal for the NUL terminator; the cast stays because the FFI
+        // declares `*const i8` while `c_char` is unsigned on aarch64 Linux.
+        let clipboard = x11_ffi::XInternAtom(display, c"CLIPBOARD".as_ptr().cast(), 0);
         if clipboard == 0 {
             x11_ffi::XDestroyWindow(display, window);
             x11_ffi::XCloseDisplay(display);
@@ -1044,9 +1046,10 @@ pub fn read_clipboard_text() -> Option<String> {
             }
             // `long_offset` counts 32-bit units; for 8-bit data one unit holds
             // 4 bytes, so advance by the rounded-up byte count just read.
-            // Spelled out instead of `i64::div_ceil`, which is still unstable for
-            // signed integers and so fails to build on the Linux toolchain.
-            offset_units += (nitems.max(0) as i64 + 3) / 4;
+            // `nitems` is unsigned on purpose: `div_ceil` is only stable for
+            // unsigned integers, so rounding before the cast keeps this on
+            // stable Rust (a signed `div_ceil` fails the Linux build).
+            offset_units += nitems.div_ceil(4) as i64;
             if bytes_after == 0 || nitems == 0 {
                 break;
             }

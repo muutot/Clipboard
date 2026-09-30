@@ -1109,7 +1109,7 @@ pub fn write_clipboard_text_with_self_trigger(_text: &str) -> Result<(), String>
 /// poll loop. The returned [`StopPipeWriter`] must be triggered (or dropped)
 /// on stop; the monitor thread owns and closes the pipe's read end.
 #[cfg(target_os = "linux")]
-pub fn try_spawn_data_control_monitor(
+pub(crate) fn try_spawn_data_control_monitor(
     sender: std::sync::mpsc::Sender<crate::platform::windows_clipboard::ClipboardChange>,
 ) -> Option<(
     std::thread::JoinHandle<()>,
