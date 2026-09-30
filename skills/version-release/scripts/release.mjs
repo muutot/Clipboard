@@ -383,7 +383,24 @@ if (!isDryRun) {
     run(`git tag -a ${tagVersion} -m "Release ${tagVersion}"`);
     console.log(`  ✓ ${tagVersion}`);
   } else {
-    console.log(`  ✓ Tag ${tagVersion} already exists`);
+    // HARD RULE extension: an existing tag must already point at the current
+    // release commit. A stale tag (e.g. from an earlier run of the same
+    // version before RELEASE.md curation) would ship the old tree while the
+    // subject check above still passes, so refuse instead of silently reusing it.
+    const taggedCommit = execSync(`git rev-parse "${tagVersion}^{}}"`, {
+      cwd: ROOT,
+      encoding: "utf-8",
+    }).trim();
+    const headCommit = execSync(`git rev-parse HEAD`, { cwd: ROOT, encoding: "utf-8" }).trim();
+    if (taggedCommit !== headCommit) {
+      console.error(
+        `\nERROR: ${tagVersion} already exists but points at ${taggedCommit}, ` +
+          `not the current release commit ${headCommit}. Delete the stale tag ` +
+          `('git tag -d ${tagVersion}') and re-run, or keep the existing release as-is.`,
+      );
+      process.exit(1);
+    }
+    console.log(`  ✓ Tag ${tagVersion} already exists and points at the release commit`);
   }
 } else {
   console.log("\n[5/6] Tag (skipped in dry-run mode)");
