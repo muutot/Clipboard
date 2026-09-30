@@ -348,9 +348,38 @@ pub async fn sync_now(app: tauri::AppHandle) -> Result<SyncRunResult, String> {
         .map_err(|error| format!("sync task join failed: {error}"))?
 }
 
+/// Sync settings usable for on-demand materialization, or `None` when sync is
+/// off or selected-but-not-configured.
+///
+/// Kept separate from [`SyncSettings::from_sync_config`] so the strict variant
+/// stays available to the connection test, which *should* reject an incomplete
+/// configuration instead of tolerating it.
+fn usable_sync_settings(sync: &SyncConfig) -> Option<SyncSettings> {
+    if sync.provider != SyncProvider::S3 {
+        return None;
+    }
+    match SyncSettings::from_sync_config(sync) {
+        Ok(settings) => Some(settings),
+        Err(error) => {
+            crate::log_warn!(
+                "[sync] provider is selected but the configuration is incomplete, \
+                 so resources cannot be materialized on demand: {error}"
+            );
+            None
+        }
+    }
+}
+
 /// Materializes the content-addressed resources for one record on demand.
 /// Metadata synchronization never performs these GETs; callers invoke this
 /// command immediately before an operation that needs a local path.
+///
+/// Fetching from the cloud is an optimisation, never a precondition: sync can be
+/// *selected* without being usable (provider picked, bucket or credentials not
+/// filled in yet, or cleared again). Turning that state into an error made every
+/// image/file read — copy, paste, preview, fullscreen, save — fail with whatever
+/// the caller happened to report, while the local record was perfectly fine. An
+/// unusable configuration therefore falls through to the local row and only logs.
 #[tauri::command]
 pub fn materialize_clipboard_item(
     id: String,
@@ -372,10 +401,9 @@ pub fn materialize_clipboard_item(
         let guard = lock_state(&config, "configuration lock is poisoned")?;
         guard.sync_config()
     };
-    if sync_config.provider != SyncProvider::S3 {
+    let Some(settings) = usable_sync_settings(&sync_config) else {
         return Ok(current);
-    }
-    let settings = SyncSettings::from_sync_config(&sync_config)?;
+    };
     let remote_scope = settings.remote_scope_id();
     let refs = database
         .get_sync_resource_refs(&remote_scope, &id)
@@ -383,7 +411,17 @@ pub fn materialize_clipboard_item(
     if refs.is_empty() {
         return Ok(current);
     }
-    let store = settings.object_store()?;
+    let store = match settings.object_store() {
+        Ok(store) => store,
+        Err(error) => {
+            // Same reasoning as above: a store that cannot even be constructed
+            // means nothing can be fetched, not that the record is broken.
+            crate::log_warn!(
+                "[sync] unable to build the object store while materializing: {error}"
+            );
+            return Ok(current);
+        }
+    };
     let session_key = settings.session_key(&remote_scope)?;
     let (updated, changed) = materialize_item_resources(
         &store,
@@ -630,6 +668,36 @@ mod tests {
             RecordVersion, ReplicatedItem,
         },
     };
+
+    #[test]
+    fn usable_sync_settings_tolerates_a_selected_but_unconfigured_provider() {
+        // The exact state that broke every media read: the provider is S3 while
+        // nothing has been filled in yet.
+        let mut config = SyncConfig {
+            provider: SyncProvider::S3,
+            ..SyncConfig::default()
+        };
+        assert!(usable_sync_settings(&config).is_none());
+
+        // Partially filled is still unusable, and must not be mistaken for a
+        // working configuration that happens to have a bucket.
+        config.s3_bucket = Some("bucket".to_owned());
+        assert!(usable_sync_settings(&config).is_none());
+
+        // Off stays off.
+        let off = SyncConfig::default();
+        assert!(usable_sync_settings(&off).is_none());
+
+        // Complete configuration is usable again — the strict check the
+        // connection test relies on still rejects the states above.
+        let mut complete = config.clone();
+        complete.endpoint = Some("https://s3.example.com".to_owned());
+        complete.s3_access_key = Some("key".to_owned());
+        complete.s3_secret_key = Some("secret".to_owned());
+        assert!(SyncSettings::from_sync_config(&complete).is_ok());
+        assert!(usable_sync_settings(&complete).is_some());
+        assert!(SyncSettings::from_sync_config(&config).is_err());
+    }
 
     #[test]
     fn sync_endpoint_requires_https_except_loopback() {

@@ -22,6 +22,24 @@ use crate::performance::{PerformanceSnapshot, PerformanceTracker};
 use crate::search::SearchIndex;
 use crate::storage::{refresh_database_backup, Database, RepairResult, StoragePaths};
 
+/// Appends one frontend diagnostic line to the application log.
+///
+/// The webview can only write to its own console, which the user has to open
+/// with developer tools to reach — so a failure reported in a toast could not be
+/// diagnosed from the shipped log or a bug report. This is the same redaction
+/// boundary the rest of the logging obeys: **ids, paths, counts, config keys and
+/// error text only, never clipboard content**, so the caller is responsible for
+/// passing a reason rather than the payload that produced it.
+#[tauri::command]
+pub fn log_frontend_message(level: String, message: String) {
+    let line = format!("[frontend] {message}");
+    match level.as_str() {
+        "error" => crate::log_error!("{line}"),
+        "warn" => crate::log_warn!("{line}"),
+        _ => crate::log_event!("{line}"),
+    }
+}
+
 #[tauri::command]
 pub fn detect_content_markers(text: String) -> ContentMarkers {
     content::detect_markers(&text)

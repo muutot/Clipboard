@@ -729,6 +729,7 @@ pub fn run() {
             search_clipboard_items,
             rebuild_search_index,
             detect_content_markers,
+    log_frontend_message,
             transform_text,
             toggle_privacy_pause,
             check_sensitive_content,

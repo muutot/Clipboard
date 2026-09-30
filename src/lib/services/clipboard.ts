@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { showToast } from "$lib/services/toast";
 import { invokeTauri, invokeTauriRequired, isTauriRuntime } from "$lib/services/runtime";
+import { logFrontendError, logFrontendMessage } from "$lib/services/log";
 import { generalSettings } from "$lib/services/settings";
 import { get } from "svelte/store";
 import type {
@@ -450,7 +451,7 @@ export async function copyClipboardItem(
     try {
       item = await materializeClipboardItem(item);
     } catch (error) {
-      console.error("Unable to materialize clipboard item for copy", error);
+      logFrontendError("materialize clipboard item for copy", error);
       showToast(t("toast.copyFailed"), "error");
       return;
     }
@@ -473,7 +474,7 @@ export async function copyClipboardItem(
         // A vanished file is permanent for this record; anything else (a busy
         // clipboard, a platform write failure) is worth retrying, so the toast
         // has to say which one happened.
-        console.error("Unable to copy media files", describeInvokeFailure(error));
+        logFrontendMessage("error", `Unable to copy media files: ${describeInvokeFailure(error)}`);
         showToast(
           t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : "toast.copyFailed"),
           "error",
@@ -493,7 +494,7 @@ export async function copyClipboardItem(
       hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
       showToast(t("toast.copySuccess"), "success");
     } catch (error) {
-      console.error("Unable to copy clipboard image", error);
+      logFrontendError("copy clipboard image", error);
       showToast(t("toast.copyFailed"), "error");
     }
     return;
@@ -526,7 +527,7 @@ export async function copyClipboardItem(
         );
         showToast(t("toast.copySuccess"), "success");
       } catch (error) {
-        console.error("Unable to copy clipboard file path", error);
+        logFrontendError("copy clipboard file path", error);
         showToast(t("toast.copyFailed"), "error");
       }
     } else {
@@ -546,7 +547,7 @@ export async function copyClipboardItem(
       // The toast alone left "copy failed" undiagnosable: the most common cause
       // is Windows clipboard contention (another process holding it open), and
       // without this line there was no way to tell that from a missing resource.
-      console.error("Unable to copy clipboard text", error);
+      logFrontendError("copy clipboard text", error);
       showToast(t("toast.copyFailed"), "error");
     });
 }
@@ -578,7 +579,7 @@ export async function copyClipboardPath(
     try {
       media = await materializeClipboardItem(media);
     } catch (error) {
-      console.error("Unable to materialize clipboard item for path copy", error);
+      logFrontendError("materialize clipboard item for path copy", error);
       showToast(t("toast.copyFailed"), "error");
       return;
     }
