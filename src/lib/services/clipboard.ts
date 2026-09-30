@@ -457,7 +457,8 @@ export async function copyClipboardItem(
       await writeClipboardImage(blob, item.resourcePath, item.contentHash);
       hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
       showToast(t("toast.copySuccess"), "success");
-    } catch {
+    } catch (error) {
+      console.error("Unable to copy clipboard image", error);
       showToast(t("toast.copyFailed"), "error");
     }
     return;
@@ -489,7 +490,8 @@ export async function copyClipboardItem(
           t("app.copiedItem", { title: item.fileName || getDisplayTitle(item.title) }),
         );
         showToast(t("toast.copySuccess"), "success");
-      } catch {
+      } catch (error) {
+        console.error("Unable to copy clipboard file path", error);
         showToast(t("toast.copyFailed"), "error");
       }
     } else {
@@ -505,7 +507,11 @@ export async function copyClipboardItem(
       hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
       showToast(t("toast.copySuccess"), "success");
     })
-    .catch(() => {
+    .catch((error) => {
+      // The toast alone left "copy failed" undiagnosable: the most common cause
+      // is Windows clipboard contention (another process holding it open), and
+      // without this line there was no way to tell that from a missing resource.
+      console.error("Unable to copy clipboard text", error);
       showToast(t("toast.copyFailed"), "error");
     });
 }
