@@ -7,7 +7,7 @@ on:
     # one place instead of a branch list that silently rots.
     branches: ["**"]
     # Only pure-documentation changes skip CI. Dependency and version
-    # manifests MUST still run clippy/tests/build �?an upgrade commit that
+    # manifests MUST still run clippy/tests/build - an upgrade commit that
     # skips CI would only be validated at the next code change or release.
     paths-ignore:
       - CHANGELOG.md

@@ -7,6 +7,7 @@
 //     guaranteeing the synthesized v<version> release name is correct.
 //
 // Exits non-zero on any mismatch so the workflow fails fast.
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const failures = [];
@@ -34,6 +35,22 @@ if (process.env.GITHUB_REF_TYPE === "tag") {
   source = process.env.GITHUB_REF_NAME?.replace(/^v/, "");
   if (source !== expected) {
     failures.push(`tag ${process.env.GITHUB_REF_NAME} != declared version ${expected}`);
+  }
+  // HARD RULE (CI backstop): a release tag may only point at the release
+  // commit. The checkout is the tagged commit, so HEAD's subject must be the
+  // version bump. A hand-moved tag on any other commit fails here before the
+  // expensive build runs.
+  const expectedSubject = `\u{1F516} chore[release]: bump version to ${expected}`;
+  let headSubject = "";
+  try {
+    headSubject = execSync("git log -1 --pretty=%s", { encoding: "utf8" }).trim();
+  } catch {
+    failures.push("could not read HEAD subject for tag-binding validation");
+  }
+  if (headSubject && headSubject !== expectedSubject) {
+    failures.push(
+      `tag does not point at the release commit: HEAD is '${headSubject}', expected '${expectedSubject}'`,
+    );
   }
 } else if (process.env.GITHUB_REF_TYPE === "branch") {
   // workflow_dispatch: the input version drives the synthesized tag name.
