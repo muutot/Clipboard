@@ -6,8 +6,8 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::commands::lock::lock_state;
-use crate::state::CaptureState;
 use crate::config::ConfigStore;
+use crate::state::CaptureState;
 use crate::storage::{
     ClipboardRepository, Database, StorageFileReferences, StoragePaths, RESOURCE_ROOT_MARKER,
 };

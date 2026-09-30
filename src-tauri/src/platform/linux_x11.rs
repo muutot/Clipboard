@@ -408,9 +408,7 @@ const XFIXES_SET_SELECTION_OWNER_NOTIFY_MASK: u64 = 1 << 0;
 /// keeping the app alive; nothing else in-process touches this display.
 #[cfg(target_os = "linux")]
 extern "C" fn x11_io_error_handler(_display: *mut x11_ffi::Display) -> i32 {
-    crate::log_error!(
-        "[clipboard-monitor] X11 connection lost; stopping the monitor thread only"
-    );
+    crate::log_error!("[clipboard-monitor] X11 connection lost; stopping the monitor thread only");
     unsafe { libc::pthread_exit(std::ptr::null_mut()) }
 }
 
