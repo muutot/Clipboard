@@ -1984,7 +1984,12 @@
   function bulkFavorite() {
     const ids = [...selectedIds];
     const unfavorite = allSelectedFavorites;
+    const idSet = new Set(ids);
 
+    // Snapshot before the optimistic patch: a whole-map restore would clobber
+    // the pre-existing favorite flags of a mixed selection, while this funnel
+    // restores only the affected rows captured at this moment.
+    const snapshot = captureAffected(idSet);
     const patch = new Map<string, Partial<ClipboardItem>>();
     for (const id of ids) patch.set(id, { favorite: !unfavorite });
     applyItemPatches(patch);
@@ -2002,10 +2007,7 @@
       })
       .catch((error) => {
         console.error("Bulk favorite failed", error);
-        // Revert per-item through the shared funnel instead of restoring a
-        // whole-array snapshot: entries spliced in by clipboard-item-added
-        // during the async window must survive the rollback.
-        applyItemPatches(new Map(ids.map((id) => [id, { favorite: unfavorite }])));
+        rollbackAffected(snapshot);
         statusMessage = _t("app.favoriteFailed");
         showToast(_t("app.favoriteFailed"), "error");
       });
