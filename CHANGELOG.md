@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.3 (2026-09-30)
+
+### ✨ Features
+
+- **i18n**: follow the system locale by default with an auto language option (2dfd2e66)
+
+### 🐛 Bug Fixes
+
+- **release**: add wchar_t _M_replace_cold shim for ort on linux (b546dbba)
+- **release**: remove comment-terminator sequences inside glibc_compat comments (2226d26e)
+- **release**: link a glibc/libstdc++ compat shim for ort on ubuntu-22.04 (42dabe07)
+- **release**: refuse to tag any commit except the release commit (9b50d47c)
+
+### 🎨 Styling
+
+- **release**: apply formatting (9e703d0b)
+- **settings**: use a select dropdown for language with auto default (b7d9d875)
+
 ## 1.7.2 (2026-09-29)
 
 ### ✨ Features
