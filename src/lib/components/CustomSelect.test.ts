@@ -55,8 +55,32 @@ describe("CustomSelect", () => {
     expect(getComputedStyle(trigger()).backgroundImage).toBe("none");
   });
 
-  it("falls back to the raw value when no option matches", () => {
+  it("prefers the matching label, then the placeholder while unset, then the raw value", () => {
+    // Matching option wins over everything else.
+    expect(render().trigger().textContent).toContain("English");
+    // Unknown non-empty value: show it verbatim so the state is not hidden.
     expect(render({ value: "fr" }).trigger().textContent).toContain("fr");
+    // Nothing selected: the placeholder is what the caller asked to show. This
+    // used to fall through `??` to `String("")` and render an empty trigger.
+    const target = document.createElement("div");
+    document.body.append(target);
+    const app = mount(CustomSelect, {
+      target,
+      props: {
+        value: "",
+        options: OPTIONS,
+        onchange: () => {},
+        placeholder: "Pick a language",
+      },
+    });
+    mounted.push(() => {
+      unmount(app);
+      target.remove();
+    });
+    flushSync();
+    expect(target.querySelector(".custom-select-value")?.textContent?.trim()).toBe(
+      "Pick a language",
+    );
   });
 
   it("exposes listbox semantics and toggles the popover", () => {

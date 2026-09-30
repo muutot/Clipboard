@@ -16,6 +16,7 @@
     ariaLabel?: string;
     title?: string;
     disabled?: boolean;
+    /** Shown while `value` is empty; has no effect once an option matches. */
     placeholder?: string;
   }
 
@@ -37,8 +38,12 @@
   let triggerEl: HTMLButtonElement | undefined = $state();
   let popoverEl: HTMLDivElement | undefined = $state();
 
+  // Label precedence: the matching option, then the placeholder while nothing is
+  // selected, then the raw value. The empty-string check is explicit because
+  // `??` would short-circuit on `String("")` and make `placeholder` unreachable.
   const current = $derived(
-    options.find((o) => o.value === value)?.label ?? value?.toString() ?? placeholder,
+    options.find((o) => o.value === value)?.label ??
+      (value === "" ? placeholder : String(value ?? "")),
   );
 
   function positionPopover() {
