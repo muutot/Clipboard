@@ -28,6 +28,21 @@ impl Platform {
             if session == "wayland" {
                 return Platform::LinuxWayland;
             }
+            if session == "x11" {
+                return Platform::LinuxX11;
+            }
+            // systemd-activated sessions and some display managers never set
+            // XDG_SESSION_TYPE. The Wayland socket is the authoritative probe
+            // there: assuming X11 leaves the capture loop with a native X11
+            // reader that finds nothing on a real Wayland session (no
+            // XWayland clipboard bridge in this code path), while `wl-paste`
+            // would have worked.
+            if std::env::var_os("WAYLAND_DISPLAY")
+                .map(|value| !value.is_empty())
+                .unwrap_or(false)
+            {
+                return Platform::LinuxWayland;
+            }
             return Platform::LinuxX11;
         }
         #[allow(unreachable_code)]
