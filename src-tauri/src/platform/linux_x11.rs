@@ -363,6 +363,9 @@ mod x11_ffi {
 
         // Error handling
         pub fn XSetErrorHandler(handler: *const std::ffi::c_void) -> *const std::ffi::c_void;
+        pub fn XSetIOErrorHandler(
+            handler: Option<unsafe extern "C" fn(*mut Display) -> i32>,
+        ) -> Option<unsafe extern "C" fn(*mut Display) -> i32>;
         pub fn XSync(display: *mut Display, discard: Bool) -> i32;
     }
 
@@ -395,6 +398,21 @@ mod x11_ffi {
 /// `XFixesSetSelectionOwnerNotifyMask` — subscribe to selection owner changes.
 #[cfg(target_os = "linux")]
 const XFIXES_SET_SELECTION_OWNER_NOTIFY_MASK: u64 = 1 << 0;
+
+/// Xlib calls the IO error handler when the display connection dies (X server
+/// restart, session logout). The default handler terminates the whole process,
+/// which must not take the desktop app down with the session. The handler runs
+/// with the dead display's lock held and Xlib does not survive a plain return,
+/// so end only the monitor thread via `pthread_exit`. The dead connection and
+/// the two pipe fds stay unreclaimed until process exit, which is the price of
+/// keeping the app alive; nothing else in-process touches this display.
+#[cfg(target_os = "linux")]
+extern "C" fn x11_io_error_handler(_display: *mut x11_ffi::Display) -> i32 {
+    crate::log_error!(
+        "[clipboard-monitor] X11 connection lost; stopping the monitor thread only"
+    );
+    unsafe { libc::pthread_exit(std::ptr::null_mut()) }
+}
 
 /// Spawns the event-driven clipboard monitor backed by the XFixes extension.
 ///
@@ -486,6 +504,13 @@ pub fn try_spawn_xfixes_monitor(
             // Method call (instead of `display.0`) so the closure captures
             // the whole Send wrapper, not the raw pointer field.
             let display = display.ptr();
+            // Install the crash guard before the first Xlib read: without it
+            // a dead X connection (server restart, logout) invokes Xlib's
+            // default IO handler and terminates the whole application.
+            // SAFETY: Xlib call; the handler is a plain function pointer.
+            unsafe {
+                x11_ffi::XSetIOErrorHandler(Some(x11_io_error_handler));
+            }
             let mut fds = [
                 libc::pollfd {
                     fd: x_fd,
@@ -513,6 +538,16 @@ pub fn try_spawn_xfixes_monitor(
                     break; // stop requested
                 }
                 if fds[0].revents & libc::POLLIN == 0 {
+                    // POLLERR/POLLHUP/POLLNVAL without POLLIN: the connection
+                    // is gone but Xlib has not raised the IO error path.
+                    // Break instead of spinning forever on a poll that can
+                    // never drain.
+                    if fds[0].revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+                        crate::log_error!(
+                            "[clipboard-monitor] X11 connection poll error; stopping the monitor thread"
+                        );
+                        break;
+                    }
                     continue;
                 }
                 // Drain everything already queued on the connection.
