@@ -64,6 +64,24 @@ pub struct TagInfo {
     pub color: String,
 }
 
+/// Keyset (cursor) pagination anchor for the active-history listing. Captures
+/// every component of the MRU ordering (`effective_ts DESC, created_at_ms
+/// DESC, id DESC`) of the last row of the previous page so the next page can
+/// resume strictly after it. Unlike OFFSET pagination this is immune to the
+/// ordering shifting between pages: reuse/capture only raises a row's
+/// effective timestamp, which lands above the cursor and cannot displace or
+/// replay rows below it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryCursor {
+    /// `MAX(COALESCE(last_used_at_ms, created_at_ms), created_at_ms)` of the
+    /// anchor row.
+    pub effective_ts_ms: i64,
+    /// `created_at_ms` of the anchor row (second ordering key).
+    pub created_at_ms: i64,
+    /// `id` of the anchor row (final ordering tiebreaker).
+    pub id: String,
+}
+
 /// Optional filters for paginated active-history listing. Every field is
 /// applied in the SQL `WHERE` clause so each page returns the latest
 /// matching records instead of filtering an already-loaded set.
@@ -75,6 +93,9 @@ pub struct HistoryFilter {
     pub source_app: Option<String>,
     pub date_from_ms: Option<i64>,
     pub date_to_ms: Option<i64>,
+    /// When set, `offset` is ignored and the listing resumes strictly after
+    /// this anchor (keyset pagination). See `HistoryCursor`.
+    pub cursor: Option<HistoryCursor>,
 }
 
 pub struct TextItemUpdate<'a> {

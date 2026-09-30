@@ -272,15 +272,44 @@ impl ClipboardRepository for Database {
                 conditions.push("created_at_ms <= ?".to_owned());
                 args.push(Box::new(to));
             }
+            // Keyset pagination tail: resume strictly after the cursor row in
+            // the `effective_ts DESC, created_at_ms DESC, id DESC` ordering.
+            // All three ordering keys must participate in the predicate — a
+            // two-key cursor would silently skip rows that tie the anchor's
+            // effective timestamp with an older `created_at_ms`. Reuse of any
+            // row only raises its effective timestamp above the cursor, so
+            // rows below the cursor can neither shift (no lost rows) nor get
+            // served twice (no duplicates) — the failure modes OFFSET
+            // pagination suffers from whenever `set_last_used` reorders the
+            // active set between two page fetches.
+            let mut limit_clause = "LIMIT ? OFFSET ?".to_owned();
+            if let Some(cursor) = &filter.cursor {
+                const EFFECTIVE_TS: &str =
+                    "MAX(COALESCE(last_used_at_ms, created_at_ms), created_at_ms)";
+                conditions.push(format!(
+                    "({EFFECTIVE_TS} < ?
+                      OR ({EFFECTIVE_TS} = ? AND created_at_ms < ?)
+                      OR ({EFFECTIVE_TS} = ? AND created_at_ms = ? AND id < ?))"
+                ));
+                args.push(Box::new(cursor.effective_ts_ms));
+                args.push(Box::new(cursor.effective_ts_ms));
+                args.push(Box::new(cursor.created_at_ms));
+                args.push(Box::new(cursor.effective_ts_ms));
+                args.push(Box::new(cursor.created_at_ms));
+                args.push(Box::new(cursor.id.clone()));
+                limit_clause = "LIMIT ?".to_owned();
+            }
             args.push(Box::new(i64::from(limit)));
-            args.push(Box::new(i64::from(offset)));
+            if filter.cursor.is_none() {
+                args.push(Box::new(i64::from(offset)));
+            }
 
             let sql = format!(
                 "SELECT {ITEM_COLUMNS}
                  FROM clipboard_items
                  WHERE {}
                  ORDER BY MAX(COALESCE(last_used_at_ms, created_at_ms), created_at_ms) DESC, created_at_ms DESC, id DESC
-                 LIMIT ? OFFSET ?",
+                 {limit_clause}",
                 conditions.join(" AND ")
             );
             let mut statement = connection.prepare_cached(&sql)?;

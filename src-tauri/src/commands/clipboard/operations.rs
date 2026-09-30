@@ -10,7 +10,7 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
 use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
 use crate::storage::{
-    ClipboardRepository, Database, HistoryFilter, KindStorageStats, OcrRepository,
+    ClipboardRepository, Database, HistoryCursor, HistoryFilter, KindStorageStats, OcrRepository,
     SearchRepository, StoragePaths, TagInfo, TextItemUpdate,
 };
 use crate::CaptureState;
@@ -42,6 +42,7 @@ pub fn list_clipboard_items(
         source_app: args.source_app,
         date_from_ms: args.date_from_ms,
         date_to_ms: args.date_to_ms,
+        cursor: args.cursor.map(HistoryCursor::from),
     });
 
     database

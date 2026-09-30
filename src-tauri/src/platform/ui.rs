@@ -397,6 +397,7 @@ fn load_recent_entries<R: Runtime>(app: &AppHandle<R>) -> Vec<(String, String)> 
         source_app: None,
         date_from_ms: None,
         date_to_ms: None,
+        cursor: None,
     };
     // Page through history until the submenu is full or records run out:
     // a fixed oversample window showed "no recent text" whenever the newest

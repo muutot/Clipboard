@@ -3,8 +3,8 @@ use crate::domain::{ClipboardItem, ClipboardKind, OcrResult, OcrStatus};
 use crate::storage::{Database, OcrRepository, SearchOperation, SearchRepository, StorageError};
 
 use super::{
-    current_time_ms, ClipboardRepository, HistoryFilter, KindDeleteResult, KindDeleteScope,
-    KindStorageStats, TextItemUpdate,
+    current_time_ms, ClipboardRepository, HistoryCursor, HistoryFilter, KindDeleteResult,
+    KindDeleteScope, KindStorageStats, TextItemUpdate,
 };
 
 fn text_item(id: &str, content_hash: &str, created_at_ms: i64) -> ClipboardItem {
@@ -214,6 +214,100 @@ fn list_recent_defaults_to_most_recently_used_with_capture_fallback() {
     // Using the older entry promotes it above the freshly captured (unused) one.
     assert_eq!(after[0].id, "old-used");
     assert_eq!(after[1].id, "new-unused");
+}
+
+/// Derives the keyset cursor from a loaded row exactly like the frontend:
+/// effective_ts = MAX(last_used_at_ms ?? created_at_ms, created_at_ms).
+fn cursor_of(item: &ClipboardItem) -> HistoryCursor {
+    HistoryCursor {
+        effective_ts_ms: item
+            .last_used_at_ms
+            .unwrap_or(item.created_at_ms)
+            .max(item.created_at_ms),
+        created_at_ms: item.created_at_ms,
+        id: item.id.clone(),
+    }
+}
+
+#[test]
+fn cursor_pagination_survives_out_of_band_reuse() {
+    let database = Database::open_in_memory().unwrap();
+    for index in 1..=60 {
+        database
+            .save_item(&text_item(
+                &format!("i{index:02}"),
+                &format!("hash-{index}"),
+                index,
+            ))
+            .unwrap();
+    }
+
+    let filter = HistoryFilter::default();
+    let page1 = database.list_recent(50, 0, &filter).unwrap();
+    assert_eq!(page1.len(), 50);
+    // Page 1 covers created 60..=11; the anchor is its last row (i11).
+    let page1_ids: Vec<&str> = page1.iter().map(|item| item.id.as_str()).collect();
+    assert_eq!(page1_ids.last().copied(), Some("i11"));
+
+    // Out-of-band reuse of a not-yet-served row between the two page
+    // fetches: this is exactly the interleaving that makes OFFSET pagination
+    // replay i11 and (with a removal) silently drop rows.
+    database.set_last_used("i06").unwrap();
+
+    let page2 = database
+        .list_recent(
+            50,
+            0,
+            &HistoryFilter {
+                cursor: Some(cursor_of(page1.last().unwrap())),
+                ..HistoryFilter::default()
+            },
+        )
+        .unwrap();
+
+    // The promoted i06 jumped above the cursor (the user already used it);
+    // everything else below the anchor is served exactly once, in order.
+    let expected: Vec<String> = [
+        "i10", "i09", "i08", "i07", "i05", "i04", "i03", "i02", "i01",
+    ]
+    .iter()
+    .map(|id| (*id).to_owned())
+    .collect();
+    let page2_ids: Vec<String> = page2.iter().map(|item| item.id.clone()).collect();
+    assert_eq!(page2_ids, expected);
+    assert!(page2_ids.iter().all(|id| !page1_ids.contains(&id.as_str())));
+}
+
+#[test]
+fn cursor_pagination_keeps_effective_ts_ties_with_older_created() {
+    let database = Database::open_in_memory().unwrap();
+    // "a" and "b" tie on effective_ts 100 but differ on created_at_ms; the
+    // ordering falls through to created_at_ms DESC, so "b" (created 90, used
+    // at 100) sorts after "a". A two-key (effective_ts, id) cursor anchored at
+    // "a" would evaluate `id < 'a'` for "b" and silently drop it; the
+    // three-key predicate must keep it.
+    let mut b = text_item("b", "hash-b", 90);
+    b.last_used_at_ms = Some(100);
+    database.save_item(&text_item("a", "hash-a", 100)).unwrap();
+    database.save_item(&b).unwrap();
+
+    let page1 = database
+        .list_recent(1, 0, &HistoryFilter::default())
+        .unwrap();
+    assert_eq!(page1[0].id, "a");
+
+    let page2 = database
+        .list_recent(
+            10,
+            0,
+            &HistoryFilter {
+                cursor: Some(cursor_of(&page1[0])),
+                ..HistoryFilter::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(page2.len(), 1);
+    assert_eq!(page2[0].id, "b");
 }
 
 #[test]

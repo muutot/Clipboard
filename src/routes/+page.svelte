@@ -43,7 +43,12 @@
   import { onContextMenuOpenChanged } from "$lib/services/context-menu";
   import { getKeyboardConfig } from "$lib/services/keyboard";
   import { defaultShortcutsFor } from "$lib/keyboard-defaults";
-  import type { ClipboardFilter, ClipboardItem, WindowPosition } from "$lib/types/clipboard";
+  import type {
+    ClipboardFilter,
+    ClipboardItem,
+    HistoryCursorPayload,
+    WindowPosition,
+  } from "$lib/types/clipboard";
   import type { IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import {
@@ -243,7 +248,12 @@
   let deletedHistoryHasMore = $state(true);
   let deletedHistoryRequestId = 0;
   let activeHistoryLoading = $state(false);
-  let activeHistoryOffset = $state(0);
+  // Keyset pagination anchor for the active history: the (effective_ts,
+  // created_at, id) of the last row of the most recently fetched page. NULL
+  // means the next fetch is a fresh first page. Unlike OFFSET bookkeeping
+  // this never replays or skips rows when `set_last_used` promotes entries
+  // between page fetches — promoted rows simply land above the cursor.
+  let activeHistoryCursor = $state<HistoryCursorPayload | null>(null);
   let activeHistoryHasMore = $state(true);
   let activeHistoryRequestId = 0;
   // Keep stale in-flight recycle-bin pages from resurrecting rows that were
@@ -1064,14 +1074,16 @@
     void loadDeletedHistoryPage();
   }
 
-  // Active history uses SQLite OFFSET pagination. Any committed insertion,
-  // removal, soft-delete, or restore shifts the rows behind the current
-  // cursor, so rebuild the cursor from page zero instead of compensating with
-  // a fragile local increment/decrement.
+  // Active history uses keyset (cursor) pagination anchored to the last row
+  // of the most recent page. Out-of-band promotions (re-copy, reuse, sync
+  // apply) raise a row above the cursor, so the rows below it neither shift
+  // nor replay; any committed insertion, removal, soft-delete, or restore
+  // still rebuilds from page zero instead of compensating with a fragile
+  // local increment/decrement.
   function invalidateActiveHistoryPagination() {
     activeHistoryRequestId += 1;
     activeHistoryLoading = false;
-    activeHistoryOffset = 0;
+    activeHistoryCursor = null;
     activeHistoryHasMore = true;
     void loadActiveHistoryPage();
   }
@@ -1117,41 +1129,51 @@
 
     activeHistoryLoading = true;
     const requestId = ++activeHistoryRequestId;
-    const offset = activeHistoryOffset;
+    const cursor = activeHistoryCursor;
+    const isFirstPage = cursor === null;
     try {
-      const page = await loadClipboardHistory(
-        $generalSettings.display.pageSize,
-        offset,
-        buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
-      );
+      const page = await loadClipboardHistory($generalSettings.display.pageSize, 0, {
+        ...buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
+        cursor,
+      });
       if (requestId !== activeHistoryRequestId) return;
       if (page === null) {
         activeHistoryHasMore = false;
         return;
       }
 
-      if (offset === 0) {
+      if (isFirstPage) {
         const deletedItems = items.filter((item) => item.deleted);
         const storedIds = new Set(page.map((item) => item.id));
         items = [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))];
       } else {
-        // OFFSET pagination can replay rows after any out-of-band insertion
-        // (re-copy promotion, sync apply). Drop ids that are already loaded so
-        // the keyed each below never sees a duplicate key.
+        // Keyset pagination cannot replay rows the backend already served
+        // below the cursor, but keep the guard anyway: an entry promoted and
+        // then re-captured could theoretically round-trip its timestamps, and
+        // the keyed each below must never see a duplicate key.
         const knownIds = new Set(items.map((item) => item.id));
         const freshPage = page.filter((item) => !knownIds.has(item.id));
         items = [...items, ...freshPage];
       }
-      activeHistoryOffset += page.length;
+      // The anchor is the last row of the backend page — never the tail of
+      // `items`, which mixes in recycled deleted entries and deduplicated rows.
+      const anchor = page[page.length - 1];
+      if (anchor) {
+        activeHistoryCursor = {
+          effectiveTsMs: Math.max(anchor.lastUsedAtMs ?? anchor.createdAt, anchor.createdAt),
+          createdAtMs: anchor.createdAt,
+          id: anchor.id,
+        };
+      }
       activeHistoryHasMore = page.length === $generalSettings.display.pageSize;
       const loadedIds = new Set(page.map((item) => item.id));
       promoteFromCache(loadedIds);
       trimLoadedItems();
-      // The trim cap is a sliding window over the newest rows: deeper OFFSET
-      // pages contain the oldest rows and would be evicted right after
-      // loading, so a full window must end pagination instead of fetching
-      // pages that can never stay loaded (this previously looped
-      // fetch-then-evict on every scroll event once the cap was reached).
+      // The trim cap is a sliding window over the newest rows: deeper pages
+      // contain the oldest rows and would be evicted right after loading,
+      // so a full window must end pagination instead of fetching pages that
+      // can never stay loaded (this previously looped fetch-then-evict on
+      // every scroll event once the cap was reached).
       if (items.length >= $generalSettings.pageSizeLimit + $generalSettings.loadTolerance) {
         activeHistoryHasMore = false;
       }

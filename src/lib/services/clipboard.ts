@@ -611,6 +611,7 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
     sizeLabel: formatSizeSimple(record),
     sizeBytes: record.sizeBytes,
     createdAt: record.createdAtMs,
+    lastUsedAtMs: record.lastUsedAtMs,
     favorite: record.isFavorite,
     customTitle: isCustomClipboardTitle(record),
     fileName:

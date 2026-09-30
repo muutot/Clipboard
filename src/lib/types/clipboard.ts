@@ -11,6 +11,21 @@ export interface HistoryFilterArgs {
   sourceApp?: string | null;
   dateFromMs?: number | null;
   dateToMs?: number | null;
+  /** Keyset pagination anchor; when set the backend ignores `offset`. */
+  cursor?: HistoryCursorPayload | null;
+}
+
+/**
+ * Keyset pagination anchor: the (effective_ts, created_at, id) triple of the
+ * last row of the previous page, mirroring the backend's MRU ordering
+ * (`MAX(COALESCE(lastUsedAtMs, createdAtMs), createdAtMs) DESC, createdAtMs
+ * DESC, id DESC`). Resume strictly after this row. Unlike OFFSET pagination
+ * this is immune to rows being promoted between page fetches.
+ */
+export interface HistoryCursorPayload {
+  effectiveTsMs: number;
+  createdAtMs: number;
+  id: string;
 }
 
 /** Card action ids shared by the card action row and the context menu. */
@@ -71,6 +86,8 @@ export interface ClipboardItem {
   sizeLabel: string;
   sizeBytes?: number;
   createdAt: number;
+  /** Raw reuse timestamp from the backend; drives keyset pagination cursors. */
+  lastUsedAtMs?: number | null;
   favorite: boolean;
   deleted?: boolean;
   customTitle?: boolean;
