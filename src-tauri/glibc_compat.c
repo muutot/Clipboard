@@ -6,7 +6,8 @@
  * with undefined symbols:
  *
  *   __isoc23_strtol / __isoc23_strtoll / __isoc23_strtoull ...
- *       C23 strto*/scan* entry points, introduced in glibc 2.38.
+ *       C23 strtol-family and scanf-family entry points, introduced in
+ *       glibc 2.38.
  *   std::string::_M_replace_cold
  *       An out-of-line cold path of basic_string::replace(), introduced in
  *       GCC 13's libstdc++.
@@ -36,7 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ---- glibc 2.38 C23 strto*/scan* entry points -------------------------- */
+/* ---- glibc 2.38 C23 strtol/scanf-family entry points -------------------- */
 
 long __isoc23_strtol(const char *nptr, char **endptr, int base) {
   return strtol(nptr, endptr, base);
