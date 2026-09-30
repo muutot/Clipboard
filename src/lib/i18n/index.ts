@@ -1,6 +1,7 @@
 import { writable, derived, get } from "svelte/store";
 import type { Locale, LocaleDefinition } from "./types";
 import { isTauriRuntime } from "$lib/services/runtime";
+import type { Language } from "$lib/types/clipboard";
 import zhCN from "./locales/zh-CN";
 import en from "./locales/en";
 
@@ -11,18 +12,29 @@ const locales: Record<Locale, LocaleDefinition> = {
 
 const STORAGE_KEY = "clipboard-locale";
 
-function detectLocale(): Locale {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "zh-CN" || stored === "en") return stored;
-  } catch {
-    // localStorage unavailable
-  }
-
+/** Follow the OS locale: Chinese environments get `zh-CN`, everything else `en`. */
+export function resolveSystemLocale(): Locale {
   if (typeof navigator !== "undefined" && navigator.language?.startsWith("zh")) {
     return "zh-CN";
   }
   return "en";
+}
+
+/** Resolve a settings `Language` (which may be `"system"`) to a concrete locale. */
+export function resolveLanguage(value: Language): Locale {
+  return value === "system" ? resolveSystemLocale() : value;
+}
+
+function detectLocale(): Locale {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "zh-CN" || stored === "en") return stored;
+    if (stored === "system") return resolveSystemLocale();
+  } catch {
+    // localStorage unavailable
+  }
+
+  return resolveSystemLocale();
 }
 
 export const locale = writable<Locale>(detectLocale());
@@ -42,8 +54,8 @@ locale.subscribe(($locale) => {
   }
 });
 
-export function setLocale(value: Locale): void {
-  locale.set(value);
+export function setLocale(value: Language): void {
+  locale.set(resolveLanguage(value));
 }
 
 export function getLocale(): Locale {

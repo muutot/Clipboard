@@ -31,7 +31,7 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["window"]["launchAtStartup"], false);
     assert_eq!(saved["window"]["closeToTray"], true);
     assert_eq!(saved["window"]["singleInstance"], true);
-    assert_eq!(saved["general"]["language"], "zh-CN");
+    assert_eq!(saved["general"]["language"], "system");
     assert_eq!(saved["general"]["fontSizes"]["base"], 14);
     assert_eq!(saved["general"]["fontSizes"]["secondary"], 11);
     assert_eq!(saved["general"]["display"]["showSecondaryText"], true);
@@ -86,7 +86,7 @@ fn quarantines_a_corrupt_configuration_file_and_starts_with_defaults() {
     let store = ConfigStore::load(&project).unwrap();
 
     // Defaults are active again and the rewritten file exists.
-    assert_eq!(store.general_settings().language, "zh-CN");
+    assert_eq!(store.general_settings().language, "system");
     assert!(store.path().exists());
 
     let entries: Vec<String> = fs::read_dir(&config_directory)
@@ -275,7 +275,7 @@ fn old_configuration_without_general_settings_stays_compatible_until_migrated() 
 
     let mut store = ConfigStore::load(&project).unwrap();
     assert!(!store.has_general_settings());
-    assert_eq!(store.general_settings().language, "zh-CN");
+    assert_eq!(store.general_settings().language, "system");
 
     store.set_max_items(123).unwrap();
     let saved: Value = serde_json::from_slice(&fs::read(store.path()).unwrap()).unwrap();

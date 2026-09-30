@@ -700,9 +700,11 @@ export interface LocaleDefinition {
     eyebrow: string;
     description: string;
     language: string;
+    languageSystem: string;
     languageDescription: string;
     languageSwitchedZh: string;
     languageSwitchedEn: string;
+    languageSwitchedSystem: string;
     fontSize: string;
     fontSizeDescription: string;
     fontSizeSmall: string;

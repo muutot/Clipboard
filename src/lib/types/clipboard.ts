@@ -319,7 +319,8 @@ export interface DisplaySettings {
   searchPageSize: number;
 }
 
-export type Language = "zh-CN" | "en";
+/** `"system"` follows the OS locale: zh → `zh-CN`, anything else → `en`. */
+export type Language = "system" | "zh-CN" | "en";
 
 export type WindowEffect = "off" | "acrylic" | "mica";
 

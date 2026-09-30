@@ -122,7 +122,10 @@ pub struct GeneralConfig {
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
-            language: "zh-CN".to_owned(),
+            // "system" follows the OS locale on the frontend: zh → zh-CN,
+            // everything else → en. Keep in sync with the frontend default
+            // (DEFAULT_GENERAL_SETTINGS.language).
+            language: "system".to_owned(),
             font_sizes: FontSizeConfig::default(),
             display: DisplayConfig::default(),
             window_transparency: 95,

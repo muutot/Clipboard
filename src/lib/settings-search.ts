@@ -188,7 +188,7 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     { section: "general_general" },
     i18n("general.language"),
     i18n("general.languageDescription"),
-    ["中文", "English", "locale"],
+    ["中文", "English", i18n("general.languageSystem"), "locale"],
   ),
   entry(
     "general.search-suggestion-mode",

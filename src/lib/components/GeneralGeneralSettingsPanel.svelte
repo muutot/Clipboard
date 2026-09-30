@@ -1,8 +1,7 @@
 <script lang="ts">
   import SettingEntry from "$lib/components/SettingEntry.svelte";
-  import { messages, resolvePath, locale } from "$lib/i18n";
-  import type { Locale } from "$lib/i18n/types";
-  import type { GeneralSettings } from "$lib/types/clipboard";
+  import { messages, resolvePath, setLocale } from "$lib/i18n";
+  import type { GeneralSettings, Language } from "$lib/types/clipboard";
   import { generalSettings, windowConfig } from "$lib/services/settings";
   import { onDestroy } from "svelte";
   import { createFeedback } from "$lib/utils/feedback.svelte";
@@ -50,13 +49,16 @@
     }
   }
 
-  function changeLanguage(lang: Locale) {
+  function changeLanguage(lang: Language) {
     generalSettings.updateSetting("language", lang);
-    locale.set(lang);
-    feedback.show(
-      _t(lang === "zh-CN" ? "general.languageSwitchedZh" : "general.languageSwitchedEn"),
-      true,
-    );
+    setLocale(lang);
+    const key =
+      lang === "zh-CN"
+        ? "general.languageSwitchedZh"
+        : lang === "en"
+          ? "general.languageSwitchedEn"
+          : "general.languageSwitchedSystem";
+    feedback.show(_t(key), true);
   }
 
   const generalEntries: SettingEntryConfig[] = $derived([
@@ -157,6 +159,11 @@
       {#snippet children()}
         {#if config.type === "custom" && config.id === "general.language"}
           <div class="lang-toggle">
+            <button
+              type="button"
+              class:active={s.language === "system"}
+              onclick={() => changeLanguage("system")}>{_t("general.languageSystem")}</button
+            >
             <button
               type="button"
               class:active={s.language === "zh-CN"}

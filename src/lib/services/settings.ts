@@ -28,7 +28,7 @@ const LOCALE_STORAGE_KEY = "clipboard-locale";
 const PERSIST_DEBOUNCE_MS = 120;
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
-  language: "zh-CN",
+  language: "system",
   fontSizes: { base: 14, secondary: 11, tiny: 10, cardTitle: 13, cardPreview: 11 },
   display: { showSecondaryText: true, maxTextLines: 3, pageSize: 100, searchPageSize: 100 },
   windowTransparency: 95,
@@ -118,7 +118,7 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
 }
 
 function validLanguage(value: unknown, fallback: Language): Language {
-  return value === "zh-CN" || value === "en" ? value : fallback;
+  return value === "system" || value === "zh-CN" || value === "en" ? value : fallback;
 }
 
 function validTheme(value: unknown, fallback: GeneralSettings["theme"]): GeneralSettings["theme"] {
@@ -323,7 +323,7 @@ function normalizeGeneralSettings(
     return baseValue === undefined ? defaultSettings.display[key] : baseValue;
   };
 
-  result.language = validLanguage(source.language ?? fallback("language"), "zh-CN");
+  result.language = validLanguage(source.language ?? fallback("language"), "system");
   result.fontSizes.base = integerInRange(
     sourceFontSizes.base ?? fallbackFont("base"),
     defaultSettings.fontSizes.base,
