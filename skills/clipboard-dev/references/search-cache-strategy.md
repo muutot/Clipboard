@@ -34,6 +34,21 @@ stay plain objects) is covered by `item-store-view.test.ts`, which mounts
 reaction context, so `$derived` values created there are unowned and go stale —
 rune behaviour cannot be asserted without a component.
 
+## Cross-window convergence
+
+Each WebviewWindow holds its own item store; the float panel cannot share the
+main route's instance (separate JS realms). Two mechanisms keep them in step:
+
+- `clipboard-items-changed` (see `data-contracts.md`) carries what a mutator
+  changed. Both routes fold it through `utils/item-changes.ts`, so a favorite
+  toggled in the panel lands in the main window and vice versa.
+- The float panel additionally reloads on focus and on `clipboard-item-added`,
+  which covers anything a mutator does not announce (`set_last_used`).
+
+Anything that adds a new item-level mutator must broadcast, or the other window
+silently keeps the old row: a command that takes no `AppHandle` physically
+cannot emit, which is how this drifted for so long.
+
 ## Backend Tantivy ID cache
 
 `SearchIndex` stores `cached_ids: Mutex<Option<(String, usize, Option<(i64, i64)>, Vec<String>, usize)>>`.

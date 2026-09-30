@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -90,6 +90,7 @@
     type AffectedItemSnapshot,
   } from "$lib/utils/item-store";
   import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
+  import { applyItemsChangedEvent } from "$lib/utils/item-changes";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import {
     SEARCH_HISTORY_LIMIT,
@@ -108,7 +109,11 @@
     applyFontSizesToDocument,
   } from "$lib/services/settings-bootstrap";
   import { listen } from "@tauri-apps/api/event";
-  import type { PersistedClipboardItem, TagsChangedPayload } from "$lib/types/clipboard";
+  import type {
+    ClipboardItemsChangedPayload,
+    PersistedClipboardItem,
+    TagsChangedPayload,
+  } from "$lib/types/clipboard";
   import {
     generalSettings,
     restoreWindowPosition,
@@ -875,6 +880,29 @@
       },
     );
 
+    const unlistenItemsChanged = listen<ClipboardItemsChangedPayload>(
+      "clipboard-items-changed",
+      (event) => {
+        // A mutation made in another window (the float panel, or a second main
+        // window) arrives here with what changed. Applying our own event back is
+        // harmless: the payload is the stored row, so it equals the optimistic
+        // state this window already shows.
+        const payload = event.payload;
+        itemStore.current = applyItemsChangedEvent(itemStore.current, payload);
+
+        if (payload.removedIds?.length) {
+          const removedIds = new Set(payload.removedIds);
+          selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
+          if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
+          // A permanent delete shifts the rows behind it in both offset windows.
+          invalidateActiveHistoryPagination();
+          invalidateDeletedHistoryPagination();
+        }
+        if (payload.deletedIds?.length) invalidateDeletedHistoryPagination();
+        if (payload.restoredIds?.length) invalidateActiveHistoryPagination();
+      },
+    );
+
     const unlistenTrayOpenSettings = listen("tray-open-settings", () => {
       openSettings();
     });
@@ -986,6 +1014,7 @@
       window.clearInterval(clock);
       void unlisten.then((fn) => fn()).catch(() => {});
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
+      void unlistenItemsChanged.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
       void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});

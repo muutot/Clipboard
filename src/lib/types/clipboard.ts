@@ -455,6 +455,27 @@ export interface TagsChangedPayload {
   deleted?: string;
 }
 
+/**
+ * Payload of the backend `clipboard-items-changed` event. Every window keeps
+ * its own copy of the loaded rows, so an item-level mutation performed in one
+ * window is broadcast to the others.
+ *
+ * The split is not stylistic: `deleted` is not part of a stored record, it is
+ * which query produced the row (`list_recent` vs `list_deleted`), and the flag
+ * lives in the receiving window's display state. Content changes therefore
+ * arrive as records and the three membership transitions as ids.
+ */
+export interface ClipboardItemsChangedPayload {
+  /** Rows whose content changed and that still exist. */
+  items: PersistedClipboardItem[];
+  /** Ids that moved into the recycle bin: the receiver marks them deleted. */
+  deletedIds: string[];
+  /** Ids that came back out of the recycle bin: the receiver clears the flag. */
+  restoredIds: string[];
+  /** Ids that are gone for good: the receiver drops them from every view. */
+  removedIds: string[];
+}
+
 export interface PersistedClipboardItem {
   id: string;
   kind: ClipboardKind;

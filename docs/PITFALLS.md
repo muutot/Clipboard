@@ -116,6 +116,31 @@ Tauri 2 的 capability 按窗口授权：`src-tauri/capabilities/default.json` �
 
 新增窗口后对照该窗口用到的全部 `window.*` API 逐项核对 `core:window:allow-*` 权限。
 
+### 条目级写操作必须广播，否则另一个窗口永远看不到
+
+各 WebviewWindow 是独立 JS realm，**内存状态无法共享**。所以条目级 mutation（收藏、标签、行内编辑、改名、软删/恢复/永久删及批量版）如果不在后端 emit 事件，两个窗口就会各自显示不同的内容；而前端**无法自救**——它没有"按 id 重查"这种命令可供调用。
+
+```rust
+// BUG: 命令签名里没有 AppHandle，物理上无法 emit，悬浮窗收藏后主页不变
+pub fn set_clipboard_item_favorite(
+    database: tauri::State<'_, Database>, id: String, is_favorite: bool,
+) -> Result<bool, String>
+
+// FIX: 带上 AppHandle 并广播变更
+pub fn set_clipboard_item_favorite(
+    app: AppHandle, database: tauri::State<'_, Database>, id: String, is_favorite: bool,
+) -> Result<bool, String> {
+    let updated = database.set_favorite(&id, is_favorite).map_err(|e| e.to_string())?;
+    if updated { broadcast_content_changed(&app, &database, std::slice::from_ref(&id)); }
+    Ok(updated)
+}
+```
+
+两个容易踩的细节：
+
+- **`deleted` 不是记录上的列**。它是"这条记录由哪条查询返回"（`list_recent` vs `list_deleted`）推导出来的前端状态，存在接收方。所以软删/恢复**不能**用"记录已更新"表达，必须单独传 id 列表，否则另一个窗口会把已删行显示成未删。
+- **自己收到自己的事件是安全的**。payload 是数据库里的行，等于本窗口已经乐观渲染的状态，重复应用无副作用——所以不需要按来源过滤。
+
 ### 无边框窗口的阴影内边距会让定位溢出工作区
 
 Tauri 在 Windows 上为无边框（`decorations(false)`）窗口默认开启原生阴影。tao 创建窗口时会把阴影内边距（`calculate_insets_for_dpi`：左右下各 `SM_CXSIZEFRAME + SM_CXPADDEDBORDER`，Win11 顶部再加 1px）加到内尺寸上，实际外框比 `inner_size` 大一圈，而 builder 的 `position` 和 `set_position` 定位的都是**外框**左上角。用 `inner_size` 常量算右下角，会让面板越出工作区、压到任务栏或屏幕外（悬浮面板曾出现此问题）。

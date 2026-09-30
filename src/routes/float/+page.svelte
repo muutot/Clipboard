@@ -19,7 +19,19 @@
   } from "$lib/services/clipboard";
   import { generalSettings } from "$lib/services/settings";
   import { applyGeneralSettingsToDocument } from "$lib/services/settings-bootstrap";
-  import type { ClipboardItem, FloatPanelClickAction } from "$lib/types/clipboard";
+  import type {
+    ClipboardItem,
+    ClipboardItemsChangedPayload,
+    FloatPanelClickAction,
+  } from "$lib/types/clipboard";
+  import {
+    applyItemPatches,
+    createItemStore,
+    removeItems,
+    replaceViewItems,
+  } from "$lib/utils/item-store";
+  import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
+  import { applyItemsChangedEvent } from "$lib/utils/item-changes";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -33,11 +45,19 @@
   type FloatFilter = "all" | "favorite";
 
   let filter = $state<FloatFilter>("all");
-  let items = $state<ClipboardItem[]>([]);
+  // The panel is a second window, so it cannot share the main route's store
+  // instance — but it uses the same one so its mutations go through the same
+  // funnel, and `clipboard-items-changed` keeps the two copies from drifting.
+  const itemStore = createItemStoreView(createItemStore());
+  const items = $derived(itemStore.history);
   let loading = $state(true);
   let copyingId = $state<string | null>(null);
   /** Guards against a stale response overwriting a newer filter's list. */
   let loadRequestId = 0;
+
+  function setItems(next: ClipboardItem[]) {
+    itemStore.current = replaceViewItems(itemStore.current, next, "history");
+  }
 
   async function load() {
     if (!isTauriRuntime()) {
@@ -52,10 +72,10 @@
     try {
       const args = filter === "favorite" ? { favorite: true } : {};
       const result = (await loadClipboardHistory(100, 0, args)) ?? [];
-      if (request === loadRequestId) items = result;
+      if (request === loadRequestId) setItems(result);
     } catch (error) {
       console.error("Unable to load float history", error);
-      if (request === loadRequestId) items = [];
+      if (request === loadRequestId) setItems([]);
     } finally {
       if (request === loadRequestId) loading = false;
     }
@@ -68,7 +88,7 @@
     // revalidate: a click during the reload would otherwise copy an entry
     // from the previous filter. (Focus-triggered reloads keep SWR in
     // `load()`; only explicit filter switches clear.)
-    items = [];
+    setItems([]);
     void load();
   }
 
@@ -109,8 +129,12 @@
     if (action === "favorite") {
       const ok = await persistFavorite(id, !item.favorite);
       if (ok) {
-        items = items.map((entry) =>
-          entry.id === id ? { ...entry, favorite: !entry.favorite } : entry,
+        // The main window's optimistic path reuses the record the backend
+        // broadcast; the panel holds the row itself, so patching the one record
+        // in its store is the same funnel without a second round trip.
+        itemStore.current = applyItemPatches(
+          itemStore.current,
+          new Map([[id, { favorite: !item.favorite }]]),
         );
         showToast(
           _t(item.favorite ? "toast.unfavoriteSuccess" : "toast.favoriteSuccess"),
@@ -128,7 +152,7 @@
     if (action === "delete") {
       const ok = await persistDelete(id);
       if (ok) {
-        items = items.filter((entry) => entry.id !== id);
+        itemStore.current = removeItems(itemStore.current, new Set([id]));
         showToast(_t("toast.deleteSuccess"), "success");
       } else {
         showToast(_t("app.deleteFailed"), "error");
@@ -161,6 +185,7 @@
       if (!disposed) void load();
     };
     let unlistenAdded: (() => void) | undefined;
+    let unlistenItemsChanged: (() => void) | undefined;
     let unlistenFocus: (() => void) | undefined;
     if (isTauriRuntime()) {
       // The backend builds this window hidden so creation never races the
@@ -172,6 +197,16 @@
       listen("clipboard-item-added", reload).then((unlisten) => {
         if (disposed) unlisten();
         else unlistenAdded = unlisten;
+      });
+      // A favorite or delete made in the main window has to land here too,
+      // otherwise this panel keeps showing the row as it was. Same handler the
+      // main route uses, so the two windows cannot drift apart.
+      listen<ClipboardItemsChangedPayload>("clipboard-items-changed", (event) => {
+        if (disposed) return;
+        itemStore.current = applyItemsChangedEvent(itemStore.current, event.payload);
+      }).then((unlisten) => {
+        if (disposed) unlisten();
+        else unlistenItemsChanged = unlisten;
       });
       void resolveFloatWindow().then((win) => {
         if (disposed || !win) return;
@@ -190,6 +225,7 @@
       disposed = true;
       endHeaderDrag();
       unlistenAdded?.();
+      unlistenItemsChanged?.();
       unlistenFocus?.();
     };
   });

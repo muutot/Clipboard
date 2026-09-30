@@ -168,17 +168,35 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 
 ## Event contract
 
-| Event                           | Producer                                                                                           | Consumer/purpose                                                                                                                       |
-| ------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `clipboard-item-added`          | capture/write backend (capture, duplicate, save-as-new)                                            | main route inserts or replaces the saved record; settings window refreshes storage stats                                               |
-| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`); v1 remote apply (`sync_now`) | main route removes IDs and resets affected pagination/search state; settings window refreshes storage stats                            |
-| `general-settings-changed`      | authoritative config save                                                                          | settings stores in other WebviewWindows                                                                                                |
-| `settings-font-changed`         | font panel                                                                                         | main route live font/display synchronization                                                                                           |
-| `tags-changed`                  | tag management panel, or main-window `TagEditDialog` (rename/delete/color)                         | main route refreshes tag colors and rewrites item tags/filter; settings tag panel refreshes its list (skipping self-originated events) |
-| `tray-open-settings`            | tray backend                                                                                       | main route opens settings                                                                                                              |
-| `viewer:open`                   | detail panel                                                                                       | dedicated viewer window                                                                                                                |
-| `ppocr-download-progress`       | OCR installer                                                                                      | settings UI download progress                                                                                                          |
-| `privacy-pause-changed`         | tray pause toggle, or `toggle_privacy_pause` command                                               | settings `GeneralSettingsPanel` and tray menu item refresh recording pause state                                                       |
+| Event                           | Producer                                                                                                                         | Consumer/purpose                                                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `clipboard-item-added`          | capture/write backend (capture, duplicate, save-as-new)                                                                          | main route inserts or replaces the saved record; settings window refreshes storage stats                                               |
+| `clipboard-items-changed`       | item-level mutators (favorite, tags, inline text edit, file rename, soft delete, restore, permanent delete, and the batch forms) | main route and float panel fold the change into their own item stores                                                                  |
+| `clipboard-history-invalidated` | destructive storage-kind operation; file import (`import_from_file`); v1 remote apply (`sync_now`)                               | main route removes IDs and resets affected pagination/search state; settings window refreshes storage stats                            |
+| `general-settings-changed`      | authoritative config save                                                                                                        | settings stores in other WebviewWindows                                                                                                |
+| `settings-font-changed`         | font panel                                                                                                                       | main route live font/display synchronization                                                                                           |
+| `tags-changed`                  | tag management panel, or main-window `TagEditDialog` (rename/delete/color)                                                       | main route refreshes tag colors and rewrites item tags/filter; settings tag panel refreshes its list (skipping self-originated events) |
+| `tray-open-settings`            | tray backend                                                                                                                     | main route opens settings                                                                                                              |
+| `viewer:open`                   | detail panel                                                                                                                     | dedicated viewer window                                                                                                                |
+| `ppocr-download-progress`       | OCR installer                                                                                                                    | settings UI download progress                                                                                                          |
+| `privacy-pause-changed`         | tray pause toggle, or `toggle_privacy_pause` command                                                                             | settings `GeneralSettingsPanel` and tray menu item refresh recording pause state                                                       |
+
+`clipboard-items-changed` carries four lists, and the split is forced by the
+data model rather than by taste: `deleted` is **not** a column a record carries.
+It is which query produced the row (`list_recent` vs `list_deleted`), and the
+flag lives in the receiving window's display state. So content changes travel as
+read-back records (`items`) and the three membership transitions as ids
+(`deletedIds`, `restoredIds`, `removedIds`) — broadcasting a soft delete as "an
+updated row" would show a deleted row as still active in the other window.
+`utils/item-changes.ts::applyItemsChangedEvent` is the only consumer shape both
+windows use: content first, then the flag flips, then removals, so a removal
+always wins. Applying a window's own event back to itself is a no-op in effect
+(the payload equals the optimistic state it already shows), which is why the
+mutators do not filter by origin.
+
+Every item-level mutator takes an `AppHandle` and broadcasts on success; without
+it the two windows cannot see each other at all, since separate WebviewWindows
+are separate JS realms and the frontend cannot reconcile this on its own.
 
 Event payloads also use camelCase where Rust structs are serialized. Register listeners before fetching state when an update could occur during hydration, and always retain/unregister the returned unlisten function. Producers must not swallow `app.emit` failures silently: log them with `crate::log_event!` (or push a command warning) so a missed UI refresh is diagnosable; do not reintroduce bare `let _ = app.emit(...)` in library code.
 
