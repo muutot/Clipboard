@@ -1044,7 +1044,9 @@ pub fn read_clipboard_text() -> Option<String> {
             }
             // `long_offset` counts 32-bit units; for 8-bit data one unit holds
             // 4 bytes, so advance by the rounded-up byte count just read.
-            offset_units += (nitems as i64).div_ceil(4);
+            // Spelled out instead of `i64::div_ceil`, which is still unstable for
+            // signed integers and so fails to build on the Linux toolchain.
+            offset_units += (nitems.max(0) as i64 + 3) / 4;
             if bytes_after == 0 || nitems == 0 {
                 break;
             }
