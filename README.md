@@ -73,11 +73,11 @@ Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 ### 🔍 全文搜索
 
 - Tantivy 全文检索引擎，N-gram 中文分词
-- 多关键词无序 AND 匹配 + 相关性评分
+- 多关键词无序 AND 匹配 + BM25 相关性评分
 - 自然语言日期搜索（"昨天"、"上周"）
 - 来源应用名称参与搜索
 - 搜索建议（下拉 / 内联提示）
-- P95 < 30ms（10 万条记录）
+- 8 万条记录下索引查询 P95 < 0.1ms（[实测](docs/SEARCH_OPTIMIZATION_REPORT.md#32-搜索延迟-p50p95毫秒)）；首次搜索若遇索引积压（批量导入 / 批量恢复）需先排空，1 万条积压约 227ms
 
 ### 🏷️ 标签系统
 
@@ -206,7 +206,7 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 | 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib FFI          | ⚠️ `wl-paste`                    |
 | 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）              | ⚠️ `xclip`（无标记）      | ⚠️ `wl-copy`（无标记）           |
 | 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips` | ⚠️ `xclip`                | ⚠️ `wl-paste`                    |
-| 读取文件路径               | ✅ 原生 Win32 | ⚠️ `NSFilenamesPboardType`         | ⚠️ `xclip`（uri-list）    | ⚠️ `wl-paste`（uri-list）        |
+| 读取文件路径               | ✅ 原生 Win32 | ⚠️ 原生 `NSFilenamesPboardType`¹   | ⚠️ `xclip`（uri-list）    | ⚠️ `wl-paste`（uri-list）        |
 | 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib + `/proc`    | ⚠️ `swaymsg`/`hyprctl`/`xdotool` |
 | 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`               | ⚠️ freedesktop 图标       | ⚠️ freedesktop 图标              |
 | 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
@@ -228,6 +228,9 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 > `restore_window_and_paste` 直接返回「quick paste is only implemented on Windows」；
 > `platform_info.rs::current_capabilities` 因此在 macOS / Linux 返回 `global_shortcut: false`，并一并返回
 > `quick_paste: false`。快捷键配置本身跨平台可用，绑定在主窗口获得焦点时生效。
+
+> ¹ macOS 文件路径读取已是原生 `NSFilenamesPboardType` 实现（`platform/macos.rs::read_nsfilenames_paths`），不依赖外部命令，
+> 但整个文件在 `#[cfg(target_os = "macos")]` 之下、Windows 门禁不编译，因此仍标为 ⚠️ 而非 ✅——只有 macOS CI 变绿才可改判。
 
 ---
 
