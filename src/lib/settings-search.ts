@@ -118,8 +118,9 @@ const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]
   ],
   sync_cloud: [
     i18n("storage.syncCloudTab"),
-    i18n("storage.syncTab"),
     i18n("storage.syncTitle"),
+    "Cloud Sync",
+    "云同步",
     "移动",
     "备份",
   ],
