@@ -34,27 +34,45 @@
 
 ## 索引策略
 
-计划为每条记录建立以下搜索字段：
+每条记录在 Tantivy 中只有 5 个字段（`src-tauri/src/search/schema.rs::build_schema`）：
 
-- `content_raw`：规范化后的完整文本
-- `content_ngram`：中文及混合文本的 1～3 字符 N-gram
-- `title`：文件名、链接标题或文本首行
-- `source_app`：来源应用名称
-- `ocr_text`：图片 OCR 得到的完整文字
-- `kind`：文本、链接、图片或文件
-- `created_at`：创建时间戳
-- `is_favorite`：收藏状态
+| 字段            | 类型   | 取值                                      |
+| :-------------- | :----- | :---------------------------------------- |
+| `item_id`       | STRING | 剪贴板记录 ID，`STRING \| FAST \| STORED` |
+| `kind`          | STRING | `text` / `link` / `image` / `file`        |
+| `content`       | TEXT   | 见下方「合成规则」                        |
+| `created_at_ms` | i64    | 创建时间戳，`FAST \| INDEXED \| STORED`   |
+| `is_favorite`   | u64    | 收藏状态，`INDEXED \| FAST`               |
 
-图片二进制和文件内容不进入索引。OCR 文字作为核心搜索字段写入，与普通文本使用相同的规范化和 N-gram 策略。命中 `ocr_text` 时，搜索结果返回对应的图片记录，而不是创建一条独立文本记录。
+`content` 是**唯一一个可检索文本字段**，由 `storage/search_repository.rs::SearchDocument::from_row` 在写库时合成，
+按此顺序用换行拼接非空片段：
+
+```text
+title → text_content → ocr_text（仅 status='completed'）→ source_app → 每个用户标签
+```
+
+即标题、纯文本正文、OCR 全文、来源应用名与标签名全部落在同一字段，共用同一套 1～3 字符 N-gram
+（`cjk_ngram_1_3`，`LowerCaser` 过滤）分词器。这与早期「每类内容一个独立字段」的设计不同：拆成多字段会让单字 CJK 查询
+必须跨字段 OR 匹配，破坏「单字命中任意位置」的契约，合成单字段则天然满足。
+
+图片二进制和文件内容不进入索引。OCR 文字命中时返回对应的图片记录，而不是创建一条独立文本记录。
 
 ## 查询流程
 
-1. 对查询执行 Unicode NFKC 规范化、大小写折叠和空白清理。
-2. 将显式空格分隔的关键词去重。
-3. 为中文和混合文本生成查询 N-gram。
-4. 每个关键词生成一个 MUST 子句，实现无序 AND 匹配。
-5. 使用连续短语、同序匹配和关键词距离计算额外得分。
-6. 最后结合收藏状态、最近使用时间和创建时间进行轻量排序。
+`search/index.rs::SearchIndex::search` 的实际流程：
+
+1. `extract_date_range` 先把「今天」「上周」这类相对日期短语从原文里摘出，得到 `[start_ms, end_ms)`。
+2. 剩余内容按空白切分、去空、`to_lowercase`，再 `sort_unstable` + `dedup`——所以 `脸 脏` 与 `脏 脸`
+   得到同一个表示与同一个缓存键。（**不做** NFKC 规范化：全仓没有 `nfkc` 调用。）
+3. `required_ngrams`：长度 ≤3 的词原样保留（保住相邻性，`脸脏` 是一个二字子句而不是两个字子句），
+   更长的词切成 3 字滑窗。
+4. 每个 n-gram 生成一个 `TermQuery`，用 `BooleanQuery::intersection` 合并，实现无序 AND 匹配。
+5. 日期范围（若有）生成一个 `RangeQuery`，与上一步的结果再次 `intersection`；纯日期查询因此可以没有
+   任何内容子句。
+6. `TopDocs::order_by_score()` 取 BM25 相关度前 `limit` 条——**得分完全来自 Tantivy**，没有额外的
+   短语、同序或词距加权（早期设计里的这一层没有落地）。
+7. 可选的 `apply_sort_rules` 按用户配置的排序规则稳定重排；所有排序键都相等时保留上一步的相关度顺序
+   作为兜底（用 `sort_by` 而非 `sort_unstable_by` 正是为了不打乱分页）。
 
 概念示例：
 
