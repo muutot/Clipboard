@@ -1,12 +1,48 @@
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::domain::OcrResult;
 use crate::storage::{Database, OcrRepository};
 
-use super::OcrEngine;
+use super::{OcrEngine, OcrInput};
+
+/// Total recognition passes for one image, the first attempt included.
+///
+/// The bound is what keeps a permanently unrecognizable image (a truncated
+/// PNG, a file another process still holds) from spinning: without it every
+/// failure would be requeued and the worker would burn inference attempts on
+/// the same bytes forever. Two retries past the first attempt cover the
+/// transient classes that actually occur — an ONNX Runtime allocation failure
+/// under memory pressure, a model file being replaced mid-session, a Windows
+/// file lock — while a user-triggered regenerate from the detail panel stays
+/// unlimited.
+const MAX_RECOGNITION_ATTEMPTS: u32 = 3;
+
+/// Delay before the given number of attempts has been made, doubling per
+/// attempt so a failing image cannot monopolize the single worker slot. The
+/// exponent is capped so a large count cannot overflow the shift.
+fn retry_backoff(attempts_made: u32) -> Duration {
+    Duration::from_secs(1u64 << attempts_made.min(4))
+}
+
+/// An image whose recognition failed but still has attempts left.
+///
+/// The retry is held in memory rather than requeued through the database on
+/// purpose: `retry_ocr` would set the row back to `pending`, and
+/// `claim_next_ocr` orders by `created_at_ms`, so the same row would be
+/// claimed again on the very next poll and the other pending images would
+/// wait out the whole backoff. Keeping the row in `processing` also means the
+/// UI honestly shows "recognizing" for the whole window, and a crash mid
+/// retry is already covered — startup `requeue_interrupted_ocr` turns
+/// `processing` rows back into `pending`.
+struct PendingRetry {
+    input: OcrInput,
+    attempts_made: u32,
+    due: Instant,
+}
 
 /// Owns the resources used by an OCR worker thread.
 ///
@@ -143,6 +179,7 @@ impl OcrWorker {
         let poll_interval = Duration::from_millis(500);
         let mut consecutive_errors = 0u32;
         const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+        let mut retries: VecDeque<PendingRetry> = VecDeque::new();
 
         while running.load(Ordering::SeqCst) {
             // Do not claim another item after a stop request raced with the
@@ -151,90 +188,165 @@ impl OcrWorker {
                 break;
             }
 
-            let has_task = match database.claim_next_ocr() {
-                Ok(Some(input)) => {
-                    consecutive_errors = 0;
+            // A due retry runs before a fresh claim so a transient failure is
+            // recovered while it is still recent. Every entry is bounded by
+            // MAX_RECOGNITION_ATTEMPTS, so the queue drains and cannot starve
+            // newly captured images.
+            let due_retry = retries
+                .iter()
+                .position(|retry| retry.due <= Instant::now())
+                .and_then(|position| retries.remove(position));
 
-                    // Check if an OCR result for this image hash already
-                    // exists.  Reusing it avoids duplicate local inference.
-                    if let Ok(Some(existing)) =
-                        database.find_completed_ocr_by_hash(&input.image_hash)
-                    {
-                        let result = OcrResult::completed(
-                            &input.item_id,
-                            &existing.engine,
-                            &existing.model_version,
-                            existing.language.as_deref(),
-                            &existing.full_text,
-                            &existing.blocks,
-                            &input.image_hash,
-                        );
-                        if let Err(error) = database.save_ocr_result(&result) {
-                            let message = format!("failed to save reused OCR result: {error}");
-                            crate::log_event!("[ocr] {message} for {}", input.item_id);
-                            persist_failure(&database, &input.item_id, &message);
-                        }
-                        continue;
-                    }
+            let mut worked = false;
 
-                    let engine_name = engine.name();
-                    let model_version = engine.model_version();
+            if let Some(mut retry) = due_retry {
+                worked = true;
+                if let Err(message) = attempt_recognition(&engine, &database, &retry.input) {
+                    retry.attempts_made += 1;
+                    let attempts_made = retry.attempts_made;
+                    handle_recognition_failure(
+                        &database,
+                        retry.input,
+                        attempts_made,
+                        &message,
+                        &mut retries,
+                    );
+                }
+            } else {
+                match database.claim_next_ocr() {
+                    Ok(Some(input)) => {
+                        consecutive_errors = 0;
+                        worked = true;
 
-                    match engine.recognize(&input) {
-                        Ok(output) => {
+                        // A regenerate from the detail panel put this row back
+                        // to `pending`; drop any retry this worker still held
+                        // for it so the two paths cannot both recognize it.
+                        retries.retain(|retry| retry.input.item_id != input.item_id);
+
+                        // Check if an OCR result for this image hash already
+                        // exists.  Reusing it avoids duplicate local inference.
+                        if let Ok(Some(existing)) =
+                            database.find_completed_ocr_by_hash(&input.image_hash)
+                        {
                             let result = OcrResult::completed(
                                 &input.item_id,
-                                engine_name,
-                                model_version,
-                                output.language.as_deref(),
-                                &output.full_text,
-                                &output.blocks,
+                                &existing.engine,
+                                &existing.model_version,
+                                existing.language.as_deref(),
+                                &existing.full_text,
+                                &existing.blocks,
                                 &input.image_hash,
                             );
-
                             if let Err(error) = database.save_ocr_result(&result) {
-                                let message = format!("failed to save OCR result: {error}");
+                                let message = format!("failed to save reused OCR result: {error}");
                                 crate::log_event!("[ocr] {message} for {}", input.item_id);
                                 persist_failure(&database, &input.item_id, &message);
                             }
+                        } else if let Err(message) = attempt_recognition(&engine, &database, &input)
+                        {
+                            handle_recognition_failure(&database, input, 1, &message, &mut retries);
                         }
-                        Err(error) => {
-                            let message = error.to_string();
-                            crate::log_error!(
-                                "[ocr] recognition failed for {}: {}",
-                                input.item_id,
-                                message
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        crate::log_error!("[ocr] failed to claim next task: {error}");
+                        consecutive_errors = consecutive_errors.saturating_add(1);
+                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                            crate::log_warn!(
+                                "[ocr] too many consecutive errors ({}), pausing",
+                                consecutive_errors
                             );
-                            persist_failure(&database, &input.item_id, &message);
+                            if wait_for_stop(&stop_receiver, Duration::from_secs(10)) {
+                                break;
+                            }
+                            consecutive_errors = 0;
                         }
                     }
-
-                    true
                 }
-                Ok(None) => false,
-                Err(error) => {
-                    crate::log_error!("[ocr] failed to claim next task: {error}");
-                    consecutive_errors = consecutive_errors.saturating_add(1);
-                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                        crate::log_warn!(
-                            "[ocr] too many consecutive errors ({}), pausing",
-                            consecutive_errors
-                        );
-                        if wait_for_stop(&stop_receiver, Duration::from_secs(10)) {
-                            break;
-                        }
-                        consecutive_errors = 0;
-                    }
-                    false
-                }
-            };
+            }
 
-            if !has_task && wait_for_stop(&stop_receiver, poll_interval) {
+            if !worked && wait_for_stop(&stop_receiver, poll_interval) {
                 break;
             }
         }
 
         running.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Decides what a failed recognition pass means: the budget is spent, so the
+/// failure becomes the row's persisted state, or another attempt is scheduled.
+///
+/// Both the first attempt and every retry go through here on purpose. Checking
+/// the budget only on the retry path made `MAX_RECOGNITION_ATTEMPTS = 1` mean
+/// two passes, which the attempt-count test caught.
+fn handle_recognition_failure(
+    database: &Database,
+    input: OcrInput,
+    attempts_made: u32,
+    message: &str,
+    retries: &mut VecDeque<PendingRetry>,
+) {
+    if attempts_made >= MAX_RECOGNITION_ATTEMPTS {
+        crate::log_error!(
+            "[ocr] giving up on {} after {} attempts: {}",
+            input.item_id,
+            attempts_made,
+            message
+        );
+        persist_failure(database, &input.item_id, message);
+        return;
+    }
+
+    retries.push_back(PendingRetry {
+        input,
+        attempts_made,
+        due: Instant::now() + retry_backoff(attempts_made),
+    });
+}
+
+/// Runs one recognition pass and persists a success.
+///
+/// A recognition failure returns its message instead of persisting it: the
+/// caller decides whether another attempt is still allowed, and only the last
+/// failure becomes the row's persisted state. A failure to *store* a
+/// successful recognition is terminal and is persisted immediately, because
+/// retrying the inference would not fix the write.
+fn attempt_recognition(
+    engine: &Arc<dyn OcrEngine>,
+    database: &Database,
+    input: &OcrInput,
+) -> Result<(), String> {
+    let engine_name = engine.name();
+    let model_version = engine.model_version();
+
+    match engine.recognize(input) {
+        Ok(output) => {
+            let result = OcrResult::completed(
+                &input.item_id,
+                engine_name,
+                model_version,
+                output.language.as_deref(),
+                &output.full_text,
+                &output.blocks,
+                &input.image_hash,
+            );
+            if let Err(error) = database.save_ocr_result(&result) {
+                let message = format!("failed to save OCR result: {error}");
+                crate::log_event!("[ocr] {message} for {}", input.item_id);
+                persist_failure(database, &input.item_id, &message);
+            }
+            Ok(())
+        }
+        Err(error) => {
+            let message = error.to_string();
+            crate::log_error!(
+                "[ocr] recognition failed for {}: {}",
+                input.item_id,
+                message
+            );
+            Err(message)
+        }
     }
 }
 
@@ -292,7 +404,7 @@ mod tests {
     use crate::ocr::{OcrEngine, OcrEngineError, OcrInput, OcrOutput};
     use crate::storage::{ClipboardRepository, Database, OcrRepository};
 
-    use super::{OcrWorker, OcrWorkerManager};
+    use super::{retry_backoff, OcrWorker, OcrWorkerManager, MAX_RECOGNITION_ATTEMPTS};
 
     fn image_item(id: &str) -> ClipboardItem {
         ClipboardItem {
@@ -364,6 +476,34 @@ mod tests {
         }
     }
 
+    struct FlakyEngine {
+        calls: Arc<AtomicUsize>,
+        failures_before_success: usize,
+    }
+
+    impl OcrEngine for FlakyEngine {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+
+        fn model_version(&self) -> &str {
+            "test-1"
+        }
+
+        fn recognize(&self, _input: &OcrInput) -> Result<OcrOutput, OcrEngineError> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call < self.failures_before_success {
+                Err(OcrEngineError::new("synthetic transient failure"))
+            } else {
+                Ok(OcrOutput {
+                    language: Some("en".to_owned()),
+                    full_text: "recognized after retry".to_owned(),
+                    blocks: Vec::new(),
+                })
+            }
+        }
+    }
+
     #[test]
     fn stop_joins_worker_and_releases_engine() {
         let dropped = Arc::new(AtomicBool::new(false));
@@ -400,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_recognition_is_persisted_without_an_immediate_retry_loop() {
+    fn a_permanently_failing_image_is_retried_a_bounded_number_of_times() {
         let database = Arc::new(Database::open_in_memory().unwrap());
         database.save_item(&image_item("image")).unwrap();
         assert!(database.enqueue_ocr("image").unwrap());
@@ -412,7 +552,7 @@ mod tests {
         });
         let worker = OcrWorker::start(engine, Arc::clone(&database)).unwrap();
 
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(20);
         loop {
             if database
                 .get_ocr_result("image")
@@ -421,8 +561,11 @@ mod tests {
             {
                 break;
             }
-            assert!(Instant::now() < deadline, "OCR failure was not persisted");
-            std::thread::sleep(Duration::from_millis(10));
+            assert!(
+                Instant::now() < deadline,
+                "OCR failure was never persisted after the retry budget ran out"
+            );
+            std::thread::sleep(Duration::from_millis(20));
         }
 
         worker.stop();
@@ -432,7 +575,59 @@ mod tests {
             result.error_message.as_deref(),
             Some("synthetic OCR failure")
         );
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            calls.load(Ordering::SeqCst) as u32,
+            MAX_RECOGNITION_ATTEMPTS,
+            "a permanently failing image must stop after the bounded attempt count"
+        );
+    }
+
+    /// The whole point of the retry budget: a failure that would succeed on a
+    /// second pass must not need the user to open the item and press regenerate.
+    #[test]
+    fn a_transient_failure_recovers_without_user_action() {
+        let database = Arc::new(Database::open_in_memory().unwrap());
+        database.save_item(&image_item("image")).unwrap();
+        assert!(database.enqueue_ocr("image").unwrap());
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let engine = Arc::new(FlakyEngine {
+            calls: Arc::clone(&calls),
+            failures_before_success: 1,
+        });
+        let worker = OcrWorker::start(engine, Arc::clone(&database)).unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            if database
+                .get_ocr_result("image")
+                .unwrap()
+                .is_some_and(|result| result.status == OcrStatus::Completed)
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "a transiently failing image was never retried to completion"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        worker.stop();
+        let result = database.get_ocr_result("image").unwrap().unwrap();
+        assert_eq!(result.full_text, "recognized after retry");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn retry_backoff_grows_and_stays_bounded() {
+        assert_eq!(retry_backoff(0), Duration::from_secs(1));
+        assert_eq!(retry_backoff(1), Duration::from_secs(2));
+        assert_eq!(retry_backoff(2), Duration::from_secs(4));
+        // The exponent cap keeps a large attempt count from overflowing the
+        // shift and turning a backoff into hours.
+        assert_eq!(retry_backoff(3), Duration::from_secs(8));
+        assert_eq!(retry_backoff(64), Duration::from_secs(16));
     }
 
     #[test]

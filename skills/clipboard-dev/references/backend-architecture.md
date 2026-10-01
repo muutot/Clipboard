@@ -84,6 +84,28 @@ Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLit
 
 `OcrEngine` supports PP-OCR, Tesseract, and no-op implementations. `OcrWorkerManager` owns a replaceable worker so engine/model/threshold changes can restart OCR without restarting the app. `OcrWorker::start` and `OcrWorkerManager::start`/`restart` return `Result`, so a thread-spawn failure degrades to unavailable OCR instead of panicking the app. OCR rows are recoverable jobs, share image-hash results, and feed search through the outbox. Model downloads verify size and the pinned upstream SHA-256 (each `PpOcrModelFile.sha256`, taken from the GitHub release asset digest) before activating the file, and only then record the digest to `<model>.sha256` (`ocr/models.rs::record_model_digest`) so a later install redownloads when the on-disk file stops matching. Digest checks are memoized by file length/mtime (`ocr/models.rs::digest_cache`), so the periodic OCR status and memory-diagnostics polling does not re-hash unchanged ONNX weights. A replaced asset, intercepted TLS stream, or corruption is rejected instead of reaching the ONNX runtime; updating a model means updating the pinned size/digest in `ocr/models.rs` together with the release tag. The Tesseract engine runs the CLI with a fixed 120 s per-image timeout; its stdout/stderr must be drained on dedicated threads while waiting (`run_tesseract_with_timeout` → `wait_for_child_with_drain`), because polling `try_wait` without reading the pipes deadlocks the child as soon as the recognized output exceeds the OS pipe buffer. Keep config, model installation/status, fallback selection, worker lifecycle, database transitions, search synchronization, settings progress, and shutdown aligned.
 
+Recognition failures are retried, but the retry queue lives in the worker
+(`ocr/worker.rs::PendingRetry`), not in the database, and both the first
+attempt and every retry go through `handle_recognition_failure` so the
+budget is consulted once per failure. Two constraints make that shape
+mandatory rather than stylistic:
+
+- Requeueing through `retry_ocr` would set the row back to `pending`, and
+  `claim_next_ocr` orders by `created_at_ms` — the same row would be
+  claimed again on the next 500 ms poll while every other pending image
+  waited out the full backoff.
+- Leaving the row in `processing` for the whole retry window keeps the
+  detail panel honest, and startup `requeue_interrupted_ocr` already
+  turns `processing` rows back into `pending`, so a crash mid-retry is
+  covered without any new state.
+
+`MAX_RECOGNITION_ATTEMPTS` bounds the automatic passes; the manual
+`regenerate_clipboard_item_ocr` path stays unlimited. Only the last
+failure is persisted, so a stored `error_message` is always the real
+reason the final attempt failed. The attempt-count test exists to catch
+the budget being checked on one path only, which silently made the
+constant mean one more pass than it says.
+
 ## Capture, content, and self-trigger suppression
 
 The clipboard monitor produces change notifications; a capture thread reads platform content, applies privacy and self-trigger checks, stores resources/metadata, saves through the repository, queues OCR/thumbnails, and emits the saved record. Platform access goes through `PlatformClipboard` adapters. Text capture may include HTML/RTF fragments, each capped by `maxTextCaptureBytes`. The monitor's `start` detects a dead monitor thread (the capture worker's receiver was dropped after a worker panic or spawn failure) via `JoinHandle::is_finished` and resets its flag so a restart is not permanently blocked by "already running".

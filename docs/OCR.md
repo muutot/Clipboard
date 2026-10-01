@@ -64,6 +64,16 @@ error_message
 - 搜索索引损坏时，从 SQLite 的 OCR 结果重建
 - 删除图片记录时，同时清理 OCR 数据、索引文档和资源文件
 
+重试的实际形态（`ocr/worker.rs`）：
+
+- **自动**：单张图片最多 `MAX_RECOGNITION_ATTEMPTS`（3）次识别尝试，首次失败后按 1s → 2s → 4s 退避。
+  重试队列只存在 worker 内存里，数据库行在整段重试窗口内保持 `processing`，因此界面显示「正在识别」是诚实的；
+  进程崩溃时的中断由启动时 `requeue_interrupted_ocr` 把 `processing` 复位为 `pending` 覆盖。
+  之所以不把失败行重新入队：`claim_next_ocr` 按 `created_at_ms` 排序，重新入队会让同一行在下一个轮询周期立刻被再次领取，
+  其他待识别图片被迫等完整段退避。
+- **手动**：详情面板「重新识别」调用 `regenerate_clipboard_item_ocr`，次数不受限，并同时作废同哈希的其他记录以便重算。
+- 预算耗尽后才把最后一次的错误信息落为 `failed`，因此失败原因始终是最后一次尝试的真实原因。
+
 ## 界面状态
 
 图片项目应能显示以下状态：
