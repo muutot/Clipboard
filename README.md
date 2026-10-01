@@ -23,7 +23,7 @@
 ## 简介
 
 Clipboard Desktop 是一款 **高性能、跨平台、本地优先**的剪贴板管理工具。它在后台静默运行，持续记录剪贴板历史。通过全局热键（默认
-`Alt+C`）一键唤起，支持 **全文搜索（含中文分词）**、 **图片 OCR 文字识别**、收藏、编辑、快速粘贴等操作。
+`Alt+C`，**Windows 独有**）一键唤起，支持 **全文搜索（含中文分词）**、 **图片 OCR 文字识别**、收藏、编辑、快速粘贴等操作。
 
 > **隐私承诺**：默认所有数据存储在本地，不包含任何遥测。OCR 完全离线运行，无需联网。仅在以下用户显式操作时访问网络：配置并启用
 > S3 同步（数据将上传至你自己的存储桶）、检查应用更新、下载 OCR 模型；"仅本地模式"开启时更新检查与模型下载会被阻止。
@@ -33,6 +33,9 @@ Clipboard Desktop 是一款 **高性能、跨平台、本地优先**的剪贴板
 ```
 Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 ```
+
+> 全局热键与「粘贴到上一个窗口」目前仅在 **Windows** 可用；macOS 与 Linux 尚无系统级注册路径，快捷键只在主窗口获得焦点时生效（详见
+> [多平台支持状态](#多平台支持状态)）。
 
 ---
 
@@ -123,7 +126,7 @@ Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 - **CLI 命令行**：`clipboard list / search / copy / paste / delete / export / stats`
 - **本地 API**：仅限环回地址的 HTTP 接口，Bearer token 鉴权
 - **导入导出**：JSON / CSV / 纯文本，支持 **PPaste 备份导入**
-- **快捷键系统**：全局热键 + 应用内快捷键 + 双击修饰键（Shift+Shift）
+- **快捷键系统**：应用内快捷键（跨平台）+ 全局热键与双击修饰键（Shift+Shift，**仅 Windows**）
 
 </td>
 </tr>
@@ -198,20 +201,33 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 
 ## 多平台支持状态
 
-| 功能                       | Windows       | macOS                              | Linux X11              | Linux Wayland                    |
-| :------------------------- | :------------ | :--------------------------------- | :--------------------- | :------------------------------- |
-| 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib FFI       | ⚠️ `wl-paste`                    |
-| 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）              | ⚠️ `xclip`（无标记）   | ⚠️ `wl-copy`（无标记）           |
-| 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips` | ⚠️ `xclip`             | ⚠️ `wl-paste`                    |
-| 读取文件路径               | ✅ 原生 Win32 | ⚠️ `NSFilenamesPboardType`         | ⚠️ `xclip`（uri-list） | ⚠️ `wl-paste`（uri-list）        |
-| 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib + `/proc` | ⚠️ `swaymsg`/`hyprctl`/`xdotool` |
-| 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`               | ⚠️ freedesktop 图标    | ⚠️ freedesktop 图标              |
+| 功能                       | Windows       | macOS                              | Linux X11                 | Linux Wayland                    |
+| :------------------------- | :------------ | :--------------------------------- | :------------------------ | :------------------------------- |
+| 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib FFI          | ⚠️ `wl-paste`                    |
+| 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）              | ⚠️ `xclip`（无标记）      | ⚠️ `wl-copy`（无标记）           |
+| 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips` | ⚠️ `xclip`                | ⚠️ `wl-paste`                    |
+| 读取文件路径               | ✅ 原生 Win32 | ⚠️ `NSFilenamesPboardType`         | ⚠️ `xclip`（uri-list）    | ⚠️ `wl-paste`（uri-list）        |
+| 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib + `/proc`    | ⚠️ `swaymsg`/`hyprctl`/`xdotool` |
+| 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`               | ⚠️ freedesktop 图标       | ⚠️ freedesktop 图标              |
+| 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
+| 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
+| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
+| 富文本 RTF 采集            | ✅ 原生 Win32 | ❌ 未实现（HTML 为富文本来源）     | ⚠️ `xclip` / `wl-paste`   | ⚠️ `xclip` / `wl-paste`          |
+| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
+| 单实例唤醒已有实例         | ✅ 原命名事件 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
+| 秘密存储（OS 级钥匙串）    | ✅ DPAPI      | ⚠️ Keychain（不可达则明文回退）    | ⚠️ Secret Service（同左） | ⚠️ Secret Service（同左）        |
 
 - ✅ **原生 API** — 直接 FFI 调用系统接口，无外部依赖
 - ⚠️ **部分支持** — 依赖外部命令行工具，或受来源应用写入格式等条件限制
 - ❌ **未实现** — 返回空值/错误，尚不支持
 
 > **注意**：剪贴板变更检测按平台采用不同机制——Windows 使用原生剪贴板序列号事件驱动；Linux 在 X11 下通过 XFixes 事件、在 Wayland 下通过 data-control 协议事件驱动（协议不可用时回退 500ms 轮询）；macOS 无推送 API，使用 500ms 轮询。先比对文本，无文本时再比对文件路径与图片内容，因此图片/文件复制也能被采集。自触发防护不依赖剪贴板私有标记（写入命令行工具无法携带标记），而是将应用自身写入的内容哈希登记在内存守卫中，采集时比对跳过。
+
+> **热键说明**：系统级注册与「粘贴到上一个窗口」目前只有 Windows 的 `RegisterHotKey` + 低级键盘钩子一条真实实现。macOS 的
+> `MacOSKeyboardHook::register` 仍是仅含注释的大纲，非 Windows 走 `windows_hotkey_stub.rs`，其线程永不触发、
+> `restore_window_and_paste` 直接返回「quick paste is only implemented on Windows」；
+> `platform_info.rs::current_capabilities` 因此在 macOS / Linux 返回 `global_shortcut: false`，并一并返回
+> `quick_paste: false`。快捷键配置本身跨平台可用，绑定在主窗口获得焦点时生效。
 
 ---
 
