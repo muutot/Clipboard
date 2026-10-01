@@ -37,7 +37,7 @@
 
 ## 1.5.2 — 信任边界收尾 + 数据安全
 
-- [x] SEC-05 跨平台秘密存储：`platform::secret_store` 门面 + Windows DPAPI（存量）+ macOS login Keychain（`apple-native-keyring-store`）+ Linux Secret Service（`dbus-secret-service-keyring-store`，`crypto-rust`+`vendored` 免系统包）。`conf.json` 只存 `dpapi1:`/`oskey1:` 信封与标记；OS store 不可达时明文回退并打日志（不锁死）；mock-store 回环单测在全平台跑，mac/Linux 完整路径由 CI 覆盖。跟进：`conf/api.token` 仍为明文文件，另行立项。
+- [x] SEC-05 跨平台秘密存储：`platform::secret_store` 门面 + Windows DPAPI（存量）+ macOS login Keychain（`apple-native-keyring-store`）+ Linux Secret Service（`dbus-secret-service-keyring-store`，`crypto-rust`+`vendored` 免系统包）。`conf.json` 只存 `dpapi1:`/`oskey1:` 信封与标记；OS store 不可达时明文回退并打日志（不锁死）；mock-store 回环单测在全平台跑，mac/Linux 完整路径由 CI 覆盖。**`conf/api.token` 经复核后决定不迁入 OS store**：该文件是文档化的对接点（`cli/api.rs` 的 401 文案直接指向它，文件本身的存在意义就是让外部脚本读到稳定凭据），密封后提示与脚本同时失效。改为加固其唯一实际依赖——`commands/api.rs::write_api_token` 用 `OpenOptions::mode(0o600)` 在**创建时**设权限（原先 `fs::write` 后再 chmod 存在世界可读窗口，且 exFAT/网络共享上 chmod 静默失效），两平台权限收窄失败均打日志而非 `let _ =` 吞掉，空/纯空白 token 文件按缺失处理并重新生成。
 - [x] SEC-04 余量：`replace_icon_file` 的 `source_path` 仅 `is_file` 校验。已加三重门（扩展名白名单对齐 dialog 过滤器 + 10MiB 上限 + 光栅可解码校验，`commands/files.rs::validate_replace_source`），4 个负向/正向单测通过；残余风险（被攻破渲染层搬运其他合法图片）已在注释记录，dialog 流程属用户显式同意。
 - [x] REL-01 余量（决议：暂不做 SBOM）：产物已有 sha256sum（`release.yml`），第三方 action 已 pin SHA 且写权限收敛到 build job，`Cargo.lock` 锁定全量依赖。手写非标准 SBOM 价值低、标准工具（cargo-cyclonedx）引入 CI 工具链成本与收益不成比例；若未来进应用商店/企业分发再立项。
 - [x] Linux uri-list 解析回归测试：`platform::parse_uri_list` 共享纯函数被 X11/Wayland 共用（`platform/mod.rs`），`file://` 解码、换行分隔、注释/非法行丢弃单测通过（`platform::tests::parse_uri_list_*`）。
