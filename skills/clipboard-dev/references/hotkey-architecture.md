@@ -140,6 +140,17 @@ Window-only (main window focused):
 - Non-Windows has no OS-global path: global bindings work only while the
   main window is focused there. Do not claim global behavior from the stub
   compiling. `quickPaste` ships unbound by default.
+- `platform_info.rs::capabilities_for(platform)` is the single source for
+  the `globalShortcut` / `quickPaste` flags the UI reads, and it derives
+  both from one `cfg!(target_os = "windows")` constant rather than
+  restating them per platform. `platform/mod.rs` routes every non-Windows
+  target to `windows_hotkey_stub.rs`, whose registration loop never fires
+  and whose `restore_window_and_paste` returns `Err` — so a per-platform
+  literal is how macOS came to report `quickPaste: true` while running
+  that stub. Making it a pure function of the platform is deliberate: it
+  lets the test assert all five rows from a Windows host, which a
+  `#[cfg]`-gated literal cannot be tested against at all. Add a new
+  shortcut capability here, not in a per-platform match arm.
 - Frontend and backend registries must stay in parity: `global_action_ids()`
   order == `GLOBAL_ACTION_IDS` order (id ranges derive from position).
   `keyboard-registry.test.ts` fails the build if defaults and registry drift.

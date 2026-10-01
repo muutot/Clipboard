@@ -114,52 +114,40 @@ pub fn runtime_info() -> RuntimeInfo {
     }
 }
 
-pub fn current_capabilities() -> PlatformCapabilities {
-    #[cfg(target_os = "windows")]
-    {
-        return PlatformCapabilities {
-            clipboard_monitoring: true,
-            global_shortcut: true,
-            quick_paste: true,
-            system_tray: true,
-            requires_accessibility_permission: false,
-        };
-    }
+/// Capability table for one platform, as a pure function of the platform so
+/// every row is testable from any host.
+///
+/// The shortcut flags are deliberately derived from a single constant rather
+/// than restated per platform. `platform/mod.rs` compiles
+/// `windows_hotkey_stub.rs` for every non-Windows target, and that module
+/// registers nothing (its loop never fires) and returns
+/// `Err("quick paste is only implemented on Windows")` from
+/// `restore_window_and_paste`. A per-platform literal is what let macOS
+/// report `quick_paste: true` while running exactly that stub.
+pub fn capabilities_for(platform: Platform) -> PlatformCapabilities {
+    // The only compiled-in real backend for either capability, and only for
+    // the platform actually running — `Unknown` is a detection fallback, not
+    // a host that could be running the Windows backend.
+    let real_shortcut_backend = cfg!(target_os = "windows") && platform == Platform::detect();
 
-    #[cfg(target_os = "macos")]
-    {
-        // No OS-global hotkey path is wired (the hook register is a stub);
-        // bindings apply while the main window is focused.
-        return PlatformCapabilities {
-            clipboard_monitoring: true,
-            global_shortcut: false,
-            quick_paste: true,
-            system_tray: true,
-            requires_accessibility_permission: true,
-        };
-    }
+    let (clipboard_monitoring, system_tray, requires_accessibility_permission) = match platform {
+        Platform::Windows => (true, true, false),
+        Platform::MacOS => (true, true, true),
+        Platform::LinuxX11 | Platform::LinuxWayland => (true, true, false),
+        Platform::Unknown => (false, false, false),
+    };
 
-    #[cfg(target_os = "linux")]
-    {
-        // X11/Wayland have no OS-global registration; bindings apply while
-        // the main window is focused (compositor setup is out of scope).
-        return PlatformCapabilities {
-            clipboard_monitoring: true,
-            global_shortcut: false,
-            quick_paste: false,
-            system_tray: true,
-            requires_accessibility_permission: false,
-        };
-    }
-
-    #[allow(unreachable_code)]
     PlatformCapabilities {
-        clipboard_monitoring: false,
-        global_shortcut: false,
-        quick_paste: false,
-        system_tray: false,
-        requires_accessibility_permission: false,
+        clipboard_monitoring,
+        global_shortcut: real_shortcut_backend,
+        quick_paste: real_shortcut_backend,
+        system_tray,
+        requires_accessibility_permission,
     }
+}
+
+pub fn current_capabilities() -> PlatformCapabilities {
+    capabilities_for(Platform::detect())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -251,5 +239,60 @@ impl ForegroundApp {
             name: String::new(),
             exe_path: String::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{capabilities_for, Platform};
+
+    /// The regression this file exists to prevent: a per-platform literal
+    /// claimed a capability the target does not have. macOS reported
+    /// `quick_paste: true` while compiling `windows_hotkey_stub.rs`, whose
+    /// `restore_window_and_paste` returns Err. Asserting every row here — not
+    /// just the running one — is what makes the macOS and Linux values
+    /// checkable from a Windows host.
+    #[test]
+    fn no_platform_claims_an_unimplemented_shortcut_backend() {
+        let running = Platform::detect();
+        let real_backend = cfg!(target_os = "windows");
+
+        for platform in [
+            Platform::Windows,
+            Platform::MacOS,
+            Platform::LinuxX11,
+            Platform::LinuxWayland,
+            Platform::Unknown,
+        ] {
+            let capabilities = capabilities_for(platform);
+            let expected = real_backend && platform == running;
+
+            assert_eq!(
+                capabilities.global_shortcut, expected,
+                "{platform}: global_shortcut must track the compiled RegisterHotKey backend"
+            );
+            assert_eq!(
+                capabilities.quick_paste, expected,
+                "{platform}: quick_paste must track the compiled restore_window_and_paste"
+            );
+        }
+    }
+
+    /// macOS needs Accessibility permission for the features that reach the
+    /// system APIs; no other supported target gates on it. Unknown must not
+    /// claim any capability at all.
+    #[test]
+    fn accessibility_permission_is_macos_only_and_unknown_claims_nothing() {
+        assert!(capabilities_for(Platform::MacOS).requires_accessibility_permission);
+        assert!(!capabilities_for(Platform::Windows).requires_accessibility_permission);
+        assert!(!capabilities_for(Platform::LinuxX11).requires_accessibility_permission);
+        assert!(!capabilities_for(Platform::LinuxWayland).requires_accessibility_permission);
+
+        let unknown = capabilities_for(Platform::Unknown);
+        assert!(!unknown.clipboard_monitoring);
+        assert!(!unknown.system_tray);
+        assert!(!unknown.global_shortcut);
+        assert!(!unknown.quick_paste);
+        assert!(!unknown.requires_accessibility_permission);
     }
 }
