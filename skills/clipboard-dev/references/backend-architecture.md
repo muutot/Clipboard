@@ -106,6 +106,21 @@ reason the final attempt failed. The attempt-count test exists to catch
 the budget being checked on one path only, which silently made the
 constant mean one more pass than it says.
 
+`PpOcrEngine::recognize` decodes through
+`content::hash::decode_image_file`, not oar-ocr's `load_image`, so the
+OCR path inherits the same `MAX_DECODE_DIMENSION` and allocation budget
+as thumbnails instead of allocating whatever the file declares. It then
+clamps the long side to `MAX_OCR_SIDE` (4000, oar-ocr's own
+`DEFAULT_MAX_SIDE_LIMIT`, which the detector discards beyond anyway)
+before `predict`. Two rules follow from that clamp and must not be
+dropped: `ocr_input_geometry` is a pure function so the mapping is
+testable without ONNX weights, and the stored block geometry must be
+multiplied by the returned `coordinate_scale`, because the detector
+reports boxes in the coordinate space of the image it was handed. The
+OCR-coordinate highlight feature is still unimplemented, so nothing
+consumes those boxes yet — a missing rescale would only surface when
+that lands.
+
 ## Capture, content, and self-trigger suppression
 
 The clipboard monitor produces change notifications; a capture thread reads platform content, applies privacy and self-trigger checks, stores resources/metadata, saves through the repository, queues OCR/thumbnails, and emits the saved record. Platform access goes through `PlatformClipboard` adapters. Text capture may include HTML/RTF fragments, each capped by `maxTextCaptureBytes`. The monitor's `start` detects a dead monitor thread (the capture worker's receiver was dropped after a worker panic or spawn failure) via `JoinHandle::is_finished` and resets its flag so a restart is not permanently blocked by "already running".
