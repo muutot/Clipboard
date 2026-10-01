@@ -1078,7 +1078,11 @@ pub fn read_clipboard_text() -> Option<String> {
     None
 }
 
-/// Reads clipboard image data – not supported via command-line tools on X11.
+/// Reads clipboard image data by asking `xclip` for each common image target.
+///
+/// X11 has no single image target the way Windows does, so this depends on
+/// `xclip` being installed and on the source application having published one
+/// of these targets. Returns `None` when no target yields decodable bytes.
 #[cfg(target_os = "linux")]
 pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     // Try xclip with common image targets
