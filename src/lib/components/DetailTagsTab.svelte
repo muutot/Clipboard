@@ -48,6 +48,25 @@
 </script>
 
 <div class="tags-tab">
+  <div class="tag-input-wrap">
+    <input
+      bind:value={tagDraft}
+      placeholder={_t("detail.addTagPlaceholder")}
+      onkeydown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addTagFromInput();
+        }
+      }}
+    />
+    <button
+      type="button"
+      class="tag-add"
+      aria-label={_t("detail.addTag")}
+      disabled={!tagDraft.trim()}
+      onclick={addTagFromInput}><AppIcon name="plus" size={12} /></button
+    >
+  </div>
   {#if (item.tags ?? []).length > 0}
     <div class="tags-list">
       {#each item.tags ?? [] as tag (tag)}
@@ -68,37 +87,25 @@
   {:else}
     <p class="tags-empty">{_t("detail.noTags")}</p>
   {/if}
-  <div class="tag-input-wrap">
-    <input
-      bind:value={tagDraft}
-      placeholder={_t("detail.addTagPlaceholder")}
-      onkeydown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          addTagFromInput();
-        }
-      }}
-    />
-    <button
-      type="button"
-      class="tag-add"
-      aria-label={_t("detail.addTag")}
-      disabled={!tagDraft.trim()}
-      onclick={addTagFromInput}><AppIcon name="plus" size={12} /></button
-    >
-  </div>
 </div>
 
 <style>
+  /* The add control stays pinned to the top of the tab: the column fills the
+     panel's scroll body, so only the list itself scrolls underneath it. */
   .tags-tab {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    height: 100%;
   }
 
   .tags-list {
     display: grid;
     gap: 6px;
+    align-content: start;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .tag-row {
@@ -148,12 +155,14 @@
 
   /* Single rounded control that mirrors the shared settings input look
      (`--input-bg`, `--border-color`, control radius) with the add action
-     embedded as a trailing ghost button. */
+     embedded as a trailing ghost button. It is the tab's first row and never
+     scrolls away, so it must not shrink when the list grows. */
   .tag-input-wrap {
     display: flex;
     align-items: center;
     gap: 6px;
     height: 32px;
+    flex-shrink: 0;
     padding: 0 5px 0 10px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
