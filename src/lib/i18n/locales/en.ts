@@ -537,10 +537,12 @@ const en: LocaleDefinition = {
     selectAllDesc: "Select all items in the list",
     pasteToWindowDesc: "Quick paste the current item to the last active window",
     quickCopyDesc: "Quick copy item #{n}",
-    toggleWindowDesc: "Show or hide main window (system global hotkey)",
+    toggleWindowDesc: "Show or hide the main window",
     focusSearchDesc: "Focus search input",
     toggleFloatPanel: "Toggle or hide float panel",
-    toggleFloatPanelDesc: "Show or hide float panel (system global hotkey)",
+    toggleFloatPanelDesc: "Show or hide the float panel",
+    globalShortcutUnsupported:
+      "This platform has no system-wide shortcut registration, so these two bindings only apply while the main window is focused. They are saved normally and take effect immediately on Windows.",
   },
   capture: {
     settings: "Settings / Capture",

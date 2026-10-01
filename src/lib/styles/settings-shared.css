@@ -72,6 +72,16 @@ header p {
   margin: 0 0 12px 16px;
 }
 
+/* Platform caveat shown when the running OS cannot honor a setting. Lives
+   here rather than per-panel: the capture and keyboard panels both need it,
+   and a panel-local copy is what the shared-CSS rule exists to prevent. */
+.settings-platform-note {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
+  line-height: 1.5;
+}
+
 .visually-hidden,
 label.visually-hidden {
   position: absolute;

@@ -181,7 +181,7 @@
         </button>
       </div>
       {#if nonWindowsDesktop}
-        <p class="polling-note">{_t("capture.pollingNote")}</p>
+        <p class="settings-platform-note">{_t("capture.pollingNote")}</p>
       {/if}
     </CustomEntry>
 
@@ -245,12 +245,5 @@
   .pause-state {
     color: var(--text-muted);
     font-size: var(--settings-control-size, var(--font-size-secondary, 11px));
-  }
-
-  .polling-note {
-    margin: 6px 0 0;
-    color: var(--text-muted);
-    font-size: var(--settings-note-size, var(--font-size-tiny, 10px));
-    line-height: 1.5;
   }
 </style>

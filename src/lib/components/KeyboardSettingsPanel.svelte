@@ -12,6 +12,7 @@
     type KeyboardConfig,
   } from "$lib/services/keyboard";
   import { defaultShortcutsFor } from "$lib/keyboard-defaults";
+  import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import {
     HOTKEY_ACTIONS,
     type HotkeyActionDef,
@@ -48,6 +49,11 @@
   let recordingTimer: ReturnType<typeof setTimeout> | undefined;
   let configRequestId = 0;
   let componentDestroyed = false;
+  // Optimistic default: assume global shortcuts work so the note only appears
+  // once the backend has said otherwise. The flag is stable for the process
+  // lifetime, so there is no flash of a wrong notice the way an async-loaded
+  // control value would have.
+  let globalShortcutSupported = $state(true);
 
   interface SystemAction {
     id: string;
@@ -125,6 +131,7 @@
 
   onMount(() => {
     void loadConfig();
+    void loadGlobalShortcutSupport();
     // The backend skips chords the OS refuses (another app owns the
     // shortcut) and reports each one here; without this listener the chip
     // keeps looking active while every press is silently dropped.
@@ -147,6 +154,22 @@
     resetToken;
     if (resetToken > 0) void loadConfig();
   });
+
+  /**
+   * Whether the running OS actually registers a global shortcut.
+   *
+   * Only Windows has a real backend; every other target compiles the
+   * non-Windows hotkey stub, whose registration loop never fires. Without
+   * this the Global tab invites the user to bind Alt+C on macOS or Linux and
+   * the binding silently does nothing, because the settings are stored and
+   * reported as saved either way.
+   */
+  async function loadGlobalShortcutSupport() {
+    if (!isTauriRuntime()) return;
+    const runtime = await getRuntimeInfo();
+    if (componentDestroyed || !runtime) return;
+    globalShortcutSupported = runtime.capabilities.globalShortcut;
+  }
 
   async function loadConfig() {
     const requestId = ++configRequestId;
@@ -323,6 +346,9 @@
           </button>
         </div>
       </section>
+      {#if !globalShortcutSupported}
+        <p class="settings-platform-note">{_t("keyboard.globalShortcutUnsupported")}</p>
+      {/if}
     {/if}
     {#each categoryActions as action}
       <section

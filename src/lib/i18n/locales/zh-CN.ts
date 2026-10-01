@@ -512,10 +512,12 @@ const zhCN: LocaleDefinition = {
     selectAllDesc: "全选列表中的所有条目",
     pasteToWindowDesc: "将当前条目快速粘贴到上一个活跃窗口",
     quickCopyDesc: "快速复制列表第 {n} 条",
-    toggleWindowDesc: "唤起或隐藏主窗口（系统全局热键）",
+    toggleWindowDesc: "唤起或隐藏主窗口",
     focusSearchDesc: "聚焦搜索输入框",
     toggleFloatPanel: "唤起或隐藏悬浮窗口",
-    toggleFloatPanelDesc: "唤起或隐藏悬浮窗口（系统全局热键）",
+    toggleFloatPanelDesc: "唤起或隐藏悬浮窗口",
+    globalShortcutUnsupported:
+      "当前平台没有系统级快捷键注册能力，这两项绑定仅在主窗口处于焦点时生效。配置照常保存，在 Windows 上会立即生效。",
   },
   capture: {
     settings: "设置 / 采集",

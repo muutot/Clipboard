@@ -495,6 +495,7 @@ export interface LocaleDefinition {
     focusSearchDesc: string;
     toggleFloatPanel: string;
     toggleFloatPanelDesc: string;
+    globalShortcutUnsupported: string;
   };
   capture: {
     settings: string;

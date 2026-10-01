@@ -122,7 +122,8 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.transparency-slider` including WebKit and Firefox tracks/thumbs;
 - `.settings-feedback` success/error states;
 - `.settings-state` loading/unavailable placeholder state (centered muted text), `.readonly-hint` (muted note under disabled color settings), `.visually-hidden` (offscreen label), `.auto-save-note`, and the default pointer cursor for buttons;
-- `.restart-note` for restart-required notices in general-settings cards.
+- `.restart-note` for restart-required notices in general-settings cards;
+- `.settings-platform-note` for a muted note stating that the running OS cannot honor a setting — the capture panel's polling caveat and the keyboard panel's missing global-shortcut backend both use it. It is shared because two panels need the same rule; a second panel-local copy of that note style is the duplication this class exists to prevent.
 
 `src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `LayoutSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
 

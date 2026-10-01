@@ -162,6 +162,14 @@ Do not wrap the range input merely for styling. Initialize/update `--slider-pct`
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.
 - Roll optimistic switches back when the backend save or OS synchronization fails.
 - Keep restart-required state explicit for path/config changes that do not apply live.
+- State a platform limitation in the panel, not only in the README. Read the authoritative
+  `get_runtime_info` capability (`capabilities.globalShortcut`,
+  `capabilities.quickPaste`) rather than inferring from `operatingSystem`:
+  the capability is what the backend actually compiled, and it is the field
+  `platform_info.rs::capabilities_for` keeps honest. Default the flag to
+  "supported" and narrow it once the answer arrives — these values are fixed
+  for the process lifetime, so unlike a control value there is no
+  placeholder-default flash to avoid.
 - Hydrate async-loaded values before the control renders (shared store or load gate); never leave a placeholder default in the control. See [Never bind a control to an async placeholder default](#never-bind-a-control-to-an-async-placeholder-default).
 
 ## Settings search
