@@ -26,7 +26,9 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 ### CSV export/import
 
-`export_items` writes `id,kind,title,text_content,source_app,created_at_ms,is_favorite,content_hash`. `import_from_csv` maps columns by header name and prefers the exported `content_hash`; media rows carry no `text_content`, so deriving the hash from text alone would give every image/file row the same `(kind, content_hash)` and the `UNIQUE(kind, content_hash)` upsert would collapse them into a single row. Older CSVs without the `content_hash` column fall back to the derived hash. CSV carries no binary resources, so image/file rows import as metadata placeholders.
+Exports append a `clipboard_text_encoding` column with the value `apostrophe-v1`. Text cells whose first non-whitespace character is `=`, `+`, `-`, or `@` receive a leading apostrophe before CSV quoting, so a CSV consumer does not see a formula-leading cell; original leading apostrophes are doubled for reversibility. `import_from_csv` removes one leading apostrophe only on rows with that exact encoding marker, preserving literal apostrophes and compatibility with older/external CSV files. Regression tests parse the exported cells and round-trip formulas, whitespace, and literal apostrophes through the real importer. Spreadsheet-specific display and re-save behavior still require native consumer testing.
+
+`export_items` writes `id,kind,title,text_content,source_app,created_at_ms,is_favorite,content_hash,clipboard_text_encoding`. `import_from_csv` maps columns by header name and prefers the exported `content_hash`; media rows carry no `text_content`, so deriving the hash from text alone would give every image/file row the same `(kind, content_hash)` and the `UNIQUE(kind, content_hash)` upsert would collapse them into a single row. Older CSVs without the `content_hash` column fall back to the derived hash. CSV carries no binary resources, so image/file rows import as metadata placeholders.
 
 ### PPaste backup import
 

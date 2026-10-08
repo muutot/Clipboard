@@ -8,6 +8,8 @@ use crate::storage::Database;
 mod ppaste;
 pub(crate) use ppaste::{import_from_ppaste_backup, BACKUP_EXTENSION};
 
+const CSV_TEXT_ENCODING: &str = "apostrophe-v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ExportFormat {
@@ -59,11 +61,11 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
         ExportFormat::Csv => {
             let mut wtr = String::new();
             wtr.push_str(
-                "id,kind,title,text_content,source_app,created_at_ms,is_favorite,content_hash\n",
+                "id,kind,title,text_content,source_app,created_at_ms,is_favorite,content_hash,clipboard_text_encoding\n",
             );
             for item in filtered {
                 wtr.push_str(&format!(
-                    "{},{},{},{},{},{},{},{}\n",
+                    "{},{},{},{},{},{},{},{},{}\n",
                     escape_csv(&item.id),
                     clipboard_kind_name(item.kind),
                     escape_csv(&item.title),
@@ -72,6 +74,7 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
                     item.created_at_ms,
                     item.is_favorite,
                     escape_csv(&item.content_hash),
+                    CSV_TEXT_ENCODING,
                 ));
             }
             Ok(wtr)
@@ -289,6 +292,7 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
     let created_idx = column_index("created_at_ms");
     let favorite_idx = column_index("is_favorite");
     let content_hash_idx = column_index("content_hash");
+    let text_encoding_idx = column_index("clipboard_text_encoding");
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -305,10 +309,18 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
         }
         row_index += 1;
 
+        let encoded_text = text_encoding_idx
+            .and_then(|index| record.get(index))
+            .is_some_and(|encoding| encoding == CSV_TEXT_ENCODING);
+
         let field = |index: Option<usize>| -> Option<&str> {
-            index
-                .and_then(|index| record.get(index))
-                .map(|value| value.as_str())
+            index.and_then(|index| record.get(index)).map(|value| {
+                if encoded_text {
+                    value.strip_prefix('\'').unwrap_or(value)
+                } else {
+                    value.as_str()
+                }
+            })
         };
 
         let kind = match field(kind_idx)
@@ -447,11 +459,20 @@ fn escape_csv(field: &str) -> String {
         .chars()
         .next()
         .is_some_and(|c| matches!(c, '=' | '+' | '-' | '@'));
+    // CSV quotes delimit a cell; they do not make its contents literal in a
+    // spreadsheet. Prefix formula-looking text, and escape an original leading
+    // apostrophe too so our versioned importer can reverse this exactly.
+    let literal = if starts_as_formula || field.starts_with('\'') {
+        std::borrow::Cow::Owned(format!("'{field}"))
+    } else {
+        std::borrow::Cow::Borrowed(field)
+    };
+    let field = literal.as_ref();
     if field.contains(',')
         || field.contains('"')
         || field.contains('\n')
         || field.contains('\r')
-        || starts_as_formula
+        || field.starts_with('\'')
     {
         format!("\"{}\"", field.replace('"', "\"\""))
     } else {
@@ -943,15 +964,64 @@ mod tests {
     }
 
     #[test]
-    fn escape_csv_quotes_formula_cells() {
+    fn escape_csv_encodes_formula_cells_as_literal_text() {
         assert_eq!(escape_csv("plain"), "plain");
-        assert_eq!(escape_csv("=SUM(A1)"), "\"=SUM(A1)\"");
-        assert_eq!(escape_csv("+123"), "\"+123\"");
-        assert_eq!(escape_csv("-danger"), "\"-danger\"");
-        assert_eq!(escape_csv("@cmd"), "\"@cmd\"");
-        assert_eq!(escape_csv(" =SUM(A1)"), "\" =SUM(A1)\"");
+        assert_eq!(escape_csv("=SUM(A1)"), "\"'=SUM(A1)\"");
+        assert_eq!(escape_csv("+123"), "\"'+123\"");
+        assert_eq!(escape_csv("-danger"), "\"'-danger\"");
+        assert_eq!(escape_csv("@cmd"), "\"'@cmd\"");
+        assert_eq!(escape_csv(" =SUM(A1)"), "\"' =SUM(A1)\"");
         assert_eq!(escape_csv("a,b"), "\"a,b\"");
         assert_eq!(escape_csv("safe"), "safe");
+    }
+
+    #[test]
+    fn csv_export_keeps_formula_content_as_text_and_round_trips_it() {
+        let mut items = sample_items();
+        items[0].title = "=1+1".to_owned();
+        items[0].text_content = Some("\t=2+2".to_owned());
+        items[0].source_app = Some("'literal source".to_owned());
+        items[1].text_content = Some("'=literal text".to_owned());
+        let output = export_items(
+            &items,
+            &ExportOptions {
+                format: ExportFormat::Csv,
+                include_favorites: true,
+                date_from_ms: None,
+                date_to_ms: None,
+                content_types: vec![],
+            },
+        )
+        .unwrap();
+        let mut reader = CsvReader::new(&output);
+        reader.next_record().unwrap();
+        let row = reader.next_record().unwrap();
+        assert!(
+            row[2].starts_with('\''),
+            "CSV quoting alone still exposes a formula cell"
+        );
+        assert!(row[3].starts_with('\''));
+        let database = Database::open_in_memory().unwrap();
+        assert_eq!(
+            import_from_csv(&output, &database).unwrap().imported_count,
+            2
+        );
+        for original in items {
+            let restored = database.get_item(&original.id).unwrap().unwrap();
+            assert_eq!(restored.title, original.title);
+            assert_eq!(restored.text_content, original.text_content);
+            assert_eq!(restored.source_app, original.source_app);
+        }
+    }
+
+    #[test]
+    fn csv_without_encoding_marker_preserves_a_literal_apostrophe() {
+        let database = Database::open_in_memory().unwrap();
+        let csv = "id,kind,title,text_content\nlegacy,text,'title,'=literal\n";
+        assert_eq!(import_from_csv(csv, &database).unwrap().imported_count, 1);
+        let item = database.get_item("legacy").unwrap().unwrap();
+        assert_eq!(item.title, "'title");
+        assert_eq!(item.text_content.as_deref(), Some("'=literal"));
     }
 
     #[test]
