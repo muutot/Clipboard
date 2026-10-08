@@ -406,7 +406,7 @@ fn quarantine_database_for_migration(path: &Path) -> Result<Vec<(PathBuf, PathBu
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs();
+        .as_millis();
     let mut moved = Vec::new();
     for candidate in [
         path.to_path_buf(),
