@@ -80,6 +80,8 @@ The Windows NSIS template is `src-tauri/windows/installer.nsi`. Its settings-onl
 
 On reinstall, `DataDirectoryPage` skips an existing `conf/conf.json`, and `WriteInitialStorageConfig` returns without modifying it. Storage changes for an installed app must go through the app's migration workflow. `python scripts/test-installer-config.py` compiles the production writer and verifies byte-for-byte preservation of an existing config plus initial ASCII/Unicode path round-trips on the current Windows host.
 
+`un.ResolveStorageRoot` uses an embedded Windows PowerShell script to parse the full configuration and read only `storage.dataDirectory`. The command passes paths through `-File` arguments, never interpolates config values into code, and transfers the resolved path as UTF-16LE. The final path component must equal `storage` exactly, matching Rust's `StoragePaths`; a parent such as `mystorage` still needs its `storage` child. Invalid JSON/types, relative paths, parser failure, and paths exceeding NSIS string capacity skip data/model deletion. `python scripts/test-installer-storage.py` compiles the actual resolver and tests formatted JSON, escaped/Unicode paths, nested fields, leaf matching, and invalid input. Windows PowerShell is required for this optional uninstall cleanup; if unavailable, the uninstaller retains the data and logs the reason.
+
 ## High-coupling files
 
 Treat these as integration points and avoid concurrent edits:

@@ -24,11 +24,6 @@ ManifestDPIAwareness PerMonitorV2
 ${StrCase}
 ${StrLoc}
 ${StrRep}
-; Uninstaller-side instances of the same string helpers, used by
-; un.ResolveStorageRoot to locate a custom data directory at uninstall time.
-${UnStrCase}
-${UnStrLoc}
-${UnStrRep}
 
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
@@ -496,69 +491,81 @@ FunctionEnd
 ; Resolves the storage root targeted by the data/model cleanup options.
 ; Defaults to "$INSTDIR\storage"; when conf\conf.json carries a custom
 ; dataDirectory (written by the installer's data-location page or the app
-; settings), that directory's storage folder is used instead. The resolved
-; root is only kept when it actually contains app-owned storage content, so a
-; malformed or truncated value can never point the uninstaller at a foreign
-; folder. Result: "" means "nothing to delete".
+; settings), that directory's storage folder is used instead.
+; Parse the complete UTF-8 JSON with the Windows PowerShell parser. Invalid
+; config, unsupported paths, or an unavailable parser leave data untouched.
+; Result: "" means "nothing to delete".
+Function un.WriteStorageResolver
+  InitPluginsDir
+  FileOpen $0 "$PLUGINSDIR\clipboard-storage-resolver.ps1" w
+  FileWrite $0 `param([string]$$ConfigPath, [string]$$ProjectPath, [string]$$ResultPath)$\r$\n`
+  FileWrite $0 `$$ErrorActionPreference = 'Stop'$\r$\n`
+  FileWrite $0 `try {$\r$\n`
+  FileWrite $0 `  $$root = $$ProjectPath$\r$\n`
+  FileWrite $0 `  $$text = $$null$\r$\n`
+  FileWrite $0 `  $$utf8 = New-Object System.Text.UTF8Encoding -ArgumentList $$false, $$true$\r$\n`
+  FileWrite $0 `  try { $$text = [IO.File]::ReadAllText($$ConfigPath, $$utf8) }$\r$\n`
+  FileWrite $0 `  catch [IO.FileNotFoundException] {}$\r$\n`
+  FileWrite $0 `  catch [IO.DirectoryNotFoundException] {}$\r$\n`
+  FileWrite $0 `  if ($$null -ne $$text) {$\r$\n`
+  FileWrite $0 `    $$config = ConvertFrom-Json -InputObject $$text$\r$\n`
+  FileWrite $0 `    if ($$config -isnot [pscustomobject]) { throw 'Invalid configuration object' }$\r$\n`
+  FileWrite $0 `    $$storage = @($$config.PSObject.Properties | Where-Object { $$_.Name -ceq 'storage' })$\r$\n`
+  FileWrite $0 `    if ($$storage.Count -gt 0) {$\r$\n`
+  FileWrite $0 `      if ($$storage[0].Value -isnot [pscustomobject]) { throw 'Invalid storage object' }$\r$\n`
+  FileWrite $0 `      $$directory = @($$storage[0].Value.PSObject.Properties | Where-Object { $$_.Name -ceq 'dataDirectory' })$\r$\n`
+  FileWrite $0 `      if ($$directory.Count -gt 0 -and $$null -ne $$directory[0].Value) {$\r$\n`
+  FileWrite $0 `        if ($$directory[0].Value -isnot [string]) { throw 'Invalid directory type' }$\r$\n`
+  FileWrite $0 `        $$root = $$directory[0].Value$\r$\n`
+  FileWrite $0 `      }$\r$\n`
+  FileWrite $0 `    }$\r$\n`
+  FileWrite $0 `  }$\r$\n`
+  FileWrite $0 `  if ($$root -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$$))') { throw 'Directory must be absolute' }$\r$\n`
+  FileWrite $0 `  if ($$root.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0) { throw 'Invalid path characters' }$\r$\n`
+  FileWrite $0 `  $$root = [IO.Path]::GetFullPath($$root)$\r$\n`
+  FileWrite $0 `  if ([IO.Path]::GetFileName($$root.TrimEnd([char[]]'\/')) -cne 'storage') {$\r$\n`
+  FileWrite $0 `    $$root = [IO.Path]::Combine($$root, 'storage')$\r$\n`
+  FileWrite $0 `  }$\r$\n`
+  FileWrite $0 `  [IO.File]::WriteAllText($$ResultPath, $$root, [Text.Encoding]::Unicode)$\r$\n`
+  FileWrite $0 `  exit 0$\r$\n`
+  FileWrite $0 `} catch { exit 1 }$\r$\n`
+  FileClose $0
+FunctionEnd
+
 Function un.ResolveStorageRoot
-  StrCpy $UninstallStorageRoot "$INSTDIR\storage"
-  ${IfNot} ${FileExists} "$INSTDIR\conf\conf.json"
-    Goto resolve_validate
+  StrCpy $UninstallStorageRoot ""
+  Call un.WriteStorageResolver
+  Delete "$PLUGINSDIR\clipboard-storage-root.txt"
+  ; -File treats paths as arguments; no config values are embedded in code.
+  nsExec::ExecToLog /TIMEOUT=10000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\clipboard-storage-resolver.ps1" -ConfigPath "$INSTDIR\conf\conf.json" -ProjectPath "$INSTDIR\." -ResultPath "$PLUGINSDIR\clipboard-storage-root.txt"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Cannot parse storage configuration; retaining clipboard data and models."
+    Return
   ${EndIf}
   ClearErrors
-  FileOpen $0 "$INSTDIR\conf\conf.json" r
+  FileOpen $0 "$PLUGINSDIR\clipboard-storage-root.txt" r
   ${If} ${Errors}
-    Goto resolve_validate
+    Return
   ${EndIf}
-  StrCpy $5 ""
-  resolve_read:
-    ClearErrors
-    FileRead $0 $1
-    ${If} ${Errors}
-      Goto resolve_choose
-    ${EndIf}
-    ; Marker form: "dataDirectory":"<path>" - JSON paths use forward slashes.
-    ${UnStrLoc} $2 $1 `"dataDirectory":"` ">"
-    ${If} $2 == ""
-      Goto resolve_read
-    ${EndIf}
-    IntOp $2 $2 + 17 ; skip past `"dataDirectory":"`
-    StrCpy $1 $1 "" $2
-    ; Cut the value at the JSON string's closing quote.
-    ${UnStrLoc} $3 $1 `"` ">"
-    ${If} $3 == ""
-      StrCpy $5 $1
-    ${Else}
-      StrCpy $5 $1 $3
-    ${EndIf}
-  resolve_choose:
+  FileSeek $0 0 END $1
+  IntOp $2 ${NSIS_MAX_STRLEN} * 2
+  ${If} $1 > $2
+    FileClose $0
+    DetailPrint "Storage path exceeds installer capacity; retaining clipboard data and models."
+    Return
+  ${EndIf}
+  ; The helper writes UTF-16LE with a BOM; never decode using a code page.
+  FileSeek $0 2 SET
+  FileReadUTF16LE $0 $UninstallStorageRoot
   FileClose $0
-  ${If} $5 == ""
-    Goto resolve_validate
+  ${If} ${Errors}
+    StrCpy $UninstallStorageRoot ""
+    Return
   ${EndIf}
-  ${UnStrRep} $5 $5 "/" "\"
-  ; Trim one trailing separator, if any.
-  StrLen $1 $5
-  IntOp $1 $1 - 1
-  ${If} $1 >= 0
-    StrCpy $2 $5 1 $1
-    ${If} $2 == "\"
-      StrCpy $5 $5 $1
-    ${EndIf}
+  ${If} $UninstallStorageRoot == ""
+    Return
   ${EndIf}
-  ; A trailing "storage" leaf is the root itself, otherwise append it.
-  ${UnStrCase} $1 $5 "L"
-  StrLen $2 $1
-  IntOp $2 $2 - 7
-  ${If} $2 >= 0
-    StrCpy $3 $1 7 $2
-    ${If} $3 == "storage"
-      StrCpy $UninstallStorageRoot $5
-      Goto resolve_validate
-    ${EndIf}
-  ${EndIf}
-  StrCpy $UninstallStorageRoot "$5\storage"
-  resolve_validate:
   ${If} ${FileExists} "$UninstallStorageRoot\database\clipboard.sqlite3"
   ${OrIf} ${FileExists} "$UninstallStorageRoot\database\search-index\*.*"
   ${OrIf} ${FileExists} "$UninstallStorageRoot\models\*.*"
