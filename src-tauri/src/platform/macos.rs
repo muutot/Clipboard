@@ -29,6 +29,18 @@ impl crate::platform::PlatformClipboard for MacPlatform {
         get_foreground_app()
     }
 
+    fn read_clipboard_sequence(&self) -> Option<u32> {
+        let pool = unsafe { objc::objc_autoreleasePoolPush() };
+        let pb = objc::get_nspasteboard();
+        let count = if pb.is_null() {
+            None
+        } else {
+            Some(objc::pasteboard_change_count(pb) as u32)
+        };
+        unsafe { objc::objc_autoreleasePoolPop(pool) };
+        count
+    }
+
     fn read_clipboard_text(&self) -> Option<String> {
         read_clipboard_text()
     }

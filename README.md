@@ -215,7 +215,7 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 | 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
 | 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
 | 富文本 RTF 采集            | ✅ 原生 Win32 | ❌ 未实现（HTML 为富文本来源）     | ⚠️ `xclip` / `wl-paste`   | ⚠️ `xclip` / `wl-paste`          |
-| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
+| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ⚠️ 原生 changeCount（待平台验证）  | ⚠️ 双读校验与有限重试     | ⚠️ 双读校验与有限重试            |
 | 单实例唤醒已有实例         | ✅ 原命名事件 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
 | 秘密存储（OS 级钥匙串）    | ✅ DPAPI      | ⚠️ Keychain（不可达则明文回退）    | ⚠️ Secret Service（同左） | ⚠️ Secret Service（同左）        |
 

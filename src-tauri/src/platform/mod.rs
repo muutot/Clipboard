@@ -32,6 +32,7 @@ pub mod windows_hotkey;
 // ---------------------------------------------------------------------------
 
 pub mod autostart;
+pub mod clipboard_snapshot;
 pub mod dispatch;
 pub mod dpapi;
 pub mod hotkey_common;
