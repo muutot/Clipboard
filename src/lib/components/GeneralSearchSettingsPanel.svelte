@@ -64,10 +64,16 @@
       }
     }
 
+    function onCancel() {
+      sortDragIdx = null;
+      cleanup();
+    }
+
     function cleanup() {
       rows?.forEach((row) => row.classList.remove("sort-drag-over"));
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancel);
       if (stopPointerDrag === cleanup) stopPointerDrag = undefined;
     }
 
@@ -83,6 +89,7 @@
     stopPointerDrag = cleanup;
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onCancel);
   }
 
   function moveSortRule(fromIdx: number, toIdx: number) {
