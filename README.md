@@ -18,6 +18,8 @@
   <img src="https://img.shields.io/badge/Rust-edition2021-dea584?logo=rust" alt="rust">
 </p>
 
+> **English**: An English version of this document is available at [README_EN.md](README_EN.md).
+
 ---
 
 ## 简介
