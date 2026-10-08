@@ -376,7 +376,12 @@ pub fn run() {
                     }
                 };
                 let app_handle = app.handle().clone();
-                guard.start_wake_listener(move || show_main_window(&app_handle))?;
+                guard.start_wake_listener(move || {
+                    let app = app_handle.clone();
+                    // Teardown may join the IPC thread from the UI thread.
+                    // Post UI work rather than waiting for it here.
+                    let _ = app_handle.run_on_main_thread(move || show_main_window(&app));
+                })?;
                 app.manage(guard);
             }
             let keyboard = KeyboardManager::load(&project_directory)?;

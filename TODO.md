@@ -79,3 +79,5 @@
 - [ ] 多格式竞态防护：macOS changeCount 已接线；Linux 双读一致性校验与三次有限重试已实现，不具备系统序列号的原子保证。待对应平台 CI/实机验收。
 
 - [ ] macOS RTF：public.rtf NSData 读取已接线，ANSI 字节转 RTF 十六进制转义；含原始 binary run 的负载保守跳过。待 macOS CI/实机验收。
+
+- [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。待对应平台 CI/桌面激活验收。

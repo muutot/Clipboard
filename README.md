@@ -203,21 +203,21 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 
 ## 多平台支持状态
 
-| 功能                       | Windows       | macOS                              | Linux X11                 | Linux Wayland                    |
-| :------------------------- | :------------ | :--------------------------------- | :------------------------ | :------------------------------- |
-| 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib FFI          | ⚠️ `wl-paste`                    |
-| 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）              | ⚠️ `xclip`（无标记）      | ⚠️ `wl-copy`（无标记）           |
-| 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips` | ⚠️ `xclip`                | ⚠️ `wl-paste`                    |
-| 读取文件路径               | ✅ 原生 Win32 | ⚠️ 原生 `NSFilenamesPboardType`¹   | ⚠️ `xclip`（uri-list）    | ⚠️ `wl-paste`（uri-list）        |
-| 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib + `/proc`    | ⚠️ `swaymsg`/`hyprctl`/`xdotool` |
-| 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`               | ⚠️ freedesktop 图标       | ⚠️ freedesktop 图标              |
-| 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
-| 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
-| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
-| 富文本 RTF 采集            | ✅ 原生 Win32 | ⚠️ 原生 public.rtf（待平台验证）   | ⚠️ `xclip` / `wl-paste`   | ⚠️ `xclip` / `wl-paste`          |
-| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ⚠️ 原生 changeCount（待平台验证）  | ⚠️ 双读校验与有限重试     | ⚠️ 双读校验与有限重试            |
-| 单实例唤醒已有实例         | ✅ 原命名事件 | ❌ 未实现                          | ❌ 未实现                 | ❌ 未实现                        |
-| 秘密存储（OS 级钥匙串）    | ✅ DPAPI      | ⚠️ Keychain（不可达则明文回退）    | ⚠️ Secret Service（同左） | ⚠️ Secret Service（同左）        |
+| 功能                       | Windows       | macOS                              | Linux X11                     | Linux Wayland                           |
+| :------------------------- | :------------ | :--------------------------------- | :---------------------------- | :-------------------------------------- |
+| 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib FFI              | ⚠️ `wl-paste`                           |
+| 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）              | ⚠️ `xclip`（无标记）          | ⚠️ `wl-copy`（无标记）                  |
+| 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips` | ⚠️ `xclip`                    | ⚠️ `wl-paste`                           |
+| 读取文件路径               | ✅ 原生 Win32 | ⚠️ 原生 `NSFilenamesPboardType`¹   | ⚠️ `xclip`（uri-list）        | ⚠️ `wl-paste`（uri-list）               |
+| 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib + `/proc`        | ⚠️ `swaymsg`/`hyprctl`/`xdotool`        |
+| 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`               | ⚠️ freedesktop 图标           | ⚠️ freedesktop 图标                     |
+| 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                     | ❌ 未实现                               |
+| 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                     | ❌ 未实现                               |
+| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                     | ❌ 未实现                               |
+| 富文本 RTF 采集            | ✅ 原生 Win32 | ⚠️ 原生 public.rtf（待平台验证）   | ⚠️ `xclip` / `wl-paste`       | ⚠️ `xclip` / `wl-paste`                 |
+| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ⚠️ 原生 changeCount（待平台验证）  | ⚠️ 双读校验与有限重试         | ⚠️ 双读校验与有限重试                   |
+| 单实例唤醒已有实例         | ✅ 原命名事件 | ⚠️ 本地认证 IPC（待平台验证）      | ⚠️ 本地认证 IPC（待平台验证） | ⚠️ 本地认证 IPC（窗口激活由合成器决定） |
+| 秘密存储（OS 级钥匙串）    | ✅ DPAPI      | ⚠️ Keychain（不可达则明文回退）    | ⚠️ Secret Service（同左）     | ⚠️ Secret Service（同左）               |
 
 - ✅ **原生 API** — 直接 FFI 调用系统接口，无外部依赖
 - ⚠️ **部分支持** — 依赖外部命令行工具，或受来源应用写入格式等条件限制

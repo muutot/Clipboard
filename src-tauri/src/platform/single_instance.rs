@@ -20,6 +20,8 @@ pub struct SingleInstanceGuard {
     pid: u32,
     #[cfg(target_os = "windows")]
     wake_event: WindowsWakeEvent,
+    #[cfg(not(target_os = "windows"))]
+    wake_ipc: Option<super::local_wake::LocalWake>,
 }
 
 #[derive(Debug)]
@@ -212,11 +214,23 @@ impl SingleInstanceGuard {
         for attempt in 0..10 {
             match create_instance_lock(&lock_path, pid) {
                 Ok(()) => {
+                    #[cfg(not(target_os = "windows"))]
+                    let wake_ipc = match super::local_wake::LocalWake::bind(project_dir, pid) {
+                        Ok(wake) => wake,
+                        Err(error) => {
+                            let _ = fs::remove_file(&lock_path);
+                            return Err(SingleInstanceError::LockFile(format!(
+                                "failed to bind wake channel: {error}"
+                            )));
+                        }
+                    };
                     return Ok(Self {
                         lock_path,
                         pid,
                         #[cfg(target_os = "windows")]
                         wake_event,
+                        #[cfg(not(target_os = "windows"))]
+                        wake_ipc: Some(wake_ipc),
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
@@ -278,7 +292,11 @@ impl SingleInstanceGuard {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = callback;
+            self.wake_ipc
+                .as_mut()
+                .ok_or_else(|| SingleInstanceError::LockFile("wake channel closed".into()))?
+                .start(callback)
+                .map_err(|error| SingleInstanceError::LockFile(error.to_string()))?;
         }
         Ok(())
     }
@@ -290,15 +308,15 @@ impl SingleInstanceGuard {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = project_dir;
-            let _ = owner_pid;
-            false
+            super::local_wake::LocalWake::notify(project_dir, owner_pid)
         }
     }
 }
 
 impl Drop for SingleInstanceGuard {
     fn drop(&mut self) {
+        #[cfg(not(target_os = "windows"))]
+        drop(self.wake_ipc.take());
         if read_instance_lock_pid(&self.lock_path).ok().flatten() == Some(self.pid) {
             let _ = fs::remove_file(&self.lock_path);
         }

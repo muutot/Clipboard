@@ -37,6 +37,8 @@ pub mod dispatch;
 pub mod dpapi;
 pub mod hotkey_common;
 pub mod linux_icons;
+#[cfg(any(test, not(target_os = "windows")))]
+pub mod local_wake;
 pub mod monitor;
 pub mod platform_info;
 pub mod secret_store;
