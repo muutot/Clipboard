@@ -902,7 +902,7 @@ const en: LocaleDefinition = {
     pageSizeUnit: "items",
     pageSizeLimit: "Max Load Items",
     pageSizeLimitDescription:
-      'Upper bound for "Page Load Count"; prevents loading too many items at once',
+      "Maximum history items held in memory; the effective threshold includes load tolerance",
     pageSizeLimitUnit: "items",
     searchPageSizeLimit: "Search Result Limit",
     searchPageSizeLimitDescription: "Maximum number of results returned per search query",

@@ -531,22 +531,29 @@ export function promoteFromCache(store: ItemStore, loadedIds: ReadonlySet<string
 
 /**
  * Keeps the in-memory history view bounded: when it exceeds `limit +
- * tolerance`, up to `tolerance` oldest non-favorite non-deleted records are
- * released (favorites and recycle-bin rows are never touched).
+ * tolerance`, least-recently-used ordinary history references are released.
+ * Other views retain their records; favorites and deleted rows are protected.
  */
 export function trimLoadedHistory(
   store: ItemStore,
   options: { limit: number; tolerance: number },
 ): ItemStore {
   const max = options.limit + options.tolerance;
-  if (store.historyIds.length <= max) return store;
+  const activeCount = store.historyIds.filter((id) => !store.byId.get(id)?.deleted).length;
+  if (activeCount <= max) return store;
 
   const evictable = store.historyIds
     .map((id, index) => ({ id, index, record: store.byId.get(id) }))
     .filter((entry) => entry.record && !entry.record.deleted && !entry.record.favorite)
-    .sort((a, b) => a.record!.createdAt - b.record!.createdAt || a.index - b.index);
+    .sort(
+      (a, b) => (a.record!.lastUsedAtMs ?? 0) - (b.record!.lastUsedAtMs ?? 0) || b.index - a.index,
+    );
 
-  const toEvict = new Set(evictable.slice(0, options.tolerance).map((entry) => entry.id));
+  const count = Math.max(options.tolerance, activeCount - max);
+  const toEvict = new Set(evictable.slice(0, count).map((entry) => entry.id));
   if (toEvict.size === 0) return store;
-  return removeItems(store, toEvict);
+  const historyIds = store.historyIds.filter((id) => !toEvict.has(id));
+  const byId = new Map(store.byId);
+  pruneUnreferenced(byId, historyIds, store.indexedIds, store.cacheIds, store.detailId);
+  return { ...store, byId, historyIds };
 }

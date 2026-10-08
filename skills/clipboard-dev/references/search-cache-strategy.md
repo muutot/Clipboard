@@ -134,11 +134,11 @@ The pure maintenance logic lives in `src/lib/utils/item-store.ts` (`mergeSearchC
 
 `trimLoadedHistory()` limits ordinary loaded history separately:
 
-- threshold: `pageSizeLimit + loadTolerance`;
-- when exceeded, remove up to `loadTolerance` oldest non-deleted, non-favorite items;
-- favorites and recycle-bin items are protected from this in-memory trimming, and so is any record the detail pane still displays;
+- threshold: `pageSizeLimit + loadTolerance`, counting active history only;
+- when exceeded, remove the larger of the excess or `loadTolerance` least-recently-used ordinary history references; creation time does not choose eviction;
+- favorites and recycle-bin items are protected. Search/cache/detail references remain intact, so trimming history cannot remove an active search result or close details;
 - default `pageSizeLimit` is 500 and default tolerance is 100;
-- the window is a cap, not a target: once the history view reaches the threshold, `loadActiveHistoryPage` sets `activeHistoryHasMore = false` because deeper OFFSET pages hold the oldest rows and would be evicted immediately (previously pagination kept fetch-then-evicting on every scroll event at the cap).
+- database exhaustion is separate from the capacity stop: increasing capacity resumes at the existing cursor unless prior trimming requires a fresh page. Each request captures its page size and is bounded by remaining capacity. Lower limits trim immediately; trimming resets the cursor so a later increase cannot skip discarded rows.
 
 Changing this logic requires checking selected/detail items, virtual-scroll height state, active/deleted offsets, and the spare-result cache. In-memory trimming must not be confused with database history cleanup.
 

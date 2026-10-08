@@ -94,6 +94,8 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `loadTolerance`               | number                                      | `100`        | 50–500                                                                           |
 | `logLevel`                    | `"error"`, `"warn"`, `"info"`, or `"debug"` | `"info"`     | —                                                                                |
 
+History capacity changes apply immediately: a larger cap resumes pagination, a smaller cap trims history references while retaining search/detail records. Per-page size changes apply to subsequent requests; an in-flight response is compared against its original request size.
+
 ## Theme and sort structures
 
 | Field             | Default                                        | Contract                                                                                                |

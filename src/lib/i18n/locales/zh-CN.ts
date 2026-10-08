@@ -864,7 +864,7 @@ const zhCN: LocaleDefinition = {
     pageSizeDescription: "每次滚到底部时加载的条目数量",
     pageSizeUnit: "条",
     pageSizeLimit: "最大加载条目",
-    pageSizeLimitDescription: "限制上方「单页加载数」的最大值，防止单次加载过多",
+    pageSizeLimitDescription: "限制历史列表在内存中加载的条目数量，实际阈值包含加载容忍值",
     pageSizeLimitUnit: "条",
     searchPageSizeLimit: "搜索结果上限",
     searchPageSizeLimitDescription: "单次搜索允许返回的最大结果数",

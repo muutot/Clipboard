@@ -95,6 +95,11 @@ async function open(query = "query") {
 const ids = () =>
   [...target.querySelectorAll<HTMLElement>("[data-id]")].map((row) => row.dataset.id);
 const emit = (name: string, payload: unknown = {}) => bridge.listeners.get(name)?.({ payload });
+async function scrollToBottom() {
+  const list = target.querySelector(".history-list")!;
+  list.dispatchEvent(new Event("scroll"));
+  await settle(30);
+}
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
     measureText: (text: string) => ({ width: text.length * 7 }),
@@ -124,6 +129,83 @@ afterEach(async () => {
 });
 
 describe("search settings and live changes", () => {
+  it("rebuilds the cursor when a smaller cap trims an in-flight page", async () => {
+    bridge.desktop = true;
+    const settings = {
+      ...structuredClone(DEFAULT_GENERAL_SETTINGS),
+      pageSizeLimit: 4,
+      loadTolerance: 0,
+      display: { ...DEFAULT_GENERAL_SETTINGS.display, pageSize: 4 },
+    };
+    generalSettings.set(settings);
+    let finish!: (items: ClipboardItem[]) => void;
+    bridge.history
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue([]);
+    await open("");
+    generalSettings.set({ ...settings, pageSizeLimit: 2 });
+    await settle();
+    finish([item("a"), item("b"), item("c"), item("d")]);
+    await settle();
+    generalSettings.set({ ...settings, pageSizeLimit: 5 });
+    await settle(30);
+    expect(bridge.history.mock.calls[1][2].cursor).toBeNull();
+  });
+  it("resumes at the existing cursor after the history cap grows", async () => {
+    bridge.desktop = true;
+    generalSettings.set({
+      ...structuredClone(DEFAULT_GENERAL_SETTINGS),
+      pageSizeLimit: 2,
+      loadTolerance: 0,
+      display: { ...DEFAULT_GENERAL_SETTINGS.display, pageSize: 2 },
+    });
+    bridge.history.mockResolvedValueOnce([item("a"), item("b")]).mockResolvedValue([item("c")]);
+    await open("");
+    await scrollToBottom();
+    expect(bridge.history).toHaveBeenCalledTimes(1);
+    generalSettings.set({
+      ...structuredClone(DEFAULT_GENERAL_SETTINGS),
+      pageSizeLimit: 3,
+      loadTolerance: 0,
+      display: { ...DEFAULT_GENERAL_SETTINGS.display, pageSize: 2 },
+    });
+    await settle(30);
+    expect(bridge.history).toHaveBeenCalledTimes(2);
+    expect(bridge.history.mock.calls[1][2].cursor).toEqual({ lastUsedAtMs: 1, id: "b" });
+    expect(ids()).toEqual(["a", "b", "c"]);
+  });
+
+  it("checks exhaustion against the requested page size during a settings change", async () => {
+    bridge.desktop = true;
+    generalSettings.set({
+      ...structuredClone(DEFAULT_GENERAL_SETTINGS),
+      display: { ...DEFAULT_GENERAL_SETTINGS.display, pageSize: 2 },
+    });
+    let finish!: (items: ClipboardItem[]) => void;
+    bridge.history
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue([]);
+    await open("");
+    generalSettings.set({
+      ...structuredClone(DEFAULT_GENERAL_SETTINGS),
+      display: { ...DEFAULT_GENERAL_SETTINGS.display, pageSize: 3 },
+    });
+    finish([item("a"), item("b")]);
+    await settle();
+    await scrollToBottom();
+    expect(bridge.history).toHaveBeenCalledTimes(2);
+    expect(bridge.history.mock.calls[1][0]).toBe(3);
+  });
   it("refreshes when the candidate cap changes without resetting for unrelated settings", async () => {
     await open();
     bridge.search.mockClear();

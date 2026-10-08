@@ -218,13 +218,20 @@
   let deletedHistoryHasMore = $state(true);
   let deletedHistoryRequestId = 0;
   let activeHistoryLoading = $state(false);
-  // Keyset pagination anchor for the active history: the (effective_ts,
-  // created_at, id) of the last row of the most recently fetched page. NULL
+  // Keyset pagination anchor for active history: the (last_used_at_ms, id)
+  // of the last row of the most recently fetched page. NULL
   // means the next fetch is a fresh first page. Unlike OFFSET bookkeeping
   // this never replays or skips rows when `set_last_used` promotes entries
   // between page fetches — promoted rows simply land above the cursor.
   let activeHistoryCursor = $state<HistoryCursorPayload | null>(null);
-  let activeHistoryHasMore = $state(true);
+  let activeHistoryExhausted = $state(false);
+  const activeHistoryCount = $derived(items.filter((item) => !item.deleted).length);
+  const activeHistoryLimit = $derived(
+    $generalSettings.pageSizeLimit + $generalSettings.loadTolerance,
+  );
+  const activeHistoryHasMore = $derived(
+    !activeHistoryExhausted && activeHistoryCount < activeHistoryLimit,
+  );
   let activeHistoryRequestId = 0;
   // Keep stale in-flight recycle-bin pages from resurrecting rows that were
   // already restored or permanently removed locally.
@@ -1085,7 +1092,7 @@
     activeHistoryRequestId += 1;
     activeHistoryLoading = false;
     activeHistoryCursor = null;
-    activeHistoryHasMore = true;
+    activeHistoryExhausted = false;
     void loadActiveHistoryPage();
   }
 
@@ -1108,6 +1115,25 @@
     itemStore.current = promoteCachedEntries(itemStore.current, loadedIds);
   }
 
+  const historyLimitKey = $derived(
+    `${$generalSettings.pageSizeLimit}/${$generalSettings.loadTolerance}`,
+  );
+  let previousHistoryLimitKey = "";
+  $effect(() => {
+    const key = historyLimitKey;
+    untrack(() => {
+      if (previousHistoryLimitKey && key !== previousHistoryLimitKey) {
+        const before = itemStore.current;
+        trimLoadedItems();
+        // Trimming changes the retained range, so rebuild the cursor instead
+        // of skipping the discarded rows when capacity later grows.
+        if (before !== itemStore.current) invalidateActiveHistoryPagination();
+        handleHistoryScroll();
+      }
+      previousHistoryLimitKey = key;
+    });
+  });
+
   function trimLoadedItems() {
     itemStore.current = trimLoadedHistory(itemStore.current, {
       limit: $generalSettings.pageSizeLimit,
@@ -1116,10 +1142,10 @@
   }
 
   async function loadActiveHistoryPage(): Promise<void> {
-    if (activeHistoryLoading || !activeHistoryHasMore) return;
+    if (activeHistoryLoading || (activeHistoryCursor !== null && !activeHistoryHasMore)) return;
 
     if (!isTauriRuntime()) {
-      activeHistoryHasMore = false;
+      activeHistoryExhausted = true;
       return;
     }
 
@@ -1127,14 +1153,18 @@
     const requestId = ++activeHistoryRequestId;
     const cursor = activeHistoryCursor;
     const isFirstPage = cursor === null;
+    const requestedPageSize = Math.min(
+      $generalSettings.display.pageSize,
+      isFirstPage ? activeHistoryLimit : activeHistoryLimit - activeHistoryCount,
+    );
     try {
-      const page = await loadClipboardHistory($generalSettings.display.pageSize, 0, {
+      const page = await loadClipboardHistory(requestedPageSize, 0, {
         ...buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
         cursor,
       });
       if (requestId !== activeHistoryRequestId) return;
       if (page === null) {
-        activeHistoryHasMore = false;
+        activeHistoryExhausted = true;
         return;
       }
 
@@ -1168,17 +1198,14 @@
           id: anchor.id,
         };
       }
-      activeHistoryHasMore = page.length === $generalSettings.display.pageSize;
+      activeHistoryExhausted = page.length < requestedPageSize;
       const loadedIds = new Set(page.map((item) => item.id));
       promoteFromCache(loadedIds);
+      const beforeTrim = itemStore.current;
       trimLoadedItems();
-      // The trim cap is a sliding window over the newest rows: deeper pages
-      // contain the oldest rows and would be evicted right after loading,
-      // so a full window must end pagination instead of fetching pages that
-      // can never stay loaded (this previously looped fetch-then-evict on
-      // every scroll event once the cap was reached).
-      if (items.length >= $generalSettings.pageSizeLimit + $generalSettings.loadTolerance) {
-        activeHistoryHasMore = false;
+      if (beforeTrim !== itemStore.current) {
+        activeHistoryCursor = null;
+        activeHistoryExhausted = false;
       }
     } catch (error) {
       if (requestId !== activeHistoryRequestId) return;

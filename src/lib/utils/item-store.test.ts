@@ -395,9 +395,26 @@ describe("mergeDeletedHistoryPage", () => {
 });
 
 describe("trimLoadedHistory", () => {
+  it("preserves recent reuse and other views when a much smaller cap is applied", () => {
+    let before = createItemStore(
+      Array.from({ length: 10 }, (_, i) =>
+        item(`i${i}`, {
+          createdAt: 10 - i,
+          lastUsedAtMs: i,
+        }),
+      ),
+    );
+    before = setDetailItem(before, before.byId.get("i0")!);
+    before = appendItems(before, [before.byId.get("i1")!], "indexed");
+    const next = trimLoadedHistory(before, { limit: 2, tolerance: 1 });
+    assertConsistent(next);
+    expect(next.historyIds).toEqual(["i7", "i8", "i9"]);
+    expect(getDetailItem(next)?.id).toBe("i0");
+    expect(next.indexedIds).toEqual(["i1"]);
+  });
   const history = (count: number) =>
     createItemStore(
-      Array.from({ length: count }, (_, index) => item(`i${index}`, { createdAt: index })),
+      Array.from({ length: count }, (_, index) => item(`i${index}`, { lastUsedAtMs: index })),
     );
 
   it("is a no-op below the threshold", () => {
@@ -405,7 +422,7 @@ describe("trimLoadedHistory", () => {
     expect(trimLoadedHistory(before, { limit: 10, tolerance: 2 })).toBe(before);
   });
 
-  it("releases at most `tolerance` oldest ordinary records", () => {
+  it("releases a tolerance batch of least recently used ordinary records", () => {
     const next = trimLoadedHistory(history(6), { limit: 3, tolerance: 2 });
     assertConsistent(next);
     expect(getItems(next, "history").map((i) => i.id)).toEqual(["i2", "i3", "i4", "i5"]);
@@ -413,15 +430,15 @@ describe("trimLoadedHistory", () => {
 
   it("never releases favorites or recycle-bin rows", () => {
     const seeded = createItemStore([
-      item("old-fav", { createdAt: 0, favorite: true }),
-      item("old-deleted", { createdAt: 1, deleted: true }),
-      item("plain-1", { createdAt: 2 }),
-      item("plain-2", { createdAt: 3 }),
-      item("plain-3", { createdAt: 4 }),
+      item("old-fav", { lastUsedAtMs: 0, favorite: true }),
+      item("old-deleted", { lastUsedAtMs: 1, deleted: true }),
+      item("plain-1", { lastUsedAtMs: 2 }),
+      item("plain-2", { lastUsedAtMs: 3 }),
+      item("plain-3", { lastUsedAtMs: 4 }),
     ]);
     // Reuse the seeded record so the favorite flag is not overwritten.
     const before = setDetailItem(seeded, findLoadedItem(seeded, "old-fav")!);
-    const next = trimLoadedHistory(before, { limit: 2, tolerance: 2 });
+    const next = trimLoadedHistory(before, { limit: 1, tolerance: 2 });
     assertConsistent(next);
     expect(getItems(next, "history").map((i) => i.id)).toEqual([
       "old-fav",
@@ -433,8 +450,8 @@ describe("trimLoadedHistory", () => {
 
   it("keeps a record the detail pane alone still displays", () => {
     const before = setDetailItem(
-      createItemStore([item("a", { createdAt: 0 }), item("b", { createdAt: 1 })]),
-      item("solo", { createdAt: 2 }),
+      createItemStore([item("a", { lastUsedAtMs: 0 }), item("b", { lastUsedAtMs: 1 })]),
+      item("solo", { lastUsedAtMs: 2 }),
     );
     const next = trimLoadedHistory(before, { limit: 0, tolerance: 1 });
     assertConsistent(next);
