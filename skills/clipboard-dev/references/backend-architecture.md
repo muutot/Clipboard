@@ -49,6 +49,8 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 `storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
 
+`export::export_database` reads active history in one SQLite statement before formatting JSON, CSV, or plain text. Export already retains the complete result in memory; splitting that read into independent OFFSET pages would let concurrent capture/deletion/usage updates duplicate or omit records. Its real WAL regression uses a test-only SQLite progress hook and a second connection to move an old row while the export is reading, then checks complete unique IDs and the original snapshot values. The `rusqlite` hooks feature is enabled only through dev-dependencies.
+
 ## Synchronization
 
 Synchronization is split between the Tauri-independent `src-tauri/crates/clipboard-sync/` crate

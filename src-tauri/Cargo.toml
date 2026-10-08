@@ -84,6 +84,7 @@ global-hotkey = "0.8"
 [dev-dependencies]
 global-hotkey = "0.8"
 clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }
+rusqlite = { version = "0.40.1", features = ["hooks"] }
 
 # Dev-profile tuning for the fastest possible local `tauri dev` builds:
 # - dependencies stay unoptimized (opt-level 0) with no debug symbols, so the

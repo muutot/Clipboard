@@ -91,27 +91,18 @@ pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<
     }
 }
 
-/// Exports all active records without the normal UI page-size cap.
+/// Exports active records from one SQLite read snapshot without the UI page cap.
 pub fn export_database(database: &Database, options: &ExportOptions) -> Result<String, String> {
-    let mut items = Vec::new();
-    let mut offset = 0u32;
-    const PAGE_SIZE: u32 = 500;
-
-    loop {
-        let page = crate::storage::ClipboardRepository::list_recent(
-            database,
-            PAGE_SIZE,
-            offset,
-            &crate::storage::HistoryFilter::default(),
-        )
-        .map_err(|error| error.to_string())?;
-        let page_len = page.len() as u32;
-        items.extend(page);
-        if page_len < PAGE_SIZE {
-            break;
-        }
-        offset = offset.saturating_add(PAGE_SIZE);
-    }
+    // The exporter already materializes the full result. Reading it in one
+    // statement also keeps concurrent capture, deletion and usage reordering
+    // from moving rows between independently read OFFSET pages.
+    let items = crate::storage::ClipboardRepository::list_recent(
+        database,
+        u32::MAX,
+        0,
+        &crate::storage::HistoryFilter::default(),
+    )
+    .map_err(|error| error.to_string())?;
 
     export_items(&items, options)
 }
@@ -828,6 +819,97 @@ mod tests {
         .unwrap();
         let exported: Vec<ClipboardItem> = serde_json::from_str(&output).unwrap();
         assert_eq!(exported.len(), 510);
+    }
+
+    #[test]
+    fn database_export_keeps_one_snapshot_during_concurrent_usage_updates() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+
+        let directory =
+            std::env::temp_dir().join(format!("clipboard-export-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("history.sqlite3");
+        let database = Database::open(&path).unwrap();
+        let entries: Vec<_> = (0..510)
+            .map(|index| {
+                let mut item = sample_items().remove(0);
+                item.id = format!("export-{index}");
+                item.content_hash = item.id.clone();
+                item.created_at_ms = index;
+                item.last_used_at_ms = Some(index);
+                (item.id.clone(), item)
+            })
+            .collect();
+        assert_eq!(
+            database
+                .save_items_transactional(&entries)
+                .unwrap()
+                .imported_count,
+            510
+        );
+
+        // Commit on a separate real WAL connection while the export's SELECT
+        // is already reading. The oldest record jumps across the page boundary.
+        let writer = Database::open(&path).unwrap();
+        let wrote = Arc::new(AtomicBool::new(false));
+        let did_write = wrote.clone();
+        database
+            .with_connection(|connection| {
+                connection.progress_handler(
+                    1000,
+                    Some(move || {
+                        if !did_write.swap(true, Ordering::SeqCst) {
+                            assert!(writer.set_last_used("export-0").unwrap());
+                        }
+                        false
+                    }),
+                )?;
+                Ok(())
+            })
+            .unwrap();
+
+        let output = export_database(
+            &database,
+            &ExportOptions {
+                format: ExportFormat::Json,
+                include_favorites: true,
+                date_from_ms: None,
+                date_to_ms: None,
+                content_types: vec![],
+            },
+        )
+        .unwrap();
+        let exported: Vec<ClipboardItem> = serde_json::from_str(&output).unwrap();
+        assert!(
+            wrote.load(Ordering::SeqCst),
+            "concurrent update must actually run"
+        );
+        assert_eq!(exported.len(), 510);
+        let unique: std::collections::HashSet<_> = exported.iter().map(|item| &item.id).collect();
+        assert_eq!(
+            unique.len(),
+            510,
+            "export must neither duplicate nor omit records"
+        );
+        assert_eq!(
+            exported
+                .iter()
+                .find(|item| item.id == "export-0")
+                .unwrap()
+                .last_used_at_ms,
+            Some(0)
+        );
+        database
+            .with_connection(|connection| {
+                connection.progress_handler(0, None::<fn() -> bool>)?;
+                Ok(())
+            })
+            .unwrap();
+        drop(database);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
