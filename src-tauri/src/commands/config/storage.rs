@@ -383,55 +383,138 @@ pub fn migrate_storage_data(
         // `VACUUM INTO` refuses an existing destination, so a failed earlier
         // attempt (or a pre-existing database at the chosen directory) would
         // make every retry fail. Quarantine whatever is there first, restore it
-        // if the vacuum itself fails, and leave the quarantined copy behind
+        // if snapshot creation or validation fails, and leave the copy behind
         // otherwise instead of destroying a pre-existing database.
-        let quarantined = quarantine_database_for_migration(&new.database)?;
-        if let Err(error) = database.vacuum_into(&new.database) {
-            restore_quarantined_database(&quarantined);
-            return Err(format!("failed to migrate database: {error}"));
-        }
-        let migrated_database = Database::open(&new.database)
-            .map_err(|e| format!("failed to open migrated database: {e}"))?;
-        rewrite_database_storage_paths(&migrated_database, &storage_path_mappings(old, new))
-            .map_err(|e| format!("failed to update migrated resource paths: {e}"))?;
+        replace_migration_database(&new.database, || {
+            database
+                .vacuum_into(&new.database)
+                .map_err(|error| format!("failed to migrate database: {error}"))?;
+            let migrated_database = Database::open(&new.database)
+                .map_err(|e| format!("failed to open migrated database: {e}"))?;
+            rewrite_database_storage_paths(&migrated_database, &storage_path_mappings(old, new))
+                .map_err(|e| format!("failed to update migrated resource paths: {e}"))?;
+            Ok(())
+        })?;
     }
 
     Ok(())
 }
 
-/// Moves an existing database and its WAL sidecars out of the way before a
-/// `VACUUM INTO`, returning the `(backup, original)` pairs so a failed vacuum
-/// can restore them.
+/// Keep the old database until the snapshot is opened and its paths rewritten.
+/// Close any SQLite handle in `replace` before returning so rollback can move it.
+fn replace_migration_database(
+    path: &Path,
+    replace: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let quarantined = quarantine_database_for_migration(path)?;
+    if let Err(error) = replace() {
+        return match restore_quarantined_database(path, &quarantined) {
+            Ok(()) => Err(error),
+            Err(rollback) => Err(format!("{error}; migration rollback failed: {rollback}")),
+        };
+    }
+    Ok(())
+}
+
+/// A newly reserved directory keeps database/WAL/SHM backups together and
+/// prevents a rapid retry from replacing a previous migration's backup.
 fn quarantine_database_for_migration(path: &Path) -> Result<Vec<(PathBuf, PathBuf)>, String> {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let mut moved = Vec::new();
-    for candidate in [
+    let candidates = [
         path.to_path_buf(),
-        PathBuf::from(format!("{}-wal", path.display())),
-        PathBuf::from(format!("{}-shm", path.display())),
-    ] {
-        if !candidate.exists() {
-            continue;
+        migration_sibling(path, "-wal"),
+        migration_sibling(path, "-shm"),
+    ];
+    let mut present = Vec::new();
+    for candidate in candidates {
+        match std::fs::symlink_metadata(&candidate) {
+            Ok(_) => present.push(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "failed to inspect {}: {error}",
+                    candidate.display()
+                ))
+            }
         }
-        let backup = PathBuf::from(format!("{}.pre-migrate-{stamp}", candidate.display()));
-        std::fs::rename(&candidate, &backup).map_err(|error| {
-            format!(
-                "failed to quarantine {} before migration: {error}",
-                candidate.display()
-            )
-        })?;
+    }
+    if present.is_empty() {
+        return Ok(Vec::new());
+    }
+    let directory = loop {
+        let directory = migration_sibling(path, &format!(".pre-migrate-{}", uuid::Uuid::new_v4()));
+        match std::fs::create_dir(&directory) {
+            Ok(()) => break directory,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "failed to reserve {}: {error}",
+                    directory.display()
+                ))
+            }
+        }
+    };
+    let mut moved = Vec::new();
+    for candidate in present {
+        let backup = directory.join(
+            candidate
+                .file_name()
+                .ok_or_else(|| format!("invalid database path: {}", candidate.display()))?,
+        );
+        if let Err(error) = std::fs::rename(&candidate, &backup) {
+            let rollback = restore_moved_files(&moved);
+            let _ = std::fs::remove_dir(&directory);
+            return Err(format!(
+                "failed to quarantine {}: {error}; rollback: {}",
+                candidate.display(),
+                rollback.err().unwrap_or_else(|| "completed".to_owned())
+            ));
+        }
         moved.push((backup, candidate));
     }
     Ok(moved)
 }
 
-fn restore_quarantined_database(moved: &[(PathBuf, PathBuf)]) {
+fn migration_sibling(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+fn restore_quarantined_database(path: &Path, moved: &[(PathBuf, PathBuf)]) -> Result<(), String> {
+    // A failed vacuum/open/rewrite may have left a DB and new WAL sidecars.
+    // Preserve the whole failed bundle before restoring any old file.
+    quarantine_database_for_migration(path).map_err(|error| {
+        format!("could not preserve failed snapshot: {error}; original backups: {moved:?}")
+    })?;
+    restore_moved_files(moved)
+}
+
+fn restore_moved_files(moved: &[(PathBuf, PathBuf)]) -> Result<(), String> {
     for (backup, original) in moved {
-        let _ = std::fs::rename(backup, original);
+        // Refuse a conflicting destination and stop before restoring sidecars
+        // beside a database that could not itself be restored.
+        let result = match std::fs::symlink_metadata(original) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                std::fs::rename(backup, original)
+            }
+            Err(error) => Err(error),
+            Ok(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "rollback destination already exists",
+            )),
+        };
+        if let Err(error) = result {
+            return Err(format!(
+                "restore {} from {}: {error}; remaining backups: {moved:?}",
+                original.display(),
+                backup.display()
+            ));
+        }
     }
+    if let Some(directory) = moved.first().and_then(|(backup, _)| backup.parent()) {
+        let _ = std::fs::remove_dir(directory);
+    }
+    Ok(())
 }
 
 pub fn storage_path_mappings(old: &StoragePaths, new: &StoragePaths) -> Vec<(PathBuf, PathBuf)> {
@@ -589,7 +672,10 @@ pub fn rewrite_json_value_paths(
 
 #[cfg(test)]
 mod tests {
-    use super::{quarantine_database_for_migration, restore_quarantined_database};
+    use super::{
+        quarantine_database_for_migration, replace_migration_database, restore_moved_files,
+        restore_quarantined_database,
+    };
     use std::time::SystemTime;
 
     #[test]
@@ -613,10 +699,120 @@ mod tests {
         assert!(!database.exists());
         assert!(!wal.exists());
 
-        restore_quarantined_database(&moved);
+        restore_quarantined_database(&database, &moved).unwrap();
         assert_eq!(std::fs::read(&database).unwrap(), b"db");
         assert_eq!(std::fs::read(&wal).unwrap(), b"wal");
 
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn quarantine_failure_restores_the_already_moved_database() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-migration-locked-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("clipboard.sqlite3");
+        let wal = directory.join("clipboard.sqlite3-wal");
+        std::fs::write(&database, b"original-db").unwrap();
+        std::fs::write(&wal, b"original-wal").unwrap();
+        let locked_wal = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&wal)
+            .unwrap();
+
+        let result = quarantine_database_for_migration(&database);
+        drop(locked_wal);
+        let restored = std::fs::read(&database);
+        std::fs::remove_dir_all(directory).unwrap();
+        assert!(result.is_err());
+        assert_eq!(restored.unwrap(), b"original-db");
+    }
+
+    #[test]
+    fn restore_preserves_an_incomplete_snapshot_and_recovers_originals() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-migration-restore-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("clipboard.sqlite3");
+        std::fs::write(&database, b"original-db").unwrap();
+        let moved = quarantine_database_for_migration(&database).unwrap();
+        // VACUUM INTO can leave an incomplete destination on I/O failure.
+        std::fs::write(&database, b"incomplete-snapshot").unwrap();
+        restore_quarantined_database(&database, &moved).unwrap();
+        let restored = std::fs::read(&database).unwrap();
+        let incomplete_preserved = std::fs::read_dir(&directory).unwrap().any(|entry| {
+            entry.ok().is_some_and(|entry| {
+                std::fs::read(entry.path().join("clipboard.sqlite3"))
+                    .is_ok_and(|bytes| bytes == b"incomplete-snapshot")
+            })
+        });
+        std::fs::remove_dir_all(directory).unwrap();
+        assert_eq!(restored, b"original-db");
+        assert!(incomplete_preserved);
+    }
+
+    #[test]
+    fn failed_replacement_restores_database_without_mixing_new_sidecars() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-migration-failed-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("clipboard.sqlite3");
+        let wal = directory.join("clipboard.sqlite3-wal");
+        std::fs::write(&database, b"original-db").unwrap();
+        let result = replace_migration_database(&database, || {
+            std::fs::write(&database, b"new-db").unwrap();
+            std::fs::write(&wal, b"new-wal").unwrap();
+            Err("path rewrite failed".to_owned())
+        });
+        assert_eq!(result.unwrap_err(), "path rewrite failed");
+        assert_eq!(std::fs::read(&database).unwrap(), b"original-db");
+        assert!(!wal.exists());
+        let backups = std::fs::read_dir(&directory)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_dir())
+            .collect::<Vec<_>>();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(
+            std::fs::read(backups[0].path().join("clipboard.sqlite3")).unwrap(),
+            b"new-db"
+        );
+        assert_eq!(
+            std::fs::read(backups[0].path().join("clipboard.sqlite3-wal")).unwrap(),
+            b"new-wal"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn rollback_reports_conflict_and_retains_both_original_backups() {
+        let directory = std::env::temp_dir().join(format!(
+            "clipboard-migration-conflict-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("clipboard.sqlite3");
+        let wal = directory.join("clipboard.sqlite3-wal");
+        std::fs::write(&database, b"original-db").unwrap();
+        std::fs::write(&wal, b"original-wal").unwrap();
+        let moved = quarantine_database_for_migration(&database).unwrap();
+        std::fs::write(&database, b"conflicting-db").unwrap();
+        let error = restore_moved_files(&moved).unwrap_err();
+        assert!(error.contains("rollback destination already exists"));
+        assert!(error.contains(&moved[0].0.display().to_string()));
+        assert_eq!(std::fs::read(&database).unwrap(), b"conflicting-db");
+        assert!(!wal.exists());
+        assert_eq!(std::fs::read(&moved[0].0).unwrap(), b"original-db");
+        assert_eq!(std::fs::read(&moved[1].0).unwrap(), b"original-wal");
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
