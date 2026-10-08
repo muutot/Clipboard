@@ -80,6 +80,11 @@ cannot emit, which is how this drifted for so long.
 
 `search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs plus the true match total, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result with its total/truncation, and only then slices the requested offset/limit. It returns a `SearchPage` envelope (`items`, `totalCount`, `truncated`); `truncated` is set when index matches beyond `max_results` were dropped, and the frontend (`searchClipboardHistory` → `SearchPage`) drives `searchHasMore` from the total and shows a truncation notice instead of ending pagination silently. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order. Sorting after slicing breaks ordering across page boundaries and is forbidden. `apply_sort_rules` sorts stably on purpose: when sort fields tie, the incoming Tantivy relevance order deterministically remains the fallback order (an unstable sort permutes tied elements for larger inputs).
 
+The frontend default and omitted command sort rules both use `lastUsedAt DESC`.
+That comparator reads only stored `last_used_at_ms`; persistence initializes missing
+usage at creation/import and schema v2 backfills legacy NULLs. It never compares
+usage with creation at query time. Custom creation-time rules remain available.
+
 ### Lazy sync on search
 
 The capture thread and other mutation commands write to SQLite (triggering `search_outbox`) but do not themselves touch Tantivy. Index freshness is guaranteed by outbox draining, which runs either lazily on the search command or in a background worker, depending on `GeneralConfig.search_index_sync_mode`:
@@ -135,7 +140,16 @@ The pure maintenance logic lives in `src/lib/utils/item-store.ts` (`mergeSearchC
 
 Changing this logic requires checking selected/detail items, virtual-scroll height state, active/deleted offsets, and the spare-result cache. In-memory trimming must not be confused with database history cleanup.
 
-Active history is backed by `created_at_ms DESC LIMIT/OFFSET`. A committed insertion, re-copy dedup promotion (the timestamp bump shifts every later offset just like a fresh insert), soft/hard deletion, restore, bulk mutation, clear, or destructive invalidation can shift every later offset. Such paths call `invalidateActiveHistoryPagination()` to invalidate the in-flight request generation and reload page zero; do not merely append/remove locally and keep the old cursor. As a second line of defense, `loadActiveHistoryPage` drops ids that are already loaded when merging an offset>0 page, so a replayed row can never produce a duplicate keyed-each key even if a shift source is missed.
+Active history uses `last_used_at_ms DESC, id DESC` and a two-key
+`{ lastUsedAtMs, id }` cursor. Creation time is not part of ordering or the cursor.
+The `(last_used_at_ms, id) < (?, ?)` predicate and schema v2 indexes let SQLite
+seek directly to the next page without sorting or scanning the earlier prefix;
+the favorite view has its own matching index. OFFSET remains supported for other
+callers but the main route always sends a cursor after page zero. Insertions,
+deletions, restores, bulk mutations, and destructive invalidations reset the
+request generation and reload page zero; promotion above an existing cursor cannot
+displace or replay older rows. `loadActiveHistoryPage` still drops already-loaded
+ids while appending as a second line of defense.
 
 ## Mutation invalidation
 

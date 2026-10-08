@@ -220,7 +220,7 @@ pub(crate) fn build_text_clipboard_item(
         source_app: Some(source_app.to_owned()),
         size_bytes,
         created_at_ms: now_ms,
-        last_used_at_ms: None,
+        last_used_at_ms: Some(now_ms),
         is_favorite: false,
         icon_path: None,
         metadata_json: None,

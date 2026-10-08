@@ -48,6 +48,8 @@ pub struct ClipboardItem {
     pub icon_path: Option<String>,
     pub size_bytes: u64,
     pub created_at_ms: i64,
+    /// Device-local recency. Persistence initializes missing legacy/import
+    /// values from creation time; Option preserves JSON and sync wire compatibility.
     pub last_used_at_ms: Option<i64>,
     pub is_favorite: bool,
     pub metadata_json: Option<String>,

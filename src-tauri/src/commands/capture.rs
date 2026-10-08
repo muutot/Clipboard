@@ -676,7 +676,7 @@ pub(crate) fn run_capture_loop(
                         icon_path: icon_path.clone(),
                         size_bytes: img.len() as u64,
                         created_at_ms: now_ms,
-                        last_used_at_ms: None,
+                        last_used_at_ms: Some(now_ms),
                         is_favorite: false,
                         metadata_json: Some(metadata.to_string()),
                     };
@@ -762,7 +762,7 @@ pub(crate) fn run_capture_loop(
                             icon_path: icon_path.clone(),
                             size_bytes: stored_file.size_bytes,
                             created_at_ms: now_ms,
-                            last_used_at_ms: None,
+                            last_used_at_ms: Some(now_ms),
                             is_favorite: false,
                             metadata_json: Some(captured_file_metadata(&stored_files)),
                         };
@@ -831,7 +831,7 @@ pub(crate) fn run_capture_loop(
                             icon_path: icon_path.clone(),
                             size_bytes: total_size,
                             created_at_ms: now_ms,
-                            last_used_at_ms: None,
+                            last_used_at_ms: Some(now_ms),
                             is_favorite: false,
                             metadata_json: Some(captured_file_metadata(&stored_files)),
                         };
@@ -926,7 +926,7 @@ pub(crate) fn run_capture_loop(
                     icon_path: icon_path.clone(),
                     size_bytes,
                     created_at_ms: now_ms,
-                    last_used_at_ms: None,
+                    last_used_at_ms: Some(now_ms),
                     is_favorite: false,
                     metadata_json: None,
                 };

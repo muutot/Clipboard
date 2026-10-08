@@ -14,7 +14,23 @@ struct Migration {
 // Schema v1 is the clean migration baseline. Future schema changes must bump
 // SCHEMA_VERSION and register exactly one adjacent migration here. There are
 // intentionally no historical/pre-v1 readers or placeholder migrations.
-const REGISTERED_MIGRATIONS: &[Migration] = &[];
+const REGISTERED_MIGRATIONS: &[Migration] = &[Migration {
+    to_version: 2,
+    description: "initialize last-used timestamps for indexed history ordering",
+    apply: initialize_last_used,
+}];
+
+fn initialize_last_used(connection: &Connection) -> Result<(), StorageError> {
+    // Preserve explicit usage times, including ones older than creation.
+    // Usage-only writes do not trigger search/sync outbox entries. The final
+    // schema pass creates the matching history indexes in this transaction.
+    connection.execute(
+        "UPDATE clipboard_items SET last_used_at_ms = created_at_ms
+         WHERE last_used_at_ms IS NULL",
+        [],
+    )?;
+    Ok(())
+}
 
 pub(super) fn migrate_to_current(
     connection: &Connection,

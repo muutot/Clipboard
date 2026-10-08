@@ -1126,8 +1126,8 @@
       const anchor = page[page.length - 1];
       if (anchor) {
         activeHistoryCursor = {
-          effectiveTsMs: Math.max(anchor.lastUsedAtMs ?? anchor.createdAt, anchor.createdAt),
-          createdAtMs: anchor.createdAt,
+          // Persisted rows initialize this timestamp at creation (schema v2).
+          lastUsedAtMs: anchor.lastUsedAtMs!,
           id: anchor.id,
         };
       }

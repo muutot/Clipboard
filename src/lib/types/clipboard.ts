@@ -16,15 +16,13 @@ export interface HistoryFilterArgs {
 }
 
 /**
- * Keyset pagination anchor: the (effective_ts, created_at, id) triple of the
+ * Keyset pagination anchor: the (last_used_at, id) pair of the
  * last row of the previous page, mirroring the backend's MRU ordering
- * (`MAX(COALESCE(lastUsedAtMs, createdAtMs), createdAtMs) DESC, createdAtMs
- * DESC, id DESC`). Resume strictly after this row. Unlike OFFSET pagination
+ * (`last_used_at_ms DESC, id DESC`). Resume strictly after this row. Unlike OFFSET pagination
  * this is immune to rows being promoted between page fetches.
  */
 export interface HistoryCursorPayload {
-  effectiveTsMs: number;
-  createdAtMs: number;
+  lastUsedAtMs: number;
   id: string;
 }
 

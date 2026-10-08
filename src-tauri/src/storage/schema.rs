@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{migrations, StorageError};
 
-pub(super) const SCHEMA_VERSION: i64 = 1;
+pub(super) const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct SchemaInitResult {
@@ -138,6 +138,10 @@ fn create_current_schema(connection: &Connection) -> Result<(), StorageError> {
             ON clipboard_items (is_favorite, created_at_ms DESC);
         CREATE INDEX IF NOT EXISTS clipboard_items_deleted_created_at_idx
             ON clipboard_items (deleted, created_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS clipboard_items_deleted_last_used_idx
+            ON clipboard_items (deleted, last_used_at_ms DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS clipboard_items_favorite_last_used_idx
+            ON clipboard_items (deleted, is_favorite, last_used_at_ms DESC, id DESC);
 
         CREATE TABLE IF NOT EXISTS ocr_results (
             item_id TEXT PRIMARY KEY NOT NULL,
@@ -531,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_database_starts_at_schema_one() {
+    fn fresh_database_starts_at_current_schema() {
         let connection = Connection::open_in_memory().unwrap();
 
         assert!(initialize(&connection).unwrap().was_reset);
@@ -583,14 +587,14 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE future_data (value TEXT NOT NULL);
                  INSERT INTO future_data VALUES ('keep');
-                 PRAGMA user_version = 2;",
+                 PRAGMA user_version = 3;",
             )
             .unwrap();
 
         assert!(matches!(
             initialize(&connection),
             Err(StorageError::UnsupportedDatabaseSchemaVersion {
-                found: 2,
+                found: 3,
                 supported: SCHEMA_VERSION
             })
         ));
@@ -604,7 +608,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]
@@ -613,7 +617,93 @@ mod tests {
     }
 
     #[test]
-    fn reopening_schema_one_preserves_current_rows() {
+    fn v1_migration_backfills_only_missing_usage_without_outbox_changes() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize(&connection).unwrap();
+        connection
+            .execute_batch(
+                "DROP INDEX clipboard_items_deleted_last_used_idx;
+             DROP INDEX clipboard_items_favorite_last_used_idx;
+             PRAGMA user_version = 1;
+             INSERT INTO sync_metadata (key, value) VALUES ('sync_enabled', '1');
+             INSERT INTO clipboard_items
+                 (id, kind, title, text_content, content_hash, size_bytes,
+                  created_at_ms, last_used_at_ms, deleted)
+             VALUES ('unused', 'text', 'title', 'keep body', 'hash-1', 9, 100, NULL, 0),
+                    ('used', 'text', 'title', 'keep body', 'hash-2', 9, 200, 50, 0),
+                    ('deleted', 'text', 'title', 'keep body', 'hash-3', 9, 300, NULL, 1);
+             INSERT INTO item_tags (item_id, tag) VALUES ('unused', 'keep-tag');",
+            )
+            .unwrap();
+        let snapshots = |connection: &Connection| {
+            connection
+                .prepare(
+                    "SELECT id, text_content, created_at_ms, modified_at_ms, deleted
+                 FROM clipboard_items ORDER BY id",
+                )
+                .unwrap()
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ))
+                })
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        let outbox_counts = |connection: &Connection| {
+            connection.query_row(
+                "SELECT (SELECT COUNT(*) FROM search_outbox), (SELECT COUNT(*) FROM sync_outbox)",
+                [], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            ).unwrap()
+        };
+        let before = snapshots(&connection);
+        let counts = outbox_counts(&connection);
+
+        assert!(!initialize(&connection).unwrap().was_reset);
+        assert_eq!(snapshots(&connection), before);
+        assert_eq!(outbox_counts(&connection), counts);
+        for (id, expected) in [("unused", 100), ("used", 50), ("deleted", 300)] {
+            let actual: i64 = connection
+                .query_row(
+                    "SELECT last_used_at_ms FROM clipboard_items WHERE id = ?1",
+                    [id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(actual, expected);
+        }
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let index_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name IN
+             ('clipboard_items_deleted_last_used_idx', 'clipboard_items_favorite_last_used_idx')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 2);
+        let tag: String = connection
+            .query_row(
+                "SELECT tag FROM item_tags WHERE item_id = 'unused'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tag, "keep-tag");
+        assert!(!initialize(&connection).unwrap().was_reset);
+        assert_eq!(outbox_counts(&connection), counts);
+    }
+
+    #[test]
+    fn reopening_current_schema_preserves_rows() {
         let connection = Connection::open_in_memory().unwrap();
         initialize(&connection).unwrap();
         connection

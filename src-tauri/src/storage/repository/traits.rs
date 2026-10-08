@@ -65,19 +65,13 @@ pub struct TagInfo {
 }
 
 /// Keyset (cursor) pagination anchor for the active-history listing. Captures
-/// every component of the MRU ordering (`effective_ts DESC, created_at_ms
-/// DESC, id DESC`) of the last row of the previous page so the next page can
-/// resume strictly after it. Unlike OFFSET pagination this is immune to the
-/// ordering shifting between pages: reuse/capture only raises a row's
-/// effective timestamp, which lands above the cursor and cannot displace or
-/// replay rows below it.
+/// both components of `last_used_at_ms DESC, id DESC` from the last row of the
+/// previous page. Promoting a row above the cursor cannot displace or replay
+/// rows below it, unlike OFFSET pagination.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryCursor {
-    /// `MAX(COALESCE(last_used_at_ms, created_at_ms), created_at_ms)` of the
-    /// anchor row.
-    pub effective_ts_ms: i64,
-    /// `created_at_ms` of the anchor row (second ordering key).
-    pub created_at_ms: i64,
+    /// Stored usage timestamp, initialized to creation time on insert.
+    pub last_used_at_ms: i64,
     /// `id` of the anchor row (final ordering tiebreaker).
     pub id: String,
 }

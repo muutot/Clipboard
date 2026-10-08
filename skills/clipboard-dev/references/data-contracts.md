@@ -16,7 +16,7 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 ### Active-history listing filters
 
-`list_clipboard_items` paginates active history with an optional `filter` argument (camelCase `HistoryFilterArgs` in `commands/clipboard/types.rs`, mirroring `HistoryFilter` in the storage layer): `kind` (`text`/`link`/`image`/`file`), `favorite`, `tag`, `sourceApp`, `dateFromMs`, `dateToMs`. All fields are optional; an omitted or empty payload returns unfiltered pages. Each filter is applied in the `list_recent` SQL `WHERE` clause (`json_each(metadata_json, '$.tags')` matches tags, tolerating `NULL` metadata) so every page returns the latest matching records rather than filtering a loaded set. The `buildHistoryFilterArgs` helper (`utils/history-filter.ts`) maps the active kind tab, tag/source/date dropdowns onto this payload; the main route resets history pagination when any filter changes and `filteredItems` still re-applies the same predicates client-side.
+`list_clipboard_items` paginates active history with an optional `filter` argument (camelCase `HistoryFilterArgs` in `commands/clipboard/types.rs`, mirroring `HistoryFilter` in the storage layer): `kind` (`text`/`link`/`image`/`file`), `favorite`, `tag`, `sourceApp`, `dateFromMs`, `dateToMs`, and `cursor`. All fields are optional; an omitted or empty payload returns unfiltered pages. Each filter is applied in the `list_recent` SQL `WHERE` clause (tags use an `EXISTS` lookup in `item_tags`) so every page returns matching records rather than filtering a loaded set. Default ordering is directly `last_used_at_ms DESC, id DESC`: creation is not a sort key, and ID only stabilizes equal usage timestamps. The cursor is `{ lastUsedAtMs, id }` from the last returned row; `(last_used_at_ms, id) < (?, ?)` seeks through the matching index and ignores `offset`. The `buildHistoryFilterArgs` helper (`utils/history-filter.ts`) maps the toolbar filters onto this payload; the main route resets history pagination when any filter changes and `filteredItems` still re-applies the predicates client-side.
 
 `icon_path` currently carries an icon file key in the intended frontend path: `ClipboardCard` joins it with `iconsDir`. Do not reintroduce arbitrary absolute icon paths without re-auditing import validation, migration, cleanup, and `convertFileSrc` use.
 
@@ -48,6 +48,18 @@ forward, every schema bump must register exactly one adjacent migration in
 `storage/migrations.rs`; the entire chain runs in one transaction, advances `user_version` after
 each step, validates foreign keys, and rolls back all steps on failure. A database newer than the
 binary's current schema is rejected without modification rather than downgraded or reset.
+
+Current schema v2 fills only NULL `last_used_at_ms` values with each row's
+`created_at_ms`, preserving existing usage timestamps and all content. It creates
+`clipboard_items_deleted_last_used_idx` on `(deleted, last_used_at_ms DESC, id DESC)`
+and `clipboard_items_favorite_last_used_idx` on
+`(deleted, is_favorite, last_used_at_ms DESC, id DESC)` in the same migration transaction.
+The backfill does not enqueue search/sync events or change replication versions.
+New captures, CLI inserts, duplicates, and save-as-new records initialize usage to
+creation time. The shared insert helper fills missing legacy/import values at write
+time; explicit imported usage values are preserved. The domain/JSON field remains
+optional for import and wire compatibility, but application-persisted rows have a
+usage timestamp. Sorting reads that value directly without MAX/MIN/COALESCE.
 
 - `clipboard_items`: ID, kind, title/text/html/rtf/resource/preview, `content_hash`, source/icon, size/time, favorite, soft-delete fields, and metadata JSON. `(kind, content_hash)` is unique. Sync v1 stores `modified_at_ms` plus `sync_writer_device_id`; together they form the deterministic `(timestamp, writer UUID)` conflict version. `last_used_at_ms` and `preview_path` remain device-local: changing either does not create a sync outbox row or advance the replicated record version; wire export clears them as applicable, a remote insert initializes `last_used_at_ms` from `created_at_ms`, and a remote update preserves the receiver's local values. The current schema is created with all columns present; there is no historical column migration.
 - `ocr_results`: one row per item, status/engine/model/language/text/blocks/image hash/timestamps/error, with cascade deletion.

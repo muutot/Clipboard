@@ -322,7 +322,7 @@ pub fn search_clipboard_items(
 
     let rules = sort_rules.unwrap_or_else(|| {
         vec![SearchSortRule {
-            field: SearchSortField::CreatedAt,
+            field: SearchSortField::LastUsedAt,
             direction: SearchSortDirection::Desc,
         }]
     });
@@ -620,7 +620,7 @@ pub fn duplicate_clipboard_item_record(
     item.id = namespaced.clone();
     item.content_hash = namespaced;
     item.created_at_ms = now_ms;
-    item.last_used_at_ms = None;
+    item.last_used_at_ms = Some(now_ms);
     item.is_favorite = false;
     database.save_item(&item).map_err(|e| e.to_string())?;
     Ok(item)
@@ -698,7 +698,7 @@ pub fn save_clipboard_item_as_new_record(
     item.content_hash = content_hash;
     item.size_bytes = new_text_content.len() as u64;
     item.created_at_ms = now_ms;
-    item.last_used_at_ms = None;
+    item.last_used_at_ms = Some(now_ms);
     item.is_favorite = false;
     item.metadata_json = Some(metadata_json);
     database.save_item(&item).map_err(|e| e.to_string())?;
@@ -964,6 +964,8 @@ mod tests {
 
         let first = duplicate_clipboard_item_record(&database, "src").unwrap();
         let second = duplicate_clipboard_item_record(&database, "src").unwrap();
+        assert_eq!(first.last_used_at_ms, Some(first.created_at_ms));
+        assert_eq!(second.last_used_at_ms, Some(second.created_at_ms));
 
         assert_ne!(first.id, second.id);
         assert_ne!(first.content_hash, second.content_hash);
@@ -986,6 +988,7 @@ mod tests {
 
         let created =
             save_clipboard_item_as_new_record(&database, "src", "title2", "same").unwrap();
+        assert_eq!(created.last_used_at_ms, Some(created.created_at_ms));
 
         assert_ne!(created.id, "src");
         assert_eq!(created.text_content.as_deref(), Some("same"));
@@ -1164,10 +1167,9 @@ mod tests {
             std::cmp::Ordering::Less
         );
 
-        // LastUsedAt falls back to created_at_ms for never-used entries so a
-        // fresh copy still outranks used entries.
+        // Usage is initialized at persistence, not derived during sorting.
         newer.last_used_at_ms = Some(50);
-        older.last_used_at_ms = None;
+        older.last_used_at_ms = Some(100);
         older.created_at_ms = 300;
         assert_eq!(
             cmp_by_field(&older, &newer, SearchSortField::LastUsedAt),
@@ -1180,21 +1182,21 @@ mod tests {
     }
 
     #[test]
-    fn cmp_by_field_prefers_newer_capture_over_older_use() {
+    fn cmp_by_field_uses_last_used_without_comparing_creation() {
         let mut recaptured = item("a", "a");
         recaptured.created_at_ms = 300;
         recaptured.last_used_at_ms = Some(150);
         let mut other = item("b", "b");
         other.created_at_ms = 200;
-        other.last_used_at_ms = None;
+        other.last_used_at_ms = Some(200);
 
         assert_eq!(
             cmp_by_field(&recaptured, &other, SearchSortField::LastUsedAt),
-            std::cmp::Ordering::Less
+            std::cmp::Ordering::Greater
         );
         assert_eq!(
             cmp_by_field(&other, &recaptured, SearchSortField::LastUsedAt),
-            std::cmp::Ordering::Greater
+            std::cmp::Ordering::Less
         );
     }
 
@@ -1576,24 +1578,9 @@ pub fn cmp_by_field(
     // "title A→Z" (Asc) selection sort Z→A.
     match field {
         SearchSortField::CreatedAt => b.created_at_ms.cmp(&a.created_at_ms),
-        // Items never used from history have `last_used_at_ms = NULL`. Fall back
-        // to `created_at_ms` so a freshly copied (but unused) entry still sorts
-        // to the top instead of sinking below used entries. A re-copied entry
-        // stamps `last_used_at_ms` while its `created_at_ms` stays frozen, so
-        // the effective recency is the greater of the two; the max (rather
-        // than a plain fallback) also keeps imported/synced rows whose stored
-        // `last_used_at_ms` predates their capture time ordered sanely.
-        SearchSortField::LastUsedAt => {
-            let a_recency = a
-                .last_used_at_ms
-                .unwrap_or(a.created_at_ms)
-                .max(a.created_at_ms);
-            let b_recency = b
-                .last_used_at_ms
-                .unwrap_or(b.created_at_ms)
-                .max(b.created_at_ms);
-            b_recency.cmp(&a_recency)
-        }
+        // Persistence initializes missing usage times; sorting uses only the
+        // stored value, even when an imported usage time predates creation.
+        SearchSortField::LastUsedAt => b.last_used_at_ms.cmp(&a.last_used_at_ms),
         SearchSortField::Title => b.title.cmp(&a.title),
         SearchSortField::Size => b.size_bytes.cmp(&a.size_bytes),
         SearchSortField::Kind => b.kind.cmp(&a.kind),

@@ -34,22 +34,20 @@ pub struct HistoryFilterArgs {
     pub(crate) cursor: Option<HistoryCursorArgs>,
 }
 
-/// Frontend payload for `HistoryCursor`. The frontend derives all three keys
+/// Frontend payload for `HistoryCursor`. The frontend derives both keys
 /// from the last `ClipboardItem` of the previous page, so the shapes must
 /// stay in sync with `toClipboardItem` in `clipboard.ts`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryCursorArgs {
-    pub(crate) effective_ts_ms: i64,
-    pub(crate) created_at_ms: i64,
+    pub(crate) last_used_at_ms: i64,
     pub(crate) id: String,
 }
 
 impl From<HistoryCursorArgs> for HistoryCursor {
     fn from(args: HistoryCursorArgs) -> Self {
         Self {
-            effective_ts_ms: args.effective_ts_ms,
-            created_at_ms: args.created_at_ms,
+            last_used_at_ms: args.last_used_at_ms,
             id: args.id,
         }
     }

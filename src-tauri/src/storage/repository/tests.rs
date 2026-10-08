@@ -161,7 +161,7 @@ fn set_last_used_records_usage_without_changing_capture_time() {
         .unwrap();
     assert_eq!(
         database.get_item("used").unwrap().unwrap().last_used_at_ms,
-        None
+        Some(100)
     );
 
     // A re-copy freezes created_at_ms and records the reuse as usage.
@@ -189,13 +189,13 @@ fn set_last_used_records_usage_without_changing_capture_time() {
 }
 
 #[test]
-fn list_recent_defaults_to_most_recently_used_with_capture_fallback() {
+fn list_recent_defaults_to_last_used_initialized_at_creation() {
     let database = Database::open_in_memory().unwrap();
     // "old-used" captured long ago but used just now -> should still top the list.
     database
         .save_item(&text_item("old-used", "hash-1", 100))
         .unwrap();
-    // "new-unused" just captured, never used -> falls back to created_at (top tier).
+    // A fresh capture initializes its usage timestamp to creation time.
     database
         .save_item(&text_item("new-unused", "hash-2", 500))
         .unwrap();
@@ -217,14 +217,10 @@ fn list_recent_defaults_to_most_recently_used_with_capture_fallback() {
 }
 
 /// Derives the keyset cursor from a loaded row exactly like the frontend:
-/// effective_ts = MAX(last_used_at_ms ?? created_at_ms, created_at_ms).
+/// Both keys are read directly from the persisted row.
 fn cursor_of(item: &ClipboardItem) -> HistoryCursor {
     HistoryCursor {
-        effective_ts_ms: item
-            .last_used_at_ms
-            .unwrap_or(item.created_at_ms)
-            .max(item.created_at_ms),
-        created_at_ms: item.created_at_ms,
+        last_used_at_ms: item.last_used_at_ms.unwrap(),
         id: item.id.clone(),
     }
 }
@@ -279,13 +275,10 @@ fn cursor_pagination_survives_out_of_band_reuse() {
 }
 
 #[test]
-fn cursor_pagination_keeps_effective_ts_ties_with_older_created() {
+fn cursor_pagination_breaks_usage_ties_by_id_not_creation() {
     let database = Database::open_in_memory().unwrap();
-    // "a" and "b" tie on effective_ts 100 but differ on created_at_ms; the
-    // ordering falls through to created_at_ms DESC, so "b" (created 90, used
-    // at 100) sorts after "a". A two-key (effective_ts, id) cursor anchored at
-    // "a" would evaluate `id < 'a'` for "b" and silently drop it; the
-    // three-key predicate must keep it.
+    // "a" and "b" tie on usage. ID alone breaks the tie, so "b" comes
+    // first even though "a" has the newer creation time.
     let mut b = text_item("b", "hash-b", 90);
     b.last_used_at_ms = Some(100);
     database.save_item(&text_item("a", "hash-a", 100)).unwrap();
@@ -294,7 +287,7 @@ fn cursor_pagination_keeps_effective_ts_ties_with_older_created() {
     let page1 = database
         .list_recent(1, 0, &HistoryFilter::default())
         .unwrap();
-    assert_eq!(page1[0].id, "a");
+    assert_eq!(page1[0].id, "b");
 
     let page2 = database
         .list_recent(
@@ -307,7 +300,96 @@ fn cursor_pagination_keeps_effective_ts_ties_with_older_created() {
         )
         .unwrap();
     assert_eq!(page2.len(), 1);
-    assert_eq!(page2[0].id, "b");
+    assert_eq!(page2[0].id, "a");
+}
+
+#[test]
+fn list_recent_uses_stored_usage_even_when_it_predates_creation() {
+    let database = Database::open_in_memory().unwrap();
+    let mut older_usage = text_item("new-capture", "hash-new", 300);
+    older_usage.last_used_at_ms = Some(50);
+    database.save_item(&older_usage).unwrap();
+    database
+        .save_item(&text_item("old-capture", "hash-old", 100))
+        .unwrap();
+
+    let page = database
+        .list_recent(1, 0, &HistoryFilter::default())
+        .unwrap();
+    assert_eq!(page[0].id, "old-capture");
+    let next = database
+        .list_recent(
+            1,
+            0,
+            &HistoryFilter {
+                cursor: Some(cursor_of(&page[0])),
+                ..HistoryFilter::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(next[0].id, "new-capture");
+    assert_eq!(next[0].last_used_at_ms, Some(50));
+}
+
+#[test]
+fn inserts_and_imports_initialize_missing_usage_and_preserve_explicit_usage() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .save_item(&text_item("capture", "hash-capture", 100))
+        .unwrap();
+    let legacy = text_item("legacy-import", "hash-legacy", 200);
+    let mut used = text_item("used-import", "hash-used", 300);
+    used.last_used_at_ms = Some(50);
+    database
+        .save_items_transactional(&[("legacy".into(), legacy), ("used".into(), used)])
+        .unwrap();
+
+    for (id, expected) in [
+        ("capture", 100),
+        ("legacy-import", 200),
+        ("used-import", 50),
+    ] {
+        assert_eq!(
+            database.get_item(id).unwrap().unwrap().last_used_at_ms,
+            Some(expected)
+        );
+    }
+}
+
+#[test]
+fn history_indexes_cover_ordering_and_seek_to_usage_cursor() {
+    let database = Database::open_in_memory().unwrap();
+    database
+        .with_connection(|connection| {
+            for (favorite, index) in [
+                ("", "clipboard_items_deleted_last_used_idx"),
+                (
+                    " AND is_favorite = 1",
+                    "clipboard_items_favorite_last_used_idx",
+                ),
+            ] {
+                for cursor in ["", " AND (last_used_at_ms, id) < (100, 'anchor')"] {
+                    let sql = format!(
+                        "EXPLAIN QUERY PLAN SELECT {} FROM clipboard_items
+                     WHERE deleted = 0{favorite}{cursor}
+                     ORDER BY last_used_at_ms DESC, id DESC LIMIT 100",
+                        super::ITEM_COLUMNS
+                    );
+                    let plan = connection
+                        .prepare(&sql)?
+                        .query_map([], |row| row.get::<_, String>(3))?
+                        .collect::<Result<Vec<_>, _>>()?
+                        .join("; ");
+                    assert!(plan.contains(index), "{plan}");
+                    assert!(!plan.contains("TEMP B-TREE"), "{plan}");
+                    if !cursor.is_empty() {
+                        assert!(plan.contains("(last_used_at_ms,id)<(?,?)"), "{plan}");
+                    }
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]
@@ -1130,7 +1212,13 @@ fn update_text_item_rejects_hash_collisions_without_partial_changes() {
     });
 
     assert!(matches!(result, Err(StorageError::Sqlite(_))));
-    assert_eq!(database.get_item("original").unwrap().unwrap(), original);
+    assert_eq!(
+        database.get_item("original").unwrap().unwrap(),
+        ClipboardItem {
+            last_used_at_ms: Some(original.created_at_ms),
+            ..original
+        }
+    );
     assert_eq!(database.read_search_outbox(20).unwrap().len(), 2);
 }
 

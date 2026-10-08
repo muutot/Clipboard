@@ -129,7 +129,7 @@ pub(super) fn insert_item_row(
             item.source_app,
             size_bytes,
             item.created_at_ms,
-            item.last_used_at_ms,
+            item.last_used_at_ms.unwrap_or(item.created_at_ms),
             item.is_favorite,
             item.icon_path,
             item.metadata_json,
