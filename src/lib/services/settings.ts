@@ -566,6 +566,10 @@ function normalizeGeneralSettings(
     50,
     1000,
   );
+  result.display.searchPageSize = Math.min(
+    result.display.searchPageSize,
+    result.searchPageSizeLimit,
+  );
   result.maxTextCaptureBytes = integerInRange(
     source.maxTextCaptureBytes ?? fallback("maxTextCaptureBytes"),
     defaultSettings.maxTextCaptureBytes,

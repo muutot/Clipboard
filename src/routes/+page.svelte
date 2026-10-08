@@ -696,12 +696,13 @@
   }
 
   const searchSettingsKey = $derived(
-    `${$generalSettings.display.searchPageSize}\u0000${JSON.stringify($generalSettings.searchSortRules)}`,
+    `${$generalSettings.display.searchPageSize}\u0000${$generalSettings.searchPageSizeLimit}\u0000${JSON.stringify($generalSettings.searchSortRules)}`,
   );
 
   $effect(() => {
     const requestedQuery = query.trim();
     void searchSettingsKey; // dependency: narrow key, not the whole store
+    const requestedMaxResults = untrack(() => $generalSettings.searchPageSizeLimit);
     const requestedPageSize = untrack(() => $generalSettings.display.searchPageSize);
     const requestedSortRules = untrack(() => $generalSettings.searchSortRules);
     const requestedEpoch = searchEpoch;
@@ -734,7 +735,12 @@
 
     searchPending = true;
     const timer = window.setTimeout(() => {
-      void searchClipboardHistory(requestedQuery, requestedPageSize, 0, requestedSortRules)
+      void generalSettings
+        .flush()
+        .then(() => {
+          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return null;
+          return searchClipboardHistory(requestedQuery, requestedPageSize, 0, requestedSortRules);
+        })
         .then((page) => {
           if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
             return;
@@ -743,7 +749,7 @@
           itemStore.current = replaceViewItems(itemStore.current, page.items, "indexed");
           indexedQuery = requestedQuery;
           searchOffset = page.items.length;
-          searchHasMore = searchOffset < page.totalCount;
+          searchHasMore = searchOffset < Math.min(page.totalCount, requestedMaxResults);
           updateSearchCache(page.items);
           statusMessage = page.truncated
             ? _t("app.searchTruncated", { shown: page.items.length, total: page.totalCount })
@@ -1083,6 +1089,12 @@
     void loadActiveHistoryPage();
   }
 
+  const searchCacheLimit = $derived($generalSettings.searchCacheSize);
+  $effect(() => {
+    void searchCacheLimit;
+    untrack(() => updateSearchCache([]));
+  });
+
   function updateSearchCache(results: ClipboardItem[]) {
     itemStore.current = mergeSearchCachePage(itemStore.current, {
       results,
@@ -1188,6 +1200,7 @@
     searchLoading = true;
     const requestId = ++searchLoadRequestId;
     const offset = searchOffset;
+    const maxResults = $generalSettings.searchPageSizeLimit;
     try {
       const page = await searchClipboardHistory(
         indexedQuery,
@@ -1210,7 +1223,7 @@
         "indexed",
       );
       searchOffset += page.items.length;
-      searchHasMore = searchOffset < page.totalCount;
+      searchHasMore = searchOffset < Math.min(page.totalCount, maxResults);
       updateSearchCache(page.items);
     } catch (error) {
       if (requestId !== searchLoadRequestId) return;

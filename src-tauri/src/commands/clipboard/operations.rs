@@ -1397,6 +1397,25 @@ mod tests {
     }
 
     #[test]
+    fn changing_the_candidate_cap_invalidates_sorted_results_in_both_directions() {
+        let cache = SearchResultCache::new();
+        cache.set(
+            cache.write_token(),
+            "query".into(),
+            vec![],
+            500,
+            vec![item("low-relevance", "first-after-custom-sort")],
+            600,
+            true,
+        );
+        assert!(cache.get("query", &[], 500, 0, 100).is_some());
+        // Prefix slicing cannot shrink a relevance-capped result after custom
+        // sorting: this first row may not be among the top 100 candidates.
+        assert!(cache.get("query", &[], 100, 0, 100).is_none());
+        assert!(cache.get("query", &[], 1000, 0, 100).is_none());
+    }
+
+    #[test]
     fn usage_stamp_prevents_inflight_search_from_repopulating_stale_cache() {
         let database = Database::open_in_memory().unwrap();
         database.save_item(&item("record", "title")).unwrap();

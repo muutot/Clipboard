@@ -76,7 +76,7 @@ cannot emit, which is how this drifted for so long.
 - `rebuild_search_index` clears this cache along with Tantivy's `cached_ids`.
 - `search_clipboard_items` also clears this cache when it applies pending outbox events, so stale pages are not served after a mutation; see lazy sync below.
 - Each cache miss captures a generation/day token before querying candidates. Cache publication checks that token under the same mutex used by `clear`; an in-flight request cannot repopulate a cache invalidated by usage, synchronization, or a local midnight boundary.
-- Cache miss when `max_results` is larger than the cached value ensures `searchPageSizeLimit` changes invalidate stale entries.
+- A sorted-result cache hit requires an exact `max_results` match. Both increasing and decreasing the candidate cap invalidate it: slicing a sorted vector cannot reproduce a smaller relevance-selected candidate set.
 
 `search_clipboard_items` obtains a configured maximum, asks Tantivy for candidate IDs plus the true match total, fetches the complete bounded candidate set from SQLite, applies frontend sort rules globally, caches the full sorted result with its total/truncation, and only then slices the requested offset/limit. It returns a `SearchPage` envelope (`items`, `totalCount`, `truncated`); `truncated` is set when index matches beyond `max_results` were dropped, and the frontend (`searchClipboardHistory` → `SearchPage`) drives `searchHasMore` from the total and shows a truncation notice instead of ending pagination silently. `ClipboardRepository::get_items_by_ids` must read every requested active ID in safe query chunks and reconstruct caller order. Sorting after slicing breaks ordering across page boundaries and is forbidden. `apply_sort_rules` sorts stably on purpose: when sort fields tie, the incoming Tantivy relevance order deterministically remains the fallback order (an unstable sort permutes tied elements for larger inputs).
 
@@ -101,6 +101,8 @@ This is the only Tantivy search entry point; the CLI/local API uses SQLite scann
 
 Any new index mutation path must invalidate `cached_ids`. Add a regression test showing an old query result cannot survive an upsert, delete, or rebuild.
 
+First-page searches flush pending settings before invoking the backend; stale requests are checked again after that await. Normalization clamps stored `display.searchPageSize` to `searchPageSizeLimit`, so the slider, persisted value and requests agree.
+
 ## Frontend search request lifecycle
 
 The main route debounces a first-page indexed search by 300 ms.
@@ -108,10 +110,10 @@ The main route debounces a first-page indexed search by 300 ms.
 - Queries shorter than two characters, empty queries, recycle-bin filtering, and recognized date queries do not use Tantivy.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
 - `searchEpoch` (bumped by history/item/capture/tag invalidations and background `search-index-changed` events) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
-- The same effect reacts only to a narrow `searchSettingsKey` derived from `display.searchPageSize` and `searchSortRules` (the values themselves are read with `untrack`); either setting changing invalidates first-page and pagination request IDs before re-querying, while an unrelated settings change no longer restarts the search or resets pagination.
+- The same effect reacts only to a narrow `searchSettingsKey` derived from `display.searchPageSize`, `searchPageSizeLimit`, and `searchSortRules` (the values themselves are read with `untrack`); any of these settings changing invalidates first-page and pagination request IDs before re-querying, while an unrelated settings change no longer restarts the search or resets pagination.
 - Successful first pages replace the `indexed` view (`replaceViewItems`) and set `indexedQuery`, `searchOffset`, `searchTotalCount`/`searchTruncated`, and `searchHasMore`. An empty first page still switches the view on, so the panel shows "no match" instead of falling back to the history list; `closeSearchResults` is what returns to "no search displayed".
 - `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already in `indexedIds` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
-- `searchHasMore` is derived from the backend total (`searchOffset < totalCount`); an empty page still ends pagination as a backstop.
+- `searchHasMore` is bounded by both the true total and configured candidate cap (`searchOffset < min(totalCount, maxResults)`); an empty page still ends pagination as a backstop.
 
 When changing query, filter, sort, or mutation behavior, audit both first-page and pagination request IDs. A stale pagination response must never append to a newer query. Keep offset reset and result invalidation together.
 
@@ -119,7 +121,7 @@ When changing query, filter, sort, or mutation behavior, audit both first-page a
 
 The pure maintenance logic lives in `src/lib/utils/item-store.ts` (`mergeSearchCachePage`, `promoteFromCache`, `trimLoadedHistory`) with Vitest coverage in `item-store.test.ts`; the route's `updateSearchCache(results)` stores first and subsequent-page search results whose ids the loaded active-history view does not already hold.
 
-- Capacity is `searchCacheSize` (normalized 200–2000; default 500).
+- Capacity is `searchCacheSize` (normalized 200–2000; default 500). Reducing it trims immediately, including without another search page, while preserving records referenced by other views.
 - `cacheIds` records insertion order — the access order lives in the store now, so there is no second id list to keep in step.
 - `promoteFromCache(loadedIds)` removes ids once normal history pagination loads them; the record itself stays in `byId` because the history view owns it.
 - The cache is separate from the `indexed` view; it is not the source of search ordering.

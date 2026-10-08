@@ -33,6 +33,8 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 | `display.pageSize`          | `100`   | 50–500                  |
 | `display.searchPageSize`    | `100`   | 50–500                  |
 
+`display.searchPageSize` is additionally clamped to `searchPageSizeLimit` during normalization. Changing the candidate cap refreshes the active search and invalidates its sorted cache in either direction. Reducing `searchCacheSize` trims the spare frontend cache immediately.
+
 ## Card layout settings
 
 There is no layout-mode toggle: these fields are the always-on card/search sizing knobs. They were renamed from the historical `compact*` keys; the Rust config keeps serde aliases, so an existing `settings.json` written with old `compact*` keys still loads (values re-save under the new names).

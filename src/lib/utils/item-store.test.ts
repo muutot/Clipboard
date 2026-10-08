@@ -452,6 +452,17 @@ describe("trimLoadedHistory", () => {
 });
 
 describe("mergeSearchCachePage", () => {
+  it("applies a reduced cache cap without waiting for another result page", () => {
+    const before = cached("a", "b", "c");
+    const next = mergeSearchCachePage(before, {
+      results: [],
+      loadedIds: new Set(),
+      policy: "fifo",
+      max: 1,
+    });
+    expect(next.cacheIds).toEqual(["c"]);
+    expect(next.byId.has("a")).toBe(false);
+  });
   const cached = (...ids: string[]) => {
     let store = createItemStore();
     for (const id of ids) store = appendItems(store, [item(id)], "cache");

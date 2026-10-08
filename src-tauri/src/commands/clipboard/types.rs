@@ -135,7 +135,7 @@ impl SearchResultCache {
             cache.result.as_ref()?;
         if cached_query != query
             || cached_rules != rules
-            || *cached_max < max_results
+            || *cached_max != max_results
             || *cached_bucket != current_date_bucket()
         {
             return None;

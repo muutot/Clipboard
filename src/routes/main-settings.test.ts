@@ -124,6 +124,16 @@ afterEach(async () => {
 });
 
 describe("search settings and live changes", () => {
+  it("refreshes when the candidate cap changes without resetting for unrelated settings", async () => {
+    await open();
+    bridge.search.mockClear();
+    generalSettings.updateSetting("showToastNotifications", false);
+    await settle(350);
+    expect(bridge.search).not.toHaveBeenCalled();
+    generalSettings.updateSetting("searchPageSizeLimit", 200);
+    await settle(350);
+    expect(bridge.search).toHaveBeenCalledTimes(1);
+  });
   it("preserves title sorting during recapture and then refreshes matching results", async () => {
     generalSettings.updateSetting("searchSortRules", [{ field: "title", direction: "asc" }]);
     await open();

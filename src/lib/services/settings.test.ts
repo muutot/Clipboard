@@ -39,6 +39,16 @@ describe("windowConfig store", () => {
 });
 
 describe("generalSettings store normalization", () => {
+  it("normalizes the stored search page size when the candidate cap shrinks", () => {
+    generalSettings.merge({
+      searchPageSizeLimit: 500,
+      display: { ...DEFAULT_GENERAL_SETTINGS.display, searchPageSize: 400 },
+    });
+    generalSettings.updateSetting("searchPageSizeLimit", 100);
+    expect(get(generalSettings).display.searchPageSize).toBe(100);
+    generalSettings.updateSetting("searchPageSizeLimit", 500);
+    expect(get(generalSettings).display.searchPageSize).toBe(100);
+  });
   it("keeps nested defaults independent across updates (no shared containers)", () => {
     const before = JSON.stringify(DEFAULT_GENERAL_SETTINGS.fontSizes);
     generalSettings.updateSetting("fontSizes", {

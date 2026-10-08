@@ -494,7 +494,7 @@ export function mergeSearchCachePage(
     max: number;
   },
 ): ItemStore {
-  if (options.results.length === 0) return store;
+  if (options.results.length === 0 && store.cacheIds.length <= options.max) return store;
   const byId = new Map(store.byId);
   // A record can leave the map entirely while an id lingers in the order list,
   // so reconcile the order against the map before merging.
