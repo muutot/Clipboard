@@ -236,14 +236,28 @@ fn run_probe_with_timeout(
         .stderr(Stdio::piped())
         .spawn()
         .ok()?;
+    // Drain both pipes while waiting; otherwise a probe that writes more
+    // than the OS pipe buffer blocks in write and is misreported as a timeout.
+    let stdout_reader = spawn_pipe_reader(child.stdout.take());
+    let stderr_reader = spawn_pipe_reader(child.stderr.take());
     let started = Instant::now();
     loop {
         match child.try_wait().ok()? {
-            Some(_) => return child.wait_with_output().ok(),
+            Some(status) => {
+                let stdout = join_pipe_reader(stdout_reader).unwrap_or_default();
+                let stderr = join_pipe_reader(stderr_reader).unwrap_or_default();
+                return Some(std::process::Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
             None => {
                 if started.elapsed() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
+                    let _ = join_pipe_reader(stdout_reader);
+                    let _ = join_pipe_reader(stderr_reader);
                     return None;
                 }
                 std::thread::sleep(Duration::from_millis(50));
