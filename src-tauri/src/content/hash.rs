@@ -199,7 +199,7 @@ fn infer_icon_extension(data: &[u8]) -> &'static str {
     if data.len() >= 3 && &data[0..3] == b"\xff\xd8\xff" {
         return "jpg";
     }
-    if data.len() >= 4 && &data[0..4] == b"RIFF" {
+    if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP" {
         return "webp";
     }
     if data.len() >= 4 && &data[0..4] == b"\x00\x00\x01\x00" {
