@@ -630,6 +630,7 @@ const en: LocaleDefinition = {
   },
   toast: {
     copySuccess: "Copied to clipboard",
+    cutSuccess: "Cut to clipboard",
     favoriteSuccess: "Favorited",
     unfavoriteSuccess: "Unfavorited",
     deleteSuccess: "Deleted",

@@ -577,6 +577,7 @@ export interface LocaleDefinition {
   };
   toast: {
     copySuccess: string;
+    cutSuccess: string;
     favoriteSuccess: string;
     unfavoriteSuccess: string;
     deleteSuccess: string;

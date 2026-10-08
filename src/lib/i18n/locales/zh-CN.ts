@@ -601,6 +601,7 @@ const zhCN: LocaleDefinition = {
   },
   toast: {
     copySuccess: "已复制到剪贴板",
+    cutSuccess: "已剪切到剪贴板",
     favoriteSuccess: "已收藏",
     unfavoriteSuccess: "已取消收藏",
     deleteSuccess: "已删除",

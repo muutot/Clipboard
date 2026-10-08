@@ -117,7 +117,7 @@
         target.dispatchEvent(new Event("input", { bubbles: true }));
       }
     }
-    showToast(_t("toast.copySuccess"), "success");
+    showToast(id === "cut" ? _t("toast.cutSuccess") : _t("toast.copySuccess"), "success");
   }
 </script>
 
