@@ -1,0 +1,108 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { copyClipboardItem, pasteClipboardItem } from "./clipboard";
+import type { ClipboardItem } from "$lib/types/clipboard";
+
+const bridge = vi.hoisted(() => ({ invoke: vi.fn(), write: vi.fn(), toast: vi.fn(), pin: true }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: bridge.invoke,
+  convertFileSrc: (x: string) => x,
+}));
+vi.mock("$lib/services/toast", () => ({ showToast: bridge.toast }));
+vi.mock("$lib/services/log", () => ({ logFrontendError: vi.fn(), logFrontendMessage: vi.fn() }));
+vi.mock("$lib/services/settings", () => ({
+  generalSettings: {
+    subscribe(run: (value: unknown) => void) {
+      run({ pinCopiedToTop: bridge.pin, pasteCleaningEnabled: false });
+      return () => {};
+    },
+  },
+}));
+
+const item = { id: "record", kind: "text", title: "hello", textContent: "hello" } as ClipboardItem;
+beforeEach(() => {
+  bridge.pin = true;
+  bridge.invoke.mockReset().mockResolvedValue(true);
+  bridge.write.mockReset().mockResolvedValue(undefined);
+  bridge.toast.mockReset();
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+  vi.stubGlobal("navigator", { clipboard: { writeText: bridge.write } });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => {
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+const stamps = () =>
+  bridge.invoke.mock.calls.filter(([command]) => command === "set_clipboard_item_last_used");
+
+describe("successful usage recording", () => {
+  it("waits for the OS write before stamping and moving a copied row", async () => {
+    let finish!: () => void;
+    bridge.write.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const moveToTop = vi.fn();
+    const copy = copyClipboardItem(item, { moveToTop });
+    await vi.waitFor(() => expect(bridge.write).toHaveBeenCalled());
+    expect(stamps()).toHaveLength(0);
+    expect(moveToTop).not.toHaveBeenCalled();
+    finish();
+    await copy;
+    expect(stamps()).toHaveLength(1);
+    expect(moveToTop).toHaveBeenCalledWith(item.id);
+  });
+
+  it.each(["copy", "paste"])("does not stamp or move after a failed %s write", async (action) => {
+    bridge.write.mockRejectedValue(new Error("busy clipboard"));
+    const moveToTop = vi.fn();
+    if (action === "copy") await copyClipboardItem(item, { moveToTop });
+    else await pasteClipboardItem(item, "plain", { moveToTop });
+    expect(stamps()).toHaveLength(0);
+    expect(moveToTop).not.toHaveBeenCalled();
+    expect(bridge.toast).toHaveBeenCalledWith(expect.any(String), "error");
+  });
+
+  it("does not stamp a file copy whose source disappeared", async () => {
+    bridge.invoke.mockImplementation(async (command) => {
+      if (command === "materialize_clipboard_item")
+        return {
+          ...item,
+          kind: "file",
+          createdAtMs: 1,
+          sizeBytes: 1,
+          isFavorite: false,
+          contentHash: "file",
+          resourcePath: "C:/missing.txt",
+        };
+      if (command === "copy_clipboard_item_files") throw { kind: "resource-missing" };
+      return true;
+    });
+    const moveToTop = vi.fn();
+    await copyClipboardItem({ ...item, kind: "file" }, { moveToTop });
+    expect(stamps()).toHaveLength(0);
+    expect(moveToTop).not.toHaveBeenCalled();
+  });
+
+  it("stamps successful copies even when immediate promotion is off", async () => {
+    bridge.pin = false;
+    const moveToTop = vi.fn();
+    await copyClipboardItem(item, { moveToTop });
+    expect(stamps()).toHaveLength(1);
+    expect(moveToTop).not.toHaveBeenCalled();
+  });
+
+  it("keeps a successful OS copy successful when metadata persistence fails", async () => {
+    bridge.invoke.mockImplementation(async (command) => {
+      if (command === "set_clipboard_item_last_used") throw new Error("database busy");
+      return true;
+    });
+    const moveToTop = vi.fn();
+    await copyClipboardItem(item, { moveToTop });
+    expect(moveToTop).not.toHaveBeenCalled();
+    expect(bridge.toast).toHaveBeenCalledWith(expect.any(String), "success");
+  });
+});

@@ -294,7 +294,7 @@ export async function persistTags(id: string, tags: string[]): Promise<boolean |
 }
 
 /** Records that a record was reused (copied/pasted out from history) so the
- * optional `LastUsedAt` search sort reflects actual usage. Fire-and-forget. */
+ * optional `LastUsedAt` search sort reflects successful clipboard writes. */
 export async function persistLastUsed(id: string): Promise<boolean | null> {
   return invokeTauri<boolean>("set_clipboard_item_last_used", { id });
 }
@@ -432,6 +432,22 @@ export interface CopyItemHooks {
   onstatus?: (message: string) => void;
 }
 
+async function recordSuccessfulUsage(
+  item: ClipboardItem,
+  hooks: { moveToTop?: (id: string) => void },
+): Promise<void> {
+  try {
+    const updated = await persistLastUsed(item.id);
+    if ((updated || !isTauriRuntime()) && get(generalSettings).pinCopiedToTop) {
+      hooks.moveToTop?.(item.id);
+    }
+  } catch (error) {
+    // The OS write succeeded. A metadata failure must not report copy failure
+    // or move the UI ahead of the persisted order.
+    console.error("Unable to persist last-used item", error);
+  }
+}
+
 /**
  * Copies one history entry back to the system clipboard, shared by the main
  * list and the float panel. Materializes remote image/file records first,
@@ -457,16 +473,11 @@ export async function copyClipboardItem(
     }
   }
 
-  hooks.moveToTop?.(item.id);
-
-  void persistLastUsed(item.id).catch((error) =>
-    console.error("Unable to persist last-used item", error),
-  );
-
   if (item.kind === "image" || item.kind === "file") {
     if (isTauriRuntime()) {
       try {
         await copyClipboardItemFiles(item.id);
+        await recordSuccessfulUsage(item, hooks);
         hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
         showToast(t("toast.copySuccess"), "success");
         return;
@@ -491,6 +502,7 @@ export async function copyClipboardItem(
       const response = await fetch(src);
       const blob = await response.blob();
       await writeClipboardImage(blob, item.resourcePath, item.contentHash);
+      await recordSuccessfulUsage(item, hooks);
       hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
       showToast(t("toast.copySuccess"), "success");
     } catch (error) {
@@ -510,6 +522,7 @@ export async function copyClipboardItem(
           const joined = paths.join("\n");
           if (joined.trim().length > 0) {
             await writeClipboardText(joined);
+            await recordSuccessfulUsage(item, hooks);
             hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
             showToast(t("toast.copySuccess"), "success");
             return;
@@ -522,6 +535,7 @@ export async function copyClipboardItem(
     if (item.resourcePath) {
       try {
         await writeClipboardText(item.resourcePath);
+        await recordSuccessfulUsage(item, hooks);
         hooks.onstatus?.(
           t("app.copiedItem", { title: item.fileName || getDisplayTitle(item.title) }),
         );
@@ -538,8 +552,9 @@ export async function copyClipboardItem(
     return;
   }
 
-  void writeClipboardText(item.textContent || item.title)
-    .then(() => {
+  await writeClipboardText(item.textContent || item.title)
+    .then(async () => {
+      await recordSuccessfulUsage(item, hooks);
       hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
       showToast(t("toast.copySuccess"), "success");
     })
@@ -1030,7 +1045,6 @@ async function pasteToPreviousApp(
   const t = (path: string, params?: Record<string, string | number>) =>
     resolvePath(messages, path, params);
 
-  if (get(generalSettings).pinCopiedToTop) hooks.moveToTop?.(item.id);
   try {
     await write();
   } catch (error) {
@@ -1043,9 +1057,7 @@ async function pasteToPreviousApp(
     );
     return;
   }
-  void persistLastUsed(item.id).catch((error) =>
-    console.error("Unable to persist last-used item", error),
-  );
+  await recordSuccessfulUsage(item, hooks);
 
   if (!isTauriRuntime()) {
     showToast(t(keys.copy), "success");
