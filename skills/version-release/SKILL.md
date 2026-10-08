@@ -35,6 +35,35 @@ tree and can publish broken artifacts.
    (`git log -1 --pretty=%s <tag>^{}`).
 4. Push the branch first, the tag last.
 
+## 🚨 HARD RULE — the release commit contains only the six release files
+
+The release commit must contain **exactly** the six release files and nothing else:
+`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`,
+`CHANGELOG.md`, `RELEASE.md`. Never fold a code fix, test, script, or skill change into it —
+**not even when re-running a failed release**. Enforced twice:
+
+1. **Locally** — `release.mjs` refuses to run while any file outside the six is dirty or
+   staged. **Always create the release commit through the script.** Hand-rolling
+   `git reset --soft` + `git add` + `git commit` bypasses this guard, which is exactly how
+   mixed release commits happen.
+2. **Remotely** — `scripts/validate-release-version.mjs` (release.yml Verify job) fails the
+   build when the tagged commit touches any file outside the six.
+
+### Post-push CI failure recovery
+
+When remote CI fails on a pushed release commit or tag, the remedy is a code fix, and a code
+fix is always its own commit (one verified minimal fix at a time):
+
+1. If a GitHub release was already published, delete it (with its assets) first, then the
+   remote tag (`git push origin :refs/tags/vx.x.x`) and the local tag (`git tag -d vx.x.x`).
+2. Commit the fix standalone: `🐛 fix[scope]: ...`.
+3. Re-run the normal two-pass flow — `release.mjs x.x.x` is idempotent and regenerates the
+   changelog with the fix included — so Pass 2 creates a **fresh** release commit on top.
+4. Re-tag, verify the binding (`git rev-parse <tag>^{}` must equal the release commit),
+   push the branch first, the tag last.
+
+See "Regenerate mode" for dropping an existing release commit from history.
+
 ## Release workflow (single script, two passes for RELEASE.md)
 
 ### Pre-release Check Gate
@@ -234,6 +263,10 @@ If the release script fails mid-way:
 
 - If version was already bumped: run `git checkout -- .` to revert config files
 - If commit was created but tag failed: `git reset --soft HEAD~1` then re-run
+
+If remote CI failed **after** the release commit/tag was pushed, follow
+"Post-push CI failure recovery" above — the fix lands as its own commit and the
+release commit is re-created through the script, never hand-folded.
 
 ## Commit message format
 
