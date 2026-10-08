@@ -8,7 +8,7 @@ This tracks implementation, not a version bump or release.
 - [x] Search all history for single characters and dates; apply combined filters before candidate limits and pagination (322 frontend tests, 816 Rust tests and Clippy pass; frontend check/build and formatting pass).
 - [x] Save named searches with complete filter state and relative dates (329 frontend tests; check/build/format pass; dark-theme browser interaction and 520px layout inspected).
 - [x] Return bounded active-list text summaries and hydrate full content for detail/copy/edit (336 frontend and 818 Rust tests in verify; extra mounted editor regression passes).
-- [ ] Select/copy OCR blocks and highlight search matches on images.
+- [x] Select/copy OCR blocks and highlight search matches on images (342 frontend tests; check/build/format pass; synthetic image geometry inspected in light and dark/narrow views).
 - [ ] Extend automatic tags with source/type conditions, preview and history application.
 - [ ] Export/import a self-contained resource backup with validation and restore preview.
 - [ ] Extract route state controllers while preserving item-store ownership and page appearance.

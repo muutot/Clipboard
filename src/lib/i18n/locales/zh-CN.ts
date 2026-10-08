@@ -1,6 +1,10 @@
 import type { LocaleDefinition } from "../types";
 
 const zhCN: LocaleDefinition = {
+  ocrBlocks: {
+    copySelected: "复制所选（{count}）",
+    hint: "点击图片文字区域或勾选下方文字；搜索命中会在图片上高亮。",
+  },
   savedSearches: {
     title: "保存的搜索",
     name: "搜索名称",

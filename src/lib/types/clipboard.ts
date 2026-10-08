@@ -101,6 +101,7 @@ export interface ClipboardItem {
   resourceMetadata?: ResourceMetadata;
   mimeType?: string;
   ocrText?: string;
+  ocrBlocks?: OcrTextBlock[];
   ocrStatus?: "pending" | "processing" | "completed" | "failed" | "none";
   ocrError?: string;
   contentHash?: string;
@@ -112,6 +113,16 @@ export interface ClipboardItem {
   iconPath?: string | null;
   metadataJson?: string | null;
   tags?: string[];
+}
+
+/** OCR coordinates are pixels in the original image, even when a thumbnail is displayed. */
+export interface OcrTextBlock {
+  text: string;
+  confidence: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 export type ThemeMode = "dark" | "light" | "custom";

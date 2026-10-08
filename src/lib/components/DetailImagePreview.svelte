@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import OcrImageOverlay from "$lib/components/OcrImageOverlay.svelte";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { assetUrl } from "$lib/utils/format";
@@ -7,9 +8,10 @@
   interface Props {
     item: ClipboardItem;
     onimagefullscreen?: (id: string) => void;
+    query?: string;
   }
 
-  let { item, onimagefullscreen }: Props = $props();
+  let { item, onimagefullscreen, query = "" }: Props = $props();
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -17,7 +19,7 @@
 
 <div class="image-full-preview">
   {#if assetUrl(item.previewPath || item.resourcePath)}
-    <img src={assetUrl(item.previewPath || item.resourcePath)} alt={item.preview || item.title} />
+    <OcrImageOverlay {item} {query} />
     <button
       type="button"
       class="image-fullscreen-btn"
@@ -52,13 +54,6 @@
     border-radius: 8px;
     color: var(--text-muted);
     background: var(--input-bg);
-  }
-
-  .image-full-preview img {
-    max-width: 100%;
-    max-height: 400px;
-    object-fit: contain;
-    border-radius: 4px;
   }
 
   .image-placeholder {

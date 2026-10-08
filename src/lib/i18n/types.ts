@@ -1,6 +1,7 @@
 export type Locale = "zh-CN" | "en";
 
 export interface LocaleDefinition {
+  ocrBlocks: { copySelected: string; hint: string };
   savedSearches: {
     title: string;
     name: string;

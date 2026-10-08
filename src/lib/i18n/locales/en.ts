@@ -1,6 +1,10 @@
 import type { LocaleDefinition } from "../types";
 
 const en: LocaleDefinition = {
+  ocrBlocks: {
+    copySelected: "Copy selected ({count})",
+    hint: "Select text regions or check rows below. Matches are highlighted on the image.",
+  },
   savedSearches: {
     title: "Saved searches",
     name: "Search name",

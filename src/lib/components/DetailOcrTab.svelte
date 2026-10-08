@@ -1,5 +1,10 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import Checkbox from "$lib/components/Checkbox.svelte";
+  import OcrImageOverlay from "$lib/components/OcrImageOverlay.svelte";
+  import { ocrBlockMatches, selectedOcrText } from "$lib/utils/ocr-blocks";
+  import { assetUrl } from "$lib/utils/format";
+  import { showToast } from "$lib/services/toast";
   import type { ClipboardItem } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { writeClipboardText } from "$lib/services/clipboard";
@@ -8,9 +13,10 @@
   interface Props {
     item: ClipboardItem;
     onocrupdate: (id: string, patch: Partial<ClipboardItem>) => void;
+    query?: string;
   }
 
-  let { item, onocrupdate }: Props = $props();
+  let { item, onocrupdate, query = "" }: Props = $props();
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -18,9 +24,26 @@
   let ocrFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let regeneratingOcr = $state(false);
   let ocrFeedback = $state("");
+  let selected = $state<Set<number>>(new Set());
+  $effect(() => {
+    void item.id;
+    void item.ocrBlocks;
+    selected = new Set();
+  });
+  function toggleBlock(index: number) {
+    const next = new Set(selected);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    selected = next;
+  }
 
   function copyText(text: string) {
-    void writeClipboardText(text).catch((err) => console.error("Copy to clipboard failed:", err));
+    void writeClipboardText(text)
+      .then(() => showToast(_t("toast.copySuccess"), "success"))
+      .catch((err) => {
+        console.error("Copy to clipboard failed:", err);
+        showToast(_t("toast.copyFailed"), "error");
+      });
   }
 
   async function regenerateOcr() {
@@ -36,7 +59,12 @@
       // Route the patch through the parent so every copy of the entry
       // (items/indexedItems/searchCache/detailItem) stays in sync instead of
       // relying on this prop being a live deep proxy.
-      onocrupdate(targetId, { ocrStatus: "pending", ocrText: undefined, ocrError: undefined });
+      onocrupdate(targetId, {
+        ocrStatus: "pending",
+        ocrText: undefined,
+        ocrBlocks: undefined,
+        ocrError: undefined,
+      });
       if (item.id === targetId) {
         ocrFeedback = _t("detail.regenerationQueued");
       }
@@ -90,6 +118,15 @@
           <button type="button" class="ocr-copy-btn" onclick={() => copyText(item.ocrText ?? "")}>
             {_t("detail.copyOcrText")}
           </button>
+          {#if item.ocrBlocks?.length}
+            <button
+              type="button"
+              class="ocr-copy-btn"
+              disabled={selected.size === 0}
+              onclick={() => copyText(selectedOcrText(item.ocrBlocks ?? [], selected))}
+              >{_t("ocrBlocks.copySelected", { count: selected.size })}</button
+            >
+          {/if}
         {/if}
       </div>
     </div>
@@ -98,7 +135,26 @@
     {/if}
   {/if}
   {#if item.ocrStatus === "completed" && item.ocrText}
-    <pre class="ocr-content">{item.ocrText}</pre>
+    {#if item.ocrBlocks?.length}
+      <p class="ocr-hint">{_t("ocrBlocks.hint")}</p>
+      {#if assetUrl(item.previewPath || item.resourcePath)}
+        <OcrImageOverlay {item} {query} {selected} ontoggle={toggleBlock} />
+      {/if}
+      <div class="ocr-block-list">
+        {#each item.ocrBlocks as block, index}
+          <label class:matched={ocrBlockMatches(block, query)}>
+            <Checkbox
+              checked={selected.has(index)}
+              onchange={() => toggleBlock(index)}
+              ariaLabel={block.text}
+            />
+            <span>{block.text}</span>
+          </label>
+        {/each}
+      </div>
+    {:else}
+      <pre class="ocr-content">{item.ocrText}</pre>
+    {/if}
   {:else if item.ocrStatus === "pending" || item.ocrStatus === "processing"}
     <div class="ocr-status ocr-pending">
       <span class="ocr-dot"></span>
@@ -119,6 +175,32 @@
 </div>
 
 <style>
+  .ocr-block-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .ocr-block-list label {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+    padding: 6px;
+    border-radius: 4px;
+    font-size: var(--font-size-secondary);
+  }
+  .ocr-block-list span {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .ocr-block-list .matched {
+    background: color-mix(in srgb, var(--warning-color) 18%, transparent);
+  }
+  .ocr-hint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--font-size-secondary);
+  }
   .ocr-section {
     display: flex;
     flex-direction: column;
@@ -130,12 +212,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
   .ocr-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
   .ocr-regenerate-btn {
@@ -193,8 +277,8 @@
   .ocr-copy-btn {
     padding: 2px 8px;
     font-size: 11px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-secondary);
     cursor: pointer;
@@ -204,7 +288,7 @@
   }
 
   .ocr-copy-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--hover-bg);
     color: var(--text-primary);
   }
 

@@ -2842,6 +2842,7 @@
 
     {#if detailDisplayMode === "split" && detailItem}
       <DetailPanel
+        searchQuery={query}
         mode="split"
         item={detailItem}
         onclose={closeDetail}
@@ -2892,6 +2893,7 @@
 {/if}
 {#if detailDisplayMode !== "split" || !detailItem}
   <DetailPanel
+    searchQuery={query}
     item={detailItem}
     onclose={closeDetail}
     oncopy={copyItem}

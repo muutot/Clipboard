@@ -4,6 +4,11 @@ Use this reference whenever a value crosses TypeScript, Tauri, Rust, SQLite, JSO
 
 ## Clipboard record contract
 
+Frontend `ClipboardItem.ocrBlocks?: OcrTextBlock[]` comes from the existing
+`get_clipboard_item_ocr` result's `blocks` array, preserving text/confidence/left/top/width/height.
+Coordinates refer to original image pixels. This is derived UI state, not a new
+clipboard-row column or sync DTO field.
+
 | Layer              | Source                                                                   | Role                                                            |
 | ------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
 | Rust domain        | `src-tauri/src/domain/clipboard_item.rs`                                 | persisted/backend `ClipboardItem` and lowercase `ClipboardKind` |

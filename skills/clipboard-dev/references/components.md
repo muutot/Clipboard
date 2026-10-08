@@ -62,6 +62,14 @@ Rules:
 
 ### `DetailPanel.svelte`
 
+OCR polling maps both full text and original-image `OcrTextBlock[]` into the item store.
+The optional `searchQuery` prop highlights matching blocks in `DetailImagePreview`.
+`DetailOcrTab` owns a selection of block indices, resets it when records/blocks change,
+and copies selected blocks in engine reading order. `OcrImageOverlay` aligns clamped
+percentage rectangles with the actual image box; no coordinates are recomputed from thumbnails.
+Polling observes the scalar OCR status as well as item ID, so manual regeneration restarts
+polling after a terminal result. Engines without blocks keep the plain-text fallback.
+
 Owns overlay/split detail rendering, resource metadata display, OCR status/actions, detected-content actions, code/Markdown preview, editing, rename/duplicate/save-as-new, file actions, and copy/plain-paste/format-paste/clean-paste callbacks. In overlay (modal) mode it traps Tab focus via `$lib/utils/focus` (`trapTabFocus`) and restores focus to the trigger element on close; split mode deliberately does neither.
 
 Image fullscreen is delegated to `ImageFullscreenOverlay.svelte` via the `onimagefullscreen` callback; DetailPanel no longer owns the fullscreen viewer or WebviewWindow lifecycle.

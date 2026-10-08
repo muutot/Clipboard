@@ -13,7 +13,7 @@
   import CodePreview from "$lib/components/CodePreview.svelte";
   import EditableContextMenu from "$lib/components/EditableContextMenu.svelte";
   import MarkdownPreview from "$lib/components/MarkdownPreview.svelte";
-  import type { ClipboardItem } from "$lib/types/clipboard";
+  import type { ClipboardItem, OcrTextBlock } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import { captureFocusRestore, getFocusableElements, trapTabFocus } from "$lib/utils/focus";
@@ -92,6 +92,7 @@
     onsavetags: (id: string, tags: string[]) => void;
     onocrupdate: (id: string, patch: Partial<ClipboardItem>) => void;
     tagColors?: Record<string, string>;
+    searchQuery?: string;
   }
 
   let {
@@ -113,6 +114,7 @@
     onsavetags,
     onocrupdate,
     tagColors = {},
+    searchQuery = "",
   }: Props = $props();
 
   let activeTab = $state<"preview" | "details" | "tags" | "ocr">("preview");
@@ -172,11 +174,14 @@
   // when the value itself changes.
   const polledItemId = $derived(item?.id ?? null);
   const polledItemKind = $derived(item?.kind ?? null);
+  const polledOcrStatus = $derived(item?.ocrStatus);
 
   $effect(() => {
     const itemId = polledItemId;
     const itemKind = polledItemKind;
+    const status = polledOcrStatus;
     if (itemKind !== "image" || !itemId || !isTauriRuntime()) return;
+    if (status === "completed" || status === "failed" || status === "none") return;
 
     let disposed = false;
     let requestInFlight = false;
@@ -210,6 +215,7 @@
       requestInFlight = true;
       invoke<{
         fullText: string;
+        blocks: OcrTextBlock[];
         status: "pending" | "processing" | "completed" | "failed";
         errorMessage: string | null;
       } | null>("get_clipboard_item_ocr", { id: itemId })
@@ -220,11 +226,13 @@
               ocrStatus: result.status,
               ocrError: result.errorMessage ?? undefined,
               ocrText: result.fullText || undefined,
+              ocrBlocks: result.blocks ?? [],
             });
           } else {
             onocrupdate(itemId, {
               ocrStatus: "none",
               ocrText: undefined,
+              ocrBlocks: undefined,
               ocrError: undefined,
             });
           }
@@ -414,7 +422,7 @@
       {#if activeTab === "preview"}
         <div class="preview-section">
           {#if item.kind === "image"}
-            <DetailImagePreview {item} {onimagefullscreen} />
+            <DetailImagePreview {item} {onimagefullscreen} query={searchQuery} />
           {:else if item.kind === "file"}
             <DetailFilePreview {item} />
           {:else if isCode && !isMarkdown}
@@ -557,7 +565,7 @@
       {:else if activeTab === "tags"}
         <DetailTagsTab {item} {tagColors} {onsavetags} />
       {:else if activeTab === "ocr"}
-        <DetailOcrTab {item} {onocrupdate} />
+        <DetailOcrTab {item} {onocrupdate} query={searchQuery} />
       {/if}
     </div>
   </div>
