@@ -44,6 +44,8 @@
 
 ## 1.5.3 — 性能 / 可观测余量
 
+- [x] 排序与动态设置一致性自动化回归：索引同步模式即时切换并在启动/保存失败时回滚；复制/粘贴写入成功后才记录使用；搜索按配置排序并响应内容/使用/索引事件；候选上限与缓存缩容即时生效；历史容量和单页数量变化不再误判分页耗尽或跳过丢弃行；通用设置按嵌套字段合并并保留失败期间的新编辑；关闭文字透明度时的原生 alpha 恢复决策有单测。证据：`main-settings.test.ts`、`clipboard-usage.test.ts`、`settings-persistence.test.ts`、`item-store.test.ts`、`item-changes.test.ts` 及 Rust 设置/搜索回归；Vitest 318 项、Rust 798 项通过，check/build/Clippy 与本次修改格式检查通过。原生剪贴板读取测试因 `OpenClipboard failed` 单独跳过，既有 ignored 测试保持不变；不据此宣称原生交互已验证。
+- [ ] 上述修复的原生窗口手工回归：实际双窗口并发修改设置，以及 Windows 文字透明度开关与背景/窗口特效的视觉组合。
 - [x] 默认历史排序直接使用最后使用时间：采集/CLI/副本创建时初始化为创建时间，导入补齐缺失值，schema v2 只回填旧 NULL；默认列表及收藏列表增加最后使用时间索引，分页使用 `(last_used_at_ms, id)` 游标，搜索 `lastUsedAt` 也直接比较存储值。迁移保留数据/同步版本/队列、查询计划无临时排序且直接定位游标、跨页同时间与使用提序回归已验证；`npm run verify` 通过，Rust 788、Vitest 284 通过。10 万条内存模拟记录、每页 100 条，索引查询约 0.23–0.28 ms（中位数；非界面端到端性能）。
 - [x] PERF-01 余量：macOS 改 `task_info`（`MACH_TASK_BASIC_INFO`）in-process 查询，`ps` 降级为兜底（`performance/mod.rs`）。绑定形状逐项对锁定的 libc 0.2.189 源码核实（含 `packed(4)` 非对齐读）；mac 一致性单测（原生 vs ps 4x 容差）由 mac CI 跑，Windows 侧回归全过。
 - [x] 日志红线复核：全量审计 `log_event!`/`eprintln!`/`dbg_log` 插值——仅 id/路径/计数/配置键/错误展示，无剪贴板正文、OCR 文本、秘密、请求体（唯一例外：非法敏感正则原文的可视化警告，属设计意图）；前端 `console` 仅 DevTools，顺手去掉一处 clipboard 衍生 payload 插值（`ClipboardCard.svelte`）。红线写入 CONTRIBUTING。
