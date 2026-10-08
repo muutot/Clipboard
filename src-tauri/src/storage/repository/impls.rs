@@ -20,6 +20,21 @@ pub struct TransactionalSaveSummary {
 }
 
 impl Database {
+    /// Reads only IDs for combined search filters, before Tantivy top-k selection.
+    pub fn search_filter_ids(&self, filter: &HistoryFilter) -> Result<Vec<String>, StorageError> {
+        self.with_connection(|connection| {
+            let (conditions, args) = history_predicates(filter);
+            let sql = format!(
+                "SELECT id FROM clipboard_items WHERE {}",
+                conditions.join(" AND ")
+            );
+            let mut statement = connection.prepare_cached(&sql)?;
+            let ids = statement
+                .query_map(params_from_iter(args), |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+            Ok(ids)
+        })
+    }
     /// Saves many items inside a single transaction so a bulk import commits
     /// once instead of producing one fsync per row. Rows whose
     /// `(kind, content_hash)` already exists are counted as skipped (a
@@ -244,34 +259,7 @@ impl ClipboardRepository for Database {
         filter: &HistoryFilter,
     ) -> Result<Vec<ClipboardItem>, StorageError> {
         self.with_connection(|connection| {
-            let mut conditions: Vec<String> = vec!["deleted = 0".to_owned()];
-            let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-            if let Some(kind) = filter.kind {
-                conditions.push("kind = ?".to_owned());
-                args.push(Box::new(kind_to_storage(kind)));
-            }
-            if filter.favorite_only {
-                conditions.push("is_favorite = 1".to_owned());
-            }
-            if let Some(tag) = &filter.tag {
-                conditions.push(
-                    "EXISTS (SELECT 1 FROM item_tags WHERE item_id = clipboard_items.id AND tag = ?)"
-                        .to_owned(),
-                );
-                args.push(Box::new(tag.clone()));
-            }
-            if let Some(app) = &filter.source_app {
-                conditions.push("source_app = ?".to_owned());
-                args.push(Box::new(app.clone()));
-            }
-            if let Some(from) = filter.date_from_ms {
-                conditions.push("created_at_ms >= ?".to_owned());
-                args.push(Box::new(from));
-            }
-            if let Some(to) = filter.date_to_ms {
-                conditions.push("created_at_ms <= ?".to_owned());
-                args.push(Box::new(to));
-            }
+            let (mut conditions, mut args) = history_predicates(filter);
             // Both keys match the index: SQLite can seek straight to the
             // cursor instead of scanning the prefix or sorting the active set.
             // ID only breaks equal usage timestamps; creation is not a sort key.
@@ -1220,4 +1208,38 @@ fn rewrite_item_tags(
 fn is_valid_tag_color(color: &str) -> bool {
     let bytes = color.as_bytes();
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
+}
+
+fn history_predicates(
+    filter: &HistoryFilter,
+) -> (Vec<String>, Vec<Box<dyn rusqlite::types::ToSql>>) {
+    let mut conditions: Vec<String> = vec!["deleted = 0".to_owned()];
+    let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    if let Some(kind) = filter.kind {
+        conditions.push("kind = ?".to_owned());
+        args.push(Box::new(kind_to_storage(kind)));
+    }
+    if filter.favorite_only {
+        conditions.push("is_favorite = 1".to_owned());
+    }
+    if let Some(tag) = &filter.tag {
+        conditions.push(
+            "EXISTS (SELECT 1 FROM item_tags WHERE item_id = clipboard_items.id AND tag = ?)"
+                .to_owned(),
+        );
+        args.push(Box::new(tag.clone()));
+    }
+    if let Some(app) = &filter.source_app {
+        conditions.push("source_app = ?".to_owned());
+        args.push(Box::new(app.clone()));
+    }
+    if let Some(from) = filter.date_from_ms {
+        conditions.push("created_at_ms >= ?".to_owned());
+        args.push(Box::new(from));
+    }
+    if let Some(to) = filter.date_to_ms {
+        conditions.push("created_at_ms <= ?".to_owned());
+        args.push(Box::new(to));
+    }
+    (conditions, args)
 }

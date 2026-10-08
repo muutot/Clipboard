@@ -263,3 +263,20 @@ describe("search settings and live changes", () => {
     expect(ids()).toEqual(["a", "b", "new"]);
   });
 });
+
+describe("complete history search", () => {
+  it.each(["账", "昨天"])("queries the backend for %s beyond loaded history", async (query) => {
+    bridge.desktop = true;
+    const remote = { ...item("outside-loaded-history"), createdAt: Date.now() - 86400000 };
+    bridge.search.mockResolvedValue({ items: [remote], totalCount: 1, truncated: false });
+    await open(query);
+    expect(bridge.search).toHaveBeenCalledWith(
+      query,
+      expect.any(Number),
+      0,
+      expect.any(Array),
+      expect.any(Object),
+    );
+    expect(ids()).toEqual([remote.id]);
+  });
+});

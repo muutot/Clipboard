@@ -68,7 +68,7 @@ cannot emit, which is how this drifted for so long.
 
 ## Backend SearchResultCache
 
-`SearchResultCache` in `src-tauri/src/commands/clipboard/types.rs` stores fully-sorted, fetched `ClipboardItem` results plus the true match total and the truncation flag, keyed by `(query, sort_rules, max_results, local_date_bucket)`. The local calendar-day bucket invalidates the cache at the next local midnight so relative-date queries cannot serve a stale range.
+`SearchResultCache` in `src-tauri/src/commands/clipboard/types.rs` stores fully-sorted, fetched `ClipboardItem` results plus the true match total and the truncation flag, keyed by `(query + combined filter, sort_rules, max_results, local_date_bucket)`. The local calendar-day bucket invalidates the cache at the next local midnight so relative-date queries cannot serve a stale range.
 
 - Hit: slice `[offset..offset+limit]` directly from the cached vector and return it with the stored total/truncation; no DB or index access needed.
 - Miss: re-run the full search pipeline (Tantivy → SQL fetch → sort) and cache the result.
@@ -107,7 +107,7 @@ First-page searches flush pending settings before invoking the backend; stale re
 
 The main route debounces a first-page indexed search by 300 ms.
 
-- Queries shorter than two characters, empty queries, recycle-bin filtering, and recognized date queries do not use Tantivy.
+- Empty queries and recycle-bin filtering do not use Tantivy. Single characters and recognized date queries search the full backend history.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
 - `searchEpoch` (bumped by history/item/capture/tag invalidations and background `search-index-changed` events) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
 - The same effect reacts only to a narrow `searchSettingsKey` derived from `display.searchPageSize`, `searchPageSizeLimit`, and `searchSortRules` (the values themselves are read with `untrack`); any of these settings changing invalidates first-page and pagination request IDs before re-querying, while an unrelated settings change no longer restarts the search or resets pagination.
@@ -181,3 +181,15 @@ Search index freshness still depends on SQLite outbox synchronization. When addi
 - Promotion removes cached entries that enter normal loaded history.
 - Loaded-history trimming protects favorites/deleted items and preserves selection/detail correctness.
 - Sort-rule changes invalidate/reload results rather than reusing incompatible ordering.
+
+## Combined filters
+
+`search_clipboard_items` accepts the same optional `HistoryFilterArgs` as history listing,
+ignoring its cursor. On a cache miss, nonempty filters resolve ID-only SQL candidates via
+`Database::search_filter_ids`, sharing `history_predicates` with history listing. Tantivy
+intersects these IDs through a zero-score `TermSetQuery` before Count and TopDocs: no
+matching row is discarded by an unfiltered candidate cap, and relevance remains unchanged.
+Filtered queries bypass the unfiltered ID cache; the sorted-result cache key includes all
+filter values. Both first-page and later frontend requests carry the same filters, and
+filter changes invalidate request generations. Tests cover a match outside the unfiltered
+cap, cache isolation, all SQL axes, and single-character/date route requests.

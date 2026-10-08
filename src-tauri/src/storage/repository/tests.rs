@@ -2059,3 +2059,39 @@ fn an_import_cannot_exceed_the_capture_size_limit() {
     );
     assert_eq!(database.item_count().unwrap(), 0);
 }
+
+#[test]
+fn search_filter_ids_applies_every_axis_without_loading_payloads() {
+    let db = Database::open_in_memory().unwrap();
+    for i in 0..7 {
+        let id = format!("filter-{i}");
+        let mut item = text_item(&id, &id, 100);
+        item.is_favorite = i != 1;
+        item.source_app = Some(if i == 2 { "Other" } else { "Editor" }.into());
+        if i == 3 {
+            item.kind = ClipboardKind::Link;
+        }
+        if i == 4 {
+            item.created_at_ms = 200;
+        }
+        db.save_item(&item).unwrap();
+        if i != 5 {
+            db.set_tags(&id, &["work".into()]).unwrap();
+        }
+        if i == 6 {
+            db.set_favorite(&id, false).unwrap();
+            db.soft_delete(&id).unwrap();
+        }
+    }
+    let filter = HistoryFilter {
+        kind: Some(ClipboardKind::Text),
+        favorite_only: true,
+        tag: Some("work".into()),
+        source_app: Some("Editor".into()),
+        date_from_ms: Some(100),
+        date_to_ms: Some(100),
+        cursor: None,
+    };
+    assert_eq!(db.search_filter_ids(&filter).unwrap(), vec!["filter-0"]);
+    assert_eq!(db.list_recent(10, 0, &filter).unwrap()[0].id, "filter-0");
+}

@@ -708,6 +708,12 @@
 
   $effect(() => {
     const requestedQuery = query.trim();
+    const requestedFilter = buildHistoryFilterArgs({
+      activeFilter,
+      tagFilter,
+      sourceAppFilter,
+      dateFilter,
+    });
     void searchSettingsKey; // dependency: narrow key, not the whole store
     const requestedMaxResults = untrack(() => $generalSettings.searchPageSizeLimit);
     const requestedPageSize = untrack(() => $generalSettings.display.searchPageSize);
@@ -726,27 +732,19 @@
       return;
     }
 
-    if (requestedQuery.length < 2) {
-      itemStore.current = closeSearchResults(itemStore.current);
-      indexedQuery = "";
-      searchPending = false;
-      return;
-    }
-
-    if (parseDateQuery(requestedQuery)) {
-      itemStore.current = closeSearchResults(itemStore.current);
-      indexedQuery = "";
-      searchPending = false;
-      return;
-    }
-
     searchPending = true;
     const timer = window.setTimeout(() => {
       void generalSettings
         .flush()
         .then(() => {
           if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return null;
-          return searchClipboardHistory(requestedQuery, requestedPageSize, 0, requestedSortRules);
+          return searchClipboardHistory(
+            requestedQuery,
+            requestedPageSize,
+            0,
+            requestedSortRules,
+            requestedFilter,
+          );
         })
         .then((page) => {
           if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
@@ -1234,6 +1232,7 @@
         $generalSettings.display.searchPageSize,
         offset,
         $generalSettings.searchSortRules,
+        buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
       );
       if (requestId !== searchLoadRequestId) return;
       if (page === null || page.items.length === 0) {

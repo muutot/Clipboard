@@ -10,7 +10,7 @@ use std::{
 use tantivy::{
     collector::{Count, TopDocs},
     directory::MmapDirectory,
-    query::{BooleanQuery, Query, RangeQuery, TermQuery},
+    query::{BooleanQuery, ConstScoreQuery, Query, RangeQuery, TermQuery, TermSetQuery},
     schema::{IndexRecordOption, TantivyDocument, Value},
     Index, IndexReader, IndexWriter, ReloadPolicy, Term,
 };
@@ -274,12 +274,25 @@ impl SearchIndex {
         input: &str,
         max_results: usize,
     ) -> Result<(Vec<String>, usize), SearchError> {
+        self.search_filtered_ids(input, max_results, None)
+    }
+
+    /// Intersects SQL filter IDs before top-k/count, without changing relevance scores.
+    pub fn search_filtered_ids(
+        &self,
+        input: &str,
+        max_results: usize,
+        allowed_ids: Option<&[String]>,
+    ) -> Result<(Vec<String>, usize), SearchError> {
+        if max_results == 0 || allowed_ids.is_some_and(|ids| ids.is_empty()) {
+            return Ok((Vec::new(), 0));
+        }
         let generation = self.cache_generation.load(Ordering::Acquire);
         let normalized = input.trim().to_owned();
         let query = SearchQuery::parse(input);
         let ngrams = query.required_ngrams();
         let date_range = query.date_range();
-        {
+        if allowed_ids.is_none() {
             let cache = self
                 .cached_ids
                 .lock()
@@ -294,7 +307,7 @@ impl SearchIndex {
             }
         }
 
-        if ngrams.is_empty() && date_range.is_none() {
+        if ngrams.is_empty() && date_range.is_none() && allowed_ids.is_none() {
             let mut cache = self
                 .cached_ids
                 .lock()
@@ -324,6 +337,15 @@ impl SearchIndex {
                 Bound::Excluded(Term::from_field_i64(self.fields.created_at_ms, end)),
             )) as Box<dyn Query>);
         }
+        if let Some(ids) = allowed_ids {
+            let terms = ids
+                .iter()
+                .map(|id| Term::from_field_text(self.fields.item_id, id));
+            subqueries.push(Box::new(ConstScoreQuery::new(
+                Box::new(TermSetQuery::new(terms)),
+                0.0,
+            )));
+        }
         let boolean_query = BooleanQuery::intersection(subqueries);
         let searcher = self.reader.searcher();
         // Count every match, not just the capped TopDocs below: callers need
@@ -346,7 +368,7 @@ impl SearchIndex {
             }
         }
 
-        {
+        if allowed_ids.is_none() {
             let mut cache = self
                 .cached_ids
                 .lock()
@@ -439,6 +461,29 @@ fn stored_text<'document>(
 mod tests {
     use super::{SearchIndex, SearchIndexChange};
     use crate::storage::SearchDocument;
+
+    #[test]
+    fn combined_filter_precedes_candidate_cap_and_does_not_pollute_cache() {
+        let index = SearchIndex::in_memory().unwrap();
+        let changes = (0..100)
+            .map(|i| SearchIndexChange::Upsert(document(&format!("row-{i}"), "needle")))
+            .collect::<Vec<_>>();
+        index.apply_changes(&changes).unwrap();
+        let first = index.search_all_ids("needle", 1).unwrap();
+        let target = (0..100)
+            .map(|i| format!("row-{i}"))
+            .find(|id| !first.0.contains(id))
+            .unwrap();
+        let filtered = index
+            .search_filtered_ids("needle", 1, Some(std::slice::from_ref(&target)))
+            .unwrap();
+        assert_eq!(filtered, (vec![target], 1));
+        assert_eq!(index.search_all_ids("needle", 1).unwrap(), first);
+        assert_eq!(
+            index.search_filtered_ids("needle", 1, Some(&[])).unwrap(),
+            (vec![], 0)
+        );
+    }
 
     fn document(item_id: &str, content: &str) -> SearchDocument {
         SearchDocument {

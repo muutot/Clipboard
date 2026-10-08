@@ -232,6 +232,7 @@ export async function searchClipboardHistory(
   limit = 100,
   offset = 0,
   sortRules?: SortRule[],
+  filter?: HistoryFilterArgs,
 ): Promise<SearchPage | null> {
   if (!isTauriRuntime()) return null;
 
@@ -240,6 +241,7 @@ export async function searchClipboardHistory(
     limit,
     offset,
     sortRules,
+    filter,
   });
   if (!page) return null;
 

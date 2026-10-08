@@ -5,7 +5,7 @@ Branch: `v1.8.0`. Each unit is verified and committed separately.
 This tracks implementation, not a version bump or release.
 
 - [x] Include frontend tests in both local verification gates (320 Vitest tests pass).
-- [ ] Search all history for single characters and dates; apply combined filters before candidate limits and pagination.
+- [x] Search all history for single characters and dates; apply combined filters before candidate limits and pagination (322 frontend tests, 816 Rust tests and Clippy pass; frontend check/build and formatting pass).
 - [ ] Save named searches with complete filter state and relative dates.
 - [ ] Return bounded list summaries and hydrate full content for detail/copy/edit.
 - [ ] Select/copy OCR blocks and highlight search matches on images.

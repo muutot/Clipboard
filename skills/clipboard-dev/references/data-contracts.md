@@ -268,3 +268,10 @@ Tag management runs in the separate settings WebviewWindow, so the tag panel emi
 - Verify old configuration/data defaults and unknown-field preservation.
 - Keep self-trigger hash registration and capture-side comparison on the same canonical hashing rules.
 - Update `settings-reference.md`, `services.md`, `backend-architecture.md`, or `search-cache-strategy.md` when their contract changes.
+
+### Combined search filters
+
+`search_clipboard_items(query, limit?, offset?, sortRules?, filter?)` accepts the history
+filter payload. The cursor is ignored: search retains its sorted-result offset pagination.
+Filters constrain candidate selection before the limit and total count. Single-character
+and date-only queries use this command even when their records are not loaded in the UI.

@@ -324,8 +324,21 @@ pub fn search_clipboard_items(
     limit: Option<usize>,
     offset: Option<usize>,
     sort_rules: Option<Vec<SearchSortRule>>,
+    filter: Option<HistoryFilterArgs>,
 ) -> Result<SearchPage, String> {
     let started = Instant::now();
+    let mut filter = filter.unwrap_or_default();
+    filter.cursor = None;
+    let cache_key = serde_json::to_string(&(&query, &filter)).map_err(|e| e.to_string())?;
+    let filter = HistoryFilter {
+        kind: filter.kind,
+        favorite_only: filter.favorite.unwrap_or(false),
+        tag: filter.tag,
+        source_app: filter.source_app,
+        date_from_ms: filter.date_from_ms,
+        date_to_ms: filter.date_to_ms,
+        cursor: None,
+    };
 
     let max_results = {
         let config = lock_state(&config, "configuration lock is poisoned")?;
@@ -372,7 +385,7 @@ pub fn search_clipboard_items(
     }
 
     if let Some((cached, total_count, truncated)) =
-        search_cache.get(&query, &rules, max_results, page_offset, page_size)
+        search_cache.get(&cache_key, &rules, max_results, page_offset, page_size)
     {
         performance_tracker.record_search(
             &query,
@@ -387,8 +400,12 @@ pub fn search_clipboard_items(
     }
 
     let cache_token = search_cache.write_token();
+    let allowed_ids = (filter != HistoryFilter::default())
+        .then(|| database.search_filter_ids(&filter))
+        .transpose()
+        .map_err(|e| e.to_string())?;
     let (all_ids, total_count) = search_index
-        .search_all_ids(&query, max_results)
+        .search_filtered_ids(&query, max_results, allowed_ids.as_deref())
         .map_err(|error| error.to_string())?;
     // The candidate list is capped at `max_results` while the total counts
     // every index match, so later pages know matches were dropped instead of
@@ -415,7 +432,7 @@ pub fn search_clipboard_items(
 
     search_cache.set(
         cache_token,
-        query.clone(),
+        cache_key,
         rules.clone(),
         max_results,
         sorted,

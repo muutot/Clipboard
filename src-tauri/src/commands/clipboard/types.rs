@@ -20,7 +20,7 @@ pub struct SearchSortRule {
 /// Optional filters for paginated active-history listing, matching
 /// `HistoryFilter` in the storage layer. All fields are optional so a partial
 /// payload filters only on the supplied axes.
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryFilterArgs {
     pub(crate) kind: Option<ClipboardKind>,
@@ -37,7 +37,7 @@ pub struct HistoryFilterArgs {
 /// Frontend payload for `HistoryCursor`. The frontend derives both keys
 /// from the last `ClipboardItem` of the previous page, so the shapes must
 /// stay in sync with `toClipboardItem` in `clipboard.ts`.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryCursorArgs {
     pub(crate) last_used_at_ms: i64,
