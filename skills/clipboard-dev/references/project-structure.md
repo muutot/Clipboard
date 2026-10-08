@@ -76,6 +76,8 @@ Platform source files may contain detailed scaffolding or documented intended fl
 
 Custom image and file roots can replace their default resource directories. Cleanup eligibility is separate from usability and depends on validated ownership markers. See `backend-architecture.md` and `data-contracts.md` before changing paths or migration behavior.
 
+The Windows NSIS template is `src-tauri/windows/installer.nsi`. Its settings-only cleanup must preserve `storage/` under both roaming and local application-data roots: `resolve_project_directory` can use those roots for primary data when the executable directory is not writable. `un.DeleteSettingsAt` removes only `conf/`, `logs/`, `EBWebView/`, and `instance.lock`, then removes the root only if empty. Run `python scripts/test-installer-settings.py` on Windows to compile and execute this exact helper against isolated fixtures; `--makensis` overrides the default Tauri-cached compiler. This check does not build or install the app.
+
 ## High-coupling files
 
 Treat these as integration points and avoid concurrent edits:

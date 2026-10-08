@@ -547,6 +547,20 @@ Function un.ResolveStorageRoot
   ${EndIf}
   StrCpy $UninstallStorageRoot ""
 FunctionEnd
+
+; Stack: application data root. Shared by both Windows user-data locations.
+Function un.DeleteSettingsAt
+  Exch $0
+  ; The app can use this root for its primary storage when the install
+  ; directory is read-only. Only the data/model options may remove storage.
+  RmDir /r "$0\conf"
+  RmDir /r "$0\logs"
+  RmDir /r "$0\EBWebView"
+  Delete "$0\instance.lock"
+  RmDir "$0"
+  Pop $0
+FunctionEnd
+
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
 
@@ -954,8 +968,10 @@ Section Uninstall
       Delete "$INSTDIR\instance.lock"
 
       SetShellVarContext current
-      RmDir /r "$APPDATA\${BUNDLEID}"
-      RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+      Push "$APPDATA\${BUNDLEID}"
+      Call un.DeleteSettingsAt
+      Push "$LOCALAPPDATA\${BUNDLEID}"
+      Call un.DeleteSettingsAt
 
       DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
       DeleteRegKey /ifempty SHCTX "${MANUKEY}"
