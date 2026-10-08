@@ -129,6 +129,53 @@ afterEach(async () => {
 });
 
 describe("search settings and live changes", () => {
+  it("applies a saved search with all filters and sorting through backend search", async () => {
+    bridge.desktop = true;
+    HTMLDialogElement.prototype.showModal = function () {
+      this.setAttribute("open", "");
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.removeAttribute("open");
+    };
+    generalSettings.set({
+      ...structuredClone(DEFAULT_GENERAL_SETTINGS),
+      language: "en",
+      savedSearches: [
+        {
+          id: "work",
+          name: "Saved work",
+          query: "invoice",
+          activeFilter: "image",
+          tagFilter: "work",
+          sourceAppFilter: "Editor",
+          dateFilter: "week",
+          sortRules: [{ field: "size", direction: "asc" }],
+        },
+      ],
+    });
+    bridge.history.mockResolvedValue([]);
+    bridge.search.mockResolvedValue(page());
+    await open("");
+    target.querySelector<HTMLButtonElement>('[aria-label="Saved searches"]')!.click();
+    await settle();
+    [...target.querySelectorAll<HTMLButtonElement>("dialog button")]
+      .find((button) => button.textContent?.trim() === "Saved work")!
+      .click();
+    await settle(350);
+    expect(bridge.search).toHaveBeenLastCalledWith(
+      "invoice",
+      100,
+      0,
+      [{ field: "size", direction: "asc" }],
+      expect.objectContaining({
+        kind: "image",
+        tag: "work",
+        sourceApp: "Editor",
+        dateFromMs: expect.any(Number),
+        dateToMs: expect.any(Number),
+      }),
+    );
+  });
   it("rebuilds the cursor when a smaller cap trims an in-flight page", async () => {
     bridge.desktop = true;
     const settings = {

@@ -33,6 +33,7 @@
     dateFilterOptions: DateFilterOption[];
     ondatefilter: (id: string) => void;
     onsettings: () => void;
+    onsavedsearches?: () => void;
   }
 
   let {
@@ -47,6 +48,7 @@
     dateFilterOptions,
     ondatefilter,
     onsettings,
+    onsavedsearches,
   }: Props = $props();
 
   let sourceAppDropdownOpen = $state(false);
@@ -222,6 +224,15 @@
     </div>
 
     <div class="toolbar-actions">
+      {#if onsavedsearches}
+        <button
+          type="button"
+          aria-label={_t("savedSearches.title")}
+          class="saved-search-trigger"
+          title={_t("savedSearches.title")}
+          onclick={onsavedsearches}><AppIcon name="search" size={17} /></button
+        >
+      {/if}
       <button
         type="button"
         class:active={$generalSettings.alwaysOnTop}
@@ -447,6 +458,9 @@
       display: none;
     }
     .toolbar-actions {
+      display: flex;
+    }
+    .toolbar-actions button:not(.saved-search-trigger) {
       display: none;
     }
   }

@@ -5,6 +5,7 @@ import {
   type SettingsPatch,
 } from "$lib/utils/settings-patch";
 import { listen } from "@tauri-apps/api/event";
+import { normalizeSavedSearches } from "$lib/utils/saved-searches";
 import { get, writable } from "svelte/store";
 import { setLocale } from "$lib/i18n";
 import { invokeTauri, isTauriRuntime } from "$lib/services/runtime";
@@ -75,6 +76,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   detailDisplayMode: "overlay",
   groupDisplayMode: "iconText",
   searchSortRules: [{ field: "lastUsedAt", direction: "desc" }],
+  savedSearches: [],
   pageSizeLimit: 500,
   searchPageSizeLimit: 500,
   maxTextCaptureBytes: 500000,
@@ -107,6 +109,7 @@ function cloneDefaults(): GeneralSettings {
       colors: { ...preset.colors },
     })),
     searchSortRules: defaults.searchSortRules.map((rule) => ({ ...rule })),
+    savedSearches: [],
   };
 }
 
@@ -559,6 +562,7 @@ function normalizeGeneralSettings(
     source.searchSortRules ?? fallback("searchSortRules"),
     defaultSettings.searchSortRules,
   );
+  result.savedSearches = normalizeSavedSearches(source.savedSearches ?? fallback("savedSearches"));
   result.pageSizeLimit = integerInRange(
     source.pageSizeLimit ?? fallback("pageSizeLimit"),
     defaultSettings.pageSizeLimit,

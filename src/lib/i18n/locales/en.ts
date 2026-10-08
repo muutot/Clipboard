@@ -1,6 +1,20 @@
 import type { LocaleDefinition } from "../types";
 
 const en: LocaleDefinition = {
+  savedSearches: {
+    title: "Saved searches",
+    name: "Search name",
+    save: "Save current",
+    hint: "Saves the query, filters and sort order. Relative dates update when applied. Saving an existing name replaces it (up to 50).",
+    rename: "Rename",
+    remove: "Delete",
+    cancel: "Cancel",
+    close: "Close",
+    empty: "No saved searches yet.",
+    failed: "Could not save. Your changes are pending; retry to persist them.",
+    conflict: "Enter a unique, non-empty name.",
+    retry: "Retry",
+  },
   app: {
     name: "Clipboard",
     searchPlaceholder: "Awaken old memories, rediscover forgotten snippets",

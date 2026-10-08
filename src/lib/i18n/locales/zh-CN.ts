@@ -1,6 +1,20 @@
 import type { LocaleDefinition } from "../types";
 
 const zhCN: LocaleDefinition = {
+  savedSearches: {
+    title: "保存的搜索",
+    name: "搜索名称",
+    save: "保存当前",
+    hint: "保存关键词、筛选和排序。相对日期在应用时更新；同名保存会覆盖原搜索，最多 50 项。",
+    rename: "重命名",
+    remove: "删除",
+    cancel: "取消",
+    close: "关闭",
+    empty: "还没有保存的搜索。",
+    failed: "保存失败，修改仍在等待写入，请重试。",
+    conflict: "请输入不重复的名称。",
+    retry: "重试",
+  },
   app: {
     name: "Clipboard",
     searchPlaceholder: "唤醒记忆深处，拾起久违的片段",

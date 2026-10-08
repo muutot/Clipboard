@@ -10,6 +10,9 @@
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
   import TagEditDialog from "$lib/components/TagEditDialog.svelte";
+  import SavedSearchDialog from "$lib/components/SavedSearchDialog.svelte";
+  import type { SavedSearch } from "$lib/utils/saved-searches";
+  import type { HistoryDateFilter } from "$lib/utils/history-filter";
   import Toast from "$lib/components/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
@@ -271,11 +274,25 @@
   // insertion/access order live in the store (`cacheIds`), and only
   // `updateSearchCache`/`promoteFromCache` touch it.
 
-  let dateFilter = $state<string>("all");
+  let dateFilter = $state<HistoryDateFilter>("all");
   let sourceAppFilter = $state("");
   let tagFilter = $state<string | null>(null);
   let tagColors = $state<Record<string, string>>({});
   let tagEditDialog = $state<string | null>(null);
+  let savedSearchDialog = $state(false);
+
+  function applySavedSearch(search: SavedSearch) {
+    resetHistoryScroll();
+    query = search.query;
+    activeFilter = search.activeFilter;
+    tagFilter = search.tagFilter;
+    sourceAppFilter = search.sourceAppFilter;
+    dateFilter = search.dateFilter;
+    generalSettings.updateSetting(
+      "searchSortRules",
+      search.sortRules.map((rule) => ({ ...rule })),
+    );
+  }
   // Mirrors the global card-context-menu visibility (reported by ClipboardCard
   // through the context-menu service) so Escape yields to the open menu: one
   // press closes the menu without clearing the bulk selection or hiding the
@@ -2468,7 +2485,7 @@
       resolveKeyAction(event, {
         hasEditing: !!editingId,
         hasFullscreen: !!fullscreenFilePath,
-        hasTagDialog: !!tagEditDialog,
+        hasTagDialog: !!tagEditDialog || savedSearchDialog,
         hasContextMenu: contextMenuOpen,
         hasDetail: !!detailItem,
         detailOverlayOpen: detailItem != null && detailDisplayMode !== "split",
@@ -2695,11 +2712,12 @@
     {dateFilter}
     {dateFilterOptions}
     ondatefilter={(id) => {
-      dateFilter = id;
+      dateFilter = id as HistoryDateFilter;
       resetHistoryScroll();
       void invalidateActiveHistoryPagination();
     }}
     onsettings={openSettings}
+    onsavedsearches={() => (savedSearchDialog = true)}
   />
 
   <div
@@ -2807,6 +2825,21 @@
     tag={tagEditDialog}
     color={tagColors[tagEditDialog] ?? ""}
     onclose={() => (tagEditDialog = null)}
+  />
+{/if}
+
+{#if savedSearchDialog}
+  <SavedSearchDialog
+    current={{
+      query,
+      activeFilter,
+      tagFilter,
+      sourceAppFilter,
+      dateFilter,
+      sortRules: $generalSettings.searchSortRules,
+    }}
+    onapply={applySavedSearch}
+    onclose={() => (savedSearchDialog = false)}
   />
 {/if}
 {#if detailDisplayMode !== "split" || !detailItem}

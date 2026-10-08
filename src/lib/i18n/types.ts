@@ -1,6 +1,20 @@
 export type Locale = "zh-CN" | "en";
 
 export interface LocaleDefinition {
+  savedSearches: {
+    title: string;
+    name: string;
+    save: string;
+    hint: string;
+    rename: string;
+    remove: string;
+    cancel: string;
+    close: string;
+    empty: string;
+    failed: string;
+    conflict: string;
+    retry: string;
+  };
   app: {
     name: string;
     searchPlaceholder: string;

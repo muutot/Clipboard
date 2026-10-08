@@ -6,7 +6,7 @@ This tracks implementation, not a version bump or release.
 
 - [x] Include frontend tests in both local verification gates (320 Vitest tests pass).
 - [x] Search all history for single characters and dates; apply combined filters before candidate limits and pagination (322 frontend tests, 816 Rust tests and Clippy pass; frontend check/build and formatting pass).
-- [ ] Save named searches with complete filter state and relative dates.
+- [x] Save named searches with complete filter state and relative dates (329 frontend tests; check/build/format pass; dark-theme browser interaction and 520px layout inspected).
 - [ ] Return bounded list summaries and hydrate full content for detail/copy/edit.
 - [ ] Select/copy OCR blocks and highlight search matches on images.
 - [ ] Extend automatic tags with source/type conditions, preview and history application.
@@ -26,3 +26,7 @@ Run focused tests during each unit and the integration gate after cross-layer wo
 Preserve single-character recall, global sorting, mutation invalidation, original clipboard
 payloads, resource ownership, atomic publication, and cross-window consistency.
 Record native-platform and visual checks separately from static/unit results.
+
+Saved searches reuse the existing frontend-owned config fields and settings patch transport.
+Native cross-window behavior is covered through the mocked persistence bridge; native WebView
+and light/custom theme inspection remain integration follow-ups.

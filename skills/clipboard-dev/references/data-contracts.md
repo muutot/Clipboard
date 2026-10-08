@@ -98,6 +98,11 @@ Schema changes require a deliberate new schema marker, one registered adjacent m
 
 ### General settings
 
+`savedSearches` is a frontend-owned flattened general setting, defaulting to an empty
+array. Each entry carries id/name/query/activeFilter/tagFilter/sourceAppFilter/dateFilter/
+sortRules. The existing config patch serializer preserves it; frontend normalization
+bounds and validates the entries. No timestamps or clipboard record bodies are stored.
+
 `set_general_settings` accepts exactly one of `{settings: GeneralConfig}` (explicit replacement) or `{patch: object}` (normal frontend edits). Patches recursively merge into the current saved config; arrays replace and `null` removes a key. The worker-state mutex serializes merge, persistence, runtime application, and broadcast, while the config mutex is released before worker start/stop. Invalid patches fail before persistence. The backend also bounds `display.searchPageSize` by the candidate cap after merging, covering independent windows changing either field. Save failure preserves the previous config/worker and leaves frontend pending edits available for retry. `settings-persistence.test.ts` covers concurrent windows, nested edits, hydration, optional clearing, migration failure, and edits arriving during a final refresh.
 
 The frontend `GeneralSettings` type/defaults/normalizer are richer than the explicit Rust `GeneralConfig` fields. Extra frontend keys are preserved through Rust's flattened map. Therefore a setting change must be checked in both places even when it appears to survive through `extra`: explicit Rust fields provide typed/defaulted backend behavior; flattened-only keys remain frontend-defined.

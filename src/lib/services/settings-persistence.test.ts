@@ -24,6 +24,29 @@ let beforeRead: (() => Promise<void>) | undefined;
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const broadcast = () => bridge.listeners.forEach((listener) => listener({ payload: copy(server) }));
 const writes = () => bridge.invoke.mock.calls.filter(([name]) => name === "set_general_settings");
+
+it("persists saved search state and hydrates another window", async () => {
+  const first = await loadedStore();
+  const second = await loadedStore();
+  const saved = [
+    {
+      id: "one",
+      name: "Work",
+      query: "invoice",
+      activeFilter: "image" as const,
+      tagFilter: "work",
+      sourceAppFilter: "Editor",
+      dateFilter: "week" as const,
+      sortRules: [{ field: "size" as const, direction: "asc" as const }],
+    },
+  ];
+  first.updateSetting("savedSearches", saved);
+  await first.flush();
+  expect(server.savedSearches).toEqual(saved);
+  expect(get(second).savedSearches).toEqual(saved);
+  const reopened = await loadedStore();
+  expect(get(reopened).savedSearches).toEqual(saved);
+});
 function deferred() {
   let resolve!: () => void;
   let reject!: (error: Error) => void;
