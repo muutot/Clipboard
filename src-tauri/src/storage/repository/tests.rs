@@ -2095,3 +2095,38 @@ fn search_filter_ids_applies_every_axis_without_loading_payloads() {
     assert_eq!(db.search_filter_ids(&filter).unwrap(), vec!["filter-0"]);
     assert_eq!(db.list_recent(10, 0, &filter).unwrap()[0].id, "filter-0");
 }
+
+#[test]
+fn list_summaries_bound_unicode_bodies_and_full_reads_preserve_payloads() {
+    let db = Database::open_in_memory().unwrap();
+    let text = "长".repeat(100_000);
+    let mut item = text_item("large", "large-hash", 100);
+    item.text_content = Some(text.clone());
+    item.html_content = Some(format!("<pre>{text}</pre>"));
+    item.rtf_content = Some(text.clone());
+    db.save_item(&item).unwrap();
+    let page = db
+        .list_summaries(1, 0, &HistoryFilter::default(), false)
+        .unwrap();
+    assert_eq!(page[0].text_content.as_ref().unwrap().chars().count(), 2048);
+    assert_eq!(page[0].html_content.as_deref(), Some(""));
+    assert_eq!(page[0].rtf_content.as_deref(), Some(""));
+    assert_eq!(
+        db.get_summary_items_by_ids(&["large".into()]).unwrap(),
+        page
+    );
+    let full = db.get_item("large").unwrap().unwrap();
+    assert_eq!(full.text_content.as_deref(), Some(text.as_str()));
+    assert_eq!(full.html_content, item.html_content);
+    assert_eq!(full.rtf_content, item.rtf_content);
+    db.soft_delete("large").unwrap();
+    assert!(db
+        .list_summaries(10, 0, &HistoryFilter::default(), false)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        db.list_summaries(10, 0, &HistoryFilter::default(), true)
+            .unwrap(),
+        page
+    );
+}

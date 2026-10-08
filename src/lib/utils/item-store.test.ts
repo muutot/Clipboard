@@ -42,6 +42,58 @@ function item(id: string, overrides: Partial<ClipboardItem> = {}): ClipboardItem
   };
 }
 
+it("retains hydrated text across summary refreshes and drops it when the hash changes", () => {
+  let store = createItemStore([
+    item("a", {
+      contentHash: "same",
+      contentLoaded: true,
+      textContent: "full body",
+      htmlContent: "<b>full body</b>",
+    }),
+  ]);
+  store = appendItems(
+    store,
+    [
+      item("a", {
+        contentHash: "same",
+        contentLoaded: false,
+        textContent: "preview",
+        favorite: true,
+      }),
+    ],
+    "indexed",
+  );
+  expect(findLoadedItem(store, "a")).toMatchObject({
+    contentLoaded: true,
+    textContent: "full body",
+    favorite: true,
+  });
+  store = appendItems(
+    store,
+    [item("a", { contentHash: "new", contentLoaded: false, textContent: "changed" })],
+    "indexed",
+  );
+  expect(findLoadedItem(store, "a")).toMatchObject({
+    contentLoaded: false,
+    textContent: "changed",
+  });
+});
+
+it("evicts spare cache payloads by bytes without removing visible detail records", () => {
+  let store = createItemStore();
+  const large = item("large", { textContent: "x".repeat(4096) });
+  store = setDetailItem(store, large);
+  store = mergeSearchCachePage(store, {
+    results: [large, item("small")],
+    loadedIds: new Set(),
+    policy: "fifo",
+    max: 50,
+    maxBytes: 1024,
+  });
+  expect(store.cacheIds).toEqual(["small"]);
+  expect(getDetailItem(store)?.textContent).toHaveLength(4096);
+});
+
 /**
  * The MAINT-02 invariant, asserted after every operation: `byId` holds exactly
  * the union of the four views, and no view displays an id the map has lost.

@@ -75,6 +75,8 @@ export interface ResourceMetadata {
 }
 
 export interface ClipboardItem {
+  contentLoaded?: boolean;
+  hasHtml?: boolean;
   id: string;
   kind: ClipboardKind;
   title: string;
@@ -482,6 +484,7 @@ export interface ClipboardItemsChangedPayload {
 }
 
 export interface PersistedClipboardItem {
+  contentLoaded?: boolean;
   id: string;
   kind: ClipboardKind;
   title: string;

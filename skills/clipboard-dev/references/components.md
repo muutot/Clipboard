@@ -6,6 +6,11 @@ Read each component's current `Props` interface before changing a call site. Thi
 
 ### `ClipboardCard.svelte`
 
+Active list rows may be summaries (`contentLoaded: false`). Editing awaits the route's
+hydration before initializing its draft; copy/paste/detail also hydrate through their owners.
+Format actions use `hasHtml` so omitted rich-text bodies do not hide an available operation.
+A first drag of a summary cancels and requests hydration; retry uses complete plain/HTML data.
+
 Owns one list item: text/link/image/file rendering, source metadata, quick/content actions, context-menu actions, inline editing, favorite/delete/restore/copy/detail/plain-paste/format-paste/clean-paste callbacks, card layout, and measurement reporting.
 
 Key contracts:

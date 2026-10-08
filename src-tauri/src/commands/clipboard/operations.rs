@@ -17,8 +17,9 @@ use crate::CaptureState;
 
 use super::types::{
     permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, ClipboardItemsChanged,
-    ClipboardUsageUpdate, HistoryFilterArgs, SearchPage, SearchResultCache, SearchSortDirection,
-    SearchSortField, SearchSortRule, StorageKindDeleteExpectation, StorageKindDeleteResult,
+    ClipboardListItem, ClipboardUsageUpdate, HistoryFilterArgs, SearchPage, SearchResultCache,
+    SearchSortDirection, SearchSortField, SearchSortRule, StorageKindDeleteExpectation,
+    StorageKindDeleteResult,
 };
 
 /// Announces a content change: the mutated rows are read back and attached, so
@@ -80,7 +81,7 @@ pub fn list_clipboard_items(
     limit: Option<u32>,
     offset: Option<u32>,
     filter: Option<HistoryFilterArgs>,
-) -> Result<Vec<ClipboardItem>, String> {
+) -> Result<Vec<ClipboardListItem>, String> {
     let max_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
     let offset = offset.unwrap_or(0);
     // `max_limit` caps the per-page size only; the row offset is independent.
@@ -98,8 +99,17 @@ pub fn list_clipboard_items(
     });
 
     database
-        .list_recent(limit, offset, &filter)
+        .list_summaries(limit, offset, &filter, false)
+        .map(|items| items.into_iter().map(Into::into).collect())
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_clipboard_item(
+    database: tauri::State<'_, Database>,
+    id: String,
+) -> Result<Option<ClipboardItem>, String> {
+    database.get_item(&id).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -393,7 +403,7 @@ pub fn search_clipboard_items(
             cached.len(),
         );
         return Ok(SearchPage {
-            items: cached,
+            items: cached.into_iter().map(Into::into).collect(),
             total_count,
             truncated,
         });
@@ -413,7 +423,7 @@ pub fn search_clipboard_items(
     let truncated = total_count > all_ids.len();
 
     let items = database
-        .get_items_by_ids(&all_ids)
+        .get_summary_items_by_ids(&all_ids)
         .map_err(|error| error.to_string())?;
 
     let mut sorted = items;
@@ -446,7 +456,7 @@ pub fn search_clipboard_items(
         result.len(),
     );
     Ok(SearchPage {
-        items: result,
+        items: result.into_iter().map(Into::into).collect(),
         total_count,
         truncated,
     })
@@ -514,13 +524,23 @@ pub fn list_deleted_clipboard_items(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     limit: Option<u32>,
     offset: Option<u32>,
-) -> Result<Vec<ClipboardItem>, String> {
+) -> Result<Vec<ClipboardListItem>, String> {
     let max_limit = lock_state(&config, "configuration lock is poisoned")?.page_size_limit();
     database
+        // Recycle-bin keyword filtering is still local; retain its complete bodies.
         .list_deleted(
             limit.unwrap_or(100).clamp(1, max_limit),
             offset.unwrap_or(0),
         )
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| ClipboardListItem {
+                    item,
+                    content_loaded: true,
+                })
+                .collect()
+        })
         .map_err(|error| error.to_string())
 }
 
@@ -1430,6 +1450,23 @@ mod tests {
         // sorting: this first row may not be among the top 100 candidates.
         assert!(cache.get("query", &[], 100, 0, 100).is_none());
         assert!(cache.get("query", &[], 1000, 0, 100).is_none());
+    }
+
+    #[test]
+    fn oversized_search_results_are_returnable_but_not_retained() {
+        let cache = SearchResultCache::new();
+        let mut huge = item("large", "large");
+        huge.metadata_json = Some("x".repeat(16 * 1024 * 1024));
+        cache.set(
+            cache.write_token(),
+            "large".into(),
+            vec![],
+            100,
+            vec![huge],
+            1,
+            false,
+        );
+        assert!(cache.get("large", &[], 100, 0, 100).is_none());
     }
 
     #[test]

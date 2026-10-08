@@ -24,6 +24,15 @@ When changing settings, update normalization, valid unions, numeric ranges, clon
 
 ## `clipboard.ts`
 
+`hydrateClipboardItem` loads a summary through `get_clipboard_item`, coalesces only
+in-flight requests, and fails on missing records. Copy/paste hydrate before any OS write;
+the main route hydrates detail, inline editing and bulk copy. Format availability uses
+`hasHtml` on summaries. List summaries display persisted bytes rather than a truncated
+character count. First drag of an unhydrated row prepares its content and cancels that drag.
+Only the item store retains full bodies; matching content hashes preserve them across summary
+refreshes, and a changed hash replaces them. Spare search-cache string payloads are bounded
+to 16 MiB as well as the configured row limit (visible views retain their own references).
+
 Owns the record boundary and list operations:
 
 - writing text/image/html with self-trigger registration;

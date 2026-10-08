@@ -16,6 +16,14 @@ Rust payload structs sent to the frontend use `#[serde(rename_all = "camelCase")
 
 ### Active-history listing filters
 
+Active `list_clipboard_items` and `search_clipboard_items` return flattened
+`ClipboardListItem` records with `contentLoaded: false`. SQLite limits text/link previews
+to 2048 Unicode characters and replaces HTML/RTF bodies with empty presence sentinels.
+Titles, file-path JSON and resource/tag metadata remain complete for sorting and card rendering.
+`get_clipboard_item(id)` returns the full domain record or null; it never modifies data.
+The domain, export and sync wire contracts remain unchanged. Recycle-bin lists retain full
+content (`contentLoaded: true`) because their keyword matching remains client-side.
+
 `list_clipboard_items` paginates active history with an optional `filter` argument (camelCase `HistoryFilterArgs` in `commands/clipboard/types.rs`, mirroring `HistoryFilter` in the storage layer): `kind` (`text`/`link`/`image`/`file`), `favorite`, `tag`, `sourceApp`, `dateFromMs`, `dateToMs`, and `cursor`. All fields are optional; an omitted or empty payload returns unfiltered pages. Each filter is applied in the `list_recent` SQL `WHERE` clause (tags use an `EXISTS` lookup in `item_tags`) so every page returns matching records rather than filtering a loaded set. Default ordering is directly `last_used_at_ms DESC, id DESC`: creation is not a sort key, and ID only stabilizes equal usage timestamps. The cursor is `{ lastUsedAtMs, id }` from the last returned row; `(last_used_at_ms, id) < (?, ?)` seeks through the matching index and ignores `offset`. The `buildHistoryFilterArgs` helper (`utils/history-filter.ts`) maps the toolbar filters onto this payload; the main route resets history pagination when any filter changes and `filteredItems` still re-applies the predicates client-side.
 
 `icon_path` currently carries an icon file key in the intended frontend path: `ClipboardCard` joins it with `iconsDir`. Do not reintroduce arbitrary absolute icon paths without re-auditing import validation, migration, cleanup, and `convertFileSrc` use.

@@ -164,6 +164,43 @@ export function replaceItem(store: ItemStore, updated: ClipboardItem): ItemStore
   return { ...store, byId };
 }
 
+/** A summary refresh may update metadata, but must not truncate an open editor/detail body. */
+function mergeLoadedContent(
+  current: ClipboardItem | undefined,
+  incoming: ClipboardItem,
+): ClipboardItem {
+  if (
+    !current ||
+    current.contentLoaded !== true ||
+    incoming.contentLoaded !== false ||
+    !current.contentHash ||
+    current.contentHash !== incoming.contentHash
+  )
+    return incoming;
+  return {
+    ...incoming,
+    contentLoaded: true,
+    textContent: current.textContent,
+    htmlContent: current.htmlContent,
+    rtfContent: current.rtfContent,
+    hasHtml: current.hasHtml,
+    sizeLabel: current.sizeLabel,
+  };
+}
+
+const cachedPayloadSizes = new WeakMap<ClipboardItem, number>();
+/** UTF-16 string payload budget, not a claim about engine-specific object overhead. */
+function itemPayloadBytes(item: ClipboardItem): number {
+  const cached = cachedPayloadSizes.get(item);
+  if (cached !== undefined) return cached;
+  const bytes = Object.values(item).reduce<number>(
+    (sum, value) => sum + (typeof value === "string" ? value.length * 2 : 0),
+    0,
+  );
+  cachedPayloadSizes.set(item, bytes);
+  return bytes;
+}
+
 /** Points the detail pane at a record, or clears it. */
 export function setDetailItem(store: ItemStore, item: ClipboardItem | null): ItemStore {
   if (item === null) {
@@ -200,7 +237,7 @@ export function appendItems(
   let changed = false;
   for (const record of records) {
     if (byId.get(record.id) !== record) {
-      byId.set(record.id, record);
+      byId.set(record.id, mergeLoadedContent(byId.get(record.id), record));
       changed = true;
     }
     if (!seen.has(record.id)) {
@@ -492,9 +529,18 @@ export function mergeSearchCachePage(
     loadedIds: ReadonlySet<string>;
     policy: "fifo" | "lru";
     max: number;
+    maxBytes?: number;
   },
 ): ItemStore {
-  if (options.results.length === 0 && store.cacheIds.length <= options.max) return store;
+  if (
+    options.results.length === 0 &&
+    store.cacheIds.length <= options.max &&
+    store.cacheIds.reduce(
+      (sum, id) => sum + (store.byId.has(id) ? itemPayloadBytes(store.byId.get(id)!) : 0),
+      0,
+    ) <= (options.maxBytes ?? 16 * 1024 * 1024)
+  )
+    return store;
   const byId = new Map(store.byId);
   // A record can leave the map entirely while an id lingers in the order list,
   // so reconcile the order against the map before merging.
@@ -508,7 +554,7 @@ export function mergeSearchCachePage(
       continue;
     }
     const cached = cacheIds.includes(record.id);
-    byId.set(record.id, record);
+    byId.set(record.id, mergeLoadedContent(byId.get(record.id), record));
     if (!cached) {
       cacheIds.push(record.id);
     } else if (options.policy === "lru") {
@@ -517,6 +563,12 @@ export function mergeSearchCachePage(
   }
 
   while (cacheIds.length > options.max) cacheIds.shift();
+  let bytes = cacheIds.reduce((sum, id) => sum + itemPayloadBytes(byId.get(id)!), 0);
+  const maxBytes = options.maxBytes ?? 16 * 1024 * 1024;
+  while (cacheIds.length && bytes > maxBytes) {
+    const id = cacheIds.shift()!;
+    bytes -= itemPayloadBytes(byId.get(id)!);
+  }
   pruneUnreferenced(byId, store.historyIds, store.indexedIds, cacheIds, store.detailId);
   return { ...store, byId, cacheIds };
 }

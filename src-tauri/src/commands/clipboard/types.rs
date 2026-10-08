@@ -86,9 +86,26 @@ pub(crate) type CachedSearchResult = (
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchPage {
-    pub(crate) items: Vec<ClipboardItem>,
+    pub(crate) items: Vec<ClipboardListItem>,
     pub(crate) total_count: usize,
     pub(crate) truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardListItem {
+    #[serde(flatten)]
+    pub(crate) item: ClipboardItem,
+    pub(crate) content_loaded: bool,
+}
+
+impl From<ClipboardItem> for ClipboardListItem {
+    fn from(item: ClipboardItem) -> Self {
+        Self {
+            item,
+            content_loaded: false,
+        }
+    }
 }
 
 /// Local calendar-day bucket. Relative date phrases ("今天", "本周", "本月")
@@ -162,6 +179,29 @@ impl SearchResultCache {
         let Some(token) = token else { return };
         if let Ok(mut cache) = self.inner.lock() {
             if cache.generation != token.generation || current_date_bucket() != token.date_bucket {
+                return;
+            }
+            // Metadata/file lists can still be large. Do not retain a result above 16 MiB.
+            let bytes = items.iter().fold(0usize, |bytes, item| {
+                [
+                    Some(item.id.as_str()),
+                    Some(item.title.as_str()),
+                    Some(item.content_hash.as_str()),
+                    item.text_content.as_deref(),
+                    item.html_content.as_deref(),
+                    item.rtf_content.as_deref(),
+                    item.metadata_json.as_deref(),
+                    item.resource_path.as_deref(),
+                    item.preview_path.as_deref(),
+                    item.icon_path.as_deref(),
+                    item.source_app.as_deref(),
+                ]
+                .into_iter()
+                .flatten()
+                .fold(bytes, |sum, field| sum.saturating_add(field.len()))
+            });
+            if bytes > 16 * 1024 * 1024 {
+                cache.result = None;
                 return;
             }
             cache.result = Some((

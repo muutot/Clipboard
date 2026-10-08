@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { copyClipboardItem, pasteClipboardItem } from "./clipboard";
+import { copyClipboardItem, pasteClipboardItem, hydrateClipboardItem } from "./clipboard";
 import type { ClipboardItem } from "$lib/types/clipboard";
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn(), write: vi.fn(), toast: vi.fn(), pin: true }));
@@ -37,6 +37,51 @@ const stamps = () =>
   bridge.invoke.mock.calls.filter(([command]) => command === "set_clipboard_item_last_used");
 
 describe("successful usage recording", () => {
+  it.each(["copy", "paste"])(
+    "hydrates complete text before %s and never writes a preview",
+    async (action) => {
+      const full = "complete body ".repeat(1000);
+      bridge.invoke.mockImplementation(async (command) =>
+        command === "get_clipboard_item"
+          ? {
+              ...item,
+              textContent: full,
+              createdAtMs: 1,
+              sizeBytes: full.length,
+              isFavorite: false,
+            }
+          : true,
+      );
+      const summary = { ...item, contentLoaded: false, textContent: "preview" };
+      if (action === "copy") await copyClipboardItem(summary);
+      else await pasteClipboardItem(summary, "plain");
+      expect(bridge.write).toHaveBeenCalledWith(full);
+    },
+  );
+  it("coalesces concurrent hydration and does not retain stale bodies after it completes", async () => {
+    let finish!: (value: unknown) => void;
+    bridge.invoke.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const summary = { ...item, contentLoaded: false, textContent: "preview" };
+    const a = hydrateClipboardItem(summary);
+    const b = hydrateClipboardItem(summary);
+    expect(bridge.invoke).toHaveBeenCalledTimes(1);
+    finish({ ...item, textContent: "full", sizeBytes: 4, createdAtMs: 1, isFavorite: false });
+    expect((await a).textContent).toBe("full");
+    expect((await b).textContent).toBe("full");
+    bridge.invoke.mockResolvedValue(null);
+    await expect(hydrateClipboardItem(summary)).rejects.toThrow("no longer exists");
+  });
+  it("never copies a truncated preview if hydration fails", async () => {
+    bridge.invoke.mockRejectedValue(new Error("unavailable"));
+    await copyClipboardItem({ ...item, contentLoaded: false });
+    expect(bridge.write).not.toHaveBeenCalled();
+    expect(stamps()).toHaveLength(0);
+  });
   it("waits for the OS write before stamping and moving a copied row", async () => {
     let finish!: () => void;
     bridge.write.mockImplementation(

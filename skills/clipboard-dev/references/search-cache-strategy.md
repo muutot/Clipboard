@@ -1,5 +1,11 @@
 # Search Pagination and Cache Strategy
 
+Active list/search rows use SQLite body projections (2048 text characters, no rich-text
+bodies) from `storage/repository/summaries.rs`. Sorted cache entries own these summaries,
+with a 16 MiB string-payload ceiling; an oversized result is returned but not retained.
+The frontend spare cache applies a 16 MiB UTF-16 string budget plus its row limit.
+These budgets bound cached string payloads, not exact allocator or process memory.
+
 Search currently has three distinct pieces of state. Do not collapse them conceptually:
 
 1. backend Tantivy ID cache in `src-tauri/src/search/index.rs`;

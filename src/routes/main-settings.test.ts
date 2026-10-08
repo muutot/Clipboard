@@ -8,6 +8,7 @@ const bridge = vi.hoisted(() => ({
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
   search: vi.fn(),
   history: vi.fn(),
+  hydrate: vi.fn(),
   desktop: false,
 }));
 vi.mock("@tauri-apps/api/event", () => ({
@@ -34,6 +35,7 @@ vi.mock("$lib/services/clipboard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("$lib/services/clipboard")>()),
   searchClipboardHistory: bridge.search,
   loadClipboardHistory: bridge.history,
+  hydrateClipboardItem: bridge.hydrate,
 }));
 
 function item(id: string): ClipboardItem {
@@ -109,6 +111,7 @@ beforeEach(() => {
   bridge.listeners.clear();
   bridge.search.mockReset().mockResolvedValue(page("a", "b"));
   bridge.history.mockReset().mockResolvedValue([]);
+  bridge.hydrate.mockReset().mockImplementation(async (item) => item);
   generalSettings.set(structuredClone(DEFAULT_GENERAL_SETTINGS));
   vi.stubGlobal(
     "ResizeObserver",
@@ -129,6 +132,31 @@ afterEach(async () => {
 });
 
 describe("search settings and live changes", () => {
+  it("initializes the inline editor only after the full body arrives", async () => {
+    bridge.desktop = true;
+    generalSettings.set({ ...structuredClone(DEFAULT_GENERAL_SETTINGS), language: "en" });
+    const summary = {
+      ...item("large"),
+      contentLoaded: false,
+      contentHash: "large",
+      textContent: "preview",
+    };
+    bridge.history.mockResolvedValue([summary]);
+    let finish!: (item: ClipboardItem) => void;
+    bridge.hydrate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await open("");
+    target.querySelector<HTMLButtonElement>('[aria-label="Edit"]')!.click();
+    await settle();
+    expect(target.querySelector("textarea")).toBeNull();
+    finish({ ...summary, contentLoaded: true, textContent: "COMPLETE EDIT BODY" });
+    await settle();
+    expect(target.querySelector("textarea")?.value).toBe("COMPLETE EDIT BODY");
+  });
   it("applies a saved search with all filters and sorting through backend search", async () => {
     bridge.desktop = true;
     HTMLDialogElement.prototype.showModal = function () {

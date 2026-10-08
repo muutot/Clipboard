@@ -19,6 +19,23 @@ import en from "$lib/i18n/locales/en";
 
 const locales = { "zh-CN": zhCN, en };
 const materializationRequests = new Map<string, Promise<ClipboardItem>>();
+const contentRequests = new Map<string, Promise<ClipboardItem>>();
+
+/** Coalesce in-flight hydration only; retained bodies belong to the single item store. */
+export async function hydrateClipboardItem(item: ClipboardItem): Promise<ClipboardItem> {
+  if (item.contentLoaded !== false) return item;
+  if (!isTauriRuntime()) throw new Error("Full clipboard content is unavailable");
+  const existing = contentRequests.get(item.id);
+  if (existing) return existing;
+  const request = invoke<PersistedClipboardItem | null>("get_clipboard_item", { id: item.id })
+    .then((record) => {
+      if (!record) throw new Error("Clipboard record no longer exists");
+      return { ...toClipboardItem(record), deleted: item.deleted };
+    })
+    .finally(() => contentRequests.delete(item.id));
+  contentRequests.set(item.id, request);
+  return request;
+}
 
 export async function writeClipboardText(text: string): Promise<void> {
   if (isTauriRuntime()) {
@@ -203,6 +220,7 @@ export async function loadDeletedClipboardHistory(
  * verified local path. Concurrent callers share one in-flight backend request
  * so copy, preview, fullscreen and save never download the same blob twice. */
 export async function materializeClipboardItem(item: ClipboardItem): Promise<ClipboardItem> {
+  item = await hydrateClipboardItem(item);
   if (!isTauriRuntime() || (item.kind !== "image" && item.kind !== "file")) return item;
 
   const existing = materializationRequests.get(item.id);
@@ -465,6 +483,14 @@ export async function copyClipboardItem(
   const t = (path: string, params?: Record<string, string | number>) =>
     resolvePath(messages, path, params);
 
+  try {
+    item = await hydrateClipboardItem(item);
+  } catch (error) {
+    logFrontendError("hydrate clipboard item for copy", error);
+    showToast(t("toast.copyFailed"), "error");
+    return;
+  }
+
   if (item.kind === "image" || item.kind === "file") {
     try {
       item = await materializeClipboardItem(item);
@@ -662,12 +688,15 @@ export function toClipboardItem(record: PersistedClipboardItem): ClipboardItem {
 
   return {
     id: record.id,
+    contentLoaded: record.contentLoaded !== false,
+    hasHtml: record.htmlContent != null,
     kind: record.kind,
     title: record.title,
     preview,
     sourceApp,
     sourceTone: sourceTone(sourceApp, locale),
-    sizeLabel: formatSizeSimple(record),
+    sizeLabel:
+      record.contentLoaded === false ? formatBytes(record.sizeBytes) : formatSizeSimple(record),
     sizeBytes: record.sizeBytes,
     createdAt: record.createdAtMs,
     lastUsedAtMs: record.lastUsedAtMs,
@@ -1089,6 +1118,14 @@ export async function pasteClipboardItem(
   const messages = locales[locale] ?? locales.en;
   const t = (path: string, params?: Record<string, string | number>) =>
     resolvePath(messages, path, params);
+
+  try {
+    item = await hydrateClipboardItem(item);
+  } catch (error) {
+    logFrontendError("hydrate clipboard item for paste", error);
+    showToast(t("toast.copyFailed"), "error");
+    return;
+  }
 
   if (mode === "plain") {
     const text = item.textContent || item.title;

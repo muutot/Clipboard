@@ -109,7 +109,7 @@
       ><AppIcon name="type" size={16} /></button
     >
   {/if}
-  {#if item.kind === "text" && item.htmlContent}
+  {#if item.kind === "text" && (item.htmlContent || item.hasHtml)}
     <button
       type="button"
       title={_t("card.pasteFormat")}

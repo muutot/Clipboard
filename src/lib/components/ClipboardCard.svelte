@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import CardDateDialog from "$lib/components/CardDateDialog.svelte";
   import CardActions from "$lib/components/CardActions.svelte";
@@ -391,6 +392,11 @@
 
   function handleDragStart(event: DragEvent) {
     if (!event.dataTransfer) return;
+    if (item.contentLoaded === false) {
+      event.preventDefault();
+      onmaterialize?.(item.id);
+      return;
+    }
 
     if ((item.kind === "image" || item.kind === "file") && !item.resourcePath) {
       event.preventDefault();
@@ -399,9 +405,9 @@
     }
 
     if (item.kind === "text" || item.kind === "link") {
-      event.dataTransfer.setData("text/plain", item.title);
-      if (item.textContent) {
-        event.dataTransfer.setData("text/html", item.textContent);
+      event.dataTransfer.setData("text/plain", item.textContent || item.title);
+      if (item.htmlContent) {
+        event.dataTransfer.setData("text/html", item.htmlContent);
       }
       event.dataTransfer.effectAllowed = "copy";
     } else if (item.kind === "file" && item.resourcePath) {
@@ -423,11 +429,13 @@
     }
   }
 
-  function beginEdit() {
+  async function beginEdit() {
+    await onedit(item.id);
+    await tick();
+    if (item.contentLoaded === false) return;
     editContent = item.textContent || item.title;
     editTitle = item.title;
     editing = true;
-    onedit(item.id);
   }
 
   /** Selected text in the inline editor, if the user highlighted any. */
@@ -536,7 +544,7 @@
               icon: "clipboard" as IconName,
               children: [
                 { id: "plainpaste", label: _t("card.pastePlain"), icon: "type" as IconName },
-                ...(item.htmlContent
+                ...(item.htmlContent || item.hasHtml
                   ? [
                       {
                         id: "formatpaste",

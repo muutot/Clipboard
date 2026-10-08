@@ -1210,7 +1210,7 @@ fn is_valid_tag_color(color: &str) -> bool {
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
 }
 
-fn history_predicates(
+pub(super) fn history_predicates(
     filter: &HistoryFilter,
 ) -> (Vec<String>, Vec<Box<dyn rusqlite::types::ToSql>>) {
     let mut conditions: Vec<String> = vec!["deleted = 0".to_owned()];

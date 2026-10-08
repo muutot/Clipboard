@@ -813,6 +813,7 @@ pub fn run() {
             delete_clipboard_item,
             batch_delete_clipboard_items,
             get_clipboard_item_ocr,
+            get_clipboard_item,
             regenerate_clipboard_item_ocr,
             list_source_applications,
             get_keyboard_config,

@@ -11,6 +11,7 @@
   import ImageFullscreenOverlay from "$lib/components/ImageFullscreenOverlay.svelte";
   import TagEditDialog from "$lib/components/TagEditDialog.svelte";
   import SavedSearchDialog from "$lib/components/SavedSearchDialog.svelte";
+  import { hydrateClipboardItem } from "$lib/services/clipboard";
   import type { SavedSearch } from "$lib/utils/saved-searches";
   import type { HistoryDateFilter } from "$lib/utils/history-filter";
   import Toast from "$lib/components/Toast.svelte";
@@ -203,13 +204,33 @@
   }
 
   async function ensureItemMaterialized(item: ClipboardItem): Promise<ClipboardItem> {
+    item = await ensureItemHydrated(item);
     if (item.kind !== "image" && item.kind !== "file") return item;
     return replaceMaterializedItem(await materializeClipboardItem(item));
   }
 
+  async function ensureItemHydrated(item: ClipboardItem): Promise<ClipboardItem> {
+    if (item.contentLoaded !== false) return item;
+    const full = await hydrateClipboardItem(item);
+    const current = findLoadedItem(item.id);
+    if (!current || current.contentHash !== item.contentHash)
+      throw new Error("Clipboard record changed while loading");
+    const updated = {
+      ...current,
+      textContent: full.textContent,
+      htmlContent: full.htmlContent,
+      rtfContent: full.rtfContent,
+      hasHtml: full.hasHtml,
+      contentLoaded: true,
+      searchableText: full.searchableText,
+      sizeLabel: full.sizeLabel,
+    };
+    return replaceMaterializedItem(updated);
+  }
+
   function prepareItemMaterialization(id: string) {
     const item = findLoadedItem(id);
-    if (!item || (item.kind !== "image" && item.kind !== "file")) return;
+    if (!item) return;
     void ensureItemMaterialized(item).catch((error) => {
       console.error("Unable to prefetch remote clipboard resource", error);
     });
@@ -1703,9 +1724,19 @@
   async function openDetail(id: string, requestedItem?: ClipboardItem) {
     // Another window may show an item outside this window's current filter
     // or loaded pages. It belongs to the detail view, not the history list.
-    const item = findLoadedItem(id) ?? requestedItem;
+    let item = findLoadedItem(id) ?? requestedItem;
     if (!item) return;
     const requestId = ++detailRequestId;
+    if (item.contentLoaded === false) {
+      try {
+        item = await hydrateClipboardItem(item);
+      } catch (error) {
+        console.error("Unable to load clipboard detail", error);
+        showToast(_t("toast.copyFailed"), "error");
+        return;
+      }
+      if (requestId !== detailRequestId) return;
+    }
     itemStore.current = setDetailItem(itemStore.current, item);
     if (item.kind === "image" || item.kind === "file") {
       try {
@@ -1769,8 +1800,16 @@
 
   let editingId = $state<string | null>(null);
 
-  function startEdit(id: string) {
-    editingId = id;
+  async function startEdit(id: string) {
+    const item = findLoadedItem(id);
+    if (!item) return;
+    try {
+      await ensureItemHydrated(item);
+      editingId = id;
+    } catch (error) {
+      console.error("Unable to load clipboard editor", error);
+      showToast(_t("toast.saveFailed"), "error");
+    }
   }
 
   async function saveEdit(id: string, content: string): Promise<boolean> {
@@ -1920,7 +1959,7 @@
 
   async function formatPaste(_id: string) {
     const item = findLoadedItem(_id);
-    if (!item || !item.htmlContent) return;
+    if (!item) return;
     await pasteClipboardItem(item, "format", {
       moveToTop: (mid) => moveToTop(mid),
     });
@@ -2010,8 +2049,17 @@
 
   // --- Bulk operations ---
 
-  function bulkCopy() {
-    const selectedItems = selectedLoadedItems;
+  async function bulkCopy() {
+    let selectedItems: ClipboardItem[];
+    try {
+      // Sequential reads bound transient IPC/body memory while preserving selection order.
+      selectedItems = [];
+      for (const item of selectedLoadedItems) selectedItems.push(await hydrateClipboardItem(item));
+    } catch (error) {
+      console.error("Unable to load selection for copy", error);
+      showToast(_t("toast.copyFailed"), "error");
+      return;
+    }
     // Text/link rows carry the full content in `textContent` while `title`
     // is only the first line; copying titles silently drops content.
     // Media rows keep `title` (their `textContent` is null or an internal
