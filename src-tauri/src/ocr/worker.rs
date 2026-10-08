@@ -153,8 +153,7 @@ impl OcrWorker {
             // in-flight inference (e.g. ppocr on a large image) can take
             // minutes, so bound the wait and let shutdown proceed.
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-            while self.inner.running.load(Ordering::SeqCst)
-                && std::time::Instant::now() < deadline
+            while self.inner.running.load(Ordering::SeqCst) && std::time::Instant::now() < deadline
             {
                 thread::yield_now();
             }
