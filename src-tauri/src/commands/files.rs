@@ -172,10 +172,12 @@ pub fn delete_icon_files(
             continue;
         };
         let path = icons_dir.join(file_name);
-        let in_icons_dir = path
-            .canonicalize()
-            .map(|resolved| resolved.starts_with(icons_dir.canonicalize().unwrap_or_default()))
-            .unwrap_or(false);
+        let in_icons_dir = match (path.canonicalize(), icons_dir.canonicalize()) {
+            (Ok(resolved), Ok(icons_root)) => resolved.starts_with(icons_root),
+            // Fail closed: if either side cannot be canonicalized we cannot
+            // prove containment, so refuse the delete.
+            _ => false,
+        };
         if !in_icons_dir {
             continue;
         }
@@ -208,6 +210,13 @@ pub fn replace_icon_file(
     // copy into the asset-served icons directory: a compromised renderer could
     // stage any disk file there and fetch it back. Gate on real image content.
     validate_replace_source(source)?;
+    // A planted symlink at the target must not be followed by fs::copy —
+    // otherwise the link's own target would be overwritten with the new icon.
+    if let Ok(metadata) = std::fs::symlink_metadata(&target) {
+        if metadata.file_type().is_symlink() {
+            return Err("icon target is a symlink; refusing to overwrite".to_string());
+        }
+    }
     std::fs::copy(source, &target).map_err(|e| format!("failed to replace icon: {e}"))?;
     Ok(())
 }
