@@ -151,11 +151,24 @@ Window opacity/effects are posted to the UI thread. `apply_webview_transparency`
 
 ## CLI and loopback API
 
-`main.rs` separates GUI and process CLI execution. `cli/mod.rs` implements list/search/copy/paste/delete/export/stats over the same configured database path as the GUI. `cli/api.rs` starts only on explicit command, binds to `127.0.0.1`, enforces configured limits, and retains a stoppable listener/thread lifecycle. A CLI/API write to the system clipboard follows the same self-trigger and metadata-preservation rules as the GUI.
+`main.rs` separates GUI and process CLI execution. `cli/mod.rs` implements list/search/copy/paste/delete/export/stats over the same configured database path as the GUI. `cli/api.rs` starts only on explicit command, binds to `127.0.0.1`, enforces configured limits, and retains a stoppable listener/thread lifecycle. `item_operations.rs` owns `CopyContext`, complete-record copy/usage ordering and single-item
+membership operations for native default GUI copy, CLI and API. Text/link copy writes plain
+text; media resolves existing originals/managed resources through the same resolver. Missing
+resources produce tagged errors, never title-text fallback. GUI remote media is materialized
+before invoking copy; CLI/API require local resources. Formatted paste remains separate.
+Successful OS writes stay successful if usage persistence fails (logged, no promotion).
+In-process CLI/API use the shared self-trigger guard and invalidate desktop caches/events;
+standalone Windows writes also set the private clipboard marker. Standalone macOS/Linux
+cannot share the GUI memory guard, so cross-process self-trigger suppression remains limited.
+`ExternalChangeWorker` compares `PRAGMA data_version` on the GUI's same connection every
+500 ms, clears search cache and emits history invalidation after external connection commits,
+including usage changes without search outbox entries. Detection is eventual and can wait
+behind the database mutex. It is independent of lazy/background indexing and stopped/joined
+through unified shutdown. Native WebView/OS behavior and macOS/Linux CI remain separate gates.
 
 ## Unified shutdown
 
-`stop_runtime_services()` stops the auto-sync worker first (it is a background SQLite/S3 writer that must not outlive a storage snapshot), then cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, local API, and search-sync services. A poisoned managed lock never skips a stop: the guard is recovered with `into_inner()` (matching `state.rs`) so background writers still stop through teardown. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray. Every new worker/listener/server needs a stop signal, retained join/unlisten handle, idempotent stop behavior, integration with normal exit/tray exit/interrupt/restart as applicable, and drop/stop tests or a documented verification gap. Background threads must never call a Tauri API that blocks on the main thread while the main thread may be joining them: `refresh_tray_recent_menu` posts its `tray.set_menu` work through `run_on_main_thread` instead of calling it directly, because `set_menu` blocks on the main thread and the capture worker is joined there during shutdown. If `ctrlc::set_handler` fails (a foreign handler installed first), the failure is logged so the missing unified interrupt path is diagnosable.
+`stop_runtime_services()` first stops the external-change observer, then the auto-sync worker (it is a background SQLite/S3 writer that must not outlive a storage snapshot), then cleanup, clipboard monitor, capture, OCR, thumbnail, hotkey, local API, and search-sync services. A poisoned managed lock never skips a stop: the guard is recovered with `into_inner()` (matching `state.rs`) so background writers still stop through teardown. The Tauri `ExitRequested` path invokes it; ordinary window close may hide to tray. Every new worker/listener/server needs a stop signal, retained join/unlisten handle, idempotent stop behavior, integration with normal exit/tray exit/interrupt/restart as applicable, and drop/stop tests or a documented verification gap. Background threads must never call a Tauri API that blocks on the main thread while the main thread may be joining them: `refresh_tray_recent_menu` posts its `tray.set_menu` work through `run_on_main_thread` instead of calling it directly, because `set_menu` blocks on the main thread and the capture worker is joined there during shutdown. If `ctrlc::set_handler` fails (a foreign handler installed first), the failure is logged so the missing unified interrupt path is diagnosable.
 
 ## Backend change checklist
 

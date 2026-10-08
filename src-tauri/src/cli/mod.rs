@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::{export_database, export_database_to_file, ExportFormat, ExportOptions};
+use crate::item_operations::{
+    change_membership, copy_item_with, CopyContext, CopyError, MembershipAction,
+};
 use crate::storage::{ClipboardRepository, Database};
 
 mod api;
@@ -38,13 +41,29 @@ pub fn run_cli_command(
     page_size_limit: u32,
     search_page_size_limit: u32,
 ) -> Result<String, String> {
+    run_cli_command_with_context(
+        args,
+        database,
+        page_size_limit,
+        search_page_size_limit,
+        &CopyContext::default(),
+    )
+}
+
+pub fn run_cli_command_with_context(
+    args: &CliArgs,
+    database: &Database,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
+    context: &CopyContext,
+) -> Result<String, String> {
     run_cli_command_with_clipboard(
         args,
         database,
         page_size_limit,
         search_page_size_limit,
         read_system_clipboard_text,
-        write_system_clipboard_text,
+        |item| context.write(database, item),
     )
 }
 
@@ -58,7 +77,7 @@ fn run_cli_command_with_clipboard<Read, Write>(
 ) -> Result<String, String>
 where
     Read: FnMut() -> Result<String, String>,
-    Write: FnMut(&str) -> Result<(), String>,
+    Write: FnMut(&ClipboardItem) -> Result<(), CopyError>,
 {
     match args.command {
         CliCommand::List => {
@@ -89,21 +108,11 @@ where
                 .query
                 .as_deref()
                 .ok_or_else(|| "copy requires an item id".to_owned())?;
-            let items = database
-                .get_items_by_ids(&[id.to_owned()])
-                .map_err(|error| error.to_string())?;
-            let item = items
-                .into_iter()
-                .next()
-                .ok_or_else(|| format!("item not found: {id}"))?;
-            let text = item
-                .text_content
-                .as_deref()
-                .filter(|text| !text.is_empty())
-                .unwrap_or(&item.title);
-            write_clipboard(text)?;
+            let (item, _) =
+                copy_item_with(database, id, &mut write_clipboard).map_err(|e| e.to_string())?;
             Ok(format!("copied item: {}", item.id))
         }
+
         CliCommand::Paste => {
             let text = read_clipboard()?;
             if text.is_empty() {
@@ -126,7 +135,7 @@ where
                 .query
                 .as_deref()
                 .ok_or_else(|| "delete requires an item id".to_owned())?;
-            if !database.soft_delete(query).map_err(|e| e.to_string())? {
+            if !change_membership(database, query, MembershipAction::Delete)? {
                 return Err(format!("item not found: {query}"));
             }
             Ok(format!("deleted item: {query}"))
@@ -283,19 +292,9 @@ fn read_system_clipboard_text() -> Result<String, String> {
         .ok_or_else(|| "system clipboard does not contain readable text".to_owned())
 }
 
-#[cfg(target_os = "windows")]
-fn write_system_clipboard_text(text: &str) -> Result<(), String> {
-    crate::platform::windows_clipboard::write_clipboard_text_with_self_trigger(text)
-}
-
 #[cfg(target_os = "macos")]
 fn read_system_clipboard_text() -> Result<String, String> {
     read_clipboard_command("pbpaste", &[])
-}
-
-#[cfg(target_os = "macos")]
-fn write_system_clipboard_text(text: &str) -> Result<(), String> {
-    write_clipboard_command("pbcopy", &[], text)
 }
 
 #[cfg(target_os = "linux")]
@@ -318,26 +317,6 @@ fn read_system_clipboard_text() -> Result<String, String> {
     ))
 }
 
-#[cfg(target_os = "linux")]
-fn write_system_clipboard_text(text: &str) -> Result<(), String> {
-    let commands: [(&str, &[&str]); 3] = [
-        ("wl-copy", &[]),
-        ("xclip", &["-selection", "clipboard", "-in"]),
-        ("xsel", &["--clipboard", "--input"]),
-    ];
-    let mut errors = Vec::new();
-    for (program, args) in commands {
-        match write_clipboard_command(program, args, text) {
-            Ok(()) => return Ok(()),
-            Err(error) => errors.push(error),
-        }
-    }
-    Err(format!(
-        "no supported clipboard writer succeeded: {}",
-        errors.join("; ")
-    ))
-}
-
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn read_clipboard_command(program: &str, args: &[&str]) -> Result<String, String> {
     let output = std::process::Command::new(program)
@@ -353,37 +332,6 @@ fn read_clipboard_command(program: &str, args: &[&str]) -> Result<String, String
     }
     String::from_utf8(output.stdout)
         .map_err(|error| format!("{program} returned invalid UTF-8: {error}"))
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-fn write_clipboard_command(program: &str, args: &[&str], text: &str) -> Result<(), String> {
-    use std::io::Write;
-    use std::process::Stdio;
-
-    let mut child = std::process::Command::new(program)
-        .args(args)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("{program}: {error}"))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| format!("{program}: stdin is unavailable"))?
-        .write_all(text.as_bytes())
-        .map_err(|error| format!("{program}: {error}"))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|error| format!("{program}: {error}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "{program} exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))
-    }
 }
 
 #[cfg(test)]
@@ -535,8 +483,8 @@ mod tests {
             500,
             500,
             || Ok(String::new()),
-            |text| {
-                copied = text.to_owned();
+            |item| {
+                copied = item.text_content.clone().unwrap();
                 Ok(())
             },
         )

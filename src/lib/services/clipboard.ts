@@ -535,27 +535,20 @@ export async function copyClipboardItem(
     }
   }
 
-  if (item.kind === "image" || item.kind === "file") {
-    if (isTauriRuntime()) {
-      try {
-        await copyClipboardItemFiles(item.id);
-        await recordSuccessfulUsage(item, hooks);
-        hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
-        showToast(t("toast.copySuccess"), "success");
-        return;
-      } catch (error) {
-        // A vanished file is permanent for this record; anything else (a busy
-        // clipboard, a platform write failure) is worth retrying, so the toast
-        // has to say which one happened.
-        logFrontendMessage("error", `Unable to copy media files: ${describeInvokeFailure(error)}`);
-        showToast(
-          t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : "toast.copyFailed"),
-          "error",
-        );
-        return;
-      }
+  if (isTauriRuntime()) {
+    try {
+      const updated = await invoke<boolean>("copy_clipboard_item", { id: item.id });
+      if (updated && get(generalSettings).pinCopiedToTop) hooks.moveToTop?.(item.id);
+      hooks.onstatus?.(t("app.copiedItem", { title: getDisplayTitle(item.title) }));
+      showToast(t("toast.copySuccess"), "success");
+    } catch (error) {
+      logFrontendMessage("error", `Unable to copy item: ${describeInvokeFailure(error)}`);
+      showToast(
+        t(isFilesCopySourceMissing(error) ? "toast.copySourceMissing" : "toast.copyFailed"),
+        "error",
+      );
     }
-    // Browser/demo fallback keeps the historical in-page behavior.
+    return;
   }
 
   if (item.kind === "image" && item.resourcePath) {

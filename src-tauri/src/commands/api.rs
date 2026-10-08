@@ -7,7 +7,7 @@ use crate::cli::{CliArgs, CliCommand, LocalApiServer};
 use crate::commands::lock::lock_state;
 use crate::config::ConfigStore;
 use crate::state::SelfTriggerState;
-use crate::storage::{ClipboardRepository, Database, StoragePaths};
+use crate::storage::{Database, StoragePaths};
 
 const API_TOKEN_FILE_NAME: &str = "api.token";
 
@@ -170,6 +170,8 @@ pub struct LocalApiStatus {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn run_cli_command(
+    app: tauri::AppHandle,
+    paths: tauri::State<'_, StoragePaths>,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     self_trigger: tauri::State<'_, SelfTriggerState>,
@@ -190,31 +192,6 @@ pub fn run_cli_command(
         other => return Err(format!("unknown command: {other}")),
     };
 
-    // The in-process renderer path shares the capture thread's guard, so mark
-    // the pending write before the CLI helper touches the system clipboard.
-    // (A standalone CLI subprocess cannot reach this guard; on Windows its
-    // OS-level marker still applies, on other platforms a re-capture there
-    // remains a known limitation.)
-    let mut marked_text: Option<String> = None;
-    if command == CliCommand::Copy {
-        if let Some(id) = query.as_deref() {
-            if let Ok(Some(item)) = database.get_item(id) {
-                let text = item
-                    .text_content
-                    .as_deref()
-                    .filter(|text| !text.is_empty())
-                    .unwrap_or(&item.title)
-                    .to_owned();
-                if let Ok(mut guard) = self_trigger.0.lock() {
-                    guard.mark_clipboard_write(&text);
-                    marked_text = Some(text);
-                } else {
-                    crate::log_error!("[api] self-trigger lock poisoned; copy may re-capture");
-                }
-            }
-        }
-    }
-
     let args = CliArgs {
         command,
         query,
@@ -227,24 +204,31 @@ pub fn run_cli_command(
     let search_page_size_limit =
         lock_state(&config, "configuration lock is poisoned")?.search_page_size_limit();
 
-    let result = crate::cli::run_cli_command(
+    let result = crate::cli::run_cli_command_with_context(
         &args,
         database.inner(),
         page_size_limit,
         search_page_size_limit,
+        &crate::item_operations::CopyContext {
+            paths: Some(paths.inner().clone()),
+            self_trigger: Some(self_trigger.0.clone()),
+        },
     );
-    if result.is_err() {
-        if let Some(text) = marked_text.as_deref() {
-            if let Ok(mut guard) = self_trigger.0.lock() {
-                guard.unmark_clipboard_write(text);
-            }
-        }
+    if result.is_ok()
+        && matches!(
+            args.command,
+            CliCommand::Copy | CliCommand::Paste | CliCommand::Delete
+        )
+    {
+        crate::item_operations::invalidate_desktop(&app);
     }
     result
 }
 
 #[tauri::command]
 pub fn start_local_api(
+    app: tauri::AppHandle,
+    self_trigger: tauri::State<'_, SelfTriggerState>,
     api: tauri::State<'_, Mutex<LocalApiServer>>,
     paths: tauri::State<'_, StoragePaths>,
     config: tauri::State<'_, Mutex<ConfigStore>>,
@@ -259,6 +243,13 @@ pub fn start_local_api(
         let config = lock_state(&config, "configuration lock is poisoned")?;
         api.set_limits(config.page_size_limit(), config.search_page_size_limit());
     }
+    api.set_copy_context(crate::item_operations::CopyContext {
+        paths: Some(paths.inner().clone()),
+        self_trigger: Some(self_trigger.0.clone()),
+    });
+    api.set_change_callback(Arc::new(move || {
+        crate::item_operations::invalidate_desktop(&app)
+    }));
     api.set_token(load_or_create_api_token(&paths.project)?);
     let bound_port = api.start_with_database(database)?;
     Ok(LocalApiStatus {

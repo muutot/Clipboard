@@ -1,11 +1,14 @@
 use serde::Serialize;
 
 use crate::content::{compute_content_hash, compute_normalized_media_hash, icon_key};
+#[cfg(test)]
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::state::SelfTriggerState;
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
 
 use super::clipboard::ClipboardFilesCopyError;
+#[cfg(test)]
+use crate::item_operations::{file_metadata_entries, resolve_clipboard_file_paths};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -362,162 +365,6 @@ pub fn save_clipboard_item_file(
     Ok(())
 }
 
-/// Resolves the existing local files behind an image/file record. Image items
-/// use the stored png; file items re-reference the still-existing original
-/// file for each entry (so pasting keeps the original name) and fall back to
-/// the managed storage copy / the record's resource path when the original is
-/// gone. When `database` is given and the original for a managed copy is gone,
-/// the freshest other record sharing that managed file is consulted so the
-/// pasted name stays the one from the most recent copy of the same content.
-/// Pass-through files that exceed the copy-size limit keep their original
-/// absolute location and are accepted here: the paths originate from the
-/// record, never from the webview.
-///
-/// The error type doubles as the command's rejection payload, so "the files are
-/// gone" reaches the frontend as a distinct kind rather than as prose.
-fn resolve_clipboard_file_paths(
-    item: &ClipboardItem,
-    paths: &StoragePaths,
-    database: Option<&Database>,
-) -> Result<Vec<std::path::PathBuf>, ClipboardFilesCopyError> {
-    let mut candidates = Vec::new();
-    match item.kind {
-        ClipboardKind::Image => {
-            if let Some(resource) = item.resource_path.as_deref() {
-                candidates.push(resource.to_owned());
-            }
-        }
-        ClipboardKind::File => {
-            if let Some(entries) = file_metadata_entries(&item.metadata_json) {
-                for (storage, original) in entries {
-                    // OS clipboard semantics: re-reference the original file so
-                    // the pasted copy keeps its original name instead of the
-                    // managed (hash-named) storage copy. The managed copy stays
-                    // the fallback when the original no longer exists on disk;
-                    // with a database, the latest copy of the same content then
-                    // donates its recorded original name.
-                    if let Some(original) = original {
-                        if std::path::Path::new(&original).is_file() {
-                            candidates.push(original);
-                            continue;
-                        }
-                    }
-                    if let Some(storage) = storage {
-                        if let Some(database) = database {
-                            if let Some(inherited) =
-                                latest_copied_original_path(database, &storage, &item.id)
-                            {
-                                candidates.push(inherited.to_string_lossy().to_string());
-                                continue;
-                            }
-                        }
-                        candidates.push(storage);
-                    }
-                }
-            }
-            if candidates.is_empty() {
-                if let Some(resource) = item.resource_path.as_deref() {
-                    candidates.push(resource.to_owned());
-                }
-            }
-        }
-        _ => {
-            return Err(ClipboardFilesCopyError::Failed(
-                "clipboard item is not an image or file".to_owned(),
-            ));
-        }
-    }
-
-    let mut resolved = Vec::new();
-    for candidate in &candidates {
-        let raw = std::path::Path::new(candidate);
-        let path = if raw.is_absolute() {
-            raw.to_path_buf()
-        } else {
-            [&paths.images, &paths.files, &paths.storage]
-                .iter()
-                .map(|root| root.join(raw))
-                .find(|candidate| candidate.is_file())
-                .unwrap_or_else(|| paths.storage.join(raw))
-        };
-        if path.is_file() {
-            resolved.push(path);
-        }
-    }
-
-    if resolved.is_empty() {
-        return Err(ClipboardFilesCopyError::ResourceMissing(
-            "clipboard item has no available files on disk".to_owned(),
-        ));
-    }
-    Ok(resolved)
-}
-
-/// Locates the original file recorded by the most recent copy of the same
-/// managed file (excluding `exclude_id`) and returns its path only when it
-/// still exists on disk. Content-storage dedup guarantees a matching record
-/// holds the identical bytes, so its original path is the last name given to
-/// this content by the user.
-fn latest_copied_original_path(
-    database: &Database,
-    storage: &str,
-    exclude_id: &str,
-) -> Option<std::path::PathBuf> {
-    let record = database
-        .latest_file_record_referencing_storage(storage, exclude_id)
-        .ok()??;
-    let original = file_metadata_entries(&record.metadata_json)?
-        .into_iter()
-        .find_map(
-            |(entry_storage, entry_original)| match (entry_storage, entry_original) {
-                (Some(entry_storage), Some(entry_original))
-                    if entry_storage.as_str() == storage =>
-                {
-                    Some(entry_original)
-                }
-                _ => None,
-            },
-        )?;
-    let path = std::path::PathBuf::from(&original);
-    path.is_file().then_some(path)
-}
-
-/// Reads the `(storagePath, originalPath)` pair (legacy `path` for storage) of
-/// each entry in the `files` array of the record's resource metadata. The
-/// original path is optional: it is absent when the source is not a file on
-/// disk (for example an in-memory screenshot).
-fn file_metadata_entries(
-    metadata_json: &Option<String>,
-) -> Option<Vec<(Option<String>, Option<String>)>> {
-    let json = metadata_json.as_deref()?;
-    let parsed: serde_json::Value = serde_json::from_str(json).ok()?;
-    let files = parsed.get("files")?.as_array()?;
-    let mut entries = Vec::new();
-    for file in files {
-        let storage = file
-            .get("storagePath")
-            .or_else(|| file.get("path"))
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned);
-        let original = file
-            .get("originalPath")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned);
-        if storage.is_some() || original.is_some() {
-            entries.push((storage, original));
-        }
-    }
-    if entries.is_empty() {
-        None
-    } else {
-        Some(entries)
-    }
-}
-
 /// Copies the files behind one image/file record back to the system clipboard
 /// as dropped file references (CF_HDROP on Windows). The record id is the only
 /// input from the webview; the actual paths are resolved from the database, so
@@ -536,26 +383,11 @@ pub fn copy_clipboard_item_files(
         .get_item(&id)
         .map_err(|error| ClipboardFilesCopyError::Failed(error.to_string()))?
         .ok_or_else(|| ClipboardFilesCopyError::Failed("clipboard item not found".to_owned()))?;
-    let resolved = resolve_clipboard_file_paths(&item, paths.inner(), Some(&database))?;
-    let files = resolved
-        .iter()
-        .map(|path| path.to_string_lossy().to_string())
-        .collect::<Vec<_>>();
-    // Register the pending write with the same joined-path hashes the capture
-    // loop checks, so our own file copy is not re-captured as new history.
-    // On Windows the private clipboard marker is an additional backstop.
-    let joined = files.join("\n");
-    if let Ok(mut guard) = self_trigger.0.lock() {
-        guard.mark_clipboard_write(&joined);
+    crate::item_operations::CopyContext {
+        paths: Some(paths.inner().clone()),
+        self_trigger: Some(self_trigger.0.clone()),
     }
-    if let Err(error) = crate::platform::platform().write_clipboard_files_with_self_trigger(&files)
-    {
-        if let Ok(mut guard) = self_trigger.0.lock() {
-            guard.unmark_clipboard_write(&joined);
-        }
-        return Err(ClipboardFilesCopyError::Failed(error));
-    }
-    Ok(())
+    .write(&database, &item)
 }
 
 /// Returns true when the URL uses a scheme the OS opener may be given.

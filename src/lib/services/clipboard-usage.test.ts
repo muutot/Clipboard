@@ -55,7 +55,10 @@ describe("successful usage recording", () => {
       const summary = { ...item, contentLoaded: false, textContent: "preview" };
       if (action === "copy") await copyClipboardItem(summary);
       else await pasteClipboardItem(summary, "plain");
-      expect(bridge.write).toHaveBeenCalledWith(full);
+      if (action === "copy") {
+        expect(bridge.invoke).toHaveBeenCalledWith("copy_clipboard_item", { id: item.id });
+        expect(bridge.write).not.toHaveBeenCalled();
+      } else expect(bridge.write).toHaveBeenCalledWith(full);
     },
   );
   it("coalesces concurrent hydration and does not retain stale bodies after it completes", async () => {
@@ -84,25 +87,32 @@ describe("successful usage recording", () => {
   });
   it("waits for the OS write before stamping and moving a copied row", async () => {
     let finish!: () => void;
-    bridge.write.mockImplementation(
+    bridge.invoke.mockImplementation(
       () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
+        new Promise<boolean>((resolve) => {
+          finish = () => resolve(true);
         }),
     );
     const moveToTop = vi.fn();
     const copy = copyClipboardItem(item, { moveToTop });
-    await vi.waitFor(() => expect(bridge.write).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(bridge.invoke).toHaveBeenCalledWith("copy_clipboard_item", { id: item.id }),
+    );
     expect(stamps()).toHaveLength(0);
     expect(moveToTop).not.toHaveBeenCalled();
     finish();
     await copy;
-    expect(stamps()).toHaveLength(1);
+    expect(stamps()).toHaveLength(0);
+    expect(bridge.invoke).toHaveBeenCalledWith("copy_clipboard_item", { id: item.id });
     expect(moveToTop).toHaveBeenCalledWith(item.id);
   });
 
   it.each(["copy", "paste"])("does not stamp or move after a failed %s write", async (action) => {
     bridge.write.mockRejectedValue(new Error("busy clipboard"));
+    bridge.invoke.mockImplementation(async (command) => {
+      if (command === "copy_clipboard_item") throw new Error("busy clipboard");
+      return true;
+    });
     const moveToTop = vi.fn();
     if (action === "copy") await copyClipboardItem(item, { moveToTop });
     else await pasteClipboardItem(item, "plain", { moveToTop });
@@ -123,7 +133,7 @@ describe("successful usage recording", () => {
           contentHash: "file",
           resourcePath: "C:/missing.txt",
         };
-      if (command === "copy_clipboard_item_files") throw { kind: "resource-missing" };
+      if (command === "copy_clipboard_item") throw { kind: "resource-missing" };
       return true;
     });
     const moveToTop = vi.fn();
@@ -136,13 +146,14 @@ describe("successful usage recording", () => {
     bridge.pin = false;
     const moveToTop = vi.fn();
     await copyClipboardItem(item, { moveToTop });
-    expect(stamps()).toHaveLength(1);
+    expect(stamps()).toHaveLength(0);
+    expect(bridge.invoke).toHaveBeenCalledWith("copy_clipboard_item", { id: item.id });
     expect(moveToTop).not.toHaveBeenCalled();
   });
 
   it("keeps a successful OS copy successful when metadata persistence fails", async () => {
     bridge.invoke.mockImplementation(async (command) => {
-      if (command === "set_clipboard_item_last_used") throw new Error("database busy");
+      if (command === "copy_clipboard_item") return false;
       return true;
     });
     const moveToTop = vi.fn();

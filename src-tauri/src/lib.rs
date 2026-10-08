@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod commands;
+pub mod item_operations;
 
 /// Legacy quick-paste debug trace. Deliberately compiled out of release
 /// builds: an unconditionally appended, unbounded file in the user's temp
@@ -683,6 +684,7 @@ pub fn run() {
             app.manage(Mutex::new(config));
             app.manage(paths);
             app.manage(database);
+            app.manage(Mutex::new(item_operations::ExternalChangeWorker::start(app.handle().clone())?));
             app.manage(search_index);
             app.manage(performance_tracker);
             app.manage(SearchResultCache::new());
@@ -910,7 +912,8 @@ pub fn run() {
             test_sync_connection,
             sync_now,
             materialize_clipboard_item,
-            copy_clipboard_item_files
+            copy_clipboard_item_files,
+            copy_clipboard_item
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

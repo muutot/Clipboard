@@ -12,7 +12,7 @@ This tracks implementation, not a version bump or release.
 - [x] Extend automatic tags with source/type conditions, preview and history application (344 frontend tests, Rust suite and Clippy, check/build/format pass; dark settings layout inspected).
 - [x] Export/import a self-contained resource backup with validation and restore preview (346 frontend tests; check/build/format/Clippy pass; Rust suite passes with the unavailable native OpenClipboard test excluded; dark and 520px settings inspected).
 - [x] Extract search/history/bulk/window controllers with one item-store owner (350 frontend tests, check/build/format pass; browser main page inspected; stale requests, disposal and rollback covered).
-- [ ] Share item-operation behavior across GUI, CLI and local API.
+- [x] Share item-operation behavior across GUI, CLI and local API (353 frontend tests with two workers; Rust workspace tests except unavailable native clipboard test, Clippy, check/build/format pass).
 - [ ] Cancel synchronization cooperatively through engine and transport.
 - [x] Stream file exports from one read transaction with atomic publication (Rust export/WAL/concurrent-write/failure regressions and full Rust suite, Clippy pass).
 - [x] Hash file bytes during bounded staging without a second full read (stream/digest/growth/write-failure tests, Rust suite except unavailable native clipboard test, Clippy and format pass).
@@ -35,3 +35,10 @@ Active lists project 2048 text characters in SQLite and omit rich-text bodies. M
 file lists stay complete; recycle-bin bodies stay complete to preserve its local keyword search.
 Backend and spare frontend caches enforce a 16 MiB string-payload budget. Native clipboard
 integration and process-memory measurements remain separate from the passing unit/bridge tests.
+
+Shared native default copy now uses the backend operation service. GUI media materializes
+remote content before copy; CLI/API require existing local resources. External SQLite writes
+invalidate desktop views within a 500 ms polling interval plus any database-lock wait.
+The unrestricted Vitest fork pool exhausted available process/memory resources during the
+combined gate; rerunning the complete suite with `--maxWorkers=2` passed. No test was omitted
+by this concurrency adjustment. The opt-in performance benchmark is skipped in normal tests.

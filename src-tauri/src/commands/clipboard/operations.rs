@@ -145,6 +145,29 @@ pub fn set_clipboard_item_tags(
 }
 
 #[tauri::command]
+pub fn copy_clipboard_item(
+    app: AppHandle,
+    database: tauri::State<'_, Database>,
+    paths: tauri::State<'_, StoragePaths>,
+    self_trigger: tauri::State<'_, crate::state::SelfTriggerState>,
+    search_cache: tauri::State<'_, SearchResultCache>,
+    id: String,
+) -> Result<bool, super::types::ClipboardFilesCopyError> {
+    let context = crate::item_operations::CopyContext {
+        paths: Some(paths.inner().clone()),
+        self_trigger: Some(self_trigger.0.clone()),
+    };
+    let (_, updated) = crate::item_operations::copy_item_with(&database, &id, |item| {
+        context.write(&database, item)
+    })?;
+    if updated {
+        search_cache.clear();
+        broadcast_item_usage(&app, &database, [id]);
+    }
+    Ok(updated)
+}
+
+#[tauri::command]
 pub fn set_clipboard_item_last_used(
     app: AppHandle,
     database: tauri::State<'_, Database>,
@@ -212,7 +235,7 @@ pub fn record_item_usage(
     search_cache: &SearchResultCache,
     id: &str,
 ) -> Result<bool, String> {
-    let updated = database.set_last_used(id).map_err(|e| e.to_string())?;
+    let updated = crate::item_operations::record_usage(database, id)?;
     if updated {
         search_cache.clear();
     }
@@ -487,9 +510,11 @@ pub fn soft_delete_clipboard_item(
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    let updated = database
-        .soft_delete(&id)
-        .map_err(|error| error.to_string())?;
+    let updated = crate::item_operations::change_membership(
+        &database,
+        &id,
+        crate::item_operations::MembershipAction::Delete,
+    )?;
     if updated {
         broadcast_membership_changed(&app, std::slice::from_ref(&id), &[], &[]);
     }
@@ -509,9 +534,11 @@ pub fn restore_clipboard_item(
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    let updated = database
-        .restore_deleted(&id)
-        .map_err(|error| error.to_string())?;
+    let updated = crate::item_operations::change_membership(
+        &database,
+        &id,
+        crate::item_operations::MembershipAction::Restore,
+    )?;
     if updated {
         broadcast_membership_changed(&app, &[], std::slice::from_ref(&id), &[]);
     }
@@ -565,9 +592,11 @@ pub fn permanently_delete_clipboard_item(
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    let updated = database
-        .permanently_delete(&id)
-        .map_err(|error| error.to_string())?;
+    let updated = crate::item_operations::change_membership(
+        &database,
+        &id,
+        crate::item_operations::MembershipAction::Remove,
+    )?;
     if updated {
         broadcast_membership_changed(&app, &[], &[], std::slice::from_ref(&id));
     }

@@ -19,6 +19,9 @@ fn lock_or_recover<'a, T>(lock: &'a Mutex<T>, label: &str) -> std::sync::MutexGu
 }
 
 pub fn stop_runtime_services(app: &tauri::AppHandle) {
+    if let Some(worker) = app.try_state::<Mutex<crate::item_operations::ExternalChangeWorker>>() {
+        lock_or_recover(&worker, "external item changes").stop();
+    }
     // Stop the auto-sync worker first: it is a background writer that owns an
     // AppHandle and writes both SQLite and S3, so anything it commits after a
     // storage snapshot would be lost, and it must not resolve managed state

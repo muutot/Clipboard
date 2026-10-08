@@ -269,23 +269,7 @@ pub struct StorageKindDeleteResult {
     pub(crate) deleted_ids: Vec<String>,
 }
 
-/// Rejection payload of `copy_clipboard_item_files`.
-///
-/// The copy has two very different failure modes and the user has to be able to
-/// tell them apart: "the file is gone from disk" is permanent for that record,
-/// while "the clipboard was busy" is transient and worth a retry. A bare
-/// message collapsed both into one dead-end toast, so the rejection is tagged
-/// and the frontend maps the tag to its own wording.
-///
-/// `pub` because it appears in a `#[tauri::command]` signature.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", content = "message", rename_all = "kebab-case")]
-pub enum ClipboardFilesCopyError {
-    /// The record is intact, but none of the files it references exist on disk.
-    ResourceMissing(String),
-    /// Clipboard contention, a missing record, or a platform write failure.
-    Failed(String),
-}
+pub use crate::item_operations::CopyError as ClipboardFilesCopyError;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

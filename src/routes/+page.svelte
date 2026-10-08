@@ -67,6 +67,7 @@
     captureAffectedItems,
     closeSearchResults,
     createItemStore,
+    clearView,
     findLoadedItem as findRecord,
     promoteItem,
     removeItemTag,
@@ -812,6 +813,8 @@
       "clipboard-history-invalidated",
       (event) => {
         const removedIds = new Set(event.payload.deletedIds);
+        // An external mutation can invalidate records whose IDs we do not know.
+        itemStore.current = clearView(itemStore.current, "cache");
 
         for (const item of items) {
           if (item.deleted && removedIds.has(item.id)) addSuppressedId(item.id);

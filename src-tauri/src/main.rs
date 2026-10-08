@@ -116,11 +116,15 @@ fn run_cli_process(args: &CliArgs) -> Result<(), String> {
     let database = Database::open(&paths.database).map_err(|error| error.to_string())?;
     let page_size_limit = config.page_size_limit();
     let search_page_size_limit = config.search_page_size_limit();
-    let output = clipboard_desktop_lib::cli::run_cli_command(
+    let output = clipboard_desktop_lib::cli::run_cli_command_with_context(
         args,
         &database,
         page_size_limit,
         search_page_size_limit,
+        &clipboard_desktop_lib::item_operations::CopyContext {
+            paths: Some(paths),
+            self_trigger: None,
+        },
     )?;
     if !output.is_empty() {
         print!("{output}");

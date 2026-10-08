@@ -63,6 +63,13 @@ impl Database {
         Ok(database)
     }
 
+    /// Changes only when another SQLite connection commits. Compare on the same connection.
+    pub(crate) fn data_version(&self) -> Result<i64, StorageError> {
+        self.with_connection(|connection| {
+            Ok(connection.pragma_query_value(None, "data_version", |row| row.get(0))?)
+        })
+    }
+
     pub fn schema_was_reset(&self) -> bool {
         self.schema_was_reset
     }

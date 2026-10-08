@@ -45,7 +45,7 @@ Owns the record boundary and list operations:
 - `PersistedClipboardItem` → `ClipboardItem` mapping (including `tags` parsed from `metadata_json.tags`);
 - resource metadata parsing and display title/size helpers.
 - `materializeClipboardItem(item)` invokes `materialize_clipboard_item` immediately before a remote image/file action needs local paths and coalesces concurrent frontend callers by item id. It preserves explicit command failures; ordinary list/search/hover paths never call it.
-- `copyClipboardItem(item, hooks?)` is the shared copy path used by the main route and the float panel. Copy and paste both await the OS clipboard write before `recordSuccessfulUsage` persists usage and optionally promotes the row. Failed writes never stamp/promote; failed metadata persistence is logged without turning a successful OS copy into a copy failure. Text copy also awaits completion so per-row operation guards remain active.
+- `copyClipboardItem(item, hooks?)` is the shared copy path used by the main route and the float panel. Native default copy invokes `copy_clipboard_item(id)` and uses its usage-updated boolean for optional promotion; the backend owns the OS write and usage stamp. Browser copy and formatted paste still use `recordSuccessfulUsage` after the write. Failed writes never stamp/promote; failed metadata persistence is logged without turning a successful OS copy into a copy failure. Text copy also awaits completion so per-row operation guards remain active.
 - `deriveTextEditPatch(item, content)` is the pure title/preview/size rule for in-place edits (media rename in place, text regenerates its title unless `customTitle`); the route keeps persistence and the four-copy fan-out.
 - Text "Save as new" (`saveAsNew` on the main route) invokes `save_clipboard_item_as_new` once — do not reintroduce a frontend `duplicate_clipboard_item` + `update_clipboard_text` pair for that flow (it was non-atomic and collided with `UNIQUE (kind, content_hash)`).
 - `pasteClipboardItem(item, mode, hooks?)` is the shared paste-to-previous-app path. `mode` is `plain` | `format` | `clean` | `auto`; `auto` picks the richest representation by kind (text/link prefer HTML, image/file materialize first). It reads `pasteCleaningEnabled`/`pinCopiedToTop` from `generalSettings`, calls `persistLastUsed`, and shows the mode/kind-specific success or failure toast. Route wrappers (`plainPaste`, `formatPaste`, `cleanPaste`, `doubleClickPasteItem`) only resolve the item and pass `moveToTop`.
@@ -118,3 +118,6 @@ approximate rendered-frame boundary, not an OS compositor measurement. `storage.
 `record_search_interaction_latency(durationMs)`; `PerformanceSnapshot.searchInputLatency`
 keeps the latest 1,000 durations in memory, separate from backend `searchLatency`. No query
 text or clipboard content is retained. Statistics uses existing metric-card primitives.
+
+Broad history invalidation clears the spare search cache before reloading so an external
+CLI deletion cannot be promoted from an obsolete cached page.

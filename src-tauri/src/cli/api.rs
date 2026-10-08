@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind};
 use crate::export::{export_database, ExportFormat, ExportOptions};
+use crate::item_operations::{change_membership, copy_item_with, CopyContext, MembershipAction};
 use crate::storage::{ClipboardRepository, Database};
 
 const MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
@@ -48,6 +49,8 @@ pub struct LocalApiServer {
     page_size_limit: u32,
     search_page_size_limit: u32,
     token: Option<Arc<String>>,
+    copy_context: CopyContext,
+    on_change: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl LocalApiServer {
@@ -60,6 +63,8 @@ impl LocalApiServer {
             page_size_limit: 500,
             search_page_size_limit: 500,
             token: None,
+            copy_context: CopyContext::default(),
+            on_change: Arc::new(|| {}),
         }
     }
 
@@ -76,6 +81,12 @@ impl LocalApiServer {
     }
 
     /// Sets the bearer token clients must present. Required before start.
+    pub fn set_copy_context(&mut self, context: CopyContext) {
+        self.copy_context = context;
+    }
+    pub fn set_change_callback(&mut self, callback: Arc<dyn Fn() + Send + Sync>) {
+        self.on_change = callback;
+    }
     pub fn set_token(&mut self, token: String) {
         self.token = Some(Arc::new(token));
     }
@@ -117,6 +128,8 @@ impl LocalApiServer {
             token,
             port: self.port,
             active_connections,
+            copy_context: self.copy_context.clone(),
+            on_change: self.on_change.clone(),
         };
         let handle = thread::Builder::new()
             .name("clipboard-local-api".to_owned())
@@ -172,6 +185,8 @@ struct ServeContext {
     token: Arc<String>,
     port: u16,
     active_connections: Arc<AtomicUsize>,
+    copy_context: CopyContext,
+    on_change: Arc<dyn Fn() + Send + Sync>,
 }
 
 fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: ServeContext) {
@@ -182,6 +197,8 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
         token,
         port,
         active_connections,
+        copy_context,
+        on_change,
     } = context;
     loop {
         if matches!(
@@ -208,6 +225,8 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
                 // limit bound each thread).
                 let database = Arc::clone(&database);
                 let token = Arc::clone(&token);
+                let copy_context = copy_context.clone();
+                let on_change = on_change.clone();
                 let connection_counter = Arc::clone(&active_connections);
                 let spawned = thread::Builder::new()
                     .name("clipboard-local-api-conn".to_owned())
@@ -219,6 +238,8 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
                             search_page_size_limit,
                             &token,
                             port,
+                            &copy_context,
+                            on_change.as_ref(),
                         ) {
                             crate::log_error!("[local-api] request failed: {error}");
                         }
@@ -240,6 +261,7 @@ fn serve(listener: TcpListener, stop_receiver: mpsc::Receiver<()>, context: Serv
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_connection(
     mut stream: TcpStream,
     database: &Database,
@@ -247,6 +269,8 @@ fn handle_connection(
     search_page_size_limit: u32,
     token: &str,
     port: u16,
+    copy_context: &CopyContext,
+    on_change: &(dyn Fn() + Send + Sync),
 ) -> Result<(), String> {
     stream
         .set_read_timeout(Some(READ_TIMEOUT))
@@ -258,7 +282,17 @@ fn handle_connection(
     if let Some(rejection) = authorize(&request, token, port) {
         return write_response(&mut stream, &rejection);
     }
-    let response = dispatch(&request, database, page_size_limit, search_page_size_limit);
+    let response = dispatch_with_context(
+        &request,
+        database,
+        page_size_limit,
+        search_page_size_limit,
+        copy_context,
+    );
+    if (200..300).contains(&response.status) && matches!(request.method.as_str(), "POST" | "DELETE")
+    {
+        on_change();
+    }
     write_response(&mut stream, &response)
 }
 
@@ -459,11 +493,27 @@ fn write_response(stream: &mut TcpStream, response: &HttpResponse) -> Result<(),
         .map_err(|error| format!("write response: {error}"))
 }
 
+#[cfg(test)]
 fn dispatch(
     request: &HttpRequest,
     database: &Database,
     page_size_limit: u32,
     search_page_size_limit: u32,
+) -> HttpResponse {
+    dispatch_with_context(
+        request,
+        database,
+        page_size_limit,
+        search_page_size_limit,
+        &CopyContext::default(),
+    )
+}
+fn dispatch_with_context(
+    request: &HttpRequest,
+    database: &Database,
+    page_size_limit: u32,
+    search_page_size_limit: u32,
+    copy_context: &CopyContext,
 ) -> HttpResponse {
     if request.method == "OPTIONS" {
         return response(204, "", Vec::new());
@@ -555,37 +605,34 @@ fn dispatch(
             }
         }
         ("POST", [segment, id]) if segment == "copy" => {
-            let items = match database.get_items_by_ids(std::slice::from_ref(id)) {
-                Ok(items) => items,
-                Err(error) => return error_response(500, &error.to_string()),
-            };
-            let Some(item) = items.into_iter().next() else {
-                return error_response(404, "item not found");
-            };
-            let text = item
-                .text_content
-                .as_deref()
-                .filter(|value| !value.is_empty())
-                .unwrap_or(&item.title);
-            match super::write_system_clipboard_text(text) {
-                Ok(()) => json_response(200, &item),
-                Err(error) => error_response(500, &error),
+            match copy_item_with(database, id, |item| copy_context.write(database, item)) {
+                Ok((item, _)) => json_response(200, &item),
+                Err(error) => error_response(
+                    if error.to_string().starts_with("item not found:") {
+                        404
+                    } else {
+                        500
+                    },
+                    &error.to_string(),
+                ),
             }
         }
-        ("DELETE", [segment, id]) if segment == "items" => match database.soft_delete(id) {
-            Ok(true) => json_response(200, &ActionResponse { changed: true }),
-            Ok(false) => error_response(404, "item not found"),
-            Err(error) => error_response(500, &error.to_string()),
-        },
+        ("DELETE", [segment, id]) if segment == "items" => {
+            match change_membership(database, id, MembershipAction::Delete) {
+                Ok(true) => json_response(200, &ActionResponse { changed: true }),
+                Ok(false) => error_response(404, "item not found"),
+                Err(error) => error_response(500, &error.to_string()),
+            }
+        }
         ("DELETE", [segment, id, permanent]) if segment == "items" && permanent == "permanent" => {
-            match database.permanently_delete(id) {
+            match change_membership(database, id, MembershipAction::Remove) {
                 Ok(true) => json_response(200, &ActionResponse { changed: true }),
                 Ok(false) => error_response(404, "deleted item not found"),
                 Err(error) => error_response(500, &error.to_string()),
             }
         }
         ("POST", [segment, id, restore]) if segment == "items" && restore == "restore" => {
-            match database.restore_deleted(id) {
+            match change_membership(database, id, MembershipAction::Restore) {
                 Ok(true) => json_response(200, &ActionResponse { changed: true }),
                 Ok(false) => error_response(404, "deleted item not found"),
                 Err(error) => error_response(500, &error.to_string()),
@@ -836,6 +883,71 @@ mod tests {
             read_request_with_deadline(&mut server_side, Instant::now() - Duration::from_secs(1))
                 .expect_err("expired deadline must reject the request");
         assert!(error.contains("timed out"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn media_copy_has_the_same_missing_resource_error_as_the_cli() {
+        let db = Database::open_in_memory().unwrap();
+        let mut item = super::super::build_text_clipboard_item(
+            "not a media payload".into(),
+            ClipboardKind::File,
+            "test",
+            "test",
+        );
+        item.last_used_at_ms = Some(1);
+        db.save_item(&item).unwrap();
+        let response = dispatch(
+            &request("POST", &format!("/copy/{}", item.id), b""),
+            &db,
+            500,
+            500,
+        );
+        assert_eq!(response.status, 500);
+        assert!(String::from_utf8(response.body)
+            .unwrap()
+            .contains("resource missing"));
+        let args = crate::cli::CliArgs {
+            command: crate::cli::CliCommand::Copy,
+            query: Some(item.id.clone()),
+            limit: None,
+            format: None,
+            output_path: None,
+        };
+        assert!(crate::cli::run_cli_command(&args, &db, 500, 500)
+            .unwrap_err()
+            .contains("resource missing"));
+        assert_eq!(
+            db.get_item(&item.id).unwrap().unwrap().last_used_at_ms,
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn successful_api_mutation_notifies_but_reads_and_errors_do_not() {
+        let db = Arc::new(Database::open_in_memory().unwrap());
+        let mut server = LocalApiServer::with_database(0, db);
+        let count = Arc::new(AtomicUsize::new(0));
+        let observed = count.clone();
+        server.set_change_callback(Arc::new(move || {
+            observed.fetch_add(1, Ordering::SeqCst);
+        }));
+        server.set_token("test".into());
+        let port = server.start().unwrap();
+        for (method, path, body, expected) in [
+            ("GET", "/items", "", 0),
+            ("DELETE", "/items/absent", "", 0),
+            ("POST", "/paste", "sample", 1),
+        ] {
+            let mut socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            write!(socket, "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+            let mut response = String::new();
+            socket.read_to_string(&mut response).unwrap();
+            assert_eq!(count.load(Ordering::SeqCst), expected);
+        }
+        server.stop().unwrap();
     }
 
     #[test]
