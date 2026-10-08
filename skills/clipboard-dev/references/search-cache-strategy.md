@@ -42,8 +42,13 @@ main route's instance (separate JS realms). Two mechanisms keep them in step:
 - `clipboard-items-changed` (see `data-contracts.md`) carries what a mutator
   changed. Both routes fold it through `utils/item-changes.ts`, so a favorite
   toggled in the panel lands in the main window and vice versa.
-- The float panel additionally reloads on focus and on `clipboard-item-added`,
-  which covers anything a mutator does not announce (`set_last_used`).
+- The float panel derives visible rows from deletion/favorite state and reloads
+  on focus, `clipboard-item-added`, membership/content changes in
+  `clipboard-items-changed`, and `clipboard-history-invalidated` (import/sync/
+  cleanup). Each reload invalidates the previous request, so stale responses
+  cannot resurrect rows removed by a newer event. Usage-only events promote
+  loaded rows without reloading. Component tests in `routes/float/float-page.test.ts`
+  cover deletion, favorite filtering, restoration, and full invalidation.
 
 Anything that adds a new item-level mutator must broadcast, or the other window
 silently keeps the old row: a command that takes no `AppHandle` physically

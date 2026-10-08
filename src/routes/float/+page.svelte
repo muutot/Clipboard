@@ -49,7 +49,9 @@
   // instance — but it uses the same one so its mutations go through the same
   // funnel, and `clipboard-items-changed` keeps the two copies from drifting.
   const itemStore = createItemStoreView(createItemStore());
-  const items = $derived(itemStore.history);
+  const items = $derived(
+    itemStore.history.filter((item) => !item.deleted && (filter !== "favorite" || item.favorite)),
+  );
   let loading = $state(true);
   let copyingId = $state<string | null>(null);
   /** Guards against a stale response overwriting a newer filter's list. */
@@ -186,6 +188,7 @@
     };
     let unlistenAdded: (() => void) | undefined;
     let unlistenItemsChanged: (() => void) | undefined;
+    let unlistenHistoryInvalidated: (() => void) | undefined;
     let unlistenFocus: (() => void) | undefined;
     if (isTauriRuntime()) {
       // The backend builds this window hidden so creation never races the
@@ -209,9 +212,29 @@
           // broadcast is what moves a copied entry up here.
           promoteUsed: $generalSettings.pinCopiedToTop,
         });
+        // Patching loaded rows cannot add a newly favorited/restored row or
+        // refill a page after deletion. Reload the filtered page and invalidate
+        // any older request so it cannot overwrite the event we just applied.
+        const payload = event.payload;
+        if (
+          payload.items?.length ||
+          payload.deletedIds?.length ||
+          payload.restoredIds?.length ||
+          payload.removedIds?.length
+        ) {
+          reload();
+        }
       }).then((unlisten) => {
         if (disposed) unlisten();
         else unlistenItemsChanged = unlisten;
+      });
+      listen<{ deletedIds?: string[] }>("clipboard-history-invalidated", (event) => {
+        if (disposed) return;
+        itemStore.current = removeItems(itemStore.current, new Set(event.payload.deletedIds ?? []));
+        reload();
+      }).then((unlisten) => {
+        if (disposed) unlisten();
+        else unlistenHistoryInvalidated = unlisten;
       });
       void resolveFloatWindow().then((win) => {
         if (disposed || !win) return;
@@ -228,9 +251,11 @@
     }
     return () => {
       disposed = true;
+      loadRequestId += 1;
       endHeaderDrag();
       unlistenAdded?.();
       unlistenItemsChanged?.();
+      unlistenHistoryInvalidated?.();
       unlistenFocus?.();
     };
   });
