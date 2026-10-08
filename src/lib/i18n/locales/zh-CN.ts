@@ -760,7 +760,8 @@ const zhCN: LocaleDefinition = {
     windowOpacityAffectsTextDescription:
       "开启后文字会随窗口不透明度一并变淡；关闭时文字保持完全不透明",
     windowEffect: "毛玻璃效果",
-    windowEffectDescription: "为窗口添加半透明模糊背景，需搭配窗口不透明度使用",
+    windowEffectDescription:
+      "Windows 使用亚克力/云母，macOS 使用原生背景材质；Linux 模糊效果取决于桌面合成器，不透明度可独立使用",
     windowEffectOff: "关闭",
     windowEffectAcrylic: "亚克力 (Acrylic)",
     windowEffectMica: "Mica 云母",

@@ -538,6 +538,60 @@ pub fn window_transparency_alpha(percent: u8) -> u8 {
     ((u32::from(percent) * 255) / 100) as u8
 }
 
+/// Turning whole-window opacity off must restore the native surface to 100%;
+/// CSS then owns background-only translucency without dimming text twice.
+pub fn native_opacity_percentage(percent: u8, affects_text: bool) -> u8 {
+    if affects_text {
+        percent.clamp(60, 100)
+    } else {
+        100
+    }
+}
+
+/// Caller dispatches to the UI thread before touching native window objects.
+pub fn apply_webview_transparency<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    percent: u8,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        apply_window_transparency(
+            window.hwnd().map_err(|e| e.to_string())?.0 as isize,
+            percent,
+        )
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use super::macos::objc;
+        let native = window.ns_window().map_err(|e| e.to_string())?;
+        if native.is_null() {
+            return Err("native window unavailable".into());
+        }
+        unsafe {
+            objc::msgSend_void_f64(
+                native.cast(),
+                objc::sel_registerName(c"setAlphaValue:".as_ptr()),
+                f64::from(percent.clamp(60, 100)) / 100.0,
+            );
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::WidgetExt;
+        window
+            .gtk_window()
+            .map_err(|e| e.to_string())?
+            .set_opacity(f64::from(percent.clamp(60, 100)) / 100.0);
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (window, percent);
+        Err("window opacity unavailable".into())
+    }
+}
+
 /// Applies the configured window transparency to a native window using the
 /// Win32 layered-window alpha channel. A value of 100 maps to alpha byte 255
 /// while the layered style is retained so per-pixel translucent pixels keep
@@ -602,12 +656,57 @@ pub fn apply_window_effect<R: Runtime>(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
 pub fn apply_window_effect<R: Runtime>(
-    _window: &tauri::WebviewWindow<R>,
-    _effect: &str,
+    window: &tauri::WebviewWindow<R>,
+    effect: &str,
 ) -> Result<(), String> {
-    Ok(())
+    use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState};
+    let material = match effect {
+        "acrylic" => NSVisualEffectMaterial::Sidebar,
+        "mica" => NSVisualEffectMaterial::UnderWindowBackground,
+        _ => {
+            return window_vibrancy::clear_vibrancy(window)
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        }
+    };
+    window_vibrancy::apply_vibrancy(window, material, Some(NSVisualEffectState::Active), None)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+pub fn apply_window_effect<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    effect: &str,
+) -> Result<(), String> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let enabled = matches!(effect, "acrylic" | "mica");
+    if super::Platform::detect().is_wayland() {
+        return if enabled {
+            Err("Wayland backdrop blur is controlled by the compositor; window opacity remains available".into())
+        } else {
+            Ok(())
+        };
+    }
+    let id = match window.window_handle().map_err(|e| e.to_string())?.as_raw() {
+        RawWindowHandle::Xlib(handle) => u32::try_from(handle.window).map_err(|e| e.to_string())?,
+        RawWindowHandle::Xcb(handle) => handle.window.get(),
+        _ => return Err("X11 window handle unavailable".into()),
+    };
+    super::x11_effect::set_blur(id, enabled)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub fn apply_window_effect<R: Runtime>(
+    _: &tauri::WebviewWindow<R>,
+    effect: &str,
+) -> Result<(), String> {
+    if effect == "off" {
+        Ok(())
+    } else {
+        Err("window effects unavailable".into())
+    }
 }
 
 /// Capacity information for the volume that stores a given directory.
@@ -679,5 +778,16 @@ mod tests {
         let cjk = "汉".repeat(100);
         let titled_cjk = tray_recent_title(&cjk);
         assert_eq!(titled_cjk.chars().count(), TRAY_TITLE_CHARS);
+    }
+}
+
+#[cfg(test)]
+mod opacity_tests {
+    #[test]
+    fn switching_back_to_background_only_restores_native_alpha() {
+        assert_eq!(super::native_opacity_percentage(75, true), 75);
+        assert_eq!(super::native_opacity_percentage(75, false), 100);
+        assert_eq!(super::native_opacity_percentage(0, true), 60);
+        assert_eq!(super::native_opacity_percentage(255, true), 100);
     }
 }

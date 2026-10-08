@@ -213,7 +213,7 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 | 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`                    | ⚠️ freedesktop 图标                     | ⚠️ freedesktop 图标                         |
 | 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ⚠️ 原生组合键 / 10ms 双击采样（待验证） | ⚠️ 原生组合键 / 10ms 双击采样（待验证） | ⚠️ GlobalShortcuts portal；不支持修饰键双击 |
 | 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ⚠️ 原生激活 + CGEvent（需辅助功能权限） | ⚠️ 原生 EWMH + XTest                    | ⚠️ Sway/Hyprland + wtype                    |
-| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                               | ❌ 未实现                               | ❌ 未实现                                   |
+| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ⚠️ 原生透明度 / Vibrancy（待平台验证）  | ⚠️ GTK 透明度 / KWin 兼容模糊请求       | ⚠️ GTK 透明度；模糊由合成器控制             |
 | 富文本 RTF 采集            | ✅ 原生 Win32 | ⚠️ 原生 public.rtf（待平台验证）        | ⚠️ `xclip` / `wl-paste`                 | ⚠️ `xclip` / `wl-paste`                     |
 | 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ⚠️ 原生 changeCount（待平台验证）       | ⚠️ 双读校验与有限重试                   | ⚠️ 双读校验与有限重试                       |
 | 单实例唤醒已有实例         | ✅ 原命名事件 | ⚠️ 本地认证 IPC（待平台验证）           | ⚠️ 本地认证 IPC（待平台验证）           | ⚠️ 本地认证 IPC（窗口激活由合成器决定）     |

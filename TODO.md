@@ -85,3 +85,5 @@
 - [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样、Wayland portal 会话已接线；Wayland 不支持双击修饰键。待对应平台 CI/权限与桌面实测。
 
 - [ ] 快速粘贴：macOS 激活 + CGEvent、X11 EWMH + XTest、Sway/Hyprland + wtype 后端已接线；记录外部前台目标并复核身份与焦点。待对应平台权限/桌面实测。
+
+- [ ] 窗口透明/毛玻璃：macOS NSWindow alpha + Vibrancy、Linux GTK alpha、X11 KWin 兼容模糊请求已接线；Wayland 模糊仍依赖合成器。切回仅背景透明时恢复原生 alpha=100%。待对应平台视觉验收。

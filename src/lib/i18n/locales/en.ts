@@ -790,7 +790,8 @@ const en: LocaleDefinition = {
     windowOpacityAffectsTextDescription:
       "When enabled, text fades together with the window opacity; when disabled, text stays fully opaque",
     windowEffect: "Frosted Glass",
-    windowEffectDescription: "Adds a translucent blurred backdrop to the window",
+    windowEffectDescription:
+      "Windows: Acrylic/Mica; macOS: native materials. Linux blur depends on the compositor; opacity works independently.",
     windowEffectOff: "Off",
     windowEffectAcrylic: "Acrylic",
     windowEffectMica: "Mica",

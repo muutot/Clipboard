@@ -94,6 +94,8 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 | `loadTolerance`               | number                                      | `100`        | 50–500                                                                           |
 | `logLevel`                    | `"error"`, `"warn"`, `"info"`, or `"debug"` | `"info"`     | —                                                                                |
 
+Native opacity now applies on Windows/macOS/Linux. When `windowOpacityAffectsText` is false, native alpha resets to 100% and CSS controls only backgrounds. `windowEffect` retains its stored off/acrylic/mica values: macOS maps the latter two to Sidebar/UnderWindowBackground materials; Linux X11 requests compositor blur, while Wayland needs compositor configuration. Native window updates run on the main thread.
+
 History capacity changes apply immediately: a larger cap resumes pagination, a smaller cap trims history references while retaining search/detail records. Per-page size changes apply to subsequent requests; an in-flight response is compared against its original request size.
 
 ## Theme and sort structures

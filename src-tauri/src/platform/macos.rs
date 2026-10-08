@@ -154,6 +154,8 @@ pub(crate) mod objc {
         pub fn msgSend_i32_Id(receiver: Id, sel: Sel, arg: i32) -> Id;
         #[link_name = "objc_msgSend"]
         pub fn msgSend_bool_usize(receiver: Id, sel: Sel, arg: usize) -> i8;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_void_f64(receiver: Id, sel: Sel, arg: f64);
         pub fn objc_autoreleasePoolPush() -> Id;
         pub fn objc_autoreleasePoolPop(pool: Id);
     }

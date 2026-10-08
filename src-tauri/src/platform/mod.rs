@@ -59,6 +59,8 @@ pub mod stop_pipe;
 pub mod ui;
 #[cfg(any(test, target_os = "linux"))]
 pub mod wayland_paste;
+#[cfg(any(test, target_os = "linux"))]
+pub mod x11_effect;
 
 use std::path::Path;
 

@@ -85,9 +85,13 @@ pub fn set_general_settings(
     if let Err(error) = app.emit("general-settings-changed", &saved) {
         crate::log_error!("[settings] failed to emit general-settings-changed: {error}");
     }
-    if saved.window_opacity_affects_text {
-        apply_window_transparency_to_main(&app, saved.window_transparency);
-    }
+    apply_window_transparency_to_main(
+        &app,
+        crate::platform::ui::native_opacity_percentage(
+            saved.window_transparency,
+            saved.window_opacity_affects_text,
+        ),
+    );
     apply_window_effect_to_main(&app, &saved.window_effect);
     Ok(saved)
 }
@@ -169,36 +173,31 @@ mod search_mode_tests {
 }
 
 pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {
-    #[cfg(target_os = "windows")]
-    {
-        let Some(window) = app.get_webview_window("main") else {
+    let app_for_ui = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        let Some(window) = app_for_ui.get_webview_window("main") else {
             return;
         };
-        match window.hwnd() {
-            Ok(hwnd) => {
-                if let Err(error) =
-                    crate::platform::apply_window_transparency(hwnd.0 as isize, percent)
-                {
-                    crate::log_error!("[window] failed to apply transparency: {error}");
-                }
-            }
-            Err(error) => {
-                crate::log_error!("[window] failed to resolve the main window handle: {error}");
-            }
+        if let Err(error) = crate::platform::ui::apply_webview_transparency(&window, percent) {
+            crate::log_error!("[window] failed to apply transparency: {error}");
         }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (app, percent);
+    }) {
+        crate::log_error!("[window] failed to schedule transparency: {error}");
     }
 }
 
 pub fn apply_window_effect_to_main(app: &tauri::AppHandle, effect: &str) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    if let Err(error) = crate::platform::apply_window_effect(&window, effect) {
-        crate::log_error!("[window] failed to apply window effect: {error}");
+    let app_for_ui = app.clone();
+    let effect = effect.to_owned();
+    if let Err(error) = app.run_on_main_thread(move || {
+        let Some(window) = app_for_ui.get_webview_window("main") else {
+            return;
+        };
+        if let Err(error) = crate::platform::apply_window_effect(&window, &effect) {
+            crate::log_error!("[window] failed to apply window effect: {error}");
+        }
+    }) {
+        crate::log_error!("[window] failed to schedule window effect: {error}");
     }
 }
 
