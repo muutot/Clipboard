@@ -20,7 +20,7 @@
 
 `src-tauri/src/lib.rs::run` is the GUI composition root. The safety-sensitive startup order is:
 
-1. load `ConfigStore` beside the executable/project;
+1. load `ConfigStore` beside the executable/project (`resolve_project_directory`: executable directory while writable, platform data dir otherwise — AppImages and read-only install dirs fall back so startup never panics on the read-only mount);
 2. acquire the optional single-instance guard and wake listener;
 3. load keyboard configuration;
 4. resolve `StoragePaths` without auto-claiming arbitrary custom roots;

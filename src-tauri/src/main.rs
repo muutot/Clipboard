@@ -103,15 +103,11 @@ fn ensure_cli_console() {
 fn ensure_cli_console() {}
 
 fn run_cli_process(args: &CliArgs) -> Result<(), String> {
-    let executable =
-        std::env::current_exe().map_err(|error| format!("cannot locate executable: {error}"))?;
-    let project_directory = executable
-        .parent()
-        .ok_or_else(|| "executable has no parent directory".to_owned())?;
-    let config = clipboard_desktop_lib::config::ConfigStore::load(project_directory)
+    let project_directory = clipboard_desktop_lib::resolve_project_directory();
+    let config = clipboard_desktop_lib::config::ConfigStore::load(&project_directory)
         .map_err(|error| error.to_string())?;
     let paths = StoragePaths::initialize_with_resource_directories(
-        project_directory.to_path_buf(),
+        project_directory.clone(),
         config.storage_directory().map(PathBuf::from),
         config.image_storage_path().map(PathBuf::from),
         config.file_storage_path().map(PathBuf::from),

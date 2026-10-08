@@ -47,7 +47,7 @@ pub mod storage;
 pub mod sync;
 pub mod tags;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -89,6 +89,74 @@ const MAIN_WINDOW_MIN_WIDTH: u32 = 730;
 const MAIN_WINDOW_MIN_HEIGHT: u32 = 500;
 
 const HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
+/// Directory holding config, logs, the database and managed storage.
+/// Portable installs keep data next to the executable while that directory is
+/// writable; otherwise (AppImages, which mount read-only, system install
+/// locations, read-only portable folders) fall back to the platform data
+/// directory so the app can still start.
+pub fn resolve_project_directory() -> PathBuf {
+    let executable_directory = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|parent| parent.to_path_buf()));
+    if let Some(directory) = &executable_directory {
+        if directory_is_writable(directory) {
+            return directory.clone();
+        }
+    }
+    platform_data_directory()
+        .or(executable_directory)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn directory_is_writable(directory: &Path) -> bool {
+    if std::fs::create_dir_all(directory).is_err() {
+        return false;
+    }
+    let probe = directory.join(format!(".clipboard-write-probe-{}", std::process::id()));
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn platform_data_directory() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var_os("APPDATA")
+            .map(|base| PathBuf::from(base).join("com.clipboard.desktop"))
+            .or_else(|| {
+                std::env::var_os("LOCALAPPDATA")
+                    .map(|base| PathBuf::from(base).join("com.clipboard.desktop"))
+            })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var_os("HOME").map(|home| {
+            PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("com.clipboard.desktop")
+        })
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
+            if !xdg.is_empty() {
+                return Some(PathBuf::from(xdg).join("com.clipboard.desktop"));
+            }
+        }
+        std::env::var_os("HOME")
+            .map(|home| PathBuf::from(home).join(".local/share/com.clipboard.desktop"))
+    }
+}
 
 pub(crate) struct CleanupWorker {
     stop_flag: Arc<AtomicBool>,
@@ -265,10 +333,7 @@ pub fn run() {
         )
         .setup(|app| {
             let startup_timer = &mut StartupTimer::start();
-            let project_directory = std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| app.path().app_data_dir().unwrap_or_default());
+            let project_directory = resolve_project_directory();
             // Redirect stderr into a rotating log file as early as possible so
             // every eprintln! diagnostic survives in GUI-subsystem builds.
             if let Some(log_path) = logging::init(&project_directory, crate::logging::LogLevel::Info)
