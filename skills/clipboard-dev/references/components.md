@@ -239,3 +239,5 @@ Every child panel accepts `onclose` and optional `showHeader`. The parent must r
 - Update i18n dictionaries and types together for user-visible strings.
 - For visual changes, read `css-theming.md`; for settings, also read `settings-panels.md`.
 - Update this reference when component ownership or a durable interaction contract changes.
+
+BackupPanel.svelte is composed by TransferPanel in storage tools. It uses shared settings cards/actions, shows validated record/resource counts, requires preview before restore and surfaces retention adjustment. Its independent operation state blocks repeated submissions; no native calls run in browser preview.

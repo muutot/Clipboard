@@ -1,6 +1,16 @@
 export type Locale = "zh-CN" | "en";
 
 export interface LocaleDefinition {
+  backup: {
+    title: string;
+    description: string;
+    create: string;
+    preview: string;
+    restore: string;
+    working: string;
+    summary: string;
+    retention: string;
+  };
   autoTags: {
     source: string;
     sampleSource: string;

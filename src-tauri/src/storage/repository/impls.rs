@@ -20,6 +20,46 @@ pub struct TransactionalSaveSummary {
 }
 
 impl Database {
+    pub fn validate_restore_items(entries: &[ClipboardItem]) -> Result<(), StorageError> {
+        let upper = current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS);
+        for item in entries {
+            validate_imported_item(item, upper).map_err(|reason| {
+                StorageError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, reason))
+            })?;
+        }
+        Ok(())
+    }
+    /// Restore a validated bundle atomically; duplicates are skipped, any invalid row aborts.
+    pub fn restore_items_transactional(
+        &self,
+        entries: &[ClipboardItem],
+    ) -> Result<TransactionalSaveSummary, StorageError> {
+        self.with_connection(|connection| {
+            let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let mut summary = TransactionalSaveSummary::default();
+            for item in entries {
+                validate_imported_item(
+                    item,
+                    current_time_ms().saturating_add(MAX_IMPORT_FUTURE_SKEW_MS),
+                )
+                .map_err(|reason| {
+                    StorageError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, reason))
+                })?;
+                if content_exists_on_connection(&tx, item.kind, &item.content_hash)? {
+                    summary.skipped_count += 1;
+                    continue;
+                }
+                let size =
+                    i64::try_from(item.size_bytes).map_err(|_| StorageError::ValueOutOfRange {
+                        field: "size_bytes",
+                    })?;
+                insert_item_row(&tx, item, size)?;
+                summary.imported_count += 1;
+            }
+            tx.commit()?;
+            Ok(summary)
+        })
+    }
     /// Reads only IDs for combined search filters, before Tantivy top-k selection.
     pub fn search_filter_ids(&self, filter: &HistoryFilter) -> Result<Vec<String>, StorageError> {
         self.with_connection(|connection| {

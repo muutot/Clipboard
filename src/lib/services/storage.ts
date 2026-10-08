@@ -281,6 +281,32 @@ export async function importFromFile(path: string): Promise<ImportSummary> {
   );
 }
 
+export interface BackupPreview {
+  fingerprint: string;
+  itemCount: number;
+  duplicateCount: number;
+  resourceCount: number;
+  resourceBytes: number;
+}
+export const createResourceBackup = (path: string) =>
+  invokeTauriRequired<ExportFileResult>(
+    "create_resource_backup",
+    { path },
+    "Backup requires the desktop app",
+  );
+export const previewResourceBackup = (path: string) =>
+  invokeTauriRequired<BackupPreview>(
+    "preview_resource_backup",
+    { path },
+    "Backup requires the desktop app",
+  );
+export const restoreResourceBackup = (path: string, fingerprint: string) =>
+  invokeTauriRequired<ImportSummary>(
+    "restore_resource_backup",
+    { path, fingerprint },
+    "Backup requires the desktop app",
+  );
+
 export interface SyncConfig {
   provider: "off" | "s3";
   endpoint: string | null;

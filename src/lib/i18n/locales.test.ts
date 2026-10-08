@@ -98,6 +98,7 @@ describe("i18n locales", () => {
       "statistics.storage.text",
       "tags.autoTagRules",
       "tags.manage",
+      "clipboard.clipbackup",
     ]);
     const missing: string[] = [];
     for (const [key, files] of collectReferencedKeys()) {

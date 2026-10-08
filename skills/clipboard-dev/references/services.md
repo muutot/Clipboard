@@ -104,3 +104,5 @@ Search exact event names and payload types before modifying producers or consume
 - Update tests and the matching service/data reference in the same commit.
 
 Auto-tag services expose optional sourceApp/kind conditions and previewAutoTagRules, previewAutoTagHistory, applyAutoTagHistory. History results contain matchedCount, changedCount and up to 20 samples. Applying uses the current draft; saving is separate.
+
+Portable backup wrappers in storage.ts: createResourceBackup(path), previewResourceBackup(path), restoreResourceBackup(path, fingerprint) map to create_resource_backup, preview_resource_backup and restore_resource_backup. File operations run on the blocking pool. Preview is read-only; restore returns ImportSummary.

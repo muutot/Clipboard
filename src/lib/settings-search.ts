@@ -660,6 +660,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     [i18n("storage.importLabel"), i18n("storage.importAction"), "备份", "backup", "PPaste"],
   ),
   entry(
+    "storage.resource-backup",
+    { section: "storage_tools" },
+    i18n("backup.title"),
+    i18n("backup.description"),
+    ["资源备份", "校验", "恢复", "backup", "restore", "checksum"],
+  ),
+  entry(
     "storage.export-data",
     { section: "storage_tools" },
     i18n("storage.exportTitle"),

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::ClipboardItem;
 use crate::storage::Database;
 
+pub(crate) mod backup;
 mod ppaste;
 pub(crate) use ppaste::{import_from_ppaste_backup, BACKUP_EXTENSION};
 

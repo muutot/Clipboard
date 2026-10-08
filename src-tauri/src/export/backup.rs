@@ -1,0 +1,654 @@
+//! Portable active-history bundles. No configuration, credentials, recycle bin or derived previews.
+use super::{stream::atomic_output, ImportSummary};
+use crate::{
+    domain::{ClipboardItem, ClipboardKind},
+    storage::{ClipboardRepository, Database, StorageError, StoragePaths},
+};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{self, File},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+};
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+
+const MAX_MANIFEST: u64 = 16 * 1024 * 1024;
+const MAX_RECORDS: u64 = 512 * 1024 * 1024;
+const MAX_RESOURCE: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_TOTAL: u64 = 16 * 1024 * 1024 * 1024;
+const MAX_LINE: u64 = 32 * 1024 * 1024;
+const MAX_ITEMS: usize = 100_000;
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Manifest {
+    version: u32,
+    item_count: usize,
+    entries: Vec<Entry>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Entry {
+    name: String,
+    bytes: u64,
+    sha256: String,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupPreview {
+    pub fingerprint: String,
+    pub item_count: usize,
+    pub duplicate_count: usize,
+    pub resource_count: usize,
+    pub resource_bytes: u64,
+}
+
+/// Each scratch directory is created exclusively and only its owner removes it.
+struct Scratch(PathBuf);
+impl Scratch {
+    fn at(parent: &Path) -> Result<Self, String> {
+        fs::create_dir_all(parent).map_err(err)?;
+        let path = parent.join(format!("clipboard-backup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&path).map_err(err)?;
+        Ok(Self(path))
+    }
+}
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+fn err(error: impl std::fmt::Display) -> String {
+    error.to_string()
+}
+fn invalid(error: String) -> StorageError {
+    StorageError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+}
+
+/// Hash exactly the bytes read/written, with a hard expanded-size ceiling.
+fn transfer(
+    mut reader: impl Read,
+    mut writer: impl Write,
+    limit: u64,
+) -> Result<(u64, String), String> {
+    let mut hash = Sha256::new();
+    let mut size = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = reader.read(&mut buffer).map_err(err)?;
+        if count == 0 {
+            break;
+        }
+        size += count as u64;
+        if size > limit {
+            return Err("backup entry exceeds its size limit".into());
+        }
+        writer.write_all(&buffer[..count]).map_err(err)?;
+        hash.update(&buffer[..count]);
+    }
+    Ok((size, hex::encode(hash.finalize())))
+}
+
+/// Rewrite only known resource fields. Foreign paths are never retained during restore.
+fn remap_item(
+    item: &mut ClipboardItem,
+    map: &mut impl FnMut(&str) -> Result<String, String>,
+) -> Result<(), String> {
+    if matches!(item.kind, ClipboardKind::Image | ClipboardKind::File)
+        && item.resource_path.as_deref().is_none_or(str::is_empty)
+    {
+        return Err(format!("media record {} has no resource", item.id));
+    }
+    if let Some(path) = item.resource_path.as_mut() {
+        *path = map(path)?;
+    }
+    item.preview_path = None;
+    item.icon_path = None;
+    if let Some(raw) = &item.metadata_json {
+        let mut value: serde_json::Value = serde_json::from_str(raw).map_err(err)?;
+        if let Some(object) = value.as_object_mut() {
+            for key in ["resourcePath", "storagePath"] {
+                if let Some(path) = object
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                {
+                    let mapped = map(path)?;
+                    object.insert(key.into(), mapped.into());
+                }
+            }
+            object.remove("previewPath");
+            object.remove("iconPath");
+            if object.contains_key("originalPath") {
+                object.insert("originalPath".into(), item.resource_path.clone().into());
+            }
+            if let Some(files) = object.get_mut("files").and_then(|v| v.as_array_mut()) {
+                for file in files {
+                    let source = file["storagePath"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| file["originalPath"].as_str())
+                        .ok_or("file entry has no resource path")?;
+                    let path = map(source)?;
+                    file["storagePath"] = path.clone().into();
+                    file["originalPath"] = path.into();
+                    file["copied"] = true.into();
+                }
+            }
+        }
+        item.metadata_json = Some(value.to_string());
+    }
+    if item.kind == ClipboardKind::File {
+        if let Some(text) = &item.text_content {
+            let paths: Vec<String> = serde_json::from_str(text).map_err(err)?;
+            item.text_content = Some(
+                serde_json::to_string(
+                    &paths
+                        .iter()
+                        .map(|path| map(path))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+                .map_err(err)?,
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn create(database: &Database, target: &Path) -> Result<u64, String> {
+    let scratch = Scratch::at(&std::env::temp_dir())?;
+    atomic_output(target, |output| {
+        let mut zip = ZipWriter::new(output);
+        let mut records = File::create(scratch.0.join("records.jsonl")).map_err(err)?;
+        let mut paths: HashMap<String, String> = HashMap::new();
+        let mut manifest = Manifest {
+            version: 1,
+            item_count: 0,
+            entries: Vec::new(),
+        };
+        let mut total = 0;
+        let mut record_bytes = 0;
+        database
+            .visit_active_items(|mut item| {
+                Database::validate_restore_items(std::slice::from_ref(&item))?;
+                remap_item(&mut item, &mut |path| {
+                    if let Some(name) = paths.get(path) {
+                        return Ok(name.clone());
+                    }
+                    let source = File::open(path)
+                        .map_err(|e| format!("missing or unreadable resource {path}: {e}"))?;
+                    if !source.metadata().map_err(err)?.is_file() {
+                        return Err("resource is not a regular file".into());
+                    }
+                    // Names contain no source path and only a safe extension.
+                    let ext = Path::new(path)
+                        .extension()
+                        .and_then(|x| x.to_str())
+                        .unwrap_or("bin")
+                        .chars()
+                        .filter(char::is_ascii_alphanumeric)
+                        .take(16)
+                        .collect::<String>();
+                    let name = format!(
+                        "resources/{}.{}",
+                        manifest.entries.len(),
+                        if ext.is_empty() { "bin" } else { &ext }
+                    );
+                    zip.start_file(
+                        &name,
+                        SimpleFileOptions::default()
+                            .compression_method(zip::CompressionMethod::Stored),
+                    )
+                    .map_err(err)?;
+                    let (bytes, sha256) = transfer(source, &mut zip, MAX_RESOURCE)?;
+                    total += bytes;
+                    if total > MAX_TOTAL {
+                        return Err("backup resources exceed 16 GiB".into());
+                    }
+                    manifest.entries.push(Entry {
+                        name: name.clone(),
+                        bytes,
+                        sha256,
+                    });
+                    paths.insert(path.into(), name.clone());
+                    Ok(name)
+                })
+                .map_err(invalid)?;
+                let line = serde_json::to_vec(&item)?;
+                record_bytes += line.len() as u64 + 1;
+                if line.len() as u64 >= MAX_LINE
+                    || record_bytes > MAX_RECORDS
+                    || manifest.item_count >= MAX_ITEMS
+                {
+                    return Err(invalid("backup record limit exceeded".into()));
+                }
+                records.write_all(&line)?;
+                records.write_all(b"\n")?;
+                manifest.item_count += 1;
+                Ok(())
+            })
+            .map_err(err)?;
+        drop(records);
+        zip.start_file("records.jsonl", SimpleFileOptions::default())
+            .map_err(err)?;
+        let (bytes, sha256) = transfer(
+            File::open(scratch.0.join("records.jsonl")).map_err(err)?,
+            &mut zip,
+            MAX_RECORDS,
+        )?;
+        manifest.entries.push(Entry {
+            name: "records.jsonl".into(),
+            bytes,
+            sha256,
+        });
+        let encoded = serde_json::to_vec(&manifest).map_err(err)?;
+        if encoded.len() as u64 > MAX_MANIFEST {
+            return Err("backup manifest exceeds 16 MiB".into());
+        }
+        zip.start_file("manifest.json", SimpleFileOptions::default())
+            .map_err(err)?;
+        zip.write_all(&encoded).map_err(err)?;
+        zip.finish().map_err(err)?;
+        Ok(())
+    })
+}
+
+fn safe_entry(name: &str) -> bool {
+    if name == "records.jsonl" {
+        return true;
+    }
+    name.strip_prefix("resources/").is_some_and(|file| {
+        !file.is_empty()
+            && !file.starts_with('.')
+            && file.len() < 100
+            && file.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.')
+    })
+}
+
+struct Validated {
+    scratch: Scratch,
+    items: Vec<ClipboardItem>,
+    resources: HashMap<String, PathBuf>,
+    preview: BackupPreview,
+}
+fn validate(path: &Path, database: &Database) -> Result<Validated, String> {
+    let scratch = Scratch::at(&std::env::temp_dir())?;
+    let mut file = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(scratch.0.join("archive.zip"))
+        .map_err(err)?;
+    let (_, fingerprint) = transfer(
+        File::open(path).map_err(err)?,
+        &mut file,
+        MAX_TOTAL + MAX_RECORDS + MAX_MANIFEST * 2,
+    )?;
+    file.seek(SeekFrom::Start(0)).map_err(err)?;
+    let mut zip = ZipArchive::new(file).map_err(err)?;
+    if zip.len() > MAX_ITEMS * 10 {
+        return Err("too many archive entries".into());
+    }
+    let mut names = HashSet::new();
+    for index in 0..zip.len() {
+        let entry = zip.by_index(index).map_err(err)?;
+        if !names.insert(entry.name().to_owned())
+            || (entry.name() != "manifest.json" && !safe_entry(entry.name()))
+            || entry.is_dir()
+            || entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err("unsafe or duplicate archive entry".into());
+        }
+    }
+    let mut manifest_bytes = Vec::new();
+    transfer(
+        zip.by_name("manifest.json").map_err(err)?,
+        &mut manifest_bytes,
+        MAX_MANIFEST,
+    )?;
+    let manifest: Manifest = serde_json::from_slice(&manifest_bytes).map_err(err)?;
+    if manifest.version != 1
+        || manifest.item_count > MAX_ITEMS
+        || manifest.entries.len() + 1 != names.len()
+    {
+        return Err("unsupported or inconsistent backup manifest".into());
+    }
+    let mut resources = HashMap::new();
+    let mut total = 0;
+    let mut seen = HashSet::new();
+    for entry in &manifest.entries {
+        if !safe_entry(&entry.name) || !seen.insert(entry.name.clone()) {
+            return Err("invalid manifest entry".into());
+        }
+        let target = scratch.0.join(format!("entry-{}", seen.len()));
+        let mut output = File::create(&target).map_err(err)?;
+        let limit = if entry.name == "records.jsonl" {
+            MAX_RECORDS
+        } else {
+            MAX_RESOURCE
+        };
+        if entry.bytes > limit {
+            return Err("manifest entry exceeds size limit".into());
+        }
+        let (bytes, hash) = transfer(
+            zip.by_name(&entry.name).map_err(err)?,
+            &mut output,
+            entry.bytes,
+        )?;
+        if hash != entry.sha256 || bytes != entry.bytes {
+            return Err(format!("checksum mismatch: {}", entry.name));
+        }
+        total += bytes;
+        if total > MAX_TOTAL + MAX_RECORDS {
+            return Err("backup exceeds total size limit".into());
+        }
+        resources.insert(entry.name.clone(), target);
+    }
+    let record_file = resources
+        .remove("records.jsonl")
+        .ok_or("missing records.jsonl")?;
+    let mut reader = BufReader::new(File::open(record_file).map_err(err)?);
+    let mut items = Vec::new();
+    let mut ids = HashSet::new();
+    let mut hashes = std::collections::BTreeSet::new();
+    let mut duplicates = 0;
+    loop {
+        let mut line = Vec::new();
+        let bytes = reader
+            .by_ref()
+            .take(MAX_LINE + 1)
+            .read_until(b'\n', &mut line)
+            .map_err(err)?;
+        if bytes == 0 {
+            break;
+        }
+        if bytes as u64 > MAX_LINE {
+            return Err("record exceeds size limit".into());
+        }
+        let mut item: ClipboardItem = serde_json::from_slice(&line).map_err(err)?;
+        if !ids.insert(item.id.clone()) || !hashes.insert((item.kind, item.content_hash.clone())) {
+            return Err("duplicate record identity in backup".into());
+        }
+        // Validate every path reference even when this record is already present locally.
+        remap_item(&mut item, &mut |name| {
+            resources
+                .contains_key(name)
+                .then(|| name.to_owned())
+                .ok_or_else(|| format!("resource missing from manifest: {name}"))
+        })?;
+        if database
+            .content_exists(item.kind, &item.content_hash)
+            .map_err(err)?
+        {
+            duplicates += 1;
+        } else if database.get_item(&item.id).map_err(err)?.is_some() {
+            return Err(format!(
+                "record id conflicts with local content: {}",
+                item.id
+            ));
+        }
+        items.push(item);
+        if items.len() > MAX_ITEMS {
+            return Err("too many records".into());
+        }
+    }
+    if items.len() != manifest.item_count {
+        return Err("record count does not match manifest".into());
+    }
+    Database::validate_restore_items(&items).map_err(err)?;
+    let resource_bytes = manifest
+        .entries
+        .iter()
+        .filter(|e| e.name != "records.jsonl")
+        .map(|e| e.bytes)
+        .sum();
+    Ok(Validated {
+        scratch,
+        items,
+        preview: BackupPreview {
+            fingerprint,
+            item_count: manifest.item_count,
+            duplicate_count: duplicates,
+            resource_count: resources.len(),
+            resource_bytes,
+        },
+        resources,
+    })
+}
+
+pub fn preview(path: &Path, database: &Database) -> Result<BackupPreview, String> {
+    Ok(validate(path, database)?.preview)
+}
+
+pub fn restore(
+    path: &Path,
+    fingerprint: &str,
+    database: &Database,
+    paths: &StoragePaths,
+) -> Result<ImportSummary, String> {
+    let mut validated = validate(path, database)?;
+    if validated.preview.fingerprint != fingerprint {
+        return Err("backup changed since preview; preview it again".into());
+    }
+    struct Published {
+        paths: Vec<PathBuf>,
+        committed: bool,
+    }
+    impl Drop for Published {
+        fn drop(&mut self) {
+            if !self.committed {
+                for path in &self.paths {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
+    }
+    let mut published = Published {
+        paths: Vec::new(),
+        committed: false,
+    };
+    let prefix = uuid::Uuid::new_v4();
+    let mut local_paths = HashMap::new();
+    for (name, source) in &validated.resources {
+        let target = paths.files.join(format!(
+            "backup-{prefix}-{}",
+            name.strip_prefix("resources/").ok_or("invalid resource")?
+        ));
+        atomic_output(&target, |out| {
+            let mut input = File::open(source).map_err(err)?;
+            std::io::copy(&mut input, out).map_err(err)?;
+            Ok(())
+        })?;
+        published.paths.push(target.clone());
+        local_paths.insert(name.clone(), target.to_string_lossy().into_owned());
+    }
+    for item in &mut validated.items {
+        remap_item(item, &mut |name| {
+            local_paths
+                .get(name)
+                .cloned()
+                .ok_or_else(|| "missing restored resource".into())
+        })?;
+    }
+    let result = database
+        .restore_items_transactional(&validated.items)
+        .map_err(err)?;
+    // Flat managed paths participate in existing orphan cleanup. Any unused duplicate resources
+    // are eligible after its grace period; a failed DB transaction removes all newly published files.
+    published.committed = result.imported_count > 0;
+    drop(validated.scratch);
+    Ok(ImportSummary {
+        imported_count: result.imported_count,
+        skipped_count: result.skipped_count,
+        errors: result.errors,
+        pending_truncation: 0,
+        max_items: 0,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn item(id: &str, kind: ClipboardKind, path: Option<String>) -> ClipboardItem {
+        ClipboardItem {
+            id: id.into(),
+            kind,
+            title: format!("{id} 中文"),
+            text_content: (kind == ClipboardKind::Text).then(|| "original\r\ntext".into()),
+            html_content: Some("<b>original</b>".into()),
+            rtf_content: Some("{\\rtf1 original}".into()),
+            resource_path: path,
+            preview_path: Some("discarded-preview".into()),
+            content_hash: id.into(),
+            source_app: Some("Editor".into()),
+            icon_path: Some("discarded-icon".into()),
+            size_bytes: 8,
+            created_at_ms: 1000,
+            last_used_at_ms: Some(2000),
+            is_favorite: true,
+            metadata_json: Some(r#"{"tags":["manual"],"width":2}"#.into()),
+        }
+    }
+    fn rewrite(path: &Path, alter: impl Fn(&str, &mut Vec<u8>)) {
+        let mut original = ZipArchive::new(File::open(path).unwrap()).unwrap();
+        let mut entries = Vec::new();
+        for i in 0..original.len() {
+            let mut entry = original.by_index(i).unwrap();
+            let name = entry.name().to_owned();
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).unwrap();
+            alter(&name, &mut bytes);
+            entries.push((name, bytes));
+        }
+        drop(original);
+        let mut zip = ZipWriter::new(File::create(path).unwrap());
+        for (name, bytes) in entries {
+            zip.start_file(name, SimpleFileOptions::default()).unwrap();
+            zip.write_all(&bytes).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    #[test]
+    fn portable_backup_restores_media_rich_text_tags_and_skips_duplicates() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let source = Database::open_in_memory().unwrap();
+        let binary = root.0.join("image.png");
+        fs::write(&binary, b"synthetic image bytes").unwrap();
+        let image = item(
+            "image",
+            ClipboardKind::Image,
+            Some(binary.to_string_lossy().into()),
+        );
+        let text = item("text", ClipboardKind::Text, None);
+        let mut files = item("files", ClipboardKind::File, image.resource_path.clone());
+        files.text_content = Some(serde_json::json!([binary]).to_string());
+        files.metadata_json = Some(serde_json::json!({"tags":["manual"], "files":[{"name":"photo.png", "storagePath":binary, "originalPath":"Z:/foreign/original.png"}]}).to_string());
+        for entry in [&image, &text, &files] {
+            source.save_item(entry).unwrap();
+        }
+        let archive = root.0.join("bundle.clipbackup");
+        create(&source, &archive).unwrap();
+        fs::remove_file(binary).unwrap(); // Restoring cannot depend on the old machine.
+        let target = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!((checked.item_count, checked.resource_count), (3, 1));
+        assert_eq!(target.item_count().unwrap(), 0);
+        assert_eq!(
+            restore(&archive, &checked.fingerprint, &target, &paths)
+                .unwrap()
+                .imported_count,
+            3
+        );
+        let restored = target.get_item("image").unwrap().unwrap();
+        let path = Path::new(restored.resource_path.as_ref().unwrap());
+        assert!(path.starts_with(&paths.files));
+        assert_eq!(fs::read(path).unwrap(), b"synthetic image bytes");
+        assert_eq!(restored.preview_path, None);
+        let restored = target.get_item("text").unwrap().unwrap();
+        assert_eq!(restored.text_content, text.text_content);
+        assert_eq!(restored.html_content, text.html_content);
+        assert_eq!(restored.rtf_content, text.rtf_content);
+        assert_eq!(restored.metadata_json, text.metadata_json);
+        let restored = target.get_item("files").unwrap().unwrap();
+        let metadata: serde_json::Value =
+            serde_json::from_str(restored.metadata_json.as_ref().unwrap()).unwrap();
+        assert_eq!(
+            metadata["files"][0]["storagePath"],
+            metadata["files"][0]["originalPath"]
+        );
+        let checked = preview(&archive, &target).unwrap();
+        assert_eq!(checked.duplicate_count, 3);
+        assert_eq!(
+            restore(&archive, &checked.fingerprint, &target, &paths)
+                .unwrap()
+                .skipped_count,
+            3
+        );
+    }
+    #[test]
+    fn corrupt_or_changed_bundles_and_traversal_are_rejected_without_writes() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let database = Database::open_in_memory().unwrap();
+        database
+            .save_item(&item("text", ClipboardKind::Text, None))
+            .unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        create(&database, &archive).unwrap();
+        let checked = preview(&archive, &database).unwrap();
+        let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        assert!(restore(&archive, "old fingerprint", &database, &paths)
+            .unwrap_err()
+            .contains("changed"));
+        rewrite(&archive, |name, bytes| {
+            if name == "records.jsonl" {
+                bytes[3] ^= 1;
+            }
+        });
+        assert!(restore(&archive, &checked.fingerprint, &database, &paths)
+            .unwrap_err()
+            .contains("checksum"));
+        let mut zip = ZipWriter::new(File::create(&archive).unwrap());
+        zip.start_file("../escape", SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"bad").unwrap();
+        zip.finish().unwrap();
+        assert!(preview(&archive, &database).unwrap_err().contains("unsafe"));
+        assert_eq!(database.item_count().unwrap(), 1);
+        assert!(!root.0.join("escape").exists());
+    }
+    #[test]
+    fn failed_restore_rolls_back_rows_and_published_files() {
+        let root = Scratch::at(&std::env::temp_dir()).unwrap();
+        let source = Database::open_in_memory().unwrap();
+        let binary = root.0.join("asset.png");
+        fs::write(&binary, b"asset").unwrap();
+        source
+            .save_item(&item(
+                "a",
+                ClipboardKind::Image,
+                Some(binary.to_string_lossy().into()),
+            ))
+            .unwrap();
+        source
+            .save_item(&item("b", ClipboardKind::Text, None))
+            .unwrap();
+        let archive = root.0.join("bundle.clipbackup");
+        create(&source, &archive).unwrap();
+        let target = Database::open_in_memory().unwrap();
+        let paths = StoragePaths::initialize(root.0.join("target")).unwrap();
+        let checked = preview(&archive, &target).unwrap();
+        target.with_connection(|c| { c.execute_batch("CREATE TRIGGER reject_a BEFORE INSERT ON clipboard_items WHEN NEW.id = 'a' BEGIN SELECT RAISE(ABORT, 'injected'); END;")?; Ok(()) }).unwrap();
+        assert!(restore(&archive, &checked.fingerprint, &target, &paths).is_err());
+        assert_eq!(target.item_count().unwrap(), 0);
+        assert!(!fs::read_dir(&paths.files).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("backup-")));
+    }
+}

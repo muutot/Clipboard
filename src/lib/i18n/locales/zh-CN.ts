@@ -1,6 +1,18 @@
 import type { LocaleDefinition } from "../types";
 
 const zhCN: LocaleDefinition = {
+  backup: {
+    title: "自包含资源备份",
+    description:
+      "包含全部有效记录、富文本、标签及图片和文件原始内容；不含设置、回收站与预览缓存。资源缺失时停止备份。恢复保留已有记录并跳过重复内容。",
+    create: "创建备份",
+    preview: "选择并校验备份",
+    restore: "恢复已校验备份",
+    working: "正在处理记录并校验资源…",
+    summary:
+      "共 {items} 条记录（{duplicates} 条已存在）、{resources} 个资源，{size}。全部校验通过。",
+    retention: "当前历史容量可能清理 {count} 条恢复的记录，请调整容量以保留它们。",
+  },
   autoTags: {
     source: "来源包含（可留空）",
     sampleSource: "样本来源应用",

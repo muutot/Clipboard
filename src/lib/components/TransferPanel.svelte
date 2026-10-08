@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import BackupPanel from "$lib/components/BackupPanel.svelte";
   import Checkbox from "$lib/components/Checkbox.svelte";
   import CustomSelect from "$lib/components/CustomSelect.svelte";
   import DatePicker from "$lib/components/DatePicker.svelte";
@@ -192,6 +193,7 @@
   }
 </script>
 
+<BackupPanel {onfeedback} {onadjustlimit} />
 <section class="setting-card" data-settings-search-id="storage.import-data">
   <div class="transfer-row">
     <div class="setting-heading">

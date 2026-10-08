@@ -1,6 +1,18 @@
 import type { LocaleDefinition } from "../types";
 
 const en: LocaleDefinition = {
+  backup: {
+    title: "Portable resource backup",
+    description:
+      "Includes all active records, rich text, tags and original image/file bytes. Excludes settings, recycle bin and derived previews. Missing resources stop the backup. Restore keeps existing records and skips duplicate content.",
+    create: "Create backup",
+    preview: "Select and validate backup",
+    restore: "Restore validated backup",
+    working: "Processing records and checking resources…",
+    summary:
+      "{items} records ({duplicates} already present), {resources} resources, {size}. All checksums passed.",
+    retention: "Your history limit may remove {count} restored records. Adjust it to keep them.",
+  },
   autoTags: {
     source: "Source contains (optional)",
     sampleSource: "Sample source app",
