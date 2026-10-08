@@ -37,9 +37,12 @@ pub fn set_general_settings(
     // Serialize mode transitions without holding the config lock while opening
     // a database or joining a worker. Searches inspect this same runtime state.
     let mut worker = lock_state(&search_worker, "search-sync lock is poisoned")?;
-    let settings = {
+    let (settings, previous_opacity_affects_text) = {
         let config = lock_state(&config, "configuration lock is poisoned")?;
-        resolve_general_settings(config.general_settings(), settings, patch)?
+        (
+            resolve_general_settings(config.general_settings(), settings, patch)?,
+            config.general_settings().window_opacity_affects_text,
+        )
     };
     if worker.as_ref().is_some_and(|worker| !worker.is_running()) {
         *worker = None;
@@ -88,17 +91,45 @@ pub fn set_general_settings(
     if let Err(error) = app.emit("general-settings-changed", &saved) {
         crate::log_error!("[settings] failed to emit general-settings-changed: {error}");
     }
-    apply_window_transparency_to_main(
-        &app,
-        crate::platform::ui::native_opacity_percentage(
-            saved.window_transparency,
-            saved.window_opacity_affects_text,
-        ),
-    );
+    if let Some(percent) = native_opacity_after_change(previous_opacity_affects_text, &saved) {
+        apply_window_transparency_to_main(&app, percent);
+    }
     apply_window_effect_to_main(&app, &saved.window_effect);
     // Keep side effects and broadcasts in the same order as persisted writes.
     drop(worker);
     Ok(saved)
+}
+
+fn native_opacity_after_change(previous_affects_text: bool, saved: &GeneralConfig) -> Option<u8> {
+    if saved.window_opacity_affects_text {
+        Some(saved.window_transparency)
+    } else if previous_affects_text {
+        // CSS now controls background opacity; undo the previous whole-window alpha.
+        Some(100)
+    } else {
+        // Avoid enabling Windows' layered alpha on windows that never needed it.
+        None
+    }
+}
+
+#[cfg(test)]
+mod opacity_tests {
+    use super::native_opacity_after_change;
+    use crate::config::GeneralConfig;
+
+    #[test]
+    fn disabling_text_opacity_restores_native_alpha_without_affecting_css_preference() {
+        let mut saved = GeneralConfig::default();
+        saved.window_transparency = 70;
+        assert_eq!(native_opacity_after_change(true, &saved), Some(100));
+        assert_eq!(saved.window_transparency, 70);
+        assert_eq!(native_opacity_after_change(false, &saved), None);
+        saved.window_opacity_affects_text = true;
+        assert_eq!(native_opacity_after_change(false, &saved), Some(70));
+        assert_eq!(native_opacity_after_change(true, &saved), Some(70));
+        saved.window_transparency = 90;
+        assert_eq!(native_opacity_after_change(true, &saved), Some(90));
+    }
 }
 
 fn resolve_general_settings(
