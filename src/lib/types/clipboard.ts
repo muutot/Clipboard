@@ -473,10 +473,11 @@ export interface ClipboardItemsChangedPayload {
   /** Ids that are gone for good: the receiver drops them from every view. */
   removedIds: string[];
   /**
-   * Ids whose `last_used_at_ms` was stamped: only the position changed, so the
-   * receiver promotes them instead of replacing the rows.
+   * Ids whose usage changed; timestamps are carried in usageUpdates.
    */
   usedIds: string[];
+  /** Persisted usage timestamps; optional for older event producers. */
+  usageUpdates?: { id: string; lastUsedAtMs: number }[];
 }
 
 export interface PersistedClipboardItem {

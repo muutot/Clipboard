@@ -54,6 +54,10 @@ export function applyItemsChangedEvent(
   options: ApplyItemsChangedOptions = {},
 ): ItemStore {
   let next = applyItemsChanged(store, payload.items ?? []);
+  next = applyItemPatches(
+    next,
+    new Map((payload.usageUpdates ?? []).map(({ id, lastUsedAtMs }) => [id, { lastUsedAtMs }])),
+  );
 
   const deleted = payload.deletedIds ?? [];
   if (deleted.length) {
@@ -79,12 +83,21 @@ export function applyItemsChangedEvent(
     // pushes to the front, and two copies in one payload would otherwise land in
     // reverse order.
     for (const id of [...(payload.usedIds ?? [])].reverse()) {
-      // Promotion is a history-view operation: a search result set stays in
-      // relevance order, and a row this window never loaded cannot be shown.
+      // Search order belongs to the backend's configured sort rules.
       const item = next.byId.get(id);
       if (item) next = promoteItem(next, item, "history");
     }
+    if (payload.usageUpdates?.length) next = sortRecentHistory(next);
   }
 
   return next;
+}
+
+/** Match SQLite's timestamp/id ordering, including ties and clock rollback. */
+export function sortRecentHistory(store: ItemStore): ItemStore {
+  const historyIds = [...store.historyIds].sort((a, b) => {
+    const delta = (store.byId.get(b)?.lastUsedAtMs ?? 0) - (store.byId.get(a)?.lastUsedAtMs ?? 0);
+    return delta || (a < b ? 1 : a > b ? -1 : 0);
+  });
+  return { ...store, historyIds };
 }

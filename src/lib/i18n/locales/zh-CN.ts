@@ -771,8 +771,9 @@ const zhCN: LocaleDefinition = {
     windowConfigUpdateFailed: "系统设置更新失败",
     alwaysOnTop: "窗口置顶",
     alwaysOnTopDescription: "窗口始终悬浮在其他应用上方",
-    pinCopiedToTop: "复制后置顶",
-    pinCopiedToTopDescription: "点击复制某个条目后将其移动到列表顶部",
+    pinCopiedToTop: "复制后立即置顶",
+    pinCopiedToTopDescription:
+      "成功复制后立即更新历史列表顺序；关闭后重载仍按最近使用排序，搜索始终遵守搜索排序规则",
     useRecycleBin: "回收站",
     useRecycleBinDescription: "删除条目时移入回收站而非直接删除",
     pasteCleaning: "粘贴时清洗",

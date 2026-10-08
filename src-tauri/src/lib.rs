@@ -77,7 +77,7 @@ use storage::{
     recover_database_if_needed, refresh_database_backup, Database, KindDeleteScope, OcrRepository,
     StoragePaths,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 pub(crate) const STORAGE_KIND_DELETE_SCOPE: KindDeleteScope = KindDeleteScope {
     include_favorites: false,
@@ -640,6 +640,9 @@ pub fn run() {
                     let on_changes_applied = Arc::new(move || {
                         if let Some(cache) = app_for_sync.try_state::<SearchResultCache>() {
                             cache.clear();
+                            if let Err(error) = app_for_sync.emit("search-index-changed", ()) {
+                                crate::log_warn!("[search] unable to announce index changes: {error}");
+                            }
                         }
                     });
                     match SearchSyncWorker::start(

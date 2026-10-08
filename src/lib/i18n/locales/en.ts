@@ -801,8 +801,9 @@ const en: LocaleDefinition = {
     windowConfigUpdateFailed: "Failed to update the system setting",
     alwaysOnTop: "Always on Top",
     alwaysOnTopDescription: "Window stays on top of other applications",
-    pinCopiedToTop: "Pin Copied to Top",
-    pinCopiedToTopDescription: "Move a copied item to the top of the list",
+    pinCopiedToTop: "Move Copied Items Immediately",
+    pinCopiedToTopDescription:
+      "Update history order immediately after a successful copy. Reloads still sort by recent use when disabled; search always follows its sort rules.",
     useRecycleBin: "Recycle Bin",
     useRecycleBinDescription: "Move deleted items to recycle bin instead of permanent deletion",
     pasteCleaning: "Clean on Paste",

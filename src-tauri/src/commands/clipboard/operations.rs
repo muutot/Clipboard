@@ -17,8 +17,8 @@ use crate::CaptureState;
 
 use super::types::{
     permanently_delete_storage_kind_for, ClipboardHistoryInvalidated, ClipboardItemsChanged,
-    HistoryFilterArgs, SearchPage, SearchResultCache, SearchSortDirection, SearchSortField,
-    SearchSortRule, StorageKindDeleteExpectation, StorageKindDeleteResult,
+    ClipboardUsageUpdate, HistoryFilterArgs, SearchPage, SearchResultCache, SearchSortDirection,
+    SearchSortField, SearchSortRule, StorageKindDeleteExpectation, StorageKindDeleteResult,
 };
 
 /// Announces a content change: the mutated rows are read back and attached, so
@@ -143,7 +143,7 @@ pub fn set_clipboard_item_last_used(
 ) -> Result<bool, String> {
     let updated = record_item_usage(&database, &search_cache, &id)?;
     if updated {
-        broadcast_item_usage(&app, std::iter::once(id.as_str()));
+        broadcast_item_usage(&app, &database, std::iter::once(id.as_str()));
     }
     Ok(updated)
 }
@@ -160,6 +160,7 @@ pub fn set_clipboard_item_last_used(
 /// reorder, announces its copies through here too.
 pub(crate) fn broadcast_item_usage<R: Runtime>(
     app: &AppHandle<R>,
+    database: &Database,
     ids: impl IntoIterator<Item = impl AsRef<str>>,
 ) {
     let ids: Vec<String> = ids.into_iter().map(|id| id.as_ref().to_owned()).collect();
@@ -167,6 +168,22 @@ pub(crate) fn broadcast_item_usage<R: Runtime>(
         return;
     }
     let payload = ClipboardItemsChanged {
+        usage_updates: match database.get_items_by_ids(&ids) {
+            Ok(items) => items
+                .into_iter()
+                .filter_map(|item| {
+                    item.last_used_at_ms
+                        .map(|last_used_at_ms| ClipboardUsageUpdate {
+                            id: item.id,
+                            last_used_at_ms,
+                        })
+                })
+                .collect(),
+            Err(error) => {
+                crate::log_warn!("[clipboard] unable to read back usage timestamps: {error}");
+                Vec::new()
+            }
+        },
         used_ids: ids,
         ..ClipboardItemsChanged::default()
     };

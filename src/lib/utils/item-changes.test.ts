@@ -50,6 +50,33 @@ function shared() {
 }
 
 describe("applyItemsChangedEvent", () => {
+  it("updates persisted usage in every view while keeping promotion optional", () => {
+    const payload = {
+      usedIds: ["b"],
+      usageUpdates: [{ id: "b", lastUsedAtMs: 50 }],
+    } as ClipboardItemsChangedPayload;
+    const next = applyItemsChangedEvent(shared(), payload, { promoteUsed: false });
+    expect(next.byId.get("b")?.lastUsedAtMs).toBe(50);
+    expect(next.historyIds).toEqual(["a", "b"]);
+  });
+
+  it("uses timestamp and id rather than event arrival order for history", () => {
+    const store = createItemStore([
+      item("a", { lastUsedAtMs: 100 }),
+      item("b", { lastUsedAtMs: 200 }),
+    ]);
+    const payload = {
+      usedIds: ["a"],
+      usageUpdates: [{ id: "a", lastUsedAtMs: 150 }],
+    } as ClipboardItemsChangedPayload;
+    const next = applyItemsChangedEvent(store, payload, { promoteUsed: true });
+    expect(next.historyIds).toEqual(["b", "a"]);
+    payload.usageUpdates![0].lastUsedAtMs = 200;
+    expect(applyItemsChangedEvent(store, payload, { promoteUsed: true }).historyIds).toEqual([
+      "b",
+      "a",
+    ]);
+  });
   it("replaces a record in every view that displays it", () => {
     // A favorite toggled in the float panel arrives here: one payload, every
     // view of the main window updates together.

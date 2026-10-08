@@ -46,8 +46,8 @@ main route's instance (separate JS realms). Two mechanisms keep them in step:
   on focus, `clipboard-item-added`, membership/content changes in
   `clipboard-items-changed`, and `clipboard-history-invalidated` (import/sync/
   cleanup). Each reload invalidates the previous request, so stale responses
-  cannot resurrect rows removed by a newer event. Usage-only events promote
-  loaded rows without reloading. Component tests in `routes/float/float-page.test.ts`
+  cannot resurrect rows removed by a newer event. Usage-only events patch persisted timestamps and optionally reorder
+  loaded history without reloading. Component tests in `routes/float/float-page.test.ts`
   cover deletion, favorite filtering, restoration, and full invalidation.
 
 Anything that adds a new item-level mutator must broadcast, or the other window
@@ -107,7 +107,7 @@ The main route debounces a first-page indexed search by 300 ms.
 
 - Queries shorter than two characters, empty queries, recycle-bin filtering, and recognized date queries do not use Tantivy.
 - `searchRequestId` discards stale first-page responses when the query/effect changes.
-- `searchEpoch` (bumped by the `clipboard-history-invalidated` listener) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
+- `searchEpoch` (bumped by history/item/capture/tag invalidations and background `search-index-changed` events) re-runs the search effect; cancelling the in-flight request alone would drop a search that landed during the event and never retry it.
 - The same effect reacts only to a narrow `searchSettingsKey` derived from `display.searchPageSize` and `searchSortRules` (the values themselves are read with `untrack`); either setting changing invalidates first-page and pagination request IDs before re-querying, while an unrelated settings change no longer restarts the search or resets pagination.
 - Successful first pages replace the `indexed` view (`replaceViewItems`) and set `indexedQuery`, `searchOffset`, `searchTotalCount`/`searchTruncated`, and `searchHasMore`. An empty first page still switches the view on, so the panel shows "no match" instead of falling back to the history list; `closeSearchResults` is what returns to "no search displayed".
 - `loadSearchPage()` uses `searchLoadRequestId`, the current offset, and `display.searchPageSize` for scroll pagination, and drops ids already in `indexedIds` before appending so OFFSET drift cannot produce a duplicate keyed-each key.
@@ -150,6 +150,8 @@ deletions, restores, bulk mutations, and destructive invalidations reset the
 request generation and reload page zero; promotion above an existing cursor cannot
 displace or replay older rows. `loadActiveHistoryPage` still drops already-loaded
 ids while appending as a second line of defense.
+
+Search results never receive direct copy/recapture promotions. Usage invalidates search only when a `lastUsedAt` rule is active; content/membership/index changes always invalidate. Both request generations are cancelled immediately before the debounced refresh. Desktop history movement comes from usage events carrying persisted timestamps (including id ties and clock rollback), while `pinCopiedToTop` only controls immediate history movement.
 
 ## Mutation invalidation
 

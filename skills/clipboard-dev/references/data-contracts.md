@@ -203,14 +203,7 @@ read-back records (`items`) and the three membership transitions as ids
 (`deletedIds`, `restoredIds`, `removedIds`) — broadcasting a soft delete as "an
 updated row" would show a deleted row as still active in the other window.
 
-A fifth list, `usedIds`, exists for the same reason: a `last_used_at_ms` stamp
-changes **no field and no membership**, only the position the row sorts at. It was
-the one mutation with no broadcast at all, so a copy made in the float panel or from
-the tray looked like a no-op until a reload re-sorted from the database — "it only
-sorts after a refresh". Receivers promote these ids to the top of the loaded
-history, gated on `general.pinCopiedToTop`, and never touch a search result set or
-a row they have not loaded. Because the database order changes regardless of the
-setting, promotion only decides _when_ the row moves, not whether.
+`usedIds` identifies reused rows; `usageUpdates` carries `{id, lastUsedAtMs}` read back from SQLite without record bodies. Receivers patch timestamps in every loaded view and, when `general.pinCopiedToTop` is enabled, order history by timestamp/id. Search results are refreshed according to their configured rules instead of directly promoted. Disabling immediate promotion does not suppress timestamp persistence or reload-time ordering. Background index commits emit `search-index-changed` after clearing the result cache, so a displayed query refreshes after indexing catches up.
 
 `utils/item-changes.ts::applyItemsChangedEvent` is the only consumer shape both
 windows use: content first, then the flag flips, then removals, then the promotion

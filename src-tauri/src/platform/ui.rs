@@ -474,7 +474,7 @@ fn tray_copy_item<R: Runtime>(app: &AppHandle<R>, item_id: &str) {
         }
         // Announced so both windows move the row up straight away, like every
         // other copy path; the tray has no view of its own to reorder.
-        broadcast_item_usage(app, std::iter::once(item_id));
+        broadcast_item_usage(app, &database, std::iter::once(item_id));
         Ok(())
     })();
     if let Err(error) = result {

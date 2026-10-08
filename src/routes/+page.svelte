@@ -90,7 +90,7 @@
     type AffectedItemSnapshot,
   } from "$lib/utils/item-store";
   import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
-  import { applyItemsChangedEvent } from "$lib/utils/item-changes";
+  import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/item-changes";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import {
     SEARCH_HISTORY_LIMIT,
@@ -687,6 +687,14 @@
   // it (and reset pagination) on every unrelated settings change, because the
   // store emits a fresh object each time. This key is a primitive that only
   // changes when those two settings do.
+  function invalidateSearchResults() {
+    searchRequestId += 1;
+    searchLoadRequestId += 1;
+    searchHasMore = false;
+    searchLoading = false;
+    searchEpoch += 1;
+  }
+
   const searchSettingsKey = $derived(
     `${$generalSettings.display.searchPageSize}\u0000${JSON.stringify($generalSettings.searchSortRules)}`,
   );
@@ -844,11 +852,8 @@
       // record write refreshes the spare cache and the open detail pane too,
       // which each held their own copy of it before.
       itemStore.current = promoteItem(itemStore.current, newItem, "history");
-      // During a search the visible list is the indexed view, so promote there
-      // as well or the copied row does not move there.
-      if (itemStore.current.indexedIds?.includes(newItem.id)) {
-        itemStore.current = promoteItem(itemStore.current, newItem, "indexed");
-      }
+      itemStore.current = sortRecentHistory(itemStore.current);
+      invalidateSearchResults();
       selectedId = newItem.id;
       // The timestamp bump shifts every row behind the OFFSET cursor just like
       // a fresh insertion does. Rebuild the cursor so a later scroll-load
@@ -871,7 +876,7 @@
         // Re-run the search effect instead of only cancelling the in-flight
         // request; otherwise a search that lands during this event is dropped
         // and never retried.
-        searchEpoch += 1;
+        invalidateSearchResults();
         searchPending = false;
         selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
         if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
@@ -879,6 +884,8 @@
         invalidateDeletedHistoryPagination();
       },
     );
+
+    const unlistenSearchIndex = listen("search-index-changed", () => invalidateSearchResults());
 
     const unlistenItemsChanged = listen<ClipboardItemsChangedPayload>(
       "clipboard-items-changed",
@@ -888,6 +895,17 @@
         // harmless: the payload is the stored row, so it equals the optimistic
         // state this window already shows.
         const payload = event.payload;
+        if (
+          payload.items?.length ||
+          payload.deletedIds?.length ||
+          payload.restoredIds?.length ||
+          payload.removedIds?.length ||
+          (payload.usedIds?.length &&
+            $generalSettings.searchSortRules.some((rule) => rule.field === "lastUsedAt"))
+        ) {
+          invalidateSearchResults();
+        }
+        if (payload.items?.length) invalidateActiveHistoryPagination();
         itemStore.current = applyItemsChangedEvent(itemStore.current, payload, {
           promoteUsed: $generalSettings.pinCopiedToTop,
         });
@@ -979,6 +997,7 @@
         tagFilter = null;
       }
       void refreshTagColors();
+      if (renamed || deleted) invalidateSearchResults();
     });
 
     let listenersDisposed = false;
@@ -1021,6 +1040,7 @@
       void unlisten.then((fn) => fn()).catch(() => {});
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
       void unlistenItemsChanged.then((fn) => fn()).catch(() => {});
+      void unlistenSearchIndex.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
       void unlistenOpenDetail.then((fn) => fn()).catch(() => {});
       void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
@@ -1600,19 +1620,11 @@
   }
 
   function moveToTop(id: string) {
+    // Desktop usage events carry persisted timestamps and own history movement.
+    // Browser preview has no backend events. Search order is never promoted.
+    if (isTauriRuntime()) return;
     const item = findLoadedItem(id);
-    if (!item) return;
-    itemStore.current = promoteItem(itemStore.current, item, "history");
-    // During a search the visible list is `indexedItems`, so the copied row
-    // must be promoted there too or "pin copied to top" silently no-ops.
-    if (itemStore.current.indexedIds?.includes(id)) {
-      itemStore.current = promoteItem(itemStore.current, item, "indexed");
-    }
-    // The spare search cache keeps its own order; promote there as well so
-    // a later promoteFromCache does not restore the pre-copy position.
-    if (itemStore.current.cacheIds.includes(id)) {
-      itemStore.current = promoteItem(itemStore.current, item, "cache");
-    }
+    if (item) itemStore.current = promoteItem(itemStore.current, item, "history");
   }
 
   async function copyItem(id: string) {

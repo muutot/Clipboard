@@ -277,11 +277,17 @@ pub(crate) struct ClipboardItemsChanged {
     pub(crate) restored_ids: Vec<String>,
     /// Ids that are gone for good: the receiver drops them everywhere.
     pub(crate) removed_ids: Vec<String>,
-    /// Ids whose `last_used_at_ms` was stamped. The row itself is unchanged —
-    /// only its position, because the history is ordered by the effective
-    /// timestamp. Receivers promote these to the top of the loaded list so the
-    /// live order matches what a reload would produce from the same database.
+    /// Ids whose usage changed; timestamps travel in usage_updates.
     pub(crate) used_ids: Vec<String>,
+    /// Persisted device-local timestamps, without copying record bodies.
+    pub(crate) usage_updates: Vec<ClipboardUsageUpdate>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ClipboardUsageUpdate {
+    pub(crate) id: String,
+    pub(crate) last_used_at_ms: i64,
 }
 
 pub(crate) fn permanently_delete_storage_kind_for(

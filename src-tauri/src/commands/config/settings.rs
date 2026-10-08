@@ -57,6 +57,9 @@ pub fn set_general_settings(
                 Duration::from_millis(500),
                 Arc::new(move || {
                     app_for_sync.state::<SearchResultCache>().clear();
+                    if let Err(error) = app_for_sync.emit("search-index-changed", ()) {
+                        crate::log_warn!("[search] unable to announce index changes: {error}");
+                    }
                 }),
             )
             .map_err(|error| error.to_string())
