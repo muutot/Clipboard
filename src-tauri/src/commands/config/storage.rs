@@ -274,6 +274,15 @@ pub fn set_storage_config(
 }
 
 pub fn copy_dir_contents(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|error| format!("create migration directory: {error}"))?;
+    let source = std::fs::canonicalize(from).map_err(|error| error.to_string())?;
+    let destination = std::fs::canonicalize(to).map_err(|error| error.to_string())?;
+    if source == destination {
+        return Ok(());
+    }
+    if source.starts_with(&destination) || destination.starts_with(&source) {
+        return Err("migration source and destination directories must not overlap".to_owned());
+    }
     let mut ancestors = std::collections::HashSet::new();
     copy_dir_contents_inner(from, to, &mut ancestors)
 }
@@ -315,10 +324,69 @@ fn copy_dir_contents_children(
         {
             copy_dir_contents_inner(&entry.path(), &dest, ancestors)?;
         } else {
-            std::fs::copy(entry.path(), &dest).map_err(|e| {
-                format!("copy {} to {}: {e}", entry.path().display(), dest.display())
-            })?;
+            copy_migration_file(&entry.path(), &dest)?;
         }
+    }
+    Ok(())
+}
+
+fn identical_file_contents(from: &Path, to: &Path) -> std::io::Result<bool> {
+    use std::io::{BufRead, BufReader};
+    let mut source = BufReader::new(std::fs::File::open(from)?);
+    let mut target = BufReader::new(std::fs::File::open(to)?);
+    if source.get_ref().metadata()?.len() != target.get_ref().metadata()?.len() {
+        return Ok(false);
+    }
+    loop {
+        let left = source.fill_buf()?;
+        let right = target.fill_buf()?;
+        let count = left.len().min(right.len());
+        if count == 0 {
+            return Ok(left.is_empty() && right.is_empty());
+        }
+        if left[..count] != right[..count] {
+            return Ok(false);
+        }
+        source.consume(count);
+        target.consume(count);
+    }
+}
+
+fn copy_migration_file(from: &Path, to: &Path) -> Result<(), String> {
+    let mut source = std::fs::File::open(from).map_err(|error| error.to_string())?;
+    let permissions = source
+        .metadata()
+        .map_err(|error| error.to_string())?
+        .permissions();
+    let mut target = match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(to)
+    {
+        Ok(target) => target,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return if identical_file_contents(from, to).map_err(|error| error.to_string())? {
+                Ok(())
+            } else {
+                Err(format!(
+                    "migration destination already contains different content: {}",
+                    to.display()
+                ))
+            };
+        }
+        Err(error) => return Err(format!("create {}: {error}", to.display())),
+    };
+    // Only a file created by this attempt may be removed on failure. Existing
+    // resources are either byte-identical retry results or explicit conflicts.
+    let copied = std::io::copy(&mut source, &mut target)
+        .and_then(|_| target.sync_all())
+        .and_then(|_| target.set_permissions(permissions));
+    drop(target);
+    if let Err(error) = copied {
+        return match std::fs::remove_file(to) {
+            Ok(()) => Err(format!("copy {} to {}: {error}", from.display(), to.display())),
+            Err(cleanup) => Err(format!("copy {} failed: {error}; incomplete destination {} could not be removed: {cleanup}", from.display(), to.display())),
+        };
     }
     Ok(())
 }
@@ -705,6 +773,42 @@ mod tests {
         restore_quarantined_database,
     };
     use std::time::SystemTime;
+
+    #[test]
+    fn migration_copy_preserves_existing_destination_files() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-copy-conflict-{}", uuid::Uuid::new_v4()));
+        let source = root.join("source");
+        let destination = root.join("destination");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::write(source.join("renamed.txt"), b"incoming content").unwrap();
+        std::fs::write(destination.join("renamed.txt"), b"existing content").unwrap();
+        let result = super::copy_dir_contents(&source, &destination);
+        let contents = std::fs::read(destination.join("renamed.txt")).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+        assert_eq!(contents, b"existing content");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn migration_copy_allows_identical_retries_and_rejects_nested_directories() {
+        let root =
+            std::env::temp_dir().join(format!("clipboard-copy-retry-{}", uuid::Uuid::new_v4()));
+        let source = root.join("source");
+        let target = root.join("target");
+        std::fs::create_dir_all(source.join("child")).unwrap();
+        let bytes = vec![37; 32_001];
+        std::fs::write(source.join("child/item.bin"), &bytes).unwrap();
+        super::copy_dir_contents(&source, &target).unwrap();
+        super::copy_dir_contents(&source, &target).unwrap();
+        assert_eq!(std::fs::read(target.join("child/item.bin")).unwrap(), bytes);
+        assert!(super::copy_dir_contents(&source, &source.join("nested")).is_err());
+        assert!(!source.join("nested/nested").exists());
+        assert!(super::copy_dir_contents(&source.join("child"), &source).is_err());
+        super::copy_dir_contents(&source, &source.join(".")).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn migration_blocks_independent_writers_through_save_and_until_restart() {
