@@ -4,7 +4,7 @@ Sources of truth:
 
 - Type shape: `src/lib/types/clipboard.ts::GeneralSettings`
 - Frontend defaults and normalization: `src/lib/services/settings.ts`
-- Typed backend fields/defaults: `src-tauri/src/config.rs::GeneralConfig`
+- Typed backend fields/defaults: `src-tauri/src/config/types.rs::GeneralConfig`
 - Persistence flow: `services/settings.ts` and Tauri `get_general_settings` / `set_general_settings`
 
 Do not update this table from UI labels alone. Verify the type, default, normalizer, Rust config, and actual consumer.
@@ -57,7 +57,7 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 
 | Field                         | Type/allowed values                         | Default      | Range when numeric                                                               |
 | ----------------------------- | ------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
-| `language`                    | `"zh-CN"` or `"en"`                         | `"zh-CN"`    | —                                                                                |
+| `language`                    | `"system"`, `"zh-CN"` or `"en"`             | `"system"`   | —                                                                                |
 | `windowTransparency`          | number                                      | `95`         | 60–100                                                                           |
 | `windowEffect`                | `"off"`, `"acrylic"`, or `"mica"`           | `"off"`      | —                                                                                |
 | `windowOpacityAffectsText`    | boolean                                     | `false`      | —                                                                                |
@@ -94,12 +94,12 @@ Every card kind shares one estimator contract: the `*Height` fields are content 
 
 ## Theme and sort structures
 
-| Field             | Default                                       | Contract                                                                                                |
-| ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `themeColors`     | copy of `DARK_THEME_COLORS`                   | 20 validated hex colors; optional in the interface for compatibility but always filled by normalization |
-| `customPresets`   | `[]`                                          | array of named `ThemePreset` objects with valid colors                                                  |
-| `activePresetId`  | `undefined`                                   | string only when a named preset is active                                                               |
-| `searchSortRules` | `[{ field: "createdAt", direction: "desc" }]` | fields: createdAt, lastUsedAt, title, size, kind, favorite; direction asc/desc                          |
+| Field             | Default                                        | Contract                                                                                                |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `themeColors`     | copy of `DARK_THEME_COLORS`                    | 20 validated hex colors; optional in the interface for compatibility but always filled by normalization |
+| `customPresets`   | `[]`                                           | array of named `ThemePreset` objects with valid colors                                                  |
+| `activePresetId`  | `undefined`                                    | string only when a named preset is active                                                               |
+| `searchSortRules` | `[{ field: "lastUsedAt", direction: "desc" }]` | fields: createdAt, lastUsedAt, title, size, kind, favorite; direction asc/desc                          |
 
 See `css-theming.md` for the full ThemeColors → CSS variable contract.
 
@@ -113,7 +113,7 @@ History/storage/OCR/privacy/export settings are separate Rust config groups and 
 
 `GeneralConfig` explicitly types a core subset of the frontend settings and flattens unknown keys. Fields such as theme colors/presets, detail/card display options, search sort/cache policy, and load tolerance can survive through the flattened map without being explicit Rust members.
 
-`search_index_sync_mode` is an explicit `GeneralConfig` member (`"lazy"`/`"background"`, default `"lazy"`) because the backend startup wiring and the search command read it for typed behavior. `ConfigStore::search_index_sync_mode()` returns `SearchIndexSyncMode`. Changing the mode only takes effect after restart: the `SearchSyncWorker` is created at startup when the mode is `background`.
+`search_index_sync_mode` is an explicit `GeneralConfig` member (`"lazy"`/`"background"`, default `"lazy"`) because the backend startup wiring and the search command read it for typed behavior. `ConfigStore::search_index_sync_mode()` returns `SearchIndexSyncMode`. Changing the mode applies live. Settings serialize worker transitions, prepare a worker before saving, and retain the old mode on spawn/save failure. Searches inspect the actual running worker and fall back to lazy draining when none is alive.
 
 `update_source` is an explicit `GeneralConfig` member (`"github"`/`"gitcode"`, default `"gitcode"`) with a typed `UpdateSource` in `config/types.rs`. `ConfigStore::update_source()` returns `UpdateSource`, and the About-panel `check_for_update` reads it per call, so switching the dropdown applies immediately without a restart.
 

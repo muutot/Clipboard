@@ -253,6 +253,12 @@ impl SearchSyncWorker {
         })
     }
 
+    pub fn is_running(&self) -> bool {
+        self.handle
+            .as_ref()
+            .is_some_and(|handle| !handle.is_finished())
+    }
+
     pub fn stop(&mut self) {
         self.stop_flag.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {

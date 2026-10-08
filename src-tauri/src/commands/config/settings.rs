@@ -1,11 +1,15 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 
-use crate::config::{ConfigStore, GeneralConfig};
+use crate::commands::clipboard::SearchResultCache;
+use crate::config::{ConfigStore, GeneralConfig, SearchIndexSyncMode};
 use crate::geometry::{clamp_window_position_to_work_areas, WindowPosition, WindowWorkArea};
 use crate::platform::{sync_autostart, WindowManager};
+use crate::search::{SearchIndex, SearchSyncWorker};
 use crate::state::CaptureState;
+use crate::storage::{Database, StoragePaths};
 
 use super::{ExportConfigInfo, GeneralSettingsInfo, HistoryConfigInfo, WindowConfigInfo};
 use crate::commands::lock::lock_state;
@@ -26,21 +30,52 @@ pub fn set_general_settings(
     app: tauri::AppHandle,
     config: tauri::State<'_, Mutex<ConfigStore>>,
     capture: tauri::State<'_, CaptureState>,
+    search_worker: tauri::State<'_, Mutex<Option<SearchSyncWorker>>>,
     settings: GeneralConfig,
 ) -> Result<GeneralConfig, String> {
-    let (saved, max_text_capture_bytes) = {
-        let mut config = lock_state(&config, "configuration lock is poisoned")?;
-        config
-            .set_general_settings(settings)
-            .map_err(|error| error.to_string())?;
-        (
-            config.general_settings().clone(),
-            // Use the clamped getter, not the raw stored field: the command
-            // accepts any u64, so an unclamped value would silently change the
-            // live capture cap while the config read-back reports the clamp.
-            config.max_text_capture_bytes(),
-        )
-    };
+    // Serialize mode transitions without holding the config lock while opening
+    // a database or joining a worker. Searches inspect this same runtime state.
+    let mut worker = lock_state(&search_worker, "search-sync lock is poisoned")?;
+    if worker.as_ref().is_some_and(|worker| !worker.is_running()) {
+        *worker = None;
+    }
+    let background = settings
+        .search_index_sync_mode
+        .parse::<SearchIndexSyncMode>()
+        == Ok(SearchIndexSyncMode::Background);
+    let (saved, max_text_capture_bytes) = transition_search_worker(
+        &mut worker,
+        background,
+        || {
+            let database = Database::open(&app.state::<StoragePaths>().database)
+                .map_err(|error| error.to_string())?;
+            let index = app.state::<Arc<SearchIndex>>().inner().clone();
+            let app_for_sync = app.clone();
+            SearchSyncWorker::start(
+                database,
+                index,
+                Duration::from_millis(500),
+                Arc::new(move || {
+                    app_for_sync.state::<SearchResultCache>().clear();
+                }),
+            )
+            .map_err(|error| error.to_string())
+        },
+        || {
+            let mut config = lock_state(&config, "configuration lock is poisoned")?;
+            config
+                .set_general_settings(settings)
+                .map_err(|error| error.to_string())?;
+            Ok((
+                config.general_settings().clone(),
+                // Use the clamped getter, not the raw stored field: the command
+                // accepts any u64, so an unclamped value would silently change the
+                // live capture cap while the config read-back reports the clamp.
+                config.max_text_capture_bytes(),
+            ))
+        },
+    )?;
+    drop(worker);
 
     capture.set_max_text_capture_bytes(max_text_capture_bytes);
     crate::logging::set_level(crate::logging::LogLevel::from_str_lossy(&saved.log_level));
@@ -52,6 +87,82 @@ pub fn set_general_settings(
     }
     apply_window_effect_to_main(&app, &saved.window_effect);
     Ok(saved)
+}
+
+/// Prepare a replacement before persistence, then publish it only on success.
+/// Dropping a worker stops and joins it, including a prepared worker on error.
+fn transition_search_worker<W, T>(
+    current: &mut Option<W>,
+    background: bool,
+    start: impl FnOnce() -> Result<W, String>,
+    persist: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let prepared = if background && current.is_none() {
+        Some(start()?)
+    } else {
+        None
+    };
+    let saved = persist()?;
+    if !background {
+        *current = None;
+    } else if prepared.is_some() {
+        *current = prepared;
+    }
+    Ok(saved)
+}
+
+#[cfg(test)]
+mod search_mode_tests {
+    use super::transition_search_worker;
+
+    #[test]
+    fn live_mode_switches_reuse_and_stop_the_worker() {
+        let mut worker = None;
+        transition_search_worker(&mut worker, true, || Ok(1), || Ok(())).unwrap();
+        assert_eq!(worker, Some(1));
+        transition_search_worker(&mut worker, true, || panic!("duplicate worker"), || Ok(()))
+            .unwrap();
+        transition_search_worker(
+            &mut worker,
+            false,
+            || panic!("lazy must not start"),
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(worker, None);
+        transition_search_worker(&mut worker, true, || Ok(2), || Ok(())).unwrap();
+        assert_eq!(worker, Some(2));
+    }
+
+    #[test]
+    fn failed_transitions_preserve_the_previous_mode() {
+        let mut worker = None::<u8>;
+        assert!(transition_search_worker(
+            &mut worker,
+            true,
+            || Err("spawn".into()),
+            || -> Result<(), String> { panic!("must not save") }
+        )
+        .is_err());
+        assert_eq!(worker, None);
+        assert!(transition_search_worker(
+            &mut worker,
+            true,
+            || Ok(1),
+            || Err::<(), _>("save".into())
+        )
+        .is_err());
+        assert_eq!(worker, None);
+        worker = Some(2);
+        assert!(transition_search_worker(
+            &mut worker,
+            false,
+            || panic!(),
+            || Err::<(), _>("save".into())
+        )
+        .is_err());
+        assert_eq!(worker, Some(2));
+    }
 }
 
 pub fn apply_window_transparency_to_main(app: &tauri::AppHandle, percent: u8) {

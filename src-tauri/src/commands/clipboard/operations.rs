@@ -4,11 +4,11 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::commands::lock::lock_state;
-use crate::config::{ConfigStore, SearchIndexSyncMode};
+use crate::config::ConfigStore;
 use crate::content;
 use crate::domain::{ClipboardItem, ClipboardKind, OcrResult};
 use crate::performance::PerformanceTracker;
-use crate::search::{SearchIndex, SearchSyncSummary, SearchSynchronizer};
+use crate::search::{SearchIndex, SearchSyncSummary, SearchSyncWorker, SearchSynchronizer};
 use crate::storage::{
     ClipboardRepository, Database, HistoryCursor, HistoryFilter, KindStorageStats, OcrRepository,
     SearchRepository, StoragePaths, TagInfo, TextItemUpdate,
@@ -302,6 +302,7 @@ pub fn search_clipboard_items(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     performance_tracker: tauri::State<'_, PerformanceTracker>,
     search_cache: tauri::State<'_, SearchResultCache>,
+    search_worker: tauri::State<'_, Mutex<Option<SearchSyncWorker>>>,
     query: String,
     limit: Option<usize>,
     offset: Option<usize>,
@@ -309,13 +310,13 @@ pub fn search_clipboard_items(
 ) -> Result<SearchPage, String> {
     let started = Instant::now();
 
-    let (max_results, sync_mode) = {
+    let max_results = {
         let config = lock_state(&config, "configuration lock is poisoned")?;
-        (
-            config.search_page_size_limit() as usize,
-            config.search_index_sync_mode(),
-        )
+        config.search_page_size_limit() as usize
     };
+    let background = lock_state(&search_worker, "search-sync lock is poisoned")?
+        .as_ref()
+        .is_some_and(SearchSyncWorker::is_running);
 
     let page_size = limit.unwrap_or(100).clamp(1, max_results);
     let page_offset = offset.unwrap_or(0);
@@ -338,7 +339,7 @@ pub fn search_clipboard_items(
     // When the user opts into background sync (`SearchIndexSyncMode::Background`)
     // the `SearchSyncWorker` drains the outbox off the hot path, so search
     // never blocks on indexing here.
-    if sync_mode == SearchIndexSyncMode::Lazy {
+    if !background {
         let pending = database.has_pending_outbox_events().unwrap_or(true);
         if pending {
             match SearchSynchronizer::default()

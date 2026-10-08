@@ -626,7 +626,7 @@ pub fn run() {
             // Optional background search-index synchronizer. In `Lazy` mode the
             // search command drains the outbox itself; in `Background` mode this
             // worker keeps the Tantivy index fresh off the hot path so queries
-            // never block on indexing. The mode only takes effect at startup.
+            // never block on indexing. Settings can replace this worker live.
             let search_sync_worker: Option<SearchSyncWorker> =
                 if config.search_index_sync_mode() == SearchIndexSyncMode::Background {
                     let sync_database = Database::open(&paths.database)?;

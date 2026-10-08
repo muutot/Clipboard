@@ -879,7 +879,7 @@ const zhCN: LocaleDefinition = {
     searchCacheEvictionFifo: "先进先出 (FIFO)",
     searchCacheEvictionLru: "最近最少使用 (LRU)",
     searchIndexSyncMode: "索引同步方式",
-    searchIndexSyncModeDescription: "搜索索引如何跟随剪贴板记录变化，修改后需要重启应用生效",
+    searchIndexSyncModeDescription: "搜索索引如何跟随剪贴板记录变化，修改后立即生效",
     searchIndexSyncModeLazy: "搜索时同步",
     searchIndexSyncModeBackground: "后台实时同步",
     loadTolerance: "加载容忍阈值",

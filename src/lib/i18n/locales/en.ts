@@ -919,7 +919,7 @@ const en: LocaleDefinition = {
     searchCacheEvictionLru: "Least Recently Used (LRU)",
     searchIndexSyncMode: "Index Sync Mode",
     searchIndexSyncModeDescription:
-      "How the search index follows clipboard record changes; changing this requires an app restart",
+      "How the search index follows clipboard record changes; changes take effect immediately",
     searchIndexSyncModeLazy: "Sync on Search",
     searchIndexSyncModeBackground: "Background Sync",
     loadTolerance: "Load Tolerance",
