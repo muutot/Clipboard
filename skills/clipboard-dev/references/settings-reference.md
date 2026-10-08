@@ -11,7 +11,7 @@ Do not update this table from UI labels alone. Verify the type, default, normali
 
 Desktop edits persist as nested field patches rather than whole snapshots, preserving unrelated changes from other windows. Arrays replace as a unit; optional clears use `null`. Failed saves retain newer pending edits, and `flush()` includes changes arriving during post-save refresh. See `services.md` and `data-contracts.md` for the queue and IPC contracts.
 
-Turning `windowOpacityAffectsText` off restores the main window's native alpha to 100%, while retaining `windowTransparency` for CSS background opacity. Saving another setting while text opacity was already off does not enable native layered alpha. Native window opacity remains Windows-only; the transition decision has unit coverage, but visual composition needs a real window check.
+Turning `windowOpacityAffectsText` off restores the main window's native alpha to 100%, while retaining `windowTransparency` for CSS background opacity. Saving another setting while text opacity was already off does not enable native layered alpha. The transition decision and opacity bounds have unit coverage; Windows/macOS/Linux use their respective native adapters, with macOS/Linux execution and visual composition still requiring platform verification.
 
 ## Contents
 

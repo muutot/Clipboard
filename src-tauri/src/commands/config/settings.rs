@@ -102,7 +102,10 @@ pub fn set_general_settings(
 
 fn native_opacity_after_change(previous_affects_text: bool, saved: &GeneralConfig) -> Option<u8> {
     if saved.window_opacity_affects_text {
-        Some(saved.window_transparency)
+        Some(crate::platform::ui::native_opacity_percentage(
+            saved.window_transparency,
+            true,
+        ))
     } else if previous_affects_text {
         // CSS now controls background opacity; undo the previous whole-window alpha.
         Some(100)
