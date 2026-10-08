@@ -16,7 +16,7 @@ This tracks implementation, not a version bump or release.
 - [ ] Cancel synchronization cooperatively through engine and transport.
 - [x] Stream file exports from one read transaction with atomic publication (Rust export/WAL/concurrent-write/failure regressions and full Rust suite, Clippy pass).
 - [x] Hash file bytes during bounded staging without a second full read (stream/digest/growth/write-failure tests, Rust suite except unavailable native clipboard test, Clippy and format pass).
-- [ ] Cache content-dependent card measurements and avoid needless whole-list work.
+- [x] Cache content-dependent card measurements and reuse unchanged geometry arrays (352 frontend tests, check/build/format pass; no CSS changes; synthetic timings tracked below).
 - [ ] Measure search input-to-paint latency and validate performance candidates with synthetic data.
 
 ## Verification

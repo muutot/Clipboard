@@ -51,7 +51,8 @@
     buildPositions,
     type VirtualScrollConfig,
   } from "$lib/utils/virtual-scroll";
-  import { estimateCardHeight } from "$lib/utils/card-height";
+  import type { CardEstimateInputs } from "$lib/utils/card-height";
+  import { createCardMeasurementCache, createHeightSequence } from "$lib/utils/card-measurements";
   import { parseDateQuery } from "$lib/utils/date-query";
   import { buildHistoryFilterArgs, filterHistoryItems } from "$lib/utils/history-filter";
   import {
@@ -581,25 +582,29 @@
   const detailDisplayMode = $derived($generalSettings.detailDisplayMode);
   const doubleClickPaste = $derived($generalSettings.doubleClickPaste);
 
+  const cardMeasurements = createCardMeasurementCache();
+  const stableHeights = createHeightSequence();
+  let fontEpoch = $state(0);
+  const cardEstimateInputs = $derived<CardEstimateInputs>({
+    imageHeight: cardImageHeight,
+    textHeight: cardTextHeight,
+    tallTextHeight: cardTallTextHeight,
+    cardGap,
+    cardPaddingTop,
+    cardPaddingBottom,
+    showSecondaryText,
+    maxTextLines,
+    previewFontSize: $generalSettings.fontSizes.cardPreview,
+    contentWidth: effectiveContainerWidth,
+  });
   function estimatedCardHeight(item: ClipboardItem): number {
-    return estimateCardHeight(
+    void fontEpoch;
+    return cardMeasurements.estimate(
       item,
-      {
-        imageHeight: cardImageHeight,
-        textHeight: cardTextHeight,
-        tallTextHeight: cardTallTextHeight,
-        cardGap,
-        cardPaddingTop,
-        cardPaddingBottom,
-        showSecondaryText,
-        maxTextLines,
-        previewFontSize: $generalSettings.fontSizes.cardPreview,
-        contentWidth: effectiveContainerWidth,
-      },
+      cardEstimateInputs,
       detailDisplayMode === "split" && detailItem?.id === item.id,
     );
   }
-
   function cardHeightFor(item: ClipboardItem): number {
     return Math.max(0, estimatedCardHeight(item) - cardGap);
   }
@@ -625,26 +630,11 @@
   const cardLayoutSignaturePrefixValue = $derived(cardLayoutSignaturePrefix());
 
   function cardLayoutSignature(item: ClipboardItem): string {
-    const text = item.textContent || item.title;
-    const logicalLineCount = text.replace(/\r\n?/g, "\n").split("\n").length;
-    // Only the selected card's layout differs in split mode, so the detail
-    // selection participates in THIS card's signature instead of the global
-    // prefix — opening/closing the detail panel must not invalidate every
-    // measured height and cause a list-wide layout jitter.
-    const detailSelected =
-      detailDisplayMode === "split" && detailItem?.id === item.id ? "detail" : "";
-    // Tags, the rendered file names, and resource materialization all change
-    // the card's height, so they participate in the signature; otherwise a
-    // stale measurement is reused and the virtual list misplaces rows until
-    // the ResizeObserver corrects it.
-    const tagsKey = (item.tags ?? []).join("");
-    const fileNamesKey = (item.fileMeta ?? []).map((file) => file.name).join("");
-    const materialized = item.resourcePath ? "1" : "0";
-    return `${cardLayoutSignaturePrefixValue}:${editingId === item.id}:${item.id}:${item.kind}:${item.customTitle}:${text.length}:${logicalLineCount}:${item.title.length}:${item.preview.length}:${detailSelected}:${tagsKey}:${fileNamesKey}:${materialized}`;
+    const selected = detailDisplayMode === "split" && detailItem?.id === item.id;
+    return `${cardLayoutSignaturePrefixValue}:${fontEpoch}:${cardMeasurements.token(item)}:${editingId === item.id}:${selected}`;
   }
-
   function recordCardHeight(id: string, height: number) {
-    const item = filteredItems.find((candidate) => candidate.id === id);
+    const item = filteredItems[filteredItemIndexById.get(id) ?? -1];
     if (!item || !Number.isFinite(height) || height <= 0) return;
     const signature = cardLayoutSignature(item);
     const previous = measuredCardHeights[id];
@@ -677,7 +667,7 @@
     if (measured && measured.signature === cardLayoutSignature(item)) return measured.height;
     if (editingId === item.id) {
       return editHeight(
-        (item.textContent || "").split("\n").length,
+        cardMeasurements.editLines(item),
         !!item.customTitle,
         cardGap,
         cardPaddingTop,
@@ -687,7 +677,7 @@
     return estimatedCardHeight(item);
   }
 
-  const virtualHeights = $derived(filteredItems.map(virtualHeightFor));
+  const virtualHeights = $derived(stableHeights(filteredItems.map(virtualHeightFor)));
 
   const virtualPositions = $derived(
     buildPositions(virtualHeights, VIRTUAL_SCROLL_CONFIG.itemHeight),
@@ -747,6 +737,11 @@
   });
 
   onMount(() => {
+    const invalidateFonts = () => {
+      cardMeasurements.clear();
+      fontEpoch += 1;
+    };
+    document.fonts?.addEventListener("loadingdone", invalidateFonts);
     searchHistory = loadSearchHistory();
 
     const clock = window.setInterval(() => {
@@ -929,6 +924,7 @@
     });
 
     return () => {
+      document.fonts?.removeEventListener("loadingdone", invalidateFonts);
       windowLifecycle.dispose();
       window.clearInterval(clock);
       void unlisten.then((fn) => fn()).catch(() => {});
