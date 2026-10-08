@@ -19,7 +19,7 @@
     "test:watch": "vitest",
     "test:rust": "cargo test -j 1 --manifest-path src-tauri/Cargo.toml --workspace",
     "lint:rust": "cargo clippy -j 1 --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings",
-    "verify": "npm run format:check && npm run check && npm run build && npm run test:rust && npm run lint:rust",
+    "verify": "npm run format:check && npm run test && npm run check && npm run build && npm run test:rust && npm run lint:rust",
     "ci:local": "powershell -ExecutionPolicy Bypass -File scripts/local-ci.ps1",
     "tauri": "tauri"
   },

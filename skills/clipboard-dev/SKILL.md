@@ -70,6 +70,7 @@ Also read the focused project document when relevant: `docs/PITFALLS.md`, `docs/
 
 ```powershell
 npm run check
+npm run test
 npm run build
 npm run test:rust
 npm run lint:rust
@@ -77,7 +78,8 @@ npm run format:check
 npm run verify
 ```
 
-The Rust format, test, and Clippy scripts cover every Cargo workspace member, including the
+The local `verify` and `ci:local` gates include the frontend Vitest suite. The
+Rust format, test, and Clippy scripts cover every Cargo workspace member, including the
 Tauri-independent sync crate. Run the narrowest relevant checks during implementation. Run
 `npm run verify` at integration milestones or before a commit whose scope crosses frontend and
 backend. If an environment prevents a required runtime, visual, platform, packaging, or performance

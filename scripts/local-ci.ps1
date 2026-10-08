@@ -44,6 +44,7 @@ Write-Host "========================================" -ForegroundColor Magenta
 if (-not $SkipFrontend) {
     Step "Frontend: npm ci" { & "npm.cmd" ci }
     Step "Frontend: format:check" { & "npm.cmd" run format:check }
+    Step "Frontend: test (Vitest)" { & "npm.cmd" run test }
     Step "Frontend: check (svelte-check)" { & "npm.cmd" run check }
     Step "Frontend: build (vite)" { & "npm.cmd" run build }
 }
