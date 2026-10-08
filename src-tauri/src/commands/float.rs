@@ -74,10 +74,8 @@ pub fn open_float_panel<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(
             .decorations(false)
             .visible(false)
             .always_on_top(true);
-    // `WebviewWindowBuilder::transparent` is unavailable on macOS without the
-    // `macos-private-api` feature, which we deliberately do not enable. The
-    // float page paints its own themed background, so the panel simply stays
-    // opaque there.
+    // The float page paints its own themed background, so this panel remains
+    // opaque on macOS even though main-window effects enable macos-private-api.
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
     crate::log_debug!("[float] building window");

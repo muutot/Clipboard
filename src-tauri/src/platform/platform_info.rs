@@ -263,12 +263,8 @@ impl ForegroundApp {
 mod tests {
     use super::{capabilities_for, Platform};
 
-    /// Regression guard: a per-platform literal
-    /// claimed a capability the target does not have. macOS reported
-    /// `quick_paste: true` while compiling `windows_hotkey_stub.rs`, whose
-    /// `restore_window_and_paste` returns Err. Asserting every row here — not
-    /// just the running one — is what makes the macOS and Linux values
-    /// checkable from a Windows host.
+    /// Only the running platform may advertise its wired backend. Portal
+    /// availability is separately determined after session authorization.
     #[test]
     fn no_platform_claims_an_unimplemented_shortcut_backend() {
         let running = Platform::detect();
@@ -286,12 +282,25 @@ mod tests {
 
             assert_eq!(
                 capabilities.global_shortcut, expected,
-                "{platform}: global_shortcut must track the compiled RegisterHotKey backend"
+                "{platform}: global_shortcut must track the running shortcut backend"
             );
             assert_eq!(
                 capabilities.quick_paste,
-                !matches!(running, Platform::LinuxWayland | Platform::Unknown)
-                    && platform == running,
+                platform == running
+                    && match running {
+                        Platform::Windows | Platform::MacOS | Platform::LinuxX11 => true,
+                        Platform::LinuxWayland => {
+                            #[cfg(target_os = "linux")]
+                            {
+                                crate::platform::wayland_paste::available()
+                            }
+                            #[cfg(not(target_os = "linux"))]
+                            {
+                                false
+                            }
+                        }
+                        Platform::Unknown => false,
+                    },
                 "{platform}: quick_paste must track the compiled restore_window_and_paste"
             );
         }

@@ -382,14 +382,12 @@ fn classify_open_process_failure(error_code: u32) -> OwnerLiveness {
 
 #[cfg(not(target_os = "windows"))]
 fn is_process_running(pid: u32) -> bool {
-    unsafe {
-        extern "C" {
-            fn kill(pid: i32, sig: i32) -> i32;
-        }
-        // Signal 0 probes for existence and permission alike, so `EPERM` already
-        // counts as running here.
-        kill(pid as i32, 0) == 0
-    }
+    let Ok(pid) = i32::try_from(pid) else {
+        return true;
+    };
+    let result = unsafe { libc::kill(pid, 0) };
+    // EPERM and inconclusive failures still mean a potentially live owner.
+    result == 0 || io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
 }
 
 #[cfg(test)]
@@ -503,14 +501,15 @@ mod tests {
         // PID 0 never parses as a live owner; write a raw zero file so
         // `read_instance_lock_pid` returns None and the stale lock is removed.
         fs::write(&lock_path, b"0").unwrap();
-        let _guard = SingleInstanceGuard::acquire(&directory)
+        let guard = SingleInstanceGuard::acquire(&directory)
             .expect("a stale lock with no owner pid must be taken over");
         assert_eq!(
             read_instance_lock_pid(&lock_path).unwrap(),
             Some(std::process::id())
         );
 
-        fs::remove_file(&lock_path).unwrap();
+        drop(guard);
+        assert!(!lock_path.exists());
         fs::remove_dir(&directory).unwrap();
     }
 

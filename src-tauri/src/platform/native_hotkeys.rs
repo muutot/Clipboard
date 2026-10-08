@@ -2,6 +2,17 @@
 use crate::keyboard::{Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
 use global_hotkey::hotkey::HotKey;
 
+pub fn report_registration_failure(app: &tauri::AppHandle, action: &str, error: &str) {
+    use tauri::Emitter;
+    crate::log_warn!("[hotkey] {action}: {error}");
+    if let Err(error) = app.emit(
+        "hotkey-registration-failed",
+        serde_json::json!({"action": action, "error": error}),
+    ) {
+        crate::log_warn!("[hotkey] failed to report registration failure: {error}");
+    }
+}
+
 pub fn native_chord(modifiers: u32, key: u32) -> Result<HotKey, String> {
     let key = match key {
         0x30..=0x39 => format!("Digit{}", char::from_u32(key).unwrap()),
@@ -104,7 +115,6 @@ mod runtime {
         thread,
         time::{Duration, Instant},
     };
-    use tauri::Emitter;
 
     struct MainState {
         generation: Arc<AtomicBool>,
@@ -131,6 +141,7 @@ mod runtime {
                 // Manager construction, registration, and destruction all stay
                 // on the UI thread, as required by the Carbon event handler.
                 state.borrow_mut().take();
+                while GlobalHotKeyEvent::receiver().try_recv().is_ok() {}
                 let manager = match GlobalHotKeyManager::new() {
                     Ok(manager) => manager,
                     Err(error) => {
@@ -153,11 +164,7 @@ mod runtime {
                         let action = crate::keyboard::global_action_ids()
                             .nth(index)
                             .unwrap_or("unknown");
-                        crate::log_warn!("[hotkey] {action}: {error}");
-                        let _ = app_for_main.emit(
-                            "hotkey-registration-failed",
-                            serde_json::json!({"action": action, "error": error}),
-                        );
+                        report_registration_failure(&app_for_main, action, &error);
                     }
                 }
                 *state.borrow_mut() = Some(MainState {
@@ -176,7 +183,11 @@ mod runtime {
                 crate::platform::modifier_input::ModifierInput::open()
             };
             if !doubles.is_empty() && input.is_none() {
-                let _ = app.emit("hotkey-registration-failed", serde_json::json!({"action":"toggleWindow", "error":"Modifier monitoring unavailable; macOS requires Input Monitoring permission"}));
+                report_registration_failure(
+                    &app,
+                    "toggleWindow",
+                    "Modifier monitoring unavailable; macOS requires Input Monitoring permission",
+                );
             }
             let mut taps = TapTracker::new(doubles);
             let started = Instant::now();
@@ -193,15 +204,24 @@ mod runtime {
                         }
                     }
                 }
-                if let Some(input) = input.as_mut() {
-                    if taps.sample(&input.pressed(), started.elapsed().as_millis() as u64) {
-                        let _ = tx.send(HotkeyAction::ToggleMain);
+                if let Some(device) = input.as_mut() {
+                    if let Some(pressed) = device.pressed() {
+                        if taps.sample(&pressed, started.elapsed().as_millis() as u64) {
+                            let _ = tx.send(HotkeyAction::ToggleMain);
+                        }
+                    } else {
+                        report_registration_failure(
+                            &app,
+                            "toggleWindow",
+                            "Modifier input disconnected; double-tap monitoring stopped",
+                        );
+                        input = None;
                     }
                 }
                 thread::sleep(Duration::from_millis(10));
             }
             // Never wait for the main thread while HotkeyManager::stop joins us.
-            let _ = app.run_on_main_thread(move || {
+            if let Err(error) = app.run_on_main_thread(move || {
                 NATIVE.with(|state| {
                     if state
                         .borrow()
@@ -213,7 +233,9 @@ mod runtime {
                         }
                     }
                 })
-            });
+            }) {
+                crate::log_warn!("[hotkey] failed to schedule native cleanup: {error}");
+            }
         })
     }
 }

@@ -4,6 +4,7 @@ use crate::{
     keyboard::Modifier,
     platform::{
         hotkey_common::HotkeyRegistration,
+        native_hotkeys::report_registration_failure,
         windows_hotkey::{action_for_hotkey_id, HotkeyAction},
     },
 };
@@ -21,7 +22,6 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::Emitter;
 
 pub static READY: AtomicBool = AtomicBool::new(false);
 const SERVICE: &str = "org.freedesktop.portal.Desktop";
@@ -92,7 +92,11 @@ pub fn start(
     thread::spawn(move || {
         READY.store(false, Ordering::SeqCst);
         if !doubles.is_empty() {
-            let _ = app.emit("hotkey-registration-failed", serde_json::json!({"action":"toggleWindow", "error":"Wayland does not expose bare modifier double taps; configure a key combination"}));
+            report_registration_failure(
+                &app,
+                "toggleWindow",
+                "Wayland does not expose bare modifier double taps; configure a key combination",
+            );
         }
         if registrations.is_empty() {
             return;
@@ -100,11 +104,7 @@ pub fn start(
         let result = run(registrations, tx, &stop);
         if let Err(error) = result {
             if !stop.load(Ordering::SeqCst) {
-                crate::log_warn!("[hotkey] Wayland portal: {error}");
-                let _ = app.emit(
-                    "hotkey-registration-failed",
-                    serde_json::json!({"action":"toggleWindow", "error":error}),
-                );
+                report_registration_failure(&app, "toggleWindow", &error);
             }
         }
     })
@@ -153,7 +153,7 @@ fn run(
         MatchRule::new_signal("org.freedesktop.portal.Session", "Closed")
             .with_sender(SERVICE)
             .with_path(session.path.clone()),
-        move |(): (), _, _| {
+        move |(_details,): (PropMap,), _, _| {
             let _ = closed_tx.send(());
             true
         },

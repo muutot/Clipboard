@@ -36,8 +36,8 @@ Clipboard Desktop 是一款 **高性能、跨平台、本地优先**的剪贴板
 Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 ```
 
-> 全局热键与「粘贴到上一个窗口」目前仅在 **Windows** 可用；macOS 与 Linux 尚无系统级注册路径，快捷键只在主窗口获得焦点时生效（详见
-> [多平台支持状态](#多平台支持状态)）。
+> 全局热键与「粘贴到上一个窗口」已有 macOS/X11 原生后端，仍待对应平台验收；Wayland 热键依赖 portal 授权，快速粘贴限 Sway/Hyprland + wtype。权限和桌面限制详见
+> [多平台支持状态](#多平台支持状态)。
 
 ---
 
@@ -128,7 +128,7 @@ Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 - **CLI 命令行**：`clipboard list / search / copy / paste / delete / export / stats`
 - **本地 API**：仅限环回地址的 HTTP 接口，Bearer token 鉴权
 - **导入导出**：JSON / CSV / 纯文本，支持 **PPaste 备份导入**
-- **快捷键系统**：应用内快捷键（跨平台）+ 全局热键与双击修饰键（Shift+Shift，**仅 Windows**）
+- **快捷键系统**：应用内快捷键（跨平台）+ 全局热键；双击修饰键支持 Windows，macOS/X11 采样后端待验收，Wayland 不支持
 
 </td>
 </tr>

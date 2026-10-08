@@ -141,6 +141,9 @@ Window-only (main window focused):
   `global-hotkey` managers on the main thread and a stoppable event worker;
   `modifier_input.rs` samples keys every 10 ms for bare modifier double taps.
   Samples shorter than that can be missed; macOS requires Input Monitoring.
+  X11 sampling uses x11rb and disables monitoring with a logged/UI failure on
+  disconnect. `report_registration_failure` logs both registration errors and
+  failures to emit their UI notification.
   `wayland_hotkeys.rs` owns a GlobalShortcuts portal session, closes outstanding
   requests on stop and the session on drop; no bare modifier tap support.
 - `platform_info.rs::capabilities_for` reports native chord backends only for
@@ -154,6 +157,10 @@ Window-only (main window focused):
 - Both native registration/destruction and UI dispatch stay on the main thread.
   Workers must never wait for UI work while stop joins them. Generation checks
   prevent an old native cleanup from unregistering a replacement manager.
+  Float-window creation is the exception: the UI callback schedules a
+  generation-checked one-shot blocking task on Tauri's runtime, since its builder
+  waits for the event loop. Never build it inside the UI callback or the joined
+  dispatch worker.
 - Frontend and backend registries must stay in parity: `global_action_ids()`
   order == `GLOBAL_ACTION_IDS` order (id ranges derive from position).
   `keyboard-registry.test.ts` fails the build if defaults and registry drift.

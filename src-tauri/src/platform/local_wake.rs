@@ -126,6 +126,8 @@ impl LocalWake {
 }
 
 fn read_token(stream: &mut TcpStream, bytes: &mut [u8; 32]) -> io::Result<()> {
+    // Accepted sockets can inherit O_NONBLOCK on BSD/macOS.
+    stream.set_nonblocking(false)?;
     let deadline = Instant::now() + Duration::from_millis(100);
     let mut offset = 0;
     while offset < bytes.len() {

@@ -292,7 +292,25 @@ impl HotkeyManager {
                         }
                         HotkeyAction::ToggleFloat => {
                             if let Some(app) = app.as_ref() {
-                                let _ = crate::commands::float::toggle_float_panel(app.clone());
+                                let app = app.clone();
+                                // First-use window creation waits for the event loop.
+                                // Keep that one-shot task off both the UI thread and
+                                // the dispatch thread that stop() joins on the UI.
+                                let _task = tauri::async_runtime::spawn_blocking(move || {
+                                    if generation
+                                        .as_ref()
+                                        .is_some_and(|stop| stop.load(Ordering::SeqCst))
+                                    {
+                                        return;
+                                    }
+                                    if let Err(error) =
+                                        crate::commands::float::toggle_float_panel(app)
+                                    {
+                                        crate::log_error!(
+                                            "[hotkey] failed to toggle the float panel: {error}"
+                                        );
+                                    }
+                                });
                             }
                         }
                         HotkeyAction::Forward(index) => {

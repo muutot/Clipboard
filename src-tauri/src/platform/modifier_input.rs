@@ -14,77 +14,81 @@ impl ModifierInput {
         }
         unsafe { CGPreflightListenEventAccess().then_some(Self) }
     }
-    pub fn pressed(&mut self) -> Vec<Option<Modifier>> {
+    pub fn pressed(&mut self) -> Option<Vec<Option<Modifier>>> {
         extern "C" {
             fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
         }
-        (0..128)
-            .filter(|key| unsafe { CGEventSourceKeyState(1, *key) })
-            .map(|key| match key {
-                59 | 62 => Some(Modifier::Control),
-                56 | 60 => Some(Modifier::Shift),
-                58 | 61 => Some(Modifier::Alt),
-                54 | 55 => Some(Modifier::Meta),
-                _ => None,
-            })
-            .collect()
+        Some(
+            (0..128)
+                .filter(|key| unsafe { CGEventSourceKeyState(1, *key) })
+                .map(|key| match key {
+                    59 | 62 => Some(Modifier::Control),
+                    56 | 60 => Some(Modifier::Shift),
+                    58 | 61 => Some(Modifier::Alt),
+                    54 | 55 => Some(Modifier::Meta),
+                    _ => None,
+                })
+                .collect(),
+        )
     }
 }
 
-#[cfg(target_os = "linux")]
-pub struct ModifierInput {
-    display: *mut super::linux_x11::x11_ffi::Display,
-    modifiers: Vec<(u32, Modifier)>,
+#[cfg(any(test, target_os = "linux"))]
+pub mod x11_input {
+    use super::Modifier;
+    use x11rb::{
+        connection::Connection, protocol::xproto::ConnectionExt, rust_connection::RustConnection,
+    };
+    pub struct ModifierInput {
+        conn: RustConnection,
+        modifiers: Vec<(u8, Modifier)>,
+    }
+    impl ModifierInput {
+        pub fn open() -> Option<Self> {
+            let (conn, _) = x11rb::connect(None).ok()?;
+            let first = conn.setup().min_keycode;
+            let mapping = conn
+                .get_keyboard_mapping(first, conn.setup().max_keycode - first + 1)
+                .ok()?
+                .reply()
+                .ok()?;
+            let stride = mapping.keysyms_per_keycode as usize;
+            if stride == 0 {
+                return None;
+            }
+            let mut modifiers = Vec::new();
+            for (index, keys) in mapping.keysyms.chunks(stride).enumerate() {
+                for key in keys {
+                    let modifier = match key {
+                        0xffe1 | 0xffe2 => Modifier::Shift,
+                        0xffe3 | 0xffe4 => Modifier::Control,
+                        0xffe9 | 0xffea => Modifier::Alt,
+                        0xffeb | 0xffec => Modifier::Meta,
+                        _ => continue,
+                    };
+                    modifiers.push((first + index as u8, modifier));
+                    break;
+                }
+            }
+            Some(Self { conn, modifiers })
+        }
+        pub fn pressed(&mut self) -> Option<Vec<Option<Modifier>>> {
+            let keys = self.conn.query_keymap().ok()?.reply().ok()?.keys;
+            Some(
+                (0u16..256)
+                    .filter(|key| keys[*key as usize / 8] & (1 << (*key % 8)) != 0)
+                    .map(|key| {
+                        self.modifiers
+                            .iter()
+                            .find_map(|(code, modifier)| (*code as u16 == key).then_some(*modifier))
+                    })
+                    .collect(),
+            )
+        }
+    }
 }
 #[cfg(target_os = "linux")]
-impl ModifierInput {
-    pub fn open() -> Option<Self> {
-        use super::linux_x11::x11_ffi::*;
-        let display = unsafe { XOpenDisplay(std::ptr::null()) };
-        if display.is_null() {
-            return None;
-        }
-        let modifiers = [
-            (0xffe1, Modifier::Shift),
-            (0xffe2, Modifier::Shift),
-            (0xffe3, Modifier::Control),
-            (0xffe4, Modifier::Control),
-            (0xffe9, Modifier::Alt),
-            (0xffea, Modifier::Alt),
-            (0xffeb, Modifier::Meta),
-            (0xffec, Modifier::Meta),
-        ]
-        .into_iter()
-        .filter_map(|(sym, modifier)| {
-            let code = unsafe { XKeysymToKeycode(display, sym) };
-            (code != 0).then_some((code, modifier))
-        })
-        .collect();
-        Some(Self { display, modifiers })
-    }
-    pub fn pressed(&mut self) -> Vec<Option<Modifier>> {
-        let mut keys = [0i8; 32];
-        unsafe {
-            super::linux_x11::x11_ffi::XQueryKeymap(self.display, keys.as_mut_ptr());
-        }
-        (0u32..256)
-            .filter(|key| keys[*key as usize / 8] as u8 & (1 << (*key % 8)) != 0)
-            .map(|key| {
-                self.modifiers
-                    .iter()
-                    .find_map(|(code, modifier)| (*code == key).then_some(*modifier))
-            })
-            .collect()
-    }
-}
-#[cfg(target_os = "linux")]
-impl Drop for ModifierInput {
-    fn drop(&mut self) {
-        unsafe {
-            super::linux_x11::x11_ffi::XCloseDisplay(self.display);
-        }
-    }
-}
+pub use x11_input::ModifierInput;
 
 // Compile the portable manager on Windows in tests; this supplies no native
 // input and is not linked into the Windows application.
@@ -95,7 +99,7 @@ impl ModifierInput {
     pub fn open() -> Option<Self> {
         None
     }
-    pub fn pressed(&mut self) -> Vec<Option<Modifier>> {
-        Vec::new()
+    pub fn pressed(&mut self) -> Option<Vec<Option<Modifier>>> {
+        None
     }
 }

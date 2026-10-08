@@ -636,7 +636,7 @@ pub fn apply_window_transparency(_window_handle: isize, _percent: u8) -> Result<
 
 /// Applies a frosted glass effect to the window. Supported effects are
 /// `"acrylic"` (Windows 10+) and `"mica"` (Windows 11); any other value
-/// clears the active effect. Other platforms are a no-op.
+/// clears the active effect. Other platforms use their own adapters below.
 #[cfg(target_os = "windows")]
 pub fn apply_window_effect<R: Runtime>(
     window: &tauri::WebviewWindow<R>,

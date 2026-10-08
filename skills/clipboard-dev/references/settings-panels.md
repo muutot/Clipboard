@@ -167,9 +167,9 @@ Do not wrap the range input merely for styling. Initialize/update `--slider-pct`
   `capabilities.quickPaste`) rather than inferring from `operatingSystem`:
   the capability is what the backend actually compiled, and it is the field
   `platform_info.rs::capabilities_for` keeps honest. Default the flag to
-  "supported" and narrow it once the answer arrives — these values are fixed
-  for the process lifetime, so unlike a control value there is no
-  placeholder-default flash to avoid.
+  "supported" and narrow it once the answer arrives — native support flags describe the compiled backend; Wayland global shortcuts
+  can become available only after portal authorization. Refresh runtime info
+  when revisiting the panel rather than caching a denied portal state forever.
 - Hydrate async-loaded values before the control renders (shared store or load gate); never leave a placeholder default in the control. See [Never bind a control to an async placeholder default](#never-bind-a-control-to-an-async-placeholder-default).
 
 ## Settings search
