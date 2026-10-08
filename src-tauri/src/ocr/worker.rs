@@ -149,9 +149,17 @@ impl OcrWorker {
         let Some(handle) = handle else {
             // Another clone may be joining the shared handle.  Wait for the
             // worker's running flag to be cleared so every stop caller gets a
-            // synchronous shutdown guarantee.
-            while self.inner.running.load(Ordering::SeqCst) {
+            // synchronous shutdown guarantee — but never hang on it: an
+            // in-flight inference (e.g. ppocr on a large image) can take
+            // minutes, so bound the wait and let shutdown proceed.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while self.inner.running.load(Ordering::SeqCst)
+                && std::time::Instant::now() < deadline
+            {
                 thread::yield_now();
+            }
+            if self.inner.running.load(Ordering::SeqCst) {
+                crate::log_error!("[ocr] worker still running 10s after stop; detaching");
             }
             return;
         };
@@ -164,8 +172,18 @@ impl OcrWorker {
             return;
         }
 
-        if handle.join().is_err() {
-            crate::log_error!("[ocr] worker thread terminated with a panic");
+        // Bound the join: a stuck engine.recognize (ppocr has no timeout)
+        // must not hang app shutdown indefinitely.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !handle.is_finished() && std::time::Instant::now() < deadline {
+            thread::sleep(std::time::Duration::from_millis(50));
+        }
+        if handle.is_finished() {
+            if handle.join().is_err() {
+                crate::log_error!("[ocr] worker thread terminated with a panic");
+            }
+        } else {
+            crate::log_error!("[ocr] worker thread did not finish within 10s of stop; detaching");
         }
     }
 
