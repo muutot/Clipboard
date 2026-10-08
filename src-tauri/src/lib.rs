@@ -259,8 +259,24 @@ impl CleanupWorker {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .take();
         if let Some(handle) = handle {
-            if handle.thread().id() != thread::current().id() && handle.join().is_err() {
-                crate::log_error!("[cleanup] history cleanup thread terminated with a panic");
+            if handle.thread().id() == thread::current().id() {
+                return;
+            }
+            // A cleanup sweep on a large library can take minutes; do not
+            // hang shutdown on it. Give the thread a short grace window and
+            // detach when it exceeds it.
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while !handle.is_finished() && std::time::Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(50));
+            }
+            if handle.is_finished() {
+                if handle.join().is_err() {
+                    crate::log_error!("[cleanup] history cleanup thread terminated with a panic");
+                }
+            } else {
+                crate::log_error!(
+                    "[cleanup] history cleanup thread did not finish within 5s of stop; detaching"
+                );
             }
         }
     }
