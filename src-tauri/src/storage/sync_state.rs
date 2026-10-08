@@ -161,6 +161,12 @@ impl Database {
                     transaction.commit()?;
                     return Ok(existing.to_string());
                 }
+                // This machine will appear as a new sync peer to existing
+                // devices; make the identity rotation visible in logs.
+                crate::log_error!(
+                    "[sync] replacing non-UUID device id ({existing:?}) with a fresh identity; \
+                     existing peers will treat this device as new"
+                );
             }
 
             let device_id = Uuid::new_v4().to_string();
