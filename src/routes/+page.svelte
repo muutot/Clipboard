@@ -909,6 +909,10 @@
       openSettings();
     });
 
+    const unlistenOpenDetail = listen<ClipboardItem>("clipboard-open-detail", (event) => {
+      void openDetail(event.payload.id, event.payload);
+    });
+
     const unlistenTrayRestartBlocked = listen("tray-restart-blocked-in-dev", () => {
       showToast(_t("app.restartBlockedInDev"), "info");
     });
@@ -1018,6 +1022,7 @@
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
       void unlistenItemsChanged.then((fn) => fn()).catch(() => {});
       void unlistenTrayOpenSettings.then((fn) => fn()).catch(() => {});
+      void unlistenOpenDetail.then((fn) => fn()).catch(() => {});
       void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
@@ -1627,8 +1632,10 @@
     });
   }
 
-  async function openDetail(id: string) {
-    const item = findLoadedItem(id);
+  async function openDetail(id: string, requestedItem?: ClipboardItem) {
+    // Another window may show an item outside this window's current filter
+    // or loaded pages. It belongs to the detail view, not the history list.
+    const item = findLoadedItem(id) ?? requestedItem;
     if (!item) return;
     const requestId = ++detailRequestId;
     itemStore.current = setDetailItem(itemStore.current, item);

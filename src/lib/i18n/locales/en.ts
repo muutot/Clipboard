@@ -74,6 +74,7 @@ const en: LocaleDefinition = {
     favorites: "Favorites",
     empty: "No records yet",
     openFailed: "Could not open the float panel",
+    detailFailed: "Could not open record details",
     toggleFailed: "Could not switch the float panel",
     closeFailed: "Could not close the float panel",
   },

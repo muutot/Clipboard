@@ -5,7 +5,7 @@
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { PhysicalPosition } from "@tauri-apps/api/dpi";
   import { showToast } from "$lib/services/toast";
-  import { listen } from "@tauri-apps/api/event";
+  import { emitTo, listen } from "@tauri-apps/api/event";
   import AppIcon from "$lib/components/AppIcon.svelte";
   import Toast from "$lib/components/Toast.svelte";
   import { messages, resolvePath } from "$lib/i18n";
@@ -149,7 +149,16 @@
       return;
     }
     if (action === "detail") {
-      await copy(id);
+      try {
+        const main = await WebviewWindow.getByLabel("main");
+        if (!main) throw new Error("main window is unavailable");
+        await main.show();
+        await emitTo("main", "clipboard-open-detail", item);
+        await main.setFocus();
+      } catch (error) {
+        console.error("Unable to open clipboard details", error);
+        showToast(_t("float.detailFailed"), "error");
+      }
       return;
     }
     if (action === "delete") {

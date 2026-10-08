@@ -9,16 +9,24 @@ const bridge = vi.hoisted(() => ({
   load: vi.fn(),
   favorite: vi.fn(),
   copy: vi.fn(),
+  emit: vi.fn(),
+  showMain: vi.fn(),
+  focusMain: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
+  emitTo: bridge.emit,
   listen: vi.fn(async (name, callback) => {
     bridge.listeners.set(name, callback);
     return () => bridge.listeners.delete(name);
   }),
 }));
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
-  WebviewWindow: { getByLabel: vi.fn(async () => null) },
+  WebviewWindow: {
+    getByLabel: vi.fn(async (label) =>
+      label === "main" ? { show: bridge.showMain, setFocus: bridge.focusMain } : null,
+    ),
+  },
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => null }));
 vi.mock("$lib/services/runtime", async (original) => ({
@@ -67,6 +75,9 @@ beforeEach(() => {
   bridge.load.mockReset().mockResolvedValue([item("a", true)]);
   bridge.favorite.mockReset().mockResolvedValue(true);
   bridge.copy.mockReset();
+  bridge.emit.mockReset().mockResolvedValue(undefined);
+  bridge.showMain.mockReset().mockResolvedValue(undefined);
+  bridge.focusMain.mockReset().mockResolvedValue(undefined);
 });
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
@@ -104,6 +115,21 @@ function changed(payload: Partial<ClipboardItemsChangedPayload>) {
 }
 
 describe("float history reconciliation", () => {
+  it("opens details in the main window without copying the record", async () => {
+    generalSettings.update((settings) => ({ ...settings, floatPanelLeftClick: "detail" }));
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    expect(bridge.copy).not.toHaveBeenCalled();
+    expect(bridge.emit).toHaveBeenCalledWith(
+      "main",
+      "clipboard-open-detail",
+      expect.objectContaining({ id: "a" }),
+    );
+    expect(bridge.showMain).toHaveBeenCalledOnce();
+    expect(bridge.focusMain).toHaveBeenCalledOnce();
+  });
+
   it("keeps each copying row disabled until its own operation completes", async () => {
     generalSettings.update((settings) => ({ ...settings, floatPanelLeftClick: "copy" }));
     bridge.load.mockResolvedValue([item("a"), item("b")]);

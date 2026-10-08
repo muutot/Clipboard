@@ -73,6 +73,7 @@ export interface LocaleDefinition {
     favorites: string;
     empty: string;
     openFailed: string;
+    detailFailed: string;
     toggleFailed: string;
     closeFailed: string;
   };

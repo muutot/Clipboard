@@ -180,6 +180,8 @@ A direct `invoke` in a component is still a public cross-layer contract and rece
 
 ## Event contract
 
+`clipboard-open-detail` is a frontend-only event targeted at the `main` window by the float panel's `detail` action. Its payload is the typed `ClipboardItem` view record, allowing the main route to open an item outside its loaded pages or active filter without inserting it into history. The main route prefers its existing record when loaded and otherwise registers the payload only in the detail view; both paths reuse `openDetail` and its guarded media materialization. The sender shows/focuses the main window and never invokes copy or paste. The listener is unregistered on route teardown.
+
 | Event                           | Producer                                                                                                                         | Consumer/purpose                                                                                                                       |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `clipboard-item-added`          | capture/write backend (capture, duplicate, save-as-new)                                                                          | main route inserts or replaces the saved record; settings window refreshes storage stats                                               |

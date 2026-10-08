@@ -25,6 +25,8 @@ Key contracts:
 
 `src/routes/float/+page.svelte` tracks in-flight copy and copy/paste actions with a reactive set of item IDs. Each row remains disabled until its own request completes; starting or finishing another row's operation must not release that guard. The mounted route tests in `src/routes/float/float-page.test.ts` cover concurrent completion as well as cross-window history reconciliation.
 
+The `detail` click action shows the main window and sends `clipboard-open-detail` with the view record. The main route reuses its detail/materialization path even when that record is absent from its current history filter; opening details must never overwrite the clipboard. `src/routes/main-detail.test.ts` mounts the real main route and verifies that a float-only record opens without being added to history.
+
 ### `CardActions.svelte`
 
 The card's hover-revealed action row plus the quick-copy shortcut badge. Props: `item`, `index`, `quickCopyBadgeAlwaysVisible`, `contentActions` (the deduped quick actions), `dateViewIso` (for the date popover's `aria-expanded`), `canEdit`, `canRestore`, and `onquickaction`/`onrunaction`/`onsaveas` callbacks. It owns the `.actions`/`.actions button`/`.shortcut` base styles; `ClipboardCard` keeps the reveal/visibility rules (`.clip-card:hover :global(.actions)` etc.) and the narrow-width `:global(.actions) { display: none }` because they key off card state. The action-id union lives in `types/clipboard.ts` (`CARD_ACTION_IDS`/`CardActionId`) so the row and the card's context-menu handler stay in sync.
