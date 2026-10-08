@@ -78,7 +78,7 @@ fn write_api_token(path: &Path, token: &str) -> Result<(), String> {
         // `create` only applies the mode to a file it actually creates, so an
         // existing file keeps whatever mode it had.
         restrict_api_token_permissions(path);
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(unix))]
