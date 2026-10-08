@@ -187,8 +187,21 @@ fn normalize_imported_icon_key(icon_path: Option<&str>) -> Option<String> {
 /// database's normal content-hash upsert path.
 pub fn import_from_plain_text(text: &str, database: &Database) -> Result<ImportSummary, String> {
     let mut entries = Vec::new();
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    let mut offset = 0;
+    // Recognize delimiter lines in both LF and CRLF files without normalizing
+    // line endings inside the clipboard content itself.
+    for line in text.split_inclusive('\n') {
+        if line.trim_end_matches(['\r', '\n']) == "---" {
+            chunks.push(&text[start..offset]);
+            start = offset + line.len();
+        }
+        offset += line.len();
+    }
+    chunks.push(&text[start..]);
 
-    for (index, chunk) in text.split("\n---\n").enumerate() {
+    for (index, chunk) in chunks.into_iter().enumerate() {
         let content = chunk.trim_matches(['\r', '\n']);
         if content.trim().is_empty() {
             continue;
@@ -779,6 +792,23 @@ mod tests {
         let summary = import_from_plain_text("first\n---\nsecond\n", &database).unwrap();
         assert_eq!(summary.imported_count, 2);
         assert_eq!(database.item_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn imports_crlf_plain_text_separators_without_changing_record_line_endings() {
+        let database = Database::open_in_memory().unwrap();
+        let summary =
+            import_from_plain_text("first\r\ncontinued\r\n---\r\nsecond\r\n", &database).unwrap();
+        assert_eq!(summary.imported_count, 2);
+        let items = database
+            .list_recent(10, 0, &crate::storage::HistoryFilter::default())
+            .unwrap();
+        assert!(items
+            .iter()
+            .any(|item| item.text_content.as_deref() == Some("first\r\ncontinued")));
+        assert!(items
+            .iter()
+            .any(|item| item.text_content.as_deref() == Some("second")));
     }
 
     #[test]

@@ -51,6 +51,8 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 `export::export_database` reads active history in one SQLite statement before formatting JSON, CSV, or plain text. Export already retains the complete result in memory; splitting that read into independent OFFSET pages would let concurrent capture/deletion/usage updates duplicate or omit records. Its real WAL regression uses a test-only SQLite progress hook and a second connection to move an old row while the export is reading, then checks complete unique IDs and the original snapshot values. The `rusqlite` hooks feature is enabled only through dev-dependencies.
 
+Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes.
+
 ## Synchronization
 
 Synchronization is split between the Tauri-independent `src-tauri/crates/clipboard-sync/` crate
