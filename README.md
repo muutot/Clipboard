@@ -43,18 +43,32 @@ Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 
 ## 界面预览
 
-> 上方左侧为主界面，右侧为设置界面；下方左侧为悬浮窗，右侧为 **工具栏样式对照**（从上到下依次为 **图标 + 文字**、 **仅图标**、
-> **仅文字**）。
+当前界面的中文演示，使用虚构示例数据；点击图片查看原图。
 
-<p align="center">
-  <img src="static/screenshots/main.png" width="386" alt="主界面" title="主界面：剪贴板列表、搜索框、内容类型筛选与快捷操作">
-  <img src="static/screenshots/settings.png" width="439" alt="设置界面" title="设置界面：双栏布局与常规面板">
-</p>
-
-<p align="center">
-  <img src="static/screenshots/float_board.png" width="220" valign="middle" alt="悬浮窗" title="悬浮窗：轻量快捷面板">
-  <img src="static/screenshots/toolbar_styles.png" width="600" valign="middle" alt="工具栏样式对照" title="工具栏样式对照：从上到下依次为图标+文字 / 仅图标 / 仅文字">
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <a href="static/screenshots/zh-CN/main.png"><img src="static/screenshots/zh-CN/main.png" width="100%" alt="中文主界面：剪贴板历史、类型筛选、标签、收藏与快捷操作"></a><br>
+      <sub><b>剪贴板历史</b> · 搜索、筛选与快捷操作</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <a href="static/screenshots/zh-CN/settings.png"><img src="static/screenshots/zh-CN/settings.png" width="100%" alt="中文设置界面：分类导航、设置搜索与主题配色"></a><br>
+      <sub><b>外观设置</b> · 主题、字体与布局</sub>
+    </td>
+  </tr>
+</table>
+<table width="100%">
+  <tr>
+    <td width="62%" align="center" valign="top">
+      <a href="static/screenshots/zh-CN/detail.png"><img src="static/screenshots/zh-CN/detail.png" width="100%" alt="浅色中文详情面板：Markdown 预览、标签、复制、编辑与粘贴操作"></a><br>
+      <sub><b>内容详情</b> · Markdown 预览与编辑</sub>
+    </td>
+    <td width="38%" align="center" valign="top">
+      <a href="static/screenshots/zh-CN/float.png"><img src="static/screenshots/zh-CN/float.png" width="100%" alt="中文悬浮剪贴板：紧凑列表、全部与收藏分组"></a><br>
+      <sub><b>悬浮剪贴板</b> · 常用内容随手取用</sub>
+    </td>
+  </tr>
+</table>
 
 ## 核心特性
 

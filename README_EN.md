@@ -40,17 +40,32 @@ Alt+C to open → type keywords to search → ↑↓ to navigate → Enter to pa
 
 ## Screenshots
 
-> The main window is on the left and the settings window on the right of the top row; the floating panel is on the left below, next to the **toolbar style comparison** (top to bottom: **icon + text**, **icon only**, **text only**).
+The current interface in English, populated with fictional sample data. Click any image for the full-size view.
 
-<p align="center">
-  <img src="static/screenshots/main.png" width="386" alt="Main window" title="Main window: clipboard list, search box, content-type filters and quick actions">
-  <img src="static/screenshots/settings.png" width="439" alt="Settings window" title="Settings window: two-column layout with the general panel">
-</p>
-
-<p align="center">
-  <img src="static/screenshots/float_board.png" width="220" valign="middle" alt="Floating panel" title="Floating panel: lightweight quick panel">
-  <img src="static/screenshots/toolbar_styles.png" width="600" valign="middle" alt="Toolbar styles" title="Toolbar style comparison: icon + text / icon only / text only">
-</p>
+<table width="100%">
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <a href="static/screenshots/en/main.png"><img src="static/screenshots/en/main.png" width="100%" alt="English main window: clipboard history, type filters, tags, favorites and quick actions"></a><br>
+      <sub><b>Clipboard history</b> · Search, filters and quick actions</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <a href="static/screenshots/en/settings.png"><img src="static/screenshots/en/settings.png" width="100%" alt="English settings window: category navigation, settings search and theme colors"></a><br>
+      <sub><b>Appearance settings</b> · Themes, fonts and layout</sub>
+    </td>
+  </tr>
+</table>
+<table width="100%">
+  <tr>
+    <td width="62%" align="center" valign="top">
+      <a href="static/screenshots/en/detail.png"><img src="static/screenshots/en/detail.png" width="100%" alt="English detail panel in light mode: Markdown preview, tags, copy, edit and paste actions"></a><br>
+      <sub><b>Content details</b> · Markdown preview and editing</sub>
+    </td>
+    <td width="38%" align="center" valign="top">
+      <a href="static/screenshots/en/float.png"><img src="static/screenshots/en/float.png" width="100%" alt="English floating clipboard: compact history list with All and Favorites tabs"></a><br>
+      <sub><b>Floating clipboard</b> · Quick access to saved items</sub>
+    </td>
+  </tr>
+</table>
 
 ## Features
 
