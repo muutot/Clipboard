@@ -1490,7 +1490,9 @@ pub fn extract_app_icon(
     std::fs::create_dir_all(icon_dir).ok();
 
     if icon_path.exists() && is_normalized_app_icon(&icon_path) {
-        return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
+        return icon_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string());
     }
     if icon_path.exists() {
         let _ = std::fs::remove_file(&icon_path);
@@ -1528,7 +1530,9 @@ pub fn extract_app_icon(
             let saved = save_hicon_to_png(hicon, &icon_path);
             DestroyIcon(hicon);
             if saved {
-                return Some(icon_path.file_name().unwrap().to_string_lossy().to_string());
+                return icon_path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string());
             }
         }
     }

@@ -148,7 +148,9 @@ impl OcrEngine for PpOcrEngine {
             *guard = Some(ocr);
         }
 
-        let ocr = guard.as_ref().unwrap();
+        let ocr = guard
+            .as_ref()
+            .ok_or_else(|| OcrEngineError::new("OCR engine unavailable after init"))?;
 
         // Decode through the project's bounded decoder rather than
         // oar_ocr's loader: both guess the format from the same way, but only
