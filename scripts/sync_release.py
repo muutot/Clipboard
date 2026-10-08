@@ -168,7 +168,7 @@ def download_file_with_progress_and_resume(
             print(f"    [OK] 下载成功: {asset_name}")
             return True
 
-        except (requests.exceptions.RequestException, Exception) as e:
+        except Exception as e:
             current_size = (
                 os.path.getsize(local_path) if os.path.exists(local_path) else 0
             )

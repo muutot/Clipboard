@@ -236,14 +236,13 @@ The release script is **local-only** — it performs no remote operations. After
 
 ## CI/CD
 
-When the release commit is pushed to the main branch (manually, by the user), it does **not** trigger the CI workflow:
-`ci.yml` ignores pushes that only touch release files (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `CHANGELOG.md`, `RELEASE.md`).
+When the release commit is pushed to the main branch (manually, by the user), CI still runs: `ci.yml` only ignores pushes that touch solely `CHANGELOG.md` / `RELEASE.md`; manifest and version files intentionally still trigger the full pipeline.
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml` which:
 
 - Builds for Windows (x64), macOS (arm64), Linux (x64)
 - Intel macOS (x86_64-apple-darwin) is excluded: ort-sys ships no prebuilt ONNX Runtime for it
-- Publishes the GitHub Release directly (`releaseDraft: false`) with artifacts using `RELEASE.md` as the release body
+- Publishes the GitHub Release as a draft (`releaseDraft: true`) and only flips it live in the final `publish` job once all artifacts are attached
 
 The separate `.github/workflows/sync-gitcode.yml` workflow mirrors the published release body + assets to GitCode via `scripts/sync_release.py`. It is decoupled from `release.yml` and is triggered **manually** (`workflow_dispatch` with the release tag) after a release is published, so it can be run once all assets are attached. It requires repo secret `GITCODE_TOKEN` (rotate immediately if ever committed in plaintext); optional `GITCODE_OWNER` overrides the default owner. All actions are pinned to commit SHAs and its Python dependencies come from the pinned `scripts/requirements-sync.txt` (installed with `pip install -r`) rather than an unpinned `pip install`, because this job holds `GITCODE_TOKEN` and `GITHUB_TOKEN`.
 

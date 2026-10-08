@@ -91,13 +91,12 @@ git commit -m "🔖 chore[release]: bump version to 0.2.0"
 git tag -a v0.2.0 -m "Release v0.2.0"
 ```
 
-### 6. Build
+### 6. No local build
 
-Runs Tauri production build for all platforms:
-
-```sh
-npm run tauri build
-```
+The release flow does **not** build locally — building is performed remotely
+by the GitHub Actions `release.yml` workflow when the `v*` tag is pushed.
+The pre-release gate is `npm run format:check` + `npm run check` +
+`npm run lint:rust` only.
 
 ### 7. Publish
 
@@ -174,7 +173,7 @@ node skills/version-release/scripts/release.mjs 0.2.0-beta.1
 node skills/version-release/scripts/release.mjs 0.2.0-rc.1
 ```
 
-Pre-release tags are marked as draft releases in CI/CD.
+All releases start as draft releases in CI/CD; pre-release tags additionally get `prerelease: true` on publish.
 
 ## Rollback
 
