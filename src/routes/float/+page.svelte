@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { PhysicalPosition } from "@tauri-apps/api/dpi";
@@ -53,7 +54,7 @@
     itemStore.history.filter((item) => !item.deleted && (filter !== "favorite" || item.favorite)),
   );
   let loading = $state(true);
-  let copyingId = $state<string | null>(null);
+  const copyingIds = new SvelteSet<string>();
   /** Guards against a stale response overwriting a newer filter's list. */
   let loadRequestId = 0;
 
@@ -99,12 +100,12 @@
     // Guard per row, not globally: the template already disables only the
     // in-flight row, so a global guard silently swallowed clicks on other
     // rows with no feedback.
-    if (!item || copyingId === id) return;
-    copyingId = id;
+    if (!item || copyingIds.has(id)) return;
+    copyingIds.add(id);
     try {
       await copyClipboardItem(item);
     } finally {
-      copyingId = null;
+      copyingIds.delete(id);
     }
   }
 
@@ -116,15 +117,15 @@
       return;
     }
     if (action === "copyPaste") {
-      if (copyingId === id) return;
-      copyingId = id;
+      if (copyingIds.has(id)) return;
+      copyingIds.add(id);
       try {
         // pasteClipboardItem already stages the clipboard content and
         // restores the previous app with a single toast; copying first
         // would write the clipboard twice and pop a second toast.
         await pasteClipboardItem(item, "auto");
       } finally {
-        copyingId = null;
+        copyingIds.delete(id);
       }
       return;
     }
@@ -459,7 +460,7 @@
           type="button"
           class="float-row"
           title={rowTitle(item)}
-          disabled={copyingId === item.id}
+          disabled={copyingIds.has(item.id)}
           onclick={(event) => handleRowClick(item.id, event)}
           oncontextmenu={(event) => {
             event.preventDefault();

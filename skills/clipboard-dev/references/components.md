@@ -21,6 +21,10 @@ Key contracts:
 - Card layout dimensions come from `GeneralSettings` (the `card*`/`search*` fields are the always-on default sizing), and must remain aligned with `virtual-scroll.ts` and route height calculations.
 - Tag chips share the title/file text line (right-aligned, `flex: 0 0 auto`), so adding tags does **not** add a new row and must not change card height. Chips render through the shared `TagChip.svelte` component (compact + hover-reveal remove); right-click `Add tag` toggles an inline input; a chip's `×` removes the tag via `onsavetags`; clicking a chip calls `ontoggleTagFilter`; right-clicking a chip calls `oneditTag(tag)` so the route can open `TagEditDialog` for that tag. Keep tag height changes out of `estimatedCardHeight`.
 
+### Float panel row operations
+
+`src/routes/float/+page.svelte` tracks in-flight copy and copy/paste actions with a reactive set of item IDs. Each row remains disabled until its own request completes; starting or finishing another row's operation must not release that guard. The mounted route tests in `src/routes/float/float-page.test.ts` cover concurrent completion as well as cross-window history reconciliation.
+
 ### `CardActions.svelte`
 
 The card's hover-revealed action row plus the quick-copy shortcut badge. Props: `item`, `index`, `quickCopyBadgeAlwaysVisible`, `contentActions` (the deduped quick actions), `dateViewIso` (for the date popover's `aria-expanded`), `canEdit`, `canRestore`, and `onquickaction`/`onrunaction`/`onsaveas` callbacks. It owns the `.actions`/`.actions button`/`.shortcut` base styles; `ClipboardCard` keeps the reveal/visibility rules (`.clip-card:hover :global(.actions)` etc.) and the narrow-width `:global(.actions) { display: none }` because they key off card state. The action-id union lives in `types/clipboard.ts` (`CARD_ACTION_IDS`/`CardActionId`) so the row and the card's context-menu handler stay in sync.

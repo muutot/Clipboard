@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipboardItem, ClipboardItemsChangedPayload } from "$lib/types/clipboard";
+import { generalSettings } from "$lib/services/settings";
 import FloatPage from "./+page.svelte";
 
 const bridge = vi.hoisted(() => ({
@@ -61,6 +62,7 @@ function item(id: string, favorite = false): ClipboardItem {
 
 const cleanups: (() => Promise<void>)[] = [];
 beforeEach(() => {
+  generalSettings.update((settings) => ({ ...settings, floatPanelLeftClick: "favorite" }));
   bridge.listeners.clear();
   bridge.load.mockReset().mockResolvedValue([item("a", true)]);
   bridge.favorite.mockReset().mockResolvedValue(true);
@@ -102,6 +104,38 @@ function changed(payload: Partial<ClipboardItemsChangedPayload>) {
 }
 
 describe("float history reconciliation", () => {
+  it("keeps each copying row disabled until its own operation completes", async () => {
+    generalSettings.update((settings) => ({ ...settings, floatPanelLeftClick: "copy" }));
+    bridge.load.mockResolvedValue([item("a"), item("b")]);
+    let finishA!: () => void;
+    let finishB!: () => void;
+    bridge.copy
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishA = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishB = resolve;
+        }),
+      );
+    const page = await render();
+    page.rows()[0].click();
+    await settle();
+    page.rows()[1].click();
+    await settle();
+    expect(page.rows().map((row) => row.disabled)).toEqual([true, true]);
+    finishB();
+    await settle();
+    expect(page.rows().map((row) => row.disabled)).toEqual([true, false]);
+    page.rows()[0].click();
+    expect(bridge.copy).toHaveBeenCalledTimes(2);
+    finishA();
+    await settle();
+    expect(page.rows().map((row) => row.disabled)).toEqual([false, false]);
+  });
+
   it("hides a soft-deleted row immediately while its replacement page is pending", async () => {
     const page = await render();
     expect(page.rows()).toHaveLength(1);
