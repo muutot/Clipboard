@@ -603,12 +603,107 @@ pub fn read_clipboard_html() -> Option<String> {
     None
 }
 
-/// RTF capture is not wired on macOS yet; the `public.rtf` UTI carries binary
-/// data (not a string), so the HTML fragment remains the rich-text source for
-/// `formatPaste` there.
+/// Reads NSData rather than stringForType: so legacy RTF code-page bytes
+/// are preserved as hex escapes instead of being decoded lossily as UTF-8.
 #[cfg(target_os = "macos")]
 pub fn read_clipboard_rtf() -> Option<String> {
-    None
+    let pool = unsafe { objc::objc_autoreleasePoolPush() };
+    let result = (|| {
+        let pb = objc::get_nspasteboard();
+        if pb.is_null() {
+            return None;
+        }
+        let data = unsafe {
+            objc::msgSend_id_id(
+                pb,
+                objc::sel_registerName(c"dataForType:".as_ptr()),
+                objc::nsstring_from_str("public.rtf"),
+            )
+        };
+        if data.is_null() {
+            return None;
+        }
+        let len = unsafe { objc::msgSend_isize(data, objc::sel_registerName(c"length".as_ptr())) };
+        if !(1..=16 * 1024 * 1024).contains(&len) {
+            return None;
+        }
+        let bytes = unsafe { objc::msgSend_ptr(data, objc::sel_registerName(c"bytes".as_ptr())) };
+        if bytes.is_null() {
+            return None;
+        }
+        // NSData remains alive inside this autorelease pool until copied.
+        decode_rtf_bytes(unsafe { std::slice::from_raw_parts(bytes.cast::<u8>(), len as usize) })
+    })();
+    unsafe { objc::objc_autoreleasePoolPop(pool) };
+    result
+}
+
+/// The metadata contract stores RTF as a UTF-8 string. Hex escaping retains
+/// original ANSI/code-page bytes. Raw binary runs cannot safely pass through
+/// that contract, so reject them (HTML/plain text remain available).
+fn decode_rtf_bytes(bytes: &[u8]) -> Option<String> {
+    use std::fmt::Write;
+    let bytes = bytes.strip_suffix(&[0]).unwrap_or(bytes);
+    if !bytes.starts_with(b"{\\rtf") || bytes.len() > 16 * 1024 * 1024 {
+        return None;
+    }
+    let mut result = String::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let byte = bytes[i];
+        if byte == 0 {
+            return None;
+        }
+        if byte == b'\\' {
+            let start = i + 1;
+            let mut end = start;
+            while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
+                end += 1;
+            }
+            if &bytes[start..end] == b"bin" {
+                return None;
+            }
+            // Escaped backslashes/braces and hex prefixes are control symbols,
+            // not starts of another control word.
+            if end == start && start < bytes.len() && bytes[start] != 0 && bytes[start].is_ascii() {
+                result.push('\\');
+                result.push(bytes[start] as char);
+                i += 2;
+                continue;
+            }
+        }
+        if byte.is_ascii() {
+            result.push(byte as char);
+        } else {
+            write!(&mut result, "\\'{byte:02x}").ok()?;
+        }
+        i += 1;
+    }
+    Some(result)
+}
+
+#[cfg(test)]
+mod rtf_tests {
+    use super::decode_rtf_bytes;
+    #[test]
+    fn preserves_rtf_controls_and_code_page_bytes() {
+        let rtf = b"{\\rtf1\\ansi\\ansicpg1252 caf\xe9}";
+        assert_eq!(
+            decode_rtf_bytes(rtf).as_deref(),
+            Some("{\\rtf1\\ansi\\ansicpg1252 caf\\'e9}")
+        );
+        assert_eq!(
+            decode_rtf_bytes(b"{\\rtf1 \\u20320?}"),
+            Some("{\\rtf1 \\u20320?}".into())
+        );
+    }
+    #[test]
+    fn rejects_binary_runs_without_confusing_escaped_text() {
+        assert!(decode_rtf_bytes(b"{\\rtf1\\bin3 abc}").is_none());
+        assert!(decode_rtf_bytes(b"plain text").is_none());
+        assert!(decode_rtf_bytes(b"{\\rtf1 \\\\bin3}").is_some());
+        assert!(decode_rtf_bytes(b"{\\rtf1 \0}").is_none());
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

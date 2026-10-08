@@ -44,7 +44,7 @@ pub trait PlatformClipboard {
     }
 
     /// Reads the optional RTF payload used for paste-by-format.
-    /// Windows: registered `Rich Text Format`; macOS: not wired; Linux: `text/rtf`.
+    /// Windows: registered `Rich Text Format`; macOS: `public.rtf` NSData; Linux: `text/rtf`.
     fn read_clipboard_rtf(&self) -> Option<String> {
         None
     }
