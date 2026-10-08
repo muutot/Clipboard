@@ -208,6 +208,8 @@ Every child panel accepts `onclose` and optional `showHeader`. The parent must r
 
 ## Component change checklist
 
+`MarkdownPreview.svelte` delegates its supported Markdown subset to `utils/markdown.ts`. The renderer recognizes source blocks before escaping and renders inline tokens once; generated HTML is never parsed again. Fenced and inline code stay literal, list wrappers accept formatted items, consecutive quote lines share a blockquote, and image alt attributes are escaped directly from source. Raw HTML is escaped and URLs retain the explicit scheme allowlist. `MarkdownPreview.test.ts` mounts the real component to check DOM structure, exact code text, attributes, and unsafe URLs; the renderer is not a complete CommonMark implementation.
+
 - Update all call sites when props/callbacks change.
 - Preserve focus, Escape, and outside-click ordering across route, detail, context menu, dialogs, and windows.
 - Clean up store subscriptions, Tauri event listeners, observers, timers, and WebviewWindow references.
