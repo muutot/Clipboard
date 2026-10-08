@@ -24,6 +24,11 @@ ManifestDPIAwareness PerMonitorV2
 ${StrCase}
 ${StrLoc}
 ${StrRep}
+; Uninstaller-side instances of the same string helpers, used by
+; un.ResolveStorageRoot to locate a custom data directory at uninstall time.
+${UnStrCase}
+${UnStrLoc}
+${UnStrRep}
 
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
@@ -63,6 +68,12 @@ ${StrRep}
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"
+
+; Uninstall options (English-only, matching the data-directory page above;
+; Tauri's shipped language files carry no keys for these).
+!define UNOPT_DATA_TEXT "Delete clipboard data (history, images, files, search index)"
+!define UNOPT_MODELS_TEXT "Delete downloaded OCR models"
+!define UNOPT_SETTINGS_TEXT "Delete settings, logs and cached app data"
 
 Var PassiveMode
 Var UpdateMode
@@ -411,8 +422,13 @@ Function RunMainBinary
 FunctionEnd
 
 ; Uninstaller Pages
-Var DeleteAppDataCheckbox
-Var DeleteAppDataCheckboxState
+Var DeleteDataCheckbox
+Var DeleteDataState
+Var DeleteModelsCheckbox
+Var DeleteModelsState
+Var DeleteSettingsCheckbox
+Var DeleteSettingsState
+Var UninstallStorageRoot
 !define /ifndef WS_EX_LAYOUTRTL         0x00400000
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
 Function un.ConfirmShow
@@ -425,21 +441,111 @@ Function un.ConfirmShow
     StrCpy $3 "${__NSD_CheckBox_EXSTYLE}"
     IntOp $4 0 * $2
   ${EndIf}
-  IntOp $5 100 * $2
   IntOp $6 400 * $2
   IntOp $7 25 * $2
   IntOp $4 $4 / 96
-  IntOp $5 $5 / 96
   IntOp $6 $6 / 96
   IntOp $7 $7 / 96
-  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "$(deleteAppData)", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
-  Pop $DeleteAppDataCheckbox
+  ; Three stacked optional cleanup targets, starting at the vertical position
+  ; of the old single "delete app data" checkbox. All default to unchecked.
+  IntOp $5 100 * $2
+  IntOp $5 $5 / 96
+  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "${UNOPT_DATA_TEXT}", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
+  Pop $DeleteDataCheckbox
+  IntOp $5 134 * $2
+  IntOp $5 $5 / 96
+  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "${UNOPT_MODELS_TEXT}", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
+  Pop $DeleteModelsCheckbox
+  IntOp $5 168 * $2
+  IntOp $5 $5 / 96
+  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "${UNOPT_SETTINGS_TEXT}", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
+  Pop $DeleteSettingsCheckbox
   SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
-  SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
+  SendMessage $DeleteDataCheckbox ${WM_SETFONT} $1 1
+  SendMessage $DeleteModelsCheckbox ${WM_SETFONT} $1 1
+  SendMessage $DeleteSettingsCheckbox ${WM_SETFONT} $1 1
 FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
 Function un.ConfirmLeave
-  SendMessage $DeleteAppDataCheckbox ${BM_GETCHECK} 0 0 $DeleteAppDataCheckboxState
+  SendMessage $DeleteDataCheckbox ${BM_GETCHECK} 0 0 $DeleteDataState
+  SendMessage $DeleteModelsCheckbox ${BM_GETCHECK} 0 0 $DeleteModelsState
+  SendMessage $DeleteSettingsCheckbox ${BM_GETCHECK} 0 0 $DeleteSettingsState
+FunctionEnd
+
+; Resolves the storage root targeted by the data/model cleanup options.
+; Defaults to "$INSTDIR\storage"; when conf\conf.json carries a custom
+; dataDirectory (written by the installer's data-location page or the app
+; settings), that directory's storage folder is used instead. The resolved
+; root is only kept when it actually contains app-owned storage content, so a
+; malformed or truncated value can never point the uninstaller at a foreign
+; folder. Result: "" means "nothing to delete".
+Function un.ResolveStorageRoot
+  StrCpy $UninstallStorageRoot "$INSTDIR\storage"
+  ${IfNot} ${FileExists} "$INSTDIR\conf\conf.json"
+    Goto resolve_validate
+  ${EndIf}
+  ClearErrors
+  FileOpen $0 "$INSTDIR\conf\conf.json" r
+  ${If} ${Errors}
+    Goto resolve_validate
+  ${EndIf}
+  StrCpy $5 ""
+  resolve_read:
+    ClearErrors
+    FileRead $0 $1
+    ${If} ${Errors}
+      Goto resolve_choose
+    ${EndIf}
+    ; Marker form: "dataDirectory":"<path>" - JSON paths use forward slashes.
+    ${UnStrLoc} $2 $1 `"dataDirectory":"` ">"
+    ${If} $2 == ""
+      Goto resolve_read
+    ${EndIf}
+    IntOp $2 $2 + 17 ; skip past `"dataDirectory":"`
+    StrCpy $1 $1 "" $2
+    ; Cut the value at the JSON string's closing quote.
+    ${UnStrLoc} $3 $1 `"` ">"
+    ${If} $3 == ""
+      StrCpy $5 $1
+    ${Else}
+      StrCpy $5 $1 $3
+    ${EndIf}
+  resolve_choose:
+  FileClose $0
+  ${If} $5 == ""
+    Goto resolve_validate
+  ${EndIf}
+  ${UnStrRep} $5 $5 "/" "\"
+  ; Trim one trailing separator, if any.
+  StrLen $1 $5
+  IntOp $1 $1 - 1
+  ${If} $1 >= 0
+    StrCpy $2 $5 1 $1
+    ${If} $2 == "\"
+      StrCpy $5 $5 $1
+    ${EndIf}
+  ${EndIf}
+  ; A trailing "storage" leaf is the root itself, otherwise append it.
+  ${UnStrCase} $1 $5 "L"
+  StrLen $2 $1
+  IntOp $2 $2 - 7
+  ${If} $2 >= 0
+    StrCpy $3 $1 7 $2
+    ${If} $3 == "storage"
+      StrCpy $UninstallStorageRoot $5
+      Goto resolve_validate
+    ${EndIf}
+  ${EndIf}
+  StrCpy $UninstallStorageRoot "$5\storage"
+  resolve_validate:
+  ${If} ${FileExists} "$UninstallStorageRoot\database\clipboard.sqlite3"
+  ${OrIf} ${FileExists} "$UninstallStorageRoot\database\search-index\*.*"
+  ${OrIf} ${FileExists} "$UninstallStorageRoot\models\*.*"
+  ${OrIf} ${FileExists} "$UninstallStorageRoot\image\*.*"
+  ${OrIf} ${FileExists} "$UninstallStorageRoot\files\*.*"
+    Return
+  ${EndIf}
+  StrCpy $UninstallStorageRoot ""
 FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -821,18 +927,46 @@ Section Uninstall
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
   ${EndIf}
 
-  ${If} $DeleteAppDataCheckboxState = 1
-  ${AndIf} $UpdateMode <> 1
-    DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
-    DeleteRegKey /ifempty SHCTX "${MANUKEY}"
+  ${If} $UpdateMode <> 1
+    Call un.ResolveStorageRoot
 
-    DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
-    DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
-    DeleteRegKey /ifempty HKCU "${MANUKEY}"
+    ${If} $DeleteDataState = 1
+    ${AndIf} $UninstallStorageRoot != ""
+      DetailPrint "Deleting clipboard data from $UninstallStorageRoot"
+      RmDir /r "$UninstallStorageRoot\database"
+      RmDir /r "$UninstallStorageRoot\image"
+      RmDir /r "$UninstallStorageRoot\files"
+      RmDir /r "$UninstallStorageRoot\icons"
+      RmDir "$UninstallStorageRoot"
+    ${EndIf}
 
-    SetShellVarContext current
-    RmDir /r "$APPDATA\${BUNDLEID}"
-    RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    ${If} $DeleteModelsState = 1
+    ${AndIf} $UninstallStorageRoot != ""
+      DetailPrint "Deleting OCR models from $UninstallStorageRoot"
+      RmDir /r "$UninstallStorageRoot\models"
+      RmDir "$UninstallStorageRoot"
+    ${EndIf}
+
+    ${If} $DeleteSettingsState = 1
+      DetailPrint "Deleting settings, logs and cached app data"
+      RmDir /r "$INSTDIR\conf"
+      RmDir /r "$INSTDIR\logs"
+      Delete "$INSTDIR\instance.lock"
+
+      SetShellVarContext current
+      RmDir /r "$APPDATA\${BUNDLEID}"
+      RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+
+      DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
+      DeleteRegKey /ifempty SHCTX "${MANUKEY}"
+
+      DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
+      DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
+      DeleteRegKey /ifempty HKCU "${MANUKEY}"
+    ${EndIf}
+
+    ; Remove the install directory itself when the options above emptied it.
+    RmDir "$INSTDIR"
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL
