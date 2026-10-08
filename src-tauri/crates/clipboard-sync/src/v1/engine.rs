@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
+use crate::cancellation::{self, CancellationToken};
 use sha2::{Digest, Sha256};
 
 use super::wire::envelope_is_encrypted;
@@ -24,6 +25,7 @@ fn write_large_pack_batch(
     writer: &mut LargePackWriter<'_>,
     mutations: MutationBatch,
 ) -> Result<(), String> {
+    cancellation::check()?;
     if mutations.is_empty() {
         return Ok(());
     }
@@ -111,6 +113,19 @@ pub struct SyncEngineResult {
 /// upload-first; immutable packs and resources become visible through the
 /// device head only after their writes succeed. Pull cursors advance in the
 /// same SQLite transaction as the corresponding mutation batch.
+#[allow(clippy::too_many_arguments)]
+pub fn sync_database_cancellable(
+    store: &impl ObjectStore,
+    database: &impl SyncRepository,
+    paths: &SyncEnginePaths,
+    remote_scope: &str,
+    session_key: Option<&SessionKey>,
+    options: SyncEngineOptions,
+    cancellation: &CancellationToken,
+) -> Result<SyncEngineResult, String> {
+    cancellation.run(|| sync_database(store, database, paths, remote_scope, session_key, options))
+}
+
 pub fn sync_database(
     store: &impl ObjectStore,
     database: &impl SyncRepository,
@@ -119,6 +134,7 @@ pub fn sync_database(
     session_key: Option<&SessionKey>,
     options: SyncEngineOptions,
 ) -> Result<SyncEngineResult, String> {
+    cancellation::check()?;
     if options.segment_max_entries == 0 {
         return Err("sync segment entry limit must be greater than zero".to_string());
     }
@@ -180,6 +196,7 @@ pub fn sync_database(
     while let Some(batch) =
         database.get_sync_outbox_batch_for_scope(remote_scope, options.segment_max_entries)?
     {
+        cancellation::check()?;
         state = publish_segment(
             store,
             database,
@@ -230,6 +247,7 @@ pub fn sync_database(
             &mut result,
         )?;
     }
+    cancellation::check()?;
     Ok(result)
 }
 
@@ -240,6 +258,7 @@ fn validate_remote_access_before_first_publish(
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     if state.initialized {
         return Ok(());
     }
@@ -248,6 +267,7 @@ fn validate_remote_access_before_first_publish(
     let mut valid_pointers = 0u64;
     let mut last_error = None::<String>;
     for info in heads {
+        cancellation::check()?;
         let Ok(device_id) = parse_head_key(&info.key) else {
             continue;
         };
@@ -328,6 +348,7 @@ fn reconcile_local_device_head(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<SyncRemoteState, String> {
+    cancellation::check()?;
     let key = head_object_key(device_id)?;
     let listed = heads.iter().find(|info| info.key == key);
     if state.initialized
@@ -415,6 +436,7 @@ fn local_head_cache_matches(
     state: &SyncRemoteState,
     info: &ObjectInfo,
 ) -> Result<bool, String> {
+    cancellation::check()?;
     let Some(cache) = database.get_sync_head_cache(remote_scope, device_id)? else {
         return Ok(false);
     };
@@ -428,6 +450,7 @@ fn peer_head_cache_matches(
     device_id: &str,
     info: &ObjectInfo,
 ) -> Result<bool, String> {
+    cancellation::check()?;
     let Some(cache) = database.get_sync_head_cache(remote_scope, device_id)? else {
         return Ok(false);
     };
@@ -475,6 +498,7 @@ fn pull_checkpoint_if_needed(
     result: &mut SyncEngineResult,
     force: bool,
 ) -> Result<bool, String> {
+    cancellation::check()?;
     if !force {
         let has_checkpoint = database.get_sync_checkpoint_state(remote_scope)?.is_some();
         let has_peer_cursors = !database.list_sync_cursors(remote_scope)?.is_empty();
@@ -546,7 +570,7 @@ fn pull_checkpoint_if_needed(
     let expected_record_count = checkpoint.expected_record_count;
     let mut reader = open_checkpoint_pack(&checkpoint.file.path, session_key)?;
     let mut terminal_checked = false;
-    let mut batches = std::iter::from_fn(|| {
+    let mut batches = cancellation::checked_batches(std::iter::from_fn(|| {
         if terminal_checked {
             return None;
         }
@@ -566,7 +590,8 @@ fn pull_checkpoint_if_needed(
                 }
             }
         }
-    });
+    }));
+    cancellation::check()?;
     let applied = database.apply_sync_checkpoint_batches(
         remote_scope,
         generation,
@@ -587,6 +612,7 @@ fn checkpoint_digest_for_generation(
     head: &CheckpointHead,
     generation: u64,
 ) -> Result<String, String> {
+    cancellation::check()?;
     if generation == head.generation {
         return Ok(head.checkpoint.sha256.clone());
     }
@@ -609,6 +635,7 @@ fn download_checkpoint(
     temporary_directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<DownloadedCheckpoint, String> {
+    cancellation::check()?;
     let parsed = parse_checkpoint_key(&reference.key)?;
     if parsed.generation != generation || parsed.sha256 != reference.sha256 {
         return Err("checkpoint reference is not canonical".to_string());
@@ -640,6 +667,7 @@ struct DownloadedCheckpoint {
 }
 
 fn validate_checkpoint_head(head: &CheckpointHead) -> Result<(), String> {
+    cancellation::check()?;
     let parsed = parse_checkpoint_key(&head.checkpoint.key)?;
     if head.generation == 0
         || parsed.generation != head.generation
@@ -659,6 +687,7 @@ fn validate_checkpoint_head(head: &CheckpointHead) -> Result<(), String> {
 }
 
 fn validate_checkpoint_vector(vector: &[DeviceCursor]) -> Result<(), String> {
+    cancellation::check()?;
     let mut previous_device = None::<&str>;
     for cursor in vector {
         if previous_device.is_some_and(|previous| previous >= cursor.device_id.as_str()) {
@@ -701,6 +730,7 @@ fn encode_database_pack(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(EncodedFile, SyncSnapshotExport), String> {
+    cancellation::check()?;
     let mut writer = match kind {
         LargePackKind::Snapshot => LargePackWriter::new(
             &paths.temporary_directory,
@@ -720,6 +750,7 @@ fn encode_database_pack(
         LARGE_PACK_BATCH_ENTRIES,
         &paths.temporary_directory,
         &mut |mut mutations| {
+            cancellation::check()?;
             let resources = prepare_mutation_resources(
                 store,
                 &mut mutations,
@@ -740,6 +771,7 @@ fn encode_database_pack(
                 .checked_add(resources.transferred_bytes)
                 .ok_or_else(|| "uploaded sync byte count overflowed".to_string())?;
             let resource_refs = collect_mutation_resource_refs(&mutations)?;
+            cancellation::check()?;
             database.record_sync_resource_refs(remote_scope, &mutations, &resource_refs)?;
             write_large_pack_batch(&mut writer, mutations)
         },
@@ -770,6 +802,7 @@ fn maybe_compact(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     let vector = frozen_checkpoint_vector(database, remote_scope, local_device_id, local_state)?;
     let baseline = database.get_sync_checkpoint_cursors(remote_scope)?;
     if vector.is_empty()
@@ -913,6 +946,7 @@ fn checkpoint_pointer_is_durable(
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<bool, String> {
+    cancellation::check()?;
     let downloaded = store.get(CHECKPOINT_HEAD_KEY)?.ok_or_else(|| {
         "checkpoint pointer disappeared after a successful conditional write".to_string()
     })?;
@@ -945,6 +979,7 @@ fn finalize_checkpoint_publication(
     temporary_directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     if let Some(previous) = head.previous_checkpoint.as_ref() {
         let previous_generation = parse_checkpoint_key(&previous.key)?.generation;
         let covered_vector = if let Some(vector) = covered_vector_hint {
@@ -987,6 +1022,7 @@ fn finalize_checkpoint_publication(
         deleted,
         "deleted remote object count",
     )?;
+    cancellation::check()?;
     database.record_sync_checkpoint_published(
         remote_scope,
         head.generation,
@@ -999,12 +1035,14 @@ fn prune_unreferenced_checkpoints(
     store: &impl ObjectStore,
     head: &CheckpointHead,
 ) -> Result<u64, String> {
+    cancellation::check()?;
     let mut retained = vec![head.checkpoint.key.as_str()];
     if let Some(previous) = head.previous_checkpoint.as_ref() {
         retained.push(previous.key.as_str());
     }
     let mut deleted = 0u64;
     for object in store.list("v1/checkpoints/", None)? {
+        cancellation::check()?;
         let Ok(parsed) = parse_checkpoint_key(&object.key) else {
             continue;
         };
@@ -1030,6 +1068,7 @@ fn read_checkpoint_head(
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<Option<StoredCheckpointHead>, String> {
+    cancellation::check()?;
     let Some(downloaded) = store.get(CHECKPOINT_HEAD_KEY)? else {
         return Ok(None);
     };
@@ -1053,6 +1092,7 @@ fn frozen_checkpoint_vector(
     local_device_id: &str,
     local_state: &SyncRemoteState,
 ) -> Result<Vec<DeviceCursor>, String> {
+    cancellation::check()?;
     let mut vector = database
         .list_sync_cursors(remote_scope)?
         .into_iter()
@@ -1080,6 +1120,7 @@ fn checkpoint_compaction_due(
     baseline: &[DeviceCursor],
     vector: &[DeviceCursor],
 ) -> Result<bool, String> {
+    cancellation::check()?;
     if baseline.is_empty() {
         return Ok(true);
     }
@@ -1131,6 +1172,7 @@ fn validate_compaction_vector(
     current: &[DeviceCursor],
     candidate: &[DeviceCursor],
 ) -> Result<(), String> {
+    cancellation::check()?;
     let current = current
         .iter()
         .map(|cursor| (cursor.device_id.as_str(), cursor))
@@ -1162,15 +1204,19 @@ fn garbage_collect_covered_history(
     store: &impl ObjectStore,
     covered_vector: &[DeviceCursor],
 ) -> Result<u64, String> {
+    cancellation::check()?;
     let mut deleted = 0u64;
     for cursor in covered_vector {
+        cancellation::check()?;
         let snapshot_prefix = format!("v1/snapshots/{}/{}/", cursor.device_id, cursor.epoch);
         for object in store.list(&snapshot_prefix, None)? {
+            cancellation::check()?;
             store.delete(&object.key)?;
             deleted = checked_add(deleted, 1, "deleted remote object count")?;
         }
         let prefix = segment_prefix(&cursor.device_id, &cursor.epoch)?;
         for object in store.list(&prefix, None)? {
+            cancellation::check()?;
             // Tolerate non-canonical keys under the prefix (directory markers,
             // partial or foreign uploads) instead of aborting the whole
             // compaction pass; `prune_unreferenced_checkpoints` skips the same
@@ -1198,6 +1244,7 @@ fn pull_device_with_checkpoint_recovery(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     match pull_device(
         store,
         database,
@@ -1260,6 +1307,7 @@ fn publish_bootstrap(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<SyncRemoteState, String> {
+    cancellation::check()?;
     let snapshot_header = SnapshotPackHeader {
         device_id: device_id.to_string(),
         epoch: state.epoch.clone(),
@@ -1299,6 +1347,7 @@ fn publish_bootstrap(
         encoded.record_count,
         "uploaded entry count",
     )?;
+    cancellation::check()?;
     let state = database.commit_sync_bootstrap_published(
         remote_scope,
         &state.epoch,
@@ -1327,17 +1376,20 @@ fn adopt_orphan_segments(
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<SyncRemoteState, String> {
+    cancellation::check()?;
     if !state.initialized {
         return Ok(state);
     }
     let prefix = segment_prefix(device_id, &state.epoch)?;
     loop {
+        cancellation::check()?;
         let listed = store.list(&prefix, None)?;
         // A retry that encoded a longer segment than an earlier orphan leaves
         // a partially overlapping leftover: once the shorter orphan is
         // adopted, such an object can never continue the contiguous chain
         // peers require, so remove it before looking for adoptable orphans.
         for info in &listed {
+            cancellation::check()?;
             let Ok(parsed) = parse_segment_key(&info.key) else {
                 continue;
             };
@@ -1390,6 +1442,7 @@ fn adopt_orphan_segments(
             ));
         }
         let resource_refs = collect_mutation_resource_refs(&segment.mutations)?;
+        cancellation::check()?;
         database.record_sync_resource_refs(remote_scope, &segment.mutations, &resource_refs)?;
         result.uploaded_entries = checked_add(
             result.uploaded_entries,
@@ -1402,6 +1455,7 @@ fn adopt_orphan_segments(
         next_state.updated_at_ms = current_time_ms();
         let head = next_state.device_head(device_id)?;
         let published_head = publish_head(store, &head, session_key, result)?;
+        cancellation::check()?;
         state = database.commit_sync_segment_published(
             remote_scope,
             &state.epoch,
@@ -1433,6 +1487,7 @@ fn publish_segment(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<SyncRemoteState, String> {
+    cancellation::check()?;
     let mut segment = Segment {
         device_id: device_id.to_string(),
         epoch: state.epoch.clone(),
@@ -1463,6 +1518,7 @@ fn publish_segment(
         "uploaded byte count",
     )?;
     let resource_refs = collect_mutation_resource_refs(&segment.mutations)?;
+    cancellation::check()?;
     database.record_sync_resource_refs(remote_scope, &segment.mutations, &resource_refs)?;
 
     let encoded = encode_segment(&segment, session_key)?;
@@ -1485,6 +1541,7 @@ fn publish_segment(
         segment.mutations.len() as u64,
         "uploaded entry count",
     )?;
+    cancellation::check()?;
     let state = database.commit_sync_segment_published(
         remote_scope,
         &state.epoch,
@@ -1515,7 +1572,9 @@ fn pull_remote_devices(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     for info in heads {
+        cancellation::check()?;
         let peer_result = (|| -> Result<(), String> {
             let device_id = parse_head_key(&info.key)?;
             if device_id == local_device_id {
@@ -1556,6 +1615,7 @@ fn pull_remote_devices(
             Ok(())
         })();
         if let Err(error) = peer_result {
+            cancellation::check()?;
             result.failed_peers = checked_add(result.failed_peers, 1, "failed peer count")?;
             eprintln!("[sync] skipped remote head {:?}: {error}", info.key);
         }
@@ -1574,6 +1634,7 @@ fn pull_device(
     resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     let mut cursor = database.get_sync_cursor(remote_scope, &head.device_id)?;
     if cursor
         .as_ref()
@@ -1610,6 +1671,7 @@ fn pull_device(
     segments.sort_by(|left, right| left.key.cmp(&right.key));
     let mut reached_head = false;
     for info in segments {
+        cancellation::check()?;
         if info.key.as_str() > head_last_key {
             break;
         }
@@ -1663,6 +1725,7 @@ fn pull_device(
             sequence: segment.last_sequence,
             last_segment_key: Some(info.key.clone()),
         };
+        cancellation::check()?;
         let applied = database.apply_sync_segment_with_resources(
             remote_scope,
             &next_cursor,
@@ -1697,6 +1760,7 @@ fn pull_snapshot(
     _resource_limits: ResourceLimits,
     result: &mut SyncEngineResult,
 ) -> Result<DeviceCursor, String> {
+    cancellation::check()?;
     let downloaded = get_verified_object_to_file(
         store,
         &head.snapshot.key,
@@ -1723,7 +1787,7 @@ fn pull_snapshot(
     };
     let expected_record_count = head.snapshot.record_count;
     let mut terminal_checked = false;
-    let mut batches = std::iter::from_fn(|| {
+    let mut batches = cancellation::checked_batches(std::iter::from_fn(|| {
         if terminal_checked {
             return None;
         }
@@ -1744,7 +1808,8 @@ fn pull_snapshot(
                 }
             }
         }
-    });
+    }));
+    cancellation::check()?;
     let applied = database.apply_sync_snapshot_batches(
         remote_scope,
         &cursor,
@@ -1761,6 +1826,7 @@ fn pull_snapshot(
 }
 
 fn validate_head(key: &str, device_id: &str, head: &DeviceHead) -> Result<(), String> {
+    cancellation::check()?;
     if head.device_id != device_id {
         return Err(format!("head payload device does not match key {key:?}"));
     }
@@ -1799,6 +1865,7 @@ fn publish_head(
     session_key: Option<&SessionKey>,
     result: &mut SyncEngineResult,
 ) -> Result<PublishedHead, String> {
+    cancellation::check()?;
     let key = head_object_key(&head.device_id)?;
     let encoded = encode_device_head(head, session_key)?;
     let stored_size = encoded.stored_size_bytes();
@@ -1823,6 +1890,7 @@ fn put_immutable(
     encoded: &EncodedObject,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     match store.put(key, encoded.bytes.clone(), PutCondition::IfAbsent)? {
         PutOutcome::Stored { .. } => {
             result.bytes_uploaded = checked_add(
@@ -1854,6 +1922,7 @@ fn get_verified_object(
     expected_size: Option<u64>,
     result: &mut SyncEngineResult,
 ) -> Result<Vec<u8>, String> {
+    cancellation::check()?;
     let downloaded = store
         .get(key)?
         .ok_or_else(|| format!("remote object {key:?} does not exist"))?;
@@ -1881,6 +1950,7 @@ fn remove_obsolete_local_manifest(
     temporary_directory: &std::path::Path,
     remote_scope: &str,
 ) -> Result<(), String> {
+    cancellation::check()?;
     let path = temporary_directory.join(format!("sync-pool-manifest-{remote_scope}.json"));
     match std::fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_file() || metadata.file_type().is_symlink() => {
@@ -1904,6 +1974,7 @@ fn current_time_ms() -> i64 {
 }
 
 fn checked_add(left: u64, right: u64, label: &str) -> Result<u64, String> {
+    cancellation::check()?;
     left.checked_add(right)
         .ok_or_else(|| format!("{label} overflowed"))
 }
@@ -1950,6 +2021,7 @@ fn get_verified_object_to_file(
     directory: &std::path::Path,
     result: &mut SyncEngineResult,
 ) -> Result<TemporarySyncFile, String> {
+    cancellation::check()?;
     let temporary = TemporarySyncFile::new(directory, "download")?;
     fs::remove_file(&temporary.path)
         .map_err(|error| format!("failed to prepare sync download file: {error}"))?;
@@ -1986,6 +2058,7 @@ fn put_immutable_file(
     encoded: &EncodedFile,
     result: &mut SyncEngineResult,
 ) -> Result<(), String> {
+    cancellation::check()?;
     match store.put_file(
         key,
         encoded.path(),

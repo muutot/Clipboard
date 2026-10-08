@@ -23,7 +23,7 @@ the small per-device head is the only routinely overwritten object.
 
 The desktop runtime supports only S3-compatible storage. `get_sync_config`, `set_sync_config`,
 typed `test_sync_connection`, `sync_now`, and on-demand `materialize_clipboard_item` are the complete
-sync Tauri surface; automatic sync calls the same internal `run_sync` function. The old remote-backup list/download/verification,
+sync Tauri surface; automatic sync calls the same internal `run_sync_cancellable` function as manual sync. The old remote-backup list/download/verification,
 compaction, WebDAV, baseline and oplog IPC surfaces are not registered.
 
 Each run snapshots configuration once, releases the config lock, derives at most one optional
@@ -368,6 +368,33 @@ destination only after a response arrives, so an attempt either transferred an o
 transferred nothing. The in-memory upload path hashes its payload before signing and re-sends
 through a `SharedBuffer` over one `Arc`, so a retry over a payload at the 256 MiB protocol ceiling
 costs a refcount bump rather than a copy.
+
+### Cooperative cancellation
+
+`sync_database_cancellable` accepts a `CancellationToken`. The synchronous engine uses a
+thread-local scope that is restored on return or panic; its HTTP facade captures the token
+before entering async execution. Engine phase boundaries, outbox/peer/GC loops and resource
+hash/encryption chunks observe it. Snapshot/checkpoint iterators check before and after every
+batch, including EOF, turning cancellation into an error so the whole SQLite apply rolls back.
+Individual completed commits are retained; cancellation does not undo previously synced peers.
+
+S3 requests use async reqwest through one shared two-thread Tokio runtime. Response-header,
+upload/body and retry-backoff waits race the token. Cancellation drops the I/O future;
+there are no detached per-request blocking threads. Upload input reads are bounded to 64 KiB
+per poll. Download errors remove owned partial files. Conditional PUT headers, SigV4,
+size limits and v1 formats are unchanged. An already committed remote object can survive
+cancellation; immutable objects remain retryable and heads/cursors advance only at existing
+publication boundaries. This is cooperative cancellation, not a distributed rollback.
+
+Desktop shutdown cancels the root shared by manual and automatic runs before joining workers.
+Auto-stop also cancels its child token. The 30-second fallback still protects against local
+filesystem/SQLite/OS calls that cannot be preempted. Cancellation persists `cancelled` status;
+history invalidation also runs on errors so earlier committed peers become visible.
+
+Local tests cover stalled response headers, upload and partial download, retry interruption,
+partial-download removal, publication cancellation before heads, orphan retry and transaction
+rollback at the terminal snapshot/checkpoint batch. Real cloud interruption and native app
+exit timing remain separate integration checks.
 
 ### Real S3 benchmark commands
 

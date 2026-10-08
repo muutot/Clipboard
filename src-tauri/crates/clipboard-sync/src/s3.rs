@@ -9,9 +9,10 @@ use std::{
     time::Duration,
 };
 
+use crate::{cancellation, transport};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, ETAG};
+use reqwest::{Client, RequestBuilder};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -364,17 +365,14 @@ struct S3Request<'a> {
 }
 
 /// Signs a request and returns a `RequestBuilder`.
-fn signed_request(
-    client: &reqwest::blocking::Client,
-    req: &S3Request,
-) -> Result<RequestBuilder, String> {
+fn signed_request(client: &reqwest::Client, req: &S3Request) -> Result<RequestBuilder, String> {
     let data = req.payload.unwrap_or(&[]);
     let payload_hash = sha256_hex(data);
     signed_request_with_payload_hash(client, req, &payload_hash)
 }
 
 fn signed_request_with_payload_hash(
-    client: &reqwest::blocking::Client,
+    client: &reqwest::Client,
     req: &S3Request,
     payload_hash: &str,
 ) -> Result<RequestBuilder, String> {
@@ -533,8 +531,8 @@ fn is_retryable_status(status: u16) -> bool {
 /// `is_body` is excluded on purpose: a body error means the request was already
 /// on the wire, so this stays a conservative list — connect, request, and
 /// timeout only.
-fn is_retryable_transport(error: &reqwest::Error) -> bool {
-    error.is_timeout() || error.is_connect() || error.is_request()
+fn is_retryable_transport(error: &transport::SendError) -> bool {
+    error.retryable()
 }
 
 /// Reads a `Retry-After` delta-seconds hint, capped at the backoff ceiling.
@@ -552,17 +550,18 @@ fn retry_after_delay(headers: &HeaderMap) -> Option<Duration> {
 /// is returned for *any* non-retryable status, leaving the caller's existing
 /// status handling — 412, 404, and the rest — exactly as it was.
 fn send_with_retry(
-    build: impl Fn() -> Result<reqwest::blocking::RequestBuilder, String>,
+    build: impl Fn() -> Result<reqwest::RequestBuilder, String>,
     label: &str,
-) -> Result<reqwest::blocking::Response, String> {
+) -> Result<transport::Response, String> {
     let mut backoff = SEND_RETRY_BASE_DELAY;
     let mut last_error = format!("{label} failed");
     for attempt in 0..MAX_SEND_ATTEMPTS {
         if attempt > 0 {
-            std::thread::sleep(backoff);
+            cancellation::sleep(backoff)?;
             backoff = (backoff * 2).min(SEND_RETRY_MAX_DELAY);
         }
-        match build()?.send() {
+        cancellation::check()?;
+        match transport::send(build()?) {
             Ok(response) if !is_retryable_status(response.status().as_u16()) => {
                 return Ok(response);
             }
@@ -612,11 +611,7 @@ const MAX_S3_ERROR_BODY_BYTES: u64 = 64 * 1024;
 /// Reads a response body into memory, refusing to buffer more than `limit`
 /// bytes (early-rejecting via `Content-Length` when present, and hard-capping
 /// the stream otherwise).
-fn read_body_bounded(
-    resp: reqwest::blocking::Response,
-    limit: u64,
-    op: &str,
-) -> Result<Vec<u8>, String> {
+fn read_body_bounded(resp: transport::Response, limit: u64, op: &str) -> Result<Vec<u8>, String> {
     if let Some(len) = resp.content_length() {
         if len > limit {
             return Err(format!("{op} response body exceeds the {limit}-byte limit"));
@@ -632,7 +627,7 @@ fn read_body_bounded(
     Ok(bytes)
 }
 
-fn err_from_response(resp: reqwest::blocking::Response, op: &str) -> String {
+fn err_from_response(resp: transport::Response, op: &str) -> String {
     let status = resp.status();
     let body = read_body_bounded(resp, MAX_S3_ERROR_BODY_BYTES, op)
         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
@@ -671,10 +666,15 @@ pub fn ensure_test_bucket(
             region,
             extra_headers: &[],
         };
-        match signed_request(&client, &req)?.body(empty).send() {
+        match transport::send(signed_request(&client, &req)?.body(empty)) {
             Ok(response) if response.status().is_success() => return Ok(()),
             Ok(response) if response.status().as_u16() == 409 => {
-                let body = response.text().unwrap_or_default();
+                let body = String::from_utf8_lossy(&read_body_bounded(
+                    response,
+                    MAX_S3_ERROR_BODY_BYTES,
+                    "create test bucket",
+                )?)
+                .into_owned();
                 if body.contains("<Code>BucketAlreadyOwnedByYou</Code>")
                     || body.contains("<Code>BucketAlreadyExists</Code>")
                 {
@@ -735,7 +735,8 @@ pub fn test_s3_connection(
         region,
         extra_headers: &[],
     };
-    match signed_request(&client, &req).and_then(|r| r.send().map_err(|e| e.to_string())) {
+    match signed_request(&client, &req).and_then(|r| transport::send(r).map_err(|e| e.to_string()))
+    {
         Ok(resp) => {
             let status = resp.status();
             if status.is_success() {
@@ -852,7 +853,8 @@ pub fn put_s3_object(
             Ok(
                 signed_request_with_payload_hash(&client, &req, &payload_hash)?
                     .timeout(streaming_timeout(payload_len))
-                    .body(reqwest::blocking::Body::sized(view, payload_len)),
+                    .header(CONTENT_LENGTH, payload_len)
+                    .body(transport::stream_body(view)),
             )
         },
         "upload",
@@ -931,7 +933,8 @@ pub fn put_s3_file(
             Ok(
                 signed_request_with_payload_hash(&client, &req, payload_sha256)?
                     .timeout(streaming_timeout(size_bytes))
-                    .body(reqwest::blocking::Body::sized(source, size_bytes)),
+                    .header(CONTENT_LENGTH, size_bytes)
+                    .body(transport::stream_body(source)),
             )
         },
         "streaming upload",
@@ -1363,7 +1366,7 @@ fn streaming_timeout(size_limit_bytes: u64) -> Duration {
     )
 }
 
-fn response_etag(response: &reqwest::blocking::Response) -> Result<Option<String>, String> {
+fn response_etag(response: &transport::Response) -> Result<Option<String>, String> {
     response
         .headers()
         .get(ETAG)
@@ -1758,8 +1761,116 @@ mod tests {
         (port, requests)
     }
 
-    fn retry_test_client() -> reqwest::blocking::Client {
-        reqwest::blocking::Client::builder()
+    #[test]
+    fn cancellation_interrupts_stalled_headers_download_and_upload() {
+        use crate::cancellation::CancellationToken;
+        use std::{net::TcpListener, sync::mpsc, time::Instant};
+        for mode in ["headers", "download", "upload"] {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            let (ready_tx, ready_rx) = mpsc::channel();
+            let (release_tx, release_rx) = mpsc::channel();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut byte = [0];
+                while !request.ends_with(b"\r\n\r\n") {
+                    if stream.read(&mut byte).unwrap() == 0 {
+                        return;
+                    }
+                    request.push(byte[0]);
+                }
+                if mode == "download" {
+                    stream
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8192\r\n\r\ndata")
+                        .unwrap();
+                }
+                ready_tx.send(()).unwrap();
+                let _ = release_rx.recv_timeout(Duration::from_secs(5));
+            });
+            let token = CancellationToken::default();
+            let worker_token = token.clone();
+            let dir =
+                std::env::temp_dir().join(format!("clipboard-cancel-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let destination = dir.join("partial.bin");
+            let worker_path = destination.clone();
+            let (done_tx, done_rx) = mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                let result = worker_token.run(|| {
+                    if mode == "upload" {
+                        put_s3_object(
+                            &endpoint,
+                            "region",
+                            "bucket",
+                            "object",
+                            vec![7; 8 * 1024 * 1024],
+                            "key",
+                            "secret",
+                            S3PutCondition::IfAbsent,
+                        )
+                        .map(|_| ())
+                    } else {
+                        get_s3_object_to_file(
+                            &endpoint,
+                            "region",
+                            "bucket",
+                            "object",
+                            &worker_path,
+                            8192,
+                            "key",
+                            "secret",
+                        )
+                        .map(|_| ())
+                    }
+                });
+                done_tx.send(result).unwrap();
+            });
+            ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+            if mode == "download" {
+                let deadline = Instant::now() + Duration::from_secs(2);
+                while !destination.exists() && Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                assert!(destination.exists(), "exercise cleanup after creation");
+            }
+            token.cancel();
+            let result = done_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("network cancellation should not wait for the request timeout");
+            assert!(result.unwrap_err().contains("sync cancelled"));
+            assert!(!destination.exists(), "partial downloads must be removed");
+            let _ = release_tx.send(());
+            worker.join().unwrap();
+            server.join().unwrap();
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn cancellation_interrupts_retry_backoff() {
+        let token = crate::cancellation::CancellationToken::default();
+        let cancel = token.clone();
+        let trigger = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(30));
+            cancel.cancel();
+        });
+        let started = std::time::Instant::now();
+        assert_eq!(
+            token
+                .run(|| cancellation::sleep(Duration::from_secs(4)))
+                .unwrap_err(),
+            "sync cancelled"
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        trigger.join().unwrap();
+    }
+
+    fn retry_test_client() -> reqwest::Client {
+        reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .build()
             .expect("build the test client")

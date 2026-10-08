@@ -19,15 +19,13 @@ fn lock_or_recover<'a, T>(lock: &'a Mutex<T>, label: &str) -> std::sync::MutexGu
 }
 
 pub fn stop_runtime_services(app: &tauri::AppHandle) {
+    // Signal all runs before any join can wait for the database mutex.
+    if let Some(cancellation) = app.try_state::<crate::commands::sync::SyncCancellation>() {
+        cancellation.0.cancel();
+    }
     if let Some(worker) = app.try_state::<Mutex<crate::item_operations::ExternalChangeWorker>>() {
         lock_or_recover(&worker, "external item changes").stop();
     }
-    // Stop the auto-sync worker first: it is a background writer that owns an
-    // AppHandle and writes both SQLite and S3, so anything it commits after a
-    // storage snapshot would be lost, and it must not resolve managed state
-    // after teardown. Its stop waits for the in-flight run up to a bounded
-    // timeout and then leaks the (flag-set) thread rather than hang exit on a
-    // slow S3 run.
     if let Some(worker) = app.try_state::<Mutex<crate::commands::sync::AutoSyncWorker>>() {
         lock_or_recover(&worker, "auto-sync worker").stop();
     }

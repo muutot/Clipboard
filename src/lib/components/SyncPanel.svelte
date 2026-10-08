@@ -293,7 +293,9 @@
                 ? _t("storage.syncStatusSuccess")
                 : syncStatus === "partial"
                   ? _t("storage.syncStatusPartial")
-                  : _t("storage.syncStatusFailed")}{/if}
+                  : syncStatus === "cancelled"
+                    ? _t("storage.syncStatusCancelled")
+                    : _t("storage.syncStatusFailed")}{/if}
           </p>
         </div>
         <button

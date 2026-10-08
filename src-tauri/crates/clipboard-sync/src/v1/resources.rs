@@ -332,6 +332,7 @@ pub fn prepare_mutation_resources(
     let mut skipped_resources = 0u64;
 
     for replicated in &mut mutations.upserts {
+        crate::cancellation::check()?;
         let item = &mut replicated.item;
         let mut path_map = BTreeMap::<String, Option<String>>::new();
         match item.kind {
@@ -405,6 +406,7 @@ pub fn prepare_mutation_resources(
         ..ResourceTransferStats::default()
     };
     for descriptor in descriptors.values() {
+        crate::cancellation::check()?;
         let result = ensure_resource_uploaded(store, descriptor, session_key)?;
         if result.uploaded {
             stats.transferred_resources += 1;
@@ -431,6 +433,7 @@ pub fn materialize_mutation_resources(
     let mut stats = ResourceTransferStats::default();
 
     for replicated in &mut mutations.upserts {
+        crate::cancellation::check()?;
         let item = &mut replicated.item;
         match item.kind {
             SyncItemKind::Image => {
@@ -520,6 +523,7 @@ pub fn defer_mutation_resources(
 ) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, String> {
     let mut pending = BTreeMap::new();
     for replicated in &mut mutations.upserts {
+        crate::cancellation::check()?;
         let item = &mut replicated.item;
         let mut references = Vec::new();
         let mut path_map = BTreeMap::<String, Option<String>>::new();
@@ -631,6 +635,7 @@ pub fn collect_mutation_resource_refs(
 ) -> Result<BTreeMap<String, Vec<SyncResourceRef>>, String> {
     let mut references_by_item = BTreeMap::new();
     for replicated in &mutations.upserts {
+        crate::cancellation::check()?;
         let item = &replicated.item;
         let mut references = Vec::new();
         match item.kind {
@@ -1081,6 +1086,7 @@ fn encrypt_resource_to_temp(
         let mut chunk_index = 0u64;
         let mut buffer = vec![0u8; RESOURCE_CHUNK_BYTES];
         loop {
+            crate::cancellation::check()?;
             let read = source
                 .read(&mut buffer)
                 .map_err(|error| format!("failed to read resource for encryption: {error}"))?;
@@ -1173,6 +1179,7 @@ fn decrypt_resource_to_file(
     let mut remaining = plaintext_size;
     let mut chunk_index = 0u64;
     while remaining > 0 {
+        crate::cancellation::check()?;
         let chunk_plaintext_size = remaining.min(RESOURCE_CHUNK_BYTES as u64) as usize;
         let mut ciphertext = vec![0u8; chunk_plaintext_size + RESOURCE_AUTH_TAG_LEN];
         source
@@ -1211,6 +1218,7 @@ fn symlink_metadata_if_exists(path: &Path) -> Result<Option<fs::Metadata>, Strin
 }
 
 fn publish_verified_file(temp_path: &Path, final_path: &Path) -> Result<(), String> {
+    crate::cancellation::check()?;
     if let Some(metadata) = symlink_metadata_if_exists(final_path)? {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("cached resource path changed to a non-regular file".to_string());
@@ -1250,6 +1258,7 @@ fn hash_regular_file(path: &Path, max_bytes: u64) -> Result<(String, u64), Strin
     let mut size_bytes = 0u64;
     let mut buffer = vec![0u8; HASH_BUFFER_BYTES];
     loop {
+        crate::cancellation::check()?;
         let read = file
             .read(&mut buffer)
             .map_err(|error| format!("failed to hash resource: {error}"))?;

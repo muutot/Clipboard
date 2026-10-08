@@ -203,6 +203,7 @@ const en: LocaleDefinition = {
     syncLastTime: "Last: {time}",
     syncStatusSuccess: "Success",
     syncStatusPartial: "Partial",
+    syncStatusCancelled: "Cancelled",
     syncStatusFailed: "Failed",
     syncCloudTab: "Cloud",
     syncS3Tab: "S3",

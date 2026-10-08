@@ -8,7 +8,7 @@ pub mod resources;
 pub mod wire;
 
 pub use crate::s3::{S3RequestMetrics, S3RequestMetricsSnapshot};
-pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
+pub use engine::{sync_database, sync_database_cancellable, SyncEngineOptions, SyncEngineResult};
 pub use layout::{
     checkpoint_object_key, head_object_key, obsolete_object_candidate, parse_checkpoint_key,
     parse_head_key, parse_resource_key, parse_segment_key, resource_object_key, segment_object_key,

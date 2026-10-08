@@ -193,6 +193,7 @@ const zhCN: LocaleDefinition = {
     syncLastTime: "上次: {time}",
     syncStatusSuccess: "成功",
     syncStatusPartial: "部分成功",
+    syncStatusCancelled: "已取消",
     syncStatusFailed: "失败",
     syncS3Tab: "S3",
     syncCloudTab: "云端",

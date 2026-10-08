@@ -12,7 +12,7 @@ mod s3_smoke;
 mod scale_bench;
 
 pub use clipboard_sync::v1::{engine, layout, remote, repository, resources, wire};
-pub use engine::{sync_database, SyncEngineOptions, SyncEngineResult};
+pub use engine::{sync_database, sync_database_cancellable, SyncEngineOptions, SyncEngineResult};
 
 pub use clipboard_sync::s3::{S3RequestMetrics, S3RequestMetricsSnapshot};
 pub use layout::{

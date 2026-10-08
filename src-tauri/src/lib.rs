@@ -699,6 +699,7 @@ pub fn run() {
             // Background auto-sync worker. It re-reads `auto_sync` and
             // `auto_sync_interval_secs` from the managed config each tick, so
             // toggling the setting in the UI takes effect without a restart.
+            app.manage(commands::sync::SyncCancellation::default());
             let auto_sync_worker = match commands::sync::AutoSyncWorker::start(app.handle().clone())
             {
                 Ok(worker) => {

@@ -182,6 +182,7 @@ impl S3ObjectStore {
 
 impl ObjectStore for S3ObjectStore {
     fn list(&self, prefix: &str, start_after: Option<&str>) -> Result<Vec<ObjectInfo>, String> {
+        crate::cancellation::check()?;
         let full_prefix = self.full_list_prefix(prefix)?;
         let full_start_after = start_after
             .map(|cursor| {
@@ -223,6 +224,7 @@ impl ObjectStore for S3ObjectStore {
     }
 
     fn get(&self, key: &str) -> Result<Option<DownloadedObject>, String> {
+        crate::cancellation::check()?;
         let full_key = self.full_object_key(key)?;
         let started = Instant::now();
         let result = get_s3_object(
@@ -251,6 +253,7 @@ impl ObjectStore for S3ObjectStore {
     }
 
     fn head(&self, key: &str) -> Result<Option<ObjectMetadata>, String> {
+        crate::cancellation::check()?;
         let full_key = self.full_object_key(key)?;
         let started = Instant::now();
         let result = head_s3_object(
@@ -279,6 +282,7 @@ impl ObjectStore for S3ObjectStore {
         destination: &Path,
         max_bytes: u64,
     ) -> Result<Option<DownloadedFile>, String> {
+        crate::cancellation::check()?;
         let full_key = self.full_object_key(key)?;
         let started = Instant::now();
         let result = get_s3_object_to_file(
@@ -315,6 +319,7 @@ impl ObjectStore for S3ObjectStore {
         bytes: Vec<u8>,
         condition: PutCondition,
     ) -> Result<PutOutcome, String> {
+        crate::cancellation::check()?;
         let full_key = self.full_object_key(key)?;
         let condition = match condition {
             PutCondition::Unconditional => S3PutCondition::Unconditional,
@@ -351,6 +356,7 @@ impl ObjectStore for S3ObjectStore {
         size_bytes: u64,
         condition: PutCondition,
     ) -> Result<PutOutcome, String> {
+        crate::cancellation::check()?;
         let full_key = self.full_object_key(key)?;
         let condition = match condition {
             PutCondition::Unconditional => S3PutCondition::Unconditional,
@@ -381,6 +387,7 @@ impl ObjectStore for S3ObjectStore {
     }
 
     fn delete(&self, key: &str) -> Result<(), String> {
+        crate::cancellation::check()?;
         let full_key = self.full_object_key(key)?;
         let started = Instant::now();
         let result = delete_from_s3(
@@ -416,6 +423,7 @@ pub fn cleanup_obsolete_objects(store: &impl ObjectStore) -> Result<ObsoleteClea
         .collect();
 
     for key in &candidates {
+        crate::cancellation::check()?;
         store
             .delete(key)
             .map_err(|error| format!("failed to delete obsolete sync object {key:?}: {error}"))?;

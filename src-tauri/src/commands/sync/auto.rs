@@ -1,17 +1,14 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use tauri::Manager;
 
-use crate::commands::sync::run_sync;
+use crate::commands::sync::{run_sync_cancellable, SyncCancellation};
 use crate::config::ConfigStore;
+use clipboard_sync::cancellation::CancellationToken;
 
-/// How long `stop` waits for an in-flight `run_sync` before leaking the
-/// worker thread. A network-slow run has no cancellation checkpoints, so an
-/// unbounded join could hang exit/restart until the S3 timeouts fire (up to
-/// 30 minutes for a streaming transfer).
+/// Last-resort bound for an uninterruptible local OS call. Network waits,
+/// retries and engine batches cooperate with cancellation before this deadline.
 const STOP_JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Background worker that periodically runs the same S3-first v1 engine as the
@@ -22,20 +19,20 @@ const STOP_JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 /// on each tick. Config is re-read every second so a settings change to
 /// `auto_sync` or `auto_sync_interval_secs` takes effect without a restart.
 pub struct AutoSyncWorker {
-    stop_flag: Arc<AtomicBool>,
+    stop_flag: CancellationToken,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl AutoSyncWorker {
     pub fn start(app: tauri::AppHandle) -> Result<Self, String> {
-        let stop_flag = Arc::new(AtomicBool::new(false));
-        let worker_stop_flag = Arc::clone(&stop_flag);
+        let stop_flag = app.state::<SyncCancellation>().0.child_token();
+        let worker_stop_flag = stop_flag.clone();
 
         let handle = std::thread::Builder::new()
             .name("auto-sync".to_owned())
             .spawn(move || {
                 let mut last_sync_ms: i64 = 0;
-                while !worker_stop_flag.load(Ordering::Relaxed) {
+                while !worker_stop_flag.is_cancelled() {
                     let (enabled, interval_secs) = {
                         let config = app.state::<std::sync::Mutex<ConfigStore>>();
                         let lock_result = config.lock();
@@ -68,7 +65,7 @@ impl AutoSyncWorker {
 
                     let interval_ms = interval_secs.saturating_mul(1000) as i64;
                     if enabled && now_ms - last_sync_ms >= interval_ms {
-                        match run_sync(&app) {
+                        match run_sync_cancellable(&app, &worker_stop_flag) {
                             Ok(result) => {
                                 crate::log_event!(
                                     "[auto-sync] done: {} uploaded, {} downloaded, {} applied, {} peers failed",
@@ -84,6 +81,7 @@ impl AutoSyncWorker {
                                     as i64;
                             }
                             Err(e) => {
+                                if worker_stop_flag.is_cancelled() { break; }
                                 // A manual sync holding SYNC_RUN_LOCK is not
                                 // a completed auto-sync cycle: keep the old
                                 // last_sync_ms so the next tick retries
@@ -113,10 +111,10 @@ impl AutoSyncWorker {
     }
 
     pub fn stop(&mut self) {
-        self.stop_flag.store(true, Ordering::Relaxed);
+        self.stop_flag.cancel();
         if let Some(handle) = self.handle.take() {
             // Join through a helper thread so the wait is bounded: if the
-            // worker is stuck in a long sync, log and leak it — the stop flag
+            // worker is stuck in an uninterruptible OS call, log it — the stop flag
             // stays set (the loop exits after the in-flight run) and process
             // exit reclaims the thread.
             let (done_tx, done_rx) = mpsc::channel::<()>();

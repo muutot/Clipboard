@@ -6,7 +6,7 @@ use std::{
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 use crate::commands::lock::lock_state;
 use crate::config::{ConfigStore, SyncConfig, SyncProvider};
@@ -16,6 +16,9 @@ use crate::storage::{ClipboardRepository, Database, StoragePaths};
 use crate::sync::{self, v1};
 
 mod auto;
+
+#[derive(Default)]
+pub(crate) struct SyncCancellation(pub clipboard_sync::cancellation::CancellationToken);
 
 /// Manual and automatic runs share one local publication state and therefore
 /// cannot overlap. A second caller fails fast instead of queueing behind a
@@ -547,6 +550,15 @@ pub(crate) fn try_lock_sync_run() -> Result<std::sync::MutexGuard<'static, ()>, 
 
 /// Shared entry point for the Tauri command and the auto-sync worker.
 pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> {
+    let cancellation = app.state::<SyncCancellation>().0.child_token();
+    run_sync_cancellable(app, &cancellation)
+}
+
+pub(super) fn run_sync_cancellable(
+    app: &tauri::AppHandle,
+    cancellation: &clipboard_sync::cancellation::CancellationToken,
+) -> Result<SyncRunResult, String> {
+    cancellation.check()?;
     let _run_guard = try_lock_sync_run()?;
     let config = app.state::<Mutex<ConfigStore>>();
     let database = app.state::<Database>();
@@ -561,27 +573,19 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
     let store = settings.object_store()?;
     let engine_paths = v1::SyncEnginePaths::from(paths.inner());
 
-    let outcome = v1::sync_database(
+    let outcome = v1::sync_database_cancellable(
         &store,
         database.inner(),
         &engine_paths,
         &remote_scope,
         session_key.as_ref(),
         settings.engine_options(),
+        cancellation,
     );
+    crate::item_operations::invalidate_desktop(app);
     let now_ms = current_time_ms();
     match outcome {
         Ok(engine_result) => {
-            if engine_result.applied_entries > 0 {
-                if let Err(error) = app.emit(
-                    "clipboard-history-invalidated",
-                    crate::commands::clipboard::ClipboardHistoryInvalidated {
-                        deleted_ids: Vec::new(),
-                    },
-                ) {
-                    crate::log_error!("[sync] failed to emit history-invalidated: {error}");
-                }
-            }
             if let Ok(mut guard) = config.lock() {
                 let status = if engine_result.failed_peers == 0 {
                     "success"
@@ -596,7 +600,14 @@ pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> 
         }
         Err(error) => {
             if let Ok(mut guard) = config.lock() {
-                if let Err(status_error) = guard.update_sync_status("failed", now_ms) {
+                if let Err(status_error) = guard.update_sync_status(
+                    if cancellation.is_cancelled() {
+                        "cancelled"
+                    } else {
+                        "failed"
+                    },
+                    now_ms,
+                ) {
                     crate::log_error!(
                         "[sync] failed to persist failed sync status: {status_error}"
                     );
