@@ -106,3 +106,5 @@ Search exact event names and payload types before modifying producers or consume
 Auto-tag services expose optional sourceApp/kind conditions and previewAutoTagRules, previewAutoTagHistory, applyAutoTagHistory. History results contain matchedCount, changedCount and up to 20 samples. Applying uses the current draft; saving is separate.
 
 Portable backup wrappers in storage.ts: createResourceBackup(path), previewResourceBackup(path), restoreResourceBackup(path, fingerprint) map to create_resource_backup, preview_resource_backup and restore_resource_backup. File operations run on the blocking pool. Preview is read-only; restore returns ImportSummary.
+
+Main-route controllers receive live settings/query/filter getters and a shared ItemStoreView. Search flushes settings before the first request and owns debounce/request generations. History owns keyset/recycle-bin pagination and suppressed IDs. Bulk operations use the existing affected-item rollback helpers. window-lifecycle owns native listeners and the settings subscription, while window-bounds retains geometry debounce/restore logic.

@@ -11,7 +11,7 @@ This tracks implementation, not a version bump or release.
 - [x] Select/copy OCR blocks and highlight search matches on images (342 frontend tests; check/build/format pass; synthetic image geometry inspected in light and dark/narrow views).
 - [x] Extend automatic tags with source/type conditions, preview and history application (344 frontend tests, Rust suite and Clippy, check/build/format pass; dark settings layout inspected).
 - [x] Export/import a self-contained resource backup with validation and restore preview (346 frontend tests; check/build/format/Clippy pass; Rust suite passes with the unavailable native OpenClipboard test excluded; dark and 520px settings inspected).
-- [ ] Extract route state controllers while preserving item-store ownership and page appearance.
+- [x] Extract search/history/bulk/window controllers with one item-store owner (350 frontend tests, check/build/format pass; browser main page inspected; stale requests, disposal and rollback covered).
 - [ ] Share item-operation behavior across GUI, CLI and local API.
 - [ ] Cancel synchronization cooperatively through engine and transport.
 - [x] Stream file exports from one read transaction with atomic publication (Rust export/WAL/concurrent-write/failure regressions and full Rust suite, Clippy pass).

@@ -1,4 +1,8 @@
-﻿<script lang="ts">
+<script lang="ts">
+  import { createMainWindowController } from "$lib/controllers/window-lifecycle";
+  import { createBulkController } from "$lib/controllers/bulk.svelte";
+  import { createSearchController } from "$lib/controllers/search.svelte";
+  import { createHistoryController } from "$lib/controllers/history.svelte";
   import { flushSync, onMount, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -17,20 +21,13 @@
   import Toast from "$lib/components/Toast.svelte";
   import { demoClipboardItems } from "$lib/data/demo-items";
   import {
-    loadClipboardHistory,
-    loadDeletedClipboardHistory,
     persistDelete,
     persistHardDelete,
     persistRestore,
-    persistBatchRestore,
     persistPermanentDelete,
-    persistBatchPermanentDelete,
     persistFavorite,
-    persistBatchFavorite,
-    persistBatchDelete,
     persistTags,
     listAllTags,
-    searchClipboardHistory,
     listSourceApplications,
     materializeClipboardItem,
     toClipboardItem,
@@ -39,20 +36,13 @@
     pasteClipboardItem,
     deriveTextEditPatch,
     writeClipboardText,
-    getDisplayTitle,
-    getDisplayRemainingLines,
   } from "$lib/services/clipboard";
   import { getRuntimeInfo, isTauriRuntime } from "$lib/services/runtime";
   import { showToast } from "$lib/services/toast";
   import { onContextMenuOpenChanged } from "$lib/services/context-menu";
   import { getKeyboardConfig } from "$lib/services/keyboard";
   import { defaultShortcutsFor } from "$lib/keyboard-defaults";
-  import type {
-    ClipboardFilter,
-    ClipboardItem,
-    HistoryCursorPayload,
-    WindowPosition,
-  } from "$lib/types/clipboard";
+  import type { ClipboardFilter, ClipboardItem } from "$lib/types/clipboard";
   import type { IconName } from "$lib/types/clipboard";
   import { messages, resolvePath } from "$lib/i18n";
   import {
@@ -69,60 +59,42 @@
     resolveFilterShortcutBindings,
     resolveNavigationBindings,
   } from "$lib/utils/shortcut-bindings";
-  import { planBulkDelete } from "$lib/utils/bulk-actions";
   import { resolveKeyAction, type KeyAction } from "$lib/utils/keyboard-actions";
   import { resolveSearchInputAction } from "$lib/utils/search-input-actions";
   import {
-    appendItems,
     applyItemPatches,
     captureAffectedItems,
     closeSearchResults,
     createItemStore,
     findLoadedItem as findRecord,
-    mergeDeletedHistoryPage,
-    mergeSearchCachePage,
-    promoteFromCache as promoteCachedEntries,
     promoteItem,
     removeItemTag,
     removeItems,
     replaceItem,
-    replaceViewItems,
     restoreAffectedItems,
     rewriteItemTags,
     setDetailItem,
-    trimLoadedHistory,
     type AffectedItemSnapshot,
   } from "$lib/utils/item-store";
   import { createItemStoreView } from "$lib/utils/item-store-view.svelte";
   import { applyItemsChangedEvent, sortRecentHistory } from "$lib/utils/item-changes";
   import { isEditableKeyboardTarget } from "$lib/utils/keyboard";
   import {
-    SEARCH_HISTORY_LIMIT,
-    SEARCH_HISTORY_STORAGE_KEY,
     SEARCH_SUGGESTION_LIMIT,
-    SEARCH_TERM_MAX_LENGTH,
     loadSearchHistory as loadStoredSearchHistory,
     nextSearchHistory,
     normalizeSearchTerm,
     persistSearchHistory as persistStoredSearchHistory,
     suggestionCandidate,
   } from "$lib/utils/search-history";
-  import { createWindowBoundsController } from "$lib/utils/window-bounds";
-  import {
-    applyGeneralSettingsToDocument,
-    applyFontSizesToDocument,
-  } from "$lib/services/settings-bootstrap";
+  import { applyFontSizesToDocument } from "$lib/services/settings-bootstrap";
   import { listen } from "@tauri-apps/api/event";
   import type {
     ClipboardItemsChangedPayload,
     PersistedClipboardItem,
     TagsChangedPayload,
   } from "$lib/types/clipboard";
-  import {
-    generalSettings,
-    restoreWindowPosition,
-    saveWindowPosition,
-  } from "$lib/services/settings";
+  import { generalSettings } from "$lib/services/settings";
   import { iconsDir } from "$lib/services/paths";
   import { getStorageStatus } from "$lib/services/storage";
 
@@ -139,7 +111,6 @@
 
   const VIRTUAL_SCROLL_CONFIG: VirtualScrollConfig = { itemHeight: 150, overscan: 5 };
   const VIRTUAL_SCROLL_THRESHOLD = 50;
-  const DELETED_HISTORY_PAGE_SIZE = 100;
 
   type SearchOption = {
     value: string;
@@ -181,7 +152,7 @@
   /// cannot discard a capture, search, or favorite toggle that landed while the
   /// persist call was in flight.
   function captureAffected(ids: ReadonlySet<string>): AffectedItemSnapshot {
-    return captureAffectedItems(itemStore.current, ids, selectedIds);
+    return captureAffectedItems(itemStore.current, ids, bulk.selectedIds);
   }
 
   /// Undoes a failed bulk mutation: restores only the captured ids and
@@ -190,7 +161,7 @@
   function rollbackAffected(snapshot: AffectedItemSnapshot) {
     itemStore.current = restoreAffectedItems(itemStore.current, snapshot);
     if (snapshot.selected.size > 0) {
-      selectedIds = new Set([...selectedIds, ...snapshot.selected]);
+      bulk.selectedIds = new Set([...bulk.selectedIds, ...snapshot.selected]);
     }
   }
 
@@ -236,38 +207,26 @@
     });
   }
 
-  let deletedHistoryLoaded = $state(false);
-  let deletedHistoryLoading = $state(false);
-  let deletedHistoryOffset = $state(0);
-  let deletedHistoryHasMore = $state(true);
-  let deletedHistoryRequestId = 0;
-  let activeHistoryLoading = $state(false);
-  // Keyset pagination anchor for active history: the (last_used_at_ms, id)
-  // of the last row of the most recently fetched page. NULL
-  // means the next fetch is a fresh first page. Unlike OFFSET bookkeeping
-  // this never replays or skips rows when `set_last_used` promotes entries
-  // between page fetches — promoted rows simply land above the cursor.
-  let activeHistoryCursor = $state<HistoryCursorPayload | null>(null);
-  let activeHistoryExhausted = $state(false);
-  const activeHistoryCount = $derived(items.filter((item) => !item.deleted).length);
-  const activeHistoryLimit = $derived(
-    $generalSettings.pageSizeLimit + $generalSettings.loadTolerance,
-  );
-  const activeHistoryHasMore = $derived(
-    !activeHistoryExhausted && activeHistoryCount < activeHistoryLimit,
-  );
-  let activeHistoryRequestId = 0;
-  // Keep stale in-flight recycle-bin pages from resurrecting rows that were
-  // already restored or permanently removed locally.
-  const deletedHistorySuppressedIds = new Set<string>();
-  const SUPPRESSED_IDS_MAX = 500;
-  function addSuppressedId(id: string) {
-    if (deletedHistorySuppressedIds.size >= SUPPRESSED_IDS_MAX) {
-      const first = deletedHistorySuppressedIds.values().next().value;
-      if (first !== undefined) deletedHistorySuppressedIds.delete(first);
-    }
-    deletedHistorySuppressedIds.add(id);
-  }
+  const history = createHistoryController({
+    itemStore,
+    get settings() {
+      return $generalSettings;
+    },
+    filter: () => buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
+    onError: (key) => {
+      statusMessage = _t(key);
+    },
+  });
+  const {
+    addSuppressedId,
+    invalidateDeletedHistoryPagination,
+    invalidateActiveHistoryPagination,
+    promoteFromCache,
+    trimLoadedItems,
+    loadActiveHistoryPage,
+    loadDeletedHistoryPage,
+  } = history;
+
   let query = $state("");
   let activeFilter = $state<ClipboardFilter>("all");
   let selectedId = $state(isTauriRuntime() ? "" : (demoClipboardItems[0]?.id ?? ""));
@@ -276,21 +235,35 @@
   let statusMessage = $state(_t("app.activateHint"));
   let lastBackspaceAt = $state(0);
   let indexedItems = $derived(itemStore.indexed);
-  let indexedQuery = $state("");
-  let searchPending = $state(false);
-  let searchRequestId = 0;
-  // Bumped by `clipboard-history-invalidated` to re-run the search effect;
-  // cancelling the in-flight request alone left the panel with no results.
-  let searchEpoch = $state(0);
-  let searchHasMore = $state(false);
-  let searchLoading = $state(false);
-  let searchOffset = $state(0);
-  let searchLoadRequestId = 0;
+
+  const search = createSearchController({
+    itemStore,
+    get settings() {
+      return $generalSettings;
+    },
+    get query() {
+      return query;
+    },
+    get isDeleted() {
+      return activeFilter === "deleted";
+    },
+    filter: () => buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
+    get status() {
+      return statusMessage;
+    },
+    set status(value) {
+      statusMessage = value;
+    },
+    translate: _t,
+    flushSettings: () => generalSettings.flush(),
+    rememberSearchTerm,
+  });
+  const { invalidateSearchResults, loadSearchPage, updateSearchCache } = search;
+
   let searchHistory = $state<string[]>([]);
   let searchSuggestionsOpen = $state(false);
   let searchSuggestionIndex = $state(-1);
   let searchBlurTimer: number | undefined;
-  let pendingSearchHistoryQuery = "";
   // The spare-result cache is never rendered directly: its records and its
   // insertion/access order live in the store (`cacheIds`), and only
   // `updateSearchCache`/`promoteFromCache` touch it.
@@ -334,7 +307,30 @@
   let fullscreenOpacity = $state(0.92);
   let fullscreenMode = $state<"overlay" | "desktop">("overlay");
 
-  let selectedIds = $state<Set<string>>(new Set());
+  const bulk = createBulkController({
+    itemStore,
+    get settings() {
+      return $generalSettings;
+    },
+    get selectedLoadedItems() {
+      return selectedLoadedItems;
+    },
+    get allSelectedFavorites() {
+      return allSelectedFavorites;
+    },
+    history,
+    captureAffected,
+    rollbackAffected,
+    get statusMessage() {
+      return statusMessage;
+    },
+    set statusMessage(value) {
+      statusMessage = value;
+    },
+    translate: _t,
+  });
+  const { bulkCopy, bulkFavorite, bulkRestore, bulkPermanentDelete, bulkDelete } = bulk;
+
   let lastClickedIndex = $state(-1);
 
   let searchInputEl = $state<HTMLInputElement | null>(null);
@@ -369,7 +365,7 @@
 
   const hasDeletedItems = $derived(
     items.some((item) => !!item.deleted) ||
-      (activeFilter === "deleted" && deletedHistoryLoaded && deletedHistoryHasMore),
+      (activeFilter === "deleted" && history.deletedHistoryLoaded && history.deletedHistoryHasMore),
   );
 
   const filters = $derived([
@@ -532,7 +528,7 @@
 
   const filteredItems = $derived(
     filterHistoryItems(
-      { items, indexedItems, indexedQuery },
+      { items, indexedItems, indexedQuery: search.indexedQuery },
       {
         query,
         activeFilter,
@@ -549,7 +545,7 @@
   // history view alone undercounts and makes bulk operations skip search-only
   // rows.
   const selectedLoadedItems = $derived(
-    [...selectedIds]
+    [...bulk.selectedIds]
       .map((id) => findLoadedItem(id))
       .filter((item): item is ClipboardItem => item !== undefined),
   );
@@ -561,7 +557,7 @@
     selectedLoadedItems.length > 0 && selectedLoadedItems.every((item) => item.favorite),
   );
   const resultSummary = $derived(
-    searchPending
+    search.searchPending
       ? _t("status.searching")
       : _t("status.recordCount", { count: filteredItems.length }),
   );
@@ -725,121 +721,28 @@
       .filter((item): item is ClipboardItem => item !== undefined);
   });
 
-  // --- Effects ---
-
-  // Only an actual page-size or sort-rule change should restart the search.
-  // Reading the whole `$generalSettings` store in the effect below would re-run
-  // it (and reset pagination) on every unrelated settings change, because the
-  // store emits a fresh object each time. This key is a primitive that only
-  // changes when those two settings do.
-  function invalidateSearchResults() {
-    searchRequestId += 1;
-    searchLoadRequestId += 1;
-    searchHasMore = false;
-    searchLoading = false;
-    searchEpoch += 1;
-  }
-
-  const searchSettingsKey = $derived(
-    `${$generalSettings.display.searchPageSize}\u0000${$generalSettings.searchPageSizeLimit}\u0000${JSON.stringify($generalSettings.searchSortRules)}`,
-  );
-
-  $effect(() => {
-    const requestedQuery = query.trim();
-    const requestedFilter = buildHistoryFilterArgs({
-      activeFilter,
-      tagFilter,
-      sourceAppFilter,
-      dateFilter,
-    });
-    void searchSettingsKey; // dependency: narrow key, not the whole store
-    const requestedMaxResults = untrack(() => $generalSettings.searchPageSizeLimit);
-    const requestedPageSize = untrack(() => $generalSettings.display.searchPageSize);
-    const requestedSortRules = untrack(() => $generalSettings.searchSortRules);
-    const requestedEpoch = searchEpoch;
-    const requestId = ++searchRequestId;
-    searchLoadRequestId += 1;
-    searchLoading = false;
-    searchHasMore = false;
-    searchOffset = 0;
-
-    if (!requestedQuery || activeFilter === "deleted") {
-      itemStore.current = closeSearchResults(itemStore.current);
-      indexedQuery = "";
-      searchPending = false;
-      return;
-    }
-
-    searchPending = true;
-    const timer = window.setTimeout(() => {
-      void generalSettings
-        .flush()
-        .then(() => {
-          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch) return null;
-          return searchClipboardHistory(
-            requestedQuery,
-            requestedPageSize,
-            0,
-            requestedSortRules,
-            requestedFilter,
-          );
-        })
-        .then((page) => {
-          if (requestId !== searchRequestId || requestedEpoch !== searchEpoch || page === null)
-            return;
-          // A first page replaces the previous query's results outright; an
-          // empty page is still a displayed search, so the view stays on.
-          itemStore.current = replaceViewItems(itemStore.current, page.items, "indexed");
-          indexedQuery = requestedQuery;
-          searchOffset = page.items.length;
-          searchHasMore = searchOffset < Math.min(page.totalCount, requestedMaxResults);
-          updateSearchCache(page.items);
-          statusMessage = page.truncated
-            ? _t("app.searchTruncated", { shown: page.items.length, total: page.totalCount })
-            : _t("app.searchHitSummary", { count: page.items.length });
-          if (
-            $generalSettings.searchHistoryEnabled &&
-            pendingSearchHistoryQuery === requestedQuery
-          ) {
-            rememberSearchTerm(requestedQuery);
-            pendingSearchHistoryQuery = "";
-          }
-        })
-        .catch((error) => {
-          if (requestId !== searchRequestId) return;
-          console.error("Unable to search clipboard history", error);
-          statusMessage = _t("app.searchFailed");
-        })
-        .finally(() => {
-          if (requestId === searchRequestId) searchPending = false;
-        });
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  });
-
   $effect(() => {
     if (filteredItems.length > 0 && selectedIndex === -1) {
       selectedId = filteredItems[0].id;
     }
   });
 
-  // After filteredItems changes, prune invalid selectedIds. Rebuild the set
+  // After filteredItems changes, prune invalid bulk.selectedIds. Rebuild the set
   // in one pass: removing ids one at a time would re-trigger this effect
   // once per invalid id and can exceed Svelte's effect update depth on
   // large bulk selections.
   $effect(() => {
     const idSet = new Set(filteredItems.map((i) => i.id));
-    const pruned = new Set([...selectedIds].filter((id) => idSet.has(id)));
-    if (pruned.size !== selectedIds.size) {
-      selectedIds = pruned;
+    const pruned = new Set([...bulk.selectedIds].filter((id) => idSet.has(id)));
+    if (pruned.size !== bulk.selectedIds.size) {
+      bulk.selectedIds = pruned;
     }
   });
 
   $effect(() => {
     if (activeFilter === "deleted" && (!$generalSettings.useRecycleBin || !hasDeletedItems)) {
       activeFilter = "all";
-      selectedIds = new Set();
+      bulk.selectedIds = new Set();
     }
   });
 
@@ -926,8 +829,8 @@
         // request; otherwise a search that lands during this event is dropped
         // and never retried.
         invalidateSearchResults();
-        searchPending = false;
-        selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
+        search.searchPending = false;
+        bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !removedIds.has(id)));
         if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
         invalidateActiveHistoryPagination();
         invalidateDeletedHistoryPagination();
@@ -961,7 +864,7 @@
 
         if (payload.removedIds?.length) {
           const removedIds = new Set(payload.removedIds);
-          selectedIds = new Set([...selectedIds].filter((id) => !removedIds.has(id)));
+          bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !removedIds.has(id)));
           if (removedIds.has(selectedId)) selectedId = items[0]?.id ?? "";
           // A permanent delete shifts the rows behind it in both offset windows.
           invalidateActiveHistoryPagination();
@@ -984,32 +887,8 @@
       showToast(_t("app.restartBlockedInDev"), "info");
     });
 
-    const appWindow = isTauriRuntime() ? getCurrentWindow() : null;
-    let previousRememberWindowPosition = false;
+    const windowLifecycle = createMainWindowController(loadKeyboardShortcuts);
 
-    const windowBounds = createWindowBoundsController({
-      appWindow,
-      isRemembered: () => $generalSettings.rememberWindowPosition,
-      savePosition: saveWindowPosition,
-      restorePosition: restoreWindowPosition,
-      storage: typeof window !== "undefined" ? window.localStorage : null,
-    });
-
-    function applySettings(s: typeof $generalSettings) {
-      applyGeneralSettingsToDocument(s);
-      if (appWindow) {
-        appWindow.setAlwaysOnTop(s.alwaysOnTop).catch(() => {});
-        appWindow.setDecorations(s.useSystemTitleBar).catch(() => {});
-        if (!s.rememberWindowPosition) {
-          windowBounds.resetRestoreAttempt();
-        } else if (!previousRememberWindowPosition) {
-          void windowBounds.restore();
-        }
-      }
-      previousRememberWindowPosition = s.rememberWindowPosition;
-    }
-    applySettings($generalSettings);
-    const unsubSettings = generalSettings.subscribe((s) => applySettings(s));
     const unsubFontEvent = listen<{
       fontSizes: {
         base: number;
@@ -1049,42 +928,8 @@
       if (renamed || deleted) invalidateSearchResults();
     });
 
-    let listenersDisposed = false;
-    let unlistenMove: (() => void) | undefined;
-    let unlistenResize: (() => void) | undefined;
-    let unlistenFocus: (() => void) | undefined;
-    if (appWindow) {
-      appWindow
-        .onFocusChanged(() => {
-          void loadKeyboardShortcuts();
-        })
-        .then((fn) => {
-          if (listenersDisposed) fn();
-          else unlistenFocus = fn;
-        })
-        .catch(() => {});
-      appWindow
-        .onMoved(() => {
-          windowBounds.scheduleSave();
-        })
-        .then((fn) => {
-          if (listenersDisposed) fn();
-          else unlistenMove = fn;
-        })
-        .catch(() => {});
-      appWindow
-        .onResized(() => {
-          windowBounds.scheduleSave();
-        })
-        .then((fn) => {
-          if (listenersDisposed) fn();
-          else unlistenResize = fn;
-        })
-        .catch(() => {});
-    }
-
     return () => {
-      listenersDisposed = true;
+      windowLifecycle.dispose();
       window.clearInterval(clock);
       void unlisten.then((fn) => fn()).catch(() => {});
       void unlistenHistoryInvalidated.then((fn) => fn()).catch(() => {});
@@ -1095,61 +940,18 @@
       void unlistenTrayRestartBlocked.then((fn) => fn()).catch(() => {});
       void unsubFontEvent.then((fn) => fn()).catch(() => {});
       void unsubTagsChanged.then((fn) => fn()).catch(() => {});
-      unsubSettings();
-      if (unlistenMove) unlistenMove();
-      if (unlistenResize) unlistenResize();
-      if (unlistenFocus) unlistenFocus();
       if (heightRafId) cancelAnimationFrame(heightRafId);
       if (scrollRaf) cancelAnimationFrame(scrollRaf);
       if (searchBlurTimer !== undefined) window.clearTimeout(searchBlurTimer);
       pendingHeights.clear();
-      void windowBounds.flush();
     };
   });
-
-  // Deleting, restoring, or permanently removing a row changes the result
-  // set behind the recycle-bin OFFSET. Reset the cursor before loading again
-  // so a mutation in an earlier page cannot cause the next row to be skipped.
-  function invalidateDeletedHistoryPagination() {
-    deletedHistoryRequestId += 1;
-    deletedHistoryLoading = false;
-    deletedHistoryOffset = 0;
-    deletedHistoryHasMore = true;
-    void loadDeletedHistoryPage();
-  }
-
-  // Active history uses keyset (cursor) pagination anchored to the last row
-  // of the most recent page. Out-of-band promotions (re-copy, reuse, sync
-  // apply) raise a row above the cursor, so the rows below it neither shift
-  // nor replay; any committed insertion, removal, soft-delete, or restore
-  // still rebuilds from page zero instead of compensating with a fragile
-  // local increment/decrement.
-  function invalidateActiveHistoryPagination() {
-    activeHistoryRequestId += 1;
-    activeHistoryLoading = false;
-    activeHistoryCursor = null;
-    activeHistoryExhausted = false;
-    void loadActiveHistoryPage();
-  }
 
   const searchCacheLimit = $derived($generalSettings.searchCacheSize);
   $effect(() => {
     void searchCacheLimit;
     untrack(() => updateSearchCache([]));
   });
-
-  function updateSearchCache(results: ClipboardItem[]) {
-    itemStore.current = mergeSearchCachePage(itemStore.current, {
-      results,
-      loadedIds: new Set(itemStore.current.historyIds),
-      policy: $generalSettings.searchCacheEviction,
-      max: $generalSettings.searchCacheSize,
-    });
-  }
-
-  function promoteFromCache(loadedIds: Set<string>) {
-    itemStore.current = promoteCachedEntries(itemStore.current, loadedIds);
-  }
 
   const historyLimitKey = $derived(
     `${$generalSettings.pageSizeLimit}/${$generalSettings.loadTolerance}`,
@@ -1170,174 +972,6 @@
     });
   });
 
-  function trimLoadedItems() {
-    itemStore.current = trimLoadedHistory(itemStore.current, {
-      limit: $generalSettings.pageSizeLimit,
-      tolerance: $generalSettings.loadTolerance,
-    });
-  }
-
-  async function loadActiveHistoryPage(): Promise<void> {
-    if (activeHistoryLoading || (activeHistoryCursor !== null && !activeHistoryHasMore)) return;
-
-    if (!isTauriRuntime()) {
-      activeHistoryExhausted = true;
-      return;
-    }
-
-    activeHistoryLoading = true;
-    const requestId = ++activeHistoryRequestId;
-    const cursor = activeHistoryCursor;
-    const isFirstPage = cursor === null;
-    const requestedPageSize = Math.min(
-      $generalSettings.display.pageSize,
-      isFirstPage ? activeHistoryLimit : activeHistoryLimit - activeHistoryCount,
-    );
-    try {
-      const page = await loadClipboardHistory(requestedPageSize, 0, {
-        ...buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
-        cursor,
-      });
-      if (requestId !== activeHistoryRequestId) return;
-      if (page === null) {
-        activeHistoryExhausted = true;
-        return;
-      }
-
-      if (isFirstPage) {
-        const deletedItems = items.filter((item) => item.deleted);
-        const storedIds = new Set(page.map((item) => item.id));
-        itemStore.current = replaceViewItems(
-          itemStore.current,
-          [...page, ...deletedItems.filter((item) => !storedIds.has(item.id))],
-          "history",
-        );
-      } else {
-        // Keyset pagination cannot replay rows the backend already served
-        // below the cursor, but keep the guard anyway: an entry promoted and
-        // then re-captured could theoretically round-trip its timestamps, and
-        // the keyed each below must never see a duplicate key.
-        const knownIds = new Set(itemStore.current.historyIds);
-        itemStore.current = appendItems(
-          itemStore.current,
-          page.filter((item) => !knownIds.has(item.id)),
-          "history",
-        );
-      }
-      // The anchor is the last row of the backend page — never the tail of
-      // `items`, which mixes in recycled deleted entries and deduplicated rows.
-      const anchor = page[page.length - 1];
-      if (anchor) {
-        activeHistoryCursor = {
-          // Persisted rows initialize this timestamp at creation (schema v2).
-          lastUsedAtMs: anchor.lastUsedAtMs!,
-          id: anchor.id,
-        };
-      }
-      activeHistoryExhausted = page.length < requestedPageSize;
-      const loadedIds = new Set(page.map((item) => item.id));
-      promoteFromCache(loadedIds);
-      const beforeTrim = itemStore.current;
-      trimLoadedItems();
-      if (beforeTrim !== itemStore.current) {
-        activeHistoryCursor = null;
-        activeHistoryExhausted = false;
-      }
-    } catch (error) {
-      if (requestId !== activeHistoryRequestId) return;
-      console.error("Unable to load clipboard history", error);
-      statusMessage = _t("app.databaseLoadFailed");
-    } finally {
-      if (requestId === activeHistoryRequestId) activeHistoryLoading = false;
-    }
-  }
-
-  async function loadSearchPage(): Promise<void> {
-    if (searchLoading || !searchHasMore || !indexedQuery) return;
-
-    if (!isTauriRuntime()) {
-      searchHasMore = false;
-      return;
-    }
-
-    searchLoading = true;
-    const requestId = ++searchLoadRequestId;
-    const offset = searchOffset;
-    const maxResults = $generalSettings.searchPageSizeLimit;
-    try {
-      const page = await searchClipboardHistory(
-        indexedQuery,
-        $generalSettings.display.searchPageSize,
-        offset,
-        $generalSettings.searchSortRules,
-        buildHistoryFilterArgs({ activeFilter, tagFilter, sourceAppFilter, dateFilter }),
-      );
-      if (requestId !== searchLoadRequestId) return;
-      if (page === null || page.items.length === 0) {
-        searchHasMore = false;
-        return;
-      }
-
-      // OFFSET pagination can replay a row after an out-of-band insertion;
-      // drop ids already loaded so the keyed each never sees a duplicate key.
-      const knownIds = new Set(itemStore.current.indexedIds ?? []);
-      itemStore.current = appendItems(
-        itemStore.current,
-        page.items.filter((item) => !knownIds.has(item.id)),
-        "indexed",
-      );
-      searchOffset += page.items.length;
-      searchHasMore = searchOffset < Math.min(page.totalCount, maxResults);
-      updateSearchCache(page.items);
-    } catch (error) {
-      if (requestId !== searchLoadRequestId) return;
-      console.error("Unable to load more search results", error);
-      statusMessage = _t("app.searchFailed");
-    } finally {
-      if (requestId === searchLoadRequestId) searchLoading = false;
-    }
-  }
-
-  async function loadDeletedHistoryPage(): Promise<void> {
-    if (deletedHistoryLoading || !deletedHistoryHasMore) return;
-
-    // The browser preview has no persisted recycle bin. Mark the page as
-    // exhausted so selecting the filter remains a harmless local operation.
-    if (!isTauriRuntime()) {
-      deletedHistoryLoaded = true;
-      deletedHistoryHasMore = false;
-      return;
-    }
-
-    deletedHistoryLoading = true;
-    const requestId = ++deletedHistoryRequestId;
-    const offset = deletedHistoryOffset;
-    try {
-      const page = await loadDeletedClipboardHistory(DELETED_HISTORY_PAGE_SIZE, offset);
-      if (requestId !== deletedHistoryRequestId) return;
-      if (page === null) {
-        deletedHistoryLoaded = true;
-        deletedHistoryHasMore = false;
-        return;
-      }
-
-      itemStore.current = mergeDeletedHistoryPage(
-        itemStore.current,
-        page,
-        deletedHistorySuppressedIds,
-      );
-      deletedHistoryOffset += page.length;
-      deletedHistoryLoaded = true;
-      deletedHistoryHasMore = page.length === DELETED_HISTORY_PAGE_SIZE;
-    } catch (error) {
-      if (requestId !== deletedHistoryRequestId) return;
-      console.error("Unable to load deleted clipboard history", error);
-      statusMessage = _t("app.databaseLoadFailed");
-    } finally {
-      if (requestId === deletedHistoryRequestId) deletedHistoryLoading = false;
-    }
-  }
-
   // --- Handlers ---
 
   function commitSearchQuery(value = query) {
@@ -1346,20 +980,20 @@
     searchSuggestionIndex = -1;
 
     if (!term) {
-      pendingSearchHistoryQuery = "";
+      search.pendingSearchHistoryQuery = "";
       return;
     }
 
-    pendingSearchHistoryQuery = $generalSettings.searchHistoryEnabled ? term : "";
+    search.pendingSearchHistoryQuery = $generalSettings.searchHistoryEnabled ? term : "";
 
     if (
       !isTauriRuntime() ||
       activeFilter === "deleted" ||
       parseDateQuery(term) ||
-      (indexedItems !== null && indexedQuery === term)
+      (indexedItems !== null && search.indexedQuery === term)
     ) {
       if ($generalSettings.searchHistoryEnabled) rememberSearchTerm(term);
-      pendingSearchHistoryQuery = "";
+      search.pendingSearchHistoryQuery = "";
     }
   }
 
@@ -1375,7 +1009,7 @@
 
   function clearSearchQuery() {
     query = "";
-    pendingSearchHistoryQuery = "";
+    search.pendingSearchHistoryQuery = "";
     searchSuggestionIndex = -1;
     searchSuggestionsOpen = true;
     searchInputEl?.focus();
@@ -1404,12 +1038,12 @@
         break;
       case "clear-query":
         query = "";
-        pendingSearchHistoryQuery = "";
+        search.pendingSearchHistoryQuery = "";
         searchSuggestionIndex = -1;
         break;
       case "accept-inline":
         query = resolved.action.value;
-        pendingSearchHistoryQuery = "";
+        search.pendingSearchHistoryQuery = "";
         searchSuggestionsOpen = false;
         searchSuggestionIndex = -1;
         void tick().then(() => {
@@ -1448,7 +1082,7 @@
         searchSuggestionsOpen = false;
         searchSuggestionIndex = -1;
         query = "";
-        pendingSearchHistoryQuery = "";
+        search.pendingSearchHistoryQuery = "";
         break;
     }
   }
@@ -1516,11 +1150,11 @@
     const enteringDeleted = filter === "deleted";
     if (activeFilter !== filter) resetHistoryScroll();
     activeFilter = filter;
-    selectedIds = new Set();
+    bulk.selectedIds = new Set();
     itemStore.current = closeSearchResults(itemStore.current);
-    indexedQuery = "";
+    search.indexedQuery = "";
     if (enteringDeleted) {
-      if (!deletedHistoryLoaded) {
+      if (!history.deletedHistoryLoaded) {
         void loadDeletedHistoryPage();
       }
     } else {
@@ -1549,7 +1183,7 @@
       for (let i = start; i <= end; i++) {
         rangeIds.add(filteredItems[i].id);
       }
-      selectedIds = new Set(rangeIds);
+      bulk.selectedIds = new Set(rangeIds);
       return;
     }
 
@@ -1558,14 +1192,14 @@
   }
 
   function toggleSelectItem(id: string) {
-    const next = new Set(selectedIds);
+    const next = new Set(bulk.selectedIds);
     if (next.has(id)) {
       next.delete(id);
       if (selectedId === id) selectedId = "";
     } else {
       next.add(id);
     }
-    selectedIds = next;
+    bulk.selectedIds = next;
     lastClickedIndex = filteredItems.findIndex((i) => i.id === id);
   }
 
@@ -1603,10 +1237,10 @@
       return;
     }
 
-    const wasSelected = selectedIds.has(id);
-    deletedHistorySuppressedIds.delete(id);
+    const wasSelected = bulk.selectedIds.has(id);
+    history.deletedHistorySuppressedIds.delete(id);
     updateItem(id, () => ({ deleted: true }));
-    selectedIds = new Set([...selectedIds].filter((x) => x !== id));
+    bulk.selectedIds = new Set([...bulk.selectedIds].filter((x) => x !== id));
 
     void persistDelete(id)
       .then((removed) => {
@@ -1620,7 +1254,7 @@
         // Undo only this row; restoring a whole-array snapshot would discard
         // items captured while the delete was in flight.
         revertItem(id, { deleted: false });
-        if (wasSelected) selectedIds = new Set([...selectedIds, id]);
+        if (wasSelected) bulk.selectedIds = new Set([...bulk.selectedIds, id]);
         showToast(_t("app.deleteFailed"), "error");
       });
   }
@@ -1635,7 +1269,7 @@
     const snapshot = captureAffected(new Set([id]));
     addSuppressedId(id);
     itemStore.current = removeItems(itemStore.current, new Set([id]));
-    selectedIds = new Set([...selectedIds].filter((x) => x !== id));
+    bulk.selectedIds = new Set([...bulk.selectedIds].filter((x) => x !== id));
 
     void persistPermanentDelete(id)
       .then((removed) => {
@@ -1645,7 +1279,7 @@
       })
       .catch((error) => {
         console.error("Unable to permanently delete clipboard item", error);
-        deletedHistorySuppressedIds.delete(id);
+        history.deletedHistorySuppressedIds.delete(id);
         rollbackAffected(snapshot);
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -1660,7 +1294,7 @@
 
     const snapshot = captureAffected(new Set([id]));
     itemStore.current = removeItems(itemStore.current, new Set([id]));
-    selectedIds = new Set([...selectedIds].filter((x) => x !== id));
+    bulk.selectedIds = new Set([...bulk.selectedIds].filter((x) => x !== id));
 
     void persistHardDelete(id)
       .then((removed) => {
@@ -1690,7 +1324,7 @@
       })
       .catch((error) => {
         console.error("Unable to restore clipboard item", error);
-        deletedHistorySuppressedIds.delete(id);
+        history.deletedHistorySuppressedIds.delete(id);
         revertItem(id, { deleted: true });
         showToast(_t("app.deleteFailed"), "error");
       });
@@ -2047,234 +1681,6 @@
     }
   }
 
-  // --- Bulk operations ---
-
-  async function bulkCopy() {
-    let selectedItems: ClipboardItem[];
-    try {
-      // Sequential reads bound transient IPC/body memory while preserving selection order.
-      selectedItems = [];
-      for (const item of selectedLoadedItems) selectedItems.push(await hydrateClipboardItem(item));
-    } catch (error) {
-      console.error("Unable to load selection for copy", error);
-      showToast(_t("toast.copyFailed"), "error");
-      return;
-    }
-    // Text/link rows carry the full content in `textContent` while `title`
-    // is only the first line; copying titles silently drops content.
-    // Media rows keep `title` (their `textContent` is null or an internal
-    // multi-file JSON list, never user-facing text).
-    const text = selectedItems
-      .map((i) => (i.kind === "text" || i.kind === "link" ? i.textContent || i.title : i.title))
-      .join("\n");
-    void writeClipboardText(text)
-      .then(() => {
-        showToast(_t("toast.bulkCopySuccess", { count: selectedItems.length }), "success");
-      })
-      .catch(() => {
-        showToast(_t("toast.copyFailed"), "error");
-      });
-  }
-
-  function bulkFavorite() {
-    const ids = [...selectedIds];
-    const unfavorite = allSelectedFavorites;
-    const idSet = new Set(ids);
-
-    // Snapshot before the optimistic patch: a whole-map restore would clobber
-    // the pre-existing favorite flags of a mixed selection, while this funnel
-    // restores only the affected rows captured at this moment.
-    const snapshot = captureAffected(idSet);
-    const patch = new Map<string, Partial<ClipboardItem>>();
-    for (const id of ids) patch.set(id, { favorite: !unfavorite });
-    itemStore.current = applyItemPatches(itemStore.current, patch);
-
-    void persistBatchFavorite(ids, !unfavorite)
-      .then((updated) => {
-        if (updated === false) throw new Error("batch favorite failed");
-        showToast(
-          unfavorite
-            ? _t("toast.bulkUnfavoriteSuccess", { count: ids.length })
-            : _t("toast.bulkFavoriteSuccess", { count: ids.length }),
-          "success",
-        );
-        selectedIds = new Set();
-      })
-      .catch((error) => {
-        console.error("Bulk favorite failed", error);
-        rollbackAffected(snapshot);
-        statusMessage = _t("app.favoriteFailed");
-        showToast(_t("app.favoriteFailed"), "error");
-      });
-  }
-
-  function bulkRestore() {
-    const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
-    if (ids.length === 0) return;
-
-    const idSet = new Set(ids);
-    const snapshot = captureAffected(idSet);
-    for (const id of ids) addSuppressedId(id);
-    itemStore.current = applyItemPatches(
-      itemStore.current,
-      new Map(ids.map((id) => [id, { deleted: false }])),
-    );
-    selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
-
-    void persistBatchRestore(ids)
-      .then((restored) => {
-        if (restored === false) throw new Error("batch restore failed");
-        invalidateActiveHistoryPagination();
-        invalidateDeletedHistoryPagination();
-        showToast(_t("toast.restoreSuccess", { count: ids.length }), "success");
-      })
-      .catch((error) => {
-        console.error("Bulk restore failed", error);
-        for (const id of ids) deletedHistorySuppressedIds.delete(id);
-        rollbackAffected(snapshot);
-        statusMessage = _t("app.deleteFailed");
-        showToast(_t("app.deleteFailed"), "error");
-      });
-  }
-
-  function bulkPermanentDelete() {
-    const ids = selectedLoadedItems.filter((item) => item.deleted).map((item) => item.id);
-    if (ids.length === 0) return;
-
-    const idSet = new Set(ids);
-    const snapshot = captureAffected(idSet);
-    for (const id of ids) addSuppressedId(id);
-    itemStore.current = removeItems(itemStore.current, idSet);
-    selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
-
-    void persistBatchPermanentDelete(ids)
-      .then((removed) => {
-        if (removed === false) throw new Error("batch permanent delete failed");
-        invalidateDeletedHistoryPagination();
-        showToast(_t("toast.bulkDeleteSuccess", { count: ids.length }), "success");
-      })
-      .catch((error) => {
-        console.error("Bulk permanent delete failed", error);
-        for (const id of ids) deletedHistorySuppressedIds.delete(id);
-        rollbackAffected(snapshot);
-        statusMessage = _t("app.deleteFailed");
-        showToast(_t("app.deleteFailed"), "error");
-      });
-  }
-
-  function bulkDelete() {
-    const selectedItems = selectedLoadedItems;
-    if (selectedItems.length === 0) return;
-
-    const useRecycleBin = $generalSettings.useRecycleBin;
-    const { softIds, permanentIds, hardIds } = planBulkDelete(selectedItems, useRecycleBin);
-    const operationIds = new Set([...softIds, ...permanentIds, ...hardIds]);
-    if (operationIds.size === 0) return;
-
-    const snapshot = captureAffected(operationIds);
-
-    for (const id of softIds) deletedHistorySuppressedIds.delete(id);
-    for (const id of permanentIds) addSuppressedId(id);
-
-    const removedOptimistic = new Set([...permanentIds, ...hardIds]);
-    // Removed rows leave every view at once; soft rows are flagged in place, so
-    // the open detail pane follows along without a write of its own.
-    itemStore.current = removeItems(itemStore.current, removedOptimistic);
-    itemStore.current = applyItemPatches(
-      itemStore.current,
-      new Map(softIds.map((id) => [id, { deleted: true }])),
-    );
-    selectedIds = new Set();
-
-    const operations: {
-      ids: string[];
-      mode: "soft" | "permanent" | "hard";
-      run: () => Promise<boolean | null>;
-    }[] = [];
-    if (softIds.length > 0) {
-      operations.push({ ids: softIds, mode: "soft", run: () => persistBatchDelete(softIds) });
-    }
-    if (permanentIds.length > 0) {
-      operations.push({
-        ids: permanentIds,
-        mode: "permanent",
-        run: () => persistBatchPermanentDelete(permanentIds),
-      });
-    }
-    for (const id of hardIds) {
-      operations.push({ ids: [id], mode: "hard", run: () => persistHardDelete(id) });
-    }
-
-    void Promise.all(
-      operations.map(async (operation) => {
-        try {
-          const result = await operation.run();
-          return { ...operation, ok: result !== false };
-        } catch (error) {
-          console.error(
-            operation.mode === "permanent"
-              ? "Bulk permanent delete failed"
-              : operation.mode === "hard"
-                ? "Bulk hard delete failed"
-                : "Bulk delete failed",
-            error,
-          );
-          return { ...operation, ok: false };
-        }
-      }),
-    ).then((outcomes) => {
-      const successfulSoft = new Set(
-        outcomes.filter((outcome) => outcome.ok && outcome.mode === "soft").flatMap((o) => o.ids),
-      );
-      const successfulPermanent = new Set(
-        outcomes
-          .filter((outcome) => outcome.ok && outcome.mode === "permanent")
-          .flatMap((o) => o.ids),
-      );
-      const successfulHard = new Set(
-        outcomes.filter((outcome) => outcome.ok && outcome.mode === "hard").flatMap((o) => o.ids),
-      );
-      const failedIds = new Set(outcomes.filter((outcome) => !outcome.ok).flatMap((o) => o.ids));
-      const removedIds = new Set([...successfulPermanent, ...successfulHard]);
-      const succeededIds = new Set([...successfulSoft, ...removedIds]);
-
-      for (const id of successfulPermanent) addSuppressedId(id);
-      for (const id of permanentIds) {
-        if (!successfulPermanent.has(id)) deletedHistorySuppressedIds.delete(id);
-      }
-      for (const id of softIds) deletedHistorySuppressedIds.delete(id);
-
-      // Mirror exactly which backend transaction succeeded: return the ids this
-      // batch touched to their pre-mutation state, then re-apply the per-outcome
-      // transitions. Going through the funnel (rather than rebuilding whole
-      // arrays from a snapshot) keeps records that arrived via clipboard events
-      // during the async window — a whole-array rebuild dropped them entirely.
-      let next = restoreAffectedItems(itemStore.current, snapshot);
-      next = removeItems(next, removedIds);
-      next = applyItemPatches(
-        next,
-        new Map([...successfulSoft].map((id) => [id, { deleted: true }])),
-      );
-      itemStore.current = next;
-      selectedIds = new Set([...selectedIds].filter((id) => !succeededIds.has(id)));
-
-      // Failed (and partially failed) batches skip the success-path
-      // invalidations, so resync from the backend explicitly.
-      if (successfulSoft.size > 0 || successfulPermanent.size > 0 || failedIds.size > 0) {
-        invalidateDeletedHistoryPagination();
-      }
-      if (successfulSoft.size > 0 || successfulHard.size > 0 || failedIds.size > 0) {
-        invalidateActiveHistoryPagination();
-      }
-      if (failedIds.size > 0) {
-        statusMessage = _t("app.deleteFailed");
-        showToast(_t("app.deleteFailed"), "error");
-      } else {
-        showToast(_t("toast.bulkDeleteSuccess", { count: succeededIds.size }), "success");
-      }
-    });
-  }
-
   function activateSelected() {
     if (!selectedId) return;
     copyItem(selectedId);
@@ -2332,7 +1738,7 @@
 
     const ids = nonFavorites.map((item) => item.id);
     const idSet = new Set(ids);
-    for (const id of ids) deletedHistorySuppressedIds.delete(id);
+    for (const id of ids) history.deletedHistorySuppressedIds.delete(id);
     const snapshot = captureAffected(idSet);
 
     if ($generalSettings.useRecycleBin) {
@@ -2342,7 +1748,7 @@
         itemStore.current,
         new Map(ids.map((id) => [id, { deleted: true }])),
       );
-      selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
+      bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !idSet.has(id)));
 
       void invoke<number>("clear_all_non_favorite_items")
         .then((count) => {
@@ -2362,7 +1768,7 @@
     // clear command is intentionally soft-delete-only, so use the existing
     // direct-delete command for each active record instead.
     itemStore.current = removeItems(itemStore.current, idSet);
-    selectedIds = new Set([...selectedIds].filter((id) => !idSet.has(id)));
+    bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !idSet.has(id)));
 
     void Promise.all(
       ids.map(async (id) => {
@@ -2385,7 +1791,7 @@
         // arrived during the window stays.
         rollbackAffected(snapshot);
         itemStore.current = removeItems(itemStore.current, successfulIds);
-        selectedIds = new Set([...selectedIds].filter((id) => !successfulIds.has(id)));
+        bulk.selectedIds = new Set([...bulk.selectedIds].filter((id) => !successfulIds.has(id)));
         statusMessage = _t("app.deleteFailed");
         showToast(_t("app.deleteFailed"), "error");
         return;
@@ -2397,7 +1803,7 @@
   function handleEscapePriority(event: KeyboardEvent) {
     if (
       event.key !== "Escape" ||
-      selectedIds.size === 0 ||
+      bulk.selectedIds.size === 0 ||
       editingId ||
       contextMenuOpen ||
       isEditableKeyboardTarget(event.target)
@@ -2405,7 +1811,7 @@
       return;
     }
 
-    selectedIds = new Set();
+    bulk.selectedIds = new Set();
     // Don't preventDefault — let the event continue so a single Esc press
     // can clear bulk selection, close detail panel, or hide the window.
   }
@@ -2438,8 +1844,8 @@
         query = `${query}${action.value}`;
         searchSuggestionsOpen = true;
         searchSuggestionIndex = -1;
-        if (pendingSearchHistoryQuery && query.trim() !== pendingSearchHistoryQuery) {
-          pendingSearchHistoryQuery = "";
+        if (search.pendingSearchHistoryQuery && query.trim() !== search.pendingSearchHistoryQuery) {
+          search.pendingSearchHistoryQuery = "";
         }
         void tick().then(() => {
           const el = searchInputEl;
@@ -2475,10 +1881,10 @@
         openDetail(action.id);
         break;
       case "clear-selection":
-        if (selectedIds.size > 0) selectedIds = new Set();
+        if (bulk.selectedIds.size > 0) bulk.selectedIds = new Set();
         break;
       case "select-all":
-        selectedIds = new Set(filteredItems.map((i) => i.id));
+        bulk.selectedIds = new Set(filteredItems.map((i) => i.id));
         break;
       case "escape-hide-window":
         getCurrentWindow()
@@ -2545,7 +1951,7 @@
           event.target.closest(".detail-panel") !== null,
         isSearchInput: event.target === searchInputEl,
         selectedId,
-        selectedCount: selectedIds.size,
+        selectedCount: bulk.selectedIds.size,
         filteredItems,
         filters,
         activeFilter,
@@ -2578,20 +1984,20 @@
         historyListEl.scrollTop + historyListEl.clientHeight >= historyListEl.scrollHeight - 180;
       if (
         activeFilter === "deleted" &&
-        deletedHistoryHasMore &&
-        !deletedHistoryLoading &&
+        history.deletedHistoryHasMore &&
+        !history.deletedHistoryLoading &&
         nearBottom
       ) {
         void loadDeletedHistoryPage();
       }
       if (indexedItems !== null) {
-        if (searchHasMore && !searchLoading && nearBottom) {
+        if (search.searchHasMore && !search.searchLoading && nearBottom) {
           void loadSearchPage();
         }
       } else if (
         activeFilter !== "deleted" &&
-        activeHistoryHasMore &&
-        !activeHistoryLoading &&
+        history.activeHistoryHasMore &&
+        !history.activeHistoryLoading &&
         nearBottom
       ) {
         void loadActiveHistoryPage();
@@ -2708,7 +2114,7 @@
   });
 
   $effect(() => {
-    if (!$generalSettings.searchHistoryEnabled) pendingSearchHistoryQuery = "";
+    if (!$generalSettings.searchHistoryEnabled) search.pendingSearchHistoryQuery = "";
   });
 </script>
 
@@ -2735,8 +2141,8 @@
     oninput={() => {
       searchSuggestionsOpen = true;
       searchSuggestionIndex = -1;
-      if (pendingSearchHistoryQuery && query.trim() !== pendingSearchHistoryQuery) {
-        pendingSearchHistoryQuery = "";
+      if (search.pendingSearchHistoryQuery && query.trim() !== search.pendingSearchHistoryQuery) {
+        search.pendingSearchHistoryQuery = "";
       }
     }}
     onblur={handleSearchInputBlur}
@@ -2779,7 +2185,7 @@
       {virtualList}
       indexById={filteredItemIndexById}
       {currentTime}
-      {selectedIds}
+      selectedIds={bulk.selectedIds}
       {selectedId}
       splitDetail={detailDisplayMode === "split" && detailItem != null}
       {cardPaddingTop}
@@ -2827,12 +2233,12 @@
     />
 
     <BulkBar
-      selectedCount={selectedIds.size}
+      selectedCount={bulk.selectedIds.size}
       {selectedActiveCount}
       {selectedDeletedCount}
       {activeFilter}
       {allSelectedFavorites}
-      ondeselect={() => (selectedIds = new Set())}
+      ondeselect={() => (bulk.selectedIds = new Set())}
       oncopy={bulkCopy}
       ondelete={bulkDelete}
       onfavorite={bulkFavorite}
