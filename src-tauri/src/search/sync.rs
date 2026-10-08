@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn background_worker_performs_a_required_full_rebuild() {
-        use std::sync::Arc;
+        use std::sync::{mpsc, Arc};
         use std::time::Duration;
 
         let database = Database::open_in_memory().unwrap();
@@ -597,23 +597,24 @@ mod tests {
         assert!(index.requires_full_rebuild());
         assert!(index.search("重建", 20).unwrap().is_empty());
 
+        let (completed_tx, completed_rx) = mpsc::channel();
         let mut worker = SearchSyncWorker::start(
             database,
             index.clone(),
             Duration::from_millis(20),
-            Arc::new(|| {}),
+            Arc::new(move || {
+                let _ = completed_tx.send(());
+            }),
         )
         .unwrap();
 
-        for _ in 0..100 {
-            if index.search("重建", 20).unwrap().len() == 1 {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        // Search visibility precedes marking the rebuild complete. Wait for
+        // the callback emitted after both steps, rather than racing the flag.
+        let completed = completed_rx.recv_timeout(Duration::from_secs(10));
+        worker.stop();
+        completed.expect("worker must signal a completed rebuild");
 
         assert_eq!(index.search("重建", 20).unwrap().len(), 1);
         assert!(!index.requires_full_rebuild());
-        worker.stop();
     }
 }
