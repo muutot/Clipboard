@@ -2130,3 +2130,60 @@ fn list_summaries_bound_unicode_bodies_and_full_reads_preserve_payloads() {
         page
     );
 }
+
+#[test]
+fn auto_tag_history_preview_is_read_only_and_apply_is_additive_and_idempotent() {
+    let db = Database::open_in_memory().unwrap();
+    for id in ["a", "b", "deleted"] {
+        let mut row = text_item(id, id, 1);
+        row.source_app = Some(if id == "b" { "Other" } else { "Editor" }.into());
+        db.save_item(&row).unwrap();
+    }
+    db.soft_delete("deleted").unwrap();
+    db.set_tags("a", &["manual".into()]).unwrap();
+    let rules = crate::tags::compile_auto_tag_rules(&[crate::config::AutoTagRule {
+        tag: "work".into(),
+        source_app: "editor".into(),
+        ..Default::default()
+    }]);
+    let preview = db.auto_tag_history(&rules, false).unwrap();
+    assert_eq!(preview.changed_count, 1);
+    assert_eq!(preview.samples[0].id, "a");
+    assert!(!db
+        .get_item("a")
+        .unwrap()
+        .unwrap()
+        .metadata_json
+        .unwrap()
+        .contains("work"));
+    assert_eq!(db.auto_tag_history(&rules, true).unwrap().changed_count, 1);
+    let metadata: serde_json::Value =
+        serde_json::from_str(&db.get_item("a").unwrap().unwrap().metadata_json.unwrap()).unwrap();
+    assert_eq!(metadata["tags"], serde_json::json!(["manual", "work"]));
+    assert_eq!(db.auto_tag_history(&rules, true).unwrap().changed_count, 0);
+    assert!(!db.add_tags("a", &["work".into()]).unwrap());
+}
+
+#[test]
+fn historical_auto_tag_failure_rolls_back_every_record() {
+    let db = Database::open_in_memory().unwrap();
+    for id in ["a", "b"] {
+        db.save_item(&text_item(id, id, 1)).unwrap();
+    }
+    db.with_connection(|connection| {
+        connection.execute_batch(
+            "CREATE TRIGGER reject_b BEFORE UPDATE OF metadata_json ON clipboard_items
+          WHEN NEW.id = 'b' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;",
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    let rules = crate::tags::compile_auto_tag_rules(&[crate::config::AutoTagRule {
+        pattern: "content".into(),
+        tag: "auto".into(),
+        ..Default::default()
+    }]);
+    assert!(db.auto_tag_history(&rules, true).is_err());
+    assert!(db.list_all_tags().unwrap().is_empty());
+    assert!(db.get_item("a").unwrap().unwrap().metadata_json.is_none());
+}

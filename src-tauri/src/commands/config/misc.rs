@@ -165,23 +165,7 @@ pub fn set_auto_tag_rules(
     capture: tauri::State<'_, CaptureState>,
     rules: Vec<crate::config::AutoTagRule>,
 ) -> Result<Vec<crate::config::AutoTagRule>, String> {
-    // Validate up front so nothing is persisted when a pattern is invalid
-    // or a tag is blank (mirrors set_privacy_settings). Patterns are
-    // validated in their persisted form (500-char cap, then trim): a longer
-    // pattern whose truncation breaks the regex must be rejected here
-    // instead of being stored as a rule that can never compile.
-    for rule in &rules {
-        let persisted_pattern: String = rule.pattern.chars().take(500).collect();
-        if let Err(error) = regex_lite::Regex::new(persisted_pattern.trim()) {
-            return Err(format!(
-                "invalid auto-tag pattern {:?}: {error}",
-                rule.pattern
-            ));
-        }
-        if rule.tag.trim().is_empty() {
-            return Err("auto-tag rule tag must not be empty".to_owned());
-        }
-    }
+    crate::tags::validate_auto_tag_rules(&rules)?;
 
     let persisted = {
         lock_state(&config, "configuration lock is poisoned")?
@@ -192,6 +176,78 @@ pub fn set_auto_tag_rules(
     // Mirror into the running capture worker without a restart.
     capture.set_auto_tag_rules(crate::tags::compile_auto_tag_rules(&persisted));
     Ok(persisted)
+}
+
+fn compiled_preview_rules(
+    rules: &[crate::config::AutoTagRule],
+) -> Result<Vec<crate::tags::CompiledAutoTagRule>, String> {
+    crate::tags::validate_auto_tag_rules(rules)?;
+    Ok(crate::tags::compile_auto_tag_rules(
+        &rules
+            .iter()
+            .map(|rule| rule.normalized())
+            .collect::<Vec<_>>(),
+    ))
+}
+
+#[tauri::command]
+pub fn preview_auto_tag_rules(
+    rules: Vec<crate::config::AutoTagRule>,
+    text: String,
+    source_app: String,
+    kind: crate::domain::ClipboardKind,
+) -> Result<Vec<String>, String> {
+    if text.len() > 1_000_000 || source_app.len() > 4096 {
+        return Err("sample is too large".into());
+    }
+    Ok(crate::tags::match_auto_tags(
+        &compiled_preview_rules(&rules)?,
+        &text,
+        &source_app,
+        kind,
+    ))
+}
+
+#[tauri::command]
+pub async fn preview_auto_tag_history(
+    app: tauri::AppHandle,
+    rules: Vec<crate::config::AutoTagRule>,
+) -> Result<crate::storage::AutoTagHistoryPreview, String> {
+    run_auto_tag_history(app, rules, false).await
+}
+
+#[tauri::command]
+pub async fn apply_auto_tag_history(
+    app: tauri::AppHandle,
+    rules: Vec<crate::config::AutoTagRule>,
+) -> Result<crate::storage::AutoTagHistoryPreview, String> {
+    run_auto_tag_history(app, rules, true).await
+}
+
+async fn run_auto_tag_history(
+    app: tauri::AppHandle,
+    rules: Vec<crate::config::AutoTagRule>,
+    apply: bool,
+) -> Result<crate::storage::AutoTagHistoryPreview, String> {
+    let compiled = compiled_preview_rules(&rules)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = app
+            .state::<Database>()
+            .auto_tag_history(&compiled, apply)
+            .map_err(|error| error.to_string())?;
+        if apply && result.changed_count > 0 {
+            app.state::<crate::commands::clipboard::SearchResultCache>()
+                .clear();
+            for event in ["clipboard-history-invalidated", "tags-changed"] {
+                if let Err(error) = app.emit(event, serde_json::json!({ "deletedIds": [] })) {
+                    crate::log_warn!("[autotag] unable to broadcast {event}: {error}");
+                }
+            }
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

@@ -344,6 +344,40 @@ export async function setTagColor(name: string, color: string): Promise<boolean 
 export interface AutoTagRule {
   pattern: string;
   tag: string;
+  sourceApp?: string;
+  kind?: ClipboardItem["kind"] | null;
+}
+
+export interface AutoTagHistoryPreview {
+  matchedCount: number;
+  changedCount: number;
+  samples: { id: string; title: string; tags: string[] }[];
+}
+export async function previewAutoTagRules(
+  rules: AutoTagRule[],
+  text: string,
+  sourceApp: string,
+  kind: ClipboardItem["kind"],
+) {
+  return invokeTauriRequired<string[]>(
+    "preview_auto_tag_rules",
+    { rules, text, sourceApp, kind },
+    "Auto-tag preview requires the desktop app",
+  );
+}
+export async function previewAutoTagHistory(rules: AutoTagRule[]) {
+  return invokeTauriRequired<AutoTagHistoryPreview>(
+    "preview_auto_tag_history",
+    { rules },
+    "Auto-tag preview requires the desktop app",
+  );
+}
+export async function applyAutoTagHistory(rules: AutoTagRule[]) {
+  return invokeTauriRequired<AutoTagHistoryPreview>(
+    "apply_auto_tag_history",
+    { rules },
+    "Auto-tag application requires the desktop app",
+  );
 }
 
 export async function getAutoTagRules(): Promise<AutoTagRule[] | null> {

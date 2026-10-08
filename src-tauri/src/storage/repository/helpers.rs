@@ -145,7 +145,7 @@ pub(super) fn insert_item_row(
 }
 
 /// Mirrors `metadata_json.tags` into the derived `item_tags` index for one row.
-fn sync_item_tags_from_metadata(
+pub(super) fn sync_item_tags_from_metadata(
     connection: &rusqlite::Connection,
     id: &str,
 ) -> Result<(), StorageError> {

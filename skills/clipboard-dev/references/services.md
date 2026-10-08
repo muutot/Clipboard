@@ -102,3 +102,5 @@ Search exact event names and payload types before modifying producers or consume
 - Preserve browser-preview behavior when it is intentional; do not let demo behavior masquerade as desktop completion.
 - Clean up event listeners and store subscriptions.
 - Update tests and the matching service/data reference in the same commit.
+
+Auto-tag services expose optional sourceApp/kind conditions and previewAutoTagRules, previewAutoTagHistory, applyAutoTagHistory. History results contain matchedCount, changedCount and up to 20 samples. Applying uses the current draft; saving is separate.

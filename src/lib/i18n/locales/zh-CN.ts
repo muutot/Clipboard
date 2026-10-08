@@ -1,6 +1,24 @@
 import type { LocaleDefinition } from "../types";
 
 const zhCN: LocaleDefinition = {
+  autoTags: {
+    source: "来源包含（可留空）",
+    sampleSource: "样本来源应用",
+    kind: "内容类型",
+    allTypes: "全部类型",
+    previewTitle: "测试当前规则",
+    conditionsHint: "正则、来源和类型条件需同时匹配；留空表示不限。图片和文件按标题匹配。",
+    sample: "样本文本或文件名",
+    test: "测试样本",
+    noMatch: "没有匹配的标签。",
+    historyTitle: "应用到历史记录",
+    historyHint:
+      "预览当前规则（包括未保存的修改）。仅向有效记录追加标签，保留已有标签；应用前数量可能变化。",
+    previewHistory: "预览历史匹配",
+    applyHistory: "应用到历史",
+    counts: "匹配 {matched} 条，将向 {changed} 条追加标签。前 20 条样本：",
+    applied: "已向 {count} 条记录追加标签。",
+  },
   ocrBlocks: {
     copySelected: "复制所选（{count}）",
     hint: "点击图片文字区域或勾选下方文字；搜索命中会在图片上高亮。",

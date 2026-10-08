@@ -1,3 +1,4 @@
+mod auto_tags;
 mod helpers;
 mod impls;
 mod summaries;
@@ -5,6 +6,7 @@ mod traits;
 
 use helpers::*;
 
+pub use auto_tags::AutoTagHistoryPreview;
 pub use impls::TransactionalSaveSummary;
 pub use traits::*;
 

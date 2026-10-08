@@ -4,6 +4,14 @@
   import { isTauriRuntime } from "$lib/services/runtime";
   import { getAutoTagRules, setAutoTagRules, type AutoTagRule } from "$lib/services/clipboard";
   import { createFeedback } from "$lib/utils/feedback.svelte";
+  import CustomSelect from "$lib/components/CustomSelect.svelte";
+  import {
+    previewAutoTagRules,
+    previewAutoTagHistory,
+    applyAutoTagHistory,
+    type AutoTagHistoryPreview,
+  } from "$lib/services/clipboard";
+  import type { ClipboardKind } from "$lib/types/clipboard";
 
   const _t = (path: string, params?: Record<string, string | number>) =>
     resolvePath($messages, path, params);
@@ -19,6 +27,53 @@
   let loading = $state(true);
   let rulesSaving = $state(false);
   let feedback = createFeedback(3000);
+  let sampleText = $state("");
+  let sampleSource = $state("");
+  let sampleKind = $state<ClipboardKind>("text");
+  let sampleTags = $state<string[] | null>(null);
+  let preview = $state<AutoTagHistoryPreview | null>(null);
+  const kindOptions = $derived(
+    ["text", "link", "image", "file"].map((value) => ({ value, label: _t("filter." + value) })),
+  );
+  const rulesKey = $derived(JSON.stringify(rules));
+  $effect(() => {
+    void sampleText;
+    void sampleSource;
+    void sampleKind;
+    sampleTags = null;
+  });
+  $effect(() => {
+    void rulesKey;
+    sampleTags = null;
+    preview = null;
+  });
+  const snapshotRules = () =>
+    rules.map((rule) => ({
+      pattern: rule.pattern.trim(),
+      tag: rule.tag.trim(),
+      sourceApp: rule.sourceApp?.trim() ?? "",
+      kind: rule.kind ?? null,
+    }));
+
+  async function runPreview(mode: "sample" | "history" | "apply") {
+    if (rulesSaving) return;
+    rulesSaving = true;
+    try {
+      const snapshot = snapshotRules();
+      if (mode === "sample")
+        sampleTags = await previewAutoTagRules(snapshot, sampleText, sampleSource, sampleKind);
+      else if (mode === "history") preview = await previewAutoTagHistory(snapshot);
+      else {
+        const result = await applyAutoTagHistory(snapshot);
+        preview = null;
+        feedback.show(_t("autoTags.applied", { count: result.changedCount }));
+      }
+    } catch (error) {
+      feedback.show(error instanceof Error ? error.message : String(error), false);
+    } finally {
+      rulesSaving = false;
+    }
+  }
 
   onDestroy(() => feedback.dispose());
 
@@ -48,9 +103,7 @@
     if (rulesSaving) return;
     rulesSaving = true;
     try {
-      const saved = await setAutoTagRules(
-        rules.map((rule) => ({ pattern: rule.pattern.trim(), tag: rule.tag.trim() })),
-      );
+      const saved = await setAutoTagRules(snapshotRules());
       rules = saved ?? rules;
       feedback.show(_t("tags.autoTagSaved"));
     } catch (error) {
@@ -86,34 +139,52 @@
       <p class="settings-state">{_t("storage.readingConfig")}</p>
     {:else}
       {#each rules as rule, index (index)}
-        <div class="autotag-row">
-          <input
-            class="autotag-pattern"
-            type="text"
-            bind:value={rule.pattern}
-            placeholder={_t("tags.autoTagPatternPlaceholder")}
-            aria-label={_t("tags.autoTagPatternPlaceholder")}
-            spellcheck={false}
-          />
-          <input
-            class="autotag-tag"
-            type="text"
-            bind:value={rule.tag}
-            placeholder={_t("tags.autoTagTagPlaceholder")}
-            aria-label={_t("tags.autoTagTagPlaceholder")}
-            spellcheck={false}
-          />
-          <button
-            type="button"
-            class="autotag-remove"
-            aria-label={_t("tags.autoTagDelete")}
-            title={_t("tags.autoTagDelete")}
-            onclick={() => removeRule(index)}>×</button
-          >
-        </div>
+        <fieldset disabled={rulesSaving}>
+          <div class="autotag-row">
+            <input
+              class="autotag-pattern"
+              type="text"
+              bind:value={rule.pattern}
+              placeholder={_t("tags.autoTagPatternPlaceholder")}
+              aria-label={_t("tags.autoTagPatternPlaceholder")}
+              spellcheck={false}
+            />
+            <input
+              class="autotag-tag"
+              type="text"
+              bind:value={rule.tag}
+              placeholder={_t("tags.autoTagTagPlaceholder")}
+              aria-label={_t("tags.autoTagTagPlaceholder")}
+              spellcheck={false}
+            />
+            <button
+              type="button"
+              class="autotag-remove"
+              aria-label={_t("tags.autoTagDelete")}
+              title={_t("tags.autoTagDelete")}
+              onclick={() => removeRule(index)}>×</button
+            >
+          </div>
+          <div class="autotag-row">
+            <input
+              class="settings-text-input autotag-source"
+              bind:value={rule.sourceApp}
+              maxlength={256}
+              placeholder={_t("autoTags.source")}
+              aria-label={_t("autoTags.source")}
+            />
+            <CustomSelect
+              value={rule.kind ?? ""}
+              options={[{ value: "", label: _t("autoTags.allTypes") }, ...kindOptions]}
+              ariaLabel={_t("autoTags.kind")}
+              disabled={rulesSaving}
+              onchange={(value) => (rule.kind = (value || null) as ClipboardKind | null)}
+            />
+          </div>
+        </fieldset>
       {/each}
       <div class="autotag-actions">
-        <button type="button" class="autotag-add" onclick={addRule}>
+        <button type="button" class="autotag-add" disabled={rulesSaving} onclick={addRule}>
           {_t("tags.autoTagAdd")}
         </button>
         <button
@@ -128,6 +199,81 @@
     {/if}
   </section>
 
+  {#if !loading}
+    <section class="setting-card" data-settings-search-id="tags.auto-tag-preview">
+      <div class="setting-heading">
+        <div>
+          <strong>{_t("autoTags.previewTitle")}</strong>
+          <p>{_t("autoTags.conditionsHint")}</p>
+        </div>
+      </div>
+      <textarea
+        disabled={rulesSaving}
+        class="settings-text-input sample-text"
+        maxlength={10000}
+        bind:value={sampleText}
+        aria-label={_t("autoTags.sample")}
+        placeholder={_t("autoTags.sample")}></textarea>
+      <div class="autotag-row">
+        <input
+          class="settings-text-input autotag-source"
+          bind:value={sampleSource}
+          disabled={rulesSaving}
+          maxlength={256}
+          aria-label={_t("autoTags.sampleSource")}
+          placeholder={_t("autoTags.sampleSource")}
+        />
+        <CustomSelect
+          value={sampleKind}
+          disabled={rulesSaving}
+          options={kindOptions}
+          ariaLabel={_t("autoTags.kind")}
+          onchange={(value) => (sampleKind = value as ClipboardKind)}
+        />
+      </div>
+      <div class="autotag-actions">
+        <button
+          class="settings-action-btn"
+          disabled={rulesSaving || !isTauriRuntime()}
+          onclick={() => runPreview("sample")}>{_t("autoTags.test")}</button
+        >
+      </div>
+      {#if sampleTags !== null}<p class="preview-result" role="status">
+          {sampleTags.join(", ") || _t("autoTags.noMatch")}
+        </p>{/if}
+    </section>
+    <section class="setting-card" data-settings-search-id="tags.auto-tag-history">
+      <div class="setting-heading">
+        <div>
+          <strong>{_t("autoTags.historyTitle")}</strong>
+          <p>{_t("autoTags.historyHint")}</p>
+        </div>
+      </div>
+      <div class="autotag-actions">
+        <button
+          class="settings-action-btn"
+          disabled={rulesSaving || !isTauriRuntime()}
+          onclick={() => runPreview("history")}>{_t("autoTags.previewHistory")}</button
+        >
+        <button
+          class="settings-action-btn"
+          disabled={rulesSaving || !preview?.changedCount || !isTauriRuntime()}
+          onclick={() => runPreview("apply")}>{_t("autoTags.applyHistory")}</button
+        >
+      </div>
+      {#if preview}
+        <p class="preview-result">
+          {_t("autoTags.counts", { matched: preview.matchedCount, changed: preview.changedCount })}
+        </p>
+        <ul>
+          {#each preview.samples as sample}<li>
+              <span>{sample.title}</span> → {sample.tags.join(", ")}
+            </li>{/each}
+        </ul>
+      {/if}
+    </section>
+  {/if}
+
   {#if feedback.message}
     <p class="settings-feedback" class:success={feedback.success} role="status">
       {feedback.message}
@@ -136,6 +282,31 @@
 </div>
 
 <style>
+  fieldset {
+    min-width: 0;
+    border: 0;
+    padding: 0 0 8px;
+    margin: 0;
+  }
+  .autotag-source {
+    flex: 1;
+    min-width: 0;
+  }
+  .sample-text {
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+  }
+  .preview-result,
+  li {
+    font-size: var(--settings-description-size);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+  }
+  ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
   .autotag-row {
     display: flex;
     align-items: center;

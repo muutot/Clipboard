@@ -9,7 +9,7 @@ This tracks implementation, not a version bump or release.
 - [x] Save named searches with complete filter state and relative dates (329 frontend tests; check/build/format pass; dark-theme browser interaction and 520px layout inspected).
 - [x] Return bounded active-list text summaries and hydrate full content for detail/copy/edit (336 frontend and 818 Rust tests in verify; extra mounted editor regression passes).
 - [x] Select/copy OCR blocks and highlight search matches on images (342 frontend tests; check/build/format pass; synthetic image geometry inspected in light and dark/narrow views).
-- [ ] Extend automatic tags with source/type conditions, preview and history application.
+- [x] Extend automatic tags with source/type conditions, preview and history application (344 frontend tests, Rust suite and Clippy, check/build/format pass; dark settings layout inspected).
 - [ ] Export/import a self-contained resource backup with validation and restore preview.
 - [ ] Extract route state controllers while preserving item-store ownership and page appearance.
 - [ ] Share item-operation behavior across GUI, CLI and local API.

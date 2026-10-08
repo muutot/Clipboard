@@ -474,6 +474,7 @@ fn persists_auto_tag_rules_with_normalization() {
     let rule = |pattern: &str, tag: &str| AutoTagRule {
         pattern: pattern.to_owned(),
         tag: tag.to_owned(),
+        ..AutoTagRule::default()
     };
     let stored = store
         .set_auto_tag_rules(vec![

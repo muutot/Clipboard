@@ -332,6 +332,27 @@ impl Default for PrivacyConfig {
 pub struct AutoTagRule {
     pub pattern: String,
     pub tag: String,
+    pub source_app: String,
+    pub kind: Option<crate::domain::ClipboardKind>,
+}
+
+impl AutoTagRule {
+    pub fn normalized(&self) -> Self {
+        fn bounded(value: &str, limit: usize) -> String {
+            value
+                .chars()
+                .take(limit)
+                .collect::<String>()
+                .trim()
+                .to_owned()
+        }
+        Self {
+            pattern: bounded(&self.pattern, 500),
+            tag: bounded(&self.tag, 64),
+            source_app: bounded(&self.source_app, 256),
+            kind: self.kind,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

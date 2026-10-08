@@ -891,6 +891,20 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
   ),
 
   entry(
+    "tags.auto-tag-preview",
+    { section: "tags_rules" },
+    i18n("autoTags.previewTitle"),
+    i18n("autoTags.conditionsHint"),
+    ["来源", "类型", "预览", "source", "type", "sample"],
+  ),
+  entry(
+    "tags.auto-tag-history",
+    { section: "tags_rules" },
+    i18n("autoTags.historyTitle"),
+    i18n("autoTags.historyHint"),
+    ["历史标签", "批量", "history", "auto tag"],
+  ),
+  entry(
     "ocr.engine",
     { section: "ocr" },
     i18n("storage.ocrEngineLabel"),

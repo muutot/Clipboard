@@ -1,6 +1,25 @@
 import type { LocaleDefinition } from "../types";
 
 const en: LocaleDefinition = {
+  autoTags: {
+    source: "Source contains (optional)",
+    sampleSource: "Sample source app",
+    kind: "Content type",
+    allTypes: "All types",
+    previewTitle: "Test current rules",
+    conditionsHint:
+      "Pattern, source and type conditions must all match. Leave a condition blank to ignore it. Media rules match the title.",
+    sample: "Sample text or file name",
+    test: "Test sample",
+    noMatch: "No matching tags.",
+    historyTitle: "Apply to history",
+    historyHint:
+      "Preview current rules, including unsaved edits. Adds tags to active records and keeps existing tags. Counts may change before application.",
+    previewHistory: "Preview history",
+    applyHistory: "Apply to history",
+    counts: "{matched} matched; {changed} will gain tags. First 20 samples:",
+    applied: "Added tags to {count} records.",
+  },
   ocrBlocks: {
     copySelected: "Copy selected ({count})",
     hint: "Select text regions or check rows below. Matches are highlighted on the image.",

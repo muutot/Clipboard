@@ -100,10 +100,21 @@ impl CaptureState {
     /// Tags whose rules match `text`. A poisoned lock is recovered via
     /// `into_inner` like every other capture lock; tagging is best-effort
     /// enrichment, so recovered stale rules are preferable to silent loss.
-    pub(crate) fn match_auto_tags(&self, text: &str) -> Vec<String> {
+    pub(crate) fn match_auto_tags(&self, item: &crate::domain::ClipboardItem) -> Vec<String> {
+        let text = if matches!(
+            item.kind,
+            crate::domain::ClipboardKind::Text | crate::domain::ClipboardKind::Link
+        ) {
+            item.text_content.as_deref().unwrap_or(&item.title)
+        } else {
+            &item.title
+        };
+        let source = item.source_app.as_deref().unwrap_or("");
         match self.policy.auto_tag_rules.read() {
-            Ok(rules) => crate::tags::match_auto_tags(&rules, text),
-            Err(poisoned) => crate::tags::match_auto_tags(&poisoned.into_inner(), text),
+            Ok(rules) => crate::tags::match_auto_tags(&rules, text, source, item.kind),
+            Err(poisoned) => {
+                crate::tags::match_auto_tags(&poisoned.into_inner(), text, source, item.kind)
+            }
         }
     }
 

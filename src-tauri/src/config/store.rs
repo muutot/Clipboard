@@ -317,29 +317,14 @@ impl ConfigStore {
             if normalized.len() >= Self::MAX_AUTO_TAG_RULES {
                 break;
             }
-            let pattern: String = rule
-                .pattern
-                .chars()
-                .take(500)
-                .collect::<String>()
-                .trim()
-                .to_owned();
-            let tag: String = rule
-                .tag
-                .chars()
-                .take(64)
-                .collect::<String>()
-                .trim()
-                .to_owned();
-            if pattern.is_empty()
-                || tag.is_empty()
-                || normalized
-                    .iter()
-                    .any(|existing| existing.pattern == pattern && existing.tag == tag)
+            let rule = rule.normalized();
+            if (rule.pattern.is_empty() && rule.source_app.is_empty() && rule.kind.is_none())
+                || rule.tag.is_empty()
+                || normalized.contains(&rule)
             {
                 continue;
             }
-            normalized.push(AutoTagRule { pattern, tag });
+            normalized.push(rule);
         }
 
         let stored = normalized.clone();

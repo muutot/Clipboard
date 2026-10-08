@@ -128,6 +128,21 @@ pub fn register_image_self_trigger(
 /// entry is de-duplicated onto its existing row with a frozen `created_at_ms`
 /// and a refreshed `last_used_at_ms`, so emitting the transient capture
 /// snapshot would lie about the capture time until the next list reload.
+fn apply_capture_auto_tags(
+    database: &Database,
+    capture: &crate::CaptureState,
+    id: &str,
+    item: &ClipboardItem,
+) {
+    let tags = capture.match_auto_tags(item);
+    if tags.is_empty() {
+        return;
+    }
+    if let Err(error) = database.add_tags(id, &tags) {
+        crate::log_error!("[clipboard-worker] failed to apply auto tags for {id}: {error}");
+    }
+}
+
 fn load_emit_item(database: &Database, saved_id: &str, fallback: &ClipboardItem) -> ClipboardItem {
     database
         .get_item(saved_id)
@@ -685,6 +700,7 @@ pub(crate) fn run_capture_loop(
                                 );
                             }
                             thumbnail_queue.enqueue(saved_id.clone(), img_path.clone());
+                            apply_capture_auto_tags(&database, &capture_state, &saved_id, &item);
                             let emit_item = load_emit_item(&database, &saved_id, &item);
                             if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item)
                             {
@@ -763,6 +779,12 @@ pub(crate) fn run_capture_loop(
                         match database.save_item(&item) {
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
+                                apply_capture_auto_tags(
+                                    &database,
+                                    &capture_state,
+                                    &saved_id,
+                                    &item,
+                                );
                                 let emit_item = load_emit_item(&database, &saved_id, &item);
                                 if let Err(error) =
                                     app_handle.emit("clipboard-item-added", &emit_item)
@@ -832,6 +854,12 @@ pub(crate) fn run_capture_loop(
                         match database.save_item(&item) {
                             Ok(saved_id) => {
                                 consecutive_errors = 0;
+                                apply_capture_auto_tags(
+                                    &database,
+                                    &capture_state,
+                                    &saved_id,
+                                    &item,
+                                );
                                 let emit_item = load_emit_item(&database, &saved_id, &item);
                                 if let Err(error) =
                                     app_handle.emit("clipboard-item-added", &emit_item)
@@ -927,18 +955,7 @@ pub(crate) fn run_capture_loop(
                 match database.save_item(&item) {
                     Ok(saved_id) => {
                         consecutive_errors = 0;
-                        // Auto-tag rules apply to the stored row via the same
-                        // set_tags path as manual tagging (same search-index
-                        // timing: the background drain picks the row up after
-                        // this commit).
-                        let auto_tags = capture_state.match_auto_tags(&text);
-                        if !auto_tags.is_empty() {
-                            if let Err(error) = database.set_tags(&saved_id, &auto_tags) {
-                                crate::log_error!(
-                                    "[clipboard-worker] failed to apply auto tags for {saved_id}: {error}"
-                                );
-                            }
-                        }
+                        apply_capture_auto_tags(&database, &capture_state, &saved_id, &item);
                         let emit_item = load_emit_item(&database, &saved_id, &item);
                         if let Err(error) = app_handle.emit("clipboard-item-added", &emit_item) {
                             crate::log_error!(
