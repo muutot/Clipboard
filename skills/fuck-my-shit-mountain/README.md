@@ -16,12 +16,14 @@
 
 语言默认跟随对话；一般审计默认全量，具体关注点自动映射专项维度；报告请求默认 Markdown，对话审查默认 stdout。只有影响范围判断的歧义才需要澄清。审计本身不会修改应用代码或触发发布。
 
+所有审计文件统一保存到本技能的 `result/`（仓库路径：`skills/fuck-my-shit-mountain/result/`），包括 Markdown、HTML、JSON 报告、历史元数据、修复计划及证据附件，不写入项目根目录。可按审计批次建立子目录，重名时保留旧报告。该目录中的结果保持本地存储，不进入 Git 或技能分发 ZIP；`stdout` 仍只在对话中输出。
+
 本地检查：
 
 ```powershell
 python -X utf8 -B -m unittest discover -s skills/fuck-my-shit-mountain/tests -v
 python -X utf8 -B skills/fuck-my-shit-mountain/scripts/project_inventory.py . --format text --language zh
-python -X utf8 -B skills/fuck-my-shit-mountain/scripts/report_lint.py --modes security audit-report.json
+python -X utf8 -B skills/fuck-my-shit-mountain/scripts/report_lint.py --modes security skills/fuck-my-shit-mountain/result/audit-report.json
 python -X utf8 -B skills/fuck-my-shit-mountain/scripts/package_skill.py --dry-run
 ```
 

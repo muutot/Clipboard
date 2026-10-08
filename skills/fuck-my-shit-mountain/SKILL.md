@@ -30,10 +30,12 @@ Audit real failure risks with source evidence and proportionate verification. Ke
 ## Output and side effects
 
 - `md`, `html`, `json`, `both` (Markdown + HTML), and `stdout` are supported.
-- Honor a user-selected path. Otherwise use `audit-report-<project>-<YYYY-MM-DD>.<ext>` under the working directory. If it already exists, use a descriptive suffix rather than overwriting an unrelated report.
+- Store all generated audit files under `<skill-dir>/result/`, resolved from this `SKILL.md` location rather than the current working directory. In Clipboard this is `skills/fuck-my-shit-mountain/result/`. Create it when needed; do not write audit files to the project root.
+- Use `audit-report-<project>-<YYYY-MM-DD>.<ext>` inside `result/`. Keep related Markdown/HTML/JSON reports, metadata, remediation plans, evidence exports, screenshots and logs together there, optionally in a run-specific subdirectory. A supplied filename also resolves inside `result/`; use another directory only when the user explicitly requests that destination. Preserve existing reports by adding a descriptive suffix on collisions.
 - JSON follows [templates/audit-report.json](templates/audit-report.json), a schema, not a report instance. HTML reuses the template's CSS and reusable section structure, with content escaped and selected dimensions added/removed as needed.
 - Zero findings is valid. Leave risk lists empty and explain coverage; never invent findings to populate a template.
-- `stdout` writes no files. Save history metadata only when the user requests historical tracking, in their chosen directory or beside the report. Include commit, dirty-tree state, actual comparison refs, modes, scope, scores and report paths. Do not create tool-specific configuration directories by default.
+- `stdout` writes no files. Save history metadata only when the user requests historical tracking, beside the report inside `result/`. Include commit, dirty-tree state, actual comparison refs, modes, scope, scores and report paths. Do not create tool-specific configuration directories by default.
+- Treat `result/` as local generated output: preserve its Git ignore policy and exclude its contents from skill distribution packages. Prior reports are historical context, not current implementation evidence.
 - An audit alone does not authorize application fixes, dependency installs, TODO edits, commits, version bumps, releases, remote comments, or scheduled monitors. Continue already-authorized remediation without asking again.
 
 ## Evidence and coverage

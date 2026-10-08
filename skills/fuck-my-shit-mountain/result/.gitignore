@@ -1,0 +1,3 @@
+# Generated audit reports, metadata, plans and evidence stay local.
+*
+!.gitignore

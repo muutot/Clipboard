@@ -21,6 +21,7 @@ DEFAULT_EXCLUDES = (
     ".git/**",
     ".gitignore",
     "dist/**",
+    "result/**",
 )
 
 

@@ -219,6 +219,25 @@ class PackageTests(unittest.TestCase):
                                  "templates/audit-report.json", "prompts/concurrency-audit.md"]:
                     self.assertIn(prefix + resource, names)
                 self.assertFalse(any("__pycache__" in name or name.endswith(".pyc") for name in names))
+                self.assertFalse(any(name.startswith(prefix + "result/") for name in names))
+
+    def test_archive_excludes_all_audit_results_but_keeps_templates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = Path(tmp) / "fixture-skill"
+            for name in ["SKILL.md", "templates/audit-report.md", "result/report.md",
+                         "result/report.html", "result/report.json", "result/run/evidence.txt"]:
+                path = skill / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("synthetic fixture", encoding="utf-8")
+            output = Path(tmp) / "skill.zip"
+            result = subprocess.run([sys.executable, "-X", "utf8", "-B",
+                                     str(SKILL / "scripts/package_skill.py"),
+                                     "--skill-dir", str(skill), "--output", str(output)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(set(archive.namelist()), {
+                    "fixture-skill/SKILL.md", "fixture-skill/templates/audit-report.md"})
 
 
 if __name__ == "__main__":
