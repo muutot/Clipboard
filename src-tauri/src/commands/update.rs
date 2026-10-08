@@ -149,10 +149,19 @@ pub async fn get_release(
 
 fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
     let cleaned = version.trim().trim_start_matches('v');
-    let mut parts = cleaned.split('.');
+    // Ignore pre-release/build metadata before parsing: "1.2.3-beta" must
+    // compare as 1.2.3, not collapse to 1.2.0.
+    let core = cleaned.split(['-', '+']).next().unwrap_or(cleaned);
+    let mut parts = core.split('.');
     let major = parts.next()?.parse().ok()?;
-    let minor = parts.next().unwrap_or("0").parse().unwrap_or(0);
-    let patch = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let minor = match parts.next() {
+        Some(part) => part.parse().ok()?,
+        None => 0,
+    };
+    let patch = match parts.next() {
+        Some(part) => part.parse().ok()?,
+        None => 0,
+    };
     Some((major, minor, patch))
 }
 
@@ -187,6 +196,14 @@ mod tests {
         assert!(!is_newer("1.0.1", "1.1.0"));
         assert!(!is_newer("not-a-version", "1.1.0"));
         assert!(!is_newer("1.2.0", "not-a-version"));
+    }
+
+    #[test]
+    fn parse_version_rejects_unparsable_components() {
+        assert_eq!(parse_version("1.2.x"), None);
+        assert_eq!(parse_version("1.x.0"), None);
+        assert_eq!(parse_version("1.2.3-beta"), Some((1, 2, 3)));
+        assert_eq!(parse_version("1.2.3+build"), Some((1, 2, 3)));
     }
 
     #[test]
