@@ -78,6 +78,8 @@ Custom image and file roots can replace their default resource directories. Clea
 
 The Windows NSIS template is `src-tauri/windows/installer.nsi`. Its settings-only cleanup must preserve `storage/` under both roaming and local application-data roots: `resolve_project_directory` can use those roots for primary data when the executable directory is not writable. `un.DeleteSettingsAt` removes only `conf/`, `logs/`, `EBWebView/`, and `instance.lock`, then removes the root only if empty. Run `python scripts/test-installer-settings.py` on Windows to compile and execute this exact helper against isolated fixtures; `--makensis` overrides the default Tauri-cached compiler. This check does not build or install the app.
 
+On reinstall, `DataDirectoryPage` skips an existing `conf/conf.json`, and `WriteInitialStorageConfig` returns without modifying it. Storage changes for an installed app must go through the app's migration workflow. `python scripts/test-installer-config.py` compiles the production writer and verifies byte-for-byte preservation of an existing config plus initial ASCII/Unicode path round-trips on the current Windows host.
+
 ## High-coupling files
 
 Treat these as integration points and avoid concurrent edits:

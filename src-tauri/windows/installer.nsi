@@ -343,6 +343,11 @@ FunctionEnd
 ; 5.5 Choose data directory page (custom)
 Page custom DataDirectoryPage DataDirectoryPageLeave
 Function DataDirectoryPage
+  ; Existing installations keep their storage choice. Changing it requires
+  ; the app's migration workflow, not a config overwrite during reinstall.
+  ${If} ${FileExists} "$INSTDIR\conf\conf.json"
+    Abort
+  ${EndIf}
   ${If} $DataDirectory == ""
     StrCpy $DataDirectory "$INSTDIR"
   ${EndIf}
@@ -391,6 +396,22 @@ Function DataDirectoryPageLeave
   ${If} $DataDirectory == ""
     MessageBox MB_ICONEXCLAMATION "Please select a data storage folder."
     Abort
+  ${EndIf}
+FunctionEnd
+
+Function WriteInitialStorageConfig
+  ${If} ${FileExists} "$INSTDIR\conf\conf.json"
+    Return
+  ${EndIf}
+  ${If} $DataDirectory != ""
+  ${AndIf} $DataDirectory != "$INSTDIR"
+    CreateDirectory "$INSTDIR\conf"
+    ${StrRep} $0 $DataDirectory "\" "/"
+    FileOpen $1 "$INSTDIR\conf\conf.json" w
+    ${If} $1 != 0
+      FileWrite $1 '{"storage":{"dataDirectory":"$0"}}$\r$\n'
+      FileClose $1
+    ${EndIf}
   ${EndIf}
 FunctionEnd
 
@@ -813,17 +834,7 @@ Section Install
   ${EndIf}
 
   ; Write data directory config if a custom directory was chosen
-  ${If} $DataDirectory != ""
-  ${AndIf} $DataDirectory != "$INSTDIR"
-    CreateDirectory "$INSTDIR\conf"
-    ; Convert backslashes to forward slashes for JSON
-    ${StrRep} $0 $DataDirectory "\" "/"
-    FileOpen $1 "$INSTDIR\conf\conf.json" w
-    ${If} $1 != 0
-      FileWrite $1 '{"storage":{"dataDirectory":"$0"}}$\r$\n'
-      FileClose $1
-    ${EndIf}
-  ${EndIf}
+  Call WriteInitialStorageConfig
 
   !ifmacrodef NSIS_HOOK_POSTINSTALL
     !insertmacro NSIS_HOOK_POSTINSTALL
