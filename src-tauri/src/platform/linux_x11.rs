@@ -133,7 +133,7 @@ pub type X11Result<T> = Result<T, X11Error>;
 
 #[cfg(target_os = "linux")]
 #[allow(non_camel_case_types, dead_code)]
-mod x11_ffi {
+pub(crate) mod x11_ffi {
     // Types -----------------------------------------------------------------
     pub type Display = std::ffi::c_void;
     pub type Window = u64;
@@ -359,6 +359,7 @@ mod x11_ffi {
         ) -> i32;
         pub fn XKeysymToKeycode(display: *mut Display, keysym: KeySym) -> KeyCode;
         pub fn XStringToKeysym(string: *const i8) -> KeySym;
+        pub fn XQueryKeymap(display: *mut Display, keys: *mut i8) -> i32;
         pub fn XKeycodeToKeysym(display: *mut Display, keycode: KeyCode, index: i32) -> KeySym;
 
         // Error handling

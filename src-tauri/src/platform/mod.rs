@@ -20,6 +20,8 @@ pub mod linux_wayland;
 #[path = "linux_wayland.rs"]
 pub mod linux_wayland;
 
+#[cfg(target_os = "linux")]
+pub mod wayland_hotkeys;
 pub mod windows_clipboard;
 #[cfg(target_os = "windows")]
 pub mod windows_hotkey;
@@ -39,8 +41,15 @@ pub mod hotkey_common;
 pub mod linux_icons;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod local_wake;
+#[cfg(any(test, not(target_os = "windows")))]
+pub mod modifier_input;
 pub mod monitor;
+#[cfg(any(test, not(target_os = "windows")))]
+pub mod native_hotkeys;
 pub mod platform_info;
+#[cfg(all(test, target_os = "windows"))]
+#[path = "windows_hotkey_stub.rs"]
+mod portable_hotkey_compile_test;
 pub mod secret_store;
 pub mod single_instance;
 #[cfg(target_os = "linux")]

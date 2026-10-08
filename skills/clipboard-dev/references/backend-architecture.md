@@ -137,7 +137,7 @@ Privacy pause, ignored applications, and sensitive-source checks happen before p
 
 ## Platform adapters
 
-`platform/` contains shared traits/managers plus Windows, macOS, X11, and Wayland sources. Windows is the primary wired runtime. File presence is not proof of native clipboard, hotkey, source-app, tray, or quick-paste completion; verify runtime wiring, target-specific tests, and real-platform evidence. Keep degradation capabilities accurate in `RuntimeInfo`.
+`platform/` contains shared traits/managers plus Windows, macOS, X11, and Wayland sources. Windows is the primary wired runtime. File presence is not proof of native clipboard, hotkey, source-app, tray, or quick-paste completion; verify runtime wiring, target-specific tests, and real-platform evidence. Keep degradation capabilities accurate in `RuntimeInfo`. Non-Windows hotkey dispatch is implemented by the historical `windows_hotkey_stub.rs` facade, `native_hotkeys.rs` (macOS/X11 main-thread registrations), `modifier_input.rs` (10 ms modifier samples), and `wayland_hotkeys.rs` (authorized GlobalShortcuts portal sessions). Each loop has a stop signal and join; queued UI operations never block the loop during shutdown.
 
 ## CLI and loopback API
 

@@ -1,7 +1,7 @@
 # Hotkey Architecture
 
 Single reference for every shortcut in the app: OS-global hotkeys (Windows
-`RegisterHotKey` loop) and in-window shortcuts (main-route keydown table).
+`RegisterHotKey`, macOS/X11 native registration, Wayland portal) and in-window shortcuts (main-route keydown table).
 Both sides are driven by action registries, so a new shortcut is a few rows
 of data plus its dispatch branch — never a new manager, loop, or settings
 panel.
@@ -45,7 +45,7 @@ event forward (anything else)     event with the action id payload
 | `keyboard/manager.rs`             | Config store + matcher composition; no OS code.                                                                                                                                                                                                                      |
 | `platform/hotkey_common.rs`       | Shared pure logic for both OS backends: per-action id ranges (`action_id_base` / `action_index_for_hotkey_id`, stride 1000, legacy `1..` / `1000..` layout preserved), `plan_registrations`, Win32 key mapping, binding conversion.                                  |
 | `platform/windows_hotkey.rs`      | Real `RegisterHotKey` message loop + low-level double-modifier hook. A chord the OS refuses (occupied by another app) is skipped, logged, and emitted as a `hotkey-registration-failed` event (`{action, error}`) so the settings UI can surface the conflict.       |
-| `platform/windows_hotkey_stub.rs` | Non-Windows placeholder: identical dispatch, no OS registration.                                                                                                                                                                                                     |
+| `platform/windows_hotkey_stub.rs` | Non-Windows manager: native_hotkeys / wayland_hotkeys registration, joined dispatch thread, UI work posted to main.                                                                                                                                                  |
 | `lib.rs`                          | `resolve_global_hotkey_plan` (registry → chords/doubles) + `refresh_hotkey_registrations` (single rebuild) + startup wiring with bundled-default toggle fallback.                                                                                                    |
 | `commands/config/misc.rs`         | `get/configure/delete/reset_keyboard_config`; configure/delete refresh the OS loop only when `is_global_action(&action)`.                                                                                                                                            |
 
@@ -137,20 +137,18 @@ Window-only (main window focused):
 - Double-modifier taps stay toggle-only by design (`RegisterHotKey` cannot
   express them); `allow_double_tap` marks the single action that owns the
   hook. Other keys pressed mid-tap cancel the pending sequence.
-- Non-Windows has no OS-global path: global bindings work only while the
-  main window is focused there. Do not claim global behavior from the stub
-  compiling. `quickPaste` ships unbound by default.
-- `platform_info.rs::capabilities_for(platform)` is the single source for
-  the `globalShortcut` / `quickPaste` flags the UI reads, and it derives
-  both from one `cfg!(target_os = "windows")` constant rather than
-  restating them per platform. `platform/mod.rs` routes every non-Windows
-  target to `windows_hotkey_stub.rs`, whose registration loop never fires
-  and whose `restore_window_and_paste` returns `Err` — so a per-platform
-  literal is how macOS came to report `quickPaste: true` while running
-  that stub. Making it a pure function of the platform is deliberate: it
-  lets the test assert all five rows from a Windows host, which a
-  `#[cfg]`-gated literal cannot be tested against at all. Add a new
-  shortcut capability here, not in a per-platform match arm.
+- Non-Windows registration is real: `native_hotkeys.rs` owns macOS/X11
+  `global-hotkey` managers on the main thread and a stoppable event worker;
+  `modifier_input.rs` samples keys every 10 ms for bare modifier double taps.
+  Samples shorter than that can be missed; macOS requires Input Monitoring.
+  `wayland_hotkeys.rs` owns a GlobalShortcuts portal session, closes outstanding
+  requests on stop and the session on drop; no bare modifier tap support.
+- `platform_info.rs::capabilities_for` reports native chord backends only for
+  the running platform; Wayland reports true only after portal binding succeeds.
+  Quick paste remains Windows-only until its separate backend is wired.
+- Both native registration/destruction and UI dispatch stay on the main thread.
+  Workers must never wait for UI work while stop joins them. Generation checks
+  prevent an old native cleanup from unregistering a replacement manager.
 - Frontend and backend registries must stay in parity: `global_action_ids()`
   order == `GLOBAL_ACTION_IDS` order (id ranges derive from position).
   `keyboard-registry.test.ts` fails the build if defaults and registry drift.

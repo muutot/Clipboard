@@ -203,21 +203,21 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 
 ## 多平台支持状态
 
-| 功能                       | Windows       | macOS                              | Linux X11                     | Linux Wayland                           |
-| :------------------------- | :------------ | :--------------------------------- | :---------------------------- | :-------------------------------------- |
-| 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib FFI              | ⚠️ `wl-paste`                           |
-| 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）              | ⚠️ `xclip`（无标记）          | ⚠️ `wl-copy`（无标记）                  |
-| 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips` | ⚠️ `xclip`                    | ⚠️ `wl-paste`                           |
-| 读取文件路径               | ✅ 原生 Win32 | ⚠️ 原生 `NSFilenamesPboardType`¹   | ⚠️ `xclip`（uri-list）        | ⚠️ `wl-paste`（uri-list）               |
-| 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                   | ✅ 原生 Xlib + `/proc`        | ⚠️ `swaymsg`/`hyprctl`/`xdotool`        |
-| 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`               | ⚠️ freedesktop 图标           | ⚠️ freedesktop 图标                     |
-| 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                     | ❌ 未实现                               |
-| 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                     | ❌ 未实现                               |
-| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                          | ❌ 未实现                     | ❌ 未实现                               |
-| 富文本 RTF 采集            | ✅ 原生 Win32 | ⚠️ 原生 public.rtf（待平台验证）   | ⚠️ `xclip` / `wl-paste`       | ⚠️ `xclip` / `wl-paste`                 |
-| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ⚠️ 原生 changeCount（待平台验证）  | ⚠️ 双读校验与有限重试         | ⚠️ 双读校验与有限重试                   |
-| 单实例唤醒已有实例         | ✅ 原命名事件 | ⚠️ 本地认证 IPC（待平台验证）      | ⚠️ 本地认证 IPC（待平台验证） | ⚠️ 本地认证 IPC（窗口激活由合成器决定） |
-| 秘密存储（OS 级钥匙串）    | ✅ DPAPI      | ⚠️ Keychain（不可达则明文回退）    | ⚠️ Secret Service（同左）     | ⚠️ Secret Service（同左）               |
+| 功能                       | Windows       | macOS                                   | Linux X11                               | Linux Wayland                               |
+| :------------------------- | :------------ | :-------------------------------------- | :-------------------------------------- | :------------------------------------------ |
+| 读取剪贴板文本             | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                        | ✅ 原生 Xlib FFI                        | ⚠️ `wl-paste`                               |
+| 写入剪贴板（含自触发标记） | ✅ 原生 Win32 | ⚠️ `pbcopy`（无标记）                   | ⚠️ `xclip`（无标记）                    | ⚠️ `wl-copy`（无标记）                      |
+| 读取剪贴板图片             | ✅ 原生 Win32 | ⚠️ `pngpaste` / `osascript`+`sips`      | ⚠️ `xclip`                              | ⚠️ `wl-paste`                               |
+| 读取文件路径               | ✅ 原生 Win32 | ⚠️ 原生 `NSFilenamesPboardType`¹        | ⚠️ `xclip`（uri-list）                  | ⚠️ `wl-paste`（uri-list）                   |
+| 获取前台应用               | ✅ 原生 Win32 | ✅ 原生 ObjC FFI                        | ✅ 原生 Xlib + `/proc`                  | ⚠️ `swaymsg`/`hyprctl`/`xdotool`            |
+| 提取应用图标               | ✅ 原生 Win32 | ⚠️ `plutil` + `sips`                    | ⚠️ freedesktop 图标                     | ⚠️ freedesktop 图标                         |
+| 全局热键 / 双击修饰键      | ✅ 原生 Win32 | ⚠️ 原生组合键 / 10ms 双击采样（待验证） | ⚠️ 原生组合键 / 10ms 双击采样（待验证） | ⚠️ GlobalShortcuts portal；不支持修饰键双击 |
+| 快速粘贴到上一个窗口       | ✅ 原生 Win32 | ❌ 未实现                               | ❌ 未实现                               | ❌ 未实现                                   |
+| 窗口透明 / 毛玻璃特效      | ✅ 原生 Win32 | ❌ 未实现                               | ❌ 未实现                               | ❌ 未实现                                   |
+| 富文本 RTF 采集            | ✅ 原生 Win32 | ⚠️ 原生 public.rtf（待平台验证）        | ⚠️ `xclip` / `wl-paste`                 | ⚠️ `xclip` / `wl-paste`                     |
+| 剪贴板序列号（多格式竞态） | ✅ 原生 Win32 | ⚠️ 原生 changeCount（待平台验证）       | ⚠️ 双读校验与有限重试                   | ⚠️ 双读校验与有限重试                       |
+| 单实例唤醒已有实例         | ✅ 原命名事件 | ⚠️ 本地认证 IPC（待平台验证）           | ⚠️ 本地认证 IPC（待平台验证）           | ⚠️ 本地认证 IPC（窗口激活由合成器决定）     |
+| 秘密存储（OS 级钥匙串）    | ✅ DPAPI      | ⚠️ Keychain（不可达则明文回退）         | ⚠️ Secret Service（同左）               | ⚠️ Secret Service（同左）                   |
 
 - ✅ **原生 API** — 直接 FFI 调用系统接口，无外部依赖
 - ⚠️ **部分支持** — 依赖外部命令行工具，或受来源应用写入格式等条件限制
@@ -225,11 +225,7 @@ npm run tauri build  # 在 src-tauri/target/release/bundle/ 生成安装包
 
 > **注意**：剪贴板变更检测按平台采用不同机制——Windows 使用原生剪贴板序列号事件驱动；Linux 在 X11 下通过 XFixes 事件、在 Wayland 下通过 data-control 协议事件驱动（协议不可用时回退 500ms 轮询）；macOS 无推送 API，使用 500ms 轮询。先比对文本，无文本时再比对文件路径与图片内容，因此图片/文件复制也能被采集。自触发防护不依赖剪贴板私有标记（写入命令行工具无法携带标记），而是将应用自身写入的内容哈希登记在内存守卫中，采集时比对跳过。
 
-> **热键说明**：系统级注册与「粘贴到上一个窗口」目前只有 Windows 的 `RegisterHotKey` + 低级键盘钩子一条真实实现。macOS 的
-> `MacOSKeyboardHook::register` 仍是仅含注释的大纲，非 Windows 走 `windows_hotkey_stub.rs`，其线程永不触发、
-> `restore_window_and_paste` 直接返回「quick paste is only implemented on Windows」；
-> `platform_info.rs::current_capabilities` 因此在 macOS / Linux 返回 `global_shortcut: false`，并一并返回
-> `quick_paste: false`。快捷键配置本身跨平台可用，绑定在主窗口获得焦点时生效。
+> **热键说明**：macOS/X11 组合键经 `global-hotkey` 原生注册，双击修饰键经 10ms 按键状态采样识别（短于采样间隔的按键可能漏检，macOS 需要输入监控权限）。Wayland 通过 GlobalShortcuts portal 请求桌面授权，只在绑定成功后报告可用；修饰键双击无通用接口，明确报错。非 Windows 实现仍待对应平台 CI 和桌面实测。快速粘贴当前仍只有 Windows 实现。
 
 > ¹ macOS 文件路径读取已是原生 `NSFilenamesPboardType` 实现（`platform/macos.rs::read_nsfilenames_paths`），不依赖外部命令，
 > 但整个文件在 `#[cfg(target_os = "macos")]` 之下、Windows 门禁不编译，因此仍标为 ⚠️ 而非 ✅——只有 macOS CI 变绿才可改判。

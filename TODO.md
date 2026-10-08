@@ -81,3 +81,5 @@
 - [ ] macOS RTF：public.rtf NSData 读取已接线，ANSI 字节转 RTF 十六进制转义；含原始 binary run 的负载保守跳过。待 macOS CI/实机验收。
 
 - [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。待对应平台 CI/桌面激活验收。
+
+- [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样、Wayland portal 会话已接线；Wayland 不支持双击修饰键。待对应平台 CI/权限与桌面实测。

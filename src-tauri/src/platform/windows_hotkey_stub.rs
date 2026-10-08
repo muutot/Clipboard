@@ -1,23 +1,22 @@
 #![allow(dead_code)]
 
-use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use tauri::Emitter as _;
 
 use super::hotkey_common::{action_index_for_hotkey_id, plan_registrations};
+#[cfg_attr(all(test, target_os = "windows"), allow(unused_imports))]
 pub use super::hotkey_common::{
     assign_hotkey_ids, combined_hotkey_registrations, shortcut_bindings_to_double_modifiers,
     shortcut_bindings_to_windows_hotkeys, HotkeyRegistration, FIRST_HOTKEY_ID,
     FLOAT_HOTKEY_ID_BASE,
 };
-use crate::keyboard::{global_action_ids, Modifier, DEFAULT_DOUBLE_TAP_INTERVAL_MS};
+use crate::keyboard::{global_action_ids, Modifier};
 
 /// OS hotkey action selected by the fired registration id. Mirrors
-/// `windows_hotkey.rs`; the stub thread never fires, but the routing stays
+/// `windows_hotkey.rs`; the native loop supplies OS events, but the routing stays
 /// identical so behavior differs only in OS registration, not in dispatch.
 /// `Forward` carries later registry actions as `global-hotkey` events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,113 +63,35 @@ impl QuickPasteTarget {
     }
 }
 
-fn modifier_from_virtual_key(virtual_key: u32) -> Option<Modifier> {
-    match virtual_key {
-        0x10 => Some(Modifier::Shift),
-        0x11 => Some(Modifier::Control),
-        0x12 => Some(Modifier::Alt),
-        0x5B => Some(Modifier::Meta),
-        _ => None,
-    }
-}
-
-struct DoubleModifierTracker {
-    registered: BTreeSet<Modifier>,
-    active_press: Option<Modifier>,
-    last_tap: Option<(Modifier, u64)>,
-    press_interrupted: bool,
-    double_tap_interval_ms: u64,
-}
-
-impl DoubleModifierTracker {
-    fn new(modifiers: impl IntoIterator<Item = Modifier>) -> Self {
-        Self {
-            registered: modifiers.into_iter().collect(),
-            active_press: None,
-            last_tap: None,
-            press_interrupted: false,
-            double_tap_interval_ms: DEFAULT_DOUBLE_TAP_INTERVAL_MS,
-        }
-    }
-
-    fn on_key_event(&mut self, virtual_key: u32, is_key_down: bool, timestamp_ms: u64) -> bool {
-        let Some(modifier) = modifier_from_virtual_key(virtual_key) else {
-            if is_key_down {
-                self.press_interrupted = self.active_press.is_some();
-                self.last_tap = None;
-            }
-            return false;
-        };
-
-        if is_key_down {
-            if self.active_press == Some(modifier) {
-                return false;
-            }
-            if self.active_press.is_some() {
-                self.press_interrupted = true;
-                self.last_tap = None;
-                return false;
-            }
-            self.active_press = Some(modifier);
-            self.press_interrupted = false;
-            return false;
-        }
-
-        if self.active_press != Some(modifier) {
-            return false;
-        }
-        self.active_press = None;
-        if self.press_interrupted {
-            self.press_interrupted = false;
-            return false;
-        }
-
-        let is_double_tap = self
-            .last_tap
-            .is_some_and(|(previous_modifier, previous_timestamp)| {
-                previous_modifier == modifier
-                    && timestamp_ms >= previous_timestamp
-                    && timestamp_ms - previous_timestamp <= self.double_tap_interval_ms
-            });
-        if is_double_tap && self.registered.contains(&modifier) {
-            self.last_tap = None;
-            true
-        } else {
-            self.last_tap = Some((modifier, timestamp_ms));
-            false
-        }
-    }
-}
-
-static HOTKEY_STOP: AtomicBool = AtomicBool::new(false);
-
-pub fn set_hotkey_sender(_tx: &mpsc::Sender<HotkeyAction>) {}
-
-pub fn set_hotkey_hwnd(_hwnd: isize) {}
-
-pub fn clear_hotkey_state() {}
+static HOTKEY_STOP: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 pub fn stop_hotkey_thread() {
-    HOTKEY_STOP.store(true, Ordering::SeqCst);
+    if let Some(stop) = HOTKEY_STOP.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        stop.store(true, Ordering::SeqCst);
+    }
 }
 
 fn spawn_hotkey_thread_with_registrations(
-    _registrations: Vec<HotkeyRegistration>,
-    _double_modifiers: Vec<Modifier>,
+    registrations: Vec<HotkeyRegistration>,
+    double_modifiers: Vec<Modifier>,
     tx: mpsc::Sender<HotkeyAction>,
-    _app: Option<tauri::AppHandle>,
+    app: Option<tauri::AppHandle>,
 ) -> thread::JoinHandle<()> {
-    HOTKEY_STOP.store(false, Ordering::SeqCst);
-    thread::spawn(move || {
-        while !HOTKEY_STOP.load(Ordering::SeqCst) {
-            thread::sleep(Duration::from_millis(200));
-        }
-        drop(tx);
-    })
+    let stop = Arc::new(AtomicBool::new(false));
+    *HOTKEY_STOP.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&stop));
+    let Some(app) = app else {
+        return thread::spawn(|| {});
+    };
+    #[cfg(target_os = "linux")]
+    if super::Platform::detect().is_wayland() {
+        return super::wayland_hotkeys::start(registrations, double_modifiers, tx, app, stop);
+    }
+    super::native_hotkeys::start(registrations, double_modifiers, tx, app, stop)
 }
 
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
+    dispatch_handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
     /// Chord bindings per global action in `global_action_ids()` order.
     /// Mirrors `windows_hotkey.rs`; a new registry row extends this vector
@@ -191,6 +112,7 @@ impl HotkeyManager {
     pub fn new() -> Self {
         Self {
             handle: None,
+            dispatch_handle: None,
             window: None,
             global_chords: Vec::new(),
             toggle_doubles: Vec::new(),
@@ -249,7 +171,7 @@ impl HotkeyManager {
     }
 
     /// Starts the shared loop from a full registry-ordered chord plan in one
-    /// rebuild. Mirrors `windows_hotkey.rs`; the stub thread never fires, but
+    /// rebuild. Mirrors `windows_hotkey.rs`; the native loop supplies OS events, but
     /// plan handling stays identical.
     pub fn start_with_plan(
         &mut self,
@@ -313,47 +235,55 @@ impl HotkeyManager {
         let _quick_paste_target = Arc::clone(&self.quick_paste_target);
         let app = self.app.clone();
 
-        thread::spawn(move || {
+        self.dispatch_handle = Some(thread::spawn(move || {
             while let Ok(action) = rx.recv() {
-                match action {
-                    HotkeyAction::ToggleMain => {
-                        let is_visible = window.is_visible().unwrap_or(false);
-                        let is_focused = window.is_focused().unwrap_or(false);
-                        if is_visible && is_focused {
-                            let _ = window.hide();
-                        } else {
-                            if !is_visible {
-                                let _ = window.show();
-                            }
-                            if !is_focused {
-                                let _ = window.set_focus();
+                let Some(app_handle) = app.as_ref() else {
+                    continue;
+                };
+                let window = window.clone();
+                let app = app.clone();
+                // Dispatch never waits for UI work; stop() can safely join it.
+                let _ = app_handle.run_on_main_thread(move || {
+                    match action {
+                        HotkeyAction::ToggleMain => {
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            let is_focused = window.is_focused().unwrap_or(false);
+                            if is_visible && is_focused {
+                                let _ = window.hide();
+                            } else {
+                                if !is_visible {
+                                    let _ = window.show();
+                                }
+                                if !is_focused {
+                                    let _ = window.set_focus();
+                                }
                             }
                         }
-                    }
-                    HotkeyAction::ToggleFloat => {
-                        if let Some(app) = app.as_ref() {
-                            let _ = crate::commands::float::toggle_float_panel(app.clone());
+                        HotkeyAction::ToggleFloat => {
+                            if let Some(app) = app.as_ref() {
+                                let _ = crate::commands::float::toggle_float_panel(app.clone());
+                            }
                         }
-                    }
-                    HotkeyAction::Forward(index) => {
-                        // Future global actions without a native handler are
-                        // forwarded as events; listeners need no manager code.
-                        let action_id = global_action_ids().nth(index).unwrap_or("unknown");
-                        if let Some(app) = app.as_ref() {
-                            if let Err(error) = app.emit("global-hotkey", action_id) {
-                                crate::log_error!(
+                        HotkeyAction::Forward(index) => {
+                            // Future global actions without a native handler are
+                            // forwarded as events; listeners need no manager code.
+                            let action_id = global_action_ids().nth(index).unwrap_or("unknown");
+                            if let Some(app) = app.as_ref() {
+                                if let Err(error) = app.emit("global-hotkey", action_id) {
+                                    crate::log_error!(
                                     "[hotkey] failed to emit global-hotkey {action_id}: {error}"
                                 );
+                                }
+                            } else {
+                                crate::log_warn!(
+                                    "[hotkey] no app handle to forward global action {action_id}"
+                                );
                             }
-                        } else {
-                            crate::log_warn!(
-                                "[hotkey] no app handle to forward global action {action_id}"
-                            );
                         }
                     }
-                }
+                });
             }
-        });
+        }));
 
         self.handle = Some(handle);
     }
@@ -384,6 +314,9 @@ impl HotkeyManager {
     pub fn stop(&mut self) {
         stop_hotkey_thread();
         if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+        if let Some(handle) = self.dispatch_handle.take() {
             let _ = handle.join();
         }
         self.quick_paste_target.clear();

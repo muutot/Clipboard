@@ -65,6 +65,7 @@ libc = "0.2"
 mach2 = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"
 # crypto-rust keeps crypto in pure Rust. OpenSSL and libdbus link against the
 # system libraries (libssl-dev is already required; libdbus-1-dev was added to
 # the CI/docs apt lists) so Linux builds stay fast: no vendored C compilation.
@@ -77,7 +78,11 @@ wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+global-hotkey = "0.8"
+
 [dev-dependencies]
+global-hotkey = "0.8"
 clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }
 
 # Dev-profile tuning for the fastest possible local `tauri dev` builds:
