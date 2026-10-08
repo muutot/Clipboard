@@ -208,6 +208,8 @@ Every child panel accepts `onclose` and optional `showHeader`. The parent must r
 
 ## Component change checklist
 
+`CustomSelect` moves focus to its selected enabled option when opened. Arrow keys and Home/End navigate enabled options without changing the value; Enter/Space use the option buttons' native activation. Escape, picking an option, or clicking the backdrop returns focus to the trigger. Tab closes the popup and continues from that trigger, avoiding focus loss when option DOM nodes disappear. Options stay outside the page's normal Tab sequence; the listbox itself is programmatically focusable for an all-disabled list. Mounted component tests verify focus restoration and disabled-option navigation.
+
 `MarkdownPreview.svelte` delegates its supported Markdown subset to `utils/markdown.ts`. The renderer recognizes source blocks before escaping and renders inline tokens once; generated HTML is never parsed again. Fenced and inline code stay literal, list wrappers accept formatted items, consecutive quote lines share a blockquote, and image alt attributes are escaped directly from source. Raw HTML is escaped and URLs retain the explicit scheme allowlist. `MarkdownPreview.test.ts` mounts the real component to check DOM structure, exact code text, attributes, and unsafe URLs; the renderer is not a complete CommonMark implementation.
 
 - Update all call sites when props/callbacks change.

@@ -160,4 +160,50 @@ describe("CustomSelect", () => {
     expect(popover()).toBeNull();
     expect(trigger().disabled).toBe(true);
   });
+
+  it("restores focus to the trigger after Escape or selection", () => {
+    const { trigger, optionButtons, popover } = render();
+    trigger().focus();
+    trigger().click();
+    flushSync();
+    optionButtons()[1].focus();
+    optionButtons()[1].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    flushSync();
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    trigger().click();
+    flushSync();
+    optionButtons()[1].focus();
+    optionButtons()[1].click();
+    flushSync();
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it("opens from the keyboard and navigates enabled options without selecting", () => {
+    const { trigger, optionButtons, onchange } = render();
+    trigger().focus();
+    trigger().dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+    );
+    flushSync();
+    expect(optionButtons()).toHaveLength(3);
+    expect(document.activeElement).toBe(optionButtons()[0]);
+    const key = (name: string) => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
+      );
+      flushSync();
+    };
+    key("ArrowDown");
+    expect(document.activeElement).toBe(optionButtons()[1]);
+    key("ArrowDown");
+    expect(document.activeElement).toBe(optionButtons()[0]);
+    key("End");
+    expect(document.activeElement).toBe(optionButtons()[1]);
+    key("Home");
+    expect(document.activeElement).toBe(optionButtons()[0]);
+    expect(onchange).not.toHaveBeenCalled();
+  });
 });
