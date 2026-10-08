@@ -66,6 +66,7 @@ mach2 = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9"
+x11rb = { version = "0.13", features = ["xtest"] }
 # crypto-rust keeps crypto in pure Rust. OpenSSL and libdbus link against the
 # system libraries (libssl-dev is already required; libdbus-1-dev was added to
 # the CI/docs apt lists) so Linux builds stay fast: no vendored C compilation.
@@ -83,6 +84,7 @@ global-hotkey = "0.8"
 
 [dev-dependencies]
 global-hotkey = "0.8"
+x11rb = { version = "0.13", features = ["xtest"] }
 clipboard-sync = { path = "crates/clipboard-sync", features = ["engine-test-support"] }
 rusqlite = { version = "0.40.1", features = ["hooks"] }
 

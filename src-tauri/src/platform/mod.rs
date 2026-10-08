@@ -50,11 +50,15 @@ pub mod platform_info;
 #[cfg(all(test, target_os = "windows"))]
 #[path = "windows_hotkey_stub.rs"]
 mod portable_hotkey_compile_test;
+#[cfg(any(test, not(target_os = "windows")))]
+pub mod quick_paste;
 pub mod secret_store;
 pub mod single_instance;
 #[cfg(target_os = "linux")]
 pub mod stop_pipe;
 pub mod ui;
+#[cfg(any(test, target_os = "linux"))]
+pub mod wayland_paste;
 
 use std::path::Path;
 

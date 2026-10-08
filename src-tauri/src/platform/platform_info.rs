@@ -143,7 +143,21 @@ pub fn capabilities_for(platform: Platform) -> PlatformCapabilities {
     PlatformCapabilities {
         clipboard_monitoring,
         global_shortcut: real_shortcut_backend,
-        quick_paste: cfg!(target_os = "windows") && platform == Platform::detect(),
+        quick_paste: platform == Platform::detect()
+            && match platform {
+                Platform::Windows | Platform::MacOS | Platform::LinuxX11 => true,
+                Platform::LinuxWayland => {
+                    #[cfg(target_os = "linux")]
+                    {
+                        super::wayland_paste::available()
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        false
+                    }
+                }
+                Platform::Unknown => false,
+            },
         system_tray,
         requires_accessibility_permission,
     }
@@ -276,7 +290,8 @@ mod tests {
             );
             assert_eq!(
                 capabilities.quick_paste,
-                cfg!(target_os = "windows") && platform == running,
+                !matches!(running, Platform::LinuxWayland | Platform::Unknown)
+                    && platform == running,
                 "{platform}: quick_paste must track the compiled restore_window_and_paste"
             );
         }

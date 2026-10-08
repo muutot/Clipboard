@@ -145,7 +145,12 @@ Window-only (main window focused):
   requests on stop and the session on drop; no bare modifier tap support.
 - `platform_info.rs::capabilities_for` reports native chord backends only for
   the running platform; Wayland reports true only after portal binding succeeds.
-  Quick paste remains Windows-only until its separate backend is wired.
+  Quick paste uses `quick_paste.rs` on macOS/X11 and `wayland_paste.rs` for
+  Sway/Hyprland with wtype. The non-Windows manager retains a 150 ms foreground
+  tracker even when global bindings are empty. Targets include both native id
+  and pid; restored focus/ownership is checked before key injection. Mac/X11
+  wait for held keys/modifiers to release. Wayland subprocesses have bounded
+  output/time and unsupported desktops return explicit errors.
 - Both native registration/destruction and UI dispatch stay on the main thread.
   Workers must never wait for UI work while stop joins them. Generation checks
   prevent an old native cleanup from unregistering a replacement manager.

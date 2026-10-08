@@ -126,7 +126,7 @@ pub type MacOSResult<T> = Result<T, MacOSError>;
 // FFI boundary.
 
 #[cfg(target_os = "macos")]
-mod objc {
+pub(crate) mod objc {
     #![allow(non_camel_case_types, dead_code, clashing_extern_declarations)]
 
     #[repr(C)]
@@ -152,6 +152,8 @@ mod objc {
         pub fn msgSend_id_Int(receiver: Id, sel: Sel, arg: isize) -> Id;
         #[link_name = "objc_msgSend"]
         pub fn msgSend_i32_Id(receiver: Id, sel: Sel, arg: i32) -> Id;
+        #[link_name = "objc_msgSend"]
+        pub fn msgSend_bool_usize(receiver: Id, sel: Sel, arg: usize) -> i8;
         pub fn objc_autoreleasePoolPush() -> Id;
         pub fn objc_autoreleasePoolPop(pool: Id);
     }

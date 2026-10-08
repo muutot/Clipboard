@@ -771,7 +771,7 @@ pub fn run() {
                         }
                     }
                 }
-                if chords.iter().any(|list| !list.is_empty()) || !double_modifiers.is_empty() {
+                if !cfg!(target_os = "windows") || chords.iter().any(|list| !list.is_empty()) || !double_modifiers.is_empty() {
                     hotkey_manager.start_with_plan(
                         chords,
                         double_modifiers,

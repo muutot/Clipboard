@@ -36,12 +36,12 @@ pub fn action_for_hotkey_id(id: i32) -> HotkeyAction {
 
 #[derive(Default)]
 struct QuickPasteTarget {
-    window_handle: Mutex<Option<isize>>,
+    window_handle: Mutex<Option<super::quick_paste::Target>>,
 }
 
 impl QuickPasteTarget {
-    fn remember(&self, window_handle: isize) {
-        if window_handle == 0 {
+    fn remember(&self, window_handle: super::quick_paste::Target) {
+        if window_handle.handle == 0 {
             return;
         }
         if let Ok(mut target) = self.window_handle.lock() {
@@ -49,7 +49,7 @@ impl QuickPasteTarget {
         }
     }
 
-    fn take(&self) -> Option<isize> {
+    fn take(&self) -> Option<super::quick_paste::Target> {
         self.window_handle
             .lock()
             .ok()
@@ -92,6 +92,8 @@ fn spawn_hotkey_thread_with_registrations(
 pub struct HotkeyManager {
     handle: Option<thread::JoinHandle<()>>,
     dispatch_handle: Option<thread::JoinHandle<()>>,
+    tracking_stop: Option<mpsc::Sender<()>>,
+    tracking_handle: Option<thread::JoinHandle<()>>,
     window: Option<tauri::WebviewWindow>,
     /// Chord bindings per global action in `global_action_ids()` order.
     /// Mirrors `windows_hotkey.rs`; a new registry row extends this vector
@@ -113,6 +115,8 @@ impl HotkeyManager {
         Self {
             handle: None,
             dispatch_handle: None,
+            tracking_stop: None,
+            tracking_handle: None,
             window: None,
             global_chords: Vec::new(),
             toggle_doubles: Vec::new(),
@@ -209,6 +213,19 @@ impl HotkeyManager {
         let Some(window) = self.window.clone() else {
             return;
         };
+        let (tracking_tx, tracking_rx) = mpsc::channel();
+        let tracked = Arc::clone(&self.quick_paste_target);
+        self.tracking_stop = Some(tracking_tx);
+        self.tracking_handle = Some(thread::spawn(move || {
+            while matches!(
+                tracking_rx.recv_timeout(std::time::Duration::from_millis(150)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                if let Some(target) = super::quick_paste::current() {
+                    tracked.remember(target);
+                }
+            }
+        }));
         self.ensure_chord_slots();
         let slices: Vec<&[(u32, u32)]> = self.global_chords.iter().map(Vec::as_slice).collect();
         let plan = plan_registrations(&slices);
@@ -232,7 +249,11 @@ impl HotkeyManager {
             tx,
             self.app.clone(),
         );
-        let _quick_paste_target = Arc::clone(&self.quick_paste_target);
+        let quick_paste_target = Arc::clone(&self.quick_paste_target);
+        let dispatch_generation = HOTKEY_STOP
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let app = self.app.clone();
 
         self.dispatch_handle = Some(thread::spawn(move || {
@@ -242,8 +263,18 @@ impl HotkeyManager {
                 };
                 let window = window.clone();
                 let app = app.clone();
+                if let Some(target) = super::quick_paste::current() {
+                    quick_paste_target.remember(target);
+                }
+                let generation = dispatch_generation.clone();
                 // Dispatch never waits for UI work; stop() can safely join it.
                 let _ = app_handle.run_on_main_thread(move || {
+                    if generation
+                        .as_ref()
+                        .is_some_and(|stop| stop.load(Ordering::SeqCst))
+                    {
+                        return;
+                    }
                     match action {
                         HotkeyAction::ToggleMain => {
                             let is_visible = window.is_visible().unwrap_or(false);
@@ -298,7 +329,7 @@ impl HotkeyManager {
         }
     }
 
-    pub fn take_quick_paste_target(&self) -> Option<isize> {
+    pub fn take_quick_paste_target(&self) -> Option<super::quick_paste::Target> {
         self.quick_paste_target.take()
     }
 
@@ -312,6 +343,12 @@ impl HotkeyManager {
     }
 
     pub fn stop(&mut self) {
+        if let Some(stop) = self.tracking_stop.take() {
+            let _ = stop.send(());
+        }
+        if let Some(handle) = self.tracking_handle.take() {
+            let _ = handle.join();
+        }
         stop_hotkey_thread();
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
@@ -323,10 +360,10 @@ impl HotkeyManager {
     }
 }
 
-fn foreground_window_handle() -> Option<isize> {
-    None
+fn foreground_window_handle() -> Option<super::quick_paste::Target> {
+    super::quick_paste::current()
 }
 
-pub fn restore_window_and_paste(_window_handle: isize) -> Result<(), String> {
-    Err("quick paste is only implemented on Windows".to_owned())
+pub fn restore_window_and_paste(target: super::quick_paste::Target) -> Result<(), String> {
+    super::quick_paste::paste(target)
 }

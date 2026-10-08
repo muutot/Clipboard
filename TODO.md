@@ -83,3 +83,5 @@
 - [ ] macOS/Linux 单实例唤醒：实例锁所有者发布 owner-only 的本地端点与随机令牌，通知线程有停止与 join；UI 操作投递主线程。待对应平台 CI/桌面激活验收。
 
 - [ ] 跨平台全局热键：macOS/X11 原生注册与可停止的双击采样、Wayland portal 会话已接线；Wayland 不支持双击修饰键。待对应平台 CI/权限与桌面实测。
+
+- [ ] 快速粘贴：macOS 激活 + CGEvent、X11 EWMH + XTest、Sway/Hyprland + wtype 后端已接线；记录外部前台目标并复核身份与焦点。待对应平台权限/桌面实测。
