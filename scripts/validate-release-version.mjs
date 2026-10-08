@@ -52,6 +52,32 @@ if (process.env.GITHUB_REF_TYPE === "tag") {
       `tag does not point at the release commit: HEAD is '${headSubject}', expected '${expectedSubject}'`,
     );
   }
+  // HARD RULE (CI backstop): the release commit contains only the six release
+  // files. A commit folding in code changes means a fix was mixed into the
+  // release instead of landing as its own commit; fail before the expensive
+  // build runs.
+  const releaseFiles = new Set([
+    "package.json",
+    "src-tauri/tauri.conf.json",
+    "src-tauri/Cargo.toml",
+    "src-tauri/Cargo.lock",
+    "CHANGELOG.md",
+    "RELEASE.md",
+  ]);
+  try {
+    const headFiles = execSync("git show --name-only --pretty=format:", {
+      encoding: "utf8",
+    })
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const unexpected = headFiles.filter((file) => !releaseFiles.has(file));
+    if (unexpected.length > 0) {
+      failures.push(`release commit touches non-release files: ${unexpected.join(", ")}`);
+    }
+  } catch {
+    failures.push("could not list HEAD files for release-commit validation");
+  }
 } else if (process.env.GITHUB_REF_TYPE === "branch") {
   // workflow_dispatch: the input version drives the synthesized tag name.
   const input = process.env.GITHUB_EVENT_INPUTS_VERSION ?? "";
