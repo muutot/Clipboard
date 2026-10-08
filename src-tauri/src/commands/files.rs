@@ -70,7 +70,7 @@ fn build_icon_cache(
             size_bytes = std::fs::metadata(&key_path).map(|m| m.len()).unwrap_or(0);
         } else {
             let hash = compute_content_hash("icon", &icon_key(&app), None);
-            for ext in ["png", "ico", "svg", "jpg", "jpeg"] {
+            for ext in ["png", "ico", "svg", "jpg", "jpeg", "webp"] {
                 let candidate = icons_dir.join(format!("{hash}.{ext}"));
                 if candidate.is_file() {
                     let name = candidate

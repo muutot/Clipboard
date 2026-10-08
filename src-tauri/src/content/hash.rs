@@ -181,7 +181,7 @@ impl AppIconStore {
 
     pub fn get_icon_path(&self, key: &str) -> PathBuf {
         let hash = compute_content_hash("icon", key, None);
-        let possible_exts = ["png", "ico", "svg", "jpg", "jpeg"];
+        let possible_exts = ["png", "ico", "svg", "jpg", "jpeg", "webp"];
         for ext in &possible_exts {
             let path = self.icons_dir.join(format!("{}.{}", hash, ext));
             if path.exists() {
@@ -273,6 +273,30 @@ mod tests {
     #[test]
     fn infer_icon_extension_detects_jpg() {
         assert_eq!(infer_icon_extension(&[0xff, 0xd8, 0xff, 0]), "jpg");
+    }
+
+    #[test]
+    fn app_icon_store_retrieves_webp_icons() {
+        let temp = std::env::temp_dir().join(format!(
+            "clipboard-icon-webp-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = AppIconStore::new(temp.clone()).unwrap();
+
+        let mut webp_data = b"RIFF".to_vec();
+        webp_data.extend_from_slice(&[0, 0, 0, 0]);
+        webp_data.extend_from_slice(b"WEBP");
+        let path = store.store_icon("edge", &webp_data).unwrap();
+        assert!(path.extension().map(|e| e == "webp").unwrap_or(false));
+
+        let retrieved = store.get_icon_path("edge");
+        assert_eq!(retrieved, path);
+
+        let _ = fs::remove_dir_all(&temp);
     }
 
     #[test]
