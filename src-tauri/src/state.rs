@@ -125,17 +125,22 @@ impl CaptureState {
 
     pub(crate) fn set_ignored_apps(&self, apps: Vec<String>) -> Vec<String> {
         let normalized = normalize_app_list(&apps);
-        if let Ok(mut ignored) = self.ignored_apps.lock() {
-            *ignored = normalized.clone();
+        match self.ignored_apps.lock() {
+            Ok(mut ignored) => {
+                *ignored = normalized.clone();
+            }
+            Err(poisoned) => {
+                *poisoned.into_inner() = normalized.clone();
+            }
         }
         normalized
     }
 
     pub(crate) fn ignored_apps(&self) -> Vec<String> {
-        self.ignored_apps
-            .lock()
-            .map(|apps| apps.clone())
-            .unwrap_or_default()
+        match self.ignored_apps.lock() {
+            Ok(apps) => apps.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub(crate) fn should_skip(&self, source_app: Option<&str>, text: Option<&str>) -> bool {
