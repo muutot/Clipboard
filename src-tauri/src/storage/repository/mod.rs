@@ -1,6 +1,7 @@
 mod auto_tags;
 mod helpers;
 mod impls;
+mod snapshot;
 mod summaries;
 mod traits;
 

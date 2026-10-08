@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{ClipboardItem, ClipboardKind};
-use crate::export::{export_database, write_export_file, ExportFormat, ExportOptions};
+use crate::export::{export_database, export_database_to_file, ExportFormat, ExportOptions};
 use crate::storage::{ClipboardRepository, Database};
 
 mod api;
@@ -138,21 +138,18 @@ where
                     .or(args.query.as_deref())
                     .unwrap_or("json"),
             )?;
-            let output = export_database(
-                database,
-                &ExportOptions {
-                    format,
-                    include_favorites: true,
-                    date_from_ms: None,
-                    date_to_ms: None,
-                    content_types: Vec::new(),
-                },
-            )?;
+            let options = ExportOptions {
+                format,
+                include_favorites: true,
+                date_from_ms: None,
+                date_to_ms: None,
+                content_types: Vec::new(),
+            };
             if let Some(path) = args.output_path.as_deref() {
-                write_export_file(path, &output)?;
+                export_database_to_file(database, &options, std::path::Path::new(path))?;
                 Ok(format!("exported clipboard items to: {path}"))
             } else {
-                Ok(output)
+                export_database(database, &options)
             }
         }
         CliCommand::Stats => {

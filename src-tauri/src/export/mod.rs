@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 
 use crate::domain::ClipboardItem;
@@ -40,76 +38,19 @@ pub struct ImportSummary {
     pub max_items: u32,
 }
 
+mod stream;
+pub use stream::{export_database_to_file, export_database_to_writer};
+
 pub fn export_items(items: &[ClipboardItem], options: &ExportOptions) -> Result<String, String> {
-    let filtered = items.iter().filter(|item| {
-        let favorite_matches = options.include_favorites || !item.is_favorite;
-        let from_matches = options
-            .date_from_ms
-            .is_none_or(|from| item.created_at_ms >= from);
-        let to_matches = options.date_to_ms.is_none_or(|to| item.created_at_ms <= to);
-        let kind_matches = options.content_types.is_empty()
-            || options
-                .content_types
-                .iter()
-                .any(|kind| kind.eq_ignore_ascii_case(clipboard_kind_name(item.kind)));
-        favorite_matches && from_matches && to_matches && kind_matches
-    });
-
-    match options.format {
-        ExportFormat::Json => serde_json::to_string_pretty(&filtered.cloned().collect::<Vec<_>>())
-            .map_err(|e| e.to_string()),
-        ExportFormat::Csv => {
-            let mut wtr = String::new();
-            wtr.push_str(
-                "id,kind,title,text_content,source_app,created_at_ms,is_favorite,content_hash,clipboard_text_encoding\n",
-            );
-            for item in filtered {
-                wtr.push_str(&format!(
-                    "{},{},{},{},{},{},{},{},{}\n",
-                    escape_csv(&item.id),
-                    clipboard_kind_name(item.kind),
-                    escape_csv(&item.title),
-                    escape_csv(item.text_content.as_deref().unwrap_or("")),
-                    escape_csv(item.source_app.as_deref().unwrap_or("")),
-                    item.created_at_ms,
-                    item.is_favorite,
-                    escape_csv(&item.content_hash),
-                    CSV_TEXT_ENCODING,
-                ));
-            }
-            Ok(wtr)
-        }
-        ExportFormat::PlainText => {
-            let mut out = String::new();
-            for item in filtered {
-                if let Some(ref text) = item.text_content {
-                    if !out.is_empty() {
-                        out.push_str("\n---\n");
-                    }
-                    out.push_str(text);
-                }
-            }
-            Ok(out)
-        }
-    }
+    stream::export_slice(items, options)
 }
 
-/// Exports active records from one SQLite read snapshot without the UI page cap.
+/// IPC compatibility wrapper; file exports use the bounded writer directly.
 pub fn export_database(database: &Database, options: &ExportOptions) -> Result<String, String> {
-    // The exporter already materializes the full result. Reading it in one
-    // statement also keeps concurrent capture, deletion and usage reordering
-    // from moving rows between independently read OFFSET pages.
-    let items = crate::storage::ClipboardRepository::list_recent(
-        database,
-        u32::MAX,
-        0,
-        &crate::storage::HistoryFilter::default(),
-    )
-    .map_err(|error| error.to_string())?;
-
-    export_items(&items, options)
+    let mut output = Vec::new();
+    export_database_to_writer(database, options, &mut output).map_err(|error| error.to_string())?;
+    String::from_utf8(output).map_err(|error| error.to_string())
 }
-
 pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary, String> {
     let items: Vec<ClipboardItem> =
         serde_json::from_str(json).map_err(|e| format!("invalid JSON: {e}"))?;
@@ -430,18 +371,6 @@ pub fn import_from_csv(csv: &str, database: &Database) -> Result<ImportSummary, 
         pending_truncation: 0,
         max_items: 0,
     })
-}
-
-pub(crate) fn write_export_file(path: &str, output: &str) -> Result<(), String> {
-    let path = Path::new(path);
-    if let Some(parent) = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create export directory: {error}"))?;
-    }
-    std::fs::write(path, output).map_err(|error| format!("failed to write export: {error}"))
 }
 
 fn clipboard_kind_name(kind: crate::domain::ClipboardKind) -> &'static str {

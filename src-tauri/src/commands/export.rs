@@ -6,8 +6,8 @@ use tauri::{Emitter, Manager};
 use crate::commands::clipboard::ClipboardHistoryInvalidated;
 use crate::config::ConfigStore;
 use crate::export::{
-    export_database, import_from_csv, import_from_json, import_from_plain_text,
-    import_from_ppaste_backup, write_export_file, ExportFormat, ExportOptions, ImportSummary,
+    export_database, export_database_to_file, import_from_csv, import_from_json,
+    import_from_plain_text, import_from_ppaste_backup, ExportFormat, ExportOptions, ImportSummary,
     BACKUP_EXTENSION,
 };
 use crate::storage::{ClipboardRepository, Database, StoragePaths};
@@ -85,12 +85,11 @@ fn export_database_to_path(
         date_to_ms,
         content_types,
     )?;
-    let content = export_database(database, &options)?;
-    write_export_file(path, &content)?;
+    let byte_count = export_database_to_file(database, &options, std::path::Path::new(path))?;
     Ok(ExportFileResult {
         path: path.to_owned(),
         format: format.to_owned(),
-        byte_count: content.len(),
+        byte_count: usize::try_from(byte_count).map_err(|error| error.to_string())?,
     })
 }
 

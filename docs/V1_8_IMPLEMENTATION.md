@@ -14,7 +14,7 @@ This tracks implementation, not a version bump or release.
 - [ ] Extract route state controllers while preserving item-store ownership and page appearance.
 - [ ] Share item-operation behavior across GUI, CLI and local API.
 - [ ] Cancel synchronization cooperatively through engine and transport.
-- [ ] Stream exports from a consistent database snapshot.
+- [x] Stream file exports from one read transaction with atomic publication (Rust export/WAL/concurrent-write/failure regressions and full Rust suite, Clippy pass).
 - [ ] Hash file bytes during staging without a second full read.
 - [ ] Cache content-dependent card measurements and avoid needless whole-list work.
 - [ ] Measure search input-to-paint latency and validate performance candidates with synthetic data.
