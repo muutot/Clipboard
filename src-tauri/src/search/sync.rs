@@ -102,6 +102,18 @@ impl SearchSynchronizer {
         repository: &impl SearchRepository,
         index: &SearchIndex,
     ) -> Result<SearchSyncSummary, SearchError> {
+        let _guard = index
+            .synchronization
+            .lock()
+            .map_err(|_| SearchError::SynchronizationPoisoned)?;
+        self.sync_locked(repository, index)
+    }
+
+    fn sync_locked(
+        &self,
+        repository: &impl SearchRepository,
+        index: &SearchIndex,
+    ) -> Result<SearchSyncSummary, SearchError> {
         let mut total = SearchSyncSummary::default();
 
         loop {
@@ -156,9 +168,13 @@ impl SearchSynchronizer {
         repository: &impl SearchRepository,
         index: &SearchIndex,
     ) -> Result<SearchSyncSummary, SearchError> {
+        let _guard = index
+            .synchronization
+            .lock()
+            .map_err(|_| SearchError::SynchronizationPoisoned)?;
         index.begin_full_rebuild()?;
         repository.enqueue_full_search_rebuild()?;
-        let summary = self.sync_until_idle(repository, index)?;
+        let summary = self.sync_locked(repository, index)?;
         index.mark_rebuild_complete()?;
         Ok(summary)
     }
@@ -340,6 +356,94 @@ mod tests {
         assert_eq!(summary.upserted_documents, 1);
         assert!(index.search("旧标题", 20).unwrap().is_empty());
         assert_eq!(index.search("新标题", 20).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn concurrent_drains_cannot_commit_an_older_snapshot_after_a_newer_one() {
+        use crate::storage::{SearchDocument, SearchOutboxEvent, StorageError};
+        use std::sync::{mpsc, Mutex};
+        use std::time::Duration;
+
+        struct PausedRepository<'a> {
+            database: &'a Database,
+            captured: mpsc::Sender<()>,
+            resume: Mutex<mpsc::Receiver<()>>,
+        }
+
+        impl SearchRepository for PausedRepository<'_> {
+            fn read_search_outbox(
+                &self,
+                limit: u32,
+            ) -> Result<Vec<SearchOutboxEvent>, StorageError> {
+                self.database.read_search_outbox(limit)
+            }
+
+            fn get_search_document(
+                &self,
+                id: &str,
+            ) -> Result<Option<SearchDocument>, StorageError> {
+                self.database.get_search_document(id)
+            }
+
+            fn get_search_documents(
+                &self,
+                ids: &[impl AsRef<str>],
+            ) -> Result<Vec<SearchDocument>, StorageError> {
+                let documents = self.database.get_search_documents(ids)?;
+                self.captured.send(()).unwrap();
+                self.resume.lock().unwrap().recv().unwrap();
+                Ok(documents)
+            }
+
+            fn acknowledge_search_outbox(&self, sequence: i64) -> Result<u64, StorageError> {
+                self.database.acknowledge_search_outbox(sequence)
+            }
+
+            fn enqueue_full_search_rebuild(&self) -> Result<u64, StorageError> {
+                self.database.enqueue_full_search_rebuild()
+            }
+
+            fn has_pending_outbox_events(&self) -> Result<bool, StorageError> {
+                self.database.has_pending_outbox_events()
+            }
+        }
+
+        let database = Database::open_in_memory().unwrap();
+        let mut record = item("item", "oldtitle");
+        database.save_item(&record).unwrap();
+        let index = SearchIndex::in_memory().unwrap();
+        let (captured_tx, captured_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let paused = PausedRepository {
+            database: &database,
+            captured: captured_tx,
+            resume: Mutex::new(resume_rx),
+        };
+        let (done_tx, done_rx) = mpsc::channel();
+
+        std::thread::scope(|scope| {
+            let older =
+                scope.spawn(|| SearchSynchronizer::default().sync_until_idle(&paused, &index));
+            captured_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            record.title = "newtitle".to_owned();
+            database.save_item(&record).unwrap();
+            let newer = scope.spawn(|| {
+                let result = SearchSynchronizer::default().sync_until_idle(&database, &index);
+                done_tx.send(()).unwrap();
+                result
+            });
+            // Without serialization the newer drain finishes while the old
+            // document snapshot is paused. With serialization it waits; either
+            // way both complete after the old snapshot is released.
+            let _ = done_rx.recv_timeout(Duration::from_millis(500));
+            resume_tx.send(()).unwrap();
+            older.join().unwrap().unwrap();
+            newer.join().unwrap().unwrap();
+        });
+
+        assert!(database.read_search_outbox(100).unwrap().is_empty());
+        assert!(index.search("oldtitle", 10).unwrap().is_empty());
+        assert_eq!(index.search("newtitle", 10).unwrap().len(), 1);
     }
 
     #[test]

@@ -7,6 +7,7 @@ pub enum SearchError {
     Storage(crate::storage::StorageError),
     Tantivy(tantivy::TantivyError),
     WriterPoisoned,
+    SynchronizationPoisoned,
     MissingStoredField(&'static str),
 }
 
@@ -18,6 +19,9 @@ impl fmt::Display for SearchError {
             Self::Storage(error) => write!(formatter, "search storage error: {error}"),
             Self::Tantivy(error) => write!(formatter, "Tantivy search error: {error}"),
             Self::WriterPoisoned => formatter.write_str("search index writer lock is poisoned"),
+            Self::SynchronizationPoisoned => {
+                formatter.write_str("search synchronization lock is poisoned")
+            }
             Self::MissingStoredField(field) => {
                 write!(formatter, "search result is missing stored field: {field}")
             }

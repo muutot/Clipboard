@@ -83,6 +83,8 @@ cannot emit, which is how this drifted for so long.
 
 The capture thread and other mutation commands write to SQLite (triggering `search_outbox`) but do not themselves touch Tantivy. Index freshness is guaranteed by outbox draining, which runs either lazily on the search command or in a background worker, depending on `GeneralConfig.search_index_sync_mode`:
 
+All `SearchSynchronizer` instances share the target index's synchronization mutex. Hold it from reading outbox events through resolving documents, committing the index, and acknowledging events. Full rebuilds hold the same lock across clearing, enqueueing, draining, and marking completion. The Tantivy writer lock alone cannot prevent an older document snapshot from overwriting a newer drain after its outbox events have already been acknowledged.
+
 - `"lazy"` (default): `search_clipboard_items` drains the outbox via `SearchSynchronizer::sync_until_idle` before consulting the cache or Tantivy:
   - Empty outbox: one cheap `SELECT ... LIMIT` and no reader reload; the result cache is preserved so pagination stays a hit.
   - Pending events: Tantivy is updated, `cached_ids` is cleared by `apply_changes`, and the result cache is cleared so the re-query reflects newly captured or mutated items.

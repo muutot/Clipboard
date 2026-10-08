@@ -45,6 +45,8 @@ pub enum SearchIndexChange {
 }
 
 pub struct SearchIndex {
+    /// Serializes outbox reads through acknowledgement, including full rebuilds.
+    pub(super) synchronization: Mutex<()>,
     fields: SearchFields,
     writer: Mutex<IndexWriter<TantivyDocument>>,
     reader: IndexReader,
@@ -390,6 +392,7 @@ impl SearchIndex {
             index.writer_with_num_threads::<TantivyDocument>(4, INDEX_WRITER_MEMORY_BYTES)?;
 
         Ok(Self {
+            synchronization: Mutex::new(()),
             fields,
             writer: Mutex::new(writer),
             reader,
