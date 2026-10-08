@@ -356,7 +356,7 @@ pub fn run() {
             {
                 crate::log_event!("[logging] writing diagnostics to {}", log_path.display());
             }
-            let config = ConfigStore::load(&project_directory)?;
+            let mut config = ConfigStore::load(&project_directory)?;
             logging::set_level(config.log_level());
             if config.single_instance() {
                 let mut guard = match SingleInstanceGuard::acquire(&project_directory) {
@@ -649,6 +649,11 @@ pub fn run() {
                         }
                         Err(error) => {
                             crate::log_error!("[search-sync] failed to start background synchronizer: {error}");
+                            // Degrade to Lazy draining so the search command
+                            // keeps the index fresh instead of serving stale
+                            // results for the whole session.
+                            config.config.general.search_index_sync_mode =
+                                "lazy".to_owned();
                             None
                         }
                     }
