@@ -85,6 +85,7 @@ pub struct SyncRunResult {
     pub deleted_remote_objects: u64,
     pub bytes_uploaded: u64,
     pub bytes_downloaded: u64,
+    pub skipped_resources: u64,
 }
 
 impl From<v1::SyncEngineResult> for SyncRunResult {
@@ -99,6 +100,7 @@ impl From<v1::SyncEngineResult> for SyncRunResult {
             deleted_remote_objects: result.deleted_remote_objects,
             bytes_uploaded: result.bytes_uploaded,
             bytes_downloaded: result.bytes_downloaded,
+            skipped_resources: result.skipped_resources,
         }
     }
 }
@@ -925,6 +927,7 @@ mod tests {
             deleted_remote_objects: 6,
             bytes_uploaded: 7,
             bytes_downloaded: 8,
+            skipped_resources: 0,
         }))
         .unwrap();
 

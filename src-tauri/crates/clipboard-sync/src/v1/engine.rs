@@ -104,6 +104,7 @@ pub struct SyncEngineResult {
     pub deleted_remote_objects: u64,
     pub bytes_uploaded: u64,
     pub bytes_downloaded: u64,
+    pub skipped_resources: u64,
 }
 
 /// Runs one complete S3/object-store synchronization pass. Publication is
@@ -730,6 +731,10 @@ fn encode_database_pack(
                 .uploaded_resources
                 .checked_add(resources.transferred_resources)
                 .ok_or_else(|| "uploaded sync resource count overflowed".to_string())?;
+            result.skipped_resources = result
+                .skipped_resources
+                .checked_add(resources.skipped_resources)
+                .ok_or_else(|| "skipped sync resource count overflowed".to_string())?;
             result.bytes_uploaded = result
                 .bytes_uploaded
                 .checked_add(resources.transferred_bytes)
@@ -1442,7 +1447,16 @@ fn publish_segment(
         resource_limits,
         session_key,
     )?;
-    result.uploaded_resources += resources.transferred_resources;
+    result.uploaded_resources = checked_add(
+        result.uploaded_resources,
+        resources.transferred_resources,
+        "uploaded resource count",
+    )?;
+    result.skipped_resources = checked_add(
+        result.skipped_resources,
+        resources.skipped_resources,
+        "skipped resource count",
+    )?;
     result.bytes_uploaded = checked_add(
         result.bytes_uploaded,
         resources.transferred_bytes,
