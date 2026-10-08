@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fuck My Shit Mountain"
+  short_description: "Evidence-based multidimensional codebase audit"
+  default_prompt: "Use $fuck-my-shit-mountain to audit this repository in full mode and write a concise report."

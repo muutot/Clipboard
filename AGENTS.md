@@ -10,6 +10,12 @@ In particular:
 - Commit one verified minimal feature or fix at a time.
 - **Commit message must follow gitmoji format:** `<emoji> <type>[<scope>]: <message>` (e.g., `✨ feat[search]: add pagination`, `🐛 fix[viewer]: correct fullscreen crash`, `📝 docs[release]: ...`). See full type/emoji table in `skills/clipboard-dev/SKILL.md:96-135`.
 
+## Repository audits
+
+For requested codebase audits or structured health reports, use the repository copy at
+`skills/fuck-my-shit-mountain/SKILL.md` and its Clipboard profile. Skill maintenance does not itself
+start an application audit. Keep this copy independent of the user's global skill installation.
+
 ## Release
 
 Use `skills/version-release/SKILL.md` for version bumping, changelog generation, and release. Trigger with "升级版本到 x.x.x" or "release version x.x.x". Supports `--regenerate` mode for re-releasing current content.

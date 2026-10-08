@@ -1,0 +1,488 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fuck My Shit Mountain Audit Report",
+  "type": "object",
+  "required": [
+    "metadata",
+    "executiveSummary",
+    "scoreDashboard",
+    "findingStatistics",
+    "projectMap",
+    "coverageMatrix",
+    "topRisks",
+    "detailedFindings",
+    "dimensionSections",
+    "fixOrder",
+    "quickWins"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["project", "auditModes", "date", "reviewer", "commitHash"],
+      "properties": {
+        "project": {
+          "type": "string",
+          "description": "Project name"
+        },
+        "auditModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "full",
+              "incremental",
+              "architecture",
+              "security",
+              "stability",
+              "performance",
+              "testing",
+              "maintainability",
+              "design",
+              "release",
+              "documentation",
+              "observability",
+              "configuration",
+              "data-integrity",
+              "privacy",
+              "accessibility",
+              "supply-chain",
+              "cost",
+              "ai-safety",
+              "fallback",
+              "testing-authenticity",
+              "type-safety",
+              "frontend-state",
+              "backend-api",
+              "dependency-weight",
+              "code-consistency",
+              "comment-coverage",
+              "concurrency"
+            ]
+          },
+          "minItems": 1
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reviewer": {
+          "type": "string",
+          "description": "AI model/version"
+        },
+        "commitHash": {
+          "type": "string",
+          "description": "Git commit hash at audit time"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Audit scope if limited (optional)"
+        },
+        "reportLanguage": {
+          "type": "string",
+          "description": "Language used in report"
+        }
+      }
+    },
+    "executiveSummary": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "2-3 paragraph summary of codebase condition"
+        }
+      }
+    },
+    "scoreDashboard": {
+      "type": "object",
+      "required": ["dimensions", "overall"],
+      "properties": {
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "score", "grade", "justification"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "Security",
+                  "Stability",
+                  "Performance",
+                  "Testing",
+                  "Maintainability",
+                  "Design",
+                  "Release"
+                ]
+              },
+              "score": {
+                "type": ["number", "null"],
+                "minimum": 0,
+                "maximum": 10,
+                "description": "Score 0.0-10.0, higher is better"
+              },
+              "grade": {
+                "type": "string",
+                "enum": ["S", "A", "B", "C", "D", "F", "Not assessed"]
+              },
+              "justification": {
+                "type": "string",
+                "description": "One-sentence justification referencing strongest evidence"
+              },
+              "coverageConfidence": {
+                "type": "string",
+                "enum": ["High", "Medium", "Low", "Not assessed"]
+              }
+            }
+          }
+        },
+        "overall": {
+          "type": "object",
+          "required": ["score", "grade"],
+          "properties": {
+            "score": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 10
+            },
+            "grade": {
+              "type": "string",
+              "enum": ["S", "A", "B", "C", "D", "F", "Not assessed"]
+            }
+          }
+        },
+        "intelligentWeights": {
+          "type": "object",
+          "description": "Inferred dimension weights based on project characteristics (optional)",
+          "properties": {
+            "weights": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "reasoning": {
+              "type": "string",
+              "description": "Explanation of weight inference based on detected project characteristics"
+            }
+          }
+        }
+      }
+    },
+    "findingStatistics": {
+      "type": "object",
+      "required": ["bySeverity", "total"],
+      "properties": {
+        "bySeverity": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["severity", "count", "confirmed", "suspected"],
+            "properties": {
+              "severity": {
+                "type": "string",
+                "enum": ["Critical", "High", "Medium", "Low", "Info"]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "confirmed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "suspected": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "total": {
+          "type": "object",
+          "required": ["count", "confirmed", "suspected"],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "confirmed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "suspected": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "projectMap": {
+      "type": "object",
+      "required": ["structure", "keyComponents", "riskAreas"],
+      "properties": {
+        "structure": {
+          "type": "string",
+          "description": "How the project is structured"
+        },
+        "keyComponents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Entry points, data flow, state ownership, persistence, external interfaces"
+        },
+        "riskAreas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Areas most likely to contain risks"
+        }
+      }
+    },
+    "coverageMatrix": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dimension", "coverage", "evidenceInspected", "exclusions"],
+        "properties": {
+          "dimension": {
+            "type": "string"
+          },
+          "coverage": {
+            "type": "string",
+            "enum": ["High", "Medium", "Low", "Not assessed"]
+          },
+          "evidenceInspected": {
+            "type": "string",
+            "description": "Files, commands, patterns, runtime surfaces"
+          },
+          "exclusions": {
+            "type": "string",
+            "description": "What was not inspected and why"
+          }
+        }
+      }
+    },
+    "topRisks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "severity", "summary"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["Critical", "High", "Medium", "Low", "Info"]
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-sentence summary"
+          },
+          "findingId": {
+            "type": "string",
+            "description": "Reference to detailed finding"
+          }
+        }
+      },
+      "minItems": 0,
+      "maxItems": 15
+    },
+    "detailedFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "severity",
+          "confidence",
+          "category",
+          "status",
+          "affectedArea",
+          "evidence",
+          "failureScenario",
+          "userVisibleImpact",
+          "minimalFix",
+          "regressionTestSuggestion",
+          "estimatedEffort"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique finding identifier"
+          },
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["Critical", "High", "Medium", "Low", "Info"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["High", "Medium", "Low"]
+          },
+          "category": {
+            "type": "string",
+            "description": "Primary dimension category"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["Confirmed", "Suspected"]
+          },
+          "affectedArea": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "required": ["file", "functionOrModule", "relevantBehavior"],
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "lineNumbers": {
+                "type": "string"
+              },
+              "functionOrModule": {
+                "type": "string"
+              },
+              "relevantBehavior": {
+                "type": "string"
+              }
+            }
+          },
+          "failureTrigger": {
+            "type": "string",
+            "description": "What triggers this issue (optional)"
+          },
+          "failureScenario": {
+            "type": "string",
+            "description": "Realistic failure scenario"
+          },
+          "userVisibleImpact": {
+            "type": "string"
+          },
+          "minimalFix": {
+            "type": "string"
+          },
+          "betterLongTermFix": {
+            "type": "string",
+            "description": "Optional better long-term solution"
+          },
+          "regressionTestSuggestion": {
+            "type": "string"
+          },
+          "estimatedEffort": {
+            "type": "string",
+            "description": "e.g., '30 minutes', '2 hours', '1 day'"
+          }
+        }
+      }
+    },
+    "dimensionSections": {
+      "type": "object",
+      "description": "Dimension-specific analysis sections (optional, depends on audit mode)",
+      "properties": {
+        "architecture": {
+          "type": "object"
+        },
+        "security": {
+          "type": "object"
+        },
+        "stability": {
+          "type": "object"
+        },
+        "performance": {
+          "type": "object"
+        },
+        "testing": {
+          "type": "object"
+        },
+        "maintainability": {
+          "type": "object"
+        },
+        "design": {
+          "type": "object"
+        },
+        "release": {
+          "type": "object"
+        },
+        "documentation": {
+          "type": "object"
+        },
+        "observability": {
+          "type": "object"
+        },
+        "configuration": {
+          "type": "object"
+        },
+        "dataIntegrity": {
+          "type": "object"
+        },
+        "privacy": {
+          "type": "object"
+        },
+        "accessibility": {
+          "type": "object"
+        },
+        "supplyChain": {
+          "type": "object"
+        },
+        "cost": {
+          "type": "object"
+        },
+        "aiSafety": {
+          "type": "object"
+        },
+        "concurrency": {
+          "type": "object"
+        }
+      }
+    },
+    "fixOrder": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "findingId", "reason"],
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "findingId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this should be fixed in this order"
+          }
+        }
+      }
+    },
+    "quickWins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["findingId", "effort", "impact"],
+        "properties": {
+          "findingId": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

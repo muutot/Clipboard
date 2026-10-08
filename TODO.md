@@ -7,6 +7,8 @@
 
 ## 已验证完成（审计债已闭环，不再立项）
 
+- [x] 仓库内审计技能：复制并维护 `skills/fuck-my-shit-mountain/`，接入 Clipboard 审计规则，修正目录遍历与项目识别、增量比较语义、JSON/并发模式校验和诊断脱敏。证据：`tests/test_helpers.py` 18 项回归通过，技能结构校验、真实仓库画像与临时 ZIP 打包检查通过；不据此宣称应用审计已完成。
+
 - [x] SEC-01 本地 API 认证 — `src-tauri/src/cli/api.rs:30-33,258-297` token + Host/Origin 校验 + 回归测试
 - [x] SEC-02 asset scope 去 `"**"` — `src-tauri/tauri.conf.json:34`
 - [x] SEC-03 rename 路径穿越 — `operations.rs:462,484-492` sanitize + file_name 断言
