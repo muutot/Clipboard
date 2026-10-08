@@ -127,6 +127,8 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
     let mut entries = Vec::with_capacity(items.len());
     for mut item in items {
         item.icon_path = normalize_imported_icon_key(item.icon_path.as_deref());
+        item.resource_path = sanitize_imported_path(item.resource_path.as_deref());
+        item.preview_path = sanitize_imported_path(item.preview_path.as_deref());
         let label = item.id.clone();
         entries.push((label, item));
     }
@@ -141,6 +143,29 @@ pub fn import_from_json(json: &str, database: &Database) -> Result<ImportSummary
         pending_truncation: 0,
         max_items: 0,
     })
+}
+
+/// Drops resource/preview paths from a foreign backup that cannot name a real
+/// file on this machine. A crafted backup could otherwise point `resource_path`
+/// at an arbitrary absolute path and have downstream workers (OCR, thumbnails)
+/// read it.
+fn sanitize_imported_path(path: Option<&str>) -> Option<String> {
+    let trimmed = path?.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let candidate = std::path::Path::new(trimmed);
+    if candidate
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return None;
+    }
+    if candidate.is_file() {
+        Some(trimmed.to_owned())
+    } else {
+        None
+    }
 }
 
 fn normalize_imported_icon_key(icon_path: Option<&str>) -> Option<String> {
@@ -666,6 +691,25 @@ mod tests {
             database.get_item("item-2").unwrap().unwrap().icon_path,
             Some("Chrome.png".to_owned())
         );
+    }
+
+    #[test]
+    fn imported_resource_path_is_sanitized() {
+        assert_eq!(sanitize_imported_path(None), None);
+        assert_eq!(sanitize_imported_path(Some("   ")), None);
+        assert_eq!(sanitize_imported_path(Some("../escape.png")), None);
+        assert_eq!(
+            sanitize_imported_path(Some("C:/definitely/not/existing/x.png")),
+            None
+        );
+        let temp =
+            std::env::temp_dir().join(format!("clipboard-import-path-{}", std::process::id()));
+        std::fs::write(&temp, b"x").unwrap();
+        assert_eq!(
+            sanitize_imported_path(Some(temp.to_str().unwrap())),
+            Some(temp.to_string_lossy().into_owned())
+        );
+        let _ = std::fs::remove_file(&temp);
     }
 
     #[test]
