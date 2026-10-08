@@ -534,17 +534,20 @@ fn materialize_item_resources(
     Ok((updated, changed))
 }
 
-/// Shared entry point for the Tauri command and the auto-sync worker.
-pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> {
+/// Serialize manual/automatic sync with the storage migration boundary.
+pub(crate) fn try_lock_sync_run() -> Result<std::sync::MutexGuard<'static, ()>, String> {
     // Distinguish a real concurrent run from a poisoned lock: a panic inside a
     // previous run must not disable sync forever with a misleading message.
-    let _run_guard = match SYNC_RUN_LOCK.try_lock() {
-        Ok(guard) => guard,
-        Err(std::sync::TryLockError::WouldBlock) => {
-            return Err("sync already in progress".to_string());
-        }
-        Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-    };
+    match SYNC_RUN_LOCK.try_lock() {
+        Ok(guard) => Ok(guard),
+        Err(std::sync::TryLockError::WouldBlock) => Err("sync already in progress".to_string()),
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),
+    }
+}
+
+/// Shared entry point for the Tauri command and the auto-sync worker.
+pub(super) fn run_sync(app: &tauri::AppHandle) -> Result<SyncRunResult, String> {
+    let _run_guard = try_lock_sync_run()?;
     let config = app.state::<Mutex<ConfigStore>>();
     let database = app.state::<Database>();
     let paths = app.state::<StoragePaths>();

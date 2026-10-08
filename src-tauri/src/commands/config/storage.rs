@@ -111,16 +111,35 @@ pub async fn configure_storage_directory(
     )
     .map_err(|error| error.to_string())?;
 
+    let saved_directory = target_paths
+        .uses_custom_data_directory()
+        .then(|| target_paths.data_directory.clone());
+    let save = || {
+        lock_state(&config, "configuration lock is poisoned")?
+            .set_storage_directory(saved_directory)
+            .map_err(|error| error.to_string())
+    };
+
     if target_paths.data_directory != active_paths.data_directory {
-        // Stop every background writer before taking the snapshot: OCR,
-        // thumbnail, search-sync, and cleanup workers hold their own database
-        // connections, so anything written after the snapshot would be left
-        // behind in the old location and silently lost. A restart is already
-        // mandatory after a successful migration.
+        // Shutdown's bounded auto-sync wait is insufficient for migration.
+        // Reject an active manual/automatic run before stopping any services.
+        let _sync = crate::commands::sync::try_lock_sync_run().map_err(|error| {
+            format!("{error}; wait for sync to finish before migrating storage")
+        })?;
         crate::shutdown::stop_runtime_services(&app);
         let previous_paused = capture.is_paused();
         capture.set_paused(true);
-        if let Err(error) = migrate_storage_data(&active_paths, &target_paths, &database) {
+        // Drain path-before-rename operations and file-before-record ingestion.
+        let _maintenance = lock_state(
+            &capture.storage_maintenance_lock,
+            "storage maintenance lock is poisoned",
+        )?;
+        let _ingestion = lock_state(
+            &capture.ingestion_guard,
+            "clipboard ingestion lock is poisoned",
+        )?;
+        if let Err(error) = migrate_and_save_storage(&active_paths, &target_paths, &database, save)
+        {
             // Restore the caller's pause preference where possible; services
             // stay stopped because the database location may be half-moved.
             capture.set_paused(previous_paused);
@@ -129,15 +148,9 @@ pub async fn configure_storage_directory(
                  migration — restart the app before retrying"
             ));
         }
+    } else {
+        save()?;
     }
-
-    let saved_directory = target_paths
-        .uses_custom_data_directory()
-        .then(|| target_paths.data_directory.clone());
-
-    lock_state(&config, "configuration lock is poisoned")?
-        .set_storage_directory(saved_directory)
-        .map_err(|error| error.to_string())?;
 
     Ok(StorageDirectoryUpdate {
         restart_required: target_paths.data_directory != active_paths.data_directory,
@@ -387,7 +400,7 @@ pub fn migrate_storage_data(
         // otherwise instead of destroying a pre-existing database.
         replace_migration_database(&new.database, || {
             database
-                .vacuum_into(&new.database)
+                .snapshot_into(&new.database)
                 .map_err(|error| format!("failed to migrate database: {error}"))?;
             let migrated_database = Database::open(&new.database)
                 .map_err(|e| format!("failed to open migrated database: {e}"))?;
@@ -397,6 +410,21 @@ pub fn migrate_storage_data(
         })?;
     }
 
+    Ok(())
+}
+
+fn migrate_and_save_storage(
+    old: &StoragePaths,
+    new: &StoragePaths,
+    database: &Database,
+    save: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let guard = database
+        .begin_storage_migration()
+        .map_err(|error| error.to_string())?;
+    migrate_storage_data(old, new, database)?;
+    save()?;
+    guard.keep_until_restart();
     Ok(())
 }
 
@@ -677,6 +705,89 @@ mod tests {
         restore_quarantined_database,
     };
     use std::time::SystemTime;
+
+    #[test]
+    fn migration_blocks_independent_writers_through_save_and_until_restart() {
+        use crate::storage::{Database, StoragePaths};
+        let root = std::env::temp_dir().join(format!(
+            "clipboard-migration-writers-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let old = StoragePaths::initialize(root.join("old")).unwrap();
+        let new = StoragePaths::initialize(root.join("new")).unwrap();
+        let database = Database::open(&old.database).unwrap();
+        let writer = rusqlite::Connection::open(&old.database).unwrap();
+        writer.busy_timeout(std::time::Duration::ZERO).unwrap();
+        writer
+            .execute_batch(
+                "CREATE TABLE audit_migration (id INTEGER); INSERT INTO audit_migration VALUES (1)",
+            )
+            .unwrap();
+
+        let result = super::migrate_and_save_storage(&old, &new, &database, || {
+            assert!(
+                writer
+                    .execute("INSERT INTO audit_migration VALUES (2)", [])
+                    .is_err(),
+                "writes after the snapshot would be absent from the migrated database"
+            );
+            Ok(())
+        });
+        result.unwrap();
+        assert!(writer
+            .execute("INSERT INTO audit_migration VALUES (3)", [])
+            .is_err());
+        let snapshot = rusqlite::Connection::open(&new.database).unwrap();
+        let count: i64 = snapshot
+            .query_row("SELECT COUNT(*) FROM audit_migration", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+        drop(database);
+        writer
+            .execute("INSERT INTO audit_migration VALUES (4)", [])
+            .unwrap();
+        drop(writer);
+        drop(snapshot);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn failed_migration_or_config_save_releases_the_writer_reservation() {
+        use crate::storage::{Database, StoragePaths};
+        for fail_copy in [true, false] {
+            let root = std::env::temp_dir().join(format!(
+                "clipboard-migration-release-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let old = StoragePaths::initialize(root.join("old")).unwrap();
+            let new = StoragePaths::initialize(root.join("new")).unwrap();
+            let database = Database::open(&old.database).unwrap();
+            let writer = rusqlite::Connection::open(&old.database).unwrap();
+            writer.busy_timeout(std::time::Duration::ZERO).unwrap();
+            if fail_copy {
+                std::fs::write(old.images.join("collision"), b"image bytes").unwrap();
+                std::fs::create_dir(new.images.join("collision")).unwrap();
+            }
+            let mut saved = false;
+            let result = super::migrate_and_save_storage(&old, &new, &database, || {
+                saved = true;
+                Err("injected config save failure".to_owned())
+            });
+            assert!(result.is_err());
+            assert_eq!(saved, !fail_copy);
+            writer
+                .execute(
+                    "INSERT INTO sync_metadata(key, value) VALUES ('audit-after-failure', '1')",
+                    [],
+                )
+                .unwrap();
+            // Failure must not leave the app permanently in migration state.
+            drop(database.begin_storage_migration().unwrap());
+            drop(writer);
+            drop(database);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
 
     #[test]
     fn quarantine_moves_existing_database_and_sidecars_aside() {
