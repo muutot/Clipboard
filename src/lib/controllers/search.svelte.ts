@@ -1,4 +1,6 @@
-import { onDestroy, untrack } from "svelte";
+import { onDestroy, untrack, tick } from "svelte";
+import { createSearchPaintTracker } from "$lib/utils/search-paint-latency";
+import { recordSearchInteractionLatency } from "$lib/services/storage";
 import { searchClipboardHistory } from "$lib/services/clipboard";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type { ClipboardItem, HistoryFilterArgs, GeneralSettings } from "$lib/types/clipboard";
@@ -22,6 +24,9 @@ export interface SearchDependencies {
 }
 /** Owns debouncing, request generations and search paging without duplicating records. */
 export function createSearchController(deps: SearchDependencies) {
+  const paintTracker = createSearchPaintTracker((ms) => {
+    void recordSearchInteractionLatency(ms).catch(() => {});
+  });
   let indexedQuery = $state("");
 
   let searchPending = $state(false);
@@ -63,6 +68,7 @@ export function createSearchController(deps: SearchDependencies) {
 
   $effect(() => {
     const requestedQuery = deps.query.trim();
+    const interaction = paintTracker.take();
     const requestedFilter = deps.filter();
     void searchSettingsKey; // dependency: narrow key, not the whole store
     const requestedMaxResults = untrack(() => deps.settings.searchPageSizeLimit);
@@ -106,6 +112,9 @@ export function createSearchController(deps: SearchDependencies) {
           searchOffset = page.items.length;
           searchHasMore = searchOffset < Math.min(page.totalCount, requestedMaxResults);
           updateSearchCache(page.items);
+          void tick().then(() =>
+            paintTracker.painted(interaction, () => requestId === searchRequestId),
+          );
           deps.status = page.truncated
             ? deps.translate("app.searchTruncated", {
                 shown: page.items.length,
@@ -185,10 +194,12 @@ export function createSearchController(deps: SearchDependencies) {
     }
   }
   onDestroy(() => {
+    paintTracker.dispose();
     searchRequestId++;
     searchLoadRequestId++;
   });
   return {
+    recordInput: () => paintTracker.input(),
     invalidateSearchResults,
     loadSearchPage,
     updateSearchCache,

@@ -1033,6 +1033,13 @@ export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate
     ["peak memory"],
   ),
   entry(
+    "statistics.performance.search-input",
+    { section: "statistics", statisticsTab: "performance" },
+    i18n("storage.searchInputTime"),
+    i18n("storage.searchInputTimeDesc"),
+    ["input paint latency", "输入 显示 耗时"],
+  ),
+  entry(
     "statistics.performance.search-count",
     { section: "statistics", statisticsTab: "performance" },
     i18n("storage.searchCount"),

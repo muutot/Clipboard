@@ -55,6 +55,12 @@ export interface ResourceMarkerUpdate {
 }
 
 export interface PerformanceMetrics {
+  searchInputLatency: {
+    searchesRecorded: number;
+    averageMs: number | null;
+    p95Ms: number | null;
+    p99Ms: number | null;
+  };
   startup: {
     totalStartupMs: number;
     dbOpenMs: number;
@@ -73,6 +79,9 @@ export interface PerformanceMetrics {
     uptimeSeconds: number;
   };
 }
+
+export const recordSearchInteractionLatency = (durationMs: number) =>
+  invokeTauri<void>("record_search_interaction_latency", { durationMs });
 
 export interface RepairResult {
   integrityOk: boolean;

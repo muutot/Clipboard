@@ -2135,6 +2135,7 @@
     inlineSuggestionSuffix={inlineSearchSuggestion ? inlineSearchSuggestionSuffix : null}
     onfocus={() => (searchSuggestionsOpen = true)}
     oninput={() => {
+      search.recordInput();
       searchSuggestionsOpen = true;
       searchSuggestionIndex = -1;
       if (search.pendingSearchHistoryQuery && query.trim() !== search.pendingSearchHistoryQuery) {

@@ -283,6 +283,33 @@
         >
       </section>
 
+      <section class="setting-card stats-metric-card">
+        <div class="setting-heading stats-metric-heading">
+          <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+          <div class="stats-metric-copy">
+            <strong>{_t("storage.searchInputTime")}</strong>
+            <p>{_t("storage.searchInputTimeDesc")}</p>
+            <p>
+              {_t("storage.searchInputSamples", {
+                count: perfMetrics.searchInputLatency.searchesRecorded,
+              })}
+            </p>
+          </div>
+        </div>
+        <span class="stats-metric-value"
+          >{perfMetrics.searchInputLatency.averageMs?.toFixed(1) ?? "-"}ms</span
+        >
+      </section>
+      {#each [{ label: "P95", value: perfMetrics.searchInputLatency.p95Ms }, { label: "P99", value: perfMetrics.searchInputLatency.p99Ms }] as metric}
+        <section class="setting-card stats-metric-card">
+          <div class="setting-heading stats-metric-heading">
+            <span class="setting-icon"><AppIcon name="clock" size={17} /></span>
+            <strong>{_t("storage.searchInputTime")} · {metric.label}</strong>
+          </div>
+          <span class="stats-metric-value">{metric.value ?? "-"}ms</span>
+        </section>
+      {/each}
+
       {#if perfMetrics.searchLatency.searchesRecorded > 0}
         <section class="setting-card stats-metric-card">
           <div class="setting-heading stats-metric-heading">

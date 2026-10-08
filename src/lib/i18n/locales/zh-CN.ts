@@ -396,6 +396,10 @@ const zhCN: LocaleDefinition = {
     uptimeDesc: "本次应用进程已运行时间",
     memoryPeak: "内存峰值",
     memoryPeakDesc: "进程运行期间的最高内存占用",
+    searchInputTime: "搜索输入至显示耗时",
+    searchInputTimeDesc:
+      "包含防抖、查询及近似渲染帧边界。统计最近 1,000 次可见窗口内完成的文字搜索，仅在内存中保留耗时。",
+    searchInputSamples: "样本数：{count}",
     searchCount: "搜索次数",
     searchCountDesc: "已纳入延迟统计的搜索次数",
     searchAvgTime: "平均搜索耗时",

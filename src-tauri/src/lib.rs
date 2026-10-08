@@ -899,6 +899,7 @@ pub fn run() {
             enforce_history_cleanup,
             clear_all_non_favorite_items,
             get_performance_metrics,
+            record_search_interaction_latency,
             memory::get_memory_diagnostics,
             repair_database,
             validate_search_index,

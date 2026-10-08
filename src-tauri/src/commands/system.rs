@@ -99,6 +99,14 @@ pub fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn record_search_interaction_latency(
+    performance_tracker: tauri::State<'_, PerformanceTracker>,
+    duration_ms: u64,
+) {
+    performance_tracker.record_search_input(duration_ms);
+}
+
+#[tauri::command]
 pub fn get_performance_metrics(
     performance_tracker: tauri::State<'_, PerformanceTracker>,
 ) -> Result<PerformanceSnapshot, String> {

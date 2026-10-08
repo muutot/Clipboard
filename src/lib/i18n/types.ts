@@ -380,6 +380,9 @@ export interface LocaleDefinition {
     uptimeDesc: string;
     memoryPeak: string;
     memoryPeakDesc: string;
+    searchInputTime: string;
+    searchInputTimeDesc: string;
+    searchInputSamples: string;
     searchCount: string;
     searchCountDesc: string;
     searchAvgTime: string;

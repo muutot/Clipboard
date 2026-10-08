@@ -16,6 +16,7 @@ const SEARCH_LATENCY_HISTORY_SIZE: usize = 1000;
 pub struct PerformanceTracker {
     startup_metrics: Mutex<Option<StartupMetrics>>,
     search_tracker: SearchLatencyTracker,
+    search_input_tracker: SearchLatencyTracker,
     memory_monitor: MemoryMonitor,
 }
 
@@ -24,6 +25,7 @@ impl PerformanceTracker {
         Self {
             startup_metrics: Mutex::new(None),
             search_tracker: SearchLatencyTracker::new(),
+            search_input_tracker: SearchLatencyTracker::new(),
             memory_monitor: MemoryMonitor::new(),
         }
     }
@@ -43,6 +45,13 @@ impl PerformanceTracker {
         self.memory_monitor.record_snapshot();
     }
 
+    /// Frontend-visible interaction duration, including debounce and a frame boundary.
+    pub fn record_search_input(&self, duration_ms: u64) {
+        if duration_ms <= 60_000 {
+            self.search_input_tracker.record_search("", duration_ms, 0);
+        }
+    }
+
     pub fn snapshot(&self) -> PerformanceSnapshot {
         let startup = self.startup_metrics.lock().ok().and_then(|m| m.clone());
         // A metrics request is also a sampling point. This keeps the peak
@@ -52,6 +61,7 @@ impl PerformanceTracker {
         PerformanceSnapshot {
             startup: startup.unwrap_or_default(),
             search_latency: self.search_tracker.summary(),
+            search_input_latency: self.search_input_tracker.summary(),
             memory: self.memory_monitor.snapshot(),
         }
     }
@@ -373,6 +383,7 @@ pub struct MemoryMetrics {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PerformanceSnapshot {
+    pub search_input_latency: SearchLatencySummary,
     pub startup: StartupMetrics,
     pub search_latency: SearchLatencySummary,
     pub memory: MemoryMetrics,
@@ -381,6 +392,21 @@ pub struct PerformanceSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_latency_is_bounded_and_separate_from_backend_latency() {
+        let tracker = PerformanceTracker::new();
+        tracker.record_search("private query", 5, 1);
+        tracker.record_search_input(350);
+        tracker.record_search_input(60_001);
+        let snapshot = tracker.snapshot();
+        assert_eq!(snapshot.search_latency.average_ms, Some(5.0));
+        assert_eq!(snapshot.search_input_latency.searches_recorded, 1);
+        assert_eq!(snapshot.search_input_latency.average_ms, Some(350.0));
+        let json = serde_json::to_string(&snapshot).unwrap();
+        assert!(json.contains("searchInputLatency"));
+        assert!(!json.contains("private query"));
+    }
 
     #[test]
     fn startup_timer_records_segments() {

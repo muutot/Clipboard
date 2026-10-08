@@ -108,3 +108,13 @@ Auto-tag services expose optional sourceApp/kind conditions and previewAutoTagRu
 Portable backup wrappers in storage.ts: createResourceBackup(path), previewResourceBackup(path), restoreResourceBackup(path, fingerprint) map to create_resource_backup, preview_resource_backup and restore_resource_backup. File operations run on the blocking pool. Preview is read-only; restore returns ImportSummary.
 
 Main-route controllers receive live settings/query/filter getters and a shared ItemStoreView. Search flushes settings before the first request and owns debounce/request generations. History owns keyset/recycle-bin pagination and suppressed IDs. Bulk operations use the existing affected-item rollback helpers. window-lifecycle owns native listeners and the settings subscription, while window-bounds retains geometry debounce/restore logic.
+
+## Search interaction diagnostics
+
+`controllers/search.svelte.ts` starts `utils/search-paint-latency.ts` from the header input
+callback. Only accepted first-page text searches report after Svelte tick plus two animation
+frames; stale, hidden, disposed and over-60-second observations are discarded. This is an
+approximate rendered-frame boundary, not an OS compositor measurement. `storage.ts` invokes
+`record_search_interaction_latency(durationMs)`; `PerformanceSnapshot.searchInputLatency`
+keeps the latest 1,000 durations in memory, separate from backend `searchLatency`. No query
+text or clipboard content is retained. Statistics uses existing metric-card primitives.

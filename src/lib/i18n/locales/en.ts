@@ -415,6 +415,10 @@ const en: LocaleDefinition = {
     uptimeDesc: "How long this app process has been running",
     memoryPeak: "Peak Memory",
     memoryPeakDesc: "Highest memory usage during process lifetime",
+    searchInputTime: "Search input to display",
+    searchInputTimeDesc:
+      "Includes debounce, query and an approximate rendered-frame boundary. Recent 1,000 visible, completed text searches; durations only, kept in memory.",
+    searchInputSamples: "Samples: {count}",
     searchCount: "Search Count",
     searchCountDesc: "Number of searches included in latency stats",
     searchAvgTime: "Avg Search Time",
