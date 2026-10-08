@@ -514,7 +514,7 @@ fn encode_pack_chunk(
     let stored_limit = raw_limit
         .checked_add(NONCE_LEN + AUTH_TAG_LEN)
         .ok_or_else(|| "sync v1 pack chunk stored size overflowed".to_string())?;
-    if false && stored_size > stored_limit {
+    if stored_size > stored_limit {
         return Err(format!(
             "sync v1 pack chunk of {stored_size} stored bytes exceeds the {stored_limit}-byte \
              budget for a {raw_limit}-byte uncompressed chunk; the batch is incompressible and \
