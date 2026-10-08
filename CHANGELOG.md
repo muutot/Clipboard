@@ -1,5 +1,76 @@
 # Changelog
 
+## 1.7.4 (2026-10-08)
+
+### ✨ Features
+
+- **settings**: tell the user when the OS has no global shortcut backend (4a7b473b)
+- **ocr**: clamp the OCR input size so a huge image cannot be fully decoded (148ed411)
+- **ocr**: retry a failed recognition a bounded number of times (e138cb8f)
+- **history**: converge both windows on clipboard-items-changed (65423664)
+- **clipboard**: broadcast item-level mutations to every window (e2c646f1)
+- **settings**: raise the default card padding and gap (f78aa8c3)
+- **release**: enforce tag-to-release-commit binding in CI and fix mojibake comment (907d6558)
+- **capabilities**: grant set-decorations so the system title bar toggle works (e99b12a0)
+- **platform**: add event-driven clipboard monitoring on Linux (1ad670b8)
+
+### 🐛 Bug Fixes
+
+- **api**: drop needless return flagged by clippy 1.99 (d1587fa6)
+- **security**: create the API token file owner-only instead of narrowing it after (612fc9ff)
+- **platform**: stop reporting quick paste on macOS, and make the flags testable (4be12ac6)
+- **platform**: correct the X11 image-read comment that contradicted the code (11345af7)
+- **settings**: shorten the sidebar cloud label and disk caption (264ac826)
+- **clipboard**: promote a copied row in every window (92373cfc)
+- **sync**: stop an unconfigured sync provider from failing every media read (237fc3a8)
+- **clipboard**: tell a vanished file apart from a busy clipboard (5a90cf90)
+- **clipboard**: log why a clipboard copy failed (83e8a32a)
+- **settings**: make the select placeholder reachable (884b34a9)
+- **platform**: clear the remaining Linux-only clippy findings (bb1ce80a)
+- **platform**: round the X11 offset advance without signed div_ceil (ba868b6e)
+- **history**: switch active-history pagination from OFFSET to a keyset cursor (3006f948)
+- **capture**: widen the text self-trigger window so slow ingestion cannot re-capture own pastes (684f703c)
+- **platform**: read large X11 clipboard properties in chunks and reject INCR explicitly (38fb8ddd)
+- **cleanup**: serialize renames against orphan cleanup with a maintenance lock (987c037e)
+- **platform**: survive X11 connection loss instead of exiting the process (824b15ad)
+- **platform**: probe WAYLAND_DISPLAY when XDG_SESSION_TYPE is unset on linux (0862e219)
+- **capture**: apply the error backoff breaker to image and file save failures (a7f0eb0e)
+- **frontend**: roll back bulkFavorite through the per-item snapshot funnel (7bc69cc8)
+- **storage**: refresh created_at_ms on restore so retention cleanup cannot purge restored records (c40dc895)
+- **release**: refuse to reuse a tag that does not point at HEAD (bef4b4c3)
+
+### ♻️ Refactoring
+
+- **platform**: keep the self-trigger marker allocation lazy (3f52b0f6)
+- **history**: back the four item copies with one record map (8a49dd33)
+- **state**: add the single-source item store with invariant tests (cf9ba916)
+
+### 🎨 Styling
+
+- **detail**: pin the tags add input to the top of the tab (4cb46bf2)
+- **settings**: drop the dead select arrow and pin CustomSelect's contract (1f1398ec)
+- apply rustfmt to cleanup imports and X11 log call (f979313c)
+
+### 📝 Documentation
+
+- **search**: record that the outbox worker recommendation shipped (c827ab22)
+- **readme**: replace the unmeasured 100k P95 claim with what was measured (420f2bac)
+- **search**: replace the planned index-field list with the real schema (1393b528)
+- **readme**: qualify the global hotkey and quick-paste claims by platform (2c070b12)
+- **skill**: record the platform-gated code verification blind spot (0a33328a)
+- **todo**: record the architecture-convergence items as decided (4d7d6058)
+- **skill**: track the delete-remote-release skill (009c606e)
+- **skill**: document the storage maintenance lock invariant (b93e78b7)
+- **readme**: revise feature table, platform notes, and fact accuracy (ba6a4303)
+
+### ✅ Testing
+
+- **state**: mount the item store view to prove its rune contract (332bca59)
+
+### 🔧 Chores
+
+- **git**: ignore local agent memory and python caches (f5a9d32d)
+
 ## 1.7.3 (2026-09-30)
 
 ### ✨ Features
