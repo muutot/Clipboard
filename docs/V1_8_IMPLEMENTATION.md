@@ -15,7 +15,7 @@ This tracks implementation, not a version bump or release.
 - [ ] Share item-operation behavior across GUI, CLI and local API.
 - [ ] Cancel synchronization cooperatively through engine and transport.
 - [x] Stream file exports from one read transaction with atomic publication (Rust export/WAL/concurrent-write/failure regressions and full Rust suite, Clippy pass).
-- [ ] Hash file bytes during staging without a second full read.
+- [x] Hash file bytes during bounded staging without a second full read (stream/digest/growth/write-failure tests, Rust suite except unavailable native clipboard test, Clippy and format pass).
 - [ ] Cache content-dependent card measurements and avoid needless whole-list work.
 - [ ] Measure search input-to-paint latency and validate performance candidates with synthetic data.
 

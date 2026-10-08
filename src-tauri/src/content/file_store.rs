@@ -1,7 +1,7 @@
 use std::{
     ffi::OsStr,
     fs,
-    io::Read,
+    io::{Read, Write},
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -66,8 +66,8 @@ impl FileStore {
             });
         }
 
-        // Stage the source into a process-unique temp file and hash the
-        // STAGED bytes in a single pass. Hashing the live source first and
+        // Stage the source into a process-unique temp file while hashing those
+        // exact bytes. Hashing the live source first and
         // copying second lets a concurrent writer slip different bytes under
         // a stale hash, permanently mislabeling the content-addressed file
         // (dedup, rename inheritance, and sync digests all derive identity
@@ -78,27 +78,22 @@ impl FileStore {
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let staging =
             file_storage_dir.join(format!(".staging.tmp-{}-{}", std::process::id(), sequence));
-        if let Err(error) = fs::copy(source_path, &staging) {
-            let _ = fs::remove_file(&staging);
-            return Err(StorageError::Io(error));
-        }
-        let staged_size = match fs::metadata(&staging) {
-            Ok(metadata) => metadata.len(),
+        let source = fs::File::open(source_path)?;
+        let target = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staging)?;
+        let staged = copy_and_hash(source, target, max_copy_size);
+        let (staged_size, content_hash) = match staged {
+            Ok(result) => result,
             Err(error) => {
                 let _ = fs::remove_file(&staging);
                 return Err(StorageError::Io(error));
             }
         };
-        let content_hash = match hash_file(&staging) {
-            Ok(content_hash) => content_hash,
-            Err(error) => {
-                let _ = fs::remove_file(&staging);
-                return Err(error);
-            }
-        };
 
-        // The source can grow between the metadata check and the copy, so keep
-        // a post-copy guard as well.
+        // If the source grows, the stream stops staging at the cap but keeps
+        // hashing the source for the existing pass-through-file fallback.
         if max_copy_size > 0 && staged_size > max_copy_size {
             let _ = fs::remove_file(&staging);
             return Ok(FileStorageInfo {
@@ -242,6 +237,36 @@ fn hash_file(path: &Path) -> Result<String, StorageError> {
         hasher.update(&buffer[..bytes_read]);
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+/// One bounded buffer and one source read. Once over the cap, no more bytes reach disk.
+/// A successful staged file's digest always identifies the bytes written, even if the source changes.
+fn copy_and_hash(
+    mut source: impl Read,
+    mut target: impl Write,
+    max: u64,
+) -> std::io::Result<(u64, String)> {
+    let mut hash = Sha256::new();
+    let mut size = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = match source.read(&mut buffer) {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
+        if count == 0 {
+            break;
+        }
+        size = size
+            .checked_add(count as u64)
+            .ok_or_else(|| std::io::Error::other("file size overflow"))?;
+        if max == 0 || size <= max {
+            target.write_all(&buffer[..count])?;
+        }
+        hash.update(&buffer[..count]);
+    }
+    target.flush()?;
+    Ok((size, hex::encode(hash.finalize())))
 }
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -501,4 +526,28 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp);
     }
+}
+#[test]
+fn streamed_hash_covers_exact_written_bytes_and_bounds_growing_sources() {
+    let bytes: Vec<u8> = (0..200_000).map(|i| (i % 251) as u8).collect();
+    let mut written = Vec::new();
+    let (size, hash) = copy_and_hash(bytes.as_slice(), &mut written, 0).unwrap();
+    assert_eq!(written, bytes);
+    assert_eq!(size, bytes.len() as u64);
+    assert_eq!(hash, hex::encode(Sha256::digest(&written)));
+    let mut bounded = Vec::new();
+    let (size, hash) = copy_and_hash(bytes.as_slice(), &mut bounded, 70_000).unwrap();
+    assert!(bounded.len() <= 70_000);
+    assert_eq!(size, bytes.len() as u64);
+    assert_eq!(hash, hex::encode(Sha256::digest(&bytes)));
+    struct FullDisk;
+    impl Write for FullDisk {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("disk full"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    assert!(copy_and_hash(bytes.as_slice(), FullDisk, 0).is_err());
 }
