@@ -104,9 +104,17 @@
     positionPopover();
     window.addEventListener("resize", positionPopover);
     window.addEventListener("scroll", onScroll, true);
+    const onEscapeCapture = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      open = false;
+    };
+    window.addEventListener("keydown", onEscapeCapture, true);
     return () => {
       window.removeEventListener("resize", positionPopover);
       window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("keydown", onEscapeCapture, true);
     };
   });
 
@@ -146,7 +154,11 @@
     bind:this={triggerEl}
     onclick={toggle}
     onkeydown={(e) => {
-      if (e.key === "Escape") open = false;
+      if (e.key === "Escape") {
+        open = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }}
   >
     <span class:placeholder={!value}>

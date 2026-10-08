@@ -69,9 +69,17 @@
     if (popoverEl) alignDropdownOptionText(popoverEl);
     window.addEventListener("resize", positionPopover);
     window.addEventListener("scroll", onScroll, true);
+    const onEscapeCapture = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      open = false;
+    };
+    window.addEventListener("keydown", onEscapeCapture, true);
     return () => {
       window.removeEventListener("resize", positionPopover);
       window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("keydown", onEscapeCapture, true);
     };
   });
 
@@ -102,7 +110,11 @@
     bind:this={triggerEl}
     onclick={toggle}
     onkeydown={(e) => {
-      if (e.key === "Escape") open = false;
+      if (e.key === "Escape") {
+        open = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }}
   >
     <span class="custom-select-value">{current}</span>
@@ -116,6 +128,13 @@
       aria-label={ariaLabel}
       style="top: {popoverTop}px; left: {popoverLeft}px; min-width: {popoverWidth}px;"
       bind:this={popoverEl}
+      onkeydown={(e) => {
+        if (e.key === "Escape") {
+          open = false;
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
     >
       <div class="custom-select-backdrop" onclick={() => (open = false)} aria-hidden="true"></div>
       {#each options as option}

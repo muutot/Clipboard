@@ -134,7 +134,11 @@
   }
 
   function onColorKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") colorPopover = null;
+    if (e.key === "Escape") {
+      colorPopover = null;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
   }
 
   $effect(() => {

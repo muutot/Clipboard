@@ -83,6 +83,13 @@
   aria-label={_t("tags.editTitle")}
   {onclose}
   onclick={handleBackdropClick}
+  onkeydown={(event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onclose();
+    }
+  }}
 >
   <div class="tag-edit-content">
     <div class="tag-edit-top">

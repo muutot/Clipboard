@@ -29,6 +29,7 @@
   let menuEl = $state<HTMLDivElement>();
   let posX = $state(0);
   let posY = $state(0);
+  let positioned = $state(false);
 
   let activeSub = $state<string | null>(null);
   let subOpenLeft = $state(false);
@@ -36,8 +37,9 @@
   function adjustPosition(width: number, height: number) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    posX = Math.min(x, vw - width - 8);
-    posY = Math.min(y, vh - height - 8);
+    posX = Math.max(8, Math.min(x, vw - width - 8));
+    posY = Math.max(8, Math.min(y, vh - height - 8));
+    positioned = true;
   }
 
   $effect(() => {
@@ -63,6 +65,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopImmediatePropagation();
       onclose();
     }
   }
@@ -101,13 +104,13 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} onclick={handleClickOutside} />
+<svelte:window onkeydowncapture={handleKeydown} onclick={handleClickOutside} />
 
 <div
   class="context-menu"
   bind:this={menuEl}
-  style:left="{posX || x}px"
-  style:top="{posY || y}px"
+  style:left="{positioned ? posX : x}px"
+  style:top="{positioned ? posY : y}px"
   role="menu"
   aria-label={_t("actions.contextMenu")}
 >
