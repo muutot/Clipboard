@@ -1,4 +1,4 @@
-﻿use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use tauri::{AppHandle, Emitter, Runtime};
@@ -368,6 +368,7 @@ pub fn search_clipboard_items(
         });
     }
 
+    let cache_token = search_cache.write_token();
     let (all_ids, total_count) = search_index
         .search_all_ids(&query, max_results)
         .map_err(|error| error.to_string())?;
@@ -395,6 +396,7 @@ pub fn search_clipboard_items(
     };
 
     search_cache.set(
+        cache_token,
         query.clone(),
         rules.clone(),
         max_results,
@@ -1341,7 +1343,15 @@ mod tests {
         );
 
         let cache = SearchResultCache::new();
-        cache.set(String::new(), rules.clone(), 100, sorted, 2, false);
+        cache.set(
+            cache.write_token(),
+            String::new(),
+            rules.clone(),
+            100,
+            sorted,
+            2,
+            false,
+        );
         assert_eq!(cache.get("", &rules, 100, 0, 10).unwrap().0[0].id, "newer");
 
         // The user pastes the older entry out of history; the usage entry
@@ -1364,6 +1374,38 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["older", "newer"]
         );
+    }
+
+    #[test]
+    fn usage_stamp_prevents_inflight_search_from_repopulating_stale_cache() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&item("record", "title")).unwrap();
+        let cache = SearchResultCache::new();
+        let token = cache.write_token();
+        let snapshot = database.get_items_by_ids(&["record".to_owned()]).unwrap();
+        assert!(record_item_usage(&database, &cache, "record").unwrap());
+        // This is the completion of a search that read before the usage stamp.
+        cache.set(
+            token,
+            "title".to_owned(),
+            Vec::new(),
+            100,
+            snapshot,
+            1,
+            false,
+        );
+        assert!(cache.get("title", &[], 100, 0, 10).is_none());
+        let fresh = database.get_items_by_ids(&["record".to_owned()]).unwrap();
+        cache.set(
+            cache.write_token(),
+            "title".to_owned(),
+            Vec::new(),
+            100,
+            fresh,
+            1,
+            false,
+        );
+        assert!(cache.get("title", &[], 100, 0, 10).is_some());
     }
 
     /// Module scenario for tie ordering: the search pipeline feeds items in

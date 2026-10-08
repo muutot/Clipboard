@@ -56,7 +56,19 @@ impl From<HistoryCursorArgs> for HistoryCursor {
 }
 
 pub struct SearchResultCache {
-    inner: Mutex<Option<CachedSearchResult>>,
+    inner: Mutex<SearchCacheState>,
+}
+
+#[derive(Default)]
+struct SearchCacheState {
+    generation: u64,
+    result: Option<CachedSearchResult>,
+}
+
+#[derive(Clone, Copy)]
+pub struct SearchCacheToken {
+    generation: u64,
+    date_bucket: i64,
 }
 
 pub(crate) type CachedSearchResult = (
@@ -98,8 +110,18 @@ impl Default for SearchResultCache {
 impl SearchResultCache {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(None),
+            inner: Mutex::new(SearchCacheState::default()),
         }
+    }
+
+    /// Capture before reading candidates; invalidation and publication use
+    /// the same lock so an old request cannot undo a cache clear.
+    pub fn write_token(&self) -> Option<SearchCacheToken> {
+        let cache = self.inner.lock().ok()?;
+        Some(SearchCacheToken {
+            generation: cache.generation,
+            date_bucket: current_date_bucket(),
+        })
     }
 
     pub fn get(
@@ -112,7 +134,7 @@ impl SearchResultCache {
     ) -> Option<(Vec<ClipboardItem>, usize, bool)> {
         let cache = self.inner.lock().ok()?;
         let (cached_query, cached_rules, cached_max, cached_bucket, cached_items, total, truncated) =
-            cache.as_ref()?;
+            cache.result.as_ref()?;
         if cached_query != query
             || cached_rules != rules
             || *cached_max < max_results
@@ -128,8 +150,10 @@ impl SearchResultCache {
         Some((cached_items[offset..end].to_vec(), *total, *truncated))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn set(
         &self,
+        token: Option<SearchCacheToken>,
         query: String,
         rules: Vec<SearchSortRule>,
         max_results: usize,
@@ -137,12 +161,16 @@ impl SearchResultCache {
         total: usize,
         truncated: bool,
     ) {
+        let Some(token) = token else { return };
         if let Ok(mut cache) = self.inner.lock() {
-            *cache = Some((
+            if cache.generation != token.generation || current_date_bucket() != token.date_bucket {
+                return;
+            }
+            cache.result = Some((
                 query,
                 rules,
                 max_results,
-                current_date_bucket(),
+                token.date_bucket,
                 items,
                 total,
                 truncated,
@@ -152,7 +180,8 @@ impl SearchResultCache {
 
     pub fn clear(&self) {
         if let Ok(mut cache) = self.inner.lock() {
-            *cache = None;
+            cache.generation = cache.generation.wrapping_add(1);
+            cache.result = None;
         }
     }
 }
