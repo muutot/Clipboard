@@ -12,9 +12,11 @@ Desktop flow:
 2. subscribe to `general-settings-changed` before hydration;
 3. read `get_general_settings` from Rust;
 4. migrate legacy browser/localStorage values once when the backend reports they are needed;
-5. merge edits made before hydration through dirty-key/revision tracking;
-6. debounce writes for 120 ms through `set_general_settings`;
-7. apply the command response as canonical and listen for changes from other windows.
+5. track actual edits as nested field patches, including edits before hydration;
+6. debounce patches for 120 ms through `set_general_settings` (`{patch}`); nested objects merge, arrays replace, and `null` clears an optional field;
+7. apply the command response with any newer pending edits overlaid, and refresh after broadcasts skipped during a write. `flush()` drains edits arriving during that refresh too. Failed writes retain their fields underneath newer edits for an explicit retry or later edit; they never restore an older snapshot or spin on errors.
+
+`utils/settings-patch.ts` owns diff, composition (preserving deletion markers), and application. Migration uses the same patch queue and removes legacy keys only after a successful save. Backend patch merging uses the current config under the same serialization lock as worker transitions, persistence, live side effects, and broadcasts, so independent windows cannot overwrite untouched fields. The full `{settings}` command form remains available for explicit replacement.
 
 Browser-preview flow uses localStorage and the browser `storage` event. Do not describe localStorage as the desktop source of truth.
 

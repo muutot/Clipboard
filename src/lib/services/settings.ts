@@ -1,4 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
+import {
+  applySettingsPatch,
+  diffSettings,
+  mergeSettingsPatches,
+  type SettingsPatch,
+} from "$lib/utils/settings-patch";
 import { listen } from "@tauri-apps/api/event";
 import { get, writable } from "svelte/store";
 import { setLocale } from "$lib/i18n";
@@ -749,19 +754,6 @@ export async function saveWindowPosition(position: WindowPosition): Promise<void
   await invokeTauri<void>("save_window_position", { ...position });
 }
 
-function applyDirtySettings(
-  remote: GeneralSettings,
-  local: GeneralSettings,
-  dirtyKeys: Set<keyof GeneralSettings>,
-): GeneralSettings {
-  if (dirtyKeys.size === 0) return remote;
-  const merged = { ...remote } as GeneralSettings;
-  for (const key of dirtyKeys) {
-    (merged as unknown as UnknownRecord)[key] = (local as unknown as UnknownRecord)[key];
-  }
-  return normalizeGeneralSettings(merged, remote);
-}
-
 function createSettingsStore() {
   const desktop = isTauriRuntime();
   const browserInitial = normalizeGeneralSettings(parseStorageObject(STORAGE_KEY), cloneDefaults());
@@ -769,19 +761,22 @@ function createSettingsStore() {
   let applyingExternalValue = false;
   let initialized = !desktop;
   let initialization: Promise<void> | undefined;
-  let localRevision = 0;
-  const dirtyKeys = new Set<keyof GeneralSettings>();
-  let pendingValue: GeneralSettings | undefined;
+  // Keep intent separately from the displayed snapshot, including before hydration.
+  let pendingPatch: SettingsPatch | undefined;
   let writeTimer: ReturnType<typeof setTimeout> | undefined;
   let writeInFlight: Promise<void> | undefined;
   let unlistenSettings: (() => void) | undefined;
   let legacyMigrationPending = false;
-  // A `general-settings-changed` broadcast that arrives while our own write
-  // is in flight (or debounced) cannot be applied directly: our command
-  // response is canonical for the in-flight value. Remember it so the drain
-  // below re-hydrates from the backend afterwards instead of silently
-  // diverging from (and later overwriting) the other window's change.
   let refreshAfterWrite = false;
+
+  function applyRemote(value: unknown): void {
+    const remote = normalizeGeneralSettings(value, cloneDefaults());
+    const normalized = pendingPatch
+      ? normalizeGeneralSettings(applySettingsPatch(remote, pendingPatch), cloneDefaults())
+      : remote;
+    store.set(normalized);
+    setLocale(normalized.language);
+  }
 
   if (!desktop && typeof window !== "undefined") {
     store.subscribe((value) => {
@@ -793,9 +788,6 @@ function createSettingsStore() {
         applyingExternalValue = true;
         const normalized = normalizeGeneralSettings(JSON.parse(event.newValue), get(store));
         store.set(normalized);
-        // The language lives in the same settings object: without syncing the
-        // locale store here, another tab's language change would leave this
-        // tab rendering in the previous locale.
         setLocale(normalized.language);
       } catch {
         // Ignore malformed values from another browser tab.
@@ -805,10 +797,14 @@ function createSettingsStore() {
     });
   }
 
+  function clearWriteTimer(): void {
+    if (writeTimer !== undefined) clearTimeout(writeTimer);
+    writeTimer = undefined;
+  }
+
   function schedulePersist(): void {
     if (!desktop || !initialized) return;
-    pendingValue = normalizeGeneralSettings(get(store), get(store));
-    if (writeTimer !== undefined) clearTimeout(writeTimer);
+    clearWriteTimer();
     writeTimer = setTimeout(() => {
       writeTimer = undefined;
       void drainWrites().catch((err) => console.error("Settings persist failed:", err));
@@ -820,48 +816,41 @@ function createSettingsStore() {
     if (writeInFlight) return writeInFlight;
 
     writeInFlight = (async () => {
-      while (pendingValue) {
-        const value = pendingValue;
-        pendingValue = undefined;
-        try {
-          const saved = await setGeneralSettings(value);
-          // A newer value may have arrived while this write was in flight.
-          // In that case the next loop iteration owns the store update.
-          if (!pendingValue) {
-            const normalized = normalizeGeneralSettings(saved, get(store));
-            store.set(normalized);
-            setLocale(normalized.language);
-            // The backend now holds the canonical value for every key that
-            // was dirty when this snapshot was taken. Keeping the flags would
-            // make stale local values shadow later remote changes forever
-            // (applyDirtySettings would keep overriding them on hydration).
-            // Keys dirtied while this write was in flight re-populate the set
-            // and stay pending until their own write succeeds.
-            dirtyKeys.clear();
+      while (pendingPatch || refreshAfterWrite) {
+        if (pendingPatch) {
+          const patch = pendingPatch;
+          pendingPatch = undefined;
+          clearWriteTimer();
+          try {
+            const saved = await invokeTauri<GeneralSettings>(
+              "set_general_settings",
+              { patch },
+              get(store),
+            );
+            applyRemote(saved);
             if (legacyMigrationPending) {
               removeStorage(STORAGE_KEY);
               removeStorage(LOCALE_STORAGE_KEY);
               legacyMigrationPending = false;
             }
+          } catch (error) {
+            // Retry failed fields underneath newer edits, never an old snapshot.
+            pendingPatch = mergeSettingsPatches(patch, pendingPatch ?? {});
+            clearWriteTimer();
+            throw error;
           }
-        } catch (error) {
-          // Keep the latest failed value so an explicit flush or a later edit
-          // can retry it; do not spin on a permanently failed IPC call.
-          pendingValue = value;
-          throw error;
-        }
-      }
-      // A remote change that arrived mid-write was skipped by the listener
-      // below; converge on the backend state now that our value persisted.
-      if (refreshAfterWrite && !pendingValue) {
-        refreshAfterWrite = false;
-        try {
-          const response = await getGeneralSettings();
-          const hydrated = normalizeGeneralSettings(response.settings, cloneDefaults());
-          store.set(applyDirtySettings(hydrated, get(store), dirtyKeys));
-          setLocale(get(store).language);
-        } catch (error) {
-          console.error("Settings refresh after write failed:", error);
+        } else {
+          refreshAfterWrite = false;
+          try {
+            const response = await getGeneralSettings();
+            applyRemote(response.settings);
+          } catch (error) {
+            console.error("Settings refresh after write failed:", error);
+            // Keep the refresh for the next flush/edit, without an automatic retry loop.
+            refreshAfterWrite = true;
+            if (!pendingPatch) break;
+          }
+          // An edit/event arriving during hydration is handled by this same drain.
         }
       }
     })().finally(() => {
@@ -873,25 +862,14 @@ function createSettingsStore() {
   async function initialize(): Promise<void> {
     if (initialization) return initialization;
     initialization = (async () => {
-      if (!desktop) {
-        initialized = true;
-        return;
-      }
-
+      if (!desktop) return;
       try {
         unlistenSettings = await listen<GeneralSettings>("general-settings-changed", (event) => {
-          // Ignore an event while our own command is in flight; its command
-          // response is the canonical value we apply below. Remember that a
-          // remote change arrived so the drain converges on it afterwards
-          // instead of leaving this window diverged (and overwriting it with
-          // the next local edit).
-          if (writeInFlight || pendingValue) {
+          if (!initialized || writeInFlight || pendingPatch) {
             refreshAfterWrite = true;
             return;
           }
-          const normalized = normalizeGeneralSettings(event.payload, get(store));
-          store.set(normalized);
-          setLocale(normalized.language);
+          applyRemote(event.payload);
         });
       } catch {
         // A missing event permission must not prevent settings persistence.
@@ -902,85 +880,60 @@ function createSettingsStore() {
         response = await getGeneralSettings();
       } catch {
         initialized = true;
-        if (dirtyKeys.size > 0) schedulePersist();
+        if (pendingPatch) schedulePersist();
         return;
       }
 
-      const localAtHydration = get(store);
-      const dirtyAtHydration = new Set(dirtyKeys);
-      const revisionAtHydration = localRevision;
-      let hydrated = normalizeGeneralSettings(response.settings, cloneDefaults());
-
+      const remote = normalizeGeneralSettings(response.settings, cloneDefaults());
       if (response.legacyMigrationRequired) {
         legacyMigrationPending = true;
         const legacy = readLegacySettings();
-        hydrated = normalizeGeneralSettings(legacy.settings, hydrated);
+        const migrated = normalizeGeneralSettings(legacy.settings, remote);
         const legacyRecord = isRecord(legacy.settings) ? legacy.settings : {};
         if (legacy.locale && legacyRecord.language !== "zh-CN" && legacyRecord.language !== "en") {
-          hydrated.language = legacy.locale;
+          migrated.language = legacy.locale;
         }
-        hydrated = applyDirtySettings(hydrated, localAtHydration, dirtyAtHydration);
-        try {
-          hydrated = normalizeGeneralSettings(await setGeneralSettings(hydrated), hydrated);
-          const concurrentEdits = localRevision !== revisionAtHydration;
-          if (concurrentEdits) {
-            hydrated = applyDirtySettings(hydrated, get(store), dirtyKeys);
-            pendingValue = hydrated;
-          }
-          if (!concurrentEdits) {
-            removeStorage(STORAGE_KEY);
-            removeStorage(LOCALE_STORAGE_KEY);
-            legacyMigrationPending = false;
-            dirtyKeys.clear();
-          }
-        } catch {
-          // Keep old keys for a retry if the first migration write fails.
-          pendingValue = applyDirtySettings(hydrated, get(store), dirtyKeys);
-        }
+        pendingPatch = mergeSettingsPatches(diffSettings(remote, migrated), pendingPatch ?? {});
       } else {
         removeStorage(STORAGE_KEY);
         removeStorage(LOCALE_STORAGE_KEY);
-        hydrated = applyDirtySettings(hydrated, localAtHydration, dirtyAtHydration);
       }
 
-      store.set(hydrated);
-      setLocale(hydrated.language);
+      applyRemote(remote);
       initialized = true;
-      if (pendingValue || (dirtyAtHydration.size > 0 && !response.legacyMigrationRequired)) {
+      if (legacyMigrationPending) {
+        // Preserve legacy keys on failure; later flush/edit retries the same patch.
+        await drainWrites().catch((error) => console.error("Settings migration failed:", error));
+      } else if (pendingPatch || refreshAfterWrite) {
         schedulePersist();
       }
     })();
     return initialization;
   }
 
-  function updateSetting<K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) {
-    localRevision += 1;
-    dirtyKeys.add(key);
-    const current = get(store);
-    const next = normalizeGeneralSettings({ ...current, [key]: value }, current);
-    store.set(next);
-    schedulePersist();
-  }
-
   function merge(partial: Partial<GeneralSettings>) {
-    localRevision += 1;
-    for (const key of Object.keys(partial) as Array<keyof GeneralSettings>) {
-      dirtyKeys.add(key);
-    }
     const current = get(store);
     const next = normalizeGeneralSettings({ ...current, ...partial }, current);
+    const patch = diffSettings(current, next);
+    if (desktop && Object.keys(patch).length) {
+      pendingPatch = mergeSettingsPatches(pendingPatch ?? {}, patch);
+    }
     store.set(next);
-    schedulePersist();
+    if (pendingPatch) schedulePersist();
+  }
+
+  function updateSetting<K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) {
+    merge({ [key]: value });
   }
 
   async function flush(): Promise<void> {
     if (!desktop) return;
     if (!initialized && initialization) await initialization;
-    if (writeTimer !== undefined) {
-      clearTimeout(writeTimer);
-      writeTimer = undefined;
-    }
-    await drainWrites();
+    clearWriteTimer();
+    do {
+      await drainWrites();
+      // Include edits queued just as the previous drain's promise settled.
+    } while (pendingPatch);
   }
 
   void initialize();
@@ -993,12 +946,8 @@ function createSettingsStore() {
     flush,
     /** Exposed for lifecycle cleanup in tests and future window teardown. */
     destroy() {
-      if (writeTimer !== undefined) clearTimeout(writeTimer);
-      writeTimer = undefined;
-      // Do not drop a debounced value on teardown: hand it to the drain so a
-      // pending edit still reaches the backend instead of being lost.
-      if (pendingValue)
-        void drainWrites().catch((err) => console.error("Settings persist failed:", err));
+      clearWriteTimer();
+      if (pendingPatch) void flush().catch((err) => console.error("Settings persist failed:", err));
       unlistenSettings?.();
       unlistenSettings = undefined;
     },

@@ -9,6 +9,8 @@ Sources of truth:
 
 Do not update this table from UI labels alone. Verify the type, default, normalizer, Rust config, and actual consumer.
 
+Desktop edits persist as nested field patches rather than whole snapshots, preserving unrelated changes from other windows. Arrays replace as a unit; optional clears use `null`. Failed saves retain newer pending edits, and `flush()` includes changes arriving during post-save refresh. See `services.md` and `data-contracts.md` for the queue and IPC contracts.
+
 ## Contents
 
 - [Nested settings](#nested-settings)

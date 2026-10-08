@@ -31,11 +31,16 @@ pub fn set_general_settings(
     config: tauri::State<'_, Mutex<ConfigStore>>,
     capture: tauri::State<'_, CaptureState>,
     search_worker: tauri::State<'_, Mutex<Option<SearchSyncWorker>>>,
-    settings: GeneralConfig,
+    settings: Option<GeneralConfig>,
+    patch: Option<serde_json::Value>,
 ) -> Result<GeneralConfig, String> {
     // Serialize mode transitions without holding the config lock while opening
     // a database or joining a worker. Searches inspect this same runtime state.
     let mut worker = lock_state(&search_worker, "search-sync lock is poisoned")?;
+    let settings = {
+        let config = lock_state(&config, "configuration lock is poisoned")?;
+        resolve_general_settings(config.general_settings(), settings, patch)?
+    };
     if worker.as_ref().is_some_and(|worker| !worker.is_running()) {
         *worker = None;
     }
@@ -78,8 +83,6 @@ pub fn set_general_settings(
             ))
         },
     )?;
-    drop(worker);
-
     capture.set_max_text_capture_bytes(max_text_capture_bytes);
     crate::logging::set_level(crate::logging::LogLevel::from_str_lossy(&saved.log_level));
     if let Err(error) = app.emit("general-settings-changed", &saved) {
@@ -93,7 +96,132 @@ pub fn set_general_settings(
         ),
     );
     apply_window_effect_to_main(&app, &saved.window_effect);
+    // Keep side effects and broadcasts in the same order as persisted writes.
+    drop(worker);
     Ok(saved)
+}
+
+fn resolve_general_settings(
+    current: &GeneralConfig,
+    settings: Option<GeneralConfig>,
+    patch: Option<serde_json::Value>,
+) -> Result<GeneralConfig, String> {
+    let mut value = match (settings, patch) {
+        (Some(settings), None) => {
+            serde_json::to_value(settings).map_err(|error| error.to_string())?
+        }
+        (None, Some(patch)) if patch.is_object() => {
+            let mut value = serde_json::to_value(current).map_err(|error| error.to_string())?;
+            merge_settings_patch(&mut value, patch);
+            value
+        }
+        _ => return Err("provide either settings or an object patch".into()),
+    };
+    // Two windows may independently change the page size and candidate cap.
+    let cap = value["searchPageSizeLimit"]
+        .as_u64()
+        .unwrap_or(500)
+        .clamp(50, 1000);
+    if let Some(page_size) = value["display"]["searchPageSize"].as_u64() {
+        value["display"]["searchPageSize"] = page_size.clamp(10, 500).min(cap).into();
+    }
+    serde_json::from_value(value).map_err(|error| error.to_string())
+}
+
+fn merge_settings_patch(target: &mut serde_json::Value, patch: serde_json::Value) {
+    if let serde_json::Value::Object(fields) = patch {
+        if !target.is_object() {
+            *target = serde_json::json!({});
+        }
+        let object = target.as_object_mut().expect("object initialized above");
+        for (key, value) in fields {
+            if value.is_null() {
+                object.remove(&key);
+            } else {
+                merge_settings_patch(object.entry(key).or_insert(serde_json::Value::Null), value);
+            }
+        }
+    } else {
+        *target = patch;
+    }
+}
+
+#[cfg(test)]
+mod settings_patch_tests {
+    use super::resolve_general_settings;
+    use crate::config::GeneralConfig;
+    use serde_json::json;
+
+    #[test]
+    fn sequential_patches_preserve_unrelated_and_nested_fields() {
+        let initial = GeneralConfig::default();
+        let first = resolve_general_settings(
+            &initial,
+            None,
+            Some(json!({"pageSizeLimit": 800, "display": {"pageSize": 200}})),
+        )
+        .unwrap();
+        let second = resolve_general_settings(
+            &first,
+            None,
+            Some(json!({"searchCacheSize": 1000, "display": {"maxTextLines": 6}})),
+        )
+        .unwrap();
+        assert_eq!(second.page_size_limit, 800);
+        assert_eq!(second.display.max_text_lines, 6);
+        let saved = serde_json::to_value(second).unwrap();
+        assert_eq!(saved["display"]["pageSize"], 200);
+        assert_eq!(saved["searchCacheSize"], 1000);
+    }
+
+    #[test]
+    fn patches_clear_optional_fields_and_replace_arrays() {
+        let initial = serde_json::from_value(json!({
+            "activePresetId": "custom", "iconColors": {"text": "#ffffff", "file": "#000000"},
+            "searchSortRules": [{"field": "title", "direction": "asc"}]
+        }))
+        .unwrap();
+        let saved = resolve_general_settings(
+            &initial,
+            None,
+            Some(json!({
+                "activePresetId": null, "iconColors": {"text": null},
+                "searchSortRules": [{"field": "lastUsedAt", "direction": "desc"}]
+            })),
+        )
+        .unwrap();
+        let saved = serde_json::to_value(saved).unwrap();
+        assert!(saved.get("activePresetId").is_none());
+        assert_eq!(saved["iconColors"], json!({"file": "#000000"}));
+        assert_eq!(
+            saved["searchSortRules"],
+            json!([{"field": "lastUsedAt", "direction": "desc"}])
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_invalid_requests_and_clamps_cross_field_limits() {
+        let initial = GeneralConfig::default();
+        assert!(resolve_general_settings(&initial, None, None).is_err());
+        assert!(resolve_general_settings(&initial, None, Some(json!([]))).is_err());
+        assert!(
+            resolve_general_settings(&initial, Some(initial.clone()), Some(json!({}))).is_err()
+        );
+        assert!(resolve_general_settings(&initial, None, Some(json!({"display": false}))).is_err());
+        let saved =
+            resolve_general_settings(&initial, None, Some(json!({"searchPageSizeLimit": 50})))
+                .unwrap();
+        let saved = resolve_general_settings(
+            &saved,
+            None,
+            Some(json!({"display": {"searchPageSize": 300}})),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(saved).unwrap()["display"]["searchPageSize"],
+            50
+        );
+    }
 }
 
 /// Prepare a replacement before persistence, then publish it only on success.
