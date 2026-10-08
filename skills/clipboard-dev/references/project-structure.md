@@ -82,6 +82,8 @@ On reinstall, `DataDirectoryPage` skips an existing `conf/conf.json`, and `Write
 
 `un.ResolveStorageRoot` uses an embedded Windows PowerShell script to parse the full configuration and read only `storage.dataDirectory`. The command passes paths through `-File` arguments, never interpolates config values into code, and transfers the resolved path as UTF-16LE. The final path component must equal `storage` exactly, matching Rust's `StoragePaths`; a parent such as `mystorage` still needs its `storage` child. Invalid JSON/types, relative paths, parser failure, and paths exceeding NSIS string capacity skip data/model deletion. `python scripts/test-installer-storage.py` compiles the actual resolver and tests formatted JSON, escaped/Unicode paths, nested fields, leaf matching, and invalid input. Windows PowerShell is required for this optional uninstall cleanup; if unavailable, the uninstaller retains the data and logs the reason.
 
+The resolver takes `$UninstallProjectRoot`. Before removing settings, uninstall calls `un.DeleteStorageAt` for the install directory and the current user's fixed roaming/local application-data roots. Each root's own config determines its storage location; elevated uninstall-time writability must not be used to infer the runtime location. Data and model options remain independent. The storage fixture also executes the production cleanup helper for all four option combinations, checking config and unrelated-file preservation entirely within temporary directories.
+
 ## High-coupling files
 
 Treat these as integration points and avoid concurrent edits:

@@ -1,7 +1,7 @@
 """Compile the production NSIS storage resolver and test real config files.
 
-All paths and output files are under one temporary directory. No deletion or
-registry operations from the application installer are included in the fixture.
+All paths and output files are under one temporary directory. Only the extracted
+storage helper can delete fixture data; no registry or real uninstall runs.
 """
 
 import argparse
@@ -27,6 +27,10 @@ def main() -> None:
         raise RuntimeError("Missing production storage resolver")
     helper = re.search(r"^Function un\.WriteStorageResolver\n.*?^FunctionEnd", source, re.M | re.S)
     functions = (helper.group() + "\n" if helper else "") + resolver.group()
+    cleanup = re.search(r"^Function un\.DeleteStorageAt\n.*?^FunctionEnd", source, re.M | re.S)
+    if cleanup is None:
+        raise RuntimeError("Missing production storage cleanup helper")
+    functions += "\n" + cleanup.group()
     functions = functions.replace("un.", "").replace("${UnStr", "${Str")
     temp_root = Path(tempfile.gettempdir()).resolve()
     with tempfile.TemporaryDirectory(prefix="clipboard-nsis-resolve-", dir=temp_root) as temporary:
@@ -68,17 +72,34 @@ def main() -> None:
         add("wrong-type", '{"storage":{"dataDirectory":42}}', "")
         add("relative-path", '{"storage":{"dataDirectory":"relative"}}', "")
         add("null-directory", '{"storage":{"dataDirectory":null}}')
+        add("fallback-default", '{}')
+        add("fallback-custom", json.dumps({"storage": {"dataDirectory": custom.as_posix()}}, indent=2), custom / "storage")
 
         executable = workspace / "resolve-test.exe"
         fixture = workspace / "resolve-test.nsi"
         calls = "".join(
-            f'StrCpy $INSTDIR "{nsis_string(project)}"\nCall ResolveStorageRoot\nFileOpen $9 "{nsis_string(workspace / (name + ".result"))}" w\nFileWriteUTF16LE $9 "$UninstallStorageRoot"\nFileClose $9\n'
+            f'StrCpy $INSTDIR "{nsis_string(workspace / "separate-install" if name.startswith("fallback-") else project)}"\nStrCpy $UninstallProjectRoot "{nsis_string(project)}"\nCall ResolveStorageRoot\nFileOpen $9 "{nsis_string(workspace / (name + ".result"))}" w\nFileWriteUTF16LE $9 "$UninstallStorageRoot"\nFileClose $9\n'
             for name, project, _ in cases
         )
+        cleanup_cases = []
+        for data in (0, 1):
+            for models in (0, 1):
+                project = workspace / f"cleanup-{data}-{models}"
+                storage = workspace / f"cleanup-custom-{data}-{models}" / "storage"
+                config = project / "conf/conf.json"
+                config.parent.mkdir(parents=True)
+                config.write_text(json.dumps({"storage": {"dataDirectory": str(storage)}}), encoding="utf-8")
+                original_config = config.read_bytes()
+                for folder in ("database", "image", "files", "icons", "models", "unrelated"):
+                    marker = storage / folder / "keep.txt"
+                    marker.parent.mkdir(parents=True)
+                    marker.write_text("fixture", encoding="utf-8")
+                cleanup_cases.append((storage, config, original_config, data, models))
+                calls += f'StrCpy $UninstallProjectRoot "{nsis_string(project)}"\nStrCpy $DeleteDataState {data}\nStrCpy $DeleteModelsState {models}\nCall DeleteStorageAt\n'
         fixture.write_text(
             'Unicode true\nRequestExecutionLevel user\nSilentInstall silent\n'
             '!include LogicLib.nsh\n!include FileFunc.nsh\n'
-            f'OutFile "{nsis_string(executable)}"\nVar UninstallStorageRoot\n{functions}\nSection\n{calls}SectionEnd\n', encoding="utf-8")
+            f'OutFile "{nsis_string(executable)}"\nVar UninstallStorageRoot\nVar UninstallProjectRoot\nVar DeleteDataState\nVar DeleteModelsState\n{functions}\nSection\n{calls}SectionEnd\n', encoding="utf-8")
         subprocess.run([str(args.makensis.resolve()), "/V2", str(fixture)], check=True, timeout=30)
         subprocess.run([str(executable), "/S"], check=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
         failures = []
@@ -88,7 +109,12 @@ def main() -> None:
             if not correct:
                 failures.append(name)
         assert not failures, "Incorrect storage resolution: " + ", ".join(failures)
-    print(f"PASS: {len(cases)} compiled NSIS storage resolution scenarios")
+        for storage, config, original_config, data, models in cleanup_cases:
+            for folder in ("database", "image", "files", "icons", "models", "unrelated"):
+                deleted = bool(models) if folder == "models" else bool(data) if folder != "unrelated" else False
+                assert (storage / folder / "keep.txt").exists() != deleted, f"Incorrect cleanup: {data}/{models}/{folder}"
+            assert config.read_bytes() == original_config, "Storage cleanup changed configuration"
+    print(f"PASS: {len(cases)} compiled NSIS storage resolution scenarios and {len(cleanup_cases)} cleanup option combinations")
 
 
 if __name__ == "__main__":

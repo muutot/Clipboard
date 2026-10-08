@@ -445,6 +445,7 @@ Var DeleteModelsState
 Var DeleteSettingsCheckbox
 Var DeleteSettingsState
 Var UninstallStorageRoot
+Var UninstallProjectRoot
 !define /ifndef WS_EX_LAYOUTRTL         0x00400000
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
 Function un.ConfirmShow
@@ -489,7 +490,7 @@ Function un.ConfirmLeave
 FunctionEnd
 
 ; Resolves the storage root targeted by the data/model cleanup options.
-; Defaults to "$INSTDIR\storage"; when conf\conf.json carries a custom
+; Uses $UninstallProjectRoot; when conf\conf.json carries a custom
 ; dataDirectory (written by the installer's data-location page or the app
 ; settings), that directory's storage folder is used instead.
 ; Parse the complete UTF-8 JSON with the Windows PowerShell parser. Invalid
@@ -537,7 +538,7 @@ Function un.ResolveStorageRoot
   Call un.WriteStorageResolver
   Delete "$PLUGINSDIR\clipboard-storage-root.txt"
   ; -File treats paths as arguments; no config values are embedded in code.
-  nsExec::ExecToLog /TIMEOUT=10000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\clipboard-storage-resolver.ps1" -ConfigPath "$INSTDIR\conf\conf.json" -ProjectPath "$INSTDIR\." -ResultPath "$PLUGINSDIR\clipboard-storage-root.txt"'
+  nsExec::ExecToLog /TIMEOUT=10000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\clipboard-storage-resolver.ps1" -ConfigPath "$UninstallProjectRoot\conf\conf.json" -ProjectPath "$UninstallProjectRoot\." -ResultPath "$PLUGINSDIR\clipboard-storage-root.txt"'
   Pop $0
   ${If} $0 != 0
     DetailPrint "Cannot parse storage configuration; retaining clipboard data and models."
@@ -574,6 +575,26 @@ Function un.ResolveStorageRoot
     Return
   ${EndIf}
   StrCpy $UninstallStorageRoot ""
+FunctionEnd
+
+; Apply the independent data/model options to one known project root.
+Function un.DeleteStorageAt
+  Call un.ResolveStorageRoot
+  ${If} $UninstallStorageRoot == ""
+    Return
+  ${EndIf}
+  ${If} $DeleteDataState = 1
+    DetailPrint "Deleting clipboard data from $UninstallStorageRoot"
+    RmDir /r "$UninstallStorageRoot\database"
+    RmDir /r "$UninstallStorageRoot\image"
+    RmDir /r "$UninstallStorageRoot\files"
+    RmDir /r "$UninstallStorageRoot\icons"
+  ${EndIf}
+  ${If} $DeleteModelsState = 1
+    DetailPrint "Deleting OCR models from $UninstallStorageRoot"
+    RmDir /r "$UninstallStorageRoot\models"
+  ${EndIf}
+  RmDir "$UninstallStorageRoot"
 FunctionEnd
 
 ; Stack: application data root. Shared by both Windows user-data locations.
@@ -960,23 +981,19 @@ Section Uninstall
   ${EndIf}
 
   ${If} $UpdateMode <> 1
-    Call un.ResolveStorageRoot
-
     ${If} $DeleteDataState = 1
-    ${AndIf} $UninstallStorageRoot != ""
-      DetailPrint "Deleting clipboard data from $UninstallStorageRoot"
-      RmDir /r "$UninstallStorageRoot\database"
-      RmDir /r "$UninstallStorageRoot\image"
-      RmDir /r "$UninstallStorageRoot\files"
-      RmDir /r "$UninstallStorageRoot\icons"
-      RmDir "$UninstallStorageRoot"
-    ${EndIf}
-
-    ${If} $DeleteModelsState = 1
-    ${AndIf} $UninstallStorageRoot != ""
-      DetailPrint "Deleting OCR models from $UninstallStorageRoot"
-      RmDir /r "$UninstallStorageRoot\models"
-      RmDir "$UninstallStorageRoot"
+    ${OrIf} $DeleteModelsState = 1
+      ; Runtime falls back to the current user's app-data directory when the
+      ; executable directory is not writable. Elevation at uninstall time must
+      ; not change which existing locations we inspect. Resolve before settings
+      ; deletion so each root's custom dataDirectory remains available.
+      StrCpy $UninstallProjectRoot "$INSTDIR"
+      Call un.DeleteStorageAt
+      SetShellVarContext current
+      StrCpy $UninstallProjectRoot "$APPDATA\${BUNDLEID}"
+      Call un.DeleteStorageAt
+      StrCpy $UninstallProjectRoot "$LOCALAPPDATA\${BUNDLEID}"
+      Call un.DeleteStorageAt
     ${EndIf}
 
     ${If} $DeleteSettingsState = 1
