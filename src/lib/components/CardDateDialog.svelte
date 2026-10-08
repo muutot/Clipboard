@@ -1,5 +1,8 @@
 <script lang="ts">
   import AppIcon from "$lib/components/AppIcon.svelte";
+  import { messages, resolvePath } from "$lib/i18n";
+
+  const _t = (path: string) => resolvePath($messages, path);
 
   interface DateView {
     isoDate: string;
@@ -55,7 +58,7 @@
 <dialog
   bind:this={dialogEl}
   class="date-action-dialog"
-  aria-label={dateView?.label ?? "View date"}
+  aria-label={dateView?.label ?? _t("storage.dateDialogViewDate")}
   onclose={ondismiss}
   onclick={handleClick}
   onkeydown={handleKeydown}
@@ -70,8 +73,8 @@
       <button
         type="button"
         class="date-action-close"
-        title="Close date"
-        aria-label="Close date"
+        title={_t("storage.dateDialogClose")}
+        aria-label={_t("storage.dateDialogClose")}
         onclick={dismiss}
       >
         <AppIcon name="x" size={15} />

@@ -294,6 +294,8 @@ const zhCN: LocaleDefinition = {
     datePickerClear: "清除",
     datePickerPrevMonth: "上个月",
     datePickerNextMonth: "下个月",
+    dateDialogViewDate: "查看日期",
+    dateDialogClose: "关闭日期",
     ocrModelInstalled: "PP-OCRv6 {variant} 模型已安装并启用",
     ocrModelInstallFailed: "OCR 模型下载失败：{error}",
     ocrModelAlreadyApplied: "模型已应用",

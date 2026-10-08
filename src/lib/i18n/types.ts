@@ -284,6 +284,8 @@ export interface LocaleDefinition {
     datePickerClear: string;
     datePickerPrevMonth: string;
     datePickerNextMonth: string;
+    dateDialogViewDate: string;
+    dateDialogClose: string;
     ocrModelInstalled: string;
     ocrModelInstallFailed: string;
     ocrModelAlreadyApplied: string;

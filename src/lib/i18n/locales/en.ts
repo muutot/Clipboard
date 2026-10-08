@@ -311,6 +311,8 @@ const en: LocaleDefinition = {
     datePickerClear: "Clear",
     datePickerPrevMonth: "Previous month",
     datePickerNextMonth: "Next month",
+    dateDialogViewDate: "View date",
+    dateDialogClose: "Close date",
     ocrModelInstalled: "PP-OCRv6 {variant} model installed and activated",
     ocrModelInstallFailed: "OCR model download failed: {error}",
     ocrModelAlreadyApplied: "Model already applied",
