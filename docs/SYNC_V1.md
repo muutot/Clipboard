@@ -27,7 +27,7 @@ sync Tauri surface; automatic sync calls the same internal `run_sync_cancellable
 compaction, WebDAV, baseline and oplog IPC surfaces are not registered.
 
 Each run snapshots configuration once, releases the config lock, derives at most one optional
-remote-scoped encryption key, creates one prefix-scoped S3 object store, and enters the v1 engine.
+remote-scoped encryption key in the ordinary case, creates one prefix-scoped S3 object store, and enters the v1 engine. Desktop local-only policy gates all entries and cancels active S3 work.
 The frontend exposes `segmentMaxEntries` plus image/file resource byte limits; it has no mutable-log
 rollover or remote-file-retention settings.
 
@@ -37,6 +37,7 @@ All v1 objects live below the configured remote prefix in an isolated `v1/` name
 
 ```text
 v1/
+├─ namespace.json
 ├─ heads/{device_id}.bin
 ├─ checkpoint.bin
 ├─ checkpoints/{generation:020}-{sha256}.pack
@@ -44,6 +45,30 @@ v1/
 ├─ segments/{device_id}/{epoch}/{first:020}-{last:020}-{sha256}.pack
 └─ resources/{image|file|icon}/sha256-{digest}.{ext}
 ```
+
+`namespace.json` version 1 holds a public 64-hex derivation scope and an optional
+domain-separated HMAC key check. It contains no login credential, password or AES
+key. New namespaces derive their identity from endpoint/region/bucket/prefix,
+excluding S3 Access Key and Secret Key. A desktop run reads and verifies this
+small binding before entering the engine, even with a warm head cache, so changing
+the encryption password/mode cannot publish mixed ciphertext.
+
+Existing v1 namespaces without a descriptor retain their legacy derivation scope:
+the first upgraded client must authenticate all existing canonical pointers with
+the original S3 Access Key and password, then create the binding with If-None-Match
+and read it back. After that, clients with different/rotated S3 credentials discover
+the same scope. This does not rewrite packs or move SQLite resource references.
+If credentials were already rotated and no client has the old binding, run the
+upgrade once with the original Access Key; do not delete the old data. Every active
+client should be upgraded before introducing different credentials.
+
+The desktop caches the public binding under `sync_namespace:<stable-scope>` in
+SQLite for offline local-resource lookup. A changed remote binding is rejected;
+a missing binding may be repaired from that cached identity after authenticating
+existing pointers. Cold concurrent creators adopt only a password/mode-compatible
+conditional-write winner. Cached copies are not a substitute for the per-run remote
+check. Warm desktop runs add one small descriptor GET to the engine-only request
+counts documented below; local materialization reads the cache without that GET.
 
 - `device_id` is the persisted UUID belonging to one local database.
 - `epoch` changes only when that device must publish a replacement bootstrap snapshot.
@@ -429,15 +454,12 @@ $env:CLIPBOARD_S3_TEST_BUCKET = "clipboard-sync-codex-test"
 $env:CLIPBOARD_S3_TEST_ACCESS_KEY = "..."
 $env:CLIPBOARD_S3_TEST_SECRET_KEY = "..."
 $env:CLIPBOARD_S3_TEST_PASSWORD = "..." # optional, recommended
-$env:CARGO_PROFILE_RELEASE_OPT_LEVEL = "3"
-$env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "1"
-$env:CARGO_PROFILE_RELEASE_LTO = "true"
 
-cargo test --manifest-path src-tauri/Cargo.toml --lib --release `
+cargo test --manifest-path src-tauri/Cargo.toml --lib `
   sync::v1::scale_bench::s3_segment_listing_paginates_beyond_one_thousand_objects `
   -- --ignored --exact --nocapture
 
-cargo test --manifest-path src-tauri/Cargo.toml --lib --release `
+cargo test --manifest-path src-tauri/Cargo.toml --lib `
   sync::v1::scale_bench::s3_three_device_target_scale_benchmark `
   -- --ignored --exact --nocapture
 ```
@@ -462,6 +484,10 @@ generations with vector-bounded GC, and a fresh fourth database bootstrapped sol
 v1 state.
 
 ### 2026-08-13 Windows baseline
+
+Historical optimized numbers below are not a local build recipe. Extreme release
+overrides belong only to GitHub Actions `release.yml`; local benchmark runs retain
+the repository's development profile and will be slower.
 
 An isolated MinIO `RELEASE.2025-09-07T16-13-09Z` instance on the local machine produced this
 correctness/performance baseline with encrypted metadata and the extreme release profile above:

@@ -93,9 +93,8 @@ struct SmokeScope {
 impl SmokeScope {
     fn new(config: &SmokeConfig, purpose: &str) -> Self {
         let remote_prefix = format!("clipboard-sync-smoke/{}/{}", uuid::Uuid::new_v4(), purpose);
-        // The scope identity must match the app's own derivation
-        // (`commands/sync/mod.rs`), otherwise an object written here would be
-        // invisible to the engine and vice versa.
+        // Retain a legacy credential-derived scope for frozen engine fixtures;
+        // the desktop now resolves a namespace binding before entering the engine.
         let endpoint = config.endpoint.trim().trim_end_matches('/');
         let identity = format!(
             "clipboard-sync-v1\n{endpoint}\n{}\n{}\n{}\n{}",
@@ -171,6 +170,49 @@ impl Drop for SmokeScope {
             );
         }
     }
+}
+
+#[test]
+#[ignore = "requires an explicitly configured disposable S3-compatible server"]
+fn namespace_binding_is_durable_and_cannot_be_overwritten() {
+    use clipboard_sync::v1::namespace::{resolve_namespace, NAMESPACE_KEY};
+    let config = require_config!();
+    let scope = SmokeScope::new(&config, "namespace-binding");
+    scope.ensure_bucket();
+    let store = scope.store(None);
+    let stable = hex::encode(Sha256::digest(scope.remote_prefix.as_bytes()));
+    let (binding, _) = resolve_namespace(
+        &store,
+        &stable,
+        &scope.remote_scope,
+        config.password.as_deref(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(binding.scope, stable);
+    let (second, _) = resolve_namespace(
+        &store,
+        &stable,
+        &"d".repeat(64),
+        config.password.as_deref(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(second, binding);
+    assert_eq!(
+        store
+            .put(
+                NAMESPACE_KEY,
+                b"must not replace".to_vec(),
+                PutCondition::IfAbsent
+            )
+            .unwrap(),
+        PutOutcome::PreconditionFailed
+    );
+    assert_eq!(
+        store.get(NAMESPACE_KEY).unwrap().unwrap().bytes,
+        binding.to_bytes()
+    );
 }
 
 /// A disposable on-disk database, mirroring the engine test helper.

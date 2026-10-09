@@ -201,6 +201,15 @@ impl SyncSettings {
     fn remote_scope_id(&self) -> String {
         let endpoint = self.endpoint.trim().trim_end_matches('/');
         let identity = format!(
+            "clipboard-sync-v1-namespace\n{endpoint}\n{}\n{}\n{}",
+            self.region, self.bucket, self.remote_path
+        );
+        hex::encode(Sha256::digest(identity.as_bytes()))
+    }
+
+    fn legacy_scope_id(&self) -> String {
+        let endpoint = self.endpoint.trim().trim_end_matches('/');
+        let identity = format!(
             "clipboard-sync-v1\n{endpoint}\n{}\n{}\n{}\n{}",
             self.region, self.bucket, self.remote_path, self.access_key
         );
@@ -428,7 +437,16 @@ pub fn materialize_clipboard_item(
     let Some(settings) = usable_sync_settings(&sync_config) else {
         return Ok(current);
     };
-    let remote_scope = settings.remote_scope_id();
+    let stable_scope = settings.remote_scope_id();
+    let binding = database
+        .sync_namespace_binding(&stable_scope)
+        .map_err(|e| e.to_string())?
+        .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
+        .transpose()?;
+    let remote_scope = binding
+        .as_ref()
+        .map(|v| v.scope.clone())
+        .unwrap_or_else(|| settings.legacy_scope_id());
     let refs = database
         .get_sync_resource_refs(&remote_scope, &id)
         .map_err(|error| error.to_string())?;
@@ -446,7 +464,10 @@ pub fn materialize_clipboard_item(
             return Ok(current);
         }
     };
-    let session_key = settings.session_key(&remote_scope)?;
+    let session_key = match binding {
+        Some(binding) => binding.session_key(settings.sync_password.as_deref())?,
+        None => settings.session_key(&remote_scope)?,
+    };
     let (updated, changed) = token.run(|| {
         materialize_item_resources(
             &store,
@@ -592,20 +613,37 @@ pub(super) fn run_sync_cancellable(
             .register(guard.privacy_local_only(), cancellation)?;
         (SyncSettings::from_config(&guard)?, token)
     };
-    let remote_scope = settings.remote_scope_id();
-    let session_key = settings.session_key(&remote_scope)?;
     let store = settings.object_store()?;
     let engine_paths = v1::SyncEnginePaths::from(paths.inner());
 
-    let outcome = v1::sync_database_cancellable(
-        &store,
-        database.inner(),
-        &engine_paths,
-        &remote_scope,
-        session_key.as_ref(),
-        settings.engine_options(),
-        &cancellation,
-    );
+    let outcome = cancellation.run(|| {
+        cancellation.check()?;
+        let stable_scope = settings.remote_scope_id();
+        let previous = database
+            .sync_namespace_binding(&stable_scope)
+            .map_err(|e| e.to_string())?
+            .map(|bytes| clipboard_sync::v1::namespace::Namespace::from_bytes(&bytes))
+            .transpose()?;
+        let (binding, session_key) = clipboard_sync::v1::namespace::resolve_namespace(
+            &store,
+            &stable_scope,
+            &settings.legacy_scope_id(),
+            settings.sync_password.as_deref(),
+            previous.as_ref(),
+        )?;
+        database
+            .remember_sync_namespace(&stable_scope, &binding.to_bytes())
+            .map_err(|e| e.to_string())?;
+        v1::sync_database_cancellable(
+            &store,
+            database.inner(),
+            &engine_paths,
+            &binding.scope,
+            session_key.as_ref(),
+            settings.engine_options(),
+            &cancellation,
+        )
+    });
     crate::item_operations::invalidate_desktop(app);
     let now_ms = current_time_ms();
     match outcome {
@@ -896,6 +934,11 @@ mod tests {
         equivalent_config.endpoint = Some("http://127.0.0.1:9000".to_string());
         equivalent_config.remote_path = Some("clipboard".to_string());
         let equivalent = SyncSettings::from_sync_config(&equivalent_config).unwrap();
+        equivalent_config.s3_access_key = Some("rotated-access-key".into());
+        equivalent_config.s3_secret_key = Some("rotated-secret-key".into());
+        let rotated = SyncSettings::from_sync_config(&equivalent_config).unwrap();
+        assert_eq!(first.remote_scope_id(), rotated.remote_scope_id());
+        assert_ne!(first.legacy_scope_id(), rotated.legacy_scope_id());
         let mut other_config = configured_sync();
         other_config.remote_path = Some("other".to_string());
         let other = SyncSettings::from_sync_config(&other_config).unwrap();

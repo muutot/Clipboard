@@ -194,6 +194,23 @@ impl SessionKey {
         Ok(Aes256Gcm::new(&self.key.into()))
     }
 
+    pub(crate) fn namespace_check(&self, scope: &str) -> String {
+        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&self.key).expect("HMAC key size");
+        mac.update(b"clipboard-sync-v1-namespace-check\0");
+        mac.update(scope.as_bytes());
+        hex::encode(mac.finalize().into_bytes())
+    }
+
+    pub(crate) fn verify_namespace_check(&self, scope: &str, expected: &str) -> Result<(), String> {
+        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&self.key).expect("HMAC key size");
+        mac.update(b"clipboard-sync-v1-namespace-check\0");
+        mac.update(scope.as_bytes());
+        let bytes = hex::decode(expected).map_err(|_| "invalid namespace key check")?;
+        mac.verify_slice(&bytes).map_err(|_| {
+            "sync namespace password differs; in-place password changes are unsupported".into()
+        })
+    }
+
     pub(crate) fn resource_digest(&self, plaintext_sha256: &[u8; 32]) -> String {
         let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&self.key)
             .expect("HMAC-SHA256 accepts a 256-bit key");

@@ -2,6 +2,7 @@
 
 pub mod engine;
 pub mod layout;
+pub mod namespace;
 pub mod remote;
 pub mod repository;
 pub mod resources;

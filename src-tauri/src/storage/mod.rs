@@ -9,6 +9,7 @@ mod recovery;
 mod repository;
 mod schema;
 mod search_repository;
+mod sync_namespace;
 mod sync_repository;
 mod sync_state;
 

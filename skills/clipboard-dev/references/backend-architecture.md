@@ -88,6 +88,14 @@ interrupted by the privacy policy.
 
 There is no WebDAV transport, baseline/oplog archive implementation, legacy resource pool, fallback encryption path, or historical wire reader in the source tree.
 
+Desktop sync resolves `clipboard_sync::v1::namespace` before engine work. New
+identities exclude S3 credentials; existing v1 scopes are authenticated and bound
+without rewriting data. A conditional, read-back-verified `v1/namespace.json`
+stores the public scope plus a domain-separated HMAC password check. SQLite caches
+that descriptor via `storage/sync_namespace.rs` for offline materialization and
+rejects replacement of a known binding. All resolution I/O stays inside the same
+cancellation scope. See `docs/SYNC_V1.md` for upgrading before credential rotation.
+
 ## Storage paths and ownership
 
 `src-tauri/src/storage/paths.rs` owns resource-root resolution and validation.
