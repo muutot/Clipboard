@@ -145,6 +145,14 @@ Tantivy uses the schema/query modules and a CJK-friendly n-gram tokenizer. SQLit
 
 ## OCR
 
+Worker stop revokes a per-worker publication mutex before the bounded join.
+Claims, reused results, successful inference and terminal failure writes share
+that mutex; inference itself runs outside it. A timed-out old engine may finish
+computing, but cannot write after revocation or overwrite a replacement worker.
+The running flag records actual thread lifetime, while `is_running` also checks
+publication permission. Concurrent stop callers wait for actual completion up
+to the same bound instead of treating the stop request as thread completion.
+
 `OcrEngine` supports PP-OCR, Tesseract, and no-op implementations. `OcrWorkerManager` owns a replaceable worker so engine/model/threshold changes can restart OCR without restarting the app. `OcrWorker::start` and `OcrWorkerManager::start`/`restart` return `Result`, so a thread-spawn failure degrades to unavailable OCR instead of panicking the app. OCR rows are recoverable jobs, share image-hash results, and feed search through the outbox. Model downloads verify size and the pinned upstream SHA-256 (each `PpOcrModelFile.sha256`, taken from the GitHub release asset digest) before activating the file, and only then record the digest to `<model>.sha256` (`ocr/models.rs::record_model_digest`) so a later install redownloads when the on-disk file stops matching. Digest checks are memoized by file length/mtime (`ocr/models.rs::digest_cache`), so the periodic OCR status and memory-diagnostics polling does not re-hash unchanged ONNX weights. A replaced asset, intercepted TLS stream, or corruption is rejected instead of reaching the ONNX runtime; updating a model means updating the pinned size/digest in `ocr/models.rs` together with the release tag. The Tesseract engine runs the CLI with a fixed 120 s per-image timeout; its stdout/stderr must be drained on dedicated threads while waiting (`run_tesseract_with_timeout` → `wait_for_child_with_drain`), because polling `try_wait` without reading the pipes deadlocks the child as soon as the recognized output exceeds the OS pipe buffer. Keep config, model installation/status, fallback selection, worker lifecycle, database transitions, search synchronization, settings progress, and shutdown aligned.
 
 Recognition failures are retried, but the retry queue lives in the worker

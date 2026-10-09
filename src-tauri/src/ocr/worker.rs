@@ -51,7 +51,10 @@ struct PendingRetry {
 /// clone can request a stop while the last owner is still responsible for
 /// joining the thread during drop.
 struct WorkerInner {
+    /// Revoked synchronously by stop; held only while claiming/publishing DB state.
+    publication: Arc<Mutex<bool>>,
     running: Arc<AtomicBool>,
+    stop_deadline: Mutex<Option<Instant>>,
     stop_sender: Mutex<Option<mpsc::Sender<()>>>,
     handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -104,9 +107,12 @@ impl OcrWorker {
         }
 
         let running = Arc::new(AtomicBool::new(true));
+        let publication = Arc::new(Mutex::new(true));
         let (stop_sender, stop_receiver) = mpsc::channel();
         let inner = Arc::new(WorkerInner {
+            publication: Arc::clone(&publication),
             running: Arc::clone(&running),
+            stop_deadline: Mutex::new(None),
             stop_sender: Mutex::new(Some(stop_sender)),
             handle: Mutex::new(None),
         });
@@ -115,7 +121,7 @@ impl OcrWorker {
         let handle = thread::Builder::new()
             .name("ocr-worker".to_owned())
             .spawn(move || {
-                Self::run_loop(engine, database, worker_running, stop_receiver);
+                Self::run_loop(engine, database, worker_running, publication, stop_receiver);
             })
             .map_err(|error| format!("failed to spawn OCR worker thread: {error}"))?;
 
@@ -130,21 +136,26 @@ impl OcrWorker {
     /// shared handle performs the actual join.  The stop channel wakes a
     /// worker that is waiting for its next polling interval immediately.
     pub fn stop(&self) {
-        self.inner.running.store(false, Ordering::SeqCst);
+        let deadline = *lock_unpoisoned(&self.inner.stop_deadline)
+            .get_or_insert_with(|| Instant::now() + Duration::from_secs(10));
+        // Linearize stop against every claim/result write, including a late
+        // inference returning after the bounded join. Never hold this during
+        // recognize: revocation must not wait for the engine itself.
+        *lock_unpoisoned(&self.inner.publication) = false;
 
         let sender = lock_unpoisoned(&self.inner.stop_sender).take();
         if let Some(sender) = sender {
             let _ = sender.send(());
         }
 
-        self.join_thread();
+        self.join_thread(deadline);
     }
 
     pub fn is_running(&self) -> bool {
-        self.inner.running.load(Ordering::SeqCst)
+        *lock_unpoisoned(&self.inner.publication) && self.inner.running.load(Ordering::SeqCst)
     }
 
-    fn join_thread(&self) {
+    fn join_thread(&self, deadline: Instant) {
         let handle = lock_unpoisoned(&self.inner.handle).take();
         let Some(handle) = handle else {
             // Another clone may be joining the shared handle.  Wait for the
@@ -152,10 +163,9 @@ impl OcrWorker {
             // synchronous shutdown guarantee — but never hang on it: an
             // in-flight inference (e.g. ppocr on a large image) can take
             // minutes, so bound the wait and let shutdown proceed.
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
             while self.inner.running.load(Ordering::SeqCst) && std::time::Instant::now() < deadline
             {
-                thread::yield_now();
+                thread::sleep(Duration::from_millis(10));
             }
             if self.inner.running.load(Ordering::SeqCst) {
                 crate::log_error!("[ocr] worker still running 10s after stop; detaching");
@@ -173,7 +183,6 @@ impl OcrWorker {
 
         // Bound the join: a stuck engine.recognize (ppocr has no timeout)
         // must not hang app shutdown indefinitely.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while !handle.is_finished() && std::time::Instant::now() < deadline {
             thread::sleep(std::time::Duration::from_millis(50));
         }
@@ -190,6 +199,7 @@ impl OcrWorker {
         engine: Arc<dyn OcrEngine>,
         database: Arc<Database>,
         running: Arc<AtomicBool>,
+        publication: Arc<Mutex<bool>>,
         stop_receiver: mpsc::Receiver<()>,
     ) {
         let _running_guard = RunningGuard(Arc::clone(&running));
@@ -218,7 +228,9 @@ impl OcrWorker {
 
             if let Some(mut retry) = due_retry {
                 worked = true;
-                if let Err(message) = attempt_recognition(&engine, &database, &retry.input) {
+                if let Err(message) =
+                    attempt_recognition(&engine, &database, &retry.input, &publication)
+                {
                     retry.attempts_made += 1;
                     let attempts_made = retry.attempts_made;
                     handle_recognition_failure(
@@ -227,10 +239,18 @@ impl OcrWorker {
                         attempts_made,
                         &message,
                         &mut retries,
+                        &publication,
                     );
                 }
             } else {
-                match database.claim_next_ocr() {
+                let claimed = {
+                    let active = lock_unpoisoned(&publication);
+                    if !*active {
+                        break;
+                    }
+                    database.claim_next_ocr()
+                };
+                match claimed {
                     Ok(Some(input)) => {
                         consecutive_errors = 0;
                         worked = true;
@@ -254,14 +274,26 @@ impl OcrWorker {
                                 &existing.blocks,
                                 &input.image_hash,
                             );
+                            let active = lock_unpoisoned(&publication);
+                            if !*active {
+                                break;
+                            }
                             if let Err(error) = database.save_ocr_result(&result) {
                                 let message = format!("failed to save reused OCR result: {error}");
                                 crate::log_event!("[ocr] {message} for {}", input.item_id);
                                 persist_failure(&database, &input.item_id, &message);
                             }
-                        } else if let Err(message) = attempt_recognition(&engine, &database, &input)
+                        } else if let Err(message) =
+                            attempt_recognition(&engine, &database, &input, &publication)
                         {
-                            handle_recognition_failure(&database, input, 1, &message, &mut retries);
+                            handle_recognition_failure(
+                                &database,
+                                input,
+                                1,
+                                &message,
+                                &mut retries,
+                                &publication,
+                            );
                         }
                     }
                     Ok(None) => {}
@@ -303,7 +335,12 @@ fn handle_recognition_failure(
     attempts_made: u32,
     message: &str,
     retries: &mut VecDeque<PendingRetry>,
+    publication: &Mutex<bool>,
 ) {
+    let active = lock_unpoisoned(publication);
+    if !*active {
+        return;
+    }
     if attempts_made >= MAX_RECOGNITION_ATTEMPTS {
         crate::log_error!(
             "[ocr] giving up on {} after {} attempts: {}",
@@ -333,11 +370,17 @@ fn attempt_recognition(
     engine: &Arc<dyn OcrEngine>,
     database: &Database,
     input: &OcrInput,
+    publication: &Mutex<bool>,
 ) -> Result<(), String> {
     let engine_name = engine.name();
     let model_version = engine.model_version();
 
-    match engine.recognize(input) {
+    let output = engine.recognize(input);
+    let active = lock_unpoisoned(publication);
+    if !*active {
+        return Ok(());
+    }
+    match output {
         Ok(output) => {
             let result = OcrResult::completed(
                 &input.item_id,
@@ -491,6 +534,111 @@ mod tests {
                 blocks: Vec::new(),
             })
         }
+    }
+
+    struct BlockingEngine {
+        entered: std::sync::mpsc::Sender<()>,
+        release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+        finished: std::sync::mpsc::Sender<()>,
+    }
+
+    impl OcrEngine for BlockingEngine {
+        fn name(&self) -> &'static str {
+            "old"
+        }
+        fn model_version(&self) -> &str {
+            "old-model"
+        }
+        fn recognize(&self, _: &OcrInput) -> Result<OcrOutput, OcrEngineError> {
+            self.entered.send(()).unwrap();
+            self.release
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(30))
+                .unwrap();
+            Ok(OcrOutput {
+                language: None,
+                full_text: "stale result".into(),
+                blocks: Vec::new(),
+            })
+        }
+    }
+    impl Drop for BlockingEngine {
+        fn drop(&mut self) {
+            let _ = self.finished.send(());
+        }
+    }
+
+    #[test]
+    fn stopped_inference_cannot_overwrite_a_replacement_worker_result() {
+        let database = Arc::new(Database::open_in_memory().unwrap());
+        database.save_item(&image_item("image")).unwrap();
+        database.enqueue_ocr("image").unwrap();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+        let old = OcrWorker::start(
+            Arc::new(BlockingEngine {
+                entered: entered_tx,
+                release: std::sync::Mutex::new(release_rx),
+                finished: finished_tx,
+            }),
+            Arc::clone(&database),
+        )
+        .unwrap();
+        entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        // Exercise the real bounded stop path: inference still owns its thread.
+        old.stop();
+        let replacement = OcrWorker::start(
+            Arc::new(SuccessfulEngine {
+                calls: Arc::new(AtomicUsize::new(0)),
+            }),
+            Arc::clone(&database),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while database.get_ocr_result("image").unwrap().unwrap().full_text != "recognized" {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        replacement.stop();
+        release_tx.send(()).unwrap();
+        finished_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let result = database.get_ocr_result("image").unwrap().unwrap();
+        assert_eq!(result.full_text, "recognized");
+        assert_eq!(result.model_version, "test-1");
+    }
+
+    #[test]
+    fn revoked_worker_cannot_mark_a_replacement_result_failed() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&image_item("image")).unwrap();
+        database.enqueue_ocr("image").unwrap();
+        let input = database.claim_next_ocr().unwrap().unwrap();
+        database
+            .save_ocr_result(&OcrResult::completed(
+                "image",
+                "replacement",
+                "new",
+                None,
+                "fresh",
+                &[],
+                &input.image_hash,
+            ))
+            .unwrap();
+        let mut retries = std::collections::VecDeque::new();
+        super::handle_recognition_failure(
+            &database,
+            input,
+            MAX_RECOGNITION_ATTEMPTS,
+            "late failure",
+            &mut retries,
+            &std::sync::Mutex::new(false),
+        );
+        assert!(retries.is_empty());
+        let result = database.get_ocr_result("image").unwrap().unwrap();
+        assert_eq!(result.status, OcrStatus::Completed);
+        assert_eq!(result.full_text, "fresh");
     }
 
     struct FlakyEngine {
