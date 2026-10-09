@@ -30,6 +30,9 @@
   let patternsSaving = $state(false);
   let privacyPaused = $state(false);
   let pauseLoading = $state(true);
+  let pauseReady = $state(false);
+  let pauseRevision = 0;
+  let disposed = false;
   // True on desktop macOS/Linux, where clipboard capture polls instead of
   // using native monitoring and self-trigger marking is unavailable.
   let nonWindowsDesktop = $state(false);
@@ -37,21 +40,38 @@
 
   onMount(() => {
     void loadPrivacy();
-    void loadPrivacyStatus();
     let unlistenPrivacyPause: (() => void) | undefined;
-    let disposed = false;
     if (isTauriRuntime()) {
-      void getRuntimeInfo().then((runtime) => {
-        if (runtime && runtime.operatingSystem !== "windows") {
-          nonWindowsDesktop = true;
-        }
-      });
-      listen<boolean>("privacy-pause-changed", (event) => {
+      void getRuntimeInfo()
+        .then((runtime) => {
+          if (!disposed && runtime && runtime.operatingSystem !== "windows") {
+            nonWindowsDesktop = true;
+          }
+        })
+        .catch((error) => console.error("Unable to load runtime capabilities", error));
+      // Subscribe before reading; an event received during the read is newer
+      // than its snapshot and must not be overwritten by that response.
+      void listen<boolean>("privacy-pause-changed", (event) => {
+        if (disposed) return;
+        pauseRevision += 1;
         privacyPaused = event.payload;
-      }).then((unlisten) => {
-        if (disposed) unlisten();
-        else unlistenPrivacyPause = unlisten;
-      });
+        pauseReady = true;
+      })
+        .then((unlisten) => {
+          if (disposed) {
+            unlisten();
+            return;
+          }
+          unlistenPrivacyPause = unlisten;
+          return loadPrivacyStatus();
+        })
+        .catch((error) => {
+          if (disposed) return;
+          feedback.show(error instanceof Error ? error.message : String(error), false);
+          void loadPrivacyStatus();
+        });
+    } else {
+      void loadPrivacyStatus();
     }
     return () => {
       disposed = true;
@@ -61,27 +81,40 @@
   });
 
   async function loadPrivacyStatus() {
+    if (disposed) return;
     if (!isTauriRuntime()) {
+      pauseReady = true;
       pauseLoading = false;
       return;
     }
-
+    pauseLoading = true;
+    const revision = pauseRevision;
     try {
       const status = await invoke<{ paused: boolean }>("get_privacy_status");
-      privacyPaused = status.paused;
+      if (disposed) return;
+      if (revision === pauseRevision) privacyPaused = status.paused;
+      pauseReady = true;
     } catch (error) {
-      console.error("Unable to load privacy status", error);
+      if (!disposed) console.error("Unable to load privacy status", error);
     } finally {
-      pauseLoading = false;
+      if (!disposed) pauseLoading = false;
     }
+  }
+
+  function retryConfiguration() {
+    void loadPrivacy();
+    void loadPrivacyStatus();
   }
 
   async function togglePrivacyPause() {
     if (!isTauriRuntime() || pauseLoading) return;
     pauseLoading = true;
 
+    const revision = pauseRevision;
     try {
-      privacyPaused = await invoke<boolean>("toggle_privacy_pause");
+      const paused = await invoke<boolean>("toggle_privacy_pause");
+      if (disposed) return;
+      if (revision === pauseRevision) privacyPaused = paused;
       feedback.show(_t(privacyPaused ? "capture.paused" : "capture.resumed"), true);
     } catch (error) {
       console.error("Unable to toggle privacy pause", error);
@@ -92,15 +125,19 @@
   }
 
   async function loadPrivacy() {
+    if (disposed) return;
+    loading = true;
     try {
       const loaded = await getPrivacySettings();
+      if (disposed) return;
       privacy = loaded;
       patternsText = loaded.sensitivePatterns.join("\n");
     } catch (error) {
+      if (disposed) return;
       console.error("Unable to load privacy settings", error);
       feedback.show(error instanceof Error ? error.message : String(error), false);
     } finally {
-      loading = false;
+      if (!disposed) loading = false;
     }
   }
 
@@ -154,8 +191,15 @@
 {/if}
 
 <div class="settings-scroll">
-  {#if loading || pauseLoading || !privacy}
+  {#if loading || pauseLoading}
     <div class="settings-state">{_t("storage.readingConfig")}</div>
+  {:else if !privacy || !pauseReady}
+    <div class="settings-state" role="status">
+      <p>{_t("storage.configLoadFailed")}</p>
+      <button type="button" class="settings-action-btn" onclick={retryConfiguration}
+        >{_t("storage.retryLoad")}</button
+      >
+    </div>
   {:else}
     <CustomEntry
       searchId="recording.pause"

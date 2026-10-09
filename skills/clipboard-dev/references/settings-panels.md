@@ -173,6 +173,7 @@ backend until completion or explicit cancellation.
 - Clear feedback with a timer whose cleanup is retained when the component can unmount or messages can be replaced.
 - Disable controls or show a saving/loading state during commands that cannot safely overlap.
 - Roll optimistic switches back when the backend save or OS synchronization fails.
+- Privacy pause hydration subscribes before fetching status and ignores a snapshot when a newer pause event has arrived. Failed initial status reads retain a retry gate; teardown suppresses late loads and releases even a late listener registration.
 - `SensitiveContentSettingsPanel` keeps pattern drafts separate from saved privacy settings. A save response updates only the submitted field; pattern normalization replaces the editor only if its text is unchanged since submission. Toggling local-only must never reset the pattern draft.
 - Keep restart-required state explicit for path/config changes that do not apply live.
 - State a platform limitation in the panel, not only in the README. Read the authoritative
