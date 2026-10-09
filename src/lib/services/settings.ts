@@ -6,6 +6,7 @@ import {
 } from "$lib/utils/settings-patch";
 import { listen } from "@tauri-apps/api/event";
 import { normalizeSavedSearches } from "$lib/utils/saved-searches";
+import { normalizeCustomCss } from "$lib/utils/custom-css";
 import { get, writable } from "svelte/store";
 import { setLocale } from "$lib/i18n";
 import { invokeTauri, isTauriRuntime } from "$lib/services/runtime";
@@ -58,6 +59,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   alwaysOnTop: false,
   useSystemTitleBar: false,
   theme: "dark",
+  customCssEnabled: false,
+  customCss: "",
   themeColors: { ...DARK_THEME_COLORS },
   customPresets: [],
   activePresetId: undefined,
@@ -485,6 +488,11 @@ function normalizeGeneralSettings(
     defaultSettings.useSystemTitleBar,
   );
   result.theme = validTheme(source.theme ?? fallback("theme"), "dark");
+  result.customCssEnabled = booleanValue(
+    source.customCssEnabled ?? fallback("customCssEnabled"),
+    false,
+  );
+  result.customCss = normalizeCustomCss(source.customCss ?? fallback("customCss"));
   result.themeColors = normalizeThemeColors(source.themeColors ?? fallback("themeColors"), {
     ...DARK_THEME_COLORS,
   });

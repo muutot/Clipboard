@@ -1,6 +1,27 @@
 import type { LocaleDefinition } from "../types";
 
 const zhCN: LocaleDefinition = {
+  customCss: {
+    title: "自定义 CSS",
+    description: "使用自己的样式表覆盖内置外观。",
+    enabled: "启用自定义 CSS",
+    enabledDescription: "应用于所有应用窗口。关闭后仍保留代码。",
+    editor: "样式表",
+    editorHint:
+      "规则优先于内置样式和主题设置。支持选择器、变量和条件规则，不支持外部 @import；无效声明由浏览器忽略。",
+    save: "保存并应用",
+    resetDraft: "撤销编辑",
+    example: "插入示例",
+    clear: "清空编辑器",
+    saved: "自定义 CSS 已应用并保存",
+    failed: "自定义 CSS 保存失败",
+    invalid: "未找到有效的 CSS 规则",
+    limit: "CSS 最多支持 65,536 个字符",
+    recovery:
+      "若样式遮住界面，可在应用窗口内按 Ctrl+Shift+F12（macOS 为 Cmd+Shift+F12）关闭自定义样式，代码仍会保留。",
+    disabled: "已关闭自定义 CSS，代码已保留",
+    unsaved: "尚未保存",
+  },
   operations: {
     cancel: "取消当前任务",
     cancelling: "正在取消…",

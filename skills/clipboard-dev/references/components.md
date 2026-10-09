@@ -190,6 +190,13 @@ Do not treat its long scoped style block as a copy template. Use `settings-share
 
 ### Child settings panels
 
+`CustomCssSettingsPanel.svelte` is the lazy Appearance → Custom CSS section. It waits for
+shared settings initialization, retains an unsaved draft across external updates and offers
+explicit save/apply, discard, example and clear actions. The enable switch keeps saved code.
+Its subscription belongs to `onMount`: reading and writing the draft inside an effect-owned
+immediate subscription can create a reactive update loop. Shared cards, controls and feedback
+remain authoritative; only the monospace editor geometry is scoped locally.
+
 | Component                              | Focus                                                                                                                                                                                                                                            | Extra routing props                                                      |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
 | `GeneralGeneralSettingsPanel.svelte`   | Language, launch-at-startup/close-to-tray (via the shared `windowConfig` store), recycle bin, toast notifications, system title bar, settings close button, log level (`logLevel` select)                                                        | none beyond shell props                                                  |

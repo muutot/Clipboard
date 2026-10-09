@@ -109,6 +109,11 @@
       props: () => ({ onclose, showHeader: false }),
     },
     {
+      sections: ["custom_css"],
+      load: () => import("$lib/components/CustomCssSettingsPanel.svelte"),
+      props: () => ({ onclose, showHeader: false }),
+    },
+    {
       sections: ["icons"],
       load: () => import("$lib/components/IconColorsSettingsPanel.svelte"),
       props: () => ({ onclose, showHeader: false }),

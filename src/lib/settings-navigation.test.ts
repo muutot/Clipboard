@@ -9,6 +9,10 @@ describe("resolveSettingsNavPath", () => {
       "storage.generalTab",
       "storage.generalGeneralTab",
     ]);
+    expect(resolveSettingsNavPath(t, "custom_css")).toEqual([
+      "storage.appearanceTab",
+      "customCss.title",
+    ]);
     expect(resolveSettingsNavPath(t, "general_window")).toEqual([
       "storage.generalTab",
       "storage.generalWindowTab",

@@ -44,6 +44,21 @@ Do not broadly restyle the main page as part of a settings task. Inspect it to b
 
 ## Theme color contract
 
+User-authored CSS is an explicit opt-in override of the approved default design.
+`src/app.html` declares `clipboard-custom-overrides` before any built-in layers.
+`utils/custom-css.ts` uses browser CSSOM, adds importance to style declarations (not
+keyframes/font descriptors), including `CSSNestedDeclarations` inside/after nested
+conditional rules, and emits one sheet inside that layer. Important layer order
+is reversed, so these declarations outrank built-in unlayered styles and normal inline
+theme variables even when a lazy component loads later. Do not put built-in styles in
+this reserved layer. Keep imports excluded and the existing CSP intact.
+
+The root layout applies changes to every window and reserves Ctrl/Cmd+Shift+F12 while
+enabled to disable CSS without deleting the source. Do not implement this override by
+regex-appending importance, rewriting every DOM inline style, or widening network policy.
+Browser/user-agent and inline-important/transition rules retain their native cascade
+semantics; see `docs/CUSTOM_CSS.md`.
+
 The current `ThemeColors` interface has 20 semantic values:
 
 | CSS variable          | ThemeColors key    | Purpose                                           |

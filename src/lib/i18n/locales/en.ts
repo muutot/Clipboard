@@ -1,6 +1,27 @@
 import type { LocaleDefinition } from "../types";
 
 const en: LocaleDefinition = {
+  customCss: {
+    title: "Custom CSS",
+    description: "Override built-in appearance with your own stylesheet.",
+    enabled: "Enable custom CSS",
+    enabledDescription: "Applies to all app windows. Turning this off keeps your code.",
+    editor: "Stylesheet",
+    editorHint:
+      "Rules take priority over built-in styles and theme settings. Supports selectors, variables and conditional rules; external @import is not supported. Invalid declarations are ignored by the browser.",
+    save: "Save and apply",
+    resetDraft: "Discard edits",
+    example: "Insert example",
+    clear: "Clear editor",
+    saved: "Custom CSS applied and saved",
+    failed: "Could not save custom CSS",
+    invalid: "No valid CSS rules found",
+    limit: "CSS must be at most 65,536 characters",
+    recovery:
+      "If styles hide the interface, press Ctrl+Shift+F12 (Cmd+Shift+F12 on macOS) in an app window to disable them without deleting your code.",
+    disabled: "Custom CSS disabled; code retained",
+    unsaved: "Unsaved edits",
+  },
   operations: {
     cancel: "Cancel current task",
     cancelling: "Cancelling…",

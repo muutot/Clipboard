@@ -124,6 +124,13 @@ materialization uses the cached binding and retains legacy lookup before upgrade
 
 ### General settings
 
+`customCssEnabled: boolean` and `customCss: string` default to false/empty and are typed
+in Rust, rather than depending on flattened extras. They use existing nested settings
+patches, `set_general_settings`, `general-settings-changed` and startup hydration.
+The backend rejects source over 65,536 UTF-16 units before mutation. The toggle and the
+recovery shortcut disable application while preserving the source; drafts are local until
+save. This is local appearance configuration, not replicated clipboard content.
+
 `savedSearches` is a frontend-owned flattened general setting, defaulting to an empty
 array. Each entry carries id/name/query/activeFilter/tagFilter/sourceAppFilter/dateFilter/
 sortRules. The existing config patch serializer preserves it; frontend normalization

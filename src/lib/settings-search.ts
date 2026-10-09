@@ -51,6 +51,13 @@ const entry = (
 ): SettingsSearchItemTemplate => ({ id, ...target, title, description, aliases });
 
 const SECTION_SEARCH_TEXT: Record<SettingsSection, readonly SettingsSearchText[]> = {
+  custom_css: [
+    i18n("storage.appearanceTab"),
+    i18n("customCss.title"),
+    "CSS",
+    "样式表",
+    "stylesheet",
+  ],
   general_search: [i18n("storage.generalTab"), i18n("storage.generalSearchTab"), "搜索"],
   general_items: [
     i18n("storage.generalTab"),
@@ -186,6 +193,13 @@ const STATISTICS_TAB_SEARCH_TEXT: Record<StatisticsTab, readonly SettingsSearchT
 };
 
 export const SETTINGS_SEARCH_ITEM_TEMPLATES: readonly SettingsSearchItemTemplate[] = [
+  entry(
+    "appearance.custom-css",
+    { section: "custom_css" },
+    i18n("customCss.title"),
+    i18n("customCss.description"),
+    ["CSS", "自定义样式", "stylesheet", "覆盖", "override"],
+  ),
   entry(
     "general.language",
     { section: "general_general" },

@@ -93,6 +93,8 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["window"]["closeToTray"], true);
     assert_eq!(saved["window"]["singleInstance"], true);
     assert_eq!(saved["general"]["language"], "system");
+    assert_eq!(saved["general"]["customCssEnabled"], false);
+    assert_eq!(saved["general"]["customCss"], "");
     assert_eq!(saved["general"]["fontSizes"]["base"], 14);
     assert_eq!(saved["general"]["fontSizes"]["secondary"], 11);
     assert_eq!(saved["general"]["display"]["showSecondaryText"], true);
@@ -117,6 +119,34 @@ fn creates_the_single_project_configuration_file() {
     assert_eq!(saved["general"]["pageSizeLimit"], 500);
     assert_eq!(saved["general"]["searchPageSizeLimit"], 500);
     assert_eq!(saved["general"]["maxTextCaptureBytes"], 500_000);
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn custom_css_persists_exactly_and_rejects_oversized_updates_atomically() {
+    let project = temporary_test_directory("custom-css");
+    let mut store = ConfigStore::load(&project).unwrap();
+    let mut settings = store.general_settings().clone();
+    settings.custom_css_enabled = true;
+    settings.custom_css = "/* 中文 */\n:root { --accent: #123456; }\n".into();
+    store.set_general_settings(settings.clone()).unwrap();
+    assert_eq!(
+        ConfigStore::load(&project).unwrap().general_settings(),
+        &settings
+    );
+    let previous = fs::read(store.path()).unwrap();
+    let mut too_large = settings.clone();
+    // Rust UTF-8 bytes and JavaScript UTF-16 lengths differ for this character.
+    too_large.custom_css = "😀".repeat(32_769);
+    assert!(store.set_general_settings(too_large).is_err());
+    assert_eq!(fs::read(store.path()).unwrap(), previous);
+    assert_eq!(store.general_settings(), &settings);
+    settings.custom_css_enabled = false;
+    store.set_general_settings(settings.clone()).unwrap();
+    assert_eq!(
+        ConfigStore::load(&project).unwrap().general_settings(),
+        &settings
+    );
     fs::remove_dir_all(project).unwrap();
 }
 

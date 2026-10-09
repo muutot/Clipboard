@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyThemeColors } from "$lib/utils/theme";
+import { applyCustomCss } from "$lib/utils/custom-css";
 import { isTauriRuntime } from "$lib/services/runtime";
 import type {
   FontSizeSettings,
@@ -69,4 +70,5 @@ export function applyGeneralSettingsToDocument(settings: GeneralSettings): void 
   applyThemeColors(settings.themeColors);
   applyWindowEffectToDocument(settings.windowEffect);
   applyWindowOpacityToDocument(settings.windowTransparency, settings.windowOpacityAffectsText);
+  applyCustomCss(settings.customCss, settings.customCssEnabled);
 }

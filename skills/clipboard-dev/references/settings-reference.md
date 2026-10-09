@@ -104,6 +104,13 @@ History capacity changes apply immediately: a larger cap resumes pagination, a s
 
 ## Theme and sort structures
 
+`customCssEnabled` defaults to false and `customCss` to an empty string; both are explicit
+Rust `GeneralConfig` fields. Code is preserved verbatim up to 65,536 UTF-16 units. The
+frontend normalizer ignores malformed/oversized values without truncating a rule; backend
+saves reject over-limit input before changing memory or disk. Disabling preserves code.
+The Custom CSS panel stages a draft until Save and apply, then uses the existing patch/flush
+and cross-window event flow. See `docs/CUSTOM_CSS.md` for cascade and recovery semantics.
+
 | Field             | Default                                        | Contract                                                                                                |
 | ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `themeColors`     | copy of `DARK_THEME_COLORS`                    | 20 validated hex colors; optional in the interface for compatibility but always filled by normalization |

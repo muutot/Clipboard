@@ -79,6 +79,12 @@ impl ConfigStore {
     }
 
     pub fn set_general_settings(&mut self, settings: GeneralConfig) -> Result<(), StorageError> {
+        if settings.custom_css.encode_utf16().count() > 65_536 {
+            return Err(StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "custom CSS exceeds 65,536 characters",
+            )));
+        }
         let previous_settings = self.config.general.clone();
         let previous_present = self.general_settings_present;
         self.config.general = settings;

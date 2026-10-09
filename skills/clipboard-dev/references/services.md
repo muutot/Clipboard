@@ -78,13 +78,19 @@ localized by the caller; the monitor retains no clipboard payload.
 
 ## UI-only services
 
+`utils/custom-css.ts` parses with CSSOM in a constructed stylesheet or an inert document,
+promotes style declarations, caches the last compiled source and owns one style element.
+`applyGeneralSettingsToDocument` applies it after the theme/font values. The root layout
+also subscribes specifically to CSS settings so every WebView responds to saved changes;
+its capture-phase recovery key listener and subscription are removed on teardown.
+
 | Service                 | Responsibility                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------- |
 | `toast.ts`              | listener-based toast pub/sub; public producer is `showToast(message, type?, duration?)` |
 | `paths.ts`              | writable `iconsDir` used to resolve source icon keys                                    |
 | `settings-bootstrap.ts` | applies font/theme variables to `document.documentElement`                              |
 
-`settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping. Long-lived windows that outlive the settings window (settings page, float panel) subscribe to `generalSettings` and re-apply it to the document on remote changes; the root layout only bootstraps once at load.
+`settings-bootstrap.ts` is used at startup; per-panel live preview code must remain consistent with it. Do not create a second divergent theme/font mapping. Long-lived windows that outlive the settings window (settings page, float panel) subscribe to `generalSettings` and re-apply it to the document on remote changes; the root layout bootstraps once at load and owns the live custom CSS subscription.
 
 ## Main route state boundaries
 

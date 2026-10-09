@@ -25,6 +25,24 @@ const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const broadcast = () => bridge.listeners.forEach((listener) => listener({ payload: copy(server) }));
 const writes = () => bridge.invoke.mock.calls.filter(([name]) => name === "set_general_settings");
 
+it("preserves custom CSS across windows, disable and restart without clobbering theme edits", async () => {
+  const first = await loadedStore();
+  const second = await loadedStore();
+  const css = "/* 中文; } */\n:root { --accent: #123456; }\n";
+  first.merge({ customCss: css, customCssEnabled: true });
+  second.updateSetting("theme", "light");
+  await Promise.all([first.flush(), second.flush()]);
+  expect(server.customCss).toBe(css);
+  expect(server.theme).toBe("light");
+  expect(get(second).customCssEnabled).toBe(true);
+  second.updateSetting("customCssEnabled", false);
+  await second.flush();
+  const reopened = await loadedStore();
+  expect(get(reopened).customCss).toBe(css);
+  expect(get(first).customCssEnabled).toBe(false);
+  expect(get(reopened).customCssEnabled).toBe(false);
+});
+
 it("persists saved search state and hydrates another window", async () => {
   const first = await loadedStore();
   const second = await loadedStore();

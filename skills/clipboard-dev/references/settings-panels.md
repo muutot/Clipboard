@@ -34,6 +34,10 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
+Appearance also includes the `custom_css` secondary section, implemented by the lazy
+`CustomCssSettingsPanel`. Its searchable card is `appearance.custom-css`; the parent
+owns its title/breadcrumb, as with other appearance panels.
+
 `src/lib/settings-navigation.ts::SETTINGS_NAV_GROUP_DEFINITIONS` is the shell navigation source of truth. It defines section/statistics-tab types, category order/icons, default targets, secondary-tab order, translated labels, section title/description keys, and breadcrumb behavior; the sidebar, secondary row, and settings-search paths resolve from that module. Update the descriptor plus settings-search item metadata together when a section is added, renamed, or moved.
 
 ## Approved shell hierarchy

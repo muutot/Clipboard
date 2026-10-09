@@ -382,6 +382,8 @@ export interface GeneralSettings {
   alwaysOnTop: boolean;
   useSystemTitleBar: boolean;
   theme: ThemeMode;
+  customCssEnabled: boolean;
+  customCss: string;
   themeColors?: ThemeColors;
   customPresets: ThemePreset[];
   activePresetId?: string;

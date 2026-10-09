@@ -1,6 +1,25 @@
 export type Locale = "zh-CN" | "en";
 
 export interface LocaleDefinition {
+  customCss: {
+    title: string;
+    description: string;
+    enabled: string;
+    enabledDescription: string;
+    editor: string;
+    editorHint: string;
+    save: string;
+    resetDraft: string;
+    example: string;
+    clear: string;
+    saved: string;
+    failed: string;
+    invalid: string;
+    limit: string;
+    recovery: string;
+    disabled: string;
+    unsaved: string;
+  };
   operations: {
     cancel: string;
     cancelling: string;
