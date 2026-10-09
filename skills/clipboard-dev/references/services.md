@@ -67,7 +67,7 @@ Keep frontend mapping aligned with Rust serde names and `metadata_json`. `loadDe
 
 Do not silently return `null` from a new wrapper unless the caller can distinguish “not in Tauri” from a command failure. Preserve the existing wrapper's error semantics when extending it.
 
-## UI-only services
+## Background operation monitors
 
 `background-operations.svelte.ts` creates a mounted monitor for one backend slot
 (`tags`, `backup`, `sync`). It polls `get_background_operation` every 500 ms after the
@@ -75,6 +75,8 @@ previous poll settles, discards stale responses, and clears timers on teardown.
 `cancel_background_operation` requires the snapshot ID so an old window cannot cancel
 a newer run. Remounts recover the current process-wide task. Cancellation errors are
 localized by the caller; the monitor retains no clipboard payload.
+
+## UI-only services
 
 | Service                 | Responsibility                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------- |

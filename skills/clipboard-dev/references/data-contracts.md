@@ -321,14 +321,16 @@ Tag management runs in the separate settings WebviewWindow, so the tag panel emi
 
 ### Combined search filters
 
-Portable-backup preview validates rows incrementally and keeps only identities and resource
-metadata across rows. Restore still retains all decoded rows for atomic apply. Both enforce
-the same record, checksum, count, path and duplicate constraints; changing retention must
-not bypass validation of already-present records or the final cancellation boundary.
-
 `search_clipboard_items(query, limit?, offset?, sortRules?, filter?)` accepts the history
 filter payload. The cursor is ignored: search retains its sorted-result offset pagination.
 Filters constrain candidate selection before the limit and total count. Single-character
 and date-only queries use this command even when their records are not loaded in the UI.
+
+### Portable backups
+
+Portable-backup preview validates rows incrementally and keeps only identities and resource
+metadata across rows. Restore still retains all decoded rows for atomic apply. Both enforce
+the same record, checksum, count, path and duplicate constraints; changing retention must
+not bypass validation of already-present records or the final cancellation boundary.
 
 Portable backups use manifest.json {version:1,itemCount,entries:[{name,bytes,sha256}]} plus records.jsonl and resources/*. Preview returns fingerprint, itemCount, duplicateCount, resourceCount and resourceBytes; restore requires the same fingerprint and validates again from an immutable private copy. Bounds: 100,000 records, 32 MiB per JSONL row, 512 MiB total JSONL, 2 GiB per resource, 16 GiB total resources, 16 MiB manifest. Restore retains records in memory within the JSONL input bound; binaries are streamed and temporary disk space can approach twice the archive size. Missing media, ID conflicts, unsafe/duplicate entries, unknown versions and bad checksums reject the operation before local data is changed. Restoring does not load configuration/secrets or recycle-bin data. Preview/restore may observe different duplicate counts if local capture proceeds between them.
