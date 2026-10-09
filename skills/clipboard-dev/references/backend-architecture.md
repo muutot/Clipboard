@@ -243,6 +243,11 @@ atomic publication. File size limits bound reads, not the helper's temporary dis
 writes before its deadline. Portable fixture tests cover orchestration/cleanup;
 native macOS tools and process-group behavior still require macOS CI/runtime.
 
+Linux icon caching also stages source copies with `store_atomically`; failed
+copies cannot leave a partial final cache file for later lookups to reuse.
+Existing icon-lookup fixtures and shared partial-write regressions cover this path's
+portable contracts. Native theme lookup remains a Linux runtime check.
+
 The Linux ONNX compatibility shim's `_M_replace_cold` exports must accept the
 implicit C++ `this` pointer before their five explicit arguments, for both char
 and wchar_t. `scripts/test-glibc-compat.sh` exercises actual C++ member-call ABI

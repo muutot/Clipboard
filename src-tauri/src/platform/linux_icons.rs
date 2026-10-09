@@ -180,7 +180,12 @@ pub fn ensure_cached_app_icon(icons_dir: &Path, app_name: &str, exe_path: &str) 
         .unwrap_or("png");
     let name = format!("{key}.{extension}");
     std::fs::create_dir_all(icons_dir).ok()?;
-    std::fs::copy(&source, icons_dir.join(&name)).ok()?;
+    // Failed copies can leave partial bytes. Publish only the completed stage;
+    // otherwise the next lookup would permanently reuse the damaged cache file.
+    crate::content::file_store::store_atomically(&icons_dir.join(&name), |temporary| {
+        std::fs::copy(&source, temporary).map(|_| ())
+    })
+    .ok()?;
     Some(name)
 }
 
