@@ -4,6 +4,67 @@ use serde_json::{json, Value};
 
 use crate::config::ConfigStore;
 
+#[cfg(target_os = "windows")]
+#[test]
+fn corrupt_config_must_be_preserved_before_loading_defaults() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let project = temporary_test_directory("locked-corrupt");
+    fs::create_dir_all(project.join("conf")).unwrap();
+    let path = project.join("conf/conf.json");
+    let bytes = b"{\"storage\":{\"dataDirectory\":\"recover-this\"},";
+    fs::write(&path, bytes).unwrap();
+    // Permit reads while denying rename/delete, as an antivirus or editor can.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(&path)
+        .unwrap();
+    assert!(ConfigStore::load(&project).is_err());
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    drop(held);
+    let store = ConfigStore::load(&project).unwrap();
+    assert!(store.path().exists());
+    assert!(fs::read_dir(project.join("conf"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .any(|entry| entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("conf.json.corrupt-")
+            && fs::read(entry.path()).unwrap() == bytes));
+    fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn consecutive_corrupt_configs_preserve_every_quarantined_generation() {
+    let project = temporary_test_directory("corrupt-generations");
+    fs::create_dir_all(project.join("conf")).unwrap();
+    for bytes in [
+        b"first truncated".as_slice(),
+        b"second truncated".as_slice(),
+    ] {
+        fs::write(project.join("conf/conf.json"), bytes).unwrap();
+        ConfigStore::load(&project).unwrap();
+    }
+    let mut quarantined = fs::read_dir(project.join("conf"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("conf.json.corrupt-")
+        })
+        .map(|entry| fs::read(entry.path()).unwrap())
+        .collect::<Vec<_>>();
+    quarantined.sort();
+    assert_eq!(
+        quarantined,
+        vec![b"first truncated".to_vec(), b"second truncated".to_vec()]
+    );
+    fs::remove_dir_all(project).unwrap();
+}
+
 #[test]
 fn creates_the_single_project_configuration_file() {
     let project = temporary_test_directory("default");

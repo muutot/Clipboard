@@ -49,6 +49,10 @@ Use `Mutex`/`Arc` according to existing ownership. Never hold a config or ingest
 
 `storage/recovery.rs` validates SQLite integrity, rotates current/previous backups, quarantines damaged files, restores the first valid backup, and causes the derived search index to be quarantined/rebuilt after recovery. A deliberate schema reset deletes obsolete backup generations before writing a fresh v1 backup, so discarded rows cannot return through recovery. Persistence changes must preserve atomic config writes, recovery, backup refresh, and rebuildability of derived data.
 
+Corrupt configuration is moved to a UUID-suffixed quarantine before defaults are
+loaded. A failed move returns an error with the original untouched; it must not
+delete the only recovery copy or claim that default settings were persisted.
+
 `export::stream` writes JSON/CSV/plain text incrementally from `Database::visit_active_items`, a single read transaction with one materialized row. GUI and CLI file exports use a buffered temporary file, fsync and atomic replacement; write failure preserves the destination. IPC/stdout compatibility wrappers still return a complete String. The visitor holds the database mutex and must not reenter it. A real WAL regression mutates recency on a second connection while exporting and verifies complete unique IDs and original snapshot values.
 
 Plain-text import recognizes a `---` delimiter line with LF or CRLF endings, while preserving line endings inside each record. Delimiters at the file boundary create empty chunks that are ignored; they never create clipboard records. The CRLF regression imports two records and verifies the first record's internal CRLF bytes.

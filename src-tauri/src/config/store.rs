@@ -3,7 +3,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde_json::Value;
@@ -22,27 +21,19 @@ impl ConfigStore {
             match Self::parse_saved_config(&bytes) {
                 Ok(parsed) => parsed,
                 Err(error) => {
-                    // A truncated or otherwise unparsable file must not leave
-                    // the app unable to start. Quarantine the corrupt bytes
-                    // for inspection and continue with defaults.
-                    let stamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .map(|elapsed| elapsed.as_secs())
-                        .unwrap_or(0);
-                    let quarantined =
-                        config_directory.join(format!("{CONFIG_FILE_NAME}.corrupt-{stamp}"));
+                    // Preserve each damaged generation before using defaults.
+                    // A failed quarantine must not silently discard paths or
+                    // privacy settings, nor overwrite a prior same-second copy.
+                    let quarantined = config_directory.join(format!(
+                        "{CONFIG_FILE_NAME}.corrupt-{}",
+                        uuid::Uuid::new_v4()
+                    ));
+                    fs::rename(&path, &quarantined)?;
                     crate::log_error!(
                         "[config] {} is unreadable ({error}); quarantining it as {} and starting with defaults",
                         path.display(),
                         quarantined.display()
                     );
-                    if fs::rename(&path, &quarantined).is_err() {
-                        // The rename can fail (e.g. the file is locked by
-                        // antivirus or another process). Remove the corrupt
-                        // file so the default rewrite below still runs instead
-                        // of re-reading the same bytes on every launch.
-                        let _ = fs::remove_file(&path);
-                    }
                     (AppConfig::default(), true)
                 }
             }
