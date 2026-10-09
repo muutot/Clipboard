@@ -530,6 +530,9 @@ pub(crate) fn run_capture_loop(
                     break;
                 }
 
+                #[cfg(target_os = "linux")]
+                let _helper_budget =
+                    platform::bounded_command::CaptureBudget::enter(stop_flag.clone());
                 let app_info = platform::platform().get_foreground_app();
                 let source_app = foreground_app_name(&app_info);
                 if capture_state.should_skip(source_app.as_deref(), None) {
@@ -578,6 +581,10 @@ pub(crate) fn run_capture_loop(
                 // that moved between two ordinary windows.
                 let app_info_after = platform::platform().get_foreground_app();
                 let source_app_after = foreground_app_name(&app_info_after);
+                #[cfg(target_os = "linux")]
+                if platform::bounded_command::capture_aborted() {
+                    continue;
+                }
                 if source_app_after != source_app
                     && capture_state.should_skip(source_app_after.as_deref(), text.as_deref())
                 {

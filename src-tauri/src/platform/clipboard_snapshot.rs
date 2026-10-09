@@ -40,10 +40,18 @@ pub fn read_consistent_snapshot(
         let before = platform.read_clipboard_sequence();
         let snapshot = ClipboardSnapshot::read(platform, limit);
         let after = platform.read_clipboard_sequence();
+        #[cfg(target_os = "linux")]
+        if super::bounded_command::capture_aborted() {
+            return None;
+        }
         match (before, after) {
             (Some(a), Some(b)) if a == b => return Some(snapshot),
             (None, None) => {
                 let repeated = ClipboardSnapshot::read(platform, limit);
+                #[cfg(target_os = "linux")]
+                if super::bounded_command::capture_aborted() {
+                    return None;
+                }
                 if snapshot == repeated && platform.read_clipboard_sequence().is_none() {
                     return Some(repeated);
                 }

@@ -162,6 +162,16 @@ The clipboard monitor produces change notifications; a capture thread reads plat
 
 macOS RTF capture reads `public.rtf` as NSData (16 MiB allocation ceiling), preserves non-ASCII code-page bytes as RTF hex escapes, and rejects raw `\\bin` runs because the stored RTF contract is a UTF-8 string. HTML/plain-text capture remains available when RTF is rejected. Native pasteboard behavior requires macOS verification.
 
+Linux `wl-paste`, `xclip` and foreground helpers use `platform/bounded_command.rs`:
+600 ms per subprocess and a 64 MiB stdout ceiling. Capture supplies a shared 3 s
+budget and stop flag across foreground sampling, formats and consistency retries;
+timeout/overflow discards the capture instead of saving a partial format set.
+Wayland quick-paste helpers use the same runner with a 1 MiB ceiling. Unix pipes
+are nonblocking and each helper gets its own process group, killed/reaped on exit;
+no reader thread waits indefinitely for inherited stdout. Windows fixture tests
+use `PeekNamedPipe`; actual Linux adapters and descendant cleanup need Linux CI.
+These bounds do not make unrelated native display/filesystem calls preemptible.
+
 ## Privacy and cleanup
 
 Privacy pause, ignored applications, and sensitive-source checks happen before persistence, file writes, OCR, or index work. Cleanup reads current config periodically, protects favorites, respects recycle-bin policy, removes database rows through repository rules, and removes only positively owned orphan resources. The retention inputs are snapshotted into a `CleanupPolicy` value (`retention_days`, `max_items`, `recycle_bin_days`) before any work starts: the cleanup walks every resource root and canonicalizes every referenced path, so holding `Mutex<ConfigStore>` across it would stall every other config-reading command and the auto-sync worker's per-tick read. `enforce_history_cleanup_with_policy` therefore takes no `ConfigStore` at all, and the scheduled worker keeps loading its own store per tick.

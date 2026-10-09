@@ -113,6 +113,9 @@ impl crate::platform::PlatformClipboard for LinuxWaylandPlatform {
     }
 }
 
+#[cfg(target_os = "linux")]
+use super::bounded_command::BoundedCommandExt;
+
 // ---------------------------------------------------------------------------
 // WaylandCapabilities
 // ---------------------------------------------------------------------------
@@ -851,7 +854,7 @@ impl WaylandCompositorInfo {
 pub fn read_clipboard_text() -> Option<String> {
     std::process::Command::new("wl-paste")
         .args(["--no-newline"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
         .ok()
         .and_then(|output| {
             if output.status.success() {
@@ -872,7 +875,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     for target in &["image/png", "image/bmp", "image/jpeg", "image/tiff"] {
         if let Ok(output) = std::process::Command::new("wl-paste")
             .args(["--type", target])
-            .output()
+            .bounded_output(64 * 1024 * 1024)
         {
             if output.status.success() && !output.stdout.is_empty() {
                 if let Some(img) = crate::content::hash::decode_image_bytes(&output.stdout) {
@@ -896,7 +899,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
 pub fn read_clipboard_html() -> Option<String> {
     if let Ok(output) = std::process::Command::new("wl-paste")
         .args(["--type", "text/html"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).ok()?;
@@ -919,7 +922,7 @@ pub fn read_clipboard_html() -> Option<String> {
 pub fn read_clipboard_rtf() -> Option<String> {
     if let Ok(output) = std::process::Command::new("wl-paste")
         .args(["--type", "text/rtf"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).ok()?;
@@ -942,7 +945,7 @@ pub fn read_clipboard_rtf() -> Option<String> {
 pub fn read_clipboard_file_paths() -> Vec<String> {
     if let Ok(output) = std::process::Command::new("wl-paste")
         .args(["--type", "text/uri-list"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).unwrap_or_default();
@@ -963,7 +966,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
     // Try Sway first, then Hyprland, then fallback to /proc via xdotool (XWayland)
     let pid = std::process::Command::new("swaymsg")
         .args(["-t", "get_seats"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
         .ok()
         .and_then(|output| {
             if output.status.success() {
@@ -984,7 +987,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             // Hyprland
             std::process::Command::new("hyprctl")
                 .args(["activewindow"])
-                .output()
+                .bounded_output(64 * 1024 * 1024)
                 .ok()
                 .and_then(|output| {
                     if output.status.success() {
@@ -1003,7 +1006,7 @@ pub fn get_foreground_app() -> crate::platform::ForegroundApp {
             // Fallback: use xdotool (works in XWayland sessions)
             std::process::Command::new("xdotool")
                 .args(["getactivewindow", "getwindowpid"])
-                .output()
+                .bounded_output(64 * 1024 * 1024)
                 .ok()
                 .and_then(|output| {
                     if output.status.success() {

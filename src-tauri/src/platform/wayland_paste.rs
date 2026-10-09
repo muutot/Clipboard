@@ -2,55 +2,21 @@
 //! command and wtype. Other Wayland desktops return an explicit unsupported error.
 use super::quick_paste::Target;
 use std::{
-    io::Read,
-    process::{Command, Stdio},
+    process::Command,
     thread,
     time::{Duration, Instant},
 };
 
 fn command(program: &str, args: &[&str]) -> Result<Vec<u8>, String> {
-    let mut child = Command::new(program)
+    use super::bounded_command::BoundedCommandExt;
+    let output = Command::new(program)
         .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| format!("{program}: {e}"))?;
-    let stdout = child.stdout.take().ok_or("missing command output")?;
-    let reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout
-            .take(1024 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
-    let deadline = Instant::now() + Duration::from_millis(600);
-    let result = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                break if status.success() {
-                    Ok(())
-                } else {
-                    Err(format!("{program} failed"))
-                }
-            }
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Err(format!("{program} timed out or could not be waited"));
-            }
-        }
-    };
-    let bytes = reader
-        .join()
-        .map_err(|_| "command reader panicked")?
-        .map_err(|e| e.to_string())?;
-    result?;
-    if bytes.len() > 1024 * 1024 {
-        return Err("compositor response too large".into());
+        .bounded_output(1024 * 1024)
+        .map_err(|error| format!("{program}: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("{program} failed"));
     }
-    Ok(bytes)
+    Ok(output.stdout)
 }
 
 fn has_command(name: &str) -> bool {

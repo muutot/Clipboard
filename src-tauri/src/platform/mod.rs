@@ -34,6 +34,8 @@ pub mod windows_hotkey;
 // ---------------------------------------------------------------------------
 
 pub mod autostart;
+#[cfg(any(test, target_os = "linux"))]
+pub mod bounded_command;
 pub mod clipboard_snapshot;
 pub mod dispatch;
 pub mod dpapi;

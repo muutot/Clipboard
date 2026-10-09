@@ -70,6 +70,9 @@ impl crate::platform::PlatformClipboard for LinuxX11Platform {
     }
 }
 
+#[cfg(target_os = "linux")]
+use super::bounded_command::BoundedCommandExt;
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
@@ -1089,7 +1092,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
     for target in &["image/png", "image/bmp", "image/jpeg", "image/tiff"] {
         if let Ok(output) = std::process::Command::new("xclip")
             .args(["-selection", "clipboard", "-t", target, "-out"])
-            .output()
+            .bounded_output(64 * 1024 * 1024)
         {
             if output.status.success() && !output.stdout.is_empty() {
                 if let Some(img) = crate::content::hash::decode_image_bytes(&output.stdout) {
@@ -1113,7 +1116,7 @@ pub fn read_clipboard_image() -> Option<(Vec<u8>, u32, u32)> {
 pub fn read_clipboard_html() -> Option<String> {
     if let Ok(output) = std::process::Command::new("xclip")
         .args(["-selection", "clipboard", "-t", "text/html", "-out"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).ok()?;
@@ -1136,7 +1139,7 @@ pub fn read_clipboard_html() -> Option<String> {
 pub fn read_clipboard_rtf() -> Option<String> {
     if let Ok(output) = std::process::Command::new("xclip")
         .args(["-selection", "clipboard", "-t", "text/rtf", "-out"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).ok()?;
@@ -1159,7 +1162,7 @@ pub fn read_clipboard_rtf() -> Option<String> {
 pub fn read_clipboard_file_paths() -> Vec<String> {
     if let Ok(output) = std::process::Command::new("xclip")
         .args(["-selection", "clipboard", "-t", "text/uri-list", "-out"])
-        .output()
+        .bounded_output(64 * 1024 * 1024)
     {
         if output.status.success() {
             let text = String::from_utf8(output.stdout).unwrap_or_default();
