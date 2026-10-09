@@ -188,9 +188,9 @@ dropped: `ocr_input_geometry` is a pure function so the mapping is
 testable without ONNX weights, and the stored block geometry must be
 multiplied by the returned `coordinate_scale`, because the detector
 reports boxes in the coordinate space of the image it was handed. The
-OCR-coordinate highlight feature is still unimplemented, so nothing
-consumes those boxes yet — a missing rescale would only surface when
-that lands.
+`OcrImageOverlay` used by `DetailImagePreview` and `DetailOcrTab` consumes
+these original-image coordinates for search highlighting and block selection;
+a missing rescale misaligns those overlays on downscaled OCR inputs.
 
 ## Capture, content, and self-trigger suppression
 

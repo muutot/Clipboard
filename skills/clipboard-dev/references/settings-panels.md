@@ -26,11 +26,11 @@ Read this file and `css-theming.md` before changing settings markup or CSS.
 | Capture          | Filter (ignored apps, max file copy / text capture size) → `IgnoredAppsSettingsPanel`; Sensitive content (local-only mode, sensitive patterns, recording pause) → `SensitiveContentSettingsPanel`; Icon cache → `IconCacheSettingsPanel`      |
 | Tags             | Manage tags → `TagManagementSettingsPanel`; Auto-tag rules → `TagRulesSettingsPanel`                                                                                                                                                          |
 | Storage          | Paths → `StoragePathsPanel`; Limits (retention, item count, recycle bin) → `StorageLimitsPanel`; Tools (search index, database repair, import/export) → `StorageToolsPanel`                                                                   |
-| Cloud            | Secondary tabs Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits), and S3 (endpoint/region/bucket/credentials) → built into the parent                               |
+| Cloud            | Secondary tabs Cloud (off/S3, endpoint/prefix/credentials, encryption, auto/manual sync), Advanced (immutable segment and resource limits), and S3 (endpoint/region/bucket/credentials) → `SyncPanel`                                         |
 | Keyboard         | Global, Item, Quick, Switch → `KeyboardSettingsPanel` with category prop                                                                                                                                                                      |
-| OCR              | Single current section → built into the parent                                                                                                                                                                                                |
-| Statistics       | Storage, Performance, Memory → built into the parent                                                                                                                                                                                          |
-| About            | Version, executable-path location, configurable update source dropdown, and update check (`check_for_update`) → built into the parent                                                                                                         |
+| OCR              | Single current section → `OcrSettingsPanel`                                                                                                                                                                                                   |
+| Statistics       | Storage, Performance, Memory → `StatisticsSettingsPanel`                                                                                                                                                                                      |
+| About            | Version, executable-path location, configurable update source dropdown, and update check (`check_for_update`) → `AboutSettingsPanel`                                                                                                          |
 
 The left sidebar retains primary categories. The right content pane owns global settings search, item counts, breadcrumb, secondary row, description, and the selected panel.
 
@@ -203,7 +203,7 @@ target; otherwise the jump opens the panel's default sub-tab and the highlight m
 
 ## Shared versus panel-specific CSS
 
-Shared base classes belong in `settings-shared.css`, which is imported by the `/settings` route rather than global `app.css` so settings-only rules do not increase or leak into the main-page stylesheet. Panel-specific examples include theme color inputs/presets, keyboard binding chips, font numeric inputs, general sort-rule controls, and the ignored-app transfer board.
+Shared base classes belong in `settings-shared.css`, which is imported globally by `src/routes/+layout.svelte` for both modal and standalone settings, as well as shared main-page controls. Panel-specific examples include theme color inputs/presets, keyboard binding chips, font numeric inputs, general sort-rule controls, and the ignored-app transfer board.
 
 Reuse the `ColorField.svelte` component for the color-picker + HEX text pair instead of copying the two inputs and their validation into another panel; pass `compact` for the icon-color row sizing. The `.readonly-hint` note belongs in `settings-shared.css`.
 

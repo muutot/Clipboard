@@ -20,9 +20,9 @@ This is the authoritative style reference for reusable project UI. Read it befor
 1. The approved main page in `src/routes/+page.svelte` and `ClipboardCard.svelte` defines the product's visual language.
 2. `src/lib/types/clipboard.ts::{DARK_THEME_COLORS,LIGHT_THEME_COLORS}` defines preset values.
 3. `src/lib/utils/theme.ts::applyThemeColors` defines the ThemeColors 闂?CSS-variable mapping.
-4. `src/app.css` provides root defaults, global reset, font variables, focus/accessibility rules, and imports shared settings CSS.
+4. `src/app.css` provides root defaults, global reset, font variables, focus/accessibility rules. The root `src/routes/+layout.svelte` imports both it and shared settings CSS.
 5. `src/lib/styles/settings-shared.css` owns reusable child-panel primitives.
-6. `StorageSettingsDialog.svelte` owns settings-shell layout and built-in storage/OCR/statistics-specific styles.
+6. `StorageSettingsDialog.svelte` owns settings-shell layout; lazy child panels own their storage/OCR/statistics styles.
 7. Component-scoped CSS owns only component-specific layout/visual behavior.
 
 When these disagree, inspect the rendered target and current code, fix the narrow source of divergence, and update this reference if the approved rule changes.
@@ -140,7 +140,7 @@ Use a semantic setting variable when it fits. A raw metric is acceptable for a g
 - `.restart-note` for restart-required notices in general-settings cards;
 - `.settings-platform-note` for a muted note stating that the running OS cannot honor a setting — the capture panel's polling caveat and the keyboard panel's missing global-shortcut backend both use it. It is shared because two panels need the same rule; a second panel-local copy of that note style is the duplication this class exists to prevent.
 
-`src/app.css` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `LayoutSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
+`src/routes/+layout.svelte` imports this file globally. New child panels must rely on these primitives and add only their panel-specific layout. `LayoutSettingsPanel.svelte` is the cleanest minimal example. `GeneralSettingsPanel.svelte`, `FontSizeSettingsPanel.svelte`, `ThemeSettingsPanel.svelte`, and `KeyboardSettingsPanel.svelte` demonstrate scoped extensions.
 
 Legacy/local duplication has been removed from the ignored-app panel (it now uses shared header, scroll, feedback, toggle, and card primitives); remaining shell-local rules are density/input-reset modifiers recorded in `niche_ui_style.md` and are not a license to copy shared rules.
 
@@ -151,7 +151,7 @@ Before adding a rule, place it at the narrowest correct stable level:
 - Theme color or global accessibility/reset 闂?`app.css`, `ThemeColors`, presets, and `theme.ts` together.
 - Global scrollbar treatment (thin width, themed thumb via `--scrollbar-color`) 闂?`app.css` on the universal `*` selectors; components only add scrollability, never per-scope scrollbar rules. The `.filters` row is the intentional exception (hidden scrollbar).
 - Shared settings card/control/feedback primitive 闂?`settings-shared.css`.
-- Settings navigation/shell/built-in storage-OCR-statistics layout 闂?`StorageSettingsDialog.svelte`.
+- Settings navigation and shell layout 闂?`StorageSettingsDialog.svelte`.
 - One reusable component's unique layout 闂?that component's scoped `<style>`.
 - One-off content visualization 闂?scoped style plus a note in `niche_ui_style.md` if it does not follow the general theme contract.
 
