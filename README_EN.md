@@ -40,32 +40,17 @@ Alt+C to open → type keywords to search → ↑↓ to navigate → Enter to pa
 
 ## Screenshots
 
-The current interface in English, populated with fictional sample data. Click any image for the full-size view.
+Two English UI galleries with colorful icons and compact spacing, rendered in browser preview with fictional sample data. Click a gallery or the links below for full-size images.
 
-<table width="100%">
-  <tr>
-    <td width="50%" align="center" valign="top">
-      <a href="static/screenshots/en/main.png"><img src="static/screenshots/en/main.png" width="100%" alt="English main window: clipboard history, type filters, tags, favorites and quick actions"></a><br>
-      <sub><b>Clipboard history</b> · Search, filters and quick actions</sub>
-    </td>
-    <td width="50%" align="center" valign="top">
-      <a href="static/screenshots/en/settings.png"><img src="static/screenshots/en/settings.png" width="100%" alt="English settings window: category navigation, settings search and theme colors"></a><br>
-      <sub><b>Appearance settings</b> · Themes, fonts and layout</sub>
-    </td>
-  </tr>
-</table>
-<table width="100%">
-  <tr>
-    <td width="62%" align="center" valign="top">
-      <a href="static/screenshots/en/detail.png"><img src="static/screenshots/en/detail.png" width="100%" alt="English detail panel in light mode: Markdown preview, tags, copy, edit and paste actions"></a><br>
-      <sub><b>Content details</b> · Markdown preview and editing</sub>
-    </td>
-    <td width="38%" align="center" valign="top">
-      <a href="static/screenshots/en/float.png"><img src="static/screenshots/en/float.png" width="100%" alt="English floating clipboard: compact history list with All and Favorites tabs"></a><br>
-      <sub><b>Floating clipboard</b> · Quick access to saved items</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <a href="static/screenshots/en/overview.png"><img src="static/screenshots/en/overview.png" width="100%" alt="English interface overview: colorful icons, compact clipboard history, icon colors, Markdown details and floating panel"></a><br>
+  <sub><a href="static/screenshots/en/main.png">Main window</a> · <a href="static/screenshots/en/settings.png">Icon colors</a> · <a href="static/screenshots/en/detail.png">Content details</a> · <a href="static/screenshots/en/float.png">Floating panel</a></sub>
+</p>
+
+<p align="center">
+  <a href="static/screenshots/en/workflow.png"><img src="static/screenshots/en/workflow.png" width="100%" alt="English workflow gallery: keyword search results, card spacing settings, syntax-highlighted code and floating favorites"></a><br>
+  <sub><a href="static/screenshots/en/search.png">Search results</a> · <a href="static/screenshots/en/layout.png">Layout settings</a> · <a href="static/screenshots/en/code.png">Code preview</a> · <a href="static/screenshots/en/favorites.png">Favorites</a></sub>
+</p>
 
 ## Features
 

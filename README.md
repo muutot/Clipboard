@@ -43,32 +43,17 @@ Alt+C 唤起 → 键入关键词搜索 → ↑↓ 导航 → Enter 粘贴
 
 ## 界面预览
 
-当前界面的中文演示，使用虚构示例数据；点击图片查看原图。
+两组中文界面展示，使用彩色图标与紧凑布局；通过浏览器预览生成，内容为虚构示例数据。点击拼图或下方链接查看原图。
 
-<table width="100%">
-  <tr>
-    <td width="50%" align="center" valign="top">
-      <a href="static/screenshots/zh-CN/main.png"><img src="static/screenshots/zh-CN/main.png" width="100%" alt="中文主界面：剪贴板历史、类型筛选、标签、收藏与快捷操作"></a><br>
-      <sub><b>剪贴板历史</b> · 搜索、筛选与快捷操作</sub>
-    </td>
-    <td width="50%" align="center" valign="top">
-      <a href="static/screenshots/zh-CN/settings.png"><img src="static/screenshots/zh-CN/settings.png" width="100%" alt="中文设置界面：分类导航、设置搜索与主题配色"></a><br>
-      <sub><b>外观设置</b> · 主题、字体与布局</sub>
-    </td>
-  </tr>
-</table>
-<table width="100%">
-  <tr>
-    <td width="62%" align="center" valign="top">
-      <a href="static/screenshots/zh-CN/detail.png"><img src="static/screenshots/zh-CN/detail.png" width="100%" alt="浅色中文详情面板：Markdown 预览、标签、复制、编辑与粘贴操作"></a><br>
-      <sub><b>内容详情</b> · Markdown 预览与编辑</sub>
-    </td>
-    <td width="38%" align="center" valign="top">
-      <a href="static/screenshots/zh-CN/float.png"><img src="static/screenshots/zh-CN/float.png" width="100%" alt="中文悬浮剪贴板：紧凑列表、全部与收藏分组"></a><br>
-      <sub><b>悬浮剪贴板</b> · 常用内容随手取用</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <a href="static/screenshots/zh-CN/overview.png"><img src="static/screenshots/zh-CN/overview.png" width="100%" alt="中文界面总览：彩色图标、紧凑剪贴板历史、图标配色、Markdown 详情与悬浮窗"></a><br>
+  <sub><a href="static/screenshots/zh-CN/main.png">主界面</a> · <a href="static/screenshots/zh-CN/settings.png">图标配色</a> · <a href="static/screenshots/zh-CN/detail.png">内容详情</a> · <a href="static/screenshots/zh-CN/float.png">悬浮窗</a></sub>
+</p>
+
+<p align="center">
+  <a href="static/screenshots/zh-CN/workflow.png"><img src="static/screenshots/zh-CN/workflow.png" width="100%" alt="中文工作流展示：关键词搜索结果、卡片间距设置、代码语法高亮与收藏悬浮窗"></a><br>
+  <sub><a href="static/screenshots/zh-CN/search.png">搜索结果</a> · <a href="static/screenshots/zh-CN/layout.png">布局设置</a> · <a href="static/screenshots/zh-CN/code.png">代码预览</a> · <a href="static/screenshots/zh-CN/favorites.png">收藏分组</a></sub>
+</p>
 
 ## 核心特性
 
