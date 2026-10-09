@@ -2,6 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Sender},
         Arc,
     },
@@ -116,10 +117,14 @@ enum ThumbnailTask {
 #[derive(Clone)]
 pub struct ThumbnailQueue {
     sender: Sender<ThumbnailTask>,
+    stopped: Arc<AtomicBool>,
 }
 
 impl ThumbnailQueue {
     pub fn enqueue(&self, item_id: String, image_path: PathBuf) {
+        if self.stopped.load(Ordering::Acquire) {
+            return;
+        }
         let _ = self.sender.send(ThumbnailTask::Generate {
             item_id,
             image_path,
@@ -129,44 +134,56 @@ impl ThumbnailQueue {
 
 pub struct ThumbnailWorker {
     sender: Sender<ThumbnailTask>,
+    stopped: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl ThumbnailWorker {
     pub fn start(preview_dir: PathBuf, database: Arc<Database>) -> Result<Self, String> {
-        let (sender, receiver) = mpsc::channel::<ThumbnailTask>();
+        let generator = ThumbnailGenerator::new();
+        Self::start_with_process(move |item_id, image_path| {
+            let _resource_publication = database.begin_resource_write();
+            match generator.generate(&image_path, &preview_dir) {
+                Ok(info) => {
+                    let preview_path = &info.preview_path;
+                    if let Err(e) = database.set_preview_path(&item_id, preview_path) {
+                        crate::log_error!(
+                            "[thumbnail] failed to update preview for {item_id}: {e}"
+                        );
+                    }
+                }
+                Err(e) => {
+                    crate::log_error!("[thumbnail] thumbnail generation failed for {item_id}: {e}");
+                }
+            }
+        })
+    }
 
+    fn start_with_process(
+        mut process: impl FnMut(String, PathBuf) + Send + 'static,
+    ) -> Result<Self, String> {
+        let (sender, receiver) = mpsc::channel::<ThumbnailTask>();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let worker_stopped = stopped.clone();
         let handle = thread::Builder::new()
             .name("thumbnail".to_owned())
             .spawn(move || {
-                let generator = ThumbnailGenerator::new();
                 while let Ok(ThumbnailTask::Generate {
                     item_id,
                     image_path,
                 }) = receiver.recv()
                 {
-                    let _resource_publication = database.begin_resource_write();
-                    match generator.generate(&image_path, &preview_dir) {
-                        Ok(info) => {
-                            let preview_path = &info.preview_path;
-                            if let Err(e) = database.set_preview_path(&item_id, preview_path) {
-                                crate::log_error!(
-                                    "[thumbnail] failed to update preview for {item_id}: {e}"
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            crate::log_error!(
-                                "[thumbnail] thumbnail generation failed for {item_id}: {e}"
-                            );
-                        }
+                    if worker_stopped.load(Ordering::Acquire) {
+                        break;
                     }
+                    process(item_id, image_path);
                 }
             })
             .map_err(|error| format!("failed to spawn the thumbnail worker thread: {error}"))?;
 
         Ok(Self {
             sender,
+            stopped,
             handle: Some(handle),
         })
     }
@@ -174,18 +191,23 @@ impl ThumbnailWorker {
     pub fn queue(&self) -> ThumbnailQueue {
         ThumbnailQueue {
             sender: self.sender.clone(),
+            stopped: self.stopped.clone(),
         }
     }
 
     pub fn enqueue(&self, item_id: String, image_path: PathBuf) {
-        let _ = self.sender.send(ThumbnailTask::Generate {
-            item_id,
-            image_path,
-        });
+        self.queue().enqueue(item_id, image_path);
+    }
+
+    fn request_stop(&self) {
+        if !self.stopped.swap(true, Ordering::AcqRel) {
+            // Wake an idle receiver; the independent flag bypasses queued work.
+            let _ = self.sender.send(ThumbnailTask::Shutdown);
+        }
     }
 
     pub fn stop(&mut self) {
-        let _ = self.sender.send(ThumbnailTask::Shutdown);
+        self.request_stop();
         if let Some(handle) = self.handle.take() {
             if handle.thread().id() != thread::current().id() && handle.join().is_err() {
                 crate::log_error!("[thumbnail] worker thread terminated with a panic");
@@ -249,6 +271,36 @@ mod tests {
             icon_path: None,
             metadata_json: None,
         }
+    }
+
+    #[test]
+    fn stop_discards_pending_jobs_after_the_in_flight_job_finishes() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            mpsc,
+        };
+        let processed = Arc::new(AtomicUsize::new(0));
+        let count = processed.clone();
+        let (entered, wait_entered) = mpsc::channel();
+        let (release, wait_release) = mpsc::channel();
+        let mut worker = ThumbnailWorker::start_with_process(move |_, _| {
+            if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                entered.send(()).unwrap();
+                wait_release.recv_timeout(Duration::from_secs(10)).unwrap();
+            }
+        })
+        .unwrap();
+        worker.enqueue("first".into(), PathBuf::from("synthetic"));
+        wait_entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        for index in 0..100 {
+            worker
+                .queue()
+                .enqueue(index.to_string(), PathBuf::from("synthetic"));
+        }
+        worker.request_stop();
+        release.send(()).unwrap();
+        worker.stop();
+        assert_eq!(processed.load(Ordering::SeqCst), 1);
     }
 
     #[test]
