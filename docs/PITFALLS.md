@@ -199,20 +199,9 @@ struct ClipboardItem {
 }
 ```
 
-### `WebviewWindowBuilder::transparent` 在 macOS 上不存在
+### macOS 透明窗口与 Tauri 功能校验
 
-Tauri 2 的 `transparent()`（`WebviewWindowBuilder`/`WindowBuilder`/`WebviewBuilder` 三处同名方法）被 `#[cfg(any(not(target_os = "macos"), feature = "macos-private-api"))]` 门控：macOS 默认没有该方法，直接调用会在 macOS CI 报 `E0599`，而 Windows 本地编译完全正常。
-
-```rust
-// BUG: Windows 本地能过，macOS CI 报 E0599
-WebviewWindowBuilder::new(&app, "float", url).transparent(true)
-
-// FIX: 只在非 macOS 调用；macOS 保持不透明（页面自带主题背景即可）
-#[cfg(not(target_os = "macos"))]
-{
-    builder = builder.transparent(true);
-}
-```
+旧 Tauri 2 的 `transparent()` 需要 `macos-private-api` 功能；Tauri 2.12.1 已取消这个门控。本项目将最低版本设为 2.12.1，保留原生透明能力并移除过时的平台配置开关。不要只在 target 依赖中声明此功能、同时在 macOS 配置里启用它：`tauri-build` 的 manifest 校验优先读取主依赖声明，会在 macOS 的普通 Cargo/Clippy 构建阶段报功能不匹配，Windows 门禁却仍然通过。
 
 ## CSS 层级
 
