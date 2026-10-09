@@ -278,6 +278,12 @@ Every item-level mutator takes an `AppHandle` and broadcasts on success; without
 it the two windows cannot see each other at all, since separate WebviewWindows
 are separate JS realms and the frontend cannot reconcile this on its own.
 
+`delete_clipboard_item` (direct deletion when the recycle bin is disabled) emits
+`removedIds` only after SQLite commits an actual removal. Missing rows and rejected
+favorite deletions do not emit a transition; the command's `id`/boolean IPC shape
+is unchanged. The command helper's regression uses an in-memory database and the
+shared frontend event-consumer tests cover removal from every loaded view.
+
 ## Rejection payloads
 
 Most commands reject with a plain string. `copy_clipboard_item_files` is the

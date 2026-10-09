@@ -294,10 +294,28 @@ pub fn batch_set_favorite(
 
 #[tauri::command]
 pub fn delete_clipboard_item(
+    app: AppHandle,
     database: tauri::State<'_, Database>,
     id: String,
 ) -> Result<bool, String> {
-    database.delete_item(&id).map_err(|error| error.to_string())
+    delete_clipboard_item_record(&database, &id, |payload| emit_items_changed(&app, payload))
+}
+
+fn delete_clipboard_item_record(
+    database: &Database,
+    id: &str,
+    notify: impl FnOnce(ClipboardItemsChanged),
+) -> Result<bool, String> {
+    let removed = database
+        .delete_item(id)
+        .map_err(|error| error.to_string())?;
+    if removed {
+        notify(ClipboardItemsChanged {
+            removed_ids: vec![id.to_owned()],
+            ..ClipboardItemsChanged::default()
+        });
+    }
+    Ok(removed)
 }
 
 #[tauri::command]
@@ -1078,6 +1096,39 @@ mod tests {
             is_favorite: false,
             metadata_json: None,
         }
+    }
+
+    #[test]
+    fn hard_delete_announces_only_a_committed_removal() {
+        let database = Database::open_in_memory().unwrap();
+        database.save_item(&item("remove", "remove")).unwrap();
+        let mut favorite = item("favorite", "favorite");
+        favorite.is_favorite = true;
+        database.save_item(&favorite).unwrap();
+        let mut notifications = Vec::new();
+        assert!(
+            super::delete_clipboard_item_record(&database, "remove", |payload| {
+                assert!(database.get_item("remove").unwrap().is_none());
+                assert!(payload.deleted_ids.is_empty());
+                assert!(payload.items.is_empty());
+                notifications.push(payload.removed_ids);
+            })
+            .unwrap()
+        );
+        assert_eq!(notifications, vec![vec!["remove"]]);
+        assert!(
+            !super::delete_clipboard_item_record(&database, "remove", |_| {
+                panic!("missing row must not announce removal")
+            })
+            .unwrap()
+        );
+        assert!(
+            super::delete_clipboard_item_record(&database, "favorite", |_| {
+                panic!("failed deletion must not announce removal")
+            })
+            .is_err()
+        );
+        assert!(database.get_item("favorite").unwrap().is_some());
     }
 
     #[test]
